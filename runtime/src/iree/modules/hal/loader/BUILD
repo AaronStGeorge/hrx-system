@@ -1,4 +1,4 @@
-# Copyright 2021 The IREE Authors
+# Copyright 2022 The IREE Authors
 #
 # Licensed under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
@@ -13,15 +13,12 @@ package(
 )
 
 iree_runtime_cc_library(
-    name = "vmvx",
+    name = "loader",
     srcs = [
         "module.c",
     ],
     hdrs = [
         "module.h",
-    ],
-    defines = [
-        "IREE_HAVE_VMVX_MODULE",
     ],
     textual_hdrs = [
         "exports.inl",
@@ -29,7 +26,10 @@ iree_runtime_cc_library(
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/base:tracing",
-        "//runtime/src/iree/builtins/ukernel",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/local:executable_environment",
+        "//runtime/src/iree/hal/local:executable_loader",
+        "//runtime/src/iree/modules/hal:types",
         "//runtime/src/iree/vm",
     ],
 )
