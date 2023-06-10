@@ -1,4 +1,4 @@
-# Copyright 2021 The IREE Authors
+# Copyright 2023 The IREE Authors
 #
 # Licensed under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
@@ -12,24 +12,16 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+#===------------------------------------------------------------------------===#
+# Tracy
+#===------------------------------------------------------------------------===#
+
 iree_runtime_cc_library(
-    name = "vmvx",
-    srcs = [
-        "module.c",
-    ],
-    hdrs = [
-        "module.h",
-    ],
-    defines = [
-        "IREE_HAVE_VMVX_MODULE",
-    ],
-    textual_hdrs = [
-        "exports.inl",
-    ],
+    name = "tracy",
+    srcs = ["tracy.cc"],
+    hdrs = ["tracy.h"],
     deps = [
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:cpu",
-        "//runtime/src/iree/builtins/ukernel",
-        "//runtime/src/iree/vm",
+        "//runtime/src/iree/base:core_headers",
+        "@tracy_client//:runtime_impl",
     ],
 )
