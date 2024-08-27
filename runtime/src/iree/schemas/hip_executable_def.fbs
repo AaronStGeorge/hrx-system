@@ -6,11 +6,11 @@
 
 include "iree/schemas/executable_debug_info.fbs";
 
-namespace iree.hal.cuda;
+namespace iree.hal.hip;
 
-// 'CUDA v1 Executable'.
-file_identifier "CDA1";
-file_extension "cda1";
+// 'HIP v1 Executable'.
+file_identifier "HIP1";
+file_extension "hip1";
 
 // A struct for the kernel block size along each dimension.
 struct BlockDims {
@@ -52,8 +52,8 @@ table ExportDef {
 
 // A library containing one or more exported functions.
 table ModuleDef {
-  // PTX image.
-  ptx_image:string;
+  // HSACO image.
+  hsaco_image:string;
 }
 
 table ExecutableDef {
