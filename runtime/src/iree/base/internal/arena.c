@@ -303,6 +303,69 @@ iree_status_t iree_arena_allocate_aligned(iree_arena_allocator_t* arena,
   return iree_ok_status();
 }
 
+iree_status_t iree_arena_allocate_array(iree_arena_allocator_t* arena,
+                                        iree_host_size_t count,
+                                        iree_host_size_t element_size,
+                                        void** out_ptr) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  iree_host_size_t byte_size = 0;
+  if (!iree_host_size_checked_mul(count, element_size, &byte_size)) {
+    IREE_TRACE_ZONE_END(z0);
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "array size overflow: %" PRIhsz " * %" PRIhsz,
+                            count, element_size);
+  }
+  iree_status_t status = iree_arena_allocate(arena, byte_size, out_ptr);
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
+iree_status_t iree_arena_allocate_array_aligned(iree_arena_allocator_t* arena,
+                                                iree_host_size_t count,
+                                                iree_host_size_t element_size,
+                                                iree_host_size_t min_alignment,
+                                                void** out_ptr) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  iree_host_size_t byte_size = 0;
+  if (!iree_host_size_checked_mul(count, element_size, &byte_size)) {
+    IREE_TRACE_ZONE_END(z0);
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "array size overflow: %" PRIhsz " * %" PRIhsz,
+                            count, element_size);
+  }
+  iree_status_t status =
+      iree_arena_allocate_aligned(arena, byte_size, min_alignment, out_ptr);
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
+iree_status_t iree_arena_grow_array(iree_arena_allocator_t* arena,
+                                    iree_host_size_t existing_count,
+                                    iree_host_size_t minimum_capacity,
+                                    iree_host_size_t element_size,
+                                    iree_host_size_t* inout_capacity,
+                                    void** inout_ptr) {
+  IREE_TRACE_ZONE_BEGIN(z0);
+  iree_host_size_t doubled_capacity = 0;
+  if (!iree_host_size_checked_mul(*inout_capacity, 2, &doubled_capacity)) {
+    IREE_TRACE_ZONE_END(z0);
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE, "capacity overflow");
+  }
+  iree_host_size_t new_capacity = iree_max(minimum_capacity, doubled_capacity);
+  void* new_ptr = NULL;
+  iree_status_t status =
+      iree_arena_allocate_array(arena, new_capacity, element_size, &new_ptr);
+  if (iree_status_is_ok(status)) {
+    if (*inout_ptr && existing_count > 0) {
+      memcpy(new_ptr, *inout_ptr, existing_count * element_size);
+    }
+    *inout_ptr = new_ptr;
+    *inout_capacity = new_capacity;
+  }
+  IREE_TRACE_ZONE_END(z0);
+  return status;
+}
+
 static iree_status_t iree_arena_allocator_ctl(void* self,
                                               iree_allocator_command_t command,
                                               const void* params,
