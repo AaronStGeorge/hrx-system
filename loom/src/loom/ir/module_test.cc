@@ -1,0 +1,548 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/ir/module.h"
+
+#include "iree/base/internal/arena.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/ir/context.h"
+
+namespace loom {
+namespace {
+
+class ModuleTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
+  }
+
+  void TearDown() override {
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  loom_context_t context_;
+};
+
+//===----------------------------------------------------------------------===//
+// Module lifecycle
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, AllocateAndFree) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  ASSERT_NE(module, nullptr);
+  EXPECT_NE(module->body, nullptr);
+  EXPECT_EQ(module->body->block_count, 1);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, FreeNull) { loom_module_free(NULL); }
+
+TEST_F(ModuleTest, ModuleName) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("my_module"),
+                                      &block_pool_, NULL,
+                                      iree_allocator_system(), &module));
+  iree_string_view_t name = module->strings.entries[module->name_id];
+  EXPECT_TRUE(iree_string_view_equal(name, IREE_SV("my_module")));
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, BodyBlock) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_block_t* block = loom_module_block(module);
+  ASSERT_NE(block, nullptr);
+  EXPECT_EQ(block->op_count, 0);
+  EXPECT_GT(block->op_capacity, 0);
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Value definition
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, DefineValue) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, f32, &id));
+  EXPECT_EQ(id, 0u);
+  EXPECT_EQ(module->values.count, 1u);
+
+  loom_value_t* value = &module->values.entries[id];
+  EXPECT_EQ(loom_type_kind(value->type), LOOM_TYPE_SCALAR);
+  EXPECT_EQ(loom_type_element_type(value->type), LOOM_SCALAR_TYPE_F32);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, DefineMultipleValues) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t id0 = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t id1 = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t id2 = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, f32, &id0));
+  IREE_ASSERT_OK(loom_module_define_value(module, i32, &id1));
+  IREE_ASSERT_OK(loom_module_define_value(module, f32, &id2));
+
+  EXPECT_EQ(id0, 0u);
+  EXPECT_EQ(id1, 1u);
+  EXPECT_EQ(id2, 2u);
+  EXPECT_EQ(module->values.count, 3u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, DefineValueAlignment) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, f32, &id));
+  EXPECT_EQ((uintptr_t)&module->values.entries[id] % 64, 0u)
+      << "Value entries must be 64-byte aligned";
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, DefineValueGrowth) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  // Fill past the default capacity to trigger growth.
+  iree_host_size_t initial_capacity = module->values.capacity;
+  for (iree_host_size_t i = 0; i < initial_capacity + 100; ++i) {
+    loom_value_id_t id = LOOM_VALUE_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_define_value(module, f32, &id));
+    EXPECT_EQ(id, (loom_value_id_t)i);
+  }
+  EXPECT_GT(module->values.capacity, initial_capacity);
+  EXPECT_EQ(module->values.count, initial_capacity + 100);
+
+  // Verify all values are still accessible after growth.
+  for (iree_host_size_t i = 0; i < module->values.count; ++i) {
+    EXPECT_EQ(loom_type_kind(module->values.entries[i].type), LOOM_TYPE_SCALAR);
+  }
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// String interning
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, InternString) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_string_id_t id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("hello"), &id));
+  EXPECT_NE(id, LOOM_STRING_ID_INVALID);
+
+  iree_string_view_t stored = module->strings.entries[id];
+  EXPECT_TRUE(iree_string_view_equal(stored, IREE_SV("hello")));
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternStringDedup) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_string_id_t id1 = LOOM_STRING_ID_INVALID;
+  loom_string_id_t id2 = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("hello"), &id1));
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("hello"), &id2));
+  EXPECT_EQ(id1, id2);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternDifferentStrings) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_string_id_t id1 = LOOM_STRING_ID_INVALID;
+  loom_string_id_t id2 = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("hello"), &id1));
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("world"), &id2));
+  EXPECT_NE(id1, id2);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternEmptyString) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_string_id_t id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, iree_string_view_empty(), &id));
+  EXPECT_NE(id, LOOM_STRING_ID_INVALID);
+  iree_string_view_t stored = module->strings.entries[id];
+  EXPECT_EQ(stored.size, 0u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternStringStress) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  // Intern 1000 unique strings and verify dedup.
+  char buffer[32];
+  for (int i = 0; i < 1000; ++i) {
+    int length = snprintf(buffer, sizeof(buffer), "string_%d", i);
+    loom_string_id_t id = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_intern_string(
+        module, iree_make_string_view(buffer, length), &id));
+    // Intern again, expect same ID.
+    loom_string_id_t id2 = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(loom_module_intern_string(
+        module, iree_make_string_view(buffer, length), &id2));
+    EXPECT_EQ(id, id2);
+  }
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Type interning
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, InternScalarType) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t interned = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32, &interned));
+  EXPECT_EQ(loom_type_kind(interned), LOOM_TYPE_SCALAR);
+  EXPECT_EQ(loom_type_element_type(interned), LOOM_SCALAR_TYPE_F32);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternTypeDedup) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t interned1 = {0};
+  loom_type_t interned2 = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32, &interned1));
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32, &interned2));
+  // Same type interned twice should produce identical results.
+  EXPECT_EQ(interned1.header, interned2.header);
+  EXPECT_EQ(module->types.count, 1u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternDifferentTypes) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t interned_f32 = {0};
+  loom_type_t interned_i32 = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32, &interned_f32));
+  IREE_ASSERT_OK(loom_module_intern_type(module, i32, &interned_i32));
+  EXPECT_NE(interned_f32.header, interned_i32.header);
+  EXPECT_EQ(module->types.count, 2u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternShapedType) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t tile_4x4_f32 =
+      loom_type_shaped_2d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(4), loom_dim_pack_static(4), 0);
+  loom_type_t interned1 = {0};
+  loom_type_t interned2 = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, tile_4x4_f32, &interned1));
+  IREE_ASSERT_OK(loom_module_intern_type(module, tile_4x4_f32, &interned2));
+  EXPECT_EQ(interned1.header, interned2.header);
+  EXPECT_EQ(interned1.dims[0], interned2.dims[0]);
+  EXPECT_EQ(interned1.dims[1], interned2.dims[1]);
+  EXPECT_EQ(module->types.count, 1u);
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Block operations
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, BlockAppendOp) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_block_t* block = loom_module_block(module);
+
+  // Allocate a dummy op.
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(
+      iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op));
+  memset(op, 0, sizeof(loom_op_t));
+  op->kind = 0x0100;
+
+  IREE_ASSERT_OK(loom_block_append_op(module, block, op));
+  EXPECT_EQ(block->op_count, 1);
+  EXPECT_EQ(block->ops[0], op);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, BlockAppendOrdering) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_block_t* block = loom_module_block(module);
+
+  loom_op_t* ops[3];
+  for (int i = 0; i < 3; ++i) {
+    IREE_ASSERT_OK(iree_arena_allocate(&module->arena, sizeof(loom_op_t),
+                                       (void**)&ops[i]));
+    memset(ops[i], 0, sizeof(loom_op_t));
+    ops[i]->kind = (loom_op_kind_t)(0x0100 + i);
+    IREE_ASSERT_OK(loom_block_append_op(module, block, ops[i]));
+  }
+
+  EXPECT_EQ(block->op_count, 3);
+  EXPECT_EQ(block->ops[0], ops[0]);
+  EXPECT_EQ(block->ops[1], ops[1]);
+  EXPECT_EQ(block->ops[2], ops[2]);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, BlockInsertAtBeginning) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_block_t* block = loom_module_block(module);
+
+  loom_op_t* op_a = NULL;
+  loom_op_t* op_b = NULL;
+  IREE_ASSERT_OK(
+      iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op_a));
+  IREE_ASSERT_OK(
+      iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op_b));
+  memset(op_a, 0, sizeof(loom_op_t));
+  memset(op_b, 0, sizeof(loom_op_t));
+
+  IREE_ASSERT_OK(loom_block_append_op(module, block, op_a));
+  IREE_ASSERT_OK(loom_block_insert_op(module, block, 0, op_b));
+
+  EXPECT_EQ(block->op_count, 2);
+  EXPECT_EQ(block->ops[0], op_b);
+  EXPECT_EQ(block->ops[1], op_a);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, BlockFindOp) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_block_t* block = loom_module_block(module);
+
+  loom_op_t* op_a = NULL;
+  loom_op_t* op_b = NULL;
+  IREE_ASSERT_OK(
+      iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op_a));
+  IREE_ASSERT_OK(
+      iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op_b));
+  memset(op_a, 0, sizeof(loom_op_t));
+  memset(op_b, 0, sizeof(loom_op_t));
+
+  IREE_ASSERT_OK(loom_block_append_op(module, block, op_a));
+  IREE_ASSERT_OK(loom_block_append_op(module, block, op_b));
+
+  EXPECT_EQ(loom_block_find_op(block, op_a), 0);
+  EXPECT_EQ(loom_block_find_op(block, op_b), 1);
+
+  // Not-found case.
+  loom_op_t dummy = {0};
+  EXPECT_EQ(loom_block_find_op(block, &dummy), UINT16_MAX);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, BlockGrowth) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_block_t* block = loom_module_block(module);
+  uint16_t initial_capacity = block->op_capacity;
+
+  // Append enough ops to trigger growth.
+  for (int i = 0; i < initial_capacity + 10; ++i) {
+    loom_op_t* op = NULL;
+    IREE_ASSERT_OK(
+        iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op));
+    memset(op, 0, sizeof(loom_op_t));
+    op->kind = (loom_op_kind_t)i;
+    IREE_ASSERT_OK(loom_block_append_op(module, block, op));
+  }
+
+  EXPECT_GT(block->op_capacity, initial_capacity);
+  EXPECT_EQ(block->op_count, initial_capacity + 10);
+
+  // Verify ordering survived growth.
+  for (int i = 0; i < initial_capacity + 10; ++i) {
+    EXPECT_EQ(block->ops[i]->kind, (loom_op_kind_t)i);
+  }
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Size hints
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, SizeHints) {
+  loom_module_size_hints_t hints = {
+      .value_count = 100,
+      .string_count = 50,
+      .type_count = 20,
+      .symbol_count = 10,
+  };
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      &hints, iree_allocator_system(),
+                                      &module));
+  // Capacities should be at least hint * growth_factor.
+  EXPECT_GE(module->values.capacity, 100u);
+  EXPECT_GE(module->strings.capacity, 50u);
+  EXPECT_GE(module->types.capacity, 20u);
+  EXPECT_GE(module->symbols.capacity, 10u);
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Encoding table
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, AddEncodingBasic) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  // Intern the encoding name.
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("q8_0"), &name_id));
+
+  // Intern a param name and build a named attribute.
+  loom_string_id_t block_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("block"), &block_id));
+  loom_named_attr_t param = {
+      .name_id = block_id,
+      .value = loom_attr_i64(32),
+  };
+
+  loom_encoding_t encoding = {
+      .name_id = name_id,
+      .alias_id = LOOM_STRING_ID_INVALID,
+      .attribute_count = 1,
+      .attributes = &param,
+  };
+
+  uint16_t encoding_id = 0;
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &encoding, &encoding_id));
+  EXPECT_EQ(encoding_id, 1);
+  EXPECT_EQ(module->encodings.count, 1u);
+
+  // Look it up.
+  const loom_encoding_t* found = loom_module_encoding(module, encoding_id);
+  ASSERT_NE(found, nullptr);
+  EXPECT_EQ(found->name_id, name_id);
+  EXPECT_EQ(found->attribute_count, 1);
+  EXPECT_EQ(found->attributes[0].name_id, block_id);
+  EXPECT_EQ(found->attributes[0].value.i64, 32);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, AddEncodingDedup) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("dense"), &name_id));
+
+  loom_encoding_t encoding = {
+      .name_id = name_id,
+      .alias_id = LOOM_STRING_ID_INVALID,
+      .attribute_count = 0,
+  };
+
+  uint16_t id1 = 0, id2 = 0;
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &encoding, &id1));
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &encoding, &id2));
+  EXPECT_EQ(id1, id2);
+  EXPECT_EQ(module->encodings.count, 1u);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, AddEncodingDifferentParams) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("q8_0"), &name_id));
+  loom_string_id_t block_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("block"), &block_id));
+
+  // Same name, different block size — two distinct entries.
+  loom_named_attr_t param32 = {.name_id = block_id, .value = loom_attr_i64(32)};
+  loom_named_attr_t param64 = {.name_id = block_id, .value = loom_attr_i64(64)};
+
+  loom_encoding_t enc32 = {
+      .name_id = name_id,
+      .alias_id = LOOM_STRING_ID_INVALID,
+      .attribute_count = 1,
+      .attributes = &param32,
+  };
+  loom_encoding_t enc64 = {
+      .name_id = name_id,
+      .alias_id = LOOM_STRING_ID_INVALID,
+      .attribute_count = 1,
+      .attributes = &param64,
+  };
+
+  uint16_t id32 = 0, id64 = 0;
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &enc32, &id32));
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &enc64, &id64));
+  EXPECT_NE(id32, id64);
+  EXPECT_EQ(module->encodings.count, 2u);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, EncodingLookupOutOfRange) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  EXPECT_EQ(loom_module_encoding(module, 0), nullptr);
+  EXPECT_EQ(loom_module_encoding(module, 1), nullptr);
+  EXPECT_EQ(loom_module_encoding(module, UINT16_MAX), nullptr);
+  loom_module_free(module);
+}
+
+}  // namespace
+}  // namespace loom

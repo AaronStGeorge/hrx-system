@@ -1,0 +1,110 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "error_defs",
+    srcs = ["error_tables.c"],
+    hdrs = [
+        "error_defs.h",
+        "error_defs.inc",
+    ],
+    deps = [
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "error_defs_test",
+    srcs = ["error_defs_test.cc"],
+    deps = [
+        ":error_defs",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "renderer",
+    srcs = ["renderer.c"],
+    hdrs = ["renderer.h"],
+    deps = [
+        ":error_defs",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "renderer_test",
+    srcs = ["renderer_test.cc"],
+    deps = [
+        ":error_defs",
+        ":renderer",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "diagnostic",
+    srcs = ["diagnostic.c"],
+    hdrs = ["diagnostic.h"],
+    deps = [
+        ":error_defs",
+        ":renderer",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "diagnostic_test",
+    srcs = ["diagnostic_test.cc"],
+    deps = [
+        ":diagnostic",
+        ":error_defs",
+        ":renderer",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "json_sink",
+    srcs = ["json_sink.c"],
+    hdrs = ["json_sink.h"],
+    deps = [
+        ":diagnostic",
+        ":error_defs",
+        ":renderer",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "json_sink_test",
+    srcs = ["json_sink_test.cc"],
+    deps = [
+        ":error_defs",
+        ":json_sink",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

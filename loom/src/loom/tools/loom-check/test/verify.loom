@@ -1,0 +1,111 @@
+// RUN: verify
+
+// ====
+
+// Valid IR with no annotations — no diagnostics expected.
+func.def @clean(%x: f32) -> (f32) {
+  func.return %x : f32
+}
+
+// ====
+
+// Unknown op name produces PARSE/006.
+func.def @unknown_op() {
+  // ERROR@+1: PARSE/006
+  bogus.nonexistent
+}
+
+// ====
+
+// Referencing an undefined SSA value produces PARSE/001.
+func.def @undefined_value() -> (i32) {
+  // ERROR@+1: PARSE/001
+  func.return %nonexistent : i32
+}
+
+// ====
+
+// Annotation with no domain (wildcard) matches any error.
+func.def @wildcard() {
+  // ERROR@+1:
+  bogus.nonexistent
+}
+
+// ====
+
+// Annotation with domain but no code (wildcard) matches any code in that domain.
+func.def @wildcard_code() {
+  // ERROR@+1: PARSE
+  bogus.nonexistent
+}
+
+// ====
+
+// Annotation with substring that must appear in the diagnostic message.
+func.def @substring() {
+  // ERROR@+1: PARSE/006 "bogus.nonexistent"
+  bogus.nonexistent
+}
+
+// ====
+
+// Negative offset targets the line above.
+func.def @negative_offset() {
+  bogus.nonexistent
+  // ERROR@-1: PARSE/006
+}
+
+// ====
+
+// Multiple errors across separate functions. Each function produces one
+// parse error; error recovery within a single block body consumes
+// subsequent ops, so separate functions are needed for independent errors.
+func.def @multiple_error_a() {
+  // ERROR@+1: PARSE/006
+  bogus.first
+}
+func.def @multiple_error_b() {
+  // ERROR@+1: PARSE/006
+  bogus.second
+}
+
+// ====
+
+// Type error caught by verifier, not parser. test.addi requires INTEGER
+// operands and result but receives f32. Three diagnostics: TYPE/003 for
+// each operand and TYPE/004 for the result.
+func.def @type_mismatch(%a: f32, %b: f32) -> (f32) {
+  // ERROR@+3: TYPE/003 "operand 0"
+  // ERROR@+2: TYPE/003 "operand 1"
+  // ERROR@+1: TYPE/004 "result 0"
+  %r = test.addi %a, %b : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Type error with wildcard domain — matches any domain.
+func.def @type_wildcard(%a: f32, %b: f32) -> (f32) {
+  // ERROR@+3:
+  // ERROR@+2:
+  // ERROR@+1:
+  %r = test.addi %a, %b : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Type error with substring match on the constraint name.
+func.def @type_substring(%a: f32, %b: f32) -> (f32) {
+  // ERROR@+3: TYPE/003 "integer"
+  // ERROR@+2: TYPE/003 "integer"
+  // ERROR@+1: TYPE/004 "integer"
+  %r = test.addi %a, %b : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Non-symbol-defining op at module level is rejected by the verifier.
+// ERROR@+1: STRUCTURE/011 "test.constant"
+%c = test.constant 42 : i32

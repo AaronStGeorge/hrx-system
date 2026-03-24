@@ -1,0 +1,595 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Hand-written character scanner for loom IR text format.
+
+Produces a lazy stream of tokens from source text. Each token carries
+its kind, text, and source location (line:col) for error reporting.
+
+This is a single-pass scanner with one character of lookahead. No
+regex. The scanner handles all disambiguation:
+  - '#' digit → RESULT_ORDINAL, '#' letter → HASH_ATTR
+  - '-' '>' → ARROW, '-' digit → negative number
+  - identifier '.' identifier → OP_NAME, bare identifier → BARE_IDENT
+  - 'tile' before '<' → BARE_IDENT (type keyword), 'tile' before '.' → OP_NAME
+
+Comments (//) are collected separately and not emitted as tokens.
+The parser retrieves them via collect_pending_comments() and attaches
+them to the next operation for round-trip preservation.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import IntEnum, unique
+
+__all__ = [
+    "TokenKind",
+    "Token",
+    "SourceLocation",
+    "ParseError",
+    "Tokenizer",
+]
+
+
+# ============================================================================
+# Source location
+# ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class SourceLocation:
+    """Position in source text."""
+
+    line: int
+    column: int
+    offset: int = 0
+
+
+# ============================================================================
+# Token types
+# ============================================================================
+
+
+@unique
+class TokenKind(IntEnum):
+    """Token kinds produced by the scanner."""
+
+    # Literals.
+    INTEGER = 0
+    FLOAT = 1
+    STRING = 2
+
+    # References.
+    SSA_VALUE = 3  # %name, %0, %arg0
+    SYMBOL = 4  # @name
+    HASH_ATTR = 5  # #q8_0, #enc
+    RESULT_ORDINAL = 6  # #0, #1
+    BLOCK_LABEL = 7  # ^bb0, ^entry
+
+    # Identifiers.
+    BARE_IDENT = 8  # keyword, type name, or other bare identifier
+    OP_NAME = 9  # dotted name: tile.contract, scalar.addi
+
+    # Punctuation.
+    LPAREN = 10
+    RPAREN = 11
+    LBRACE = 12
+    RBRACE = 13
+    LBRACKET = 14
+    RBRACKET = 15
+    LANGLE = 16
+    RANGLE = 17
+    EQUALS = 18
+    COLON = 19
+    COMMA = 20
+    ARROW = 21  # ->
+    PIPE = 23  # |
+
+    # Special.
+    EOF = 24
+
+
+@dataclass(frozen=True, slots=True)
+class Token:
+    """A lexical token with source location."""
+
+    kind: TokenKind
+    text: str
+    location: SourceLocation
+
+    def __repr__(self) -> str:
+        return (
+            f"Token({self.kind.name}, {self.text!r}, "
+            f"{self.location.line}:{self.location.column})"
+        )
+
+
+# ============================================================================
+# Parse error
+# ============================================================================
+
+
+class ParseError(Exception):
+    """Error with source location."""
+
+    def __init__(
+        self, message: str, location: SourceLocation, filename: str = "<input>"
+    ) -> None:
+        self.location = location
+        self.filename = filename
+        super().__init__(
+            f"{filename}:{location.line}:{location.column}: error: {message}"
+        )
+
+
+# ============================================================================
+# Character classification
+# ============================================================================
+
+
+def _is_ident_start(character: str) -> bool:
+    """Characters that can start an identifier: [a-zA-Z_$]."""
+    return character.isalpha() or character == "_" or character == "$"
+
+
+def _is_ident_continue(character: str) -> bool:
+    """Characters that can continue an identifier: [a-zA-Z0-9_$.]."""
+    return (
+        character.isalnum() or character == "_" or character == "$" or character == "."
+    )
+
+
+def _is_ident_continue_no_dot(character: str) -> bool:
+    """Identifier continuation without dot (for bare identifiers)."""
+    return character.isalnum() or character == "_" or character == "$"
+
+
+# ============================================================================
+# Tokenizer
+# ============================================================================
+
+
+class Tokenizer:
+    """Hand-written character scanner for loom IR.
+
+    Usage:
+        tokenizer = Tokenizer(source, "model.loom")
+        while not tokenizer.at(TokenKind.EOF):
+            token = tokenizer.next()
+            ...
+    """
+
+    __slots__ = (
+        "_source",
+        "_filename",
+        "_position",
+        "_line",
+        "_column",
+        "_peeked",
+        "_comments",
+    )
+
+    def __init__(self, source: str, filename: str = "<input>") -> None:
+        self._source = source
+        self._filename = filename
+        self._position = 0
+        self._line = 1
+        self._column = 1
+        self._peeked: Token | None = None
+        self._comments: list[str] = []
+
+    # --- Public interface ---
+
+    def peek(self) -> Token:
+        """Return the next token without consuming it."""
+        if self._peeked is None:
+            self._peeked = self._scan_token()
+        return self._peeked
+
+    def next(self) -> Token:
+        """Consume and return the next token."""
+        if self._peeked is not None:
+            token = self._peeked
+            self._peeked = None
+            return token
+        return self._scan_token()
+
+    def expect(self, kind: TokenKind, text: str | None = None) -> Token:
+        """Consume the next token, raising ParseError if it doesn't match."""
+        token = self.next()
+        if token.kind != kind:
+            expected = f"{kind.name}"
+            if text is not None:
+                expected = repr(text)
+            raise ParseError(
+                f"expected {expected}, got {token.kind.name} {token.text!r}",
+                token.location,
+                self._filename,
+            )
+        if text is not None and token.text != text:
+            raise ParseError(
+                f"expected {text!r}, got {token.text!r}", token.location, self._filename
+            )
+        return token
+
+    def at(self, kind: TokenKind, text: str | None = None) -> bool:
+        """Check if the next token matches without consuming."""
+        token = self.peek()
+        if token.kind != kind:
+            return False
+        if text is not None and token.text != text:
+            return False
+        return True
+
+    def try_consume(self, kind: TokenKind, text: str | None = None) -> Token | None:
+        """Consume if matches, return None otherwise."""
+        if self.at(kind, text):
+            return self.next()
+        return None
+
+    def collect_pending_comments(self) -> list[str]:
+        """Return and clear accumulated comment lines."""
+        comments = self._comments
+        self._comments = []
+        return comments
+
+    def current_location(self) -> SourceLocation:
+        """Current scanner position (for range tracking by the parser)."""
+        return SourceLocation(self._line, self._column, self._position)
+
+    def scan_to_matching_angle_bracket(self) -> str:
+        """Scan from current position to the matching '>'.
+
+        The opening '<' must already have been consumed. Handles
+        nested angle brackets (for encodings like #q8_0<block=32>>)
+        and ignores brackets inside string literals.
+        Returns the text between the brackets (exclusive).
+        """
+        start = self._position
+        depth = 1
+        in_string = False
+        while self._position < len(self._source) and depth > 0:
+            character = self._source[self._position]
+            if character == '"':
+                in_string = not in_string
+            elif not in_string:
+                if character == "<":
+                    depth += 1
+                elif character == ">":
+                    depth -= 1
+                    if depth == 0:
+                        interior = self._source[start : self._position]
+                        self._advance()  # consume the closing '>'
+                        return interior
+            if character == "\n":
+                self._line += 1
+                self._column = 0  # advance() will increment to 1
+            self._advance()
+        raise ParseError(
+            "unterminated '<' — no matching '>'",
+            SourceLocation(self._line, self._column, self._position),
+            self._filename,
+        )
+
+    # --- Scanning ---
+
+    def _advance(self) -> None:
+        """Advance position by one character."""
+        self._position += 1
+        self._column += 1
+
+    def _char(self) -> str:
+        """Current character, or NUL at EOF.
+
+        Returns '\\0' (not empty string) at EOF so that `_char() in "abc"`
+        and `_char().isdigit()` etc. behave correctly. Empty string is a
+        substring of any string in Python, which causes infinite loops.
+        """
+        if self._position < len(self._source):
+            return self._source[self._position]
+        return "\0"
+
+    def _peek_char(self, offset: int = 1) -> str:
+        """Character at position + offset, or NUL at EOF."""
+        index = self._position + offset
+        if index < len(self._source):
+            return self._source[index]
+        return "\0"
+
+    def _make_token(
+        self, kind: TokenKind, text: str, location: SourceLocation
+    ) -> Token:
+        """Create a token."""
+        return Token(kind, text, location)
+
+    def _skip_whitespace_and_comments(self) -> None:
+        """Skip whitespace and collect comments."""
+        while self._position < len(self._source):
+            character = self._char()
+
+            # Whitespace.
+            if character in " \t\r":
+                self._advance()
+                continue
+            if character == "\n":
+                self._line += 1
+                self._column = 0
+                self._advance()
+                continue
+
+            # Comment: // to end of line.
+            if character == "/" and self._peek_char() == "/":
+                comment_start = self._position + 2
+                self._advance()  # skip first /
+                self._advance()  # skip second /
+                while self._position < len(self._source) and self._char() != "\n":
+                    self._advance()
+                comment_text = self._source[comment_start : self._position].strip()
+                self._comments.append(comment_text)
+                continue
+
+            break
+
+    def _scan_token(self) -> Token:
+        """Scan and return the next token."""
+        self._skip_whitespace_and_comments()
+
+        if self._position >= len(self._source):
+            return self._make_token(
+                TokenKind.EOF,
+                "",
+                SourceLocation(self._line, self._column, self._position),
+            )
+
+        location = SourceLocation(self._line, self._column, self._position)
+        character = self._char()
+
+        # SSA value: %name or %digits.
+        if character == "%":
+            return self._scan_ssa_value(location)
+
+        # Symbol: @name.
+        if character == "@":
+            return self._scan_symbol(location)
+
+        # Hash: #digits (result ordinal) or #name (hash attr).
+        if character == "#":
+            return self._scan_hash(location)
+
+        # Block label: ^name.
+        if character == "^":
+            return self._scan_block_label(location)
+
+        # String literal.
+        if character == '"':
+            return self._scan_string(location)
+
+        # Negative number or arrow.
+        if character == "-":
+            if self._peek_char() == ">":
+                self._advance()
+                self._advance()
+                return self._make_token(TokenKind.ARROW, "->", location)
+            if self._peek_char().isdigit():
+                return self._scan_number(location)
+            raise ParseError(
+                "unexpected '-' (not followed by '>' or digit)",
+                location,
+                self._filename,
+            )
+
+        # Number.
+        if character.isdigit():
+            return self._scan_number(location)
+
+        # Identifier (may become BARE_IDENT or OP_NAME).
+        if _is_ident_start(character):
+            return self._scan_identifier(location)
+
+        # Colon.
+        if character == ":":
+            self._advance()
+            return self._make_token(TokenKind.COLON, ":", location)
+
+        # Single-character punctuation.
+        punctuation = {
+            "(": TokenKind.LPAREN,
+            ")": TokenKind.RPAREN,
+            "{": TokenKind.LBRACE,
+            "}": TokenKind.RBRACE,
+            "[": TokenKind.LBRACKET,
+            "]": TokenKind.RBRACKET,
+            "<": TokenKind.LANGLE,
+            ">": TokenKind.RANGLE,
+            "=": TokenKind.EQUALS,
+            ",": TokenKind.COMMA,
+            "|": TokenKind.PIPE,
+        }
+        if character in punctuation:
+            self._advance()
+            return self._make_token(punctuation[character], character, location)
+
+        raise ParseError(
+            f"unexpected character {character!r}", location, self._filename
+        )
+
+    # --- Individual token scanners ---
+
+    def _scan_ssa_value(self, location: SourceLocation) -> Token:
+        """Scan %name or %digits."""
+        start = self._position
+        self._advance()  # skip %
+        if self._char().isdigit():
+            while self._char().isdigit():
+                self._advance()
+        elif _is_ident_start(self._char()):
+            while _is_ident_continue_no_dot(self._char()):
+                self._advance()
+        else:
+            raise ParseError(
+                "expected identifier or digit after '%'", location, self._filename
+            )
+        text = self._source[start : self._position]
+        return self._make_token(TokenKind.SSA_VALUE, text, location)
+
+    def _scan_symbol(self, location: SourceLocation) -> Token:
+        """Scan @name."""
+        start = self._position
+        self._advance()  # skip @
+        if not _is_ident_start(self._char()):
+            raise ParseError("expected identifier after '@'", location, self._filename)
+        while _is_ident_continue_no_dot(self._char()):
+            self._advance()
+        text = self._source[start : self._position]
+        return self._make_token(TokenKind.SYMBOL, text, location)
+
+    def _scan_hash(self, location: SourceLocation) -> Token:
+        """Scan #digits (result ordinal) or #name (hash attr)."""
+        start = self._position
+        self._advance()  # skip #
+        if self._char().isdigit():
+            while self._char().isdigit():
+                self._advance()
+            text = self._source[start : self._position]
+            return self._make_token(TokenKind.RESULT_ORDINAL, text, location)
+        if _is_ident_start(self._char()):
+            while _is_ident_continue_no_dot(self._char()):
+                self._advance()
+            text = self._source[start : self._position]
+            return self._make_token(TokenKind.HASH_ATTR, text, location)
+        raise ParseError(
+            "expected identifier or digit after '#'", location, self._filename
+        )
+
+    def _scan_block_label(self, location: SourceLocation) -> Token:
+        """Scan ^name."""
+        start = self._position
+        self._advance()  # skip ^
+        if not _is_ident_start(self._char()) and not self._char().isdigit():
+            raise ParseError("expected identifier after '^'", location, self._filename)
+        while _is_ident_continue_no_dot(self._char()):
+            self._advance()
+        text = self._source[start : self._position]
+        return self._make_token(TokenKind.BLOCK_LABEL, text, location)
+
+    def _scan_string(self, location: SourceLocation) -> Token:
+        """Scan "..." string literal with escape sequences.
+
+        Supported escapes: \\\\ (backslash), \\\" (quote), \\n (newline),
+        \\t (tab). The token text includes the outer quotes and the
+        raw escape sequences (not decoded). Decoding happens when the
+        parser extracts the string value.
+        """
+        start = self._position
+        self._advance()  # skip opening "
+        while self._position < len(self._source):
+            character = self._char()
+            if character == "\\":
+                # Escape sequence — skip the backslash and the next char.
+                self._advance()
+                if self._position >= len(self._source):
+                    raise ParseError(
+                        "unterminated escape sequence in string literal",
+                        location,
+                        self._filename,
+                    )
+                self._advance()
+                continue
+            if character == '"':
+                self._advance()  # skip closing "
+                text = self._source[start : self._position]
+                return self._make_token(TokenKind.STRING, text, location)
+            if character == "\n":
+                raise ParseError(
+                    "unterminated string literal", location, self._filename
+                )
+            self._advance()
+        raise ParseError(
+            "unterminated string literal at end of input", location, self._filename
+        )
+
+    def _scan_number(self, location: SourceLocation) -> Token:
+        """Scan integer or float literal."""
+        start = self._position
+        is_negative = self._char() == "-"
+        if is_negative:
+            self._advance()
+
+        # Hex integer: 0x...
+        if self._char() == "0" and self._peek_char() in ("x", "X"):
+            self._advance()  # 0
+            self._advance()  # x
+            if self._char() not in "0123456789abcdefABCDEF":
+                raise ParseError(
+                    "expected hex digits after '0x'", location, self._filename
+                )
+            while self._char() in "0123456789abcdefABCDEF":
+                self._advance()
+            text = self._source[start : self._position]
+            return self._make_token(TokenKind.INTEGER, text, location)
+
+        # Decimal digits.
+        while self._char().isdigit():
+            self._advance()
+
+        # Check for float: '.' or 'e'/'E'.
+        is_float = False
+        if self._char() == "." and self._peek_char().isdigit():
+            is_float = True
+            self._advance()  # skip '.'
+            while self._char().isdigit():
+                self._advance()
+
+        if self._char() in ("e", "E"):
+            is_float = True
+            self._advance()  # skip e/E
+            if self._char() in ("+", "-"):
+                self._advance()
+            if not self._char().isdigit():
+                raise ParseError(
+                    "expected digits in exponent", location, self._filename
+                )
+            while self._char().isdigit():
+                self._advance()
+
+        text = self._source[start : self._position]
+        kind = TokenKind.FLOAT if is_float else TokenKind.INTEGER
+        return self._make_token(kind, text, location)
+
+    def _scan_identifier(self, location: SourceLocation) -> Token:
+        """Scan a bare identifier or dotted op name.
+
+        If the identifier contains dots (like tile.contract), it's
+        an OP_NAME. Otherwise it's a BARE_IDENT.
+
+        Special case: 'tile', 'tensor', 'group' followed by '<' are
+        type keywords (BARE_IDENT), not the start of an op name.
+        """
+        start = self._position
+        # Scan the first segment (no dots).
+        while _is_ident_continue_no_dot(self._char()):
+            self._advance()
+
+        first_segment = self._source[start : self._position]
+
+        # Check if there's a dot following — could be an op name.
+        if self._char() == ".":
+            # Scan the rest including dots.
+            while self._char() == ".":
+                self._advance()  # skip dot
+                if not _is_ident_start(self._char()) and not self._char().isdigit():
+                    # Trailing dot without continuation — back up.
+                    self._position -= 1
+                    self._column -= 1
+                    break
+                while _is_ident_continue_no_dot(self._char()):
+                    self._advance()
+            text = self._source[start : self._position]
+            if "." in text:
+                return self._make_token(TokenKind.OP_NAME, text, location)
+
+        return self._make_token(TokenKind.BARE_IDENT, first_segment, location)

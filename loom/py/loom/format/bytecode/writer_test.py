@@ -1,0 +1,1241 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Comprehensive tests for the bytecode writer.
+
+Every construct that can produce bytes in a .loombc file is tested:
+file structure, every section type, every type variant, every
+attribute kind, value numbering, and tied results. The Python writer
+is the oracle for the C reader — these tests must be exhaustive.
+"""
+
+import struct
+
+from loom.format.bytecode.writer import (
+    FORMAT_VERSION,
+    write_module,
+)
+from loom.ir import (
+    BF16,
+    F32,
+    I8,
+    I32,
+    I64,
+    INDEX,
+    SYMBOL_FLAG_IMPORT,
+    SYMBOL_FLAG_PUBLIC,
+    Block,
+    DialectType,
+    DynamicDim,
+    EncodingInstance,
+    FunctionType,
+    GroupScope,
+    GroupType,
+    Module,
+    Operation,
+    PoolType,
+    Region,
+    ScalarType,
+    ScalarTypeKind,
+    ShapedType,
+    StaticDim,
+    Symbol,
+    SymbolKind,
+    TiedResult,
+    Type,
+    TypeKind,
+    Value,
+)
+
+# ============================================================================
+# Helpers
+# ============================================================================
+
+
+def _make_func_op(
+    module: Module,
+    func_name: str,
+    arg_types: list[Type],
+    result_types: list[Type],
+    body_ops: list[Operation] | None = None,
+    is_public: bool = False,
+    is_declaration: bool = False,
+) -> tuple[Operation, int]:
+    """Build a func.def or func.decl Operation and add it to the module.
+
+    Returns (func_op, sym_flags) for use with Symbol construction.
+    """
+    op_attrs: dict[str, object] = {"callee": func_name}
+    if is_public:
+        op_attrs["visibility"] = "public"
+
+    result_ids = [module.add_value(Value(name="", type=rt)) for rt in result_types]
+    sym_flags = SYMBOL_FLAG_PUBLIC if is_public else 0
+
+    if is_declaration:
+        operand_ids = [
+            module.add_value(Value(name=f"%arg{i}", type=at))
+            for i, at in enumerate(arg_types)
+        ]
+        func_op = Operation(
+            name="func.decl",
+            operands=operand_ids,
+            results=result_ids,
+            attributes=op_attrs,
+        )
+    else:
+        arg_ids = [
+            module.add_value(Value(name=f"%arg{i}", type=at))
+            for i, at in enumerate(arg_types)
+        ]
+        ops = body_ops or []
+        if not ops:
+            # Default: yield the first arg.
+            ops = [
+                Operation(name="test.yield", operands=[arg_ids[0]] if arg_ids else [])
+            ]
+        block = Block(arg_ids=arg_ids, ops=ops)
+        func_op = Operation(
+            name="func.def",
+            results=result_ids,
+            attributes=op_attrs,
+            regions=[Region(blocks=[block])],
+        )
+
+    return func_op, sym_flags
+
+
+def _make_func_module(
+    name: str = "test",
+    func_name: str = "f",
+    arg_types: list[Type] | None = None,
+    result_types: list[Type] | None = None,
+    body_ops: list[Operation] | None = None,
+    attributes: dict[str, object] | None = None,
+    is_public: bool = False,
+    is_declaration: bool = False,
+) -> Module:
+    """Build a module with one function. Convenience for tests."""
+    module = Module(name=name)
+    arg_types = arg_types or [F32]
+    result_types = result_types or []
+    func_op, sym_flags = _make_func_op(
+        module,
+        func_name,
+        arg_types,
+        result_types,
+        body_ops=body_ops,
+        is_public=is_public,
+        is_declaration=is_declaration,
+    )
+    sym_kind = SymbolKind.FUNC_DECL if is_declaration else SymbolKind.FUNC_DEF
+    module.add_symbol(
+        Symbol(name=func_name, kind=sym_kind, flags=sym_flags, op=func_op)
+    )
+    return module
+
+
+# ============================================================================
+# File structure
+# ============================================================================
+
+
+class TestFileHeader:
+    def test_magic_bytes(self) -> None:
+        data = write_module(Module(name="test"))
+        assert data[0:4] == b"LOOM"
+
+    def test_format_version(self) -> None:
+        data = write_module(Module(name="test"))
+        assert data[4] == FORMAT_VERSION
+
+    def test_flags_zero(self) -> None:
+        data = write_module(Module(name="test"))
+        assert data[5] == 0
+
+    def test_module_count_one(self) -> None:
+        data = write_module(Module(name="test"))
+        assert struct.unpack_from("<H", data, 6)[0] == 1
+
+    def test_producer_string(self) -> None:
+        data = write_module(Module(name="test"))
+        # Producer starts at offset 16, null-terminated.
+        producer_start = 16
+        producer_end = data.index(0, producer_start)
+        producer = data[producer_start:producer_end].decode("utf-8")
+        assert "loom" in producer.lower()
+
+    def test_header_aligned_to_8(self) -> None:
+        data = write_module(Module(name="test"))
+        # After the header (including padding), the next structure starts
+        # at an 8-byte aligned offset.
+        # Header: 16 fixed + producer + null + padding.
+        producer_start = 16
+        producer_end = data.index(0, producer_start)
+        header_end = producer_end + 1
+        aligned = (header_end + 7) & ~7
+        # Check padding is zeros.
+        for i in range(header_end, aligned):
+            assert data[i] == 0, f"non-zero padding at offset {i}"
+
+    def test_deterministic_output(self) -> None:
+        m1 = _make_func_module()
+        m2 = _make_func_module()
+        assert write_module(m1) == write_module(m2)
+
+
+class TestModuleDirectory:
+    def test_module_offset_valid(self) -> None:
+        data = write_module(Module(name="test"))
+        # Module directory is after the aligned header.
+        # Read module_offset from directory entry.
+        # Find the directory: it's right after the aligned header.
+        producer_start = 16
+        producer_end = data.index(0, producer_start)
+        dir_start = (producer_end + 1 + 7) & ~7
+        module_offset = struct.unpack_from("<Q", data, dir_start + 8)[0]
+        assert module_offset > 0
+        assert module_offset < len(data)
+
+    def test_module_length_valid(self) -> None:
+        data = write_module(Module(name="test"))
+        producer_start = 16
+        producer_end = data.index(0, producer_start)
+        dir_start = (producer_end + 1 + 7) & ~7
+        module_offset = struct.unpack_from("<Q", data, dir_start + 8)[0]
+        module_length = struct.unpack_from("<Q", data, dir_start + 16)[0]
+        assert module_offset + module_length == len(data)
+
+
+# ============================================================================
+# STRINGS section
+# ============================================================================
+
+
+class TestStringsSection:
+    def test_empty_module_has_strings(self) -> None:
+        """Even an empty module interns at least the module name."""
+        data = write_module(Module(name="mymodule"))
+        assert b"mymodule" in data
+
+    def test_function_names_interned(self) -> None:
+        module = _make_func_module(func_name="compute")
+        data = write_module(module)
+        assert b"compute" in data
+
+    def test_op_names_interned(self) -> None:
+        module = _make_func_module()
+        data = write_module(module)
+        assert b"test.yield" in data
+
+    def test_value_names_interned(self) -> None:
+        module = _make_func_module()
+        data = write_module(module)
+        assert b"%arg0" in data
+
+
+# ============================================================================
+# TYPES section — every type variant
+# ============================================================================
+
+
+class TestTypesSection:
+    def _roundtrip_type(self, ir_type: Type) -> None:
+        """Write a module with a value of this type, read back, verify."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        vid = module.add_value(Value(name="%v", type=ir_type))
+        yield_op = Operation(name="test.yield", operands=[vid])
+        block = Block(arg_ids=[vid], ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+
+        data = write_module(module)
+        loaded = read(data)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        arg_id = loaded_op.regions[0].blocks[0].arg_ids[0]
+        loaded_type = loaded.values[arg_id].type
+        assert loaded_type == ir_type, f"Type mismatch: {loaded_type} != {ir_type}"
+
+    def test_scalar_f32(self) -> None:
+        self._roundtrip_type(F32)
+
+    def test_scalar_i32(self) -> None:
+        self._roundtrip_type(I32)
+
+    def test_scalar_i64(self) -> None:
+        self._roundtrip_type(I64)
+
+    def test_scalar_i8(self) -> None:
+        self._roundtrip_type(I8)
+
+    def test_scalar_index(self) -> None:
+        self._roundtrip_type(INDEX)
+
+    def test_scalar_bf16(self) -> None:
+        self._roundtrip_type(BF16)
+
+    def test_scalar_f8e4m3(self) -> None:
+        self._roundtrip_type(ScalarType(ScalarTypeKind.F8E4M3))
+
+    def test_scalar_f8e5m2(self) -> None:
+        self._roundtrip_type(ScalarType(ScalarTypeKind.F8E5M2))
+
+    def test_tile_0d(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.TILE, F32, ()))
+
+    def test_tile_1d(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.TILE, F32, (StaticDim(4),)))
+
+    def test_tile_2d(self) -> None:
+        self._roundtrip_type(
+            ShapedType(TypeKind.TILE, F32, (StaticDim(4), StaticDim(8)))
+        )
+
+    def test_tile_3d(self) -> None:
+        self._roundtrip_type(
+            ShapedType(TypeKind.TILE, I32, (StaticDim(2), StaticDim(3), StaticDim(4)))
+        )
+
+    def test_tile_dynamic(self) -> None:
+        self._roundtrip_type(
+            ShapedType(TypeKind.TILE, F32, (DynamicDim(), StaticDim(4)))
+        )
+
+    def test_tile_all_dynamic(self) -> None:
+        self._roundtrip_type(
+            ShapedType(TypeKind.TILE, F32, (DynamicDim(), DynamicDim()))
+        )
+
+    def test_tensor_1d(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.TENSOR, I8, (StaticDim(256),)))
+
+    def test_tensor_large_dim(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.TENSOR, F32, (StaticDim(1048576),)))
+
+    def test_tile_with_encoding(self) -> None:
+        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        self._roundtrip_type(
+            ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
+        )
+
+    def test_tile_with_encoding_no_params(self) -> None:
+        enc = EncodingInstance(name="dense")
+        self._roundtrip_type(
+            ShapedType(TypeKind.TILE, F32, (StaticDim(4),), encoding=enc)
+        )
+
+    def test_group_type(self) -> None:
+        self._roundtrip_type(GroupType(GroupScope.WORKGROUP))
+
+    def test_group_subgroup(self) -> None:
+        self._roundtrip_type(GroupType(GroupScope.SUBGROUP))
+
+    def test_function_type(self) -> None:
+        self._roundtrip_type(FunctionType((F32, I32), (F32,)))
+
+    def test_function_type_empty(self) -> None:
+        self._roundtrip_type(FunctionType((), ()))
+
+    def test_dialect_type_opaque(self) -> None:
+        self._roundtrip_type(DialectType("hal.buffer"))
+
+    def test_dialect_type_parameterized(self) -> None:
+        self._roundtrip_type(DialectType("vm.ref", (DialectType("hal.buffer"),)))
+
+    def test_dialect_type_nested(self) -> None:
+        inner = DialectType("vm.list", (I32,))
+        self._roundtrip_type(DialectType("vm.ref", (inner,)))
+
+    def test_pool_static(self) -> None:
+        self._roundtrip_type(PoolType(StaticDim(65536)))
+
+    def test_pool_static_small(self) -> None:
+        self._roundtrip_type(PoolType(StaticDim(4096)))
+
+    def test_pool_dynamic(self) -> None:
+        self._roundtrip_type(PoolType(DynamicDim()))
+
+    def test_encoding_type(self) -> None:
+        from loom.ir import ENCODING_TYPE
+
+        self._roundtrip_type(ENCODING_TYPE)
+
+
+# ============================================================================
+# ENCODINGS section
+# ============================================================================
+
+
+class TestEncodingsSection:
+    def test_empty_encodings(self) -> None:
+        from loom.format.bytecode.reader import read_module as read
+
+        module = _make_func_module()
+        data = write_module(module)
+        loaded = read(data)
+        assert len(loaded.encodings) == 0
+
+    def test_single_encoding(self) -> None:
+        from loom.format.bytecode.reader import read_module as read
+
+        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        module = Module(name="test")
+        module.add_encoding(enc)
+        enc_type = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
+        vid = module.add_value(Value(name="%v", type=enc_type))
+        yield_op = Operation(name="test.yield", operands=[vid])
+        block = Block(arg_ids=[vid], ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        data = write_module(module)
+        loaded = read(data)
+        assert len(loaded.encodings) >= 1
+        assert loaded.encodings[0].name == "q8_0"
+        assert loaded.encodings[0].params == (("block", "32"),)
+
+    def test_multiple_encoding_kinds(self) -> None:
+        from loom.format.bytecode.reader import read_module as read
+
+        enc1 = EncodingInstance(name="q8_0")
+        enc2 = EncodingInstance(name="q6_k")
+        module = Module(name="test")
+        module.add_encoding(enc1)
+        module.add_encoding(enc2)
+        t1 = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc1)
+        t2 = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc2)
+        v1 = module.add_value(Value(name="%a", type=t1))
+        v2 = module.add_value(Value(name="%b", type=t2))
+        yield_op = Operation(name="test.yield", operands=[v1, v2])
+        block = Block(arg_ids=[v1, v2], ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        data = write_module(module)
+        loaded = read(data)
+        names = {e.name for e in loaded.encodings}
+        assert "q8_0" in names
+        assert "q6_k" in names
+
+    def test_encoding_integer_param_roundtrip(self) -> None:
+        """Integer params (block=32) round-trip through structured I64 encoding."""
+        from loom.format.bytecode.reader import read_module as read
+
+        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        module = Module(name="test")
+        module.add_encoding(enc)
+        t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
+        v = module.add_value(Value(name="%v", type=t))
+        block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
+        module.add_symbol(
+            Symbol(
+                name="f",
+                kind=SymbolKind.FUNC_DEF,
+                op=Operation(
+                    name="func.def",
+                    attributes={"callee": "f"},
+                    regions=[Region(blocks=[block])],
+                ),
+            )
+        )
+        data = write_module(module)
+        loaded = read(data)
+        assert loaded.encodings[0].params == (("block", "32"),)
+
+    def test_encoding_string_param_roundtrip(self) -> None:
+        """String params (layout=nchw) round-trip through structured STRING encoding."""
+        from loom.format.bytecode.reader import read_module as read
+
+        enc = EncodingInstance(name="dense", params=(("layout", "nchw"),))
+        module = Module(name="test")
+        module.add_encoding(enc)
+        t = ShapedType(TypeKind.TILE, F32, (StaticDim(4), StaticDim(4)), encoding=enc)
+        v = module.add_value(Value(name="%v", type=t))
+        block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
+        module.add_symbol(
+            Symbol(
+                name="f",
+                kind=SymbolKind.FUNC_DEF,
+                op=Operation(
+                    name="func.def",
+                    attributes={"callee": "f"},
+                    regions=[Region(blocks=[block])],
+                ),
+            )
+        )
+        data = write_module(module)
+        loaded = read(data)
+        assert loaded.encodings[0].params == (("layout", "nchw"),)
+
+    def test_encoding_multiple_params_roundtrip(self) -> None:
+        """Multiple params round-trip with correct names and values."""
+        from loom.format.bytecode.reader import read_module as read
+
+        enc = EncodingInstance(
+            name="q4_k",
+            params=(("block", "32"), ("group_size", "128")),
+        )
+        module = Module(name="test")
+        module.add_encoding(enc)
+        t = ShapedType(TypeKind.TILE, I8, (StaticDim(512),), encoding=enc)
+        v = module.add_value(Value(name="%v", type=t))
+        block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
+        module.add_symbol(
+            Symbol(
+                name="f",
+                kind=SymbolKind.FUNC_DEF,
+                op=Operation(
+                    name="func.def",
+                    attributes={"callee": "f"},
+                    regions=[Region(blocks=[block])],
+                ),
+            )
+        )
+        data = write_module(module)
+        loaded = read(data)
+        assert loaded.encodings[0].params == (("block", "32"), ("group_size", "128"))
+
+    def test_encoding_with_alias_roundtrip(self) -> None:
+        """Encoding alias round-trips correctly."""
+        from loom.format.bytecode.reader import read_module as read
+
+        enc = EncodingInstance(
+            name="q8_0",
+            alias="enc",
+            params=(("block", "32"),),
+        )
+        module = Module(name="test")
+        module.add_encoding(enc)
+        t = ShapedType(TypeKind.TILE, I8, (StaticDim(128),), encoding=enc)
+        v = module.add_value(Value(name="%v", type=t))
+        block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
+        module.add_symbol(
+            Symbol(
+                name="f",
+                kind=SymbolKind.FUNC_DEF,
+                op=Operation(
+                    name="func.def",
+                    attributes={"callee": "f"},
+                    regions=[Region(blocks=[block])],
+                ),
+            )
+        )
+        data = write_module(module)
+        loaded = read(data)
+        assert loaded.encodings[0].alias == "enc"
+        assert loaded.encodings[0].name == "q8_0"
+        assert loaded.encodings[0].params == (("block", "32"),)
+
+    def test_encoding_no_params_roundtrip(self) -> None:
+        """Encoding with zero params round-trips correctly."""
+        from loom.format.bytecode.reader import read_module as read
+
+        enc = EncodingInstance(name="dense")
+        module = Module(name="test")
+        module.add_encoding(enc)
+        t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),), encoding=enc)
+        v = module.add_value(Value(name="%v", type=t))
+        block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
+        module.add_symbol(
+            Symbol(
+                name="f",
+                kind=SymbolKind.FUNC_DEF,
+                op=Operation(
+                    name="func.def",
+                    attributes={"callee": "f"},
+                    regions=[Region(blocks=[block])],
+                ),
+            )
+        )
+        data = write_module(module)
+        loaded = read(data)
+        assert loaded.encodings[0].name == "dense"
+        assert loaded.encodings[0].params == ()
+
+
+# ============================================================================
+# OPS section
+# ============================================================================
+
+
+class TestOpsSection:
+    def test_op_names_in_bytecode(self) -> None:
+        module = _make_func_module()
+        data = write_module(module)
+        assert b"test.yield" in data
+
+    def test_multiple_op_kinds(self) -> None:
+        module = Module(name="test")
+        x = module.add_value(Value(name="%x", type=F32))
+        r = module.add_value(Value(name="%r", type=F32))
+        neg = Operation(name="test.neg", operands=[x], results=[r])
+        yield_op = Operation(name="test.yield", operands=[r])
+        block = Block(arg_ids=[x], ops=[neg, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        data = write_module(module)
+        assert b"test.neg" in data
+        assert b"test.yield" in data
+
+
+# ============================================================================
+# IR section — attribute values
+# ============================================================================
+
+
+class TestAttributeValues:
+    def _roundtrip_attr(self, key: str, value: object) -> object:
+        """Write an op with an attribute, read back, verify."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        x = module.add_value(Value(name="%x", type=F32))
+        op = Operation(name="test.constant", results=[], attributes={key: value})
+        yield_op = Operation(name="test.yield", operands=[x])
+        block = Block(arg_ids=[x], ops=[op, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        data = write_module(module)
+        loaded = read(data)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.regions
+        target_op = loaded_op.regions[0].blocks[0].ops[0]
+        return target_op.attributes.get(key)
+
+    def test_i64_positive(self) -> None:
+        assert self._roundtrip_attr("val", 42) == 42
+
+    def test_i64_negative(self) -> None:
+        assert self._roundtrip_attr("val", -7) == -7
+
+    def test_i64_zero(self) -> None:
+        assert self._roundtrip_attr("val", 0) == 0
+
+    def test_i64_large(self) -> None:
+        assert self._roundtrip_attr("val", 2**40) == 2**40
+
+    def test_f64(self) -> None:
+        result = self._roundtrip_attr("val", 3.14)
+        assert isinstance(result, float)
+        assert abs(result - 3.14) < 1e-15
+
+    def test_f64_negative(self) -> None:
+        result = self._roundtrip_attr("val", -2.718)
+        assert isinstance(result, float)
+        assert abs(result - (-2.718)) < 1e-15
+
+    def test_f64_zero(self) -> None:
+        assert self._roundtrip_attr("val", 0.0) == 0.0
+
+    def test_string_ascii(self) -> None:
+        assert self._roundtrip_attr("label", "hello") == "hello"
+
+    def test_string_empty(self) -> None:
+        assert self._roundtrip_attr("label", "") == ""
+
+    def test_bool_true(self) -> None:
+        assert self._roundtrip_attr("flag", True) is True
+
+    def test_bool_false(self) -> None:
+        assert self._roundtrip_attr("flag", False) is False
+
+    def test_i64_array(self) -> None:
+        assert self._roundtrip_attr("offsets", [0, 1, 2]) == [0, 1, 2]
+
+    def test_i64_array_empty(self) -> None:
+        assert self._roundtrip_attr("offsets", []) == []
+
+    def test_i64_array_with_sentinel(self) -> None:
+        sentinel = -(2**63)
+        assert self._roundtrip_attr("offsets", [0, sentinel]) == [0, sentinel]
+
+    def test_i64_array_negative(self) -> None:
+        assert self._roundtrip_attr("vals", [-1, -2, -3]) == [-1, -2, -3]
+
+
+# ============================================================================
+# IR section — op patterns (round-trip)
+# ============================================================================
+
+
+class TestOpPatterns:
+    """Round-trip every op pattern through bytecode."""
+
+    def _roundtrip_ops(self, module: Module) -> Module:
+        from loom.format.bytecode.reader import read_module as read
+
+        data = write_module(module)
+        return read(data)
+
+    def test_binary_op(self) -> None:
+        module = Module(name="test")
+        a = module.add_value(Value(name="%a", type=I32))
+        b = module.add_value(Value(name="%b", type=I32))
+        r = module.add_value(Value(name="%r", type=I32))
+        add = Operation(name="test.addi", operands=[a, b], results=[r])
+        yield_op = Operation(name="test.yield", operands=[r])
+        block = Block(arg_ids=[a, b], ops=[add, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = self._roundtrip_ops(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.regions
+        add_op = loaded_op.regions[0].blocks[0].ops[0]
+        assert add_op.name == "test.addi"
+        assert len(add_op.operands) == 2
+        assert len(add_op.results) == 1
+
+    def test_tied_result(self) -> None:
+        tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
+        tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
+        module = Module(name="test")
+        tile = module.add_value(Value(name="%tile", type=tile_t))
+        tensor = module.add_value(Value(name="%tensor", type=tensor_t))
+        result = module.add_value(Value(name="%r", type=tensor_t))
+        update = Operation(
+            name="test.update",
+            operands=[tile, tensor],
+            results=[result],
+            tied_results=[TiedResult(result_index=0, operand_index=1)],
+        )
+        yield_op = Operation(name="test.yield", operands=[result])
+        block = Block(arg_ids=[tile, tensor], ops=[update, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = self._roundtrip_ops(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.regions
+        update_op = loaded_op.regions[0].blocks[0].ops[0]
+        assert len(update_op.tied_results) == 1
+        assert update_op.tied_results[0].result_index == 0
+        assert update_op.tied_results[0].operand_index == 1
+
+    def test_ordinal_dim_roundtrip(self) -> None:
+        """Result ordinal dims survive bytecode round-trip."""
+        tensor_dyn = ShapedType(TypeKind.TENSOR, F32, (DynamicDim(),))
+        module = Module(name="test")
+        input_id = module.add_value(
+            Value(name="%input", type=tensor_dyn, dim_bindings={0: 0})
+        )
+        # Result with ordinal dim: tensor<[#1]xf32> — ordinal #1 = -2.
+        output_id = module.add_value(
+            Value(name="%output", type=tensor_dyn, dim_bindings={0: -2})
+        )
+        length_id = module.add_value(Value(name="%length", type=INDEX))
+        deflate_op = Operation(
+            name="test.deflate",
+            operands=[input_id],
+            results=[output_id, length_id],
+        )
+        yield_op = Operation(name="test.yield", operands=[output_id])
+        block = Block(arg_ids=[input_id], ops=[deflate_op, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = self._roundtrip_ops(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.regions
+        deflate = loaded_op.regions[0].blocks[0].ops[0]
+        assert deflate.name == "test.deflate"
+        assert len(deflate.results) == 2
+        # Check the output value's dim binding has the ordinal preserved.
+        output_value = loaded.values[deflate.results[0]]
+        assert output_value.dim_bindings[0] == -2  # #1 ordinal
+
+    def test_nested_region(self) -> None:
+        module = Module(name="test")
+        x = module.add_value(Value(name="%x", type=F32))
+        e = module.add_value(Value(name="%e", type=F32))
+        neg = Operation(name="test.neg", operands=[e], results=[e])
+        inner_yield = Operation(name="test.yield", operands=[e])
+        inner_block = Block(arg_ids=[e], ops=[neg, inner_yield])
+        inner_region = Region(blocks=[inner_block])
+        map_result = module.add_value(Value(name="%r", type=F32))
+        map_op = Operation(
+            name="test.map", operands=[x], results=[map_result], regions=[inner_region]
+        )
+        yield_op = Operation(name="test.yield", operands=[map_result])
+        block = Block(arg_ids=[x], ops=[map_op, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = self._roundtrip_ops(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.regions
+        map_loaded = loaded_op.regions[0].blocks[0].ops[0]
+        assert map_loaded.name == "test.map"
+        assert len(map_loaded.regions) == 1
+        assert len(map_loaded.regions[0].blocks) == 1
+        assert len(map_loaded.regions[0].blocks[0].ops) == 2
+
+    def test_no_results_op(self) -> None:
+        module = Module(name="test")
+        a = module.add_value(Value(name="%a", type=F32))
+        b = module.add_value(Value(name="%b", type=I32))
+        yield_op = Operation(name="test.yield", operands=[a, b])
+        block = Block(arg_ids=[a, b], ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = self._roundtrip_ops(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.regions
+        yield_loaded = loaded_op.regions[0].blocks[0].ops[0]
+        assert yield_loaded.name == "test.yield"
+        assert len(yield_loaded.operands) == 2
+        assert len(yield_loaded.results) == 0
+
+    def test_declaration_no_body(self) -> None:
+        module = _make_func_module(is_declaration=True)
+        from loom.format.bytecode.reader import read_module as read
+
+        loaded = read(write_module(module))
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert not loaded_op.regions
+
+    def test_public_function(self) -> None:
+        module = _make_func_module(is_public=True)
+        from loom.format.bytecode.reader import read_module as read
+
+        loaded = read(write_module(module))
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.attributes.get("visibility") == "public"
+
+    def test_multiple_functions(self) -> None:
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        for fn_name in ["f1", "f2", "f3"]:
+            vid = module.add_value(Value(name=f"%x_{fn_name}", type=F32))
+            yield_op = Operation(name="test.yield", operands=[vid])
+            block = Block(arg_ids=[vid], ops=[yield_op])
+            body = Region(blocks=[block])
+            func_op = Operation(
+                name="func.def",
+                attributes={"callee": fn_name},
+                regions=[body],
+            )
+            module.add_symbol(
+                Symbol(name=fn_name, kind=SymbolKind.FUNC_DEF, op=func_op)
+            )
+        loaded = read(write_module(module))
+        assert len(loaded.symbols) == 3
+        names = {s.name for s in loaded.symbols}
+        assert names == {"f1", "f2", "f3"}
+
+
+# ============================================================================
+# Cross-format round-trip
+# ============================================================================
+
+
+class TestCrossFormatRoundTrip:
+    """text → parse → IR → write bytecode → read bytecode → IR → print text."""
+
+    def test_simple_function(self) -> None:
+        from loom.builtin_types import ALL_BUILTIN_TYPES
+        from loom.dialect.func import ALL_FUNC_OPS
+        from loom.dialect.test import ALL_TEST_OPS
+        from loom.format.bytecode.reader import read_module as read
+        from loom.format.text.parser import Parser
+
+        text = (
+            "func.def @negate(%input: f32) -> (f32) {\n"
+            "  %neg0 = test.neg %input : f32\n"
+            "  test.yield %neg0 : f32\n"
+            "}\n"
+        )
+
+        # Parse text → IR.
+        parser = Parser()
+        parser.register_ops(list(ALL_FUNC_OPS) + list(ALL_TEST_OPS))
+        parser.register_types(ALL_BUILTIN_TYPES)
+        module = parser.parse(text)
+
+        # Write IR → bytecode.
+        bc_data = write_module(module)
+
+        # Read bytecode → IR.
+        loaded = read(bc_data)
+
+        # Verify structure survived.
+        assert len(loaded.symbols) == 1
+        func_op = loaded.symbols[0].op
+        assert func_op is not None
+        assert func_op.attributes.get("callee") == "negate"
+        assert func_op.regions
+        assert len(func_op.regions[0].blocks[0].ops) == 2
+
+
+class TestPredicateBytecodeRoundTrip:
+    """Predicate serialization: write → read → verify."""
+
+    def test_function_predicates_roundtrip(self) -> None:
+        """Function predicates survive bytecode round-trip."""
+        from loom.format.bytecode.reader import read_module as read
+        from loom.ir import (
+            Module,
+            Operation,
+            Predicate,
+            PredicateArg,
+            Symbol,
+            SymbolKind,
+            Value,
+        )
+
+        module = Module(name="test")
+        predicates = [
+            Predicate(
+                kind="mul",
+                args=(
+                    PredicateArg(tag="value", value="%M"),
+                    PredicateArg(tag="const", value=16),
+                ),
+            ),
+            Predicate(
+                kind="lt",
+                args=(
+                    PredicateArg(tag="value", value="%K"),
+                    PredicateArg(tag="const", value=1024),
+                ),
+            ),
+            Predicate(
+                kind="pow2",
+                args=(PredicateArg(tag="value", value="%N"),),
+            ),
+            Predicate(
+                kind="range",
+                args=(
+                    PredicateArg(tag="value", value="%M"),
+                    PredicateArg(tag="const", value=32),
+                    PredicateArg(tag="const", value=512),
+                ),
+            ),
+            Predicate(
+                kind="eq",
+                args=(
+                    PredicateArg(tag="ordinal", value=1),
+                    PredicateArg(tag="value", value="%M"),
+                ),
+            ),
+        ]
+        arg_id = module.add_value(Value(name="", type=F32))
+        result_id = module.add_value(Value(name="", type=F32))
+        func_op = Operation(
+            name="func.decl",
+            operands=[arg_id],
+            results=[result_id],
+            attributes={"callee": "test", "predicates": predicates},
+        )
+        module.add_symbol(Symbol(name="test", kind=SymbolKind.FUNC_DECL, op=func_op))
+
+        bc_data = write_module(module)
+        loaded = read(bc_data)
+
+        assert len(loaded.symbols) == 1
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        loaded_preds = loaded_op.attributes.get("predicates", [])
+        assert len(loaded_preds) == 5
+
+        # Verify each predicate survived.
+        assert loaded_preds[0].kind == "mul"
+        assert len(loaded_preds[0].args) == 2
+        assert loaded_preds[0].args[0].tag == "value"
+        assert loaded_preds[0].args[0].value == "%M"
+        assert loaded_preds[0].args[1].tag == "const"
+        assert loaded_preds[0].args[1].value == 16
+
+        assert loaded_preds[1].kind == "lt"
+        assert loaded_preds[1].args[1].value == 1024
+
+        assert loaded_preds[2].kind == "pow2"
+        assert len(loaded_preds[2].args) == 1
+
+        assert loaded_preds[3].kind == "range"
+        assert len(loaded_preds[3].args) == 3
+
+        assert loaded_preds[4].kind == "eq"
+        assert loaded_preds[4].args[0].tag == "ordinal"
+        assert loaded_preds[4].args[0].value == 1
+
+    def test_empty_predicates_roundtrip(self) -> None:
+        """Function with no predicates survives bytecode round-trip."""
+        from loom.format.bytecode.reader import read_module as read
+        from loom.ir import (
+            Module,
+            Operation,
+            Symbol,
+            SymbolKind,
+            Value,
+        )
+
+        module = Module(name="test")
+        arg_id = module.add_value(Value(name="", type=F32))
+        result_id = module.add_value(Value(name="", type=F32))
+        func_op = Operation(
+            name="func.decl",
+            operands=[arg_id],
+            results=[result_id],
+            attributes={"callee": "no_preds"},
+        )
+        module.add_symbol(
+            Symbol(name="no_preds", kind=SymbolKind.FUNC_DECL, op=func_op)
+        )
+
+        bc_data = write_module(module)
+        loaded = read(bc_data)
+
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.attributes.get("predicates", []) == []
+
+
+# ============================================================================
+# Import/export bytecode round-trips
+# ============================================================================
+
+
+class TestImportExportBytecodeRoundTrip:
+    """Import/export metadata survives bytecode serialization."""
+
+    def test_import_declaration_roundtrip(self) -> None:
+        """Import declaration with source module survives round-trip."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        operand_ids = [module.add_value(Value(name="", type=at)) for at in [F32, F32]]
+        result_id = module.add_value(Value(name="", type=F32))
+        func_op = Operation(
+            name="func.decl",
+            operands=operand_ids,
+            results=[result_id],
+            attributes={"callee": "matmul"},
+        )
+        module.add_symbol(
+            Symbol(
+                name="matmul",
+                kind=SymbolKind.FUNC_DECL,
+                flags=SYMBOL_FLAG_IMPORT,
+                op=func_op,
+                source_module="linalg_lib",
+            )
+        )
+        loaded = read(write_module(module))
+        sym = loaded.symbols[0]
+        assert sym.is_import
+        assert sym.source_module == "linalg_lib"
+        # source_symbol defaults to name when empty.
+        assert sym.source_symbol == "matmul"
+
+    def test_import_with_alias_roundtrip(self) -> None:
+        """Import with aliasing: local name differs from source symbol."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        arg_id = module.add_value(Value(name="", type=F32))
+        result_id = module.add_value(Value(name="", type=F32))
+        func_op = Operation(
+            name="func.decl",
+            operands=[arg_id],
+            results=[result_id],
+            attributes={"callee": "my_matmul"},
+        )
+        module.add_symbol(
+            Symbol(
+                name="my_matmul",
+                kind=SymbolKind.FUNC_DECL,
+                flags=SYMBOL_FLAG_IMPORT,
+                op=func_op,
+                source_module="linalg_lib",
+                source_symbol="matmul",
+            )
+        )
+        loaded = read(write_module(module))
+        sym = loaded.symbols[0]
+        assert sym.name == "my_matmul"
+        assert sym.is_import
+        assert sym.source_module == "linalg_lib"
+        assert sym.source_symbol == "matmul"
+
+    def test_public_import_roundtrip(self) -> None:
+        """Import can also be public (re-export)."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        arg_id = module.add_value(Value(name="", type=F32))
+        result_id = module.add_value(Value(name="", type=F32))
+        func_op = Operation(
+            name="func.decl",
+            operands=[arg_id],
+            results=[result_id],
+            attributes={"callee": "relu", "visibility": "public"},
+        )
+        module.add_symbol(
+            Symbol(
+                name="relu",
+                kind=SymbolKind.FUNC_DECL,
+                flags=SYMBOL_FLAG_PUBLIC | SYMBOL_FLAG_IMPORT,
+                op=func_op,
+                source_module="activations",
+            )
+        )
+        loaded = read(write_module(module))
+        sym = loaded.symbols[0]
+        assert sym.is_import
+        assert sym.is_public
+        assert sym.source_module == "activations"
+
+    def test_export_offset_table(self) -> None:
+        """Public symbols appear in the export offset table."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        # Private function.
+        vid = module.add_value(Value(name="%x", type=F32))
+        body = Region(
+            blocks=[
+                Block(arg_ids=[vid], ops=[Operation(name="test.yield", operands=[vid])])
+            ]
+        )
+        helper_op = Operation(
+            name="func.def", attributes={"callee": "helper"}, regions=[body]
+        )
+        module.add_symbol(
+            Symbol(name="helper", kind=SymbolKind.FUNC_DEF, flags=0, op=helper_op)
+        )
+        # Public function.
+        vid2 = module.add_value(Value(name="%y", type=F32))
+        body2 = Region(
+            blocks=[
+                Block(
+                    arg_ids=[vid2], ops=[Operation(name="test.yield", operands=[vid2])]
+                )
+            ]
+        )
+        entry_op = Operation(
+            name="func.def",
+            attributes={"callee": "entry", "visibility": "public"},
+            regions=[body2],
+        )
+        module.add_symbol(
+            Symbol(
+                name="entry",
+                kind=SymbolKind.FUNC_DEF,
+                flags=SYMBOL_FLAG_PUBLIC,
+                op=entry_op,
+            )
+        )
+        # Round-trip: both survive, visibility preserved.
+        loaded = read(write_module(module))
+        assert len(loaded.symbols) == 2
+        names = {s.name: s for s in loaded.symbols}
+        assert not names["helper"].is_public
+        assert names["entry"].is_public
+
+    def test_mixed_import_export_private(self) -> None:
+        """Module with imports, exports, and private symbols."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = Module(name="test")
+        # Import.
+        import_operands = [
+            module.add_value(Value(name="", type=at)) for at in [F32, F32]
+        ]
+        import_result = module.add_value(Value(name="", type=F32))
+        import_op = Operation(
+            name="func.decl",
+            operands=import_operands,
+            results=[import_result],
+            attributes={"callee": "extern_add"},
+        )
+        module.add_symbol(
+            Symbol(
+                name="extern_add",
+                kind=SymbolKind.FUNC_DECL,
+                flags=SYMBOL_FLAG_IMPORT,
+                op=import_op,
+                source_module="math_lib",
+            )
+        )
+        # Private.
+        vid = module.add_value(Value(name="%x", type=F32))
+        helper_op = Operation(
+            name="func.def",
+            attributes={"callee": "helper"},
+            regions=[
+                Region(
+                    blocks=[
+                        Block(
+                            arg_ids=[vid],
+                            ops=[Operation(name="test.yield", operands=[vid])],
+                        )
+                    ]
+                )
+            ],
+        )
+        module.add_symbol(
+            Symbol(name="helper", kind=SymbolKind.FUNC_DEF, flags=0, op=helper_op)
+        )
+        # Export.
+        vid2 = module.add_value(Value(name="%y", type=F32))
+        entry_op = Operation(
+            name="func.def",
+            attributes={"callee": "entry", "visibility": "public"},
+            regions=[
+                Region(
+                    blocks=[
+                        Block(
+                            arg_ids=[vid2],
+                            ops=[Operation(name="test.yield", operands=[vid2])],
+                        )
+                    ]
+                )
+            ],
+        )
+        module.add_symbol(
+            Symbol(
+                name="entry",
+                kind=SymbolKind.FUNC_DEF,
+                flags=SYMBOL_FLAG_PUBLIC,
+                op=entry_op,
+            )
+        )
+        loaded = read(write_module(module))
+        assert len(loaded.symbols) == 3
+        syms = {s.name: s for s in loaded.symbols}
+        assert syms["extern_add"].is_import
+        assert syms["extern_add"].source_module == "math_lib"
+        assert not syms["helper"].is_import
+        assert not syms["helper"].is_public
+        assert syms["entry"].is_public
+        assert not syms["entry"].is_import
+
+    def test_no_imports_no_exports(self) -> None:
+        """Module with only private symbols has empty offset tables."""
+        from loom.format.bytecode.reader import read_module as read
+
+        module = _make_func_module()
+        loaded = read(write_module(module))
+        for sym in loaded.symbols:
+            assert not sym.is_import
+            assert not sym.is_public

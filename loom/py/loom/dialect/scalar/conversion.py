@@ -1,0 +1,185 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Scalar conversion: type casts and constants."""
+
+from loom.assembly import (
+    COLON,
+    Attr,
+    TypeOf,
+)
+from loom.dialect.scalar import scalar_ops
+from loom.dsl import (
+    CONSTANT_LIKE,
+    FLOAT,
+    INTEGER,
+    PURE,
+    SCALAR,
+    AttrDef,
+    Op,
+    Result,
+    cast_op,
+)
+
+__all__ = ["ALL_CONVERSION_OPS"]
+
+# ============================================================================
+# Integer <-> float
+# ============================================================================
+
+scalar_sitofp = cast_op(
+    "scalar.sitofp",
+    group=scalar_ops,
+    from_constraint=INTEGER,
+    to_constraint=FLOAT,
+    doc="Signed integer to floating-point.",
+    fold="loom_scalar_sitofp_fold",
+    examples=["%result = scalar.sitofp %input : i32 to f32"],
+)
+scalar_uitofp = cast_op(
+    "scalar.uitofp",
+    group=scalar_ops,
+    from_constraint=INTEGER,
+    to_constraint=FLOAT,
+    doc="Unsigned integer to floating-point.",
+    fold="loom_scalar_uitofp_fold",
+    examples=["%result = scalar.uitofp %input : i32 to f32"],
+)
+scalar_fptosi = cast_op(
+    "scalar.fptosi",
+    group=scalar_ops,
+    from_constraint=FLOAT,
+    to_constraint=INTEGER,
+    doc="Floating-point to signed integer (rounds toward zero).",
+    fold="loom_scalar_fptosi_fold",
+    examples=["%result = scalar.fptosi %input : f32 to i32"],
+)
+scalar_fptoui = cast_op(
+    "scalar.fptoui",
+    group=scalar_ops,
+    from_constraint=FLOAT,
+    to_constraint=INTEGER,
+    doc="Floating-point to unsigned integer (rounds toward zero).",
+    fold="loom_scalar_fptoui_fold",
+    examples=["%result = scalar.fptoui %input : f32 to i32"],
+)
+
+# ============================================================================
+# Float precision
+# ============================================================================
+
+scalar_extf = cast_op(
+    "scalar.extf",
+    group=scalar_ops,
+    from_constraint=FLOAT,
+    to_constraint=FLOAT,
+    doc="Float precision extension (widen): e.g. f16 to f32.",
+    fold="loom_scalar_extf_fold",
+    examples=["%result = scalar.extf %input : f16 to f32"],
+)
+scalar_fptrunc = cast_op(
+    "scalar.fptrunc",
+    group=scalar_ops,
+    from_constraint=FLOAT,
+    to_constraint=FLOAT,
+    doc="Float precision truncation (narrow): e.g. f32 to f16.",
+    fold="loom_scalar_fptrunc_fold",
+    examples=["%result = scalar.fptrunc %input : f32 to f16"],
+)
+
+# ============================================================================
+# Integer width
+# ============================================================================
+
+scalar_extsi = cast_op(
+    "scalar.extsi",
+    group=scalar_ops,
+    from_constraint=INTEGER,
+    to_constraint=INTEGER,
+    doc="Signed integer extension (sign-extend): e.g. i8 to i32.",
+    fold="loom_scalar_extsi_fold",
+    examples=["%result = scalar.extsi %input : i8 to i32"],
+)
+scalar_extui = cast_op(
+    "scalar.extui",
+    group=scalar_ops,
+    from_constraint=INTEGER,
+    to_constraint=INTEGER,
+    doc="Unsigned integer extension (zero-extend): e.g. i8 to i32.",
+    fold="loom_scalar_extui_fold",
+    examples=["%result = scalar.extui %input : i8 to i32"],
+)
+scalar_trunci = cast_op(
+    "scalar.trunci",
+    group=scalar_ops,
+    from_constraint=INTEGER,
+    to_constraint=INTEGER,
+    doc="Integer truncation (narrow): e.g. i32 to i8.",
+    fold="loom_scalar_trunci_fold",
+    examples=["%result = scalar.trunci %input : i32 to i8"],
+)
+
+# ============================================================================
+# Special conversions
+# ============================================================================
+
+scalar_index_cast = cast_op(
+    "scalar.index_cast",
+    group=scalar_ops,
+    from_constraint=SCALAR,
+    to_constraint=SCALAR,
+    doc="Index/offset to integer or integer to index/offset conversion.",
+    fold="loom_scalar_index_cast_fold",
+    examples=["%result = scalar.index_cast %input : index to i64"],
+)
+scalar_bitcast = cast_op(
+    "scalar.bitcast",
+    group=scalar_ops,
+    from_constraint=SCALAR,
+    to_constraint=SCALAR,
+    doc="Bitwise reinterpretation: same bits, different type. No conversion.",
+    fold="loom_scalar_bitcast_fold",
+    examples=["%result = scalar.bitcast %input : f32 to i32"],
+)
+
+# ============================================================================
+# Constants
+# ============================================================================
+
+scalar_constant = Op(
+    "scalar.constant",
+    group=scalar_ops,
+    doc="Materialize a compile-time constant scalar value.",
+    results=[Result("result", SCALAR)],
+    attrs=[AttrDef("value", "any", doc="The constant value.")],
+    traits=[PURE, CONSTANT_LIKE],
+    fold="loom_scalar_constant_fold",
+    format=[Attr("value"), COLON, TypeOf("result")],
+    examples=[
+        "%c42 = scalar.constant 42 : i32",
+        "%pi = scalar.constant 3.14159265358979 : f32",
+        "%true = scalar.constant 1 : i1",
+    ],
+)
+
+# ============================================================================
+# Registry
+# ============================================================================
+
+ALL_CONVERSION_OPS: tuple[Op, ...] = (
+    scalar_sitofp,
+    scalar_uitofp,
+    scalar_fptosi,
+    scalar_fptoui,
+    scalar_extf,
+    scalar_fptrunc,
+    scalar_extsi,
+    scalar_extui,
+    scalar_trunci,
+    scalar_index_cast,
+    scalar_bitcast,
+    scalar_constant,
+)

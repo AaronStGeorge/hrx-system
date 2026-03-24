@@ -1,0 +1,506 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/format/bytecode/writer.h"
+
+#include <cstring>
+#include <vector>
+
+#include "iree/base/internal/arena.h"
+#include "iree/io/vec_stream.h"
+#include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
+#include "loom/format/bytecode/format.h"
+#include "loom/format/bytecode/varint.h"
+#include "loom/ir/context.h"
+#include "loom/ir/module.h"
+#include "loom/ops/test/ops.h"
+
+namespace loom {
+namespace {
+
+//===----------------------------------------------------------------------===//
+// Test fixture
+//===----------------------------------------------------------------------===//
+
+class WriterTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    loom_context_initialize(iree_allocator_system(), &context_);
+
+    // Register the test dialect so the writer can resolve op names.
+    iree_host_size_t op_count = 0;
+    const loom_op_vtable_t* const* vtables =
+        loom_test_dialect_vtables(&op_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_TEST,
+                                                 vtables, (uint16_t)op_count));
+    IREE_ASSERT_OK(loom_context_finalize(&context_));
+  }
+
+  void TearDown() override {
+    loom_context_deinitialize(&context_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
+
+  // Creates a module with the given name.
+  loom_module_t* CreateModule(const char* name) {
+    loom_module_t* module = nullptr;
+    IREE_CHECK_OK(loom_module_allocate(&context_, iree_make_cstring_view(name),
+                                       &block_pool_, nullptr,
+                                       iree_allocator_system(), &module));
+    return module;
+  }
+
+  // Writes a module to bytecode and returns the raw bytes.
+  std::vector<uint8_t> WriteModule(const loom_module_t* module) {
+    iree_io_stream_t* stream = nullptr;
+    IREE_CHECK_OK(iree_io_vec_stream_create(
+        IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+            IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_RESIZABLE,
+        4096, iree_allocator_system(), &stream));
+
+    iree_status_t status =
+        loom_bytecode_write_module(module, stream, nullptr, &block_pool_);
+    IREE_CHECK_OK(status);
+
+    // Read the bytes back from the stream.
+    iree_io_stream_pos_t length = iree_io_stream_length(stream);
+    std::vector<uint8_t> bytes(length);
+    IREE_CHECK_OK(iree_io_stream_seek(stream, IREE_IO_STREAM_SEEK_SET, 0));
+    IREE_CHECK_OK(
+        iree_io_stream_read(stream, bytes.size(), bytes.data(), nullptr));
+    iree_io_stream_release(stream);
+    return bytes;
+  }
+
+  // Reads a little-endian u16 from raw bytes at the given offset.
+  uint16_t ReadU16LE(const std::vector<uint8_t>& bytes, size_t offset) {
+    return (uint16_t)bytes[offset] | ((uint16_t)bytes[offset + 1] << 8);
+  }
+
+  // Reads a little-endian u32 from raw bytes at the given offset.
+  uint32_t ReadU32LE(const std::vector<uint8_t>& bytes, size_t offset) {
+    return (uint32_t)bytes[offset] | ((uint32_t)bytes[offset + 1] << 8) |
+           ((uint32_t)bytes[offset + 2] << 16) |
+           ((uint32_t)bytes[offset + 3] << 24);
+  }
+
+  // Reads a little-endian u64 from raw bytes at the given offset.
+  uint64_t ReadU64LE(const std::vector<uint8_t>& bytes, size_t offset) {
+    uint64_t value = 0;
+    for (int i = 0; i < 8; ++i) {
+      value |= (uint64_t)bytes[offset + i] << (i * 8);
+    }
+    return value;
+  }
+
+  iree_arena_block_pool_t block_pool_;
+  loom_context_t context_;
+};
+
+//===----------------------------------------------------------------------===//
+// File header tests
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, FileHeaderMagic) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  ASSERT_GE(bytes.size(), 16u);
+  EXPECT_EQ(bytes[0], 'L');
+  EXPECT_EQ(bytes[1], 'O');
+  EXPECT_EQ(bytes[2], 'O');
+  EXPECT_EQ(bytes[3], 'M');
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FileHeaderVersion) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  EXPECT_EQ(bytes[4], LOOM_BYTECODE_FORMAT_VERSION);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FileHeaderFlags) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  // Default flags: 0.
+  EXPECT_EQ(bytes[5], 0);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FileHeaderModuleCount) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  EXPECT_EQ(ReadU16LE(bytes, 6), 1);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FileHeaderStringPoolLength) {
+  loom_module_t* module = CreateModule("my_module");
+  auto bytes = WriteModule(module);
+
+  // String pool length should be the module name length.
+  EXPECT_EQ(ReadU32LE(bytes, 8), 9u);  // "my_module" = 9 bytes
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FileHeaderProducer) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  // Default producer is "loom-c", starting at offset 16.
+  std::string producer(reinterpret_cast<const char*>(&bytes[16]));
+  EXPECT_EQ(producer, "loom-c");
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FileHeaderAlignment) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  // Header (16 bytes) + "loom-c\0" (7 bytes) = 23 bytes, padded to 24.
+  // Module directory starts at offset 24.
+  size_t header_end = 16 + strlen("loom-c") + 1;
+  size_t padded = (header_end + 7) & ~(size_t)7;
+  EXPECT_EQ(padded, 24u);
+
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Module directory tests
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, ModuleDirectoryEntry) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  // Module directory starts after header (padded to 8).
+  // Header: 16 + 7 (loom-c\0) = 23 -> padded to 24.
+  size_t dir_offset = 24;
+  ASSERT_GE(bytes.size(), dir_offset + 24);
+
+  // name_offset should be 0 (first string in pool).
+  EXPECT_EQ(ReadU32LE(bytes, dir_offset), 0u);
+  // name_length should be 4 ("test").
+  EXPECT_EQ(ReadU16LE(bytes, dir_offset + 4), 4u);
+  // module_flags should be 0.
+  EXPECT_EQ(ReadU16LE(bytes, dir_offset + 6), 0u);
+
+  // module_offset should point past the directory + string pool.
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+  EXPECT_GT(module_offset, 0u);
+  // module_length should be nonzero.
+  uint64_t module_length = ReadU64LE(bytes, dir_offset + 16);
+  EXPECT_GT(module_length, 0u);
+  // Module data should not extend past the file.
+  EXPECT_LE(module_offset + module_length, bytes.size());
+
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Section directory tests
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, SectionDirectoryHasAllSections) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  // Find module_offset from the module directory.
+  size_t dir_offset = 24;  // After header padding.
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+
+  // Section directory is at the start of module data.
+  // 9 sections * 32 bytes each = 288 bytes.
+  ASSERT_GE(bytes.size(), module_offset + 288);
+
+  // Each section should have a valid kind and nonzero offset (except
+  // possibly RESOURCES which we don't write).
+  bool found_kinds[LOOM_BYTECODE_SECTION_COUNT] = {false};
+  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
+    size_t entry_offset = (size_t)module_offset + i * 32;
+    uint16_t kind = ReadU16LE(bytes, entry_offset);
+    EXPECT_LT(kind, (uint16_t)LOOM_BYTECODE_SECTION_COUNT)
+        << "section " << i << " has invalid kind " << kind;
+    found_kinds[kind] = true;
+  }
+
+  // All section kinds should be present.
+  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
+    EXPECT_TRUE(found_kinds[i]) << "missing section kind " << i;
+  }
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, SectionOffsetsAreWithinModule) {
+  loom_module_t* module = CreateModule("test");
+  auto bytes = WriteModule(module);
+
+  size_t dir_offset = 24;
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+  uint64_t module_length = ReadU64LE(bytes, dir_offset + 16);
+
+  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
+    size_t entry_offset = (size_t)module_offset + i * 32;
+    uint64_t section_offset = ReadU64LE(bytes, entry_offset + 8);
+    uint64_t section_length = ReadU64LE(bytes, entry_offset + 16);
+    EXPECT_LE(section_offset + section_length, module_length)
+        << "section " << i << " extends past module boundary";
+  }
+
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Strings section test
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, StringsSectionContainsModuleName) {
+  loom_module_t* module = CreateModule("hello");
+  auto bytes = WriteModule(module);
+
+  // Find the STRINGS section data.
+  size_t dir_offset = 24;
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+
+  // Scan section directory for STRINGS kind.
+  uint64_t strings_offset = 0;
+  uint64_t strings_length = 0;
+  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
+    size_t entry_offset = (size_t)module_offset + i * 32;
+    if (ReadU16LE(bytes, entry_offset) == LOOM_BYTECODE_SECTION_STRINGS) {
+      strings_offset = ReadU64LE(bytes, entry_offset + 8);
+      strings_length = ReadU64LE(bytes, entry_offset + 16);
+      break;
+    }
+  }
+  ASSERT_GT(strings_length, 0u);
+
+  // Parse the strings section using a cursor.
+  const uint8_t* section_data =
+      bytes.data() + (size_t)module_offset + (size_t)strings_offset;
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(section_data,
+                                  (iree_host_size_t)strings_length, &cursor);
+
+  uint64_t string_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &string_count));
+  EXPECT_GE(string_count, 1u);
+
+  // The first string should be the module name "hello".
+  uint64_t first_length = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &first_length));
+  EXPECT_EQ(first_length, 5u);
+
+  iree_const_byte_span_t span = {0};
+  IREE_ASSERT_OK(loom_bytecode_cursor_read_span(&cursor, 5, &span));
+  EXPECT_EQ(memcmp(span.data, "hello", 5), 0);
+
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Empty module (no symbols)
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, EmptyModuleRoundTrips) {
+  loom_module_t* module = CreateModule("empty");
+  auto bytes = WriteModule(module);
+
+  // Should produce a valid file with nonzero size.
+  EXPECT_GT(bytes.size(), 100u);
+
+  // Magic is valid.
+  EXPECT_EQ(bytes[0], 'L');
+  EXPECT_EQ(bytes[1], 'O');
+  EXPECT_EQ(bytes[2], 'O');
+  EXPECT_EQ(bytes[3], 'M');
+
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Module with a function
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, ModuleWithFunction) {
+  loom_module_t* module = CreateModule("func_test");
+
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  IREE_ASSERT_OK(loom_module_intern_type(module, i32_type, &i32_type));
+
+  // Build a test.func op on the module body block with two i32 args and one
+  // i32 result. The builder wires the defining_op pointer on the symbol so
+  // the writer can find and serialize the function metadata.
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("add"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_type_t arg_types[2] = {i32_type, i32_type};
+  loom_type_t result_types[1] = {i32_type};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(&module_builder, /*visibility=*/0,
+                                      /*cc=*/0, callee, arg_types, 2,
+                                      result_types, 1, nullptr, 0, nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &func_op));
+  module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+
+  // Name the entry-block args.
+  loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* arg_ids =
+      loom_func_like_arg_ids(func_like, &arg_count);
+  loom_string_id_t x_name = LOOM_STRING_ID_INVALID;
+  loom_string_id_t y_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("x"), &x_name));
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("y"), &y_name));
+  module->values.entries[arg_ids[0]].name_id = x_name;
+  module->values.entries[arg_ids[1]].name_id = y_name;
+
+  // Build an addi op in the function body.
+  loom_region_t* body = loom_func_like_body(func_like);
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, &body->blocks[0], &builder);
+  loom_op_t* addi_op = nullptr;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder, arg_ids[0], arg_ids[1],
+                                      i32_type, LOOM_LOCATION_UNKNOWN,
+                                      &addi_op));
+
+  auto bytes = WriteModule(module);
+  EXPECT_GT(bytes.size(), 200u);
+
+  // Verify the magic is still valid (sanity check that writing completed).
+  EXPECT_EQ(bytes[0], 'L');
+  EXPECT_EQ(bytes[1], 'O');
+  EXPECT_EQ(bytes[2], 'O');
+  EXPECT_EQ(bytes[3], 'M');
+
+  // Find the OPS section and verify it contains "test.addi".
+  size_t header_dir_offset = 24;
+  uint64_t module_offset = ReadU64LE(bytes, header_dir_offset + 8);
+  uint64_t ops_offset = 0;
+  uint64_t ops_length = 0;
+  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
+    size_t entry_offset = (size_t)module_offset + i * 32;
+    if (ReadU16LE(bytes, entry_offset) == LOOM_BYTECODE_SECTION_OPS) {
+      ops_offset = ReadU64LE(bytes, entry_offset + 8);
+      ops_length = ReadU64LE(bytes, entry_offset + 16);
+      break;
+    }
+  }
+  EXPECT_GT(ops_length, 0u);
+
+  // Parse the OPS section: [count: uvarint], per-op [name_id: uvarint].
+  const uint8_t* ops_data =
+      bytes.data() + (size_t)module_offset + (size_t)ops_offset;
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(ops_data, (iree_host_size_t)ops_length,
+                                  &cursor);
+  uint64_t op_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &op_count));
+  EXPECT_GE(op_count, 1u);
+
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Error handling
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, NullContextFails) {
+  // Create module without context.
+  loom_module_t* module = CreateModule("test");
+  loom_context_t* saved_context = module->context;
+  module->context = nullptr;
+
+  iree_io_stream_t* stream = nullptr;
+  IREE_ASSERT_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+          IREE_IO_STREAM_MODE_RESIZABLE,
+      4096, iree_allocator_system(), &stream));
+
+  iree_status_t status =
+      loom_bytecode_write_module(module, stream, nullptr, &block_pool_);
+  EXPECT_TRUE(iree_status_is_failed_precondition(status));
+  iree_status_ignore(status);
+
+  iree_io_stream_release(stream);
+  module->context = saved_context;
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, NonSeekableStreamFails) {
+  loom_module_t* module = CreateModule("test");
+
+  // Create a writable but non-seekable stream.
+  iree_io_stream_t* stream = nullptr;
+  IREE_ASSERT_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_RESIZABLE, 4096,
+      iree_allocator_system(), &stream));
+
+  iree_status_t status =
+      loom_bytecode_write_module(module, stream, nullptr, &block_pool_);
+  EXPECT_TRUE(iree_status_is_permission_denied(status));
+  iree_status_ignore(status);
+
+  iree_io_stream_release(stream);
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Custom producer string
+//===----------------------------------------------------------------------===//
+
+TEST_F(WriterTest, CustomProducer) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_bytecode_write_options_t options = {{0}};
+  options.producer = IREE_SV("my-tool 2.0");
+
+  iree_io_stream_t* stream = nullptr;
+  IREE_ASSERT_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+          IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_RESIZABLE,
+      4096, iree_allocator_system(), &stream));
+
+  IREE_ASSERT_OK(
+      loom_bytecode_write_module(module, stream, &options, &block_pool_));
+
+  // Read back and check producer string.
+  iree_io_stream_pos_t length = iree_io_stream_length(stream);
+  std::vector<uint8_t> bytes(length);
+  IREE_ASSERT_OK(iree_io_stream_seek(stream, IREE_IO_STREAM_SEEK_SET, 0));
+  IREE_ASSERT_OK(
+      iree_io_stream_read(stream, bytes.size(), bytes.data(), nullptr));
+
+  std::string producer(reinterpret_cast<const char*>(&bytes[16]));
+  EXPECT_EQ(producer, "my-tool 2.0");
+
+  iree_io_stream_release(stream);
+  loom_module_free(module);
+}
+
+}  // namespace
+}  // namespace loom

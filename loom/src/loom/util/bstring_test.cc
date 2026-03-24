@@ -1,0 +1,141 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/util/bstring.h"
+
+#include "iree/testing/gtest.h"
+
+namespace {
+
+// Test B-strings covering different lengths.
+static const uint8_t kEmpty[] = "\x00";
+static const uint8_t kX[] =
+    "\x01"
+    "x";
+static const uint8_t kTo[] =
+    "\x02"
+    "to";
+static const uint8_t kNsw[] =
+    "\x03"
+    "nsw";
+static const uint8_t kStep[] =
+    "\x04"
+    "step";
+static const uint8_t kHello[] =
+    "\x05"
+    "hello";
+static const uint8_t kIterArgs[] =
+    "\x09"
+    "iter_args";
+
+TEST(BString, Length) {
+  EXPECT_EQ(loom_bstring_length(kEmpty), 0);
+  EXPECT_EQ(loom_bstring_length(kX), 1);
+  EXPECT_EQ(loom_bstring_length(kTo), 2);
+  EXPECT_EQ(loom_bstring_length(kNsw), 3);
+  EXPECT_EQ(loom_bstring_length(kStep), 4);
+  EXPECT_EQ(loom_bstring_length(kHello), 5);
+  EXPECT_EQ(loom_bstring_length(kIterArgs), 9);
+}
+
+TEST(BString, Data) {
+  EXPECT_EQ(std::string_view(loom_bstring_data(kHello), 5), "hello");
+  EXPECT_EQ(std::string_view(loom_bstring_data(kTo), 2), "to");
+  EXPECT_EQ(std::string_view(loom_bstring_data(kX), 1), "x");
+  EXPECT_EQ(std::string_view(loom_bstring_data(kIterArgs), 9), "iter_args");
+}
+
+TEST(BString, ViewConvertsCorrectly) {
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_bstring_view(kHello), IREE_SV("hello")));
+  EXPECT_TRUE(iree_string_view_equal(loom_bstring_view(kTo), IREE_SV("to")));
+  EXPECT_TRUE(iree_string_view_equal(loom_bstring_view(kX), IREE_SV("x")));
+  EXPECT_TRUE(iree_string_view_equal(loom_bstring_view(kIterArgs),
+                                     IREE_SV("iter_args")));
+}
+
+TEST(BString, ViewEmptyIsEmpty) {
+  iree_string_view_t view = loom_bstring_view(kEmpty);
+  EXPECT_TRUE(iree_string_view_is_empty(view));
+  EXPECT_EQ(view.size, 0u);
+}
+
+TEST(BString, EqualMatchesIdentical) {
+  EXPECT_TRUE(loom_bstring_equal(kHello, IREE_SV("hello")));
+  EXPECT_TRUE(loom_bstring_equal(kTo, IREE_SV("to")));
+  EXPECT_TRUE(loom_bstring_equal(kX, IREE_SV("x")));
+  EXPECT_TRUE(loom_bstring_equal(kNsw, IREE_SV("nsw")));
+  EXPECT_TRUE(loom_bstring_equal(kStep, IREE_SV("step")));
+  EXPECT_TRUE(loom_bstring_equal(kIterArgs, IREE_SV("iter_args")));
+  EXPECT_TRUE(loom_bstring_equal(kEmpty, iree_string_view_empty()));
+  EXPECT_TRUE(loom_bstring_equal(kEmpty, IREE_SV("")));
+}
+
+TEST(BString, EqualRejectsDifferentContent) {
+  EXPECT_FALSE(loom_bstring_equal(kHello, IREE_SV("world")));
+  EXPECT_FALSE(loom_bstring_equal(kTo, IREE_SV("no")));
+  EXPECT_FALSE(loom_bstring_equal(kNsw, IREE_SV("nuw")));
+}
+
+TEST(BString, EqualRejectsShorterView) {
+  EXPECT_FALSE(loom_bstring_equal(kHello, IREE_SV("hell")));
+  EXPECT_FALSE(loom_bstring_equal(kTo, IREE_SV("t")));
+  EXPECT_FALSE(loom_bstring_equal(kIterArgs, IREE_SV("iter")));
+}
+
+TEST(BString, EqualRejectsLongerView) {
+  EXPECT_FALSE(loom_bstring_equal(kHello, IREE_SV("helloo")));
+  EXPECT_FALSE(loom_bstring_equal(kTo, IREE_SV("too")));
+  EXPECT_FALSE(loom_bstring_equal(kX, IREE_SV("xy")));
+}
+
+TEST(BString, EqualRejectsPrefix) {
+  EXPECT_FALSE(loom_bstring_equal(kHello, IREE_SV("hel")));
+  EXPECT_FALSE(loom_bstring_equal(kStep, IREE_SV("ste")));
+}
+
+TEST(BString, EqualEmptyRejectsNonEmpty) {
+  EXPECT_FALSE(loom_bstring_equal(kEmpty, IREE_SV("x")));
+  EXPECT_FALSE(loom_bstring_equal(kEmpty, IREE_SV("hello")));
+}
+
+TEST(BString, EqualNonEmptyRejectsEmpty) {
+  EXPECT_FALSE(loom_bstring_equal(kX, iree_string_view_empty()));
+  EXPECT_FALSE(loom_bstring_equal(kHello, iree_string_view_empty()));
+}
+
+// Verify that B-strings work in array tables (the primary use case).
+TEST(BString, ArrayTableLookup) {
+  static const loom_bstring_t keywords[] = {
+      kTo,
+      kStep,
+      kHello,
+      kIterArgs,
+  };
+  // Simulate a parser token scan: find "step" in the table.
+  iree_string_view_t token = IREE_SV("step");
+  int found = -1;
+  for (int i = 0; i < 4; ++i) {
+    if (loom_bstring_equal(keywords[i], token)) {
+      found = i;
+      break;
+    }
+  }
+  EXPECT_EQ(found, 1);
+
+  // Verify miss.
+  token = IREE_SV("missing");
+  found = -1;
+  for (int i = 0; i < 4; ++i) {
+    if (loom_bstring_equal(keywords[i], token)) {
+      found = i;
+      break;
+    }
+  }
+  EXPECT_EQ(found, -1);
+}
+
+}  // namespace

@@ -1,0 +1,408 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// loom-check: test runner for .loom IR files.
+//
+// Parses test files containing directives, input/expected sections, and
+// diagnostic annotations. Executes each test case according to its mode
+// (roundtrip, verify, pass, format) and reports pass/fail results.
+//
+// Usage:
+//   loom-check test.loom              # Run all cases in file.
+//   echo "func.def @f() {}" | loom-check  # Read from stdin.
+//   loom-check --update test.loom     # Rewrite expected sections.
+//   loom-check --verbose test.loom    # Print each case as it runs.
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
+#include "iree/base/tooling/flags.h"
+#include "iree/io/file_contents.h"
+#include "loom/tools/loom-check/check.h"
+#include "loom/tools/loom-check/execute.h"
+#include "loom/tools/loom-check/json_output.h"
+#include "loom/tools/loom-check/update.h"
+#include "loom/util/stream.h"
+
+IREE_FLAG(bool, update, false,
+          "Rewrite test files with actual output in the expected\n"
+          "section (after // ----). Inserts the separator if absent.\n"
+          "Cannot be used with stdin or verify mode.");
+IREE_FLAG(bool, json, false, "Structured JSON output to stdout.");
+IREE_FLAG(bool, verbose, false,
+          "Print PASS/FAIL for every case, not just failures.");
+
+//===----------------------------------------------------------------------===//
+// Outcome formatting
+//===----------------------------------------------------------------------===//
+
+// ANSI color codes for terminal output. Disabled when stderr is not a tty.
+static const char* loom_check_color_pass(void) {
+  return isatty(fileno(stderr)) ? "\033[32m" : "";
+}
+static const char* loom_check_color_fail(void) {
+  return isatty(fileno(stderr)) ? "\033[31m" : "";
+}
+static const char* loom_check_color_skip(void) {
+  return isatty(fileno(stderr)) ? "\033[33m" : "";
+}
+static const char* loom_check_color_reset(void) {
+  return isatty(fileno(stderr)) ? "\033[0m" : "";
+}
+
+static const char* loom_check_outcome_label(loom_check_outcome_t outcome,
+                                            bool xfail) {
+  if (outcome == LOOM_CHECK_PASS) {
+    return xfail ? "XFAIL" : "PASS";
+  }
+  return xfail ? "XPASS" : "FAIL";
+}
+
+// Prints the case header: filename :: case N [mode] OUTCOME.
+static void loom_check_print_case_header(iree_string_view_t filename,
+                                         iree_host_size_t case_index,
+                                         const loom_check_case_t* test_case,
+                                         const loom_check_result_t* result) {
+  const char* color = result->final_outcome == LOOM_CHECK_PASS
+                          ? loom_check_color_pass()
+                          : loom_check_color_fail();
+  const char* label =
+      loom_check_outcome_label(result->final_outcome, test_case->xfail);
+
+  fprintf(stderr, "%s%s%s ", color, label, loom_check_color_reset());
+  fprintf(stderr, "%.*s :: case %zu", (int)filename.size, filename.data,
+          case_index + 1);
+  fprintf(stderr, " [%s", loom_check_mode_name(test_case->mode));
+  if (test_case->mode == LOOM_CHECK_MODE_PASS) {
+    fprintf(stderr, " %.*s", (int)test_case->pipeline.size,
+            test_case->pipeline.data);
+  } else if (test_case->mode == LOOM_CHECK_MODE_FORMAT) {
+    fprintf(stderr, " %.*s", (int)test_case->format_target.size,
+            test_case->format_target.data);
+  }
+  fprintf(stderr, "]\n");
+}
+
+// File writing for --update mode (the reconstruction logic is in update.h).
+static iree_status_t loom_check_write_updates(
+    iree_string_view_t path, iree_string_view_t original_source,
+    const loom_check_file_t* file, const loom_check_case_update_t* updates,
+    iree_allocator_t allocator) {
+  iree_string_builder_t new_source;
+  iree_string_builder_initialize(allocator, &new_source);
+
+  iree_host_size_t update_count = 0;
+  iree_status_t status = loom_check_apply_updates(
+      original_source, file, updates, &new_source, &update_count);
+
+  if (iree_status_is_ok(status) && update_count > 0) {
+    FILE* fp = fopen(path.data, "wb");
+    if (!fp) {
+      status = iree_make_status(IREE_STATUS_PERMISSION_DENIED,
+                                "failed to open '%.*s' for writing",
+                                (int)path.size, path.data);
+    } else {
+      fwrite(iree_string_builder_buffer(&new_source), 1,
+             iree_string_builder_size(&new_source), fp);
+      fclose(fp);
+      fprintf(stderr, "updated %zu case%s in %.*s\n", update_count,
+              update_count == 1 ? "" : "s", (int)path.size, path.data);
+    }
+  }
+
+  iree_string_builder_deinitialize(&new_source);
+  return status;
+}
+
+//===----------------------------------------------------------------------===//
+// File processing
+//===----------------------------------------------------------------------===//
+
+// Processes a single source buffer: parses test cases, executes each one,
+// and reports results. Optionally applies --update to rewrite expected
+// sections.
+static iree_status_t loom_check_process_file(
+    iree_string_view_t filename, iree_string_view_t source, bool is_stdin,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, iree_host_size_t* pass_count,
+    iree_host_size_t* fail_count, iree_host_size_t* skip_count) {
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(block_pool, &arena);
+
+  loom_check_file_t file = {0};
+  IREE_RETURN_IF_ERROR(loom_check_parse(source, &arena, &file));
+
+  // Allocate update tracking if --update is requested.
+  loom_check_case_update_t* updates = NULL;
+  if (FLAG_update) {
+    if (is_stdin) {
+      iree_arena_deinitialize(&arena);
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "--update cannot be used with stdin");
+    }
+    updates =
+        (loom_check_case_update_t*)calloc(file.case_count, sizeof(*updates));
+    if (!updates) {
+      iree_arena_deinitialize(&arena);
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "failed to allocate update tracking");
+    }
+  }
+
+  // Execute each case. Results are allocated per-case and cleaned up
+  // after reporting (or after --update).
+  loom_check_result_t* results = NULL;
+  if (file.case_count > 0) {
+    results = (loom_check_result_t*)calloc(file.case_count, sizeof(*results));
+    if (!results) {
+      free(updates);
+      iree_arena_deinitialize(&arena);
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "failed to allocate result array");
+    }
+  }
+
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0; i < file.case_count; ++i) {
+    const loom_check_case_t* test_case = &file.cases[i];
+
+    loom_check_result_initialize(allocator, &results[i]);
+    status = loom_check_execute_case(test_case, filename, context, block_pool,
+                                     allocator, &results[i]);
+    if (!iree_status_is_ok(status)) {
+      // Infrastructure failure — bail.
+      loom_check_result_deinitialize(&results[i]);
+      break;
+    }
+
+    // Report outcome.
+    if (FLAG_verbose || results[i].final_outcome == LOOM_CHECK_FAIL) {
+      loom_check_print_case_header(filename, i, test_case, &results[i]);
+    }
+    if (results[i].final_outcome == LOOM_CHECK_FAIL &&
+        results[i].detail.size > 0) {
+      fprintf(stderr, "%.*s", (int)results[i].detail.size,
+              results[i].detail.buffer);
+    }
+
+    if (results[i].final_outcome == LOOM_CHECK_PASS) {
+      ++(*pass_count);
+    } else {
+      ++(*fail_count);
+    }
+
+    // Track update info for --update.
+    if (updates && results[i].actual_output.size > 0) {
+      iree_string_view_t stripped_expected_trimmed =
+          iree_string_view_trim(test_case->expected);
+      iree_string_view_t actual_trimmed = iree_string_view_trim(
+          iree_string_builder_view(&results[i].actual_output));
+      if (!iree_string_view_equal(stripped_expected_trimmed, actual_trimmed)) {
+        updates[i].needs_update = true;
+        updates[i].actual_output =
+            iree_string_builder_view(&results[i].actual_output);
+        updates[i].input_end = test_case->input.data + test_case->input.size;
+        if (test_case->has_expected_section) {
+          updates[i].expected_start = test_case->expected.data;
+          updates[i].expected_end =
+              test_case->expected.data + test_case->expected.size;
+        }
+      }
+    }
+  }
+
+  // Apply --update if any cases need it.
+  if (iree_status_is_ok(status) && updates) {
+    bool any_updates = false;
+    for (iree_host_size_t i = 0; i < file.case_count; ++i) {
+      if (updates[i].needs_update) {
+        any_updates = true;
+        break;
+      }
+    }
+    if (any_updates) {
+      status =
+          loom_check_write_updates(filename, source, &file, updates, allocator);
+    }
+  }
+
+  // Emit --json output to stdout (after execution, before cleanup).
+  if (iree_status_is_ok(status) && FLAG_json && results) {
+    loom_output_stream_t stdout_stream;
+    loom_output_stream_for_file(stdout, &stdout_stream);
+    status = loom_check_json_write_file_result(filename, &file, results,
+                                               *pass_count, *fail_count,
+                                               *skip_count, &stdout_stream);
+  }
+
+  // Clean up results.
+  if (results) {
+    for (iree_host_size_t i = 0; i < file.case_count; ++i) {
+      loom_check_result_deinitialize(&results[i]);
+    }
+    free(results);
+  }
+  free(updates);
+  iree_arena_deinitialize(&arena);
+  return status;
+}
+
+//===----------------------------------------------------------------------===//
+// File reading
+//===----------------------------------------------------------------------===//
+
+// Reads a source from stdin or a file path, then processes it.
+// |path| is "-" or empty for stdin, otherwise a filesystem path.
+static iree_status_t loom_check_read_and_process(
+    iree_string_view_t path, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t host_allocator,
+    iree_host_size_t* pass_count, iree_host_size_t* fail_count,
+    iree_host_size_t* skip_count) {
+  bool is_stdin = iree_string_view_is_empty(path) ||
+                  iree_string_view_equal(path, iree_make_cstring_view("-"));
+
+  iree_io_file_contents_t* contents = NULL;
+  iree_status_t status;
+  if (is_stdin) {
+    status = iree_io_file_contents_read_stdin(host_allocator, &contents);
+  } else {
+    status = iree_io_file_contents_read(path, host_allocator, &contents);
+  }
+
+  if (iree_status_is_ok(status)) {
+    iree_string_view_t source = {
+        .data = (const char*)contents->const_buffer.data,
+        .size = contents->const_buffer.data_length,
+    };
+    iree_string_view_t filename =
+        is_stdin ? iree_make_cstring_view("<stdin>") : path;
+    status = loom_check_process_file(filename, source, is_stdin, context,
+                                     block_pool, host_allocator, pass_count,
+                                     fail_count, skip_count);
+  }
+
+  iree_io_file_contents_free(contents);
+  return status;
+}
+
+//===----------------------------------------------------------------------===//
+// Entry point
+//===----------------------------------------------------------------------===//
+
+int main(int argc, char** argv) {
+  iree_flags_set_usage(
+      "loom-check",
+      "Test runner for .loom IR files.\n"
+      "\n"
+      "Parses test files into cases, executes each case according to its\n"
+      "mode directive, and reports pass/fail results with diffs or\n"
+      "diagnostic details on failure.\n"
+      "\n"
+      "Usage:\n"
+      "  loom-check [flags] [file...]\n"
+      "  cat test.loom | loom-check\n"
+      "\n"
+      "Modes (set via // RUN: directive, default is roundtrip):\n"
+      "  roundtrip   Parse, print, compare against expected output.\n"
+      "  verify      Parse, verify, match diagnostics against annotations.\n"
+      "  pass <p>    Parse, run pass pipeline <p>, print, compare.\n"
+      "  format <f>  Parse, convert to format <f>, convert back, compare.\n"
+      "\n"
+      "File format:\n"
+      "  A test file contains one or more cases separated by // ====.\n"
+      "  Each case has directives at the top, then input IR, and\n"
+      "  optionally a // ---- separator followed by expected output.\n"
+      "  When // ---- is absent, the expected output equals the input\n"
+      "  (round-trip identity test).\n"
+      "\n"
+      "  A // RUN: directive before the first // ==== sets the file-level\n"
+      "  default mode. Cases without their own // RUN: inherit from it.\n"
+      "\n"
+      "  Directives:\n"
+      "    // RUN: <mode> [args]    Set the test mode (one per case).\n"
+      "    // XFAIL: <reason>       Mark as expected failure.\n"
+      "\n"
+      "  Annotations (verify mode):\n"
+      "    // ERROR: DOMAIN/CODE \"substring\"\n"
+      "    // ERROR@+1: PARSE/006\n"
+      "    // WARNING@-2: \"some message\"\n"
+      "    // REMARK: TYPE\n"
+      "    Domain and code are optional (omit to match any).\n"
+      "    @+N/@-N targets a line relative to the annotation.\n"
+      "\n"
+      "Examples:\n"
+      "  # Round-trip: print output must match input exactly.\n"
+      "  echo '// RUN: roundtrip\n"
+      "  func.def @f() {\n"
+      "  }' | loom-check\n"
+      "\n"
+      "  # Verify: parse error must match the annotation.\n"
+      "  echo '// RUN: verify\n"
+      "  // ERROR@+1: PARSE/006\n"
+      "  bogus.nonexistent' | loom-check\n"
+      "\n"
+      "Exit code is 0 when all cases pass, 1 if any fail.\n");
+  iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
+
+  iree_allocator_t host_allocator = iree_allocator_system();
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(32 * 1024, host_allocator, &block_pool);
+
+  // Initialize context with all known dialects.
+  loom_context_t context;
+  loom_context_initialize(host_allocator, &context);
+  iree_status_t status = loom_check_context_initialize(&context);
+
+  iree_host_size_t pass_count = 0;
+  iree_host_size_t fail_count = 0;
+  iree_host_size_t skip_count = 0;
+
+  if (iree_status_is_ok(status)) {
+    if (argc < 2) {
+      // No positional args: read from stdin.
+      status = loom_check_read_and_process(
+          iree_string_view_empty(), &context, &block_pool, host_allocator,
+          &pass_count, &fail_count, &skip_count);
+    } else {
+      for (int i = 1; i < argc && iree_status_is_ok(status); ++i) {
+        status = loom_check_read_and_process(
+            iree_make_cstring_view(argv[i]), &context, &block_pool,
+            host_allocator, &pass_count, &fail_count, &skip_count);
+      }
+    }
+  }
+
+  // Print summary.
+  iree_host_size_t total = pass_count + fail_count + skip_count;
+  if (total > 0 && iree_status_is_ok(status)) {
+    fprintf(stderr, "\n%s%zu passed%s", loom_check_color_pass(), pass_count,
+            loom_check_color_reset());
+    if (fail_count > 0) {
+      fprintf(stderr, ", %s%zu failed%s", loom_check_color_fail(), fail_count,
+              loom_check_color_reset());
+    }
+    if (skip_count > 0) {
+      fprintf(stderr, ", %s%zu skipped%s", loom_check_color_skip(), skip_count,
+              loom_check_color_reset());
+    }
+    fprintf(stderr, " (%zu total)\n", total);
+  }
+
+  bool had_error = !iree_status_is_ok(status);
+  if (had_error) {
+    iree_status_fprint(stderr, status);
+    iree_status_ignore(status);
+  }
+
+  loom_context_deinitialize(&context);
+  iree_arena_block_pool_deinitialize(&block_pool);
+
+  if (had_error || fail_count > 0) return 1;
+  return 0;
+}

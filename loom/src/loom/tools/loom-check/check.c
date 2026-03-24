@@ -1,0 +1,821 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/tools/loom-check/check.h"
+
+#include <string.h>
+
+//===----------------------------------------------------------------------===//
+// Internal helpers
+//===----------------------------------------------------------------------===//
+
+// Returns the next line from |*remaining|, advancing past the newline.
+// The returned view does NOT include the trailing '\n' or '\r\n'.
+// When no newline is found, returns the remainder and sets |*remaining|
+// to empty. Trailing '\r' is stripped so that CRLF input produces the
+// same line views as LF input.
+static iree_string_view_t loom_check_consume_line(
+    iree_string_view_t* remaining) {
+  iree_string_view_t line;
+  intptr_t newline = iree_string_view_find_char(*remaining, '\n', 0);
+  if (newline < 0) {
+    line = *remaining;
+    *remaining = iree_string_view_empty();
+  } else {
+    line = iree_string_view_substr(*remaining, 0, (iree_host_size_t)newline);
+    *remaining = iree_string_view_substr(
+        *remaining, (iree_host_size_t)newline + 1, IREE_HOST_SIZE_MAX);
+  }
+  if (line.size > 0 && line.data[line.size - 1] == '\r') {
+    line.size--;
+  }
+  return line;
+}
+
+// Returns the byte pointer just past the end of |scanner|, accounting
+// for the possibility that scanner.data is NULL when the source is
+// exhausted.
+static const char* loom_check_scanner_end(iree_string_view_t scanner,
+                                          const char* fallback_end) {
+  return scanner.data ? scanner.data : fallback_end;
+}
+
+// Returns true if |line| is a case separator: starts with "// ====".
+static bool loom_check_is_case_separator(iree_string_view_t line) {
+  return iree_string_view_starts_with(line, iree_make_cstring_view("// ===="));
+}
+
+// Returns true if |line| is an input/expected separator: exactly "// ----"
+// with optional trailing whitespace.
+static bool loom_check_is_expected_separator(iree_string_view_t line) {
+  iree_string_view_t trimmed = iree_string_view_trim(line);
+  return iree_string_view_equal(trimmed, iree_make_cstring_view("// ----"));
+}
+
+// Returns true if |line| starts with "// RUN:" (with or without the
+// trailing space). Used for stray directive detection — any line
+// starting with this prefix in the body is always a mistake.
+static bool loom_check_looks_like_run(iree_string_view_t line) {
+  return iree_string_view_starts_with(line, iree_make_cstring_view("// RUN:"));
+}
+
+// Returns true if |line| is a well-formed RUN directive with the
+// required space after the colon.
+static bool loom_check_is_run_directive(iree_string_view_t line) {
+  return iree_string_view_starts_with(line, iree_make_cstring_view("// RUN: "));
+}
+
+// Returns true if |line| starts with "// XFAIL:" (with or without
+// the trailing space).
+static bool loom_check_looks_like_xfail(iree_string_view_t line) {
+  return iree_string_view_starts_with(line,
+                                      iree_make_cstring_view("// XFAIL:"));
+}
+
+// Returns true if |line| is a well-formed XFAIL directive.
+static bool loom_check_is_xfail_directive(iree_string_view_t line) {
+  return iree_string_view_starts_with(line,
+                                      iree_make_cstring_view("// XFAIL: "));
+}
+
+//===----------------------------------------------------------------------===//
+// Directive parsing
+//===----------------------------------------------------------------------===//
+
+// Parses a RUN directive value into mode and optional arguments.
+// |value| is the part after "// RUN: ".
+static iree_status_t loom_check_parse_run_directive(
+    iree_string_view_t value, loom_check_mode_t* out_mode,
+    iree_string_view_t* out_pipeline, iree_string_view_t* out_format_target) {
+  *out_pipeline = iree_string_view_empty();
+  *out_format_target = iree_string_view_empty();
+  value = iree_string_view_trim(value);
+
+  if (iree_string_view_equal(value, iree_make_cstring_view("roundtrip")) ||
+      iree_string_view_is_empty(value)) {
+    *out_mode = LOOM_CHECK_MODE_ROUNDTRIP;
+    return iree_ok_status();
+  }
+
+  if (iree_string_view_equal(value, iree_make_cstring_view("verify"))) {
+    *out_mode = LOOM_CHECK_MODE_VERIFY;
+    return iree_ok_status();
+  }
+
+  if (iree_string_view_consume_prefix(&value,
+                                      iree_make_cstring_view("pass "))) {
+    *out_mode = LOOM_CHECK_MODE_PASS;
+    *out_pipeline = iree_string_view_trim(value);
+    if (iree_string_view_is_empty(*out_pipeline)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "RUN: pass requires a pipeline argument");
+    }
+    return iree_ok_status();
+  }
+
+  if (iree_string_view_consume_prefix(&value,
+                                      iree_make_cstring_view("format "))) {
+    *out_mode = LOOM_CHECK_MODE_FORMAT;
+    *out_format_target = iree_string_view_trim(value);
+    if (iree_string_view_is_empty(*out_format_target)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "RUN: format requires a target argument");
+    }
+    return iree_ok_status();
+  }
+
+  iree_string_view_t keyword;
+  iree_string_view_t rest;
+  iree_string_view_split(value, ' ', &keyword, &rest);
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown RUN mode: '%.*s'", (int)keyword.size,
+                          keyword.data);
+}
+
+//===----------------------------------------------------------------------===//
+// Annotation parsing
+//===----------------------------------------------------------------------===//
+
+// Tries to parse a severity prefix from |*text|. Returns true if found
+// and advances |*text| past "ERROR", "WARNING", or "REMARK".
+// Annotations use uppercase severity keywords to distinguish them from
+// ordinary comments (which use natural language).
+static bool loom_check_parse_severity(
+    iree_string_view_t* text, loom_diagnostic_severity_t* out_severity) {
+  if (iree_string_view_consume_prefix(text, iree_make_cstring_view("ERROR"))) {
+    *out_severity = LOOM_DIAGNOSTIC_ERROR;
+    return true;
+  }
+  if (iree_string_view_consume_prefix(text,
+                                      iree_make_cstring_view("WARNING"))) {
+    *out_severity = LOOM_DIAGNOSTIC_WARNING;
+    return true;
+  }
+  if (iree_string_view_consume_prefix(text, iree_make_cstring_view("REMARK"))) {
+    *out_severity = LOOM_DIAGNOSTIC_REMARK;
+    return true;
+  }
+  return false;
+}
+
+// Returns true if |comment_text| (the part after "// ") looks like a
+// diagnostic annotation — starts with a severity keyword followed by
+// ':' or '@'. This distinguishes annotations from natural language
+// containing words like "ERROR" (which would lack the colon/offset).
+static bool loom_check_looks_like_annotation(iree_string_view_t comment_text) {
+  iree_string_view_t text = iree_string_view_trim(comment_text);
+  loom_diagnostic_severity_t unused;
+  if (!loom_check_parse_severity(&text, &unused)) return false;
+  return iree_string_view_starts_with_char(text, ':') ||
+         iree_string_view_starts_with_char(text, '@');
+}
+
+// Returns true if |trimmed_line| is a standalone annotation line.
+// Uses extract_comment_text to handle both "// " and "//" prefixes
+// consistently — a line that would be extracted as a comment and
+// parsed as an annotation must be recognized here too.
+static bool loom_check_is_annotation_line(
+    iree_string_view_t trimmed_line);  // forward decl
+
+// Parses the matcher part of an annotation: DOMAIN/CODE "substring".
+// All three components are independently optional. A quoted string
+// alone is a substring-only matcher. A bare identifier is a domain-only
+// matcher. DOMAIN/CODE with a trailing quoted string matches all three.
+// Domain names are validated against the known set (TYPE, SHAPE, etc.).
+static iree_status_t loom_check_parse_matcher(
+    iree_string_view_t text, loom_error_domain_t* out_domain,
+    uint16_t* out_code, iree_string_view_t* out_substring) {
+  *out_domain = LOOM_ERROR_DOMAIN_COUNT_;  // Sentinel: match any domain.
+  *out_code = 0;
+  *out_substring = iree_string_view_empty();
+  text = iree_string_view_trim(text);
+
+  if (iree_string_view_is_empty(text)) {
+    return iree_ok_status();
+  }
+
+  // Quoted string at the start means substring-only matcher.
+  if (iree_string_view_starts_with_char(text, '"')) {
+    iree_host_size_t close = iree_string_view_find_char(text, '"', 1);
+    if (close == IREE_STRING_VIEW_NPOS) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unterminated string in annotation matcher");
+    }
+    *out_substring = iree_string_view_substr(text, 1, close - 1);
+    iree_string_view_t remainder = iree_string_view_trim(
+        iree_string_view_substr(text, close + 1, IREE_HOST_SIZE_MAX));
+    if (!iree_string_view_is_empty(remainder)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "unexpected text after quoted string in annotation: '%.*s'",
+          (int)remainder.size, remainder.data);
+    }
+    return iree_ok_status();
+  }
+
+  // Otherwise expect DOMAIN or DOMAIN/CODE, optionally followed by a
+  // quoted substring. Isolate the DOMAIN/CODE token (ends at space or
+  // end of string).
+  iree_string_view_t domain_code = text;
+  iree_string_view_t after_code = iree_string_view_empty();
+  iree_host_size_t space = iree_string_view_find_char(text, ' ', 0);
+  if (space != IREE_STRING_VIEW_NPOS) {
+    domain_code = iree_string_view_substr(text, 0, space);
+    after_code = iree_string_view_trim(
+        iree_string_view_substr(text, space + 1, IREE_HOST_SIZE_MAX));
+  }
+
+  // Split DOMAIN/CODE on '/'. No slash means domain-only.
+  iree_string_view_t domain_str;
+  iree_string_view_t code_str;
+  intptr_t slash =
+      iree_string_view_split(domain_code, '/', &domain_str, &code_str);
+  if (slash >= 0) {
+    if (!loom_error_domain_from_name(domain_str, out_domain)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown error domain in annotation: '%.*s'",
+                              (int)domain_str.size, domain_str.data);
+    }
+    if (iree_string_view_is_empty(code_str)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "empty code after '/' in annotation: '%.*s'",
+                              (int)domain_code.size, domain_code.data);
+    }
+    int32_t code_value = 0;
+    if (!iree_string_view_atoi_int32_base(code_str, 10, &code_value)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "non-numeric code in annotation: '%.*s'",
+                              (int)code_str.size, code_str.data);
+    }
+    if (code_value < 0 || code_value > UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "annotation code out of range: %d", code_value);
+    }
+    *out_code = (uint16_t)code_value;
+  } else {
+    // Bare domain name without a code (e.g., "// ERROR: TYPE").
+    if (!loom_error_domain_from_name(domain_code, out_domain)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown error domain in annotation: '%.*s'",
+                              (int)domain_code.size, domain_code.data);
+    }
+  }
+
+  // Parse optional trailing quoted substring.
+  if (!iree_string_view_is_empty(after_code)) {
+    if (iree_string_view_starts_with_char(after_code, '"')) {
+      iree_host_size_t close = iree_string_view_find_char(after_code, '"', 1);
+      if (close == IREE_STRING_VIEW_NPOS) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unterminated string in annotation matcher");
+      }
+      *out_substring = iree_string_view_substr(after_code, 1, close - 1);
+      iree_string_view_t remainder = iree_string_view_trim(
+          iree_string_view_substr(after_code, close + 1, IREE_HOST_SIZE_MAX));
+      if (!iree_string_view_is_empty(remainder)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "unexpected text after quoted string in annotation: '%.*s'",
+            (int)remainder.size, remainder.data);
+      }
+    } else {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "unexpected text after DOMAIN/CODE in annotation: '%.*s'",
+          (int)after_code.size, after_code.data);
+    }
+  }
+
+  return iree_ok_status();
+}
+
+// Tries to parse an annotation from the text after "// " in a line.
+// Returns true via |*out_found| if the text is a valid annotation,
+// populating |*out|. Returns false (without error) if the text is an
+// ordinary comment. |current_line| is the 1-based line number within
+// the input section, used to compute target_line from @offsets.
+static iree_status_t loom_check_try_parse_annotation(
+    iree_string_view_t comment_text, iree_host_size_t current_line,
+    loom_check_annotation_t* out, bool* out_found) {
+  *out_found = false;
+  memset(out, 0, sizeof(*out));
+  out->domain = LOOM_ERROR_DOMAIN_COUNT_;  // Sentinel: match any domain.
+
+  iree_string_view_t text = iree_string_view_trim(comment_text);
+
+  // An annotation starts with an uppercase severity keyword. If we
+  // don't find one, this is an ordinary comment — not an error.
+  loom_diagnostic_severity_t severity;
+  if (!loom_check_parse_severity(&text, &severity)) {
+    return iree_ok_status();
+  }
+  out->severity = severity;
+
+  // The severity keyword may be followed by an @offset that redirects
+  // the annotation to a different line. Without an offset, the
+  // annotation targets its own line.
+  iree_host_size_t target_line = current_line;
+  if (iree_string_view_consume_prefix_char(&text, '@')) {
+    bool negative = false;
+    if (iree_string_view_consume_prefix_char(&text, '+')) {
+      negative = false;
+    } else if (iree_string_view_consume_prefix_char(&text, '-')) {
+      negative = true;
+    }
+    iree_host_size_t colon = iree_string_view_find_char(text, ':', 0);
+    if (colon == IREE_STRING_VIEW_NPOS) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "annotation with @ offset missing ':'");
+    }
+    iree_string_view_t offset_str = iree_string_view_substr(text, 0, colon);
+    int32_t offset_value = 0;
+    if (!iree_string_view_atoi_int32(offset_str, &offset_value)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "invalid offset in annotation: '%.*s'",
+                              (int)offset_str.size, offset_str.data);
+    }
+    if (offset_value < 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "annotation offset must be non-negative: %d",
+                              offset_value);
+    }
+    if (negative) {
+      if ((iree_host_size_t)offset_value >= current_line) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "annotation offset @-%d on line %zu "
+                                "would target before line 1",
+                                offset_value, current_line);
+      }
+      target_line = current_line - (iree_host_size_t)offset_value;
+    } else {
+      target_line = current_line + (iree_host_size_t)offset_value;
+    }
+    text = iree_string_view_substr(text, colon, IREE_HOST_SIZE_MAX);
+  }
+
+  // A colon must follow the severity (and optional offset). Without it,
+  // this is a word like "ERROR" appearing in normal text.
+  if (!iree_string_view_consume_prefix_char(&text, ':')) {
+    return iree_ok_status();
+  }
+  text = iree_string_view_trim(text);
+
+  out->target_line = target_line;
+
+  IREE_RETURN_IF_ERROR(loom_check_parse_matcher(text, &out->domain, &out->code,
+                                                &out->message_substring));
+
+  *out_found = true;
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Annotation extraction
+//===----------------------------------------------------------------------===//
+
+// Extracts comment text from a standalone comment line. Returns the
+// text after "// " if the trimmed line starts with "// ", otherwise
+// returns empty. Annotations must be on standalone comment lines;
+// trailing comments on IR lines are not recognized.
+static iree_string_view_t loom_check_extract_comment_text(
+    iree_string_view_t line) {
+  iree_string_view_t trimmed = iree_string_view_trim(line);
+  if (iree_string_view_starts_with(trimmed, iree_make_cstring_view("// "))) {
+    return iree_string_view_substr(trimmed, 3, IREE_HOST_SIZE_MAX);
+  }
+  if (iree_string_view_starts_with(trimmed, iree_make_cstring_view("//"))) {
+    return iree_string_view_trim(
+        iree_string_view_substr(trimmed, 2, IREE_HOST_SIZE_MAX));
+  }
+  return iree_string_view_empty();
+}
+
+// Definition of loom_check_is_annotation_line (forward-declared above).
+// Placed after loom_check_extract_comment_text so it can delegate.
+static bool loom_check_is_annotation_line(iree_string_view_t trimmed_line) {
+  iree_string_view_t comment = loom_check_extract_comment_text(trimmed_line);
+  if (iree_string_view_is_empty(comment)) return false;
+  return loom_check_looks_like_annotation(comment);
+}
+
+// Returns true if |text| contains any lines with diagnostic annotations.
+static bool loom_check_text_contains_annotations(iree_string_view_t text) {
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t line = loom_check_consume_line(&text);
+    iree_string_view_t comment = loom_check_extract_comment_text(line);
+    if (!iree_string_view_is_empty(comment) &&
+        loom_check_looks_like_annotation(comment)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Extracts annotations from |input| by scanning standalone comment
+// lines. Line numbers are 1-based within |input|. Annotations are
+// counted first, then arena-allocated and populated in a second scan.
+static iree_status_t loom_check_extract_annotations(
+    iree_string_view_t input, iree_arena_allocator_t* arena,
+    loom_check_annotation_t** out_annotations,
+    iree_host_size_t* out_annotation_count) {
+  *out_annotations = NULL;
+  *out_annotation_count = 0;
+
+  // Count annotations so we can allocate the array.
+  iree_host_size_t annotation_count = 0;
+  iree_host_size_t line_number = 0;
+  iree_string_view_t scanner = input;
+  while (!iree_string_view_is_empty(scanner)) {
+    iree_string_view_t line = loom_check_consume_line(&scanner);
+    ++line_number;
+    iree_string_view_t comment_text = loom_check_extract_comment_text(line);
+    if (iree_string_view_is_empty(comment_text)) continue;
+    loom_check_annotation_t annotation;
+    bool found = false;
+    IREE_RETURN_IF_ERROR(loom_check_try_parse_annotation(
+        comment_text, line_number, &annotation, &found));
+    if (found) ++annotation_count;
+  }
+
+  if (annotation_count == 0) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, annotation_count, sizeof(loom_check_annotation_t),
+      (void**)out_annotations));
+  *out_annotation_count = annotation_count;
+
+  // Populate the allocated array with a second scan.
+  scanner = input;
+  line_number = 0;
+  iree_host_size_t annotation_index = 0;
+  while (!iree_string_view_is_empty(scanner)) {
+    iree_string_view_t line = loom_check_consume_line(&scanner);
+    ++line_number;
+    iree_string_view_t comment_text = loom_check_extract_comment_text(line);
+    if (iree_string_view_is_empty(comment_text)) continue;
+    loom_check_annotation_t annotation;
+    bool found = false;
+    IREE_RETURN_IF_ERROR(loom_check_try_parse_annotation(
+        comment_text, line_number, &annotation, &found));
+    if (found) {
+      (*out_annotations)[annotation_index++] = annotation;
+    }
+  }
+
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Case section splitting
+//===----------------------------------------------------------------------===//
+
+// Splits the raw case text (everything between case separators) into
+// directives, input, and expected sections.
+//
+// Directives (// RUN:, // XFAIL:) are extracted from the top of the
+// case. The header region consists of directives, blank lines, and
+// non-annotation comment lines — all consumed. The first annotation
+// line (// ERROR/WARNING/REMARK) or non-comment line starts the body.
+//
+// Any line starting with "// RUN:" or "// XFAIL:" in the body is
+// always a mistake (misplaced or malformed directive) and produces an
+// error. This catches the silent misconfiguration where a comment
+// before a directive pushes it into the body.
+//
+// Within the body, a // ---- line splits input from expected output;
+// without it, expected equals input (round-trip identity).
+static iree_status_t loom_check_parse_case_sections(
+    iree_string_view_t case_text, loom_check_case_t* out_case,
+    iree_arena_allocator_t* arena) {
+  memset(out_case, 0, sizeof(*out_case));
+  out_case->mode = LOOM_CHECK_MODE_ROUNDTRIP;
+
+  // Guard against NULL-backed empty views (iree_string_view_empty has
+  // data == NULL). Pointer arithmetic on NULL is undefined behavior.
+  static const char kEmptySource[] = "";
+  if (!case_text.data) case_text.data = kEmptySource;
+  const char* case_end = case_text.data + case_text.size;
+
+  // Scan through the header region. Directives, blank lines, and
+  // non-annotation comments are consumed. The first annotation line
+  // or IR line starts the body.
+  iree_string_view_t scanner = case_text;
+  bool found_run = false;
+  bool body_started = false;
+  const char* body_start = case_end;
+
+  while (!iree_string_view_is_empty(scanner)) {
+    const char* line_start = scanner.data;
+    iree_string_view_t line = loom_check_consume_line(&scanner);
+    iree_string_view_t trimmed = iree_string_view_trim(line);
+
+    if (iree_string_view_is_empty(trimmed)) {
+      if (!body_started) {
+        body_start = loom_check_scanner_end(scanner, case_end);
+      }
+      continue;
+    }
+
+    if (loom_check_is_run_directive(trimmed)) {
+      if (body_started) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "stray directive '%.*s' in test case body; "
+            "directives must appear before all other content",
+            (int)trimmed.size, trimmed.data);
+      }
+      if (found_run) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "multiple RUN directives in one test case");
+      }
+      found_run = true;
+      iree_string_view_t run_value = trimmed;
+      iree_string_view_consume_prefix(&run_value,
+                                      iree_make_cstring_view("// RUN: "));
+      IREE_RETURN_IF_ERROR(loom_check_parse_run_directive(
+          run_value, &out_case->mode, &out_case->pipeline,
+          &out_case->format_target));
+      body_start = loom_check_scanner_end(scanner, case_end);
+      continue;
+    }
+
+    if (loom_check_is_xfail_directive(trimmed)) {
+      if (body_started) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "stray directive '%.*s' in test case body; "
+            "directives must appear before all other content",
+            (int)trimmed.size, trimmed.data);
+      }
+      out_case->xfail = true;
+      iree_string_view_t xfail_value = trimmed;
+      iree_string_view_consume_prefix(&xfail_value,
+                                      iree_make_cstring_view("// XFAIL: "));
+      out_case->xfail_reason = iree_string_view_trim(xfail_value);
+      body_start = loom_check_scanner_end(scanner, case_end);
+      continue;
+    }
+
+    // Catch malformed directives. These are lines that look like they
+    // are trying to be directives but don't match the exact format.
+    // Without this check, they fall through to the generic header
+    // comment consumer and silently change the test's behavior.
+    //
+    // Detected patterns:
+    //   "// RUN:verify"   — missing space after colon
+    //   "//RUN: verify"   — missing space after //
+    //   "// XFAIL:reason" — missing space after colon
+    //   "//XFAIL: reason" — missing space after //
+    if (loom_check_looks_like_run(trimmed) ||
+        loom_check_looks_like_xfail(trimmed) ||
+        iree_string_view_starts_with(trimmed,
+                                     iree_make_cstring_view("//RUN:")) ||
+        iree_string_view_starts_with(trimmed,
+                                     iree_make_cstring_view("//XFAIL:"))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "malformed directive '%.*s'; expected '// RUN: <mode>' or "
+          "'// XFAIL: <reason>'",
+          (int)trimmed.size, trimmed.data);
+    }
+
+    // Non-annotation comment lines in the header are consumed. This
+    // allows descriptive comments between or before directives:
+    //   // Tests edge case for DCE
+    //   // RUN: pass dce
+    //   func.def @f() {...}
+    // Expected separators (// ----) must not be consumed here — they
+    // are structural and must survive to the body splitting pass.
+    if (!body_started &&
+        iree_string_view_starts_with(trimmed, iree_make_cstring_view("//")) &&
+        !loom_check_is_annotation_line(trimmed) &&
+        !loom_check_is_expected_separator(trimmed)) {
+      body_start = loom_check_scanner_end(scanner, case_end);
+      continue;
+    }
+
+    // Annotation line or IR content — body starts here.
+    if (!body_started) {
+      body_started = true;
+      body_start = line_start;
+    }
+  }
+
+  // The body contains the IR input and optionally a // ---- separator
+  // followed by expected output.
+  iree_string_view_t body = {
+      .data = body_start,
+      .size = (iree_host_size_t)(case_end - body_start),
+  };
+
+  // Scan the body for a // ---- separator. Everything before it is
+  // input; everything after is expected. Without a separator, input
+  // and expected are the same text (round-trip identity).
+  iree_string_view_t input = body;
+  iree_string_view_t expected = body;
+  out_case->has_expected_section = false;
+
+  scanner = body;
+  while (!iree_string_view_is_empty(scanner)) {
+    const char* line_start = scanner.data;
+    iree_string_view_t line = loom_check_consume_line(&scanner);
+
+    if (loom_check_is_expected_separator(line)) {
+      iree_host_size_t input_length =
+          (iree_host_size_t)(line_start - body.data);
+      input = iree_string_view_substr(body, 0, input_length);
+      iree_host_size_t expected_offset =
+          (iree_host_size_t)(loom_check_scanner_end(scanner,
+                                                    body.data + body.size) -
+                             body.data);
+      expected =
+          iree_string_view_substr(body, expected_offset, IREE_HOST_SIZE_MAX);
+      out_case->has_expected_section = true;
+      break;
+    }
+  }
+
+  out_case->input = input;
+  out_case->expected = expected;
+
+  // Annotations in the expected section are always a mistake — they
+  // belong in the input section where line numbers are meaningful.
+  if (out_case->has_expected_section &&
+      loom_check_text_contains_annotations(expected)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "annotation in expected output section (below // ----); "
+        "annotations must appear in the input section");
+  }
+
+  // Record whether this case had its own RUN directive. Cases without
+  // one will inherit the file-level default after all cases are parsed.
+  out_case->has_run_directive = found_run;
+
+  // Extract diagnostic annotations from comments in the input.
+  IREE_RETURN_IF_ERROR(loom_check_extract_annotations(
+      input, arena, &out_case->annotations, &out_case->annotation_count));
+
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// File parsing
+//===----------------------------------------------------------------------===//
+
+// Boundary of a single test case within the source buffer.
+typedef struct loom_check_case_boundary_t {
+  const char* start;
+  iree_host_size_t length;
+} loom_check_case_boundary_t;
+
+iree_status_t loom_check_parse(iree_string_view_t source,
+                               iree_arena_allocator_t* arena,
+                               loom_check_file_t* out_file) {
+  memset(out_file, 0, sizeof(*out_file));
+
+  // Normalize NULL-backed empty views. iree_string_view_empty() has
+  // data == NULL, and pointer arithmetic on NULL is undefined behavior.
+  static const char kEmptySource[] = "";
+  if (!source.data) source.data = kEmptySource;
+
+  // Count case separators to determine how many cases the file contains.
+  // The first case starts at byte 0 (no leading separator needed), so
+  // N separators means N+1 cases.
+  iree_host_size_t case_count = 1;
+  iree_string_view_t scanner = source;
+  while (!iree_string_view_is_empty(scanner)) {
+    iree_string_view_t line = loom_check_consume_line(&scanner);
+    if (loom_check_is_case_separator(line)) {
+      ++case_count;
+    }
+  }
+
+  // Collect the byte range for each case.
+  loom_check_case_boundary_t* boundaries = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, case_count, sizeof(loom_check_case_boundary_t),
+      (void**)&boundaries));
+
+  boundaries[0].start = source.data;
+  iree_host_size_t case_index = 0;
+  const char* source_end = source.data + source.size;
+
+  scanner = source;
+  while (!iree_string_view_is_empty(scanner)) {
+    const char* line_start = scanner.data;
+    iree_string_view_t line = loom_check_consume_line(&scanner);
+
+    if (loom_check_is_case_separator(line)) {
+      boundaries[case_index].length =
+          (iree_host_size_t)(line_start - boundaries[case_index].start);
+
+      ++case_index;
+      boundaries[case_index].start =
+          loom_check_scanner_end(scanner, source_end);
+    }
+  }
+  boundaries[case_index].length =
+      (iree_host_size_t)(source_end - boundaries[case_index].start);
+
+  // When the file has separators, boundary 0 is the preamble — the
+  // text before the first // ====. If the preamble has no IR body
+  // (only directives and comments), it is dropped from the case list
+  // and its RUN directive (if any) becomes the file-level default.
+  // If the preamble has IR body content, it becomes case 0 and also
+  // provides the file default.
+  //
+  // When the file has no separators, there is one boundary (the whole
+  // file) and no preamble concept — it is parsed as a single case.
+  out_file->default_mode = LOOM_CHECK_MODE_ROUNDTRIP;
+  out_file->default_pipeline = iree_string_view_empty();
+  out_file->default_format_target = iree_string_view_empty();
+
+  iree_host_size_t first_case = 0;
+  if (case_count > 1) {
+    // Parse boundary 0 to determine whether it is a pure preamble
+    // (directives only, no IR body) or a real case with content.
+    iree_string_view_t preamble_text = {
+        .data = boundaries[0].start,
+        .size = boundaries[0].length,
+    };
+    loom_check_case_t preamble_case;
+    IREE_RETURN_IF_ERROR(
+        loom_check_parse_case_sections(preamble_text, &preamble_case, arena));
+
+    if (iree_string_view_is_empty(iree_string_view_trim(preamble_case.input))) {
+      // Pure preamble — no IR body. Extract its RUN directive as the
+      // file default and drop it from the case list.
+      first_case = 1;
+      case_count -= 1;
+      if (preamble_case.has_run_directive) {
+        out_file->default_mode = preamble_case.mode;
+        out_file->default_pipeline = preamble_case.pipeline;
+        out_file->default_format_target = preamble_case.format_target;
+      }
+    }
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, case_count, sizeof(loom_check_case_t), (void**)&out_file->cases));
+  out_file->case_count = case_count;
+
+  // Parse each case's directives, input/expected split, and annotations.
+  for (iree_host_size_t i = 0; i < case_count; ++i) {
+    iree_host_size_t boundary_index = first_case + i;
+    iree_string_view_t case_text = {
+        .data = boundaries[boundary_index].start,
+        .size = boundaries[boundary_index].length,
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_check_parse_case_sections(case_text, &out_file->cases[i], arena));
+  }
+
+  // When the preamble was not dropped (first_case == 0) and the first
+  // case has a RUN directive, use its mode as the file default for
+  // inheritance by later cases.
+  if (first_case == 0 && case_count > 0 &&
+      out_file->cases[0].has_run_directive) {
+    out_file->default_mode = out_file->cases[0].mode;
+    out_file->default_pipeline = out_file->cases[0].pipeline;
+    out_file->default_format_target = out_file->cases[0].format_target;
+  }
+
+  // Apply RUN inheritance: cases without their own RUN directive
+  // inherit the file-level default.
+  for (iree_host_size_t i = 0; i < case_count; ++i) {
+    if (!out_file->cases[i].has_run_directive) {
+      out_file->cases[i].mode = out_file->default_mode;
+      out_file->cases[i].pipeline = out_file->default_pipeline;
+      out_file->cases[i].format_target = out_file->default_format_target;
+    }
+  }
+
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Comment stripping
+//===----------------------------------------------------------------------===//
+
+iree_status_t loom_check_strip_comments(iree_string_view_t input,
+                                        iree_string_builder_t* output) {
+  iree_string_view_t remaining = input;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t line = loom_check_consume_line(&remaining);
+    iree_string_view_t trimmed = iree_string_view_trim(line);
+    // Standalone comment lines become blank lines to preserve line count.
+    if (iree_string_view_starts_with(trimmed, iree_make_cstring_view("//"))) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
+      continue;
+    }
+    // Non-comment lines (including lines with trailing comments) are
+    // preserved as-is. Only standalone comment lines are stripped.
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, line));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
+  }
+  return iree_ok_status();
+}

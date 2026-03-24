@@ -1,0 +1,1640 @@
+[
+  {
+    "error_id": "ERR_TYPE_001",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "SameType constraint violated.",
+    "message_template": "'{field_a}' type {type_a} does not match '{field_b}' type {type_b}",
+    "params": [
+      {
+        "name": "field_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "type_a",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "field_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "type_b",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Ensure '{field_a}' and '{field_b}' have the same type"
+  },
+  {
+    "error_id": "ERR_TYPE_002",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operands must have the same element type.",
+    "message_template": "element type mismatch: '{field_a}' has element type {element_type_a}, '{field_b}' has element type {element_type_b}",
+    "params": [
+      {
+        "name": "field_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "element_type_a",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "field_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "element_type_b",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Operands '{field_a}' and '{field_b}' must have the same element type; use explicit type casts if needed"
+  },
+  {
+    "error_id": "ERR_TYPE_003",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operand type constraint violated.",
+    "message_template": "operand '{operand_name}' has type {actual_type}, expected {expected_constraint}",
+    "params": [
+      {
+        "name": "operand_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_constraint",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "'{operand_name}' must satisfy type constraint '{expected_constraint}'"
+  },
+  {
+    "error_id": "ERR_TYPE_004",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Result type constraint violated.",
+    "message_template": "result '{result_name}' has type {actual_type}, expected {expected_constraint}",
+    "params": [
+      {
+        "name": "result_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_constraint",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "'{result_name}' must satisfy type constraint '{expected_constraint}'"
+  },
+  {
+    "error_id": "ERR_TYPE_005",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Attribute kind mismatch.",
+    "message_template": "attribute '{attr_name}' has kind {actual_kind}, expected {expected_kind}",
+    "params": [
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "'{attr_name}' must be a {expected_kind} attribute"
+  },
+  {
+    "error_id": "ERR_TYPE_006",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Fill value type mismatch.",
+    "message_template": "fill value has type {value_type}, but tile element type is {element_type}",
+    "params": [
+      {
+        "name": "value_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "element_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Cast or convert fill value to type {element_type}"
+  },
+  {
+    "error_id": "ERR_TYPE_007",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Constant attribute type mismatch.",
+    "message_template": "constant attribute has type {attr_type} but result tile has type {result_type}",
+    "params": [
+      {
+        "name": "attr_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "result_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Ensure constant attribute shape and element type match '{result_type}'"
+  },
+  {
+    "error_id": "ERR_TYPE_008",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Block argument type does not match input element type.",
+    "message_template": "block argument {arg_index} has type {arg_type}, expected element type {element_type}",
+    "params": [
+      {
+        "name": "arg_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "arg_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "element_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Block argument should have type {element_type} to match tile element type"
+  },
+  {
+    "error_id": "ERR_TYPE_009",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Yielded value type does not match result tile element type.",
+    "message_template": "yielded value has type {yield_type}, but result tile element type is {result_element_type}",
+    "params": [
+      {
+        "name": "yield_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "result_element_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Convert yielded value to type {result_element_type}"
+  },
+  {
+    "error_id": "ERR_SHAPE_001",
+    "domain": 1,
+    "domain_name": "SHAPE",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operand ranks do not match.",
+    "message_template": "'{operand_a}' rank ({rank_a}) does not match '{operand_b}' rank ({rank_b})",
+    "params": [
+      {
+        "name": "operand_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "rank_a",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "operand_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "rank_b",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ],
+    "fix_hint_template": "'{operand_a}' and '{operand_b}' must have the same rank"
+  },
+  {
+    "error_id": "ERR_SHAPE_002",
+    "domain": 1,
+    "domain_name": "SHAPE",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "SameShape constraint violated.",
+    "message_template": "'{field_a}' shape does not match '{field_b}' shape",
+    "params": [
+      {
+        "name": "field_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Ensure '{field_a}' and '{field_b}' have identical shapes"
+  },
+  {
+    "error_id": "ERR_SHAPE_003",
+    "domain": 1,
+    "domain_name": "SHAPE",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Input tiles must have identical shapes.",
+    "message_template": "input tile shapes do not match: input 0 has type {first_type}, input {other_index} has type {other_type}",
+    "params": [
+      {
+        "name": "first_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "other_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "other_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Ensure all input tiles have identical shapes, or use tile.broadcast first"
+  },
+  {
+    "error_id": "ERR_SHAPE_004",
+    "domain": 1,
+    "domain_name": "SHAPE",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Incompatible dimension sizes during broadcast.",
+    "message_template": "incompatible dimension at source axis {source_axis} (size {source_size}) with result axis {result_axis} (size {result_size})",
+    "params": [
+      {
+        "name": "source_axis",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "source_size",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "result_axis",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "result_size",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ],
+    "fix_hint_template": "Source axis {source_axis} (size {source_size}) must be 1 or match result axis {result_axis} (size {result_size})"
+  },
+  {
+    "error_id": "ERR_SHAPE_005",
+    "domain": 1,
+    "domain_name": "SHAPE",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Result tile shape must match input tile shapes.",
+    "message_template": "result tile type {result_type} does not match input tile type {input_type}",
+    "params": [
+      {
+        "name": "result_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "input_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Ensure result type has the same shape as the input tiles"
+  },
+  {
+    "error_id": "ERR_SUBRANGE_001",
+    "domain": 2,
+    "domain_name": "SUBRANGE",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Offset count must match operand rank.",
+    "message_template": "'{operand_name}' offset count ({offset_count}) does not match rank ({rank})",
+    "params": [
+      {
+        "name": "operand_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "offset_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "rank",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ],
+    "fix_hint_template": "Provide exactly {rank} offsets for '{operand_name}'"
+  },
+  {
+    "error_id": "ERR_SUBRANGE_002",
+    "domain": 2,
+    "domain_name": "SUBRANGE",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Dimension index out of bounds.",
+    "message_template": "dimension index {dim_index} is out of bounds for type with rank {rank}",
+    "params": [
+      {
+        "name": "dim_index",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "rank",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ],
+    "fix_hint_template": "Use an index in range [0, {rank})"
+  },
+  {
+    "error_id": "ERR_SUBRANGE_003",
+    "domain": 2,
+    "domain_name": "SUBRANGE",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Size count must match operand rank.",
+    "message_template": "'{operand_name}' size count ({size_count}) does not match rank ({rank})",
+    "params": [
+      {
+        "name": "operand_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "size_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "rank",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ],
+    "fix_hint_template": "Provide exactly {rank} sizes for '{operand_name}'"
+  },
+  {
+    "error_id": "ERR_SUBRANGE_004",
+    "domain": 2,
+    "domain_name": "SUBRANGE",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Static slice extends beyond bounds.",
+    "message_template": "dimension {dim_index}: offset ({offset}) + size ({size}) = {total} exceeds bound {bound}",
+    "params": [
+      {
+        "name": "dim_index",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "offset",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "size",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "total",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "bound",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ],
+    "fix_hint_template": "Ensure offset + size <= {bound} for dimension {dim_index}"
+  },
+  {
+    "error_id": "ERR_ENCODING_001",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operands must have the same encoding.",
+    "message_template": "encoding mismatch: '{field_a}' and '{field_b}' have different encodings",
+    "params": [
+      {
+        "name": "field_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Operands '{field_a}' and '{field_b}' must have the same encoding; use explicit encoding casts if needed"
+  },
+  {
+    "error_id": "ERR_ENCODING_002",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding must be preserved across slice/view operations.",
+    "message_template": "result encoding does not match source encoding for '{op_name}'",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Slice and view operations must preserve the source encoding"
+  },
+  {
+    "error_id": "ERR_ENCODING_003",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "SSA encoding reference out of range.",
+    "message_template": "{field_name} type references encoding value %{value_id}, but module has only {value_count} values",
+    "params": [
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_id",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "value_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "The encoding value_id in the type is invalid; this indicates a corrupted or malformed module"
+  },
+  {
+    "error_id": "ERR_ENCODING_004",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "SSA encoding value not visible at point of use.",
+    "message_template": "{field_name} type references encoding value '%{value_name}' which is not defined at this point",
+    "params": [
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "The encoding value must be defined before it can be referenced in a type; ensure the encoding.define op dominates this use"
+  },
+  {
+    "error_id": "ERR_ENCODING_005",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "SSA encoding reference has wrong type.",
+    "message_template": "{field_name} type references encoding value '%{value_name}' which has type {actual_type}, expected 'encoding'",
+    "params": [
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "The encoding value must have type 'encoding'; it should be the result of an encoding.define op"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_001",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wrong operand count.",
+    "message_template": "'{op_name}' has {actual_count} operands, expected {expected_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_STRUCTURE_002",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wrong result count.",
+    "message_template": "'{op_name}' has {actual_count} results, expected {expected_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_STRUCTURE_003",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wrong attribute count.",
+    "message_template": "'{op_name}' has {actual_count} attributes, expected {expected_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_STRUCTURE_004",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Wrong region count.",
+    "message_template": "'{op_name}' has {actual_count} regions, expected {expected_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_STRUCTURE_005",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Missing terminator in block.",
+    "message_template": "block in '{op_name}' region {region_index} is missing a terminator",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "region_index",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_STRUCTURE_006",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Single-block region has wrong block count.",
+    "message_template": "'{op_name}' region {region_index} must have exactly one block, has {block_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "region_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "block_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_STRUCTURE_007",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Region block argument count mismatch.",
+    "message_template": "region has {actual_count} block arguments, expected {expected_count} (one per input tile)",
+    "params": [
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Ensure the region has exactly one block argument per input tile"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_008",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Yield must produce the correct number of values.",
+    "message_template": "yield has {actual_count} operands, expected {expected_count}",
+    "params": [
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Yield exactly {expected_count} values"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_009",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown op kind.",
+    "message_template": "unknown op kind {op_kind} in '{op_name}'",
+    "params": [
+      {
+        "name": "op_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_STRUCTURE_010",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Enum attribute value out of range.",
+    "message_template": "attribute '{attr_name}' has enum value {actual_value}, but only {enum_case_count} values are defined",
+    "params": [
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_value",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "enum_case_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "'{attr_name}' must have a value in range [0, {enum_case_count})"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_011",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 11,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Non-symbol-defining op at module level.",
+    "message_template": "'{op_name}' cannot appear at module level (only symbol-defining ops like func.def and func.decl are allowed here)",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Move '{op_name}' inside a function body"
+  },
+  {
+    "error_id": "ERR_DOMINANCE_001",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Use of undefined value.",
+    "message_template": "use of undefined value '{value_name}'",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_DOMINANCE_002",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Use of consumed value.",
+    "message_template": "use of consumed value '{value_name}' (consumed by tied result of '{consuming_op}')",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "consuming_op",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use the tied result of '{consuming_op}' instead of '{value_name}'"
+  },
+  {
+    "error_id": "ERR_DOMINANCE_003",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Value ID out of range.",
+    "message_template": "value ID {value_id} is out of range (max {max_id})",
+    "params": [
+      {
+        "name": "value_id",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "max_id",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_DOMINANCE_004",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Tied result index out of range.",
+    "message_template": "tied result index {result_index} is out of range for '{op_name}' which has {result_count} results",
+    "params": [
+      {
+        "name": "result_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "result_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_DOMINANCE_005",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Tied operand index out of range.",
+    "message_template": "tied operand index {operand_index} is out of range for '{op_name}' which has {operand_count} operands",
+    "params": [
+      {
+        "name": "operand_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "operand_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_SYMBOL_001",
+    "domain": 6,
+    "domain_name": "SYMBOL",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Symbol reference out of range.",
+    "message_template": "symbol reference index {symbol_index} is out of range (max {max_index})",
+    "params": [
+      {
+        "name": "symbol_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "max_index",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_001",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Undefined SSA value.",
+    "message_template": "undefined SSA value '%{value_name}'",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_002",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate SSA name.",
+    "message_template": "SSA value '%{value_name}' is already defined",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Each SSA value name must be unique within its scope"
+  },
+  {
+    "error_id": "ERR_PARSE_003",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unexpected token.",
+    "message_template": "unexpected token '{actual_token}', expected {expected}",
+    "params": [
+      {
+        "name": "actual_token",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_004",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid type syntax.",
+    "message_template": "invalid type syntax: '{text}'",
+    "params": [
+      {
+        "name": "text",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_005",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unterminated string literal.",
+    "message_template": "unterminated string literal",
+    "params": []
+  },
+  {
+    "error_id": "ERR_PARSE_006",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown op name.",
+    "message_template": "unknown op '{op_name}'",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Check that the dialect is registered and the op name is spelled correctly"
+  },
+  {
+    "error_id": "ERR_PARSE_007",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown type name.",
+    "message_template": "unknown type '{type_name}'",
+    "params": [
+      {
+        "name": "type_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_008",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown encoding.",
+    "message_template": "unknown encoding '{encoding_name}'",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_009",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Result count mismatch.",
+    "message_template": "op '{op_name}' expects {expected_count} results, got {actual_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_010",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operand count mismatch.",
+    "message_template": "op '{op_name}' expects {expected_count} operands, got {actual_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_011",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 11,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid location syntax.",
+    "message_template": "malformed loc() annotation: {detail}",
+    "params": [
+      {
+        "name": "detail",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_012",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Too many errors.",
+    "message_template": "too many errors ({error_count}), stopping",
+    "params": [
+      {
+        "name": "error_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_013",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 13,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown predicate kind.",
+    "message_template": "unknown predicate '{predicate_name}'",
+    "params": [
+      {
+        "name": "predicate_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_014",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 14,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid encoding alias.",
+    "message_template": "invalid encoding alias definition: {detail}",
+    "params": [
+      {
+        "name": "detail",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_015",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 15,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid integer literal.",
+    "message_template": "invalid integer literal '{text}'",
+    "params": [
+      {
+        "name": "text",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_016",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 16,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid float literal.",
+    "message_template": "invalid float literal '{text}'",
+    "params": [
+      {
+        "name": "text",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_017",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 17,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown enum value.",
+    "message_template": "unknown {enum_name} value '{value}'",
+    "params": [
+      {
+        "name": "enum_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_018",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 18,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown flag or modifier.",
+    "message_template": "unknown {context} '{value}'",
+    "params": [
+      {
+        "name": "context",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_019",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 19,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Source contains invalid UTF-8.",
+    "message_template": "invalid UTF-8 byte sequence at offset {byte_offset}",
+    "params": [
+      {
+        "name": "byte_offset",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "The source file must be valid UTF-8"
+  },
+  {
+    "error_id": "ERR_BYTECODE_001",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid magic bytes.",
+    "message_template": "invalid magic bytes: expected {expected_magic}, got {actual_magic}",
+    "params": [
+      {
+        "name": "expected_magic",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_magic",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_002",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unsupported format version.",
+    "message_template": "unsupported format version {actual_version}, expected {expected_version}",
+    "params": [
+      {
+        "name": "actual_version",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_version",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_003",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unexpected end of data.",
+    "message_template": "unexpected end of data at offset {offset}, need {needed_bytes} bytes but only {available_bytes} remain",
+    "params": [
+      {
+        "name": "offset",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "needed_bytes",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "available_bytes",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_004",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown type kind.",
+    "message_template": "unknown type kind {type_kind} at offset {offset}",
+    "params": [
+      {
+        "name": "type_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "offset",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_005",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown attribute kind.",
+    "message_template": "unknown attribute kind {attr_kind} at offset {offset}",
+    "params": [
+      {
+        "name": "attr_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "offset",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_FOLD_001",
+    "domain": 9,
+    "domain_name": "FOLD",
+    "code": 1,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Operation folded to poison.",
+    "message_template": "'{op_name}' folded to poison: {reason}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_FOLD_002",
+    "domain": 9,
+    "domain_name": "FOLD",
+    "code": 2,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Slice source operand is poison.",
+    "message_template": "'{op_name}' folded to poison: source operand is poison",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "source_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_FOLD_003",
+    "domain": 9,
+    "domain_name": "FOLD",
+    "code": 3,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Update target operand is poison.",
+    "message_template": "'{op_name}' folded to poison: target operand is poison",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "target_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_FOLD_004",
+    "domain": 9,
+    "domain_name": "FOLD",
+    "code": 4,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Subrange access extends beyond bounds.",
+    "message_template": "'{op_name}' folded to poison: dimension {dim_index} access at offset {offset} + size {size} = {total} exceeds bound {bound}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "dim_index",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "offset",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "size",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "total",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "bound",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_FOLD_005",
+    "domain": 9,
+    "domain_name": "FOLD",
+    "code": 5,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Subrange access has negative offset.",
+    "message_template": "'{op_name}' folded to poison: dimension {dim_index} has negative offset {offset}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "dim_index",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "offset",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ]
+  }
+]

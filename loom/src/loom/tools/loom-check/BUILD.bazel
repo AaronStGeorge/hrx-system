@@ -1,0 +1,144 @@
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_binary", "loom_cc_library", "loom_cc_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "check",
+    srcs = ["check.c"],
+    hdrs = ["check.h"],
+    deps = [
+        "//loom/src/loom/error:error_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "execute",
+    srcs = [
+        "execute.c",
+        "roundtrip.c",
+        "verify.c",
+    ],
+    hdrs = ["execute.h"],
+    deps = [
+        ":check",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:renderer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/pool",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/testing:diff",
+        "//loom/src/loom/transforms:canonicalize",
+        "//loom/src/loom/transforms:cse",
+        "//loom/src/loom/transforms:dce",
+        "//loom/src/loom/transforms:pass",
+        "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "check_test",
+    srcs = ["check_test.cc"],
+    deps = [
+        ":check",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "execute_test",
+    srcs = ["execute_test.cc"],
+    deps = [
+        ":check",
+        ":execute",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "update",
+    srcs = ["update.c"],
+    hdrs = ["update.h"],
+    deps = [
+        ":check",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "update_test",
+    srcs = ["update_test.cc"],
+    deps = [
+        ":check",
+        ":update",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "json_output",
+    srcs = ["json_output.c"],
+    hdrs = ["json_output.h"],
+    deps = [
+        ":check",
+        ":execute",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "json_output_test",
+    srcs = ["json_output_test.cc"],
+    deps = [
+        ":check",
+        ":execute",
+        ":json_output",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_binary(
+    name = "loom-check",
+    srcs = ["loom-check.c"],
+    deps = [
+        ":check",
+        ":execute",
+        ":json_output",
+        ":update",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/io:file_handle",
+    ],
+)

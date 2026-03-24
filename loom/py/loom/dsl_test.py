@@ -1,0 +1,926 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Tests for loom.dsl — op declaration DSL."""
+
+import pytest
+
+from loom.assembly import (
+    COLON,
+    EQUALS,
+    Attr,
+    IndexList,
+    Keyword,
+    Ref,
+    Region,
+    TypeOf,
+    kw,
+)
+from loom.dsl import (
+    ANY,
+    COMMUTATIVE,
+    CONSTANT_LIKE,
+    DECOMPOSABLE,
+    ELEMENTWISE,
+    FLOAT,
+    I1,
+    IDEMPOTENT,
+    INDEX,
+    INTEGER,
+    INVOLUTION,
+    NON_DETERMINISTIC,
+    POOL,
+    PURE,
+    TENSOR,
+    TERMINATOR,
+    TILE,
+    UNIQUE_IDENTITY,
+    UNKNOWN_EFFECTS,
+    AllShapesMatch,
+    AllTypesMatch,
+    AttrDef,
+    BlockArgCount,
+    BlockArgsMatchElementTypes,
+    Dialect,
+    DimIndexInBounds,
+    EnumCase,
+    EnumDef,
+    HasParent,
+    ImplicitTerminator,
+    OffsetCountMatchesRank,
+    Op,
+    Operand,
+    RanksMatch,
+    Reads,
+    RegionDef,
+    Result,
+    SameElementType,
+    SameEncoding,
+    SameShape,
+    SameType,
+    TypeConstraint,
+    Writes,
+    YieldCountMatchesResults,
+    YieldTypesMatchResults,
+    binary_op,
+    cast_op,
+    comparison_op,
+    type_constraint_name,
+    unary_op,
+)
+
+# ============================================================================
+# Test fixtures
+# ============================================================================
+
+_scalar_ops = Dialect("scalar", doc="Scalar ops.")
+_tile_ops = Dialect("tile", doc="Tile ops.")
+_func_ops = Dialect("func", doc="Function ops.")
+_scf_ops = Dialect("scf", doc="Structured control flow.")
+
+_cmpi_preds = EnumDef(
+    "CmpIPredicate",
+    [
+        EnumCase("eq", 0),
+        EnumCase("ne", 1),
+        EnumCase("slt", 2),
+        EnumCase("sle", 3),
+        EnumCase("sgt", 4),
+        EnumCase("sge", 5),
+    ],
+)
+
+
+# ============================================================================
+# Type constraints
+# ============================================================================
+
+
+class TestTypeConstraints:
+    def test_all_constraints_have_names(self) -> None:
+        for tc in TypeConstraint:
+            name = type_constraint_name(tc)
+            assert isinstance(name, str)
+            assert len(name) > 0
+
+    def test_singleton_equality(self) -> None:
+        assert TILE == TypeConstraint.TILE
+        assert INTEGER == TypeConstraint.INTEGER
+        assert TILE != TENSOR
+
+    def test_values(self) -> None:
+        assert TILE.value == "tile"
+        assert FLOAT.value == "float"
+        assert INDEX.value == "index"
+
+
+# ============================================================================
+# Operands and results
+# ============================================================================
+
+
+class TestOperand:
+    def test_basic(self) -> None:
+        o = Operand("lhs", INTEGER)
+        assert o.name == "lhs"
+        assert o.type_constraint == INTEGER
+        assert not o.variadic
+        assert not o.optional
+
+    def test_variadic(self) -> None:
+        o = Operand("inputs", TILE, variadic=True)
+        assert o.variadic
+
+    def test_optional(self) -> None:
+        o = Operand("acc", TILE, optional=True)
+        assert o.optional
+
+    def test_with_doc(self) -> None:
+        o = Operand("lhs", INTEGER, doc="Left operand.")
+        assert o.doc == "Left operand."
+
+
+class TestResult:
+    def test_basic(self) -> None:
+        r = Result("result", FLOAT)
+        assert r.name == "result"
+        assert r.type_constraint == FLOAT
+        assert not r.variadic
+
+    def test_variadic(self) -> None:
+        r = Result("results", ANY, variadic=True)
+        assert r.variadic
+
+
+# ============================================================================
+# Attributes and enums
+# ============================================================================
+
+
+class TestAttrDef:
+    def test_basic(self) -> None:
+        a = AttrDef("axis", "i64")
+        assert a.name == "axis"
+        assert a.attr_type == "i64"
+        assert a.default is None
+        assert not a.optional
+
+    def test_with_default(self) -> None:
+        a = AttrDef("transpose", "bool", default="false")
+        assert a.default == "false"
+
+    def test_enum_attr(self) -> None:
+        a = AttrDef("predicate", "enum", enum_def=_cmpi_preds)
+        assert a.enum_def is not None
+        assert a.enum_def.name == "CmpIPredicate"
+
+    def test_invalid_attr_type_rejected(self) -> None:
+        with pytest.raises(ValueError, match="invalid attr_type"):
+            AttrDef("axis", "i64array")  # Invalid attr_type.
+
+    def test_enum_without_enum_def_rejected(self) -> None:
+        with pytest.raises(ValueError, match="requires enum_def"):
+            AttrDef("pred", "enum")  # Missing enum_def!
+
+    def test_all_valid_attr_types(self) -> None:
+        """All documented attr_type values are accepted."""
+        for attr_type in ["i64", "f64", "string", "bool", "type", "i64_array", "any"]:
+            AttrDef("test", attr_type)  # Should not raise.
+        AttrDef("test", "enum", enum_def=_cmpi_preds)  # enum needs enum_def.
+
+
+class TestEnumDef:
+    def test_basic(self) -> None:
+        e = _cmpi_preds
+        assert e.name == "CmpIPredicate"
+        assert len(e.cases) == 6
+
+    def test_keywords(self) -> None:
+        assert _cmpi_preds.keywords == ("eq", "ne", "slt", "sle", "sgt", "sge")
+
+    def test_accepts_list(self) -> None:
+        e = EnumDef("Test", [EnumCase("a", 0)])
+        assert isinstance(e.cases, tuple)
+
+    def test_duplicate_keyword_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate keyword 'eq'"):
+            EnumDef("Bad", [EnumCase("eq", 0), EnumCase("eq", 1)])
+
+    def test_duplicate_value_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate value 0"):
+            EnumDef("Bad", [EnumCase("a", 0), EnumCase("b", 0)])
+
+
+class TestEnumCase:
+    def test_basic(self) -> None:
+        c = EnumCase("slt", 2, doc="Signed less than.")
+        assert c.keyword == "slt"
+        assert c.value == 2
+        assert c.doc == "Signed less than."
+
+
+# ============================================================================
+# Regions
+# ============================================================================
+
+
+class TestRegionDef:
+    def test_basic(self) -> None:
+        r = RegionDef("body")
+        assert r.name == "body"
+        assert not r.single_block
+
+    def test_single_block(self) -> None:
+        r = RegionDef("body", single_block=True)
+        assert r.single_block
+
+
+# ============================================================================
+# Traits
+# ============================================================================
+
+
+class TestTraits:
+    def test_simple_trait(self) -> None:
+        assert PURE.name == "Pure"
+        assert PURE.args == ()
+
+    def test_trait_repr(self) -> None:
+        assert repr(PURE) == "Pure"
+        assert repr(COMMUTATIVE) == "Commutative"
+
+    def test_parameterized_trait(self) -> None:
+        t = AllTypesMatch("lhs", "rhs", "result")
+        assert t.name == "AllTypesMatch"
+        assert t.args == ("lhs", "rhs", "result")
+        assert repr(t) == "AllTypesMatch(lhs, rhs, result)"
+
+    def test_has_parent(self) -> None:
+        t = HasParent("scf.for")
+        assert t.args == ("scf.for",)
+
+    def test_implicit_terminator(self) -> None:
+        t = ImplicitTerminator("scf.yield")
+        assert t.args == ("scf.yield",)
+
+    def test_all_standard_traits(self) -> None:
+        standard = [
+            PURE,
+            COMMUTATIVE,
+            IDEMPOTENT,
+            INVOLUTION,
+            TERMINATOR,
+            CONSTANT_LIKE,
+            ELEMENTWISE,
+            DECOMPOSABLE,
+        ]
+        names = [t.name for t in standard]
+        assert len(set(names)) == len(names), "Duplicate trait names"
+
+
+# ============================================================================
+# Constraints
+# ============================================================================
+
+
+class TestConstraints:
+    def test_same_type_repr(self) -> None:
+        c = SameType("lhs", "rhs")
+        assert repr(c) == "SameType(lhs, rhs)"
+        assert c.error is not None
+        assert c.error.error_id == "ERR_TYPE_001"
+
+    def test_same_type_validation_pass(self) -> None:
+        c = SameType("a", "b")
+
+        class FakeValue:
+            def __init__(self, t: str):
+                self.type = t
+
+        ok, msg = c.check({"a": FakeValue("f32"), "b": FakeValue("f32")})
+        assert ok
+        assert msg == ""
+
+    def test_same_type_validation_fail(self) -> None:
+        c = SameType("a", "b")
+
+        class FakeValue:
+            def __init__(self, t: str):
+                self.type = t
+
+        ok, msg = c.check({"a": FakeValue("f32"), "b": FakeValue("i32")})
+        assert not ok
+        assert "'b'" in msg
+        assert "'a'" in msg
+
+    def test_same_type_missing_values(self) -> None:
+        c = SameType("a", "b")
+        ok, msg = c.check({"a": None})
+        assert ok, "Missing values should pass (can't check)"
+
+    def test_same_element_type(self) -> None:
+        c = SameElementType("x", "y")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_TYPE_002"
+
+    def test_same_encoding(self) -> None:
+        c = SameEncoding("a", "b")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_ENCODING_001"
+        # No validate function — C-only check.
+        ok, msg = c.check({})
+        assert ok
+
+    def test_same_shape(self) -> None:
+        c = SameShape("a", "b")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_SHAPE_002"
+
+    def test_ranks_match(self) -> None:
+        c = RanksMatch("a", "b")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_SHAPE_001"
+
+    def test_offset_count_matches_rank(self) -> None:
+        c = OffsetCountMatchesRank("src", "offsets")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_SUBRANGE_001"
+
+    def test_dim_index_in_bounds(self) -> None:
+        c = DimIndexInBounds("src", "dim")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_SUBRANGE_002"
+
+    def test_all_shapes_match(self) -> None:
+        c = AllShapesMatch("inputs")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_SHAPE_003"
+
+    def test_region_constraints(self) -> None:
+        block_arg_count = BlockArgCount("body", "inputs")
+        assert block_arg_count.error is not None
+        assert block_arg_count.error.error_id == "ERR_STRUCTURE_007"
+
+        block_args_match = BlockArgsMatchElementTypes("body", "inputs")
+        assert block_args_match.error is not None
+        assert block_args_match.error.error_id == "ERR_TYPE_008"
+
+        yield_count = YieldCountMatchesResults("body", "results")
+        assert yield_count.error is not None
+        assert yield_count.error.error_id == "ERR_STRUCTURE_008"
+
+        yield_types = YieldTypesMatchResults("body", "results")
+        assert yield_types.error is not None
+        assert yield_types.error.error_id == "ERR_TYPE_009"
+
+    # --- Variadic field handling ---
+
+    def test_same_type_variadic_pass(self) -> None:
+        """SameType across a variadic list and a scalar field."""
+
+        class FakeValue:
+            def __init__(self, t: str):
+                self.type = t
+
+        c = SameType("inputs", "result")
+        ok, msg = c.check(
+            {
+                "inputs": [FakeValue("f32"), FakeValue("f32"), FakeValue("f32")],
+                "result": FakeValue("f32"),
+            }
+        )
+        assert ok
+        assert msg == ""
+
+    def test_same_type_variadic_mismatch_within_list(self) -> None:
+        """SameType detects mismatch within a variadic list."""
+
+        class FakeValue:
+            def __init__(self, t: str):
+                self.type = t
+
+        c = SameType("inputs", "result")
+        ok, msg = c.check(
+            {
+                "inputs": [FakeValue("f32"), FakeValue("i32")],
+                "result": FakeValue("f32"),
+            }
+        )
+        assert not ok
+        assert "inputs[1]" in msg
+        assert "inputs[0]" in msg
+
+    def test_same_type_variadic_mismatch_against_scalar(self) -> None:
+        """SameType detects mismatch between variadic element and scalar."""
+
+        class FakeValue:
+            def __init__(self, t: str):
+                self.type = t
+
+        c = SameType("inputs", "result")
+        ok, msg = c.check(
+            {
+                "inputs": [FakeValue("f32")],
+                "result": FakeValue("i32"),
+            }
+        )
+        assert not ok
+        assert "result" in msg
+        assert "inputs[0]" in msg
+
+    def test_same_type_empty_variadic(self) -> None:
+        """SameType with empty variadic list passes (nothing to compare)."""
+
+        class FakeValue:
+            def __init__(self, t: str):
+                self.type = t
+
+        c = SameType("inputs", "result")
+        ok, msg = c.check({"inputs": [], "result": FakeValue("f32")})
+        assert ok, "Single value with empty list should pass"
+
+    def test_same_element_type_variadic_pass(self) -> None:
+        """SameElementType across variadic and scalar."""
+
+        class FakeTile:
+            def __init__(self, dt: str):
+                self.dtype = dt
+
+        c = SameElementType("inputs", "result")
+        ok, msg = c.check(
+            {
+                "inputs": [FakeTile("f32"), FakeTile("f32")],
+                "result": FakeTile("f32"),
+            }
+        )
+        assert ok
+
+    def test_same_element_type_variadic_fail(self) -> None:
+        """SameElementType detects mismatch in variadic list."""
+
+        class FakeTile:
+            def __init__(self, dt: str):
+                self.dtype = dt
+
+        c = SameElementType("inputs", "result")
+        ok, msg = c.check(
+            {
+                "inputs": [FakeTile("f32"), FakeTile("i32")],
+                "result": FakeTile("f32"),
+            }
+        )
+        assert not ok
+        assert "inputs[1]" in msg
+
+    def test_same_shape_variadic_pass(self) -> None:
+        """SameShape across variadic and scalar."""
+
+        class FakeTile:
+            def __init__(self, s: tuple[int, ...]):
+                self.shape = s
+
+        c = SameShape("inputs", "result")
+        ok, msg = c.check(
+            {
+                "inputs": [FakeTile((4, 8)), FakeTile((4, 8))],
+                "result": FakeTile((4, 8)),
+            }
+        )
+        assert ok
+
+    def test_same_shape_variadic_fail(self) -> None:
+        """SameShape detects mismatch in variadic list."""
+
+        class FakeTile:
+            def __init__(self, s: tuple[int, ...]):
+                self.shape = s
+
+        c = SameShape("inputs", "result")
+        ok, msg = c.check(
+            {
+                "inputs": [FakeTile((4, 8)), FakeTile((4, 16))],
+                "result": FakeTile((4, 8)),
+            }
+        )
+        assert not ok
+        assert "inputs[1]" in msg
+        assert "inputs[0]" in msg
+
+    def test_ranks_match_variadic_pass(self) -> None:
+        """RanksMatch with variadic field."""
+
+        class FakeTile:
+            def __init__(self, rank: int):
+                self.ndim = rank
+
+        c = RanksMatch("a", "b")
+        ok, msg = c.check(
+            {
+                "a": [FakeTile(2), FakeTile(2)],
+                "b": FakeTile(2),
+            }
+        )
+        assert ok
+
+    def test_ranks_match_variadic_fail(self) -> None:
+        """RanksMatch detects rank mismatch with variadic field."""
+
+        class FakeTile:
+            def __init__(self, rank: int):
+                self.ndim = rank
+
+        c = RanksMatch("a", "b")
+        ok, msg = c.check(
+            {
+                "a": [FakeTile(2), FakeTile(3)],
+                "b": FakeTile(2),
+            }
+        )
+        assert not ok
+        assert "a[1]" in msg
+
+    def test_ranks_match_both_variadic(self) -> None:
+        """RanksMatch with both fields variadic."""
+
+        class FakeTile:
+            def __init__(self, rank: int):
+                self.ndim = rank
+
+        c = RanksMatch("a", "b")
+        ok, msg = c.check(
+            {
+                "a": [FakeTile(2)],
+                "b": [FakeTile(3)],
+            }
+        )
+        assert not ok
+        assert "a[0]" in msg
+        assert "b[0]" in msg
+
+
+# ============================================================================
+# Op group
+# ============================================================================
+
+
+class TestDialect:
+    def test_basic(self) -> None:
+        g = Dialect("scalar", doc="Scalar ops.")
+        assert g.name == "scalar"
+        assert g.doc == "Scalar ops."
+
+    def test_with_enums(self) -> None:
+        g = Dialect("scalar", enums=[_cmpi_preds])
+        assert len(g.enums) == 1
+        assert isinstance(g.enums, tuple)
+
+
+# ============================================================================
+# Op declaration
+# ============================================================================
+
+
+class TestOp:
+    def test_basic(self) -> None:
+        op = Op(
+            "scalar.addi",
+            group=_scalar_ops,
+            doc="Integer addition.",
+            operands=[Operand("lhs", INTEGER), Operand("rhs", INTEGER)],
+            results=[Result("result", INTEGER)],
+        )
+        assert op.name == "scalar.addi"
+        assert op.namespace == "scalar"
+        assert op.short_name == "addi"
+        assert len(op.operands) == 2
+        assert len(op.results) == 1
+
+    def test_repr(self) -> None:
+        op = Op("test.op")
+        assert repr(op) == "Op('test.op')"
+
+    def test_tuples_stored(self) -> None:
+        op = Op(
+            "test.op",
+            operands=[Operand("x", ANY)],
+            results=[Result("y", ANY)],
+            traits=[PURE],
+            constraints=[SameType("x", "y")],
+            format=[Ref("x"), COLON, TypeOf("y")],
+            examples=["example"],
+        )
+        assert isinstance(op.operands, tuple)
+        assert isinstance(op.results, tuple)
+        assert isinstance(op.traits, tuple)
+        assert isinstance(op.constraints, tuple)
+        assert isinstance(op.format, tuple)
+        assert isinstance(op.examples, tuple)
+
+    def test_lookup_operand(self) -> None:
+        op = Op(
+            "test.op",
+            operands=[
+                Operand("lhs", INTEGER),
+                Operand("rhs", INTEGER),
+            ],
+        )
+        lhs_operand = op.operand("lhs")
+        assert lhs_operand is not None
+        assert lhs_operand.name == "lhs"
+        assert op.operand("missing") is None
+
+    def test_lookup_result(self) -> None:
+        op = Op("test.op", results=[Result("out", FLOAT)])
+        assert op.result("out") is not None
+        assert op.result("missing") is None
+
+    def test_lookup_attr(self) -> None:
+        op = Op("test.op", attrs=[AttrDef("axis", "i64")])
+        assert op.attr("axis") is not None
+        assert op.attr("missing") is None
+
+    def test_lookup_region(self) -> None:
+        op = Op("test.op", regions=[RegionDef("body")])
+        assert op.region("body") is not None
+        assert op.region("missing") is None
+
+    def test_trait_queries(self) -> None:
+        op = Op("test.op", traits=[PURE, COMMUTATIVE, TERMINATOR])
+        assert op.is_pure
+        assert op.is_commutative
+        assert op.is_terminator
+        assert op.has_trait("Pure")
+        assert not op.has_trait("Idempotent")
+
+    def test_no_traits(self) -> None:
+        op = Op("test.op")
+        # An op with no effects, no traits, and no allocating results
+        # is derived pure — it does nothing observable.
+        assert op.is_pure
+        assert not op.is_terminator
+
+    def test_namespace_no_dot(self) -> None:
+        op = Op("nodot")
+        assert op.namespace == ""
+        assert op.short_name == "nodot"
+
+    def test_keyword_only_args(self) -> None:
+        """Op constructor requires keyword arguments after name."""
+        # This should work:
+        Op("test.op", doc="hello")
+        # Positional args after name should fail:
+        with pytest.raises(TypeError):
+            Op("test.op", "hello")  # type: ignore[arg-type, misc]
+
+    def test_format_field_validation_catches_typo(self) -> None:
+        """Format referencing undeclared field is caught at declaration time."""
+        with pytest.raises(ValueError, match="undeclared fields"):
+            Op(
+                "test.bad",
+                operands=[Operand("input", ANY)],
+                results=[Result("result", ANY)],
+                format=[Ref("source"), COLON, TypeOf("result")],  # Wrong name.
+            )
+
+    def test_format_field_validation_allows_implicit(self) -> None:
+        """Implicit fields (iv, args, predicates) are allowed."""
+        # Should not raise — "iv" and "args" are implicit.
+        Op(
+            "test.loop",
+            operands=[Operand("lower_bound", INDEX)],
+            results=[Result("results", ANY, variadic=True)],
+            regions=[RegionDef("body")],
+            format=[Ref("iv"), EQUALS, Ref("lower_bound"), Region("body")],
+        )
+
+    def test_format_field_validation_index_list(self) -> None:
+        """IndexList fields (both dynamic and static) are validated."""
+        with pytest.raises(ValueError, match="undeclared fields"):
+            Op(
+                "test.bad",
+                operands=[Operand("source", TILE)],
+                results=[Result("result", TILE)],
+                format=[
+                    Ref("source"),
+                    IndexList("offsets", "static_offsets"),  # Neither declared!
+                ],
+            )
+
+
+# ============================================================================
+# Memory effects
+# ============================================================================
+
+
+class TestEffects:
+    def test_valid_read_effect(self) -> None:
+        op = Op(
+            "test.load",
+            operands=[Operand("source", POOL)],
+            results=[Result("result", ANY)],
+            effects=[Reads("source")],
+        )
+        assert not op.is_pure
+        assert op.effects[0].operand == "source"
+
+    def test_valid_write_effect(self) -> None:
+        op = Op(
+            "test.store",
+            operands=[Operand("target", POOL), Operand("data", TILE)],
+            effects=[Writes("target")],
+        )
+        assert not op.is_pure
+
+    def test_pure_with_effects_raises(self) -> None:
+        with pytest.raises(ValueError, match="PURE.*effects"):
+            Op(
+                "test.bad",
+                operands=[Operand("pool", POOL)],
+                traits=[PURE],
+                effects=[Reads("pool")],
+            )
+
+    def test_effect_on_nonexistent_operand_raises(self) -> None:
+        with pytest.raises(ValueError, match="not declared"):
+            Op(
+                "test.bad",
+                operands=[Operand("input", POOL)],
+                effects=[Reads("nonexistent")],
+            )
+
+    def test_effect_on_non_resource_operand_raises(self) -> None:
+        with pytest.raises(ValueError, match="not allowed"):
+            Op(
+                "test.bad",
+                operands=[Operand("value", INTEGER)],
+                effects=[Reads("value")],
+            )
+
+    def test_unknown_effects_with_pure_raises(self) -> None:
+        with pytest.raises(ValueError, match="PURE.*UNKNOWN_EFFECTS"):
+            Op("test.bad", traits=[PURE, UNKNOWN_EFFECTS])
+
+    def test_unknown_effects_with_explicit_effects_raises(self) -> None:
+        with pytest.raises(ValueError, match="UNKNOWN_EFFECTS.*explicit"):
+            Op(
+                "test.bad",
+                operands=[Operand("pool", POOL)],
+                traits=[UNKNOWN_EFFECTS],
+                effects=[Reads("pool")],
+            )
+
+    def test_pure_with_non_deterministic_raises(self) -> None:
+        with pytest.raises(ValueError, match="PURE.*NON_DETERMINISTIC"):
+            Op("test.bad", traits=[PURE, NON_DETERMINISTIC])
+
+    def test_non_deterministic_not_pure(self) -> None:
+        op = Op("test.rng", traits=[NON_DETERMINISTIC])
+        assert not op.is_pure
+
+    def test_unknown_effects_not_pure(self) -> None:
+        op = Op("test.call", traits=[UNKNOWN_EFFECTS])
+        assert not op.is_pure
+
+    def test_allocating_result(self) -> None:
+        op = Op(
+            "test.alloc",
+            results=[Result("pool", POOL, allocates=True)],
+        )
+        assert not op.is_pure
+        assert op.results[0].allocates
+
+    def test_unique_identity_not_pure(self) -> None:
+        op = Op("test.handle", traits=[UNIQUE_IDENTITY])
+        assert not op.is_pure
+
+    def test_pure_with_unique_identity_raises(self) -> None:
+        with pytest.raises(ValueError, match="PURE.*UNIQUE_IDENTITY"):
+            Op("test.bad", traits=[PURE, UNIQUE_IDENTITY])
+
+
+# ============================================================================
+# Helper functions
+# ============================================================================
+
+
+class TestBinaryOp:
+    def test_basic(self) -> None:
+        op = binary_op(
+            "scalar.addi",
+            group=_scalar_ops,
+            type_constraint=INTEGER,
+            doc="Integer addition.",
+        )
+        assert op.name == "scalar.addi"
+        assert len(op.operands) == 2
+        assert op.operands[0].name == "lhs"
+        assert op.operands[1].name == "rhs"
+        assert len(op.results) == 1
+        assert op.is_pure
+        assert not op.is_commutative
+
+    def test_commutative(self) -> None:
+        op = binary_op(
+            "scalar.addi",
+            group=_scalar_ops,
+            type_constraint=INTEGER,
+            doc="Integer addition.",
+            commutative=True,
+        )
+        assert op.is_commutative
+
+    def test_format(self) -> None:
+        op = binary_op(
+            "scalar.addi",
+            group=_scalar_ops,
+            type_constraint=INTEGER,
+            doc="Add.",
+        )
+        assert len(op.format) == 5
+        assert isinstance(op.format[0], Ref)
+        assert isinstance(op.format[1], Keyword)
+        assert isinstance(op.format[2], Ref)
+        assert isinstance(op.format[3], Keyword)
+        assert isinstance(op.format[4], TypeOf)
+
+
+class TestUnaryOp:
+    def test_basic(self) -> None:
+        op = unary_op(
+            "scalar.negf",
+            group=_scalar_ops,
+            type_constraint=FLOAT,
+            doc="Negate.",
+        )
+        assert len(op.operands) == 1
+        assert op.operands[0].name == "input"
+        assert op.is_pure
+
+    def test_format(self) -> None:
+        op = unary_op(
+            "scalar.negf",
+            group=_scalar_ops,
+            type_constraint=FLOAT,
+            doc="Negate.",
+        )
+        assert len(op.format) == 3
+        assert isinstance(op.format[0], Ref)
+        assert isinstance(op.format[1], Keyword)
+        assert isinstance(op.format[2], TypeOf)
+
+
+class TestCastOp:
+    def test_basic(self) -> None:
+        op = cast_op(
+            "scalar.sitofp",
+            group=_scalar_ops,
+            from_constraint=INTEGER,
+            to_constraint=FLOAT,
+            doc="Signed int to float.",
+        )
+        assert op.operands[0].type_constraint == INTEGER
+        assert op.results[0].type_constraint == FLOAT
+        assert op.is_pure
+
+    def test_format(self) -> None:
+        op = cast_op(
+            "scalar.sitofp",
+            group=_scalar_ops,
+            from_constraint=INTEGER,
+            to_constraint=FLOAT,
+            doc="Cast.",
+        )
+        # Expected format: Ref(input) COLON TypeOf(input) kw(to) TypeOf(result)
+        assert len(op.format) == 5
+        assert op.format[3] == kw("to")
+
+
+class TestComparisonOp:
+    def test_basic(self) -> None:
+        op = comparison_op(
+            "scalar.cmpi",
+            group=_scalar_ops,
+            type_constraint=INTEGER,
+            predicates=_cmpi_preds,
+            doc="Integer comparison.",
+        )
+        assert len(op.operands) == 2
+        assert len(op.attrs) == 1
+        assert op.attrs[0].enum_def is _cmpi_preds
+        assert op.results[0].type_constraint == I1
+
+    def test_format(self) -> None:
+        op = comparison_op(
+            "scalar.cmpi",
+            group=_scalar_ops,
+            type_constraint=INTEGER,
+            predicates=_cmpi_preds,
+            doc="Compare.",
+        )
+        # Expected format: Attr(predicate) COMMA Ref(lhs) COMMA Ref(rhs)
+        # COLON TypeOf(lhs)
+        assert len(op.format) == 7
+        assert isinstance(op.format[0], Attr)

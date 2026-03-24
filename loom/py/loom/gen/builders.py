@@ -1,0 +1,497 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Generator: Op declarations → typed Python builder stubs.
+
+Reads Op declarations and emits builders.py files with typed methods.
+Parameter order follows the format spec. Each method has full type
+annotations, docstrings, and handles tied results automatically
+for ops with fixed tying patterns.
+
+Usage:
+    python -m loom.gen.builders
+
+Generates: dialect/*/builders.py
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Any
+
+from loom.assembly import (
+    Attr,
+    AttrDict,
+    BindingList,
+    Flags,
+    FormatElement,
+    FuncArgs,
+    Glue,
+    IndexList,
+    Keyword,
+    OpRef,
+    OptionalGroup,
+    PredicateList,
+    Ref,
+    Refs,
+    ResultType,
+    ResultTypeList,
+    SymbolRef,
+    TypeOf,
+    TypesOf,
+)
+from loom.assembly import (
+    Region as RegionFmt,
+)
+from loom.dsl import AttrDef, Op
+from loom.fields import FieldKind, compute_layout
+
+_PYTHON_KEYWORDS = frozenset(
+    {
+        "yield",
+        "return",
+        "for",
+        "if",
+        "else",
+        "while",
+        "import",
+        "from",
+        "class",
+        "def",
+        "pass",
+        "break",
+        "continue",
+        "and",
+        "or",
+        "not",
+        "in",
+        "is",
+    }
+)
+
+
+# ============================================================================
+# Parameter extraction from format specs
+# ============================================================================
+
+
+def _extract_params(op: Op) -> list[dict[str, Any]]:
+    """Extract builder parameters from an op's format spec.
+
+    Walks the format elements in order and produces a parameter
+    descriptor for each element that maps to a builder parameter.
+    The order matches the textual assembly.
+    """
+    layout = compute_layout(op)
+    params: list[dict[str, Any]] = []
+
+    def walk(elements: tuple[FormatElement, ...]) -> None:
+        for element in elements:
+            match element:
+                case Ref(field=name):
+                    if name in ("iv",):
+                        # Implicit field — not a builder parameter.
+                        continue
+                    desc = layout.fields.get(name)
+                    if desc and desc.kind == FieldKind.OPERAND:
+                        params.append(
+                            {
+                                "name": name,
+                                "kind": "operand",
+                                "type_hint": "ValueRef",
+                                "doc": f"Operand: {name}",
+                            }
+                        )
+
+                case Refs(field=name):
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "operand_variadic",
+                            "type_hint": "list[ValueRef]",
+                            "doc": f"Variadic operands: {name}",
+                        }
+                    )
+
+                case Attr(field=name):
+                    attr_def = op.attr(name)
+                    type_hint = _attr_type_hint(attr_def)
+                    is_optional = attr_def.optional if attr_def else False
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "attr",
+                            "type_hint": type_hint,
+                            "optional": is_optional,
+                            "attr_def": attr_def,
+                            "doc": attr_def.doc if attr_def else "",
+                        }
+                    )
+
+                case SymbolRef(field=name):
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "attr",
+                            "type_hint": "str",
+                            "doc": f"Symbol reference: {name}",
+                        }
+                    )
+
+                case IndexList(dynamic=dynamic_field, static=static_field):
+                    params.append(
+                        {
+                            "name": dynamic_field,
+                            "kind": "index_list",
+                            "type_hint": "list[int | ValueRef]",
+                            "static_field": static_field,
+                            "doc": f"Index list: {dynamic_field}",
+                        }
+                    )
+
+                case BindingList(field=name, kind=binding_kind):
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "binding_list",
+                            "type_hint": "list[ValueRef]",
+                            "binding_kind": binding_kind,
+                            "doc": f"Binding list: {name}",
+                        }
+                    )
+
+                case ResultType(field=name):
+                    params.append(
+                        {
+                            "name": "results",
+                            "kind": "result_types",
+                            "type_hint": "list[Type | TiedResultSpec]",
+                            "doc": "Result type",
+                        }
+                    )
+
+                case ResultTypeList(field=name):
+                    params.append(
+                        {
+                            "name": "results",
+                            "kind": "result_types",
+                            "type_hint": "list[Type | TiedResultSpec]",
+                            "doc": "Result types (use tied() for in-place results)",
+                        }
+                    )
+
+                case RegionFmt(field=name):
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "region",
+                            "type_hint": "Region | None",
+                            "doc": f"Region: {name}",
+                        }
+                    )
+
+                case OptionalGroup(elements=inner, anchor=_anchor):
+                    walk(inner)
+
+                case Flags(field=name):
+                    attr_def = op.attr(name)
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "flags",
+                            "type_hint": "str",
+                            "optional": True,
+                            "attr_def": attr_def,
+                            "doc": attr_def.doc if attr_def else "Instance flags.",
+                        }
+                    )
+
+                case OpRef(field=name):
+                    attr_def = op.attr(name)
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "attr",
+                            "type_hint": "str",
+                            "optional": False,
+                            "attr_def": attr_def,
+                            "doc": f"Op kind reference: {name}",
+                        }
+                    )
+
+                case PredicateList(field=name):
+                    attr_def = op.attr(name)
+                    is_optional = attr_def.optional if attr_def else False
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "predicate_list",
+                            "type_hint": "list[Predicate]",
+                            "optional": is_optional,
+                            "doc": f"Predicate list: {name}",
+                        }
+                    )
+
+                case Keyword() | TypeOf() | TypesOf() | AttrDict() | Glue() | FuncArgs():
+                    pass  # Not parameters.
+
+    walk(op.format)
+    return params
+
+
+def _attr_type_hint(attr_def: AttrDef | None) -> str:
+    """Get Python type hint for an attribute type."""
+    if attr_def is None:
+        return "Any"
+    match attr_def.attr_type:
+        case "i64":
+            return "int"
+        case "f64":
+            return "float"
+        case "string":
+            return "str"
+        case "bool":
+            return "bool"
+        case "enum":
+            return "str"
+        case "symbol":
+            return "str"
+        case "i64_array":
+            return "list[int]"
+        case "any":
+            return "Any"
+        case _:
+            return "Any"
+
+
+# ============================================================================
+# Code generation
+# ============================================================================
+
+
+def generate_builders(ops: Sequence[Op], class_name: str) -> str:
+    """Generate a builder class with typed methods for a set of ops.
+
+    Returns the Python source code as a string.
+    """
+    # Generate method bodies first so we can scan for used imports.
+    method_lines: list[str] = []
+    for op in ops:
+        method_lines.append("")
+        method_lines.extend(_generate_method(op))
+
+    # Scan generated code to determine which imports are actually needed.
+    body_text = "\n".join(method_lines)
+    builder_imports = ["IRBuilder", "ValueRef"]
+    if "IndexedValue" in body_text:
+        builder_imports.append("IndexedValue")
+    if "TiedResultSpec" in body_text:
+        builder_imports.append("TiedResultSpec")
+    if "tied(" in body_text:
+        builder_imports.append("tied")
+
+    # Scan for Predicate usage.
+    needs_predicate = "list[Predicate]" in body_text
+
+    lines: list[str] = []
+    lines.append("# GENERATED by loom.gen.builders — do not edit.")
+    lines.append("#")
+    lines.append("# Regenerate with: python -m loom.gen.builders")
+    lines.append("")
+    lines.append("from __future__ import annotations")
+    lines.append("")
+    lines.append("from typing import Any, cast")
+    lines.append("")
+    lines.append(f"from loom.builder import {', '.join(sorted(builder_imports))}")
+    ir_imports = ["Region", "Type"]
+    if needs_predicate:
+        ir_imports.append("Predicate")
+    lines.append(f"from loom.ir import {', '.join(sorted(ir_imports))}")
+    lines.append("")
+    lines.append("")
+    lines.append(f"class {class_name}:")
+    lines.append(f'    """Typed builder methods for {class_name.replace("Builders", "").lower()} ops."""')
+    lines.append("")
+    lines.append("    def __init__(self, builder: IRBuilder) -> None:")
+    lines.append("        self._b = builder")
+    lines.extend(method_lines)
+
+    return "\n".join(lines) + "\n"
+
+
+def _generate_method(op: Op) -> list[str]:
+    """Generate one builder method for an op."""
+    params = _extract_params(op)
+    method_name = op.short_name
+
+    # Build parameter list.
+    param_strs = ["self"]
+    param_strs.append("*")  # Force keyword-only.
+    for param in params:
+        if param["kind"] == "result_types":
+            param_strs.append(f"{param['name']}: {param['type_hint']}")
+        elif param["kind"] == "region":
+            param_strs.append(f"{param['name']}: {param['type_hint']} = None")
+        elif param.get("optional"):
+            param_strs.append(f"{param['name']}: {param['type_hint']} | None = None")
+        else:
+            param_strs.append(f"{param['name']}: {param['type_hint']}")
+
+    # Determine return type.
+    result_count = len(op.results)
+    if result_count == 0:
+        return_type = "None"
+    elif result_count == 1:
+        has_variadic_result = any(r.variadic for r in op.results)
+        return_type = "list[ValueRef]" if has_variadic_result else "ValueRef"
+    else:
+        return_type = "list[ValueRef]"
+
+    # Check if results are always from ResultTypeList (needs explicit results param)
+    has_result_type_list = any(p["kind"] == "result_types" for p in params)
+    # If no ResultTypeList but op has results, add result_types param.
+    if not has_result_type_list and result_count > 0:
+        param_strs.append("result_types: list[Type]")
+
+    lines: list[str] = []
+
+    # Method signature.
+    if method_name in _PYTHON_KEYWORDS:
+        method_name = method_name + "_"
+
+    # Method signature.
+    sig = ", ".join(param_strs)
+    lines.append(f"    def {method_name}({sig}) -> {return_type}:")
+
+    # Docstring.
+    doc = op.doc or f"{op.name} operation."
+    lines.append(f'        """{doc}')
+    if op.examples:
+        lines.append("")
+        lines.append("        Example::")
+        lines.extend(f"            {example_line}" for example_line in op.examples[0].split("\n"))
+    lines.append('        """')
+
+    # Body: collect operands, attributes, regions.
+    lines.append("        _operands: list[ValueRef | int] = []")
+    lines.append("        _attributes: dict[str, Any] = {}")
+    lines.append("        _regions: list[Region] = []")
+
+    for param in params:
+        match param["kind"]:
+            case "operand":
+                lines.append(f"        _operands.append({param['name']})")
+            case "operand_variadic":
+                lines.append(f"        _operands.extend({param['name']})")
+            case "attr":
+                if param.get("optional"):
+                    lines.append(f"        if {param['name']} is not None:")
+                    lines.append(f'            _attributes["{param["name"]}"] = {param["name"]}')
+                else:
+                    lines.append(f'        _attributes["{param["name"]}"] = {param["name"]}')
+            case "index_list":
+                lines.append("        _sentinel = -(2**63)")
+                lines.append("        _static = []")
+                lines.append(f"        for _idx in {param['name']}:")
+                lines.append("            if isinstance(_idx, ValueRef):")
+                lines.append("                _static.append(_sentinel)")
+                lines.append("                _operands.append(_idx)")
+                lines.append("            else:")
+                lines.append("                _static.append(_idx)")
+                lines.append(f'        _attributes["{param["static_field"]}"] = _static')
+            case "binding_list":
+                lines.append(f"        _operands.extend({param['name']})")
+            case "predicate_list":
+                if param.get("optional"):
+                    lines.append(f"        if {param['name']}:")
+                    lines.append(f'            _attributes["{param["name"]}"] = {param["name"]}')
+                else:
+                    lines.append(f'        _attributes["{param["name"]}"] = {param["name"]}')
+            case "flags":
+                lines.append(f"        if {param['name']} is not None:")
+                lines.append(f'            _attributes["{param["name"]}"] = {param["name"]}')
+            case "result_types":
+                pass  # Handled below.
+            case "region":
+                lines.append(f"        if {param['name']} is not None:")
+                lines.append(f"            _regions.append({param['name']})")
+
+    # Build call and return with appropriate type narrowing.
+    if has_result_type_list:
+        if return_type == "None":
+            lines.append(f'        self._b.build("{op.name}", _operands,')
+            lines.append("            results=results, attributes=_attributes,")
+            lines.append("            regions=_regions)")
+        else:
+            lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands,')
+            lines.append("            results=results, attributes=_attributes,")
+            lines.append("            regions=_regions))")
+    elif result_count > 0:
+        lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands,')
+        lines.append("            results=result_types, attributes=_attributes,")
+        lines.append("            regions=_regions))")
+    else:
+        lines.append(f'        self._b.build("{op.name}", _operands,')
+        lines.append("            attributes=_attributes, regions=_regions)")
+
+    return lines
+
+
+def _has_typeof_result(op: Op) -> bool:
+    """Check if the format has TypeOf referencing a result field."""
+    layout = compute_layout(op)
+    for element in op.format:
+        if isinstance(element, TypeOf):
+            desc = layout.fields.get(element.field)
+            if desc and desc.kind == FieldKind.RESULT:
+                return True
+    return False
+
+
+# ============================================================================
+# CLI entry point
+# ============================================================================
+
+
+def main() -> None:
+    """Generate builder stubs for all registered dialects."""
+    # Output root is relative to the script location:
+    # loom/py/loom/gen/builders.py -> loom/py/loom/dialect/
+    import os
+
+    from loom.dialect.encoding import ALL_ENCODING_OPS
+    from loom.dialect.func import ALL_FUNC_OPS
+    from loom.dialect.pool import ALL_POOL_OPS
+    from loom.dialect.scalar import ALL_SCALAR_OPS
+    from loom.dialect.test import ALL_TEST_OPS
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    dialect_root = os.path.normpath(os.path.join(script_dir, "..", "dialect"))
+
+    dialects = [
+        ("test", list(ALL_TEST_OPS), "TestBuilders", "test/builders.py"),
+        ("scalar", list(ALL_SCALAR_OPS), "ScalarBuilders", "scalar/builders.py"),
+        (
+            "encoding",
+            list(ALL_ENCODING_OPS),
+            "EncodingBuilders",
+            "encoding/builders.py",
+        ),
+        ("func", list(ALL_FUNC_OPS), "FuncBuilders", "func/builders.py"),
+        ("pool", list(ALL_POOL_OPS), "PoolBuilders", "pool/builders.py"),
+    ]
+
+    for _dialect_name, ops, class_name, rel_path in dialects:
+        code = generate_builders(ops, class_name)
+        output_path = os.path.join(dialect_root, rel_path)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "w") as f:
+            f.write(code)
+        print(f"  {rel_path} ({len(ops)} ops)")
+
+
+if __name__ == "__main__":
+    main()

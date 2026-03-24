@@ -1,0 +1,87 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_fuzz", "loom_cc_library", "loom_cc_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "diff",
+    srcs = ["diff.c"],
+    hdrs = ["diff.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "diff_test",
+    srcs = ["diff_test.cc"],
+    deps = [
+        ":diff",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "gen",
+    testonly = True,
+    srcs = [
+        "gen.c",
+        "gen_func_dialect.c",
+        "gen_scalar_dialect.c",
+        "gen_test_dialect.c",
+    ],
+    hdrs = ["gen.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:prng",
+    ],
+)
+
+loom_cc_test(
+    name = "gen_test",
+    srcs = ["gen_test.cc"],
+    deps = [
+        ":gen",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_fuzz(
+    name = "gen_fuzz",
+    srcs = ["gen_fuzz.cc"],
+    deps = [
+        ":gen",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/transforms:verify",
+        "//runtime/src/iree/base",
+    ],
+)

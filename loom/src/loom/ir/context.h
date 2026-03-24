@@ -1,0 +1,200 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Global compilation context: dialect registration, op vtable lookup,
+// encoding registration, and module registry.
+//
+// Lifecycle:
+//   1. loom_context_initialize() — zero-init with allocator.
+//   2. loom_context_register_dialect() — register each dialect's vtables.
+//   3. loom_context_finalize() — build acceleration structures.
+//   4. Use: create modules, parse, compile, verify.
+//   5. loom_context_deinitialize() — release resources.
+//
+// After finalization the context is immutable. Any thread can read
+// from it without synchronization.
+
+#ifndef LOOM_IR_CONTEXT_H_
+#define LOOM_IR_CONTEXT_H_
+
+#include "iree/base/api.h"
+#include "loom/ir/ir.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//===----------------------------------------------------------------------===//
+// loom_context_t
+//===----------------------------------------------------------------------===//
+
+// A dialect's vtable array: dense, indexed by op_index within the
+// dialect. Each dialect registers its static vtable array at context
+// creation. The entries pointer references a generated array that
+// lives for the process lifetime.
+typedef struct loom_dialect_vtables_t {
+  uint16_t op_count;
+  const loom_op_vtable_t* const* entries;
+} loom_dialect_vtables_t;
+
+// Two-level op vtable registry: dialect table indexed by dialect_id,
+// each entry pointing to a dense per-dialect vtable array indexed by
+// op_index. Lookup is two array indexes — same cost as a flat array
+// but uses <2KB instead of 18KB.
+typedef struct loom_op_vtable_registry_t {
+  loom_dialect_vtables_t dialects[LOOM_DIALECT_BUILTIN_COUNT_];
+} loom_op_vtable_registry_t;
+
+// Entry in the op name hash table. Maps a dotted op name string
+// (e.g., "test.addi") to the op kind and vtable pointer. The name
+// field is a view into the vtable's B-string — no allocation.
+typedef struct loom_op_name_entry_t {
+  iree_string_view_t name;
+  loom_op_kind_t kind;
+  const loom_op_vtable_t* vtable;
+} loom_op_name_entry_t;
+
+// Open-addressed hash table for O(1) op name → vtable resolution.
+// Built during loom_context_finalize(). Allocated with the context's
+// host allocator. Uses FNV-1a hashing and linear probing.
+typedef struct loom_op_name_table_t {
+  loom_op_name_entry_t* entries;
+  uint32_t capacity;  // Power of 2.
+  uint32_t count;
+} loom_op_name_table_t;
+
+// Vtable for a specific encoding kind (q6_k, q8_0, dense, etc.).
+//
+// Registered with the context at startup. Looked up by the
+// encoding_kind byte in loom_type_t.header. The instance_params
+// argument to each function comes from the module's encoding
+// instance table and is in whatever format the vtable expects
+// (arena-allocated by parse_params during IR construction).
+//
+// Adding a new encoding: implement the vtable, register with the
+// context. No changes to the type system, parser, printer, or
+// bytecode format needed.
+typedef struct loom_encoding_vtable_t {
+  // Encoding name for printing ("q6_k", "q8_0", "dense").
+  iree_string_view_t name;
+
+  // Compute storage size in bytes for |element_count| logical elements.
+  iree_host_size_t (*storage_size)(const void* instance_params,
+                                   iree_host_size_t element_count);
+
+  // Decode: encoded bytes to dense elements.
+  iree_status_t (*decode)(const void* instance_params, const void* encoded_data,
+                          void* decoded_data, iree_host_size_t element_count);
+
+  // Encode: dense elements to encoded bytes.
+  iree_status_t (*encode)(const void* instance_params, const void* decoded_data,
+                          void* encoded_data, iree_host_size_t element_count);
+
+  // Print encoding parameters to a string builder.
+  // Example output: "block=32, group_size=128".
+  iree_status_t (*print_params)(const void* instance_params,
+                                iree_string_builder_t* builder);
+
+  // Parse encoding parameters from text, allocating in the arena.
+  // Returns the arena-allocated params blob through |out_instance_params|.
+  iree_status_t (*parse_params)(iree_string_view_t params_text,
+                                iree_arena_allocator_t* arena,
+                                const void** out_instance_params);
+} loom_encoding_vtable_t;
+
+// The global context: vtables, allocator, module registry.
+//
+// Created once at startup, shared across all modules and threads.
+// Immutable after finalization: all vtable lookups are read-only.
+//
+// Lifetime: the context must outlive all modules created from it.
+struct loom_context_t {
+  iree_allocator_t allocator;
+
+  // Source table: filenames, system tags, provenance labels.
+  loom_source_table_t sources;
+
+  // Encoding vtables indexed by the encoding_kind byte in loom_type_t.
+  loom_encoding_vtable_list_t encoding_vtables;
+
+  // Op vtable registry: two-level lookup by dialect_id then op_index.
+  loom_op_vtable_registry_t op_vtables;
+
+  // Registered modules for cross-module symbol resolution.
+  loom_module_list_t modules;
+
+  // Op name hash table for string → vtable resolution.
+  loom_op_name_table_t op_name_table;
+};
+
+// Initializes a context with the given host allocator. After
+// initialization, register dialects and encodings, then call
+// loom_context_finalize().
+void loom_context_initialize(iree_allocator_t allocator,
+                             loom_context_t* out_context);
+
+// Releases all resources owned by the context. All modules created
+// from this context must have been freed first.
+void loom_context_deinitialize(loom_context_t* context);
+
+// Registers a dialect's vtable array with the context. The |vtables|
+// pointer must remain valid for the lifetime of the context (typically
+// a static array generated from the DSL). Returns INVALID_ARGUMENT if
+// the dialect ID is out of range, ALREADY_EXISTS if already registered.
+// Must be called before loom_context_finalize().
+iree_status_t loom_context_register_dialect(
+    loom_context_t* context, uint8_t dialect_id,
+    const loom_op_vtable_t* const* vtables, uint16_t op_count);
+
+// Finalizes the context after all dialects and encodings have been
+// registered. Builds acceleration structures for fast op name lookup.
+// Must be called before creating modules or parsing.
+iree_status_t loom_context_finalize(loom_context_t* context);
+
+// Resolves an op kind to its vtable. Returns NULL if the dialect is
+// not registered or the op index is out of range.
+const loom_op_vtable_t* loom_context_resolve_op(const loom_context_t* context,
+                                                loom_op_kind_t kind);
+
+// Looks up an op by its dotted name string (e.g., "test.addi").
+// Returns the vtable pointer, or NULL if not found. On success,
+// |out_kind| is set to the op kind. The context must be finalized.
+const loom_op_vtable_t* loom_context_lookup_op_by_name(
+    const loom_context_t* context, iree_string_view_t name,
+    loom_op_kind_t* out_kind);
+
+// Registers a source identifier (filename, system tag, etc.) and
+// returns its ID. The name is interned into context-owned storage.
+// If the same name is already registered, returns the existing ID
+// without allocating. May be called after finalization — the source
+// table is append-only and does not affect lookup structures.
+iree_status_t loom_context_register_source(loom_context_t* context,
+                                           iree_string_view_t name,
+                                           loom_source_id_t* out_source_id);
+
+//===----------------------------------------------------------------------===//
+// Op convenience accessors
+//===----------------------------------------------------------------------===//
+
+// Returns the vtable for |op|, or NULL if no vtable is registered.
+const loom_op_vtable_t* loom_op_vtable(const loom_module_t* module,
+                                       const loom_op_t* op);
+
+// Returns the dotted name of |op| (e.g., "test.addi"). Returns
+// "unknown" if no vtable is registered for the op's kind.
+iree_string_view_t loom_op_name(const loom_module_t* module,
+                                const loom_op_t* op);
+
+// Returns true if |op| has the given trait bit(s) set in its vtable.
+// Returns false if no vtable is registered for the op's kind.
+bool loom_op_has_trait(const loom_module_t* module, const loom_op_t* op,
+                       loom_trait_flags_t trait);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // LOOM_IR_CONTEXT_H_

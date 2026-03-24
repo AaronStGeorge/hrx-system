@@ -1,0 +1,396 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Scalar arithmetic: integer and float arithmetic, min/max, div variants."""
+
+# These are imported from __init__.py at declaration time, but we need
+# forward references for the flag enums. Import from the parent.
+from loom.assembly import (
+    COLON,
+    COMMA,
+    Flags,
+    Ref,
+    TypeOf,
+)
+from loom.dialect.scalar import FastMathFlags, IntOverflowFlags, scalar_ops
+from loom.dsl import (
+    ATTR_TYPE_FLAGS,
+    FLOAT,
+    IDEMPOTENT,
+    INTEGER,
+    INVOLUTION,
+    PURE,
+    AttrDef,
+    Op,
+    Operand,
+    Result,
+    SameType,
+    binary_op,
+    unary_op,
+)
+
+__all__ = ["ALL_ARITHMETIC_OPS"]
+
+# ============================================================================
+# Integer arithmetic (with optional IntOverflowFlags)
+# ============================================================================
+
+scalar_addi = binary_op(
+    "scalar.addi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Integer addition.",
+    commutative=True,
+    flags=("overflow", IntOverflowFlags),
+    fold="loom_scalar_addi_fold",
+    examples=[
+        "%result = scalar.addi %lhs, %rhs : i32",
+        "%result = scalar.addi<nuw> %lhs, %rhs : i32",
+    ],
+)
+
+scalar_subi = binary_op(
+    "scalar.subi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Integer subtraction.",
+    flags=("overflow", IntOverflowFlags),
+    fold="loom_scalar_subi_fold",
+    examples=["%result = scalar.subi %lhs, %rhs : i32"],
+)
+
+scalar_muli = binary_op(
+    "scalar.muli",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Integer multiplication.",
+    commutative=True,
+    flags=("overflow", IntOverflowFlags),
+    fold="loom_scalar_muli_fold",
+    examples=["%result = scalar.muli %lhs, %rhs : i32"],
+)
+
+scalar_divsi = binary_op(
+    "scalar.divsi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Signed integer division (rounds toward zero).",
+    fold="loom_scalar_divsi_fold",
+    examples=["%result = scalar.divsi %lhs, %rhs : i32"],
+)
+
+scalar_divui = binary_op(
+    "scalar.divui",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Unsigned integer division.",
+    fold="loom_scalar_divui_fold",
+    examples=["%result = scalar.divui %lhs, %rhs : i32"],
+)
+
+scalar_remsi = binary_op(
+    "scalar.remsi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Signed integer remainder.",
+    fold="loom_scalar_remsi_fold",
+    examples=["%result = scalar.remsi %lhs, %rhs : i32"],
+)
+
+scalar_remui = binary_op(
+    "scalar.remui",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Unsigned integer remainder.",
+    fold="loom_scalar_remui_fold",
+    examples=["%result = scalar.remui %lhs, %rhs : i32"],
+)
+
+scalar_ceildivsi = binary_op(
+    "scalar.ceildivsi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Signed integer division, rounding toward positive infinity.",
+    examples=["%result = scalar.ceildivsi %lhs, %rhs : i32"],
+)
+
+scalar_ceildivui = binary_op(
+    "scalar.ceildivui",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Unsigned integer division, rounding toward positive infinity.",
+    examples=["%result = scalar.ceildivui %lhs, %rhs : i32"],
+)
+
+scalar_floordivsi = binary_op(
+    "scalar.floordivsi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Signed integer division, rounding toward negative infinity.",
+    examples=["%result = scalar.floordivsi %lhs, %rhs : i32"],
+)
+
+scalar_negi = unary_op(
+    "scalar.negi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Integer negation.",
+    traits=[INVOLUTION],
+    fold="loom_scalar_negi_fold",
+    examples=["%result = scalar.negi %input : i32"],
+)
+
+scalar_absi = unary_op(
+    "scalar.absi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Integer absolute value.",
+    traits=[IDEMPOTENT],
+    fold="loom_scalar_absi_fold",
+    examples=["%result = scalar.absi %input : i32"],
+)
+
+scalar_minsi = binary_op(
+    "scalar.minsi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Signed integer minimum.",
+    commutative=True,
+    fold="loom_scalar_minsi_fold",
+    examples=["%result = scalar.minsi %lhs, %rhs : i32"],
+)
+
+scalar_maxsi = binary_op(
+    "scalar.maxsi",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Signed integer maximum.",
+    commutative=True,
+    fold="loom_scalar_maxsi_fold",
+    examples=["%result = scalar.maxsi %lhs, %rhs : i32"],
+)
+
+scalar_minui = binary_op(
+    "scalar.minui",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Unsigned integer minimum.",
+    commutative=True,
+    fold="loom_scalar_minui_fold",
+    examples=["%result = scalar.minui %lhs, %rhs : i32"],
+)
+
+scalar_maxui = binary_op(
+    "scalar.maxui",
+    group=scalar_ops,
+    type_constraint=INTEGER,
+    doc="Unsigned integer maximum.",
+    commutative=True,
+    fold="loom_scalar_maxui_fold",
+    examples=["%result = scalar.maxui %lhs, %rhs : i32"],
+)
+
+# ============================================================================
+# Integer fused multiply-add
+# ============================================================================
+
+scalar_fmai = Op(
+    "scalar.fmai",
+    group=scalar_ops,
+    doc="Fused integer multiply-add: a*b + c with no intermediate overflow check.",
+    operands=[
+        Operand("a", INTEGER),
+        Operand("b", INTEGER),
+        Operand("c", INTEGER),
+    ],
+    results=[Result("result", INTEGER)],
+    attrs=[AttrDef("overflow", ATTR_TYPE_FLAGS, optional=True, enum_def=IntOverflowFlags)],
+    constraints=[SameType("a", "b", "c", "result")],
+    traits=[PURE],
+    format=[
+        Flags("overflow"),
+        Ref("a"),
+        COMMA,
+        Ref("b"),
+        COMMA,
+        Ref("c"),
+        COLON,
+        TypeOf("result"),
+    ],
+    fold="loom_scalar_fmai_fold",
+    canonicalize="loom_scalar_fmai_canonicalize",
+    examples=["%result = scalar.fmai %a, %b, %c : i64"],
+)
+
+# ============================================================================
+# Float arithmetic (with optional FastMathFlags)
+# ============================================================================
+
+scalar_addf = binary_op(
+    "scalar.addf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Floating-point addition.",
+    commutative=True,
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_addf_fold",
+    examples=[
+        "%result = scalar.addf %lhs, %rhs : f32",
+        "%result = scalar.addf<fast> %lhs, %rhs : f32",
+    ],
+)
+
+scalar_subf = binary_op(
+    "scalar.subf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Floating-point subtraction.",
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_subf_fold",
+    examples=["%result = scalar.subf %lhs, %rhs : f32"],
+)
+
+scalar_mulf = binary_op(
+    "scalar.mulf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Floating-point multiplication.",
+    commutative=True,
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_mulf_fold",
+    examples=["%result = scalar.mulf %lhs, %rhs : f32"],
+)
+
+scalar_divf = binary_op(
+    "scalar.divf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Floating-point division.",
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_divf_fold",
+    examples=["%result = scalar.divf %lhs, %rhs : f32"],
+)
+
+scalar_remf = binary_op(
+    "scalar.remf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Floating-point remainder (C fmod semantics).",
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_remf_fold",
+    examples=["%result = scalar.remf %lhs, %rhs : f32"],
+)
+
+scalar_negf = unary_op(
+    "scalar.negf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Floating-point negation.",
+    traits=[INVOLUTION],
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_negf_fold",
+    examples=["%result = scalar.negf %input : f32"],
+)
+
+scalar_absf = unary_op(
+    "scalar.absf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Floating-point absolute value.",
+    traits=[IDEMPOTENT],
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_absf_fold",
+    examples=["%result = scalar.absf %input : f32"],
+)
+
+scalar_minimumf = binary_op(
+    "scalar.minimumf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="IEEE 754 minimum (NaN propagates).",
+    commutative=True,
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_minimumf_fold",
+    examples=["%result = scalar.minimumf %lhs, %rhs : f32"],
+)
+
+scalar_maximumf = binary_op(
+    "scalar.maximumf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="IEEE 754 maximum (NaN propagates).",
+    commutative=True,
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_maximumf_fold",
+    examples=["%result = scalar.maximumf %lhs, %rhs : f32"],
+)
+
+scalar_minnumf = binary_op(
+    "scalar.minnumf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="C99 fmin (NaN ignored, returns the non-NaN operand).",
+    commutative=True,
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_minnumf_fold",
+    examples=["%result = scalar.minnumf %lhs, %rhs : f32"],
+)
+
+scalar_maxnumf = binary_op(
+    "scalar.maxnumf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="C99 fmax (NaN ignored, returns the non-NaN operand).",
+    commutative=True,
+    flags=("fastmath", FastMathFlags),
+    fold="loom_scalar_maxnumf_fold",
+    examples=["%result = scalar.maxnumf %lhs, %rhs : f32"],
+)
+
+scalar_copysignf = binary_op(
+    "scalar.copysignf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Copy sign of rhs onto magnitude of lhs.",
+    fold="loom_scalar_copysignf_fold",
+    examples=["%result = scalar.copysignf %lhs, %rhs : f32"],
+)
+
+# ============================================================================
+# Registry
+# ============================================================================
+
+ALL_ARITHMETIC_OPS: tuple[Op, ...] = (
+    scalar_addi,
+    scalar_subi,
+    scalar_muli,
+    scalar_divsi,
+    scalar_divui,
+    scalar_remsi,
+    scalar_remui,
+    scalar_ceildivsi,
+    scalar_ceildivui,
+    scalar_floordivsi,
+    scalar_negi,
+    scalar_absi,
+    scalar_minsi,
+    scalar_maxsi,
+    scalar_minui,
+    scalar_maxui,
+    scalar_fmai,
+    scalar_addf,
+    scalar_subf,
+    scalar_mulf,
+    scalar_divf,
+    scalar_remf,
+    scalar_negf,
+    scalar_absf,
+    scalar_minimumf,
+    scalar_maximumf,
+    scalar_minnumf,
+    scalar_maxnumf,
+    scalar_copysignf,
+)

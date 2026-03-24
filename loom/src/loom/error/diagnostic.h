@@ -1,0 +1,154 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Diagnostic infrastructure for loom subsystems (parser, verifier, bytecode).
+//
+// Diagnostics carry severity, source location (with byte range for caret
+// underlining), and structured error identity. They are emitted through a
+// sink callback that the caller provides — the sink decides rendering.
+//
+// The default stderr sink produces Clang-style caret diagnostics:
+//
+//   test.loom:42:15: error [PARSE/001]: undefined SSA value '%y'
+//    42 |   %r = test.addi %x, %y : i32
+//       |                      ^^
+//
+// Alternative sinks can collect diagnostics into a list (for testing),
+// emit JSON (for agent/IDE consumption), or route to a logging framework.
+
+#ifndef LOOM_ERROR_DIAGNOSTIC_H_
+#define LOOM_ERROR_DIAGNOSTIC_H_
+
+#include "iree/base/api.h"
+#include "loom/error/error_defs.h"
+#include "loom/util/stream.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// A source range identifying a span of text in a source buffer.
+// Both offsets are byte positions into |source|. The range is
+// [start, end) — end is one past the last byte.
+typedef struct loom_source_range_t {
+  iree_string_view_t filename;
+  iree_string_view_t source;
+  iree_host_size_t start;
+  iree_host_size_t end;
+  uint32_t start_line;
+  uint32_t start_column;
+  uint32_t end_line;
+  uint32_t end_column;
+} loom_source_range_t;
+
+// Constructs a source range from a token's position and text.
+static inline loom_source_range_t loom_source_range_from_token(
+    iree_string_view_t filename, iree_string_view_t source,
+    iree_string_view_t token_text, uint32_t line, uint32_t column) {
+  iree_host_size_t start = (iree_host_size_t)(token_text.data - source.data);
+  return (loom_source_range_t){
+      .filename = filename,
+      .source = source,
+      .start = start,
+      .end = start + token_text.size,
+      .start_line = line,
+      .start_column = column,
+      .end_line = line,
+      .end_column = column + (uint32_t)token_text.size,
+  };
+}
+
+// A byte range within a source buffer for per-token highlighting.
+// All offsets are into the same source buffer as the diagnostic's
+// primary range. Used for multi-caret diagnostics where multiple
+// tokens on the same source line need underlines.
+typedef struct loom_highlight_range_t {
+  iree_host_size_t start;  // Byte offset into source.
+  iree_host_size_t end;    // One past last byte.
+} loom_highlight_range_t;
+
+// A single diagnostic: severity + location + structured error.
+//
+// Every diagnostic carries a structured error definition and typed
+// parameters. Sinks render the message from the error_def's template
+// and the runtime params — the diagnostic itself carries no pre-rendered
+// message. This ensures JSON sinks get structured data and text sinks
+// get consistent formatting without duplicate work.
+typedef struct loom_diagnostic_t {
+  loom_diagnostic_severity_t severity;
+
+  // Structured error identity and parameters. Always non-NULL.
+  const loom_error_def_t* error;
+  const loom_diagnostic_param_t* params;
+  iree_host_size_t param_count;
+
+  // Which subsystem emitted this diagnostic.
+  loom_emitter_t emitter;
+
+  // Where the error was detected (byte range in source text or bytecode).
+  // The text sink uses this for caret rendering.
+  loom_source_range_t origin;
+
+  // Where the user should look to fix it. Same as origin when there
+  // is no location override (typical for the text parser). Differs
+  // from origin when an op carries a loc() that points elsewhere
+  // (bytecode reader, verifier with source resolver).
+  loom_source_range_t source_location;
+
+  // Per-token highlight ranges for multi-caret diagnostics. When
+  // non-NULL, the caret formatter draws underlines at each range
+  // instead of underlining the full primary range. All ranges must
+  // be within the same source line as origin.
+  const loom_highlight_range_t* highlights;
+  iree_host_size_t highlight_count;
+} loom_diagnostic_t;
+
+// Callback invoked for each diagnostic. The diagnostic is valid only
+// for the duration of the call — the sink must copy any data it wants
+// to keep. Returns iree_ok_status() to continue parsing, or an error
+// to abort immediately.
+typedef iree_status_t (*loom_diagnostic_fn_t)(
+    void* user_data, const loom_diagnostic_t* diagnostic);
+
+// A diagnostic sink: callback + context. Passed to the parser at
+// creation time. The parser emits all diagnostics through this sink.
+typedef struct loom_diagnostic_sink_t {
+  loom_diagnostic_fn_t fn;
+  void* user_data;
+} loom_diagnostic_sink_t;
+
+// Emits a diagnostic through the sink. If the sink is NULL or its fn
+// is NULL, the diagnostic is silently dropped.
+static inline iree_status_t loom_diagnostic_emit(
+    const loom_diagnostic_sink_t* sink, const loom_diagnostic_t* diagnostic) {
+  if (sink && sink->fn) {
+    return sink->fn(sink->user_data, diagnostic);
+  }
+  return iree_ok_status();
+}
+
+// Formats a diagnostic in Rust/Clang-style caret format. The output
+// flows through a loom_output_stream_t:
+//
+//   error: undefined value '%y'
+//     --> model.loom:42:15
+//      |
+//   42 |   %r = test.addi %x, %y : i32
+//      |                      ^^
+//
+iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
+                                     loom_output_stream_t* stream);
+
+// A diagnostic sink that prints to stderr using loom_diagnostic_format.
+// Pass NULL as user_data.
+iree_status_t loom_diagnostic_stderr_sink(void* user_data,
+                                          const loom_diagnostic_t* diagnostic);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // LOOM_ERROR_DIAGNOSTIC_H_

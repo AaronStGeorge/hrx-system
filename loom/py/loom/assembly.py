@@ -1,0 +1,650 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Assembly format elements for loom op declarations.
+
+Format elements describe how an op's textual assembly is structured.
+They are the single source of truth for:
+
+  - The text printer (walks elements left-to-right, emits tokens).
+  - The text parser (walks elements left-to-right, consumes tokens).
+  - Builder parameter ordering (format order = parameter order).
+  - C code generation (same format elements drive C printer/parser).
+
+An op's format spec is a list of FormatElement instances. The printer
+and parser walk the list in order. Every token in the textual
+representation is accounted for by exactly one element.
+
+Example format specs:
+
+  # scalar.addi: %r = scalar.addi %a, %b : f32
+  [Ref("lhs"), COMMA, Ref("rhs"), COLON, TypeOf("result")]
+
+  # scalar.sitofp: %r = scalar.sitofp %x : i32 to f32
+  [Ref("input"), COLON, TypeOf("input"), kw("to"), TypeOf("result")]
+
+  # func.call: %r = func.call @f(%a, %b) : (t0, t1) -> (t0, t1)
+  [SymbolRef("callee"),
+   LPAREN, Refs("operands"), RPAREN,
+   COLON, LPAREN, TypesOf("operands"), RPAREN,
+   ARROW, ResultTypeList("results")]
+
+  # tile.elementwise: %r = tile.elementwise(%e = %x : type) { ... } -> (type)
+  [BindingList("inputs"), Region("body"), ARROW, ResultTypeList("result")]
+
+Design rules:
+  - No "Custom" escape hatch. Every op is fully declarative.
+  - Variadic-ness is explicit: Ref (singular) vs Refs (variadic).
+  - Result types always use parens: -> (type) not -> type.
+  - Tied results are sparse (TiedResult list, no sentinels).
+  - Format element order = builder parameter order.
+
+Dialect files import the specific format elements they need.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+__all__ = [
+    # Element types.
+    "Ref",
+    "Refs",
+    "Attr",
+    "SymbolRef",
+    "TypeOf",
+    "TypesOf",
+    "ResultType",
+    "ResultTypeList",
+    "Keyword",
+    "AttrDict",
+    "Region",
+    "IndexList",
+    "BindingList",
+    "FuncArgs",
+    "PredicateList",
+    "OptionalGroup",
+    "Scope",
+    "Glue",
+    "GLUE",
+    # Angle-bracket elements.
+    "Flags",
+    "OpRef",
+    # Type-interior format elements.
+    "ShapeOf",
+    "ScalarOf",
+    "EncodingOf",
+    # Union type.
+    "FormatElement",
+    # Convenience constructors.
+    "kw",
+    # Binding kinds.
+    "BINDING_CAPTURE",
+    "BINDING_ELEMENT",
+    # Common keywords.
+    "COMMA",
+    "COLON",
+    "ARROW",
+    "LPAREN",
+    "RPAREN",
+    "LBRACKET",
+    "RBRACKET",
+    "LBRACE",
+    "RBRACE",
+    "EQUALS",
+]
+
+
+# ============================================================================
+# Value reference elements
+# ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class Ref:
+    """A single SSA value reference.
+
+    Prints/parses: %name
+
+    The field names an operand, result, or special value (like an
+    induction variable) on the op declaration. The printer emits the
+    value's SSA name. The parser consumes an SSA value token and
+    resolves it in the current scope.
+
+    For builders: maps to a single Value parameter.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class Refs:
+    """Variadic SSA value references, comma-separated.
+
+    Prints/parses: %a, %b, %c
+
+    The field names a variadic operand on the op declaration. The
+    printer emits each value's SSA name separated by commas. The
+    parser consumes SSA value tokens until a non-value token.
+
+    For builders: maps to a list[Value] parameter.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class Attr:
+    """An attribute value (compile-time constant).
+
+    Prints/parses: 42, 3.14, "hello", slt, true, false
+
+    The field names an attribute on the op declaration. The printer
+    emits the attribute value in its canonical form. The parser
+    consumes the appropriate literal token.
+
+    For builders: maps to a Python literal parameter (int, float,
+    str, bool, or enum member).
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class SymbolRef:
+    """A symbol reference.
+
+    Prints/parses: @name
+
+    The field names a symbol reference attribute on the op declaration.
+
+    For builders: maps to a str or Symbol parameter.
+    """
+
+    field: str
+
+
+# ============================================================================
+# Type elements
+# ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class TypeOf:
+    """The type of a single field.
+
+    Prints/parses: f32, tile<4x4xf32>, tensor<[%M]xf32>, etc.
+
+    The field names an operand or result whose type should be printed.
+    For operands, the type is known from the Value. For results, the
+    type is part of the operation's result declaration.
+
+    For builders: not a parameter (type is carried by the Value or
+    inferred from context).
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class TypesOf:
+    """Types of a variadic field, comma-separated.
+
+    Prints/parses: f32, tensor<[%M]xf32>, i32
+
+    The variadic counterpart of TypeOf. Prints one type per value
+    in the variadic field, separated by commas.
+
+    For builders: not a parameter.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class ResultTypeList:
+    """Result type list with tied-result handling.
+
+    Prints/parses: (type) or (%operand as type, type)
+
+    By default uses parentheses (even for single results). Pass
+    parens=False for bare comma-separated types without parentheses,
+    useful for ops like global.load where the result type annotation
+    is a single bare type: ``global.load @name : type``.
+
+    Each result is either a plain type (fresh allocation) or a tied
+    reference (%operand_name as type, consuming the operand).
+
+    The element reads the Operation's tied_results list (sparse,
+    no sentinels) to determine which results are tied. The printer
+    builds a {result_index: TiedResult} lookup, then emits each
+    result in order.
+
+    This element does NOT include the '->' arrow — that's a separate
+    Keyword element in the format spec, so the arrow is visible and
+    the separator choice is explicit.
+
+    For builders: maps to a result_types parameter and an optional
+    tied parameter for specifying ties.
+    """
+
+    field: str
+    parens: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class ResultType:
+    """A single result type without parentheses.
+
+    Prints/parses: type (bare, no parens)
+
+    For ops with exactly one non-variadic result where parenthesized
+    list syntax would be misleading. Does not support tied results —
+    use ResultTypeList for ops that need tied-result syntax.
+
+    Like ResultTypeList, this element does NOT include the '->' arrow.
+
+    For builders: maps to a single result_type parameter.
+    """
+
+    field: str
+
+
+# ============================================================================
+# Structural elements
+# ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class Keyword:
+    """A literal token in the assembly.
+
+    Prints/parses the exact text. Used for punctuation (,  :  ->)
+    and keyword tokens (to, step, else, iter_args, etc.).
+
+    For builders: not a parameter (structural syntax).
+    """
+
+    text: str
+
+    def __repr__(self) -> str:
+        return f"kw({self.text!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class AttrDict:
+    """An attribute dictionary backed by a named dict attribute.
+
+    Prints/parses: {key = value, key = value, ...}
+
+    The |field| parameter names the attr of type "dict" that stores
+    the key-value pairs. When empty (no entries), nothing is printed.
+
+    For builders: maps to an optional dict parameter.
+    """
+
+    field: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Region:
+    """A nested region containing blocks of operations.
+
+    Prints/parses: { block+ }
+
+    The field names a region on the op declaration. Regions contain
+    one or more blocks, each with optional block arguments and a
+    sequence of operations.
+
+    For builders: maps to a region-building callback or context
+    manager parameter.
+    """
+
+    field: str
+
+
+# ============================================================================
+# Composite elements
+# ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class IndexList:
+    """A mixed static/dynamic index list in bracket notation.
+
+    Prints/parses: [0, %x, 4] or [%i, %j] or [0, 0]
+
+    Static values come from the static attribute (an integer array).
+    Dynamic values come from the dynamic operand list. The two are
+    interleaved according to a sentinel convention: in the static
+    array, a sentinel value (e.g., min_int) means "this position
+    is dynamic, take the next value from the dynamic list."
+
+    For builders: maps to a list parameter accepting int | Value
+    entries (static or dynamic per element).
+    """
+
+    dynamic: str  # Operand field for dynamic values.
+    static: str  # Attribute field for static values.
+
+
+@dataclass(frozen=True, slots=True)
+class BindingList:
+    """Named value bindings with types.
+
+    Prints/parses: (%a = %x : type, %b = %y : type)
+
+    Each binding maps a new name (block argument in the region body)
+    to an existing value (operand) with its type. The `kind` parameter
+    determines how the block arg type relates to the operand type:
+
+      kind="capture" — block arg has the SAME type as the operand.
+        Used by scf.for iter_args, dispatch.region. The block arg
+        is a re-binding of the operand for the region body.
+
+      kind="element" — block arg has the ELEMENT TYPE of the operand.
+        Used by tile.elementwise. The block arg receives one scalar
+        element from the shaped operand.
+
+    For custom types, the type extraction is driven by the type's
+    TypeDef — custom types can define how "element" extraction works.
+
+    For builders: maps to a list of (name, value) pairs.
+    """
+
+    field: str
+    kind: str = "capture"  # "capture" or "element"
+
+
+@dataclass(frozen=True, slots=True)
+class FuncArgs:
+    """Function argument definitions with types.
+
+    Prints/parses: (%a: type, %b: type)
+
+    Unlike BindingList, FuncArgs defines new SSA values (the function
+    parameters). There is no '= %existing_value' part — the names
+    and types are the definitions themselves.
+
+    For builders: maps to a list of (name, type) pairs.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class PredicateList:
+    """Where-clause predicate list.
+
+    Prints/parses: [mul(%M, 16), lt(%K, 1024), range(%N, 32, 512)]
+
+    Predicates constrain dynamic dimension values. Each predicate is
+    a named function applied to SSA values, result ordinals, and/or
+    integer constants. Used in function where clauses and
+    scalar.assume ops.
+
+    For builders: maps to a list of Predicate instances.
+    """
+
+    field: str
+
+
+# ============================================================================
+# Modifiers
+# ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class OptionalGroup:
+    """A conditional group of format elements.
+
+    The elements are printed/parsed only when the anchor field is
+    present (non-empty, non-None, non-zero-length). Used for optional
+    parts of an op's syntax:
+
+      - else region on scf.if
+      - iter_args on scf.for
+      - where clause on func.def/func.decl
+      - visibility/calling convention modifiers
+      - body region (present for definitions, absent for declarations)
+
+    For builders: the anchor field maps to an optional parameter
+    (with a default of None or empty).
+    """
+
+    elements: tuple[FormatElement, ...]
+    anchor: str
+
+    def __init__(
+        self, elements: list[FormatElement] | tuple[FormatElement, ...], anchor: str
+    ) -> None:
+        # Accept list for ergonomics, store as tuple for immutability.
+        object.__setattr__(self, "elements", tuple(elements))
+        object.__setattr__(self, "anchor", anchor)
+
+
+@dataclass(frozen=True, slots=True)
+class Scope:
+    """A scoped group of format elements.
+
+    Pushes a new name scope before processing children and pops it
+    after. Within the scope, type parsing uses definition mode:
+    [%name] in types creates new index-typed SSA values (like
+    function argument dims) rather than requiring existing names.
+
+    Used for global definitions where type annotations introduce
+    named type variables that predicates can reference:
+
+      global.constant @weights : Scope([ tile<[%m]xf32> where [...] ])
+
+    The scope ensures dim names are local to each definition and
+    that created values get proper value table entries (enabling
+    value facts attachment).
+
+    Nesting guarantees balanced push/pop — structurally impossible
+    to leave a scope open.
+    """
+
+    elements: tuple[FormatElement, ...]
+
+    def __init__(
+        self,
+        elements: list[FormatElement] | tuple[FormatElement, ...],
+    ) -> None:
+        object.__setattr__(self, "elements", tuple(elements))
+
+
+@dataclass(frozen=True, slots=True)
+class Glue:
+    """Suppress the space before the next token.
+
+    Placed between two format elements to make them print without
+    a space between them. Used when a bare Keyword like LPAREN
+    should attach to the preceding token:
+
+        SymbolRef("callee"), Glue, LPAREN, Refs("operands"), RPAREN
+
+    Produces: @compute(%x, %y) — no space between @compute and (.
+
+    Most composite elements have built-in glue behavior and don't
+    need an explicit Glue:
+      - IndexList: always glues (always %ref[...])
+      - BindingList: always glues (always keyword(...) or opname(...))
+      - FuncArgs: always glues (always @name(...))
+
+    Elements that never glue (space before them is always present):
+      - ResultTypeList: always follows -> with space
+      - PredicateList: always follows 'where' with space
+
+    For builders: Glue is invisible (not a parameter).
+    """
+
+
+# Singleton for use in format specs.
+GLUE = Glue()
+
+
+# ============================================================================
+# Angle-bracket flags
+# ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class Flags:
+    """Per-op-instance flags in angle brackets after the op name.
+
+    Prints/parses: <flag1|flag2> (glued to the op name) or nothing
+    when the attribute value is absent or zero.
+
+    The field names a "flags"-typed attribute on the op declaration.
+    The attribute's enum_def defines the valid flag keywords and their
+    bitmask values. The attribute stores flags as a "|"-separated
+    string in Python ("nuw|nsw") and as a uint8_t bitmask in C
+    (stored in loom_op_t.instance_flags, not the attribute array).
+
+    The '|' separator was chosen over ',' because flags are OR'd
+    together, and '|' is visually distinct from comma-separated
+    lists used everywhere else.
+
+    Examples:
+        scalar.addi<nuw> %a, %b : i32
+        scalar.addf<reassoc|nnan> %a, %b : f32
+        scalar.addf %a, %b : f32          (no flags = strict)
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class OpRef:
+    """Op kind reference in angle brackets after the op name.
+
+    Prints/parses: <op.name> (glued to the op name) where the value
+    is a dotted op name like "tile.contract" or "tile.reduce".
+
+    Used by func.template<T> and func.ukernel<T> to declare which
+    abstract op the template/ukernel implements.
+
+    The field names a string attribute storing the op name.
+
+    Examples:
+        func.template<tile.contract> device @name(...)
+        func.ukernel<tile.reduce> device @name(...)
+    """
+
+    field: str
+
+
+# ============================================================================
+# Type-interior format elements
+# ============================================================================
+#
+# These elements are used inside TypeDef format specs to describe the
+# interior of parameterized types (the content between < and >).
+# They share the FormatElement union with op format elements.
+
+
+@dataclass(frozen=True, slots=True)
+class ShapeOf:
+    """Shape dimensions in a shaped type interior.
+
+    Prints/parses: 4x4 or [%M]x4 or [%M]x[%K] (dims separated by 'x').
+
+    The field names a ShapeParam on the TypeDef. Each dim is either
+    a static integer or a dynamic dim reference [%name].
+
+    The 'x' separator between dims is implicit in this element —
+    the format spec does NOT include separate Keyword("x") between
+    dims. The 'x' between the last dim and the element type IS in
+    the format spec as a Keyword.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class ScalarOf:
+    """Scalar element type name in a shaped type interior.
+
+    Prints/parses: f32, i8, bf16, index, etc.
+
+    The field names a ScalarParam on the TypeDef.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class EncodingOf:
+    """Encoding reference in a shaped type interior.
+
+    Prints/parses: #q8_0 or #q8_0<block=32>
+
+    The field names an EncodingParam on the TypeDef. The printer
+    uses the module's encoding table to resolve the encoding name
+    and parameters. The parser looks up or creates encoding instances.
+    """
+
+    field: str
+
+
+# Binding kind constants for BindingList.
+BINDING_CAPTURE = "capture"
+BINDING_ELEMENT = "element"
+
+
+# ============================================================================
+# Union type
+# ============================================================================
+
+type FormatElement = (
+    Ref
+    | Refs
+    | Attr
+    | SymbolRef
+    | TypeOf
+    | TypesOf
+    | ResultType
+    | ResultTypeList
+    | Keyword
+    | AttrDict
+    | Region
+    | IndexList
+    | BindingList
+    | FuncArgs
+    | PredicateList
+    | OptionalGroup
+    | Scope
+    | Glue
+    | Flags
+    | OpRef
+    | ShapeOf
+    | ScalarOf
+    | EncodingOf
+)
+
+
+# ============================================================================
+# Convenience constructors
+# ============================================================================
+
+
+def kw(text: str) -> Keyword:
+    """Shorthand for Keyword(text)."""
+    return Keyword(text)
+
+
+# Common keywords — pre-built singletons for format spec readability.
+COMMA = Keyword(",")
+COLON = Keyword(":")
+ARROW = Keyword("->")
+LPAREN = Keyword("(")
+RPAREN = Keyword(")")
+LBRACKET = Keyword("[")
+RBRACKET = Keyword("]")
+LBRACE = Keyword("{")
+RBRACE = Keyword("}")
+EQUALS = Keyword("=")

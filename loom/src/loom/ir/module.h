@@ -1,0 +1,194 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Module construction: create modules, define values, intern strings and
+// types, create blocks and regions, insert ops into blocks.
+//
+// All allocations go through the module's arena (bump-pointer, O(1) bulk
+// free on module destruction). Tables are pre-sized from capacity hints
+// when available (bytecode reading, cloning) and grow by doubling when
+// hints are absent (text parsing, test construction).
+//
+// Thread safety: modules are single-owner. No locks. Parallel compilation
+// uses separate modules with separate arenas.
+
+#ifndef LOOM_IR_MODULE_H_
+#define LOOM_IR_MODULE_H_
+
+#include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
+#include "loom/ir/ir.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Capacity hints from bytecode header or source module (for cloning).
+// NULL = use defaults (text parsing, test construction).
+typedef struct loom_module_size_hints_t {
+  iree_host_size_t value_count;
+  iree_host_size_t string_count;
+  iree_host_size_t type_count;
+  iree_host_size_t symbol_count;
+} loom_module_size_hints_t;
+
+// Growth factor applied to size hints during module creation:
+//   actual_capacity = (iree_host_size_t)(count * LOOM_MODULE_GROWTH_FACTOR)
+// Provides headroom for passes that add values/ops during compilation.
+// Tunable: profile real compilation pipelines to find the right value.
+#define LOOM_MODULE_GROWTH_FACTOR 1.5f
+
+// Creates a new empty module. The module owns an arena allocated from
+// |block_pool|. All IR created through the module is arena-allocated
+// and freed in O(1) when the module is destroyed. The module struct
+// itself is allocated with |allocator|.
+//
+// |hints| may be NULL for default capacities (text parsing, tests).
+// When non-NULL, tables are pre-allocated at hint * growth_factor.
+iree_status_t loom_module_allocate(loom_context_t* context,
+                                   iree_string_view_t name,
+                                   iree_arena_block_pool_t* block_pool,
+                                   const loom_module_size_hints_t* hints,
+                                   iree_allocator_t allocator,
+                                   loom_module_t** out_module);
+
+// Destroys a module and frees all arena-allocated IR in O(1).
+void loom_module_free(loom_module_t* module);
+
+// Returns the module's body block. All top-level ops (function
+// definitions, globals, executables) live in this block.
+static inline loom_block_t* loom_module_block(loom_module_t* module) {
+  return &module->body->blocks[0];
+}
+
+// Returns a pointer to a value by ID.
+static inline loom_value_t* loom_module_value(const loom_module_t* module,
+                                              loom_value_id_t value_id) {
+  IREE_ASSERT(value_id < module->values.count);
+  return &module->values.entries[value_id];
+}
+
+// Returns the type of a value by ID.
+static inline loom_type_t loom_module_value_type(const loom_module_t* module,
+                                                 loom_value_id_t value_id) {
+  IREE_ASSERT(value_id < module->values.count);
+  return module->values.entries[value_id].type;
+}
+
+// Sets the type of a value by ID.
+static inline void loom_module_set_value_type(loom_module_t* module,
+                                              loom_value_id_t value_id,
+                                              loom_type_t type) {
+  IREE_ASSERT(value_id < module->values.count);
+  module->values.entries[value_id].type = type;
+}
+
+// Returns the type of a block argument by index.
+static inline loom_type_t loom_block_arg_type(const loom_module_t* module,
+                                              const loom_block_t* block,
+                                              uint16_t arg_index) {
+  IREE_ASSERT(arg_index < block->arg_count);
+  return loom_module_value_type(module, block->arg_ids[arg_index]);
+}
+
+// Defines a fresh SSA value in the module's value table with the given
+// type. Returns the value ID (index into module->values.entries[]).
+// The value's def pointer is unset — the builder fills it when
+// finalizing the defining op (or loom_block_add_arg for block args).
+iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
+                                       loom_value_id_t* out_value_id);
+
+// Interns a string in the module's string table. If an identical string
+// already exists, returns its ID. Otherwise, arena-allocates a copy of
+// the string data and appends a new entry.
+iree_status_t loom_module_intern_string(loom_module_t* module,
+                                        iree_string_view_t string,
+                                        loom_string_id_t* out_string_id);
+
+// Adds an encoding instance to the module's encoding table.
+// Deduplicates by name and attribute equality: if an identical
+// encoding already exists, returns its 1-based ID without adding
+// a new entry. The name_id and alias_id must be pre-interned in
+// the module's string table. The attributes array is arena-copied.
+iree_status_t loom_module_add_encoding(loom_module_t* module,
+                                       const loom_encoding_t* encoding,
+                                       uint16_t* out_encoding_id);
+
+// Returns the encoding at a 1-based index, or NULL if out of range.
+static inline const loom_encoding_t* loom_module_encoding(
+    const loom_module_t* module, uint16_t encoding_id) {
+  if (encoding_id == 0 || encoding_id > module->encodings.count) return NULL;
+  return &module->encodings.entries[encoding_id - 1];
+}
+
+// Interns a type in the module's type table. If a structurally identical
+// type already exists, returns the existing entry (by value). Otherwise,
+// appends a new entry. For overflow-dim types (rank > 2), the overflow
+// array is arena-allocated in the module.
+iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
+                                      loom_type_t* out_interned_type);
+
+// Adds a location entry to the module's location table and returns
+// its ID. The entry is arena-allocated. Entry 0 is always
+// LOOM_LOCATION_NONE (reserved automatically on first call).
+iree_status_t loom_module_add_location(loom_module_t* module,
+                                       loom_location_entry_t entry,
+                                       loom_location_id_t* out_location_id);
+
+// Looks up a symbol by name. Returns the symbol index (0-based) or
+// LOOM_SYMBOL_ID_INVALID if not found. O(n) linear scan — suitable
+// for diagnostics and ad-hoc queries, not hot paths. For bulk
+// lookups during parsing, use loom_symbol_map_t instead.
+uint16_t loom_module_find_symbol(const loom_module_t* module,
+                                 loom_string_id_t name_id);
+
+// Adds a symbol to the module's symbol table. The name_id must be
+// pre-interned via loom_module_intern_string. The symbol is zero-
+// initialized except for the name_id. Returns the 0-based symbol
+// index. Fails with RESOURCE_EXHAUSTED if the symbol count would
+// exceed LOOM_SYMBOL_ID_INVALID (the symbol_id field width).
+//
+// Does NOT check for duplicates — callers should use
+// loom_module_find_symbol first if deduplication is needed.
+iree_status_t loom_module_add_symbol(loom_module_t* module,
+                                     loom_string_id_t name_id,
+                                     uint16_t* out_symbol_id);
+
+// Allocates a block in the module's arena with initial op capacity.
+iree_status_t loom_module_allocate_block(loom_module_t* module,
+                                         loom_block_t** out_block);
+
+// Allocates a region with |block_count| blocks in the module's arena.
+// Each block is initialized with default op capacity.
+iree_status_t loom_module_allocate_region(loom_module_t* module,
+                                          uint16_t block_count,
+                                          loom_region_t** out_region);
+
+// Adds a block argument. The value_id must already be defined in the
+// module's value table (via loom_module_define_value). Sets
+// LOOM_VALUE_FLAG_BLOCK_ARG on the value and records the block
+// relationship.
+iree_status_t loom_block_add_arg(loom_module_t* module, loom_block_t* block,
+                                 loom_value_id_t value_id);
+
+// Appends an op to the end of a block, growing the op array if needed.
+iree_status_t loom_block_append_op(loom_module_t* module, loom_block_t* block,
+                                   loom_op_t* op);
+
+// Inserts an op at |index| in the block, shifting subsequent ops.
+// If index == block->op_count, equivalent to append.
+iree_status_t loom_block_insert_op(loom_module_t* module, loom_block_t* block,
+                                   uint16_t index, loom_op_t* op);
+
+// Finds the index of |op| in |block|'s op list by pointer comparison.
+// Returns UINT16_MAX if not found. O(n) scan.
+uint16_t loom_block_find_op(const loom_block_t* block, const loom_op_t* op);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // LOOM_IR_MODULE_H_

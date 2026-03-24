@@ -1,0 +1,72 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "op_defs",
+    srcs = ["op_defs.c"],
+    hdrs = [
+        "builder_macros.h",
+        "op_defs.h",
+    ],
+    textual_hdrs = [
+        "keyword_enum.inc",
+        "keyword_table.inc",
+    ],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:bstring",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "op_registry",
+    srcs = ["op_registry.c"],
+    hdrs = ["op_registry.h"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/pool",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "type_registry",
+    srcs = ["type_registry.c"],
+    hdrs = ["type_registry.h"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "registry_test",
+    srcs = ["registry_test.cc"],
+    deps = [
+        ":op_registry",
+        ":type_registry",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
