@@ -9,6 +9,8 @@
 // Diagnostics carry severity, source location (with byte range for caret
 // underlining), and structured error identity. They are emitted through a
 // sink callback that the caller provides — the sink decides rendering.
+// Subsystems that want the caller to materialize diagnostics use the
+// lighter iree_diagnostic_emitter_t from emitter.h instead.
 //
 // The default stderr sink produces Clang-style caret diagnostics:
 //
@@ -23,6 +25,7 @@
 #define LOOM_ERROR_DIAGNOSTIC_H_
 
 #include "iree/base/api.h"
+#include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
 #include "loom/util/stream.h"
 

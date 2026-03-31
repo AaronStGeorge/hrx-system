@@ -1388,6 +1388,7 @@ class Op:
         ""  # C function name for per-instance trait computation, or "".
     )
     fold: str = ""  # C function name for fold/transfer, or "".
+    verify: str = ""  # C function name for op-specific verification, or "".
     interfaces: tuple[
         Any, ...
     ] = ()  # Interface implementations (FuncLikeInterface, etc.).
@@ -1410,6 +1411,7 @@ class Op:
         canonicalize: str = "",
         effective_traits: str = "",
         fold: str = "",
+        verify: str = "",
         interfaces: list[Any] | tuple[Any, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
         examples: list[str] | tuple[str, ...] = (),
@@ -1434,6 +1436,7 @@ class Op:
         object.__setattr__(self, "canonicalize", canonicalize)
         object.__setattr__(self, "effective_traits", effective_traits)
         object.__setattr__(self, "fold", fold)
+        object.__setattr__(self, "verify", verify)
         object.__setattr__(self, "interfaces", tuple(interfaces))
         object.__setattr__(self, "format", frozen_format)
         object.__setattr__(self, "examples", tuple(examples))

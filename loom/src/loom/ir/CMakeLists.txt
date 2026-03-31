@@ -50,6 +50,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::src::loom::error::emitter
     loom::src::loom::util::bstring
   PUBLIC
 )

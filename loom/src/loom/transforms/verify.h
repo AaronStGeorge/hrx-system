@@ -44,9 +44,9 @@
 //     module's symbol table. The symbol kind matches the usage
 //     context (e.g., func.call targets must be functions).
 //
-//   Custom verification (escape hatch)
-//     Ops with a custom_verify callback on their vtable get that
-//     callback invoked after all table-driven checks pass.
+//   Op-specific verification (escape hatch)
+//     Ops with a verify callback on their vtable get that callback
+//     invoked after all table-driven checks pass.
 //
 // ==========================================================================
 // Single-pass design
@@ -74,7 +74,8 @@
 //
 // All verifier errors are structured: each error site produces a
 // loom_diagnostic_t with a typed error definition, typed parameters,
-// a pre-rendered message, and the emitter tag LOOM_EMITTER_VERIFIER.
+// and the emitter tag LOOM_EMITTER_VERIFIER. Sinks render the
+// human-readable message from the error definition and params.
 //
 // Source ranges for caret underlining come from the op's location
 // resolved through an optional source resolver callback. When no
@@ -240,39 +241,6 @@ typedef struct loom_verify_result_t {
   uint32_t error_count;
   uint32_t warning_count;
 } loom_verify_result_t;
-
-//===----------------------------------------------------------------------===//
-// Verify context (for custom verify callbacks)
-//===----------------------------------------------------------------------===//
-
-// Opaque verify context passed to custom verify callbacks. Provides
-// access to the module, diagnostic emission, and scope information.
-// The full definition is internal to verify.c.
-struct loom_verify_context_t {
-  const loom_module_t* module;
-  loom_diagnostic_sink_t sink;
-  loom_verify_result_t* result;
-  uint32_t max_errors;
-};
-
-// Emits a structured error diagnostic from a custom verify callback.
-void loom_verify_emit_error(const loom_verify_context_t* context,
-                            const loom_op_t* op, const loom_error_def_t* error,
-                            const loom_diagnostic_param_t* params,
-                            iree_host_size_t param_count);
-
-// Emits a structured warning diagnostic from a custom verify callback.
-void loom_verify_emit_warning(const loom_verify_context_t* context,
-                              const loom_op_t* op,
-                              const loom_error_def_t* error,
-                              const loom_diagnostic_param_t* params,
-                              iree_host_size_t param_count);
-
-// Emits a structured note diagnostic from a custom verify callback.
-void loom_verify_emit_note(const loom_verify_context_t* context,
-                           const loom_op_t* op, const loom_error_def_t* error,
-                           const loom_diagnostic_param_t* params,
-                           iree_host_size_t param_count);
 
 //===----------------------------------------------------------------------===//
 // Verification entry points

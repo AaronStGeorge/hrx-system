@@ -32,6 +32,10 @@ typedef struct loom_verify_state_t {
   loom_verify_result_t* result;
   uint32_t max_errors;
 
+  // First non-OK status returned by the diagnostic sink. Stored so
+  // verification can stop cleanly without leaking status objects.
+  iree_status_t diagnostic_status;
+
   // Scratch arena for all verification-time allocations. Initialized
   // from the module's block pool, deinitialized (bulk O(1) free) when
   // the verification call completes.
@@ -61,6 +65,33 @@ typedef struct loom_verify_state_t {
   uint32_t scope_depth;
 
 } loom_verify_state_t;
+
+// Records the first non-OK diagnostic sink status and consumes any
+// later ones so verification never leaks status objects.
+static void loom_verify_record_diagnostic_status(loom_verify_state_t* state,
+                                                 iree_status_t status) {
+  if (iree_status_is_ok(status)) return;
+  if (iree_status_is_ok(state->diagnostic_status)) {
+    state->diagnostic_status = status;
+  } else {
+    iree_status_ignore(status);
+  }
+}
+
+static iree_status_t loom_verify_take_diagnostic_status(
+    loom_verify_state_t* state) {
+  iree_status_t status = state->diagnostic_status;
+  state->diagnostic_status = iree_ok_status();
+  return status;
+}
+
+static iree_status_t loom_verify_pending_diagnostic_status(
+    loom_verify_state_t* state) {
+  if (iree_status_is_ok(state->diagnostic_status)) {
+    return iree_ok_status();
+  }
+  return loom_verify_take_diagnostic_status(state);
+}
 
 //===----------------------------------------------------------------------===//
 // Bitset helpers
@@ -145,6 +176,21 @@ static iree_string_view_t loom_verify_value_name(
   if (value->name_id != LOOM_STRING_ID_INVALID &&
       value->name_id < state->module->strings.count) {
     return state->module->strings.entries[value->name_id];
+  }
+  return iree_make_cstring_view("<unnamed>");
+}
+
+// Returns the symbol name for a symbol ref, or "<unnamed>" if unavailable.
+static iree_string_view_t loom_verify_symbol_name(
+    const loom_verify_state_t* state, loom_symbol_ref_t ref) {
+  if (!loom_symbol_ref_is_valid(ref) ||
+      ref.symbol_id >= state->module->symbols.count) {
+    return iree_make_cstring_view("<unnamed>");
+  }
+  const loom_symbol_t* symbol = &state->module->symbols.entries[ref.symbol_id];
+  if (symbol->name_id != LOOM_STRING_ID_INVALID &&
+      symbol->name_id < state->module->strings.count) {
+    return state->module->strings.entries[symbol->name_id];
   }
   return iree_make_cstring_view("<unnamed>");
 }
@@ -251,6 +297,8 @@ static void loom_verify_emit_structured(loom_verify_state_t* state,
                                         const loom_error_def_t* error,
                                         const loom_diagnostic_param_t* params,
                                         iree_host_size_t param_count) {
+  if (!iree_status_is_ok(state->diagnostic_status)) return;
+
   if (error->severity == LOOM_DIAGNOSTIC_ERROR) {
     ++state->result->error_count;
   } else if (error->severity == LOOM_DIAGNOSTIC_WARNING) {
@@ -344,60 +392,21 @@ static void loom_verify_emit_structured(loom_verify_state_t* state,
     }
   }
 
-  loom_diagnostic_emit(&state->sink, &diagnostic);
+  iree_status_t emit_status = loom_diagnostic_emit(&state->sink, &diagnostic);
 
   if (printed_op) {
     iree_string_builder_deinitialize(&op_text_builder);
   }
+
+  loom_verify_record_diagnostic_status(state, emit_status);
 }
 
-// Public API for custom verify callbacks (structured).
-void loom_verify_emit_error(const loom_verify_context_t* context,
-                            const loom_op_t* op, const loom_error_def_t* error,
-                            const loom_diagnostic_param_t* params,
-                            iree_host_size_t param_count) {
-  ++context->result->error_count;
-  if (!context->sink.fn) return;
-
-  loom_diagnostic_t diagnostic = {0};
-  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = error;
-  diagnostic.params = params;
-  diagnostic.param_count = param_count;
-  diagnostic.emitter = LOOM_EMITTER_VERIFIER;
-  loom_diagnostic_emit(&context->sink, &diagnostic);
-}
-
-void loom_verify_emit_warning(const loom_verify_context_t* context,
-                              const loom_op_t* op,
-                              const loom_error_def_t* error,
-                              const loom_diagnostic_param_t* params,
-                              iree_host_size_t param_count) {
-  ++context->result->warning_count;
-  if (!context->sink.fn) return;
-
-  loom_diagnostic_t diagnostic = {0};
-  diagnostic.severity = LOOM_DIAGNOSTIC_WARNING;
-  diagnostic.error = error;
-  diagnostic.params = params;
-  diagnostic.param_count = param_count;
-  diagnostic.emitter = LOOM_EMITTER_VERIFIER;
-  loom_diagnostic_emit(&context->sink, &diagnostic);
-}
-
-void loom_verify_emit_note(const loom_verify_context_t* context,
-                           const loom_op_t* op, const loom_error_def_t* error,
-                           const loom_diagnostic_param_t* params,
-                           iree_host_size_t param_count) {
-  if (!context->sink.fn) return;
-
-  loom_diagnostic_t diagnostic = {0};
-  diagnostic.severity = LOOM_DIAGNOSTIC_REMARK;
-  diagnostic.error = error;
-  diagnostic.params = params;
-  diagnostic.param_count = param_count;
-  diagnostic.emitter = LOOM_EMITTER_VERIFIER;
-  loom_diagnostic_emit(&context->sink, &diagnostic);
+static iree_status_t loom_verify_diagnostic_emitter_fn(
+    void* user_data, const loom_op_t* op, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
+  loom_verify_state_t* state = (loom_verify_state_t*)user_data;
+  loom_verify_emit_structured(state, op, error, params, param_count);
+  return loom_verify_pending_diagnostic_status(state);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1404,6 +1413,16 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
           loom_param_u32((uint32_t)state->module->symbols.count),
       };
       loom_verify_emit_structured(state, op, &loom_err_symbol_001, params, 2);
+      continue;
+    }
+
+    const loom_symbol_t* symbol =
+        &state->module->symbols.entries[ref.symbol_id];
+    if (symbol->kind == LOOM_SYMBOL_NONE || symbol->defining_op == NULL) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(loom_verify_symbol_name(state, ref)),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_symbol_002, params, 1);
     }
   }
 }
@@ -1473,6 +1492,12 @@ static iree_status_t loom_verify_region(loom_verify_state_t* state,
       IREE_RETURN_IF_ERROR(loom_verify_define_value(state, block->arg_ids[a]));
     }
     loom_verify_block_arg_encoding_refs(state, block);
+    iree_status_t diagnostic_status =
+        loom_verify_pending_diagnostic_status(state);
+    if (!iree_status_is_ok(diagnostic_status)) {
+      loom_verify_pop_scope(state);
+      return diagnostic_status;
+    }
     for (uint16_t i = 0; i < block->op_count; ++i) {
       if (loom_verify_at_error_limit(state)) break;
       loom_op_t* current = block->ops[i];
@@ -1496,6 +1521,7 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
         loom_param_string(iree_make_cstring_view(kind_buffer)),
     };
     loom_verify_emit_structured(state, op, &loom_err_structure_009, params, 2);
+    IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
     // Still define results so downstream dominance checks don't cascade.
     for (uint16_t i = 0; i < op->result_count; ++i) {
       IREE_RETURN_IF_ERROR(
@@ -1507,33 +1533,41 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   // Operand references must be valid and in scope. This must run
   // before any type-level checks since those read operand types.
   loom_verify_operand_dominance(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Structural checks: operand/result/attr/region counts match the
   // vtable declaration. Must pass before per-field checks below.
   loom_verify_op_structure(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Per-field type constraint checks (operand/result types satisfy
   // the type category declared in the vtable descriptors).
   loom_verify_type_constraints(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // SSA encoding references embedded in operand/result types must
   // point to valid, in-scope values of type LOOM_TYPE_ENCODING.
   // Requires operand dominance to have run (uses the defined_bits).
   loom_verify_encoding_refs(state, op);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Semantic constraints: table-driven (relation, property) interpreter.
   // Requires structural and type checks to have passed so field refs
   // resolve to valid values with the expected type categories.
   loom_verify_semantic_constraints(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Tied result validation and linear ownership consume marking.
   loom_verify_tied_results(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Symbol reference attributes must point to valid symbol table entries.
   loom_verify_symbol_references(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Region structure: single-block invariants, terminator presence.
   loom_verify_region_structure(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Define result values. Must happen after all checks on this op
   // so that a result cannot appear to dominate its own defining op.
@@ -1550,17 +1584,14 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
     IREE_RETURN_IF_ERROR(loom_verify_region(state, regions[i]));
   }
 
-  // Custom verification callback. Runs last — all table-driven checks
+  // Op-specific verification callback. Runs last — all table-driven checks
   // have passed, so the op is structurally sound and type-correct.
-  if (vtable->custom_verify) {
-    loom_verify_context_t context = {
-        .module = state->module,
-        .sink = state->sink,
-        .result = state->result,
-        .max_errors = state->max_errors,
+  if (vtable->verify) {
+    iree_diagnostic_emitter_t emitter = {
+        .fn = loom_verify_diagnostic_emitter_fn,
+        .user_data = state,
     };
-    iree_status_t custom_status = vtable->custom_verify(op, &context);
-    iree_status_ignore(custom_status);
+    IREE_RETURN_IF_ERROR(vtable->verify(state->module, op, emitter));
   }
   return iree_ok_status();
 }
@@ -1705,6 +1736,8 @@ static iree_status_t loom_verify_state_initialize(
 }
 
 static void loom_verify_state_deinitialize(loom_verify_state_t* state) {
+  IREE_ASSERT(iree_status_is_ok(state->diagnostic_status));
+  iree_status_ignore(state->diagnostic_status);
   iree_arena_deinitialize(&state->arena);
 }
 
@@ -1744,6 +1777,12 @@ iree_status_t loom_verify_module(const loom_module_t* module,
           };
           loom_verify_emit_structured(&state, op, &loom_err_structure_011,
                                       params, IREE_ARRAYSIZE(params));
+          iree_status_t diagnostic_status =
+              loom_verify_pending_diagnostic_status(&state);
+          if (!iree_status_is_ok(diagnostic_status)) {
+            loom_verify_state_deinitialize(&state);
+            return diagnostic_status;
+          }
         }
       }
     }

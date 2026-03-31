@@ -47,6 +47,7 @@ loom_cc_library(
         "types.h",
     ],
     deps = [
+        "//loom/src/loom/error:emitter",
         "//loom/src/loom/util:bstring",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

@@ -779,6 +779,38 @@ const loom_error_def_t loom_err_symbol_001 = {
     .param_count = 2,
 };
 
+static const loom_error_param_def_t loom_err_symbol_002_params[] = {
+    {"symbol_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_symbol_002 = {
+    .domain = LOOM_ERROR_DOMAIN_SYMBOL,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 2,
+    .summary = "Symbol reference is unresolved.",
+    .message_template = "symbol '@{symbol_name}' is referenced but not defined",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_symbol_002_params,
+    .param_count = 1,
+};
+
+static const loom_error_param_def_t loom_err_symbol_003_params[] = {
+    {"symbol_name", LOOM_PARAM_STRING},
+    {"actual_kind", LOOM_PARAM_STRING},
+    {"expected_kind", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_symbol_003 = {
+    .domain = LOOM_ERROR_DOMAIN_SYMBOL,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 3,
+    .summary = "Symbol kind mismatch.",
+    .message_template =
+        "symbol '@{symbol_name}' has kind {actual_kind}, expected "
+        "{expected_kind}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_symbol_003_params,
+    .param_count = 3,
+};
+
 static const loom_error_param_def_t loom_err_parse_001_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
@@ -1232,16 +1264,17 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_structure_008, &loom_err_structure_009, &loom_err_structure_010,
     &loom_err_structure_011, &loom_err_dominance_001, &loom_err_dominance_002,
     &loom_err_dominance_003, &loom_err_dominance_004, &loom_err_dominance_005,
-    &loom_err_symbol_001,    &loom_err_parse_001,     &loom_err_parse_002,
-    &loom_err_parse_003,     &loom_err_parse_004,     &loom_err_parse_005,
-    &loom_err_parse_006,     &loom_err_parse_007,     &loom_err_parse_008,
-    &loom_err_parse_009,     &loom_err_parse_010,     &loom_err_parse_011,
-    &loom_err_parse_012,     &loom_err_parse_013,     &loom_err_parse_014,
-    &loom_err_parse_015,     &loom_err_parse_016,     &loom_err_parse_017,
-    &loom_err_parse_018,     &loom_err_parse_019,     &loom_err_bytecode_001,
-    &loom_err_bytecode_002,  &loom_err_bytecode_003,  &loom_err_bytecode_004,
-    &loom_err_bytecode_005,  &loom_err_fold_001,      &loom_err_fold_002,
-    &loom_err_fold_003,      &loom_err_fold_004,      &loom_err_fold_005,
+    &loom_err_symbol_001,    &loom_err_symbol_002,    &loom_err_symbol_003,
+    &loom_err_parse_001,     &loom_err_parse_002,     &loom_err_parse_003,
+    &loom_err_parse_004,     &loom_err_parse_005,     &loom_err_parse_006,
+    &loom_err_parse_007,     &loom_err_parse_008,     &loom_err_parse_009,
+    &loom_err_parse_010,     &loom_err_parse_011,     &loom_err_parse_012,
+    &loom_err_parse_013,     &loom_err_parse_014,     &loom_err_parse_015,
+    &loom_err_parse_016,     &loom_err_parse_017,     &loom_err_parse_018,
+    &loom_err_parse_019,     &loom_err_bytecode_001,  &loom_err_bytecode_002,
+    &loom_err_bytecode_003,  &loom_err_bytecode_004,  &loom_err_bytecode_005,
+    &loom_err_fold_001,      &loom_err_fold_002,      &loom_err_fold_003,
+    &loom_err_fold_004,      &loom_err_fold_005,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

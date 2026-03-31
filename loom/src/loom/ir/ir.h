@@ -86,6 +86,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/types.h"
 #include "loom/util/bstring.h"
 
@@ -1069,11 +1070,11 @@ enum loom_op_vtable_flag_bits_e {
 };
 typedef uint8_t loom_op_vtable_flags_t;
 
-// Custom per-op verification callback. Called after all standard
-// table-driven constraint checking passes.
-typedef struct loom_verify_context_t loom_verify_context_t;
-typedef iree_status_t (*loom_op_verify_fn_t)(
-    const loom_op_t* op, const loom_verify_context_t* context);
+// Op-specific verification callback. Called after the standard
+// table-driven checks have established the op's structural invariants.
+typedef iree_status_t (*loom_op_verify_fn_t)(const loom_module_t* module,
+                                             const loom_op_t* op,
+                                             iree_diagnostic_emitter_t emitter);
 
 // Canonicalization callback. Attempts to simplify |op| using the
 // rewriter.
@@ -1216,7 +1217,7 @@ struct loom_op_vtable_t {
   const loom_result_descriptor_t* result_descriptors;
   const loom_region_descriptor_t* region_descriptors;
   const loom_constraint_t* constraints;
-  loom_op_verify_fn_t custom_verify;
+  loom_op_verify_fn_t verify;
   const uint8_t* name;
   const loom_format_element_t* format_elements;
   const loom_bstring_t* instance_flags_case_names;

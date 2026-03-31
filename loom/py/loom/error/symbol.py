@@ -21,4 +21,32 @@ ERR_SYMBOL_001 = ErrorDef(
     ),
 )
 
-ALL_SYMBOL_ERRORS: tuple[ErrorDef, ...] = (ERR_SYMBOL_001,)
+# ERR_SYMBOL_002: Symbol reference is unresolved.
+ERR_SYMBOL_002 = ErrorDef(
+    domain=ErrorDomain.SYMBOL,
+    code=2,
+    severity=Severity.ERROR,
+    summary="Symbol reference is unresolved.",
+    message="symbol '@{symbol_name}' is referenced but not defined",
+    params=(ErrorParam("symbol_name", ParamKind.STRING),),
+)
+
+# ERR_SYMBOL_003: Symbol kind mismatch.
+ERR_SYMBOL_003 = ErrorDef(
+    domain=ErrorDomain.SYMBOL,
+    code=3,
+    severity=Severity.ERROR,
+    summary="Symbol kind mismatch.",
+    message="symbol '@{symbol_name}' has kind {actual_kind}, expected {expected_kind}",
+    params=(
+        ErrorParam("symbol_name", ParamKind.STRING),
+        ErrorParam("actual_kind", ParamKind.STRING),
+        ErrorParam("expected_kind", ParamKind.STRING),
+    ),
+)
+
+ALL_SYMBOL_ERRORS: tuple[ErrorDef, ...] = (
+    ERR_SYMBOL_001,
+    ERR_SYMBOL_002,
+    ERR_SYMBOL_003,
+)

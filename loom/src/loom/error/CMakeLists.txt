@@ -12,6 +12,46 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    emitter
+  HDRS
+    "emitter.h"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    diagnostic
+  HDRS
+    "diagnostic.h"
+  SRCS
+    "diagnostic.c"
+  DEPS
+    ::emitter
+    ::error_defs
+    ::renderer
+    iree::base
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    diagnostic_test
+  SRCS
+    "diagnostic_test.cc"
+  DEPS
+    ::diagnostic
+    ::error_defs
+    ::renderer
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     error_defs
   HDRS
     "error_defs.h"
@@ -31,62 +71,6 @@ loom_cc_test(
     "error_defs_test.cc"
   DEPS
     ::error_defs
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_library(
-  NAME
-    renderer
-  HDRS
-    "renderer.h"
-  SRCS
-    "renderer.c"
-  DEPS
-    ::error_defs
-    iree::base
-    loom::src::loom::util::stream
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    renderer_test
-  SRCS
-    "renderer_test.cc"
-  DEPS
-    ::error_defs
-    ::renderer
-    loom::src::loom::util::stream
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_library(
-  NAME
-    diagnostic
-  HDRS
-    "diagnostic.h"
-  SRCS
-    "diagnostic.c"
-  DEPS
-    ::error_defs
-    ::renderer
-    iree::base
-    loom::src::loom::util::stream
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    diagnostic_test
-  SRCS
-    "diagnostic_test.cc"
-  DEPS
-    ::diagnostic
-    ::error_defs
-    ::renderer
-    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -116,6 +100,33 @@ loom_cc_test(
   DEPS
     ::error_defs
     ::json_sink
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
+    renderer
+  HDRS
+    "renderer.h"
+  SRCS
+    "renderer.c"
+  DEPS
+    ::error_defs
+    iree::base
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    renderer_test
+  SRCS
+    "renderer_test.cc"
+  DEPS
+    ::error_defs
+    ::renderer
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main

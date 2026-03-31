@@ -1033,6 +1033,50 @@
     ]
   },
   {
+    "error_id": "ERR_SYMBOL_002",
+    "domain": 6,
+    "domain_name": "SYMBOL",
+    "code": 2,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Symbol reference is unresolved.",
+    "message_template": "symbol '@{symbol_name}' is referenced but not defined",
+    "params": [
+      {
+        "name": "symbol_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_SYMBOL_003",
+    "domain": 6,
+    "domain_name": "SYMBOL",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Symbol kind mismatch.",
+    "message_template": "symbol '@{symbol_name}' has kind {actual_kind}, expected {expected_kind}",
+    "params": [
+      {
+        "name": "symbol_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
     "error_id": "ERR_PARSE_001",
     "domain": 7,
     "domain_name": "PARSE",

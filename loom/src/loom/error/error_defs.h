@@ -16,17 +16,10 @@
 // identity, typed parameter schema, message template, and optional fix
 // hint. The tables are checked in so the C build never requires Python.
 //
-// Dependency direction:
-//
-//   error/error_defs.h    (this file — foundational)
-//     ↑
-//   error/diagnostic.h    (diagnostic infrastructure)
-//     ↑
-//   verify/verify.h       (uses both)
-//
-// A build that excludes the text format (no parser, no printer, no caret
-// diagnostics) can still use the error definitions for structured error
-// reporting through non-text sinks (JSON, programmatic API).
+// Materialized diagnostics, lightweight emitters, and verifier hooks all
+// build on these definitions. A build that excludes the text format still
+// uses the same error tables for structured reporting through JSON or
+// programmatic sinks.
 
 #ifndef LOOM_ERROR_ERROR_DEFS_H_
 #define LOOM_ERROR_ERROR_DEFS_H_

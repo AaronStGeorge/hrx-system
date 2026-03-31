@@ -154,6 +154,7 @@ global_load = Op(
     # time (one result per #N ordinal, plus the value itself).
     results=[Result("result", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    verify="loom_global_load_verify",
     format=[
         SymbolRef("global"),
         COLON,
@@ -186,6 +187,7 @@ global_store = Op(
         AttrDef("global", "symbol"),
     ],
     traits=[UNKNOWN_EFFECTS],
+    verify="loom_global_store_verify",
     format=[
         Ref("value"),
         COMMA,
