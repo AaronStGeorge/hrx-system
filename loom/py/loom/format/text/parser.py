@@ -40,6 +40,7 @@ from loom.assembly import (
     Refs,
     ResultType,
     ResultTypeList,
+    Scope,
     SymbolRef,
     TypeOf,
     TypesOf,
@@ -80,6 +81,7 @@ from loom.ir import (
     Module,
     OpaqueLocation,
     Operation,
+    PlaceholderType,
     PoolType,
     Predicate,
     PredicateArg,
@@ -100,6 +102,7 @@ from loom.ir import (
 )
 
 __all__ = [
+    "ParseError",
     "Parser",
     "NameScope",
     "parse_type_string",
@@ -170,7 +173,7 @@ class NameScope:
         """Define a new SSA name in this scope."""
         if name in self._names:
             raise ValueError(
-                f"SSA name '{name}' already defined in this scope "
+                f"SSA name '%{name}' already defined in this scope "
                 f"(existing value ID {self._names[name]}, "
                 f"new value ID {value_id})"
             )
@@ -182,7 +185,7 @@ class NameScope:
             return self._names[name]
         if self._parent is not None:
             return self._parent.lookup(name)
-        raise KeyError(f"undefined SSA value '{name}'")
+        raise KeyError(f"undefined SSA value '%{name}'")
 
     def push(self) -> NameScope:
         """Create a child scope for entering a region."""
@@ -201,6 +204,7 @@ class TypeParseMode(Enum):
     ARG = "arg"  # Function args: [%M] creates new index values.
     BODY = "body"  # Op body: [%M] looks up existing values.
     RETURN = "return"  # Function returns: [%M] looks up, [#N] is ordinal.
+    SIGNATURE = "signature"  # Function signature: [%M] creates placeholders.
 
 
 # ============================================================================
@@ -537,8 +541,9 @@ def _parse_shaped_interior(
         encoding_text = encoding_part.strip()
         if encoding_text.startswith("%"):
             # SSA value reference — dynamic encoding bound at use site.
+            enc_bare_name = encoding_text[1:]  # Strip % sigil.
             try:
-                enc_value_id = scope.lookup(encoding_text)
+                enc_value_id = scope.lookup(enc_bare_name)
             except KeyError:
                 raise ParseError(
                     f"undefined encoding value '{encoding_text}' in type",
@@ -621,29 +626,26 @@ def _parse_dims_and_element(
         if segment.startswith("[") and segment.endswith("]"):
             inner = segment[1:-1].strip()
             if inner.startswith("%"):
-                if mode == TypeParseMode.ARG:
-                    # Reference an existing arg if already defined (e.g.,
-                    # %M in tile<[%M]xf32> refers to the earlier %M: index
-                    # arg). Only define a new value if this is the first
-                    # occurrence of this dim name.
+                bare_name = inner[1:]  # Strip % sigil for scope lookup.
+                if mode == TypeParseMode.SIGNATURE:
+                    # In signature mode, define a placeholder if not found.
                     try:
-                        value_id = scope.lookup(inner)
+                        value_id = scope.lookup(bare_name)
                     except KeyError:
                         value_id = module.add_value(
-                            Value(name=inner, type=ScalarType(ScalarTypeKind.INDEX))
+                            Value(name=bare_name, type=PlaceholderType())
                         )
-                        scope.define(inner, value_id)
+                        scope.define(bare_name, value_id)
                     dim_bindings[i] = value_id
                 else:
+                    # BODY or RETURN mode: look up existing value.
                     try:
-                        value_id = scope.lookup(inner)
+                        value_id = scope.lookup(bare_name)
                         dim_bindings[i] = value_id
                     except KeyError:
                         raise ParseError(
                             f"undefined dim name '{inner}' in type", location, filename
                         ) from None
-            elif inner.startswith("#"):
-                dim_bindings[i] = -int(inner[1:]) - 1
             else:
                 raise ParseError(f"invalid dynamic dim '{segment}'", location, filename)
             dims.append(DynamicDim())
@@ -775,20 +777,21 @@ def _parse_pool_interior(
     if text.startswith("[") and text.endswith("]"):
         inner = text[1:-1].strip()
         if inner.startswith("%"):
+            bare_name = inner[1:]  # Strip % sigil for scope lookup.
             if mode == TypeParseMode.ARG:
                 # Reference an existing arg if already defined,
                 # otherwise define a new implicit index arg.
                 try:
-                    value_id = scope.lookup(inner)
+                    value_id = scope.lookup(bare_name)
                 except KeyError:
                     value_id = module.add_value(
-                        Value(name=inner, type=ScalarType(ScalarTypeKind.INDEX))
+                        Value(name=bare_name, type=ScalarType(ScalarTypeKind.INDEX))
                     )
-                    scope.define(inner, value_id)
+                    scope.define(bare_name, value_id)
                 dim_bindings[0] = value_id
             else:
                 try:
-                    value_id = scope.lookup(inner)
+                    value_id = scope.lookup(bare_name)
                     dim_bindings[0] = value_id
                 except KeyError:
                     raise ParseError(
@@ -843,7 +846,7 @@ class ParsedFields:
 
     def __init__(self) -> None:
         self.operand_ids: list[int] = []
-        self.result_ids: list[int] = []
+        self.result_ids: list[int | None] = []
         self.result_types: list[Type] = []
         self.result_bindings: list[dict[int, int]] = []
         self.attributes: dict[str, Any] = {}
@@ -935,12 +938,12 @@ class Parser:
         """Parse #alias = #encoding<params> at file level."""
         tok = self._tokenizer
         alias_tok = tok.expect(TokenKind.HASH_ATTR)
-        alias_name = alias_tok.text  # includes #
+        alias_name = "#" + alias_tok.text  # re-add # for raw-text lookups
         tok.expect(TokenKind.EQUALS)
 
         # Parse the encoding value: #name or #name<params>
         enc_tok = tok.expect(TokenKind.HASH_ATTR)
-        enc_name = enc_tok.text[1:]  # strip #
+        enc_name = enc_tok.text
 
         params: tuple[tuple[str, str], ...] = ()
         if tok.at(TokenKind.LANGLE):
@@ -992,22 +995,38 @@ class Parser:
         name_tok = tok.expect(TokenKind.SSA_VALUE)
         tok.expect(TokenKind.COLON)
         arg_type, all_bindings = parse_type_from_tokens(
-            tok, self._scope, self._module, self._type_registry, TypeParseMode.ARG
+            tok, self._scope, self._module, self._type_registry, TypeParseMode.SIGNATURE
         )
         # Extract bindings: dim_bindings are non-negative keys,
         # encoding_binding uses sentinel key -1.
         dim_bindings = {k: v for k, v in all_bindings.items() if k >= 0}
         encoding_binding = all_bindings.get(-1, -1)
-        # Define the argument value in scope.
-        value_id = self._module.add_value(
-            Value(
-                name=name_tok.text,
-                type=arg_type,
-                dim_bindings=dim_bindings,
-                encoding_binding=encoding_binding,
+
+        # If the name was already forward-referenced in another argument's
+        # type, update the placeholder value.
+        try:
+            value_id = self._scope.lookup(name_tok.text)
+            value = self._module.values[value_id]
+            if not isinstance(value.type, PlaceholderType):
+                raise ParseError(
+                    f"SSA name '%{name_tok.text}' already defined",
+                    name_tok.location,
+                    tok._filename,
+                )
+            value.type = arg_type
+            value.dim_bindings = dim_bindings
+            value.encoding_binding = encoding_binding
+        except KeyError:
+            # First occurrence: define the argument value in scope.
+            value_id = self._module.add_value(
+                Value(
+                    name=name_tok.text,
+                    type=arg_type,
+                    dim_bindings=dim_bindings,
+                    encoding_binding=encoding_binding,
+                )
             )
-        )
-        self._scope.define(name_tok.text, value_id)
+            self._scope.define(name_tok.text, value_id)
         return name_tok.text, arg_type, value_id
 
     def _layout(self, op_decl: Op) -> FieldLayout:
@@ -1074,6 +1093,14 @@ class Parser:
         if result_names:
             # Body op: LHS SSA names define result values.
             for i, name in enumerate(result_names):
+                # If the result ID was already populated (named result), use it.
+                existing_id = (
+                    parsed.result_ids[i] if i < len(parsed.result_ids) else None
+                )
+                if existing_id is not None:
+                    self._scope.define(name, existing_id)
+                    continue
+
                 if i < len(parsed.result_types):
                     result_type = parsed.result_types[i]
                 else:
@@ -1093,12 +1120,18 @@ class Parser:
                         encoding_binding=encoding_binding,
                     )
                 )
-                parsed.result_ids.append(value_id)
+                if i < len(parsed.result_ids):
+                    parsed.result_ids[i] = value_id
+                else:
+                    parsed.result_ids.append(value_id)
                 self._scope.define(name, value_id)
         elif parsed.result_types:
             # Symbol-defining op: no LHS names, create anonymous result values
-            # so op.results carries the declared return types for the printer.
+            # for any that weren't already named in the signature.
             for i, result_type in enumerate(parsed.result_types):
+                if i < len(parsed.result_ids) and parsed.result_ids[i] is not None:
+                    continue
+
                 bindings = (
                     parsed.result_bindings[i] if i < len(parsed.result_bindings) else {}
                 )
@@ -1112,7 +1145,10 @@ class Parser:
                         encoding_binding=encoding_binding,
                     )
                 )
-                parsed.result_ids.append(value_id)
+                if i < len(parsed.result_ids):
+                    parsed.result_ids[i] = value_id
+                else:
+                    parsed.result_ids.append(value_id)
 
         # 5. Build Operation.
         # Default location: implicit source position from tokenizer.
@@ -1131,10 +1167,21 @@ class Parser:
         if tok.at(TokenKind.BARE_IDENT) and tok.peek().text == "loc":
             location_id = self._parse_location_annotation()
 
+        # All result slots must be resolved to concrete value IDs by now.
+        result_ids: list[int] = []
+        for rid in parsed.result_ids:
+            if rid is None:
+                raise ParseError(
+                    "internal error: unresolved result slot",
+                    end_loc,
+                    tok._filename,
+                )
+            result_ids.append(rid)
+
         op = Operation(
             name=op_name,
             operands=parsed.operand_ids,
-            results=parsed.result_ids,
+            results=result_ids,
             tied_results=parsed.tied_results,
             attributes=parsed.attributes,
             regions=parsed.regions,
@@ -1303,19 +1350,40 @@ class Parser:
                         parsed.implicit_values[name] = value_id
                     else:
                         ssa_tok = tok.expect(TokenKind.SSA_VALUE)
-                        value_id = self._scope.lookup(ssa_tok.text)
+                        try:
+                            value_id = self._scope.lookup(ssa_tok.text)
+                        except KeyError:
+                            raise ParseError(
+                                f"undefined SSA value '%{ssa_tok.text}'",
+                                ssa_tok.location,
+                                tok._filename,
+                            ) from None
                         parsed.operand_ids.append(value_id)
 
                 case Refs(field=name):
                     if tok.at(TokenKind.SSA_VALUE):
                         ssa_tok = tok.next()
-                        value_id = self._scope.lookup(ssa_tok.text)
+                        try:
+                            value_id = self._scope.lookup(ssa_tok.text)
+                        except KeyError:
+                            raise ParseError(
+                                f"undefined SSA value '%{ssa_tok.text}'",
+                                ssa_tok.location,
+                                tok._filename,
+                            ) from None
                         parsed.operand_ids.append(value_id)
                         while tok.try_consume(TokenKind.COMMA):
                             if not tok.at(TokenKind.SSA_VALUE):
                                 break
                             ssa_tok = tok.next()
-                            value_id = self._scope.lookup(ssa_tok.text)
+                            try:
+                                value_id = self._scope.lookup(ssa_tok.text)
+                            except KeyError:
+                                raise ParseError(
+                                    f"undefined SSA value '%{ssa_tok.text}'",
+                                    ssa_tok.location,
+                                    tok._filename,
+                                ) from None
                             parsed.operand_ids.append(value_id)
 
                 case Attr(field=name):
@@ -1325,7 +1393,7 @@ class Parser:
 
                 case SymbolRef(field=name):
                     sym_tok = tok.expect(TokenKind.SYMBOL)
-                    parsed.attributes[name] = sym_tok.text.lstrip("@")
+                    parsed.attributes[name] = sym_tok.text
 
                 case TypeOf(field=name):
                     parsed_type, bindings = parse_type_from_tokens(
@@ -1402,9 +1470,6 @@ class Parser:
                     self._parse_binding_list(parsed, name, binding_kind)
 
                 case FuncArgs(field=name):
-                    # Reset to a fresh scope: func args define new SSA values
-                    # not reachable from outer scopes.
-                    self._scope = NameScope()
                     tok.expect(TokenKind.LPAREN)
                     if not tok.at(TokenKind.RPAREN):
                         _, _, vid = self._parse_func_arg()
@@ -1422,6 +1487,24 @@ class Parser:
                 case OptionalGroup(elements=inner, anchor=_anchor):
                     if self._optional_group_present(inner, op_decl):
                         self._walk_format(inner, op_decl, parsed)
+
+                case Scope(elements=inner):
+                    parent_scope = self._scope
+                    self._scope = self._scope.push()
+                    try:
+                        self._walk_format(inner, op_decl, parsed)
+                        # Verify all placeholders defined in this scope are resolved.
+                        for name, value_id in self._scope._names.items():
+                            value = self._module.values[value_id]
+                            if isinstance(value.type, PlaceholderType):
+                                raise ParseError(
+                                    f"unresolved forward reference to "
+                                    f"'%{name}' in signature",
+                                    tok.current_location(),
+                                    tok._filename,
+                                )
+                    finally:
+                        self._scope = parent_scope
 
                 case Flags(field=name):
                     if tok.at(TokenKind.LANGLE):
@@ -1532,7 +1615,7 @@ class Parser:
                 return ident.text
             case "symbol":
                 sym = tok.expect(TokenKind.SYMBOL)
-                return sym.text.lstrip("@")
+                return sym.text
             case "i64_array":
                 return self._parse_i64_array()
             case "any":
@@ -1614,41 +1697,94 @@ class Parser:
         tok.expect(TokenKind.RPAREN)
 
     def _parse_one_result_type(self, parsed: ParsedFields) -> None:
-        """Parse one result type entry: type or %operand as type."""
+        """Parse one result type entry: type, %name: type, or %operand as type."""
         tok = self._tokenizer
         if tok.at(TokenKind.SSA_VALUE):
-            # Tied result: %operand as type.
-            operand_name = tok.next().text
-            tok.expect(TokenKind.BARE_IDENT, "as")
-            result_type, bindings = parse_type_from_tokens(
-                tok, self._scope, self._module, self._type_registry, TypeParseMode.BODY
-            )
-            parsed.result_types.append(result_type)
-            parsed.result_bindings.append(bindings)
-            # Find the operand index. For func-like ops, func args are in
-            # func_arg_ids at this point (not yet moved to operand_ids).
-            operand_id = self._scope.lookup(operand_name)
-            if operand_id in parsed.func_arg_ids:
-                operand_index = parsed.func_arg_ids.index(operand_id)
-            elif operand_id in parsed.operand_ids:
-                operand_index = parsed.operand_ids.index(operand_id)
+            name_tok = tok.next()
+            if tok.try_consume(TokenKind.COLON):
+                # Named result: %name: type.
+                result_type, all_bindings = parse_type_from_tokens(
+                    tok,
+                    self._scope,
+                    self._module,
+                    self._type_registry,
+                    TypeParseMode.SIGNATURE,
+                )
+                dim_bindings = {k: v for k, v in all_bindings.items() if k >= 0}
+                encoding_binding = all_bindings.get(-1, -1)
+                # Resolve placeholder or define new value.
+                try:
+                    value_id = self._scope.lookup(name_tok.text)
+                    value = self._module.values[value_id]
+                    if not isinstance(value.type, PlaceholderType):
+                        raise ParseError(
+                            f"SSA name '%{name_tok.text}' already defined",
+                            name_tok.location,
+                            tok._filename,
+                        )
+                    value.type = result_type
+                    value.dim_bindings = dim_bindings
+                    value.encoding_binding = encoding_binding
+                except KeyError:
+                    value_id = self._module.add_value(
+                        Value(
+                            name=name_tok.text,
+                            type=result_type,
+                            dim_bindings=dim_bindings,
+                            encoding_binding=encoding_binding,
+                        )
+                    )
+                    self._scope.define(name_tok.text, value_id)
+                parsed.result_types.append(result_type)
+                parsed.result_bindings.append(all_bindings)
+                parsed.result_ids.append(value_id)
+            elif tok.try_consume(TokenKind.BARE_IDENT, "as"):
+                # Tied result: %operand as type.
+                operand_name = name_tok.text
+                result_type, bindings = parse_type_from_tokens(
+                    tok,
+                    self._scope,
+                    self._module,
+                    self._type_registry,
+                    TypeParseMode.BODY,
+                )
+                parsed.result_types.append(result_type)
+                parsed.result_bindings.append(bindings)
+                parsed.result_ids.append(None)
+                # Find the operand index.
+                operand_id = self._scope.lookup(operand_name)
+                if operand_id in parsed.func_arg_ids:
+                    operand_index = parsed.func_arg_ids.index(operand_id)
+                elif operand_id in parsed.operand_ids:
+                    operand_index = parsed.operand_ids.index(operand_id)
+                else:
+                    raise ParseError(
+                        f"tied result {operand_name!r} not found in args or operands",
+                        name_tok.location,
+                        tok._filename,
+                    )
+                result_index = len(parsed.result_types) - 1
+                parsed.tied_results.append(
+                    IRTiedResult(result_index=result_index, operand_index=operand_index)
+                )
             else:
                 raise ParseError(
-                    f"tied result {operand_name!r} not found in args or operands",
-                    tok.current_location(),
+                    f"expected ':' or 'as' after result name {name_tok.text!r}",
+                    tok.peek().location,
                     tok._filename,
                 )
-            result_index = len(parsed.result_types) - 1
-            parsed.tied_results.append(
-                IRTiedResult(result_index=result_index, operand_index=operand_index)
-            )
         else:
             # Fresh result: type.
             result_type, bindings = parse_type_from_tokens(
-                tok, self._scope, self._module, self._type_registry, TypeParseMode.BODY
+                tok,
+                self._scope,
+                self._module,
+                self._type_registry,
+                TypeParseMode.SIGNATURE,
             )
             parsed.result_types.append(result_type)
             parsed.result_bindings.append(bindings)
+            parsed.result_ids.append(None)
 
     # --- Index list ---
 
@@ -1801,12 +1937,8 @@ class Parser:
             name_tok = tok.next()
             return PredicateArg(tag="value", value=name_tok.text)
         if tok.at(TokenKind.RESULT_ORDINAL):
-            # Result ordinal: #N. Token text is "#N".
             ordinal_tok = tok.next()
-            ordinal_text = ordinal_tok.text
-            if ordinal_text.startswith("#"):
-                ordinal_text = ordinal_text[1:]
-            return PredicateArg(tag="ordinal", value=int(ordinal_text))
+            return PredicateArg(tag="ordinal", value=int(ordinal_tok.text))
         if tok.at(TokenKind.INTEGER):
             int_tok = tok.next()
             return PredicateArg(tag="const", value=int(int_tok.text))

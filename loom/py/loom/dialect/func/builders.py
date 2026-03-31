@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
-from loom.ir import Predicate, Region, Type
+from loom.ir import Region, Type
 
 
 class FuncBuilders:
@@ -16,17 +16,7 @@ class FuncBuilders:
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
 
-    def def_(
-        self,
-        *,
-        visibility: str | None = None,
-        cc: str | None = None,
-        purity: str | None = None,
-        callee: str,
-        results: list[Type | TiedResultSpec],
-        predicates: list[Predicate] | None = None,
-        body: Region | None = None,
-    ) -> list[ValueRef]:
+    def def_(self, *, visibility: str | None = None, cc: str | None = None, purity: str | None = None, callee: str, body: Region | None = None, result_types: list[Type]) -> list[ValueRef]:
         """Function definition. Callable by name via func.call.
 
         Example::
@@ -44,11 +34,9 @@ class FuncBuilders:
         if purity is not None:
             _attributes["purity"] = purity
         _attributes["callee"] = callee
-        if predicates:
-            _attributes["predicates"] = predicates
         if body is not None:
             _regions.append(body)
-        return cast(list[ValueRef], self._b.build("func.def", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.def", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def decl(
         self,
@@ -59,8 +47,7 @@ class FuncBuilders:
         cc: str | None = None,
         purity: str | None = None,
         callee: str,
-        results: list[Type | TiedResultSpec],
-        predicates: list[Predicate] | None = None,
+        result_types: list[Type],
     ) -> list[ValueRef]:
         """External function declaration. Callable by name via func.call.
 
@@ -81,9 +68,7 @@ class FuncBuilders:
         if purity is not None:
             _attributes["purity"] = purity
         _attributes["callee"] = callee
-        if predicates:
-            _attributes["predicates"] = predicates
-        return cast(list[ValueRef], self._b.build("func.decl", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.decl", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def template(
         self,
@@ -94,9 +79,8 @@ class FuncBuilders:
         purity: str | None = None,
         priority: int | None = None,
         callee: str,
-        results: list[Type | TiedResultSpec],
-        predicates: list[Predicate] | None = None,
         body: Region | None = None,
+        result_types: list[Type],
     ) -> list[ValueRef]:
         """Constraint-matched visible implementation of an abstract op.
 
@@ -118,23 +102,12 @@ class FuncBuilders:
         if priority is not None:
             _attributes["priority"] = priority
         _attributes["callee"] = callee
-        if predicates:
-            _attributes["predicates"] = predicates
         if body is not None:
             _regions.append(body)
-        return cast(list[ValueRef], self._b.build("func.template", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.template", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def ukernel(
-        self,
-        *,
-        implements: str,
-        visibility: str | None = None,
-        cc: str | None = None,
-        purity: str | None = None,
-        priority: int | None = None,
-        callee: str,
-        results: list[Type | TiedResultSpec],
-        predicates: list[Predicate] | None = None,
+        self, *, implements: str, visibility: str | None = None, cc: str | None = None, purity: str | None = None, priority: int | None = None, callee: str, result_types: list[Type]
     ) -> list[ValueRef]:
         """Constraint-matched opaque implementation of an abstract op.
 
@@ -154,9 +127,7 @@ class FuncBuilders:
         if priority is not None:
             _attributes["priority"] = priority
         _attributes["callee"] = callee
-        if predicates:
-            _attributes["predicates"] = predicates
-        return cast(list[ValueRef], self._b.build("func.ukernel", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.ukernel", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def call(self, *, purity: str | None = None, callee: str, operands: list[ValueRef], results: list[Type | TiedResultSpec]) -> list[ValueRef]:
         """Runtime function call. Target must be func.def or func.decl.

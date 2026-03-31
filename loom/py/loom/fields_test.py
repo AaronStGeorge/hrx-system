@@ -188,9 +188,9 @@ class TestComputeLayout:
 class TestResolveSingular:
     def test_ref_operand(self) -> None:
         module, [lhs_id, rhs_id, result_id] = _make_module_with_values(
-            ("%lhs", I32),
-            ("%rhs", I32),
-            ("%result", I32),
+            ("lhs", I32),
+            ("rhs", I32),
+            ("result", I32),
         )
         op = Operation(
             kind=1,
@@ -210,11 +210,11 @@ class TestResolveSingular:
 
         assert fields.value_id("lhs") == lhs_id
         assert fields.value_id("rhs") == rhs_id
-        assert fields.value_name("lhs") == "%lhs"
-        assert fields.value_name("rhs") == "%rhs"
+        assert fields.value_name("lhs") == "lhs"
+        assert fields.value_name("rhs") == "rhs"
 
     def test_type_of(self) -> None:
-        module, [vid] = _make_module_with_values(("%x", I32))
+        module, [vid] = _make_module_with_values(("x", I32))
         decl = unary_op(
             "test.neg",
             group=Dialect("test"),
@@ -232,7 +232,7 @@ class TestResolveSingular:
             attrs=[AttrDef("value", "any")],
             results=[Result("result", ANY)],
         )
-        result_id = module.add_value(Value(name="%c", type=I32))
+        result_id = module.add_value(Value(name="c", type=I32))
         op = Operation(
             kind=1,
             name="test.constant",
@@ -251,7 +251,7 @@ class TestResolveSingular:
             operands=[Operand("condition", INTEGER)],
             regions=[RegionDef("then_region"), RegionDef("else_region")],
         )
-        cond_id = module.add_value(Value(name="%cond", type=I32))
+        cond_id = module.add_value(Value(name="cond", type=I32))
         op = Operation(
             kind=1,
             name="test.branch",
@@ -263,7 +263,7 @@ class TestResolveSingular:
         assert len(resolved_region.blocks) == 1
 
     def test_unknown_field_raises(self) -> None:
-        module, [vid] = _make_module_with_values(("%x", I32))
+        module, [vid] = _make_module_with_values(("x", I32))
         decl = unary_op(
             "test.neg",
             group=Dialect("test"),
@@ -292,10 +292,10 @@ class TestResolveSingular:
 class TestResolveVariadic:
     def test_variadic_operand(self) -> None:
         module, vids = _make_module_with_values(
-            ("%src", _tile_4xf32),
-            ("%off0", INDEX),
-            ("%off1", INDEX),
-            ("%off2", INDEX),
+            ("src", _tile_4xf32),
+            ("off0", INDEX),
+            ("off1", INDEX),
+            ("off2", INDEX),
         )
         decl = Op(
             "test.slice",
@@ -321,9 +321,9 @@ class TestResolveVariadic:
 
     def test_variadic_result(self) -> None:
         module, vids = _make_module_with_values(
-            ("%a", I32),
-            ("%b", F32),
-            ("%c", INDEX),
+            ("a", I32),
+            ("b", F32),
+            ("c", INDEX),
         )
         decl = Op(
             "test.multi",
@@ -338,7 +338,7 @@ class TestResolveVariadic:
         assert types == [I32, F32, INDEX]
 
     def test_empty_variadic(self) -> None:
-        module, [src_id] = _make_module_with_values(("%src", _tile_4xf32))
+        module, [src_id] = _make_module_with_values(("src", _tile_4xf32))
         decl = Op(
             "test.slice",
             operands=[
@@ -358,8 +358,8 @@ class TestResolveVariadic:
 
     def test_variadic_names(self) -> None:
         module, vids = _make_module_with_values(
-            ("%a", I32),
-            ("%b", I32),
+            ("a", I32),
+            ("b", I32),
         )
         decl = Op(
             "test.yield",
@@ -368,7 +368,7 @@ class TestResolveVariadic:
         )
         op = Operation(kind=1, name="test.yield", operands=vids)
         fields = resolve_fields(compute_layout(decl), op, module)
-        assert fields.value_names("values") == ["%a", "%b"]
+        assert fields.value_names("values") == ["a", "b"]
 
 
 # ============================================================================
@@ -379,9 +379,9 @@ class TestResolveVariadic:
 class TestTiedResults:
     def test_tied_result_map(self) -> None:
         module, vids = _make_module_with_values(
-            ("%tile", _tile_4xf32),
-            ("%tensor", _tensor_4xf32),
-            ("%result", _tensor_4xf32),
+            ("tile", _tile_4xf32),
+            ("tensor", _tensor_4xf32),
+            ("result", _tensor_4xf32),
         )
         decl = Op(
             "test.update",
@@ -404,9 +404,9 @@ class TestTiedResults:
 
     def test_no_tied_results(self) -> None:
         module, vids = _make_module_with_values(
-            ("%a", I32),
-            ("%b", I32),
-            ("%r", I32),
+            ("a", I32),
+            ("b", I32),
+            ("r", I32),
         )
         decl = binary_op(
             "test.add",
@@ -449,7 +449,7 @@ class TestPresence:
         assert not fields.is_present("visibility")
 
     def test_present_variadic(self) -> None:
-        module, vids = _make_module_with_values(("%a", I32), ("%b", I32))
+        module, vids = _make_module_with_values(("a", I32), ("b", I32))
         decl = Op(
             "test.yield",
             operands=[Operand("values", ANY, variadic=True)],

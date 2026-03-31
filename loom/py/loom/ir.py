@@ -212,11 +212,28 @@ class TypeKind(IntEnum):
     DIALECT = 6
     ENCODING = 7
     POOL = 8
+    PLACEHOLDER = 9
 
 
 # ============================================================================
 # Types — frozen, internable, structurally compared
 # ============================================================================
+
+
+@dataclass(frozen=True, slots=True)
+class NoneType:
+    """Absence of a type (for ops with no results)."""
+
+    @property
+    def type_kind(self) -> TypeKind:
+        return TypeKind.NONE
+
+    def __repr__(self) -> str:
+        return "none"
+
+
+# Singleton for no-type.
+NONE_TYPE = NoneType()
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,38 +381,6 @@ class GroupType:
 
 
 @dataclass(frozen=True, slots=True)
-class PoolType:
-    """A block-managed device memory pool: pool<[%block_size]>.
-
-    One parameter: the block size in bytes, which may be static or
-    dynamic. The pool carries no capacity, no element type, no
-    encoding — it's untyped bytes. Element type and encoding are
-    imposed by pool ops at access time.
-
-    Dynamic block_size uses the same DynamicDim/dim_bindings mechanism
-    as shaped types: the Value carrying this type binds the dim at
-    position 0 to an index-typed SSA value.
-    """
-
-    block_size: Dim
-
-    @property
-    def type_kind(self) -> TypeKind:
-        return TypeKind.POOL
-
-    @property
-    def has_dynamic_block_size(self) -> bool:
-        return isinstance(self.block_size, DynamicDim)
-
-    def __repr__(self) -> str:
-        match self.block_size:
-            case StaticDim(size=size):
-                return f"pool<{size}>"
-            case DynamicDim():
-                return "pool<?>"
-
-
-@dataclass(frozen=True, slots=True)
 class FunctionType:
     """A function type: (arg_types) -> (result_types)."""
 
@@ -410,18 +395,6 @@ class FunctionType:
         args = ", ".join(repr(t) for t in self.arg_types)
         results = ", ".join(repr(t) for t in self.result_types)
         return f"({args}) -> ({results})"
-
-
-@dataclass(frozen=True, slots=True)
-class NoneType:
-    """Absence of a type (for ops with no results)."""
-
-    @property
-    def type_kind(self) -> TypeKind:
-        return TypeKind.NONE
-
-    def __repr__(self) -> str:
-        return "none"
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,20 +445,67 @@ class EncodingType:
 ENCODING_TYPE = EncodingType()
 
 
+@dataclass(frozen=True, slots=True)
+class PoolType:
+    """A block-managed device memory pool: pool<[%block_size]>.
+
+    One parameter: the block size in bytes, which may be static or
+    dynamic. The pool carries no capacity, no element type, no
+    encoding — it's untyped bytes. Element type and encoding are
+    imposed by pool ops at access time.
+
+    Dynamic block_size uses the same DynamicDim/dim_bindings mechanism
+    as shaped types: the Value carrying this type binds the dim at
+    position 0 to an index-typed SSA value.
+    """
+
+    block_size: Dim
+
+    @property
+    def type_kind(self) -> TypeKind:
+        return TypeKind.POOL
+
+    @property
+    def has_dynamic_block_size(self) -> bool:
+        return isinstance(self.block_size, DynamicDim)
+
+    def __repr__(self) -> str:
+        match self.block_size:
+            case StaticDim(size=size):
+                return f"pool<{size}>"
+            case DynamicDim():
+                return "pool<?>"
+
+
+@dataclass(frozen=True, slots=True)
+class PlaceholderType:
+    """A placeholder type for forward references in signatures.
+
+    Used only during assembly parsing when a name is used in a type dim
+    before it has been defined in the argument or result list. All
+    placeholders must be resolved by the end of the signature.
+    """
+
+    @property
+    def type_kind(self) -> TypeKind:
+        return TypeKind.PLACEHOLDER
+
+    def __repr__(self) -> str:
+        return "<<placeholder>>"
+
+
 # Union of all type kinds.
 type Type = (
     ScalarType
     | ShapedType
-    | PoolType
     | GroupType
     | FunctionType
-    | NoneType
     | DialectType
     | EncodingType
+    | PoolType
+    | PlaceholderType
+    | NoneType
 )
-
-# Singleton for no-type.
-NONE_TYPE = NoneType()
 
 
 def binding_element_type(operand_type: Type) -> Type:
@@ -630,9 +650,9 @@ PREDICATE_KINDS: dict[str, int | None] = {
 class PredicateArg:
     """A single argument to a predicate.
 
-    tag: "value" for SSA value references (%M), "ordinal" for result
-         ordinals (#N), "const" for integer constants.
-    value: For "value" tag, the SSA name as a string (with % prefix).
+    tag: "value" for SSA value references, "ordinal" for result
+         ordinals, "const" for integer constants.
+    value: For "value" tag, the bare SSA name as a string (no % prefix).
            For "ordinal" tag, the ordinal index as an int.
            For "const" tag, the integer constant value.
     """
@@ -677,7 +697,7 @@ def _resolve_predicate_arg(arg: PredicateArg, values: dict[str, int]) -> int | N
 def evaluate_predicate(predicate: Predicate, values: dict[str, int]) -> bool:
     """Evaluate a predicate against concrete dimension values.
 
-    values maps SSA names ("%M", "%K") to their integer values.
+    values maps bare SSA names ("M", "K") to their integer values.
     Returns True if the predicate is satisfied or if any argument
     cannot be resolved (ordinal args defer to the call site).
     """
@@ -766,6 +786,10 @@ class Value:
     The type is structural (no SSA value references in dims).
     dim_bindings maps dynamic dim positions to the value IDs that
     provide the runtime sizes.
+
+    name: Bare name without the '%' sigil. A value named "x" prints
+    as %x; a value named "" is unnamed and gets an auto-name from
+    its value ID (%0, %1, ...).
 
     encoding_binding: when the value's type has DynamicEncoding, this
     holds the value_id of the encoding-typed SSA value that provides

@@ -39,6 +39,7 @@ from loom.assembly import (
     Refs,
     Region,
     ResultTypeList,
+    Scope,
     SymbolRef,
     TypesOf,
     kw,
@@ -134,14 +135,18 @@ _IMPORT_FORMAT: list[FormatElement] = [
 # Signature: @name(%a: type, ...) -> (type, ...) where [...]
 _SIGNATURE_FORMAT: list[FormatElement] = [
     SymbolRef("callee"),
-    FuncArgs("args"),
-    OptionalGroup(
-        [ARROW, ResultTypeList("results")],
-        anchor="results",
-    ),
-    OptionalGroup(
-        [kw("where"), PredicateList("predicates")],
-        anchor="predicates",
+    Scope(
+        [
+            FuncArgs("args"),
+            OptionalGroup(
+                [ARROW, ResultTypeList("results")],
+                anchor="results",
+            ),
+            OptionalGroup(
+                [kw("where"), PredicateList("predicates")],
+                anchor="predicates",
+            ),
+        ]
     ),
 ]
 

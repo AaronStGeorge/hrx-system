@@ -406,36 +406,36 @@ class TestTiedResult:
 
 class TestValues:
     def test_basic_value(self) -> None:
-        v = Value(name="%x", type=F32)
-        assert v.name == "%x"
+        v = Value(name="x", type=F32)
+        assert v.name == "x"
         assert v.type == F32
         assert not v.is_block_arg
         assert not v.is_consumed
 
     def test_block_arg(self) -> None:
-        v = Value(name="%arg0", type=F32, flags=VALUE_FLAG_BLOCK_ARG)
+        v = Value(name="arg0", type=F32, flags=VALUE_FLAG_BLOCK_ARG)
         assert v.is_block_arg
 
     def test_consumed(self) -> None:
-        v = Value(name="%t", type=F32, flags=VALUE_FLAG_CONSUMED)
+        v = Value(name="t", type=F32, flags=VALUE_FLAG_CONSUMED)
         assert v.is_consumed
 
     def test_dim_bindings(self) -> None:
         ty = ShapedType(TypeKind.TILE, F32, (DynamicDim(), StaticDim(4)))
-        v = Value(name="%r", type=ty, dim_bindings={0: 42})
+        v = Value(name="r", type=ty, dim_bindings={0: 42})
         assert v.dim_bindings[0] == 42
 
     def test_encoding_binding_default(self) -> None:
-        v = Value(name="%x", type=F32)
+        v = Value(name="x", type=F32)
         assert v.encoding_binding == -1
 
     def test_encoding_binding(self) -> None:
         ty = ShapedType(TypeKind.TILE, F32, (StaticDim(4),), encoding=DynamicEncoding())
-        v = Value(name="%t", type=ty, encoding_binding=42)
+        v = Value(name="t", type=ty, encoding_binding=42)
         assert v.encoding_binding == 42
 
     def test_uses(self) -> None:
-        v = Value(name="%x", type=F32)
+        v = Value(name="x", type=F32)
         v.uses.append(Use(user_op_index=0, operand_index=0, block_index=0))
         assert len(v.uses) == 1
 
@@ -499,12 +499,12 @@ class TestBlocksAndRegions:
         assert len(b.ops) == 0
 
     def test_block_with_args(self) -> None:
-        b = Block(label="^bb0", arg_ids=[0, 1])
-        assert b.label == "^bb0"
+        b = Block(label="bb0", arg_ids=[0, 1])
+        assert b.label == "bb0"
         assert b.arg_ids == [0, 1]
 
     def test_region_with_blocks(self) -> None:
-        r = Region(blocks=[Block(), Block(label="^bb1")])
+        r = Region(blocks=[Block(), Block(label="bb1")])
         assert len(r.blocks) == 2
 
 
@@ -628,9 +628,9 @@ class TestModule:
 
     def test_add_value(self) -> None:
         m = Module()
-        vid = m.add_value(Value(name="%x", type=F32))
+        vid = m.add_value(Value(name="x", type=F32))
         assert vid == 0
-        assert m.values[vid].name == "%x"
+        assert m.values[vid].name == "x"
 
     def test_add_location_dedup(self) -> None:
         m = Module()
@@ -790,123 +790,123 @@ class TestPredicateEvaluation:
         )
 
     def _vals(self, **kwargs: int) -> dict[str, int]:
-        """Build a values dict with %name keys."""
-        return {f"%{k}": v for k, v in kwargs.items()}
+        """Build a values dict with bare name keys."""
+        return dict(kwargs)
 
     def test_eq_true(self) -> None:
         assert evaluate_predicate(
-            self._pred("eq", ("value", "%M"), ("const", 16)),
+            self._pred("eq", ("value", "M"), ("const", 16)),
             self._vals(M=16),
         )
 
     def test_eq_false(self) -> None:
         assert not evaluate_predicate(
-            self._pred("eq", ("value", "%M"), ("const", 16)),
+            self._pred("eq", ("value", "M"), ("const", 16)),
             self._vals(M=17),
         )
 
     def test_lt_true(self) -> None:
         assert evaluate_predicate(
-            self._pred("lt", ("value", "%K"), ("const", 1024)),
+            self._pred("lt", ("value", "K"), ("const", 1024)),
             self._vals(K=512),
         )
 
     def test_lt_false(self) -> None:
         assert not evaluate_predicate(
-            self._pred("lt", ("value", "%K"), ("const", 1024)),
+            self._pred("lt", ("value", "K"), ("const", 1024)),
             self._vals(K=1024),
         )
 
     def test_le_boundary(self) -> None:
         assert evaluate_predicate(
-            self._pred("le", ("value", "%K"), ("const", 1024)),
+            self._pred("le", ("value", "K"), ("const", 1024)),
             self._vals(K=1024),
         )
 
     def test_gt(self) -> None:
         assert evaluate_predicate(
-            self._pred("gt", ("value", "%M"), ("const", 0)),
+            self._pred("gt", ("value", "M"), ("const", 0)),
             self._vals(M=1),
         )
 
     def test_ge(self) -> None:
         assert evaluate_predicate(
-            self._pred("ge", ("value", "%M"), ("const", 16)),
+            self._pred("ge", ("value", "M"), ("const", 16)),
             self._vals(M=16),
         )
 
     def test_mul_true(self) -> None:
         assert evaluate_predicate(
-            self._pred("mul", ("value", "%M"), ("const", 16)),
+            self._pred("mul", ("value", "M"), ("const", 16)),
             self._vals(M=64),
         )
 
     def test_mul_false(self) -> None:
         assert not evaluate_predicate(
-            self._pred("mul", ("value", "%M"), ("const", 16)),
+            self._pred("mul", ("value", "M"), ("const", 16)),
             self._vals(M=17),
         )
 
     def test_mul_zero_modulus(self) -> None:
         assert not evaluate_predicate(
-            self._pred("mul", ("value", "%M"), ("const", 0)),
+            self._pred("mul", ("value", "M"), ("const", 0)),
             self._vals(M=42),
         )
 
     def test_min(self) -> None:
         assert evaluate_predicate(
-            self._pred("min", ("value", "%M"), ("const", 32)),
+            self._pred("min", ("value", "M"), ("const", 32)),
             self._vals(M=32),
         )
         assert not evaluate_predicate(
-            self._pred("min", ("value", "%M"), ("const", 32)),
+            self._pred("min", ("value", "M"), ("const", 32)),
             self._vals(M=31),
         )
 
     def test_max(self) -> None:
         assert evaluate_predicate(
-            self._pred("max", ("value", "%M"), ("const", 512)),
+            self._pred("max", ("value", "M"), ("const", 512)),
             self._vals(M=512),
         )
         assert not evaluate_predicate(
-            self._pred("max", ("value", "%M"), ("const", 512)),
+            self._pred("max", ("value", "M"), ("const", 512)),
             self._vals(M=513),
         )
 
     def test_pow2_true(self) -> None:
         for n in [1, 2, 4, 8, 16, 32, 64, 128, 256, 1024]:
             assert evaluate_predicate(
-                self._pred("pow2", ("value", "%N")),
+                self._pred("pow2", ("value", "N")),
                 self._vals(N=n),
             ), f"pow2({n}) should be true"
 
     def test_pow2_false(self) -> None:
         for n in [0, 3, 5, 6, 7, 9, 10, 15, 17, 100]:
             assert not evaluate_predicate(
-                self._pred("pow2", ("value", "%N")),
+                self._pred("pow2", ("value", "N")),
                 self._vals(N=n),
             ), f"pow2({n}) should be false"
 
     def test_range_inside(self) -> None:
         assert evaluate_predicate(
-            self._pred("range", ("value", "%M"), ("const", 32), ("const", 512)),
+            self._pred("range", ("value", "M"), ("const", 32), ("const", 512)),
             self._vals(M=128),
         )
 
     def test_range_boundaries(self) -> None:
-        pred = self._pred("range", ("value", "%M"), ("const", 32), ("const", 512))
+        pred = self._pred("range", ("value", "M"), ("const", 32), ("const", 512))
         assert evaluate_predicate(pred, self._vals(M=32))
         assert evaluate_predicate(pred, self._vals(M=512))
 
     def test_range_outside(self) -> None:
-        pred = self._pred("range", ("value", "%M"), ("const", 32), ("const", 512))
+        pred = self._pred("range", ("value", "M"), ("const", 32), ("const", 512))
         assert not evaluate_predicate(pred, self._vals(M=31))
         assert not evaluate_predicate(pred, self._vals(M=513))
 
     def test_ordinal_always_true(self) -> None:
         """Ordinal args can't be evaluated without call-site context."""
         assert evaluate_predicate(
-            self._pred("eq", ("ordinal", 1), ("value", "%M")),
+            self._pred("eq", ("ordinal", 1), ("value", "M")),
             self._vals(M=42),
         )
 
@@ -919,15 +919,15 @@ class TestPredicateEvaluation:
 
     def test_evaluate_predicates_all_true(self) -> None:
         preds = [
-            self._pred("mul", ("value", "%M"), ("const", 16)),
-            self._pred("lt", ("value", "%K"), ("const", 1024)),
+            self._pred("mul", ("value", "M"), ("const", 16)),
+            self._pred("lt", ("value", "K"), ("const", 1024)),
         ]
         assert evaluate_predicates(preds, self._vals(M=64, K=512))
 
     def test_evaluate_predicates_one_false(self) -> None:
         preds = [
-            self._pred("mul", ("value", "%M"), ("const", 16)),
-            self._pred("lt", ("value", "%K"), ("const", 1024)),
+            self._pred("mul", ("value", "M"), ("const", 16)),
+            self._pred("lt", ("value", "K"), ("const", 1024)),
         ]
         assert not evaluate_predicates(preds, self._vals(M=64, K=2048))
 
@@ -937,10 +937,10 @@ class TestPredicateEvaluation:
     def test_eq_two_values(self) -> None:
         """eq(%M, %K) — compare two SSA values."""
         assert evaluate_predicate(
-            self._pred("eq", ("value", "%M"), ("value", "%K")),
+            self._pred("eq", ("value", "M"), ("value", "K")),
             self._vals(M=64, K=64),
         )
         assert not evaluate_predicate(
-            self._pred("eq", ("value", "%M"), ("value", "%K")),
+            self._pred("eq", ("value", "M"), ("value", "K")),
             self._vals(M=64, K=32),
         )

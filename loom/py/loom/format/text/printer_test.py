@@ -142,7 +142,7 @@ class TestPrintType:
         t = ShapedType(TypeKind.TILE, F32, (DynamicDim(), StaticDim(4)))
         # Set up: value ID 0 is named %M.
         module = Module(name="test")
-        module.add_value(Value(name="%M", type=INDEX))
+        module.add_value(Value(name="M", type=INDEX))
         context = TypePrintContext(
             dim_bindings={0: 0},  # dim position 0 -> value ID 0
             module=module,
@@ -155,33 +155,13 @@ class TestPrintType:
 
         t = ShapedType(TypeKind.TENSOR, F32, (DynamicDim(), DynamicDim()))
         module = Module(name="test")
-        module.add_value(Value(name="%M", type=INDEX))
-        module.add_value(Value(name="%K", type=INDEX))
+        module.add_value(Value(name="M", type=INDEX))
+        module.add_value(Value(name="K", type=INDEX))
         context = TypePrintContext(
             dim_bindings={0: 0, 1: 1},
             module=module,
         )
         assert print_type(t, context) == "tensor<[%M]x[%K]xf32>"
-
-    def test_ordinal_dim(self) -> None:
-        """Ordinal dims print as [#N]."""
-        from loom.format.text.printer import TypePrintContext
-
-        t = ShapedType(TypeKind.TENSOR, F32, (DynamicDim(),))
-        module = Module(name="test")
-        # Ordinal dim: -1 = #0.
-        context = TypePrintContext(dim_bindings={0: -1}, module=module)
-        assert print_type(t, context) == "tensor<[#0]xf32>"
-
-    def test_ordinal_dim_nonzero(self) -> None:
-        """Ordinal dim #1 prints correctly."""
-        from loom.format.text.printer import TypePrintContext
-
-        t = ShapedType(TypeKind.TENSOR, F32, (DynamicDim(),))
-        module = Module(name="test")
-        # Ordinal dim: -2 = #1.
-        context = TypePrintContext(dim_bindings={0: -2}, module=module)
-        assert print_type(t, context) == "tensor<[#1]xf32>"
 
     def test_encoding_with_alias(self) -> None:
         """Type with encoding prints the alias when available."""
@@ -279,7 +259,7 @@ class TestPrintBinaryOp:
     """Exercises: Ref, Keyword(','), Keyword(':'), TypeOf, SameType."""
 
     def test_basic(self) -> None:
-        module, [a, b, r] = _module_with(("%a", I32), ("%b", I32), ("%r", I32))
+        module, [a, b, r] = _module_with(("a", I32), ("b", I32), ("r", I32))
         op = Operation(name="test.addi", operands=[a, b], results=[r])
         assert _printer().print_operation(op, module) == "%r = test.addi %a, %b : i32"
 
@@ -288,7 +268,7 @@ class TestPrintUnaryOp:
     """Exercises: single Ref, TypeOf on result."""
 
     def test_basic(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(name="test.neg", operands=[x], results=[r])
         assert _printer().print_operation(op, module) == "%r = test.neg %x : f32"
 
@@ -297,7 +277,7 @@ class TestPrintCastOp:
     """Exercises: TypeOf on both input and result, Keyword('to')."""
 
     def test_basic(self) -> None:
-        module, [x, r] = _module_with(("%x", I32), ("%r", F32))
+        module, [x, r] = _module_with(("x", I32), ("r", F32))
         op = Operation(name="test.cast", operands=[x], results=[r])
         assert (
             _printer().print_operation(op, module) == "%r = test.cast %x : i32 to f32"
@@ -308,7 +288,7 @@ class TestPrintConvertOp:
     """Exercises: ResultType (bare result type, no parens)."""
 
     def test_scalar(self) -> None:
-        module, [x, r] = _module_with(("%x", I32), ("%r", F32))
+        module, [x, r] = _module_with(("x", I32), ("r", F32))
         op = Operation(name="test.convert", operands=[x], results=[r])
         assert (
             _printer().print_operation(op, module)
@@ -319,7 +299,7 @@ class TestPrintConvertOp:
         tile_i8 = ShapedType(
             TypeKind.TILE, ScalarType(ScalarTypeKind.I8), (StaticDim(4),)
         )
-        module, [x, r] = _module_with(("%x", tile_i8), ("%r", _tile_4xf32))
+        module, [x, r] = _module_with(("x", tile_i8), ("r", _tile_4xf32))
         op = Operation(name="test.convert", operands=[x], results=[r])
         assert (
             _printer().print_operation(op, module)
@@ -331,12 +311,12 @@ class TestPrintConstantOp:
     """Exercises: Attr (value before colon), CONSTANT_LIKE."""
 
     def test_integer(self) -> None:
-        module, [r] = _module_with(("%c42", I32))
+        module, [r] = _module_with(("c42", I32))
         op = Operation(name="test.constant", results=[r], attributes={"value": 42})
         assert _printer().print_operation(op, module) == "%c42 = test.constant 42 : i32"
 
     def test_float(self) -> None:
-        module, [r] = _module_with(("%pi", F32))
+        module, [r] = _module_with(("pi", F32))
         op = Operation(name="test.constant", results=[r], attributes={"value": 3.14})
         text = _printer().print_operation(op, module)
         assert text.startswith("%pi = test.constant 3.14")
@@ -347,7 +327,7 @@ class TestPrintComparisonOp:
     """Exercises: Attr (enum predicate printed as bare keyword)."""
 
     def test_basic(self) -> None:
-        module, [a, b, r] = _module_with(("%a", I32), ("%b", I32), ("%r", I32))
+        module, [a, b, r] = _module_with(("a", I32), ("b", I32), ("r", I32))
         op = Operation(
             name="test.cmp",
             operands=[a, b],
@@ -363,18 +343,18 @@ class TestPrintYield:
     """Exercises: Refs (variadic), TypesOf (variadic), TERMINATOR."""
 
     def test_single(self) -> None:
-        module, [a] = _module_with(("%a", F32))
+        module, [a] = _module_with(("a", F32))
         op = Operation(name="test.yield", operands=[a])
         assert _printer().print_operation(op, module) == "test.yield %a : f32"
 
     def test_multiple(self) -> None:
-        module, [a, b] = _module_with(("%a", F32), ("%b", I32))
+        module, [a, b] = _module_with(("a", F32), ("b", I32))
         op = Operation(name="test.yield", operands=[a, b])
         assert _printer().print_operation(op, module) == "test.yield %a, %b : f32, i32"
 
     def test_no_results_prefix(self) -> None:
         """Yield has no results, so no '= ' prefix."""
-        module, [a] = _module_with(("%a", F32))
+        module, [a] = _module_with(("a", F32))
         op = Operation(name="test.yield", operands=[a])
         text = _printer().print_operation(op, module)
         assert not text.startswith("%")
@@ -391,7 +371,7 @@ class TestPrintSlice:
 
     def test_all_static(self) -> None:
         module, [src, r] = _module_with(
-            ("%src", _tile_64x64xf16), ("%r", _tile_16x16xf16)
+            ("src", _tile_64x64xf16), ("r", _tile_16x16xf16)
         )
         op = Operation(
             name="test.slice",
@@ -407,7 +387,7 @@ class TestPrintSlice:
     def test_mixed_static_dynamic(self) -> None:
         sentinel = -(2**63)
         module, [src, off, r] = _module_with(
-            ("%src", _tile_64x64xf16), ("%off", INDEX), ("%r", _tile_16x16xf16)
+            ("src", _tile_64x64xf16), ("off", INDEX), ("r", _tile_16x16xf16)
         )
         op = Operation(
             name="test.slice",
@@ -426,10 +406,10 @@ class TestPrintTiedResult:
 
     def test_single_tied(self) -> None:
         module, [tile, tensor, off, result] = _module_with(
-            ("%tile", _tile_4xf32),
-            ("%tensor", _tensor_4xf32),
-            ("%off", INDEX),
-            ("%result", _tensor_4xf32),
+            ("tile", _tile_4xf32),
+            ("tensor", _tensor_4xf32),
+            ("off", INDEX),
+            ("result", _tensor_4xf32),
         )
         sentinel = -(2**63)
         op = Operation(
@@ -450,10 +430,10 @@ class TestPrintInvoke:
 
     def test_with_tie(self) -> None:
         module, [w, x, out1, out2] = _module_with(
-            ("%weights", _tile_4xf32),
-            ("%input", INDEX),
-            ("%output", _tile_4xf32),
-            ("%count", INDEX),
+            ("weights", _tile_4xf32),
+            ("input", INDEX),
+            ("output", _tile_4xf32),
+            ("count", INDEX),
         )
         op = Operation(
             name="test.invoke",
@@ -473,7 +453,7 @@ class TestPrintAttrDict:
     """Exercises: AttrDict for extra key-value attributes."""
 
     def test_dict_attrs(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -487,7 +467,7 @@ class TestPrintAttrDict:
         assert text.endswith(" : f32")
 
     def test_empty_dict(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -499,7 +479,7 @@ class TestPrintAttrDict:
         assert text == "%r = test.attrs %x : f32"
 
     def test_no_dict_attr(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(name="test.attrs", operands=[x], results=[r], attributes={})
         text = _printer().print_operation(op, module)
         assert "{" not in text
@@ -515,7 +495,7 @@ class TestStringEscaping:
     """String attributes must escape special characters for round-trip safety."""
 
     def test_quotes_escaped(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -526,7 +506,7 @@ class TestStringEscaping:
         assert r"has \"quotes\"" in text
 
     def test_backslash_escaped(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -537,7 +517,7 @@ class TestStringEscaping:
         assert r"C:\\Users\\test" in text
 
     def test_newline_escaped(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -548,7 +528,7 @@ class TestStringEscaping:
         assert r"line1\nline2" in text
 
     def test_tab_escaped(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -568,10 +548,10 @@ class TestRegionPrinting:
     """Regions must print inline with correct indentation and separators."""
 
     def test_single_region_with_body(self) -> None:
-        module, [cond] = _module_with(("%cond", I1))
-        tv = module.add_value(Value(name="%tv", type=F32))
-        fv = module.add_value(Value(name="%fv", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        module, [cond] = _module_with(("cond", I1))
+        tv = module.add_value(Value(name="tv", type=F32))
+        fv = module.add_value(Value(name="fv", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         then_block = Block(
             ops=[Operation(name="test.yield", operands=[tv], results=[])]
         )
@@ -592,10 +572,10 @@ class TestRegionPrinting:
         assert "else" in text
 
     def test_two_regions_with_else_separator(self) -> None:
-        module, [cond] = _module_with(("%cond", I1))
-        tv = module.add_value(Value(name="%tv", type=F32))
-        fv = module.add_value(Value(name="%fv", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        module, [cond] = _module_with(("cond", I1))
+        tv = module.add_value(Value(name="tv", type=F32))
+        fv = module.add_value(Value(name="fv", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         then_block = Block(
             ops=[Operation(name="test.yield", operands=[tv], results=[])]
         )
@@ -620,9 +600,9 @@ class TestRegionPrinting:
         """test.map: region appears before -> (type) in the format."""
         module = Module(name="test")
         tile_type = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
-        input_id = module.add_value(Value(name="%input", type=tile_type))
-        elem_id = module.add_value(Value(name="%elem", type=F32))
-        r = module.add_value(Value(name="%r", type=tile_type))
+        input_id = module.add_value(Value(name="input", type=tile_type))
+        elem_id = module.add_value(Value(name="elem", type=F32))
+        r = module.add_value(Value(name="r", type=tile_type))
         body_block = Block(
             arg_ids=[elem_id],
             ops=[Operation(name="test.yield", operands=[elem_id], results=[])],
@@ -662,7 +642,7 @@ class TestAutoNaming:
         assert ": i32" in text
 
     def test_mixed_named_unnamed(self) -> None:
-        module, [a] = _module_with(("%x", I32))
+        module, [a] = _module_with(("x", I32))
         b_id = module.add_value(Value(name="", type=I32))
         r_id = module.add_value(Value(name="", type=I32))
         op = Operation(name="test.addi", operands=[a, b_id], results=[r_id])
@@ -674,7 +654,7 @@ class TestAutoNaming:
     def test_user_and_auto_names_coexist(self) -> None:
         # User name (identifier) and auto name (digit-only) are in
         # separate syntactic namespaces — no collision possible.
-        module, [user_named] = _module_with(("%x", I32))
+        module, [user_named] = _module_with(("x", I32))
         auto_id = module.add_value(Value(name="", type=I32))
         r_id = module.add_value(Value(name="", type=I32))
         op = Operation(name="test.addi", operands=[user_named, auto_id], results=[r_id])
@@ -691,21 +671,21 @@ class TestAutoNaming:
 
 class TestSpacing:
     def test_no_space_before_comma(self) -> None:
-        module, [a, b, r] = _module_with(("%a", I32), ("%b", I32), ("%r", I32))
+        module, [a, b, r] = _module_with(("a", I32), ("b", I32), ("r", I32))
         op = Operation(name="test.addi", operands=[a, b], results=[r])
         text = _printer().print_operation(op, module)
         # Should be "%a, %b" not "%a , %b".
         assert "%a, %b" in text
 
     def test_space_before_colon(self) -> None:
-        module, [x, r] = _module_with(("%x", F32), ("%r", F32))
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
         op = Operation(name="test.neg", operands=[x], results=[r])
         text = _printer().print_operation(op, module)
         assert "%x : f32" in text
 
     def test_index_list_glues(self) -> None:
         module, [src, r] = _module_with(
-            ("%src", _tile_64x64xf16), ("%r", _tile_16x16xf16)
+            ("src", _tile_64x64xf16), ("r", _tile_16x16xf16)
         )
         op = Operation(
             name="test.slice",
@@ -720,7 +700,7 @@ class TestSpacing:
 
     def test_parens_glue(self) -> None:
         module, [w, x, out] = _module_with(
-            ("%w", _tile_4xf32), ("%x", INDEX), ("%out", _tile_4xf32)
+            ("w", _tile_4xf32), ("x", INDEX), ("out", _tile_4xf32)
         )
         op = Operation(
             name="test.invoke",
@@ -734,21 +714,21 @@ class TestSpacing:
         # ')' should glue to last operand.
         assert "%x)" in text
 
-    def test_deflate_ordinal_dim(self) -> None:
-        """test.deflate prints result ordinal dim as [#1]."""
+    def test_deflate_result_dim_reference(self) -> None:
+        """test.deflate prints result dim referencing another result by name."""
         tensor_dyn = ShapedType(TypeKind.TENSOR, F32, (DynamicDim(),))
         module = Module(name="test")
         # Input: tensor<[%M]xf32> — has a named dynamic dim.
-        m_id = module.add_value(Value(name="%M", type=INDEX))
+        m_id = module.add_value(Value(name="M", type=INDEX))
         input_id = module.add_value(
-            Value(name="%input", type=tensor_dyn, dim_bindings={0: m_id})
+            Value(name="input", type=tensor_dyn, dim_bindings={0: m_id})
         )
-        # Result 0: tensor<[#1]xf32> — ordinal dim referencing result 1.
+        # Create %length first so we can reference it in %output's dim.
+        length_id = module.add_value(Value(name="length", type=INDEX))
+        # Result 0: tensor<[%length]xf32> — dim references %length directly.
         output_id = module.add_value(
-            Value(name="%output", type=tensor_dyn, dim_bindings={0: -2})
+            Value(name="output", type=tensor_dyn, dim_bindings={0: length_id})
         )
-        # Result 1: index.
-        length_id = module.add_value(Value(name="%length", type=INDEX))
         op = Operation(
             name="test.deflate",
             operands=[input_id],
@@ -757,12 +737,12 @@ class TestSpacing:
         text = _printer().print_operation(op, module)
         assert text == (
             "%output, %length = test.deflate %input"
-            " : tensor<[%M]xf32> -> (tensor<[#1]xf32>, index)"
+            " : tensor<[%M]xf32> -> (tensor<[%length]xf32>, index)"
         )
 
     def test_result_type_list_always_parens(self) -> None:
         module, [src, r] = _module_with(
-            ("%src", _tile_64x64xf16), ("%r", _tile_16x16xf16)
+            ("src", _tile_64x64xf16), ("r", _tile_16x16xf16)
         )
         op = Operation(
             name="test.slice",
@@ -787,11 +767,11 @@ class TestEncodingTypePrinting:
     def test_dynamic_encoding_with_context(self) -> None:
         """ShapedType with DynamicEncoding + encoding_binding prints %name."""
         module = Module(name="test")
-        enc_id = module.add_value(Value(name="%enc", type=ENCODING_TYPE))
+        enc_id = module.add_value(Value(name="enc", type=ENCODING_TYPE))
         tile_type = ShapedType(
             TypeKind.TILE, F32, (StaticDim(4),), encoding=DynamicEncoding()
         )
-        module.add_value(Value(name="%t", type=tile_type, encoding_binding=enc_id))
+        module.add_value(Value(name="t", type=tile_type, encoding_binding=enc_id))
         from loom.format.text.printer import TypePrintContext
 
         context = TypePrintContext(
@@ -811,18 +791,18 @@ class TestEncodingTypePrinting:
     def test_dynamic_encoding_in_operation(self) -> None:
         """Full op printing with dynamic encoding on a value type."""
         module = Module(name="test")
-        enc_id = module.add_value(Value(name="%enc", type=ENCODING_TYPE))
+        enc_id = module.add_value(Value(name="enc", type=ENCODING_TYPE))
         tile_type = ShapedType(
             TypeKind.TILE, F32, (StaticDim(4),), encoding=DynamicEncoding()
         )
         lhs_id = module.add_value(
-            Value(name="%lhs", type=tile_type, encoding_binding=enc_id)
+            Value(name="lhs", type=tile_type, encoding_binding=enc_id)
         )
         rhs_id = module.add_value(
-            Value(name="%rhs", type=tile_type, encoding_binding=enc_id)
+            Value(name="rhs", type=tile_type, encoding_binding=enc_id)
         )
         result_id = module.add_value(
-            Value(name="%result", type=tile_type, encoding_binding=enc_id)
+            Value(name="result", type=tile_type, encoding_binding=enc_id)
         )
         op = Operation(
             name="test.addi",
@@ -854,7 +834,7 @@ class TestPoolTypePrinting:
         from loom.format.text.printer import TypePrintContext
 
         module = Module(name="test")
-        module.add_value(Value(name="%BS", type=INDEX))
+        module.add_value(Value(name="BS", type=INDEX))
         context = TypePrintContext(
             dim_bindings={0: 0},
             module=module,
@@ -864,13 +844,13 @@ class TestPoolTypePrinting:
     def test_pool_in_operation(self) -> None:
         """Pool type prints correctly as an op operand type."""
         module = Module(name="test")
-        bs_id = module.add_value(Value(name="%BS", type=INDEX))
+        bs_id = module.add_value(Value(name="BS", type=INDEX))
         pool_type = PoolType(DynamicDim())
         pool_id = module.add_value(
-            Value(name="%pool", type=pool_type, dim_bindings={0: bs_id})
+            Value(name="pool", type=pool_type, dim_bindings={0: bs_id})
         )
         result_id = module.add_value(
-            Value(name="%result", type=pool_type, dim_bindings={0: bs_id})
+            Value(name="result", type=pool_type, dim_bindings={0: bs_id})
         )
         op = Operation(
             name="test.attrs",
@@ -915,10 +895,10 @@ class TestPrinterFlags:
 
     def test_use_aliases_false_in_printer(self) -> None:
         """Printer with use_aliases=False expands aliases in op output."""
-        module, [x_id] = _module_with(("%x", I8))
+        module, [x_id] = _module_with(("x", I8))
         enc = EncodingInstance(name="q8_0", alias="#enc", params=(("block", "32"),))
         enc_tile = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
-        r_id = module.add_value(Value(name="%r", type=enc_tile))
+        r_id = module.add_value(Value(name="r", type=enc_tile))
         op = Operation(
             name="test.neg",
             operands=[x_id],

@@ -22,9 +22,9 @@ Value references:
 
     b = IRBuilder()
     ...
-    tensor = b.value("%tensor", tensor_t)
-    tile = b.value("%tile", tile_t)
-    off = b.value("%off", INDEX)
+    tensor = b.value("tensor", tensor_t)
+    tile = b.value("tile", tile_t)
+    off = b.value("off", INDEX)
 
     # Natural indexing: tensor[off] captures value + offsets
     result = b.tensor.update(source=tile, target=tensor[off])

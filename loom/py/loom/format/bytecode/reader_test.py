@@ -81,7 +81,7 @@ def _make_func(
     if is_declaration:
         # func.decl: args are operands.
         operand_ids = [
-            module.add_value(Value(name=f"%{name}_arg{i}", type=at))
+            module.add_value(Value(name=f"{name}_arg{i}", type=at))
             for i, at in enumerate(arg_types)
         ]
         op = Operation(
@@ -94,7 +94,7 @@ def _make_func(
     else:
         # func.def: args are entry block arguments.
         arg_ids = [
-            module.add_value(Value(name=f"%{name}_arg{i}", type=at))
+            module.add_value(Value(name=f"{name}_arg{i}", type=at))
             for i, at in enumerate(arg_types)
         ]
         body_ops = ops or [
@@ -376,7 +376,7 @@ class TestTypeRoundTrips:
 class TestAttributeRoundTrips:
     def _roundtrip_attr(self, key: str, value: object) -> object:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
         op = Operation(name="test.op", results=[], attributes={key: value})
         yield_op = Operation(name="test.yield", operands=[x])
         block = Block(arg_ids=[x], ops=[op, yield_op])
@@ -464,7 +464,7 @@ class TestAttributeRoundTrips:
     # Multiple attributes on one op.
     def test_multiple_attrs(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
         op = Operation(
             name="test.op",
             results=[],
@@ -496,8 +496,8 @@ class TestAttributeRoundTrips:
 class TestIRStructure:
     def test_op_with_results(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         neg = Operation(name="test.neg", operands=[x], results=[r])
         yield_op = Operation(name="test.yield", operands=[r])
         block = Block(arg_ids=[x], ops=[neg, yield_op])
@@ -517,9 +517,9 @@ class TestIRStructure:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
         module = Module(name="test")
-        tile = module.add_value(Value(name="%tile", type=tile_t))
-        tensor = module.add_value(Value(name="%tensor", type=tensor_t))
-        result = module.add_value(Value(name="%r", type=tensor_t))
+        tile = module.add_value(Value(name="tile", type=tile_t))
+        tensor = module.add_value(Value(name="tensor", type=tensor_t))
+        result = module.add_value(Value(name="r", type=tensor_t))
         update = Operation(
             name="test.update",
             operands=[tile, tensor],
@@ -542,13 +542,13 @@ class TestIRStructure:
 
     def test_nested_region(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        e = module.add_value(Value(name="%e", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        e = module.add_value(Value(name="e", type=F32))
         inner_neg = Operation(name="test.neg", operands=[e], results=[e])
         inner_yield = Operation(name="test.yield", operands=[e])
         inner_block = Block(arg_ids=[e], ops=[inner_neg, inner_yield])
         inner_region = Region(blocks=[inner_block])
-        r = module.add_value(Value(name="%r", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         map_op = Operation(
             name="test.map", operands=[x], results=[r], regions=[inner_region]
         )
@@ -568,9 +568,9 @@ class TestIRStructure:
 
     def test_variadic_operands_no_results(self) -> None:
         module = Module(name="test")
-        a = module.add_value(Value(name="%a", type=F32))
-        b = module.add_value(Value(name="%b", type=I32))
-        c = module.add_value(Value(name="%c", type=INDEX))
+        a = module.add_value(Value(name="a", type=F32))
+        b = module.add_value(Value(name="b", type=I32))
+        c = module.add_value(Value(name="c", type=INDEX))
         yield_op = Operation(name="test.yield", operands=[a, b, c])
         block = Block(arg_ids=[a, b, c], ops=[yield_op])
         body = Region(blocks=[block])
@@ -586,12 +586,12 @@ class TestIRStructure:
 
     def test_multiple_blocks(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
         yield1 = Operation(name="test.yield", operands=[x])
         block1 = Block(arg_ids=[x], ops=[yield1])
-        y = module.add_value(Value(name="%y", type=F32))
+        y = module.add_value(Value(name="y", type=F32))
         yield2 = Operation(name="test.yield", operands=[y])
-        block2 = Block(label="^bb1", arg_ids=[y], ops=[yield2])
+        block2 = Block(label="bb1", arg_ids=[y], ops=[yield2])
         body = Region(blocks=[block1, block2])
         func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
         module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
@@ -603,7 +603,7 @@ class TestIRStructure:
 
     def test_value_names_preserved(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%weights", type=F32))
+        x = module.add_value(Value(name="weights", type=F32))
         yield_op = Operation(name="test.yield", operands=[x])
         block = Block(arg_ids=[x], ops=[yield_op])
         body = Region(blocks=[block])
@@ -614,12 +614,12 @@ class TestIRStructure:
         assert loaded_op is not None
         assert loaded_op.regions
         arg_id = loaded_op.regions[0].blocks[0].arg_ids[0]
-        assert loaded.values[arg_id].name == "%weights"
+        assert loaded.values[arg_id].name == "weights"
 
     def test_result_names_preserved(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        r = module.add_value(Value(name="%negated", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="negated", type=F32))
         neg = Operation(name="test.neg", operands=[x], results=[r])
         yield_op = Operation(name="test.yield", operands=[r])
         block = Block(arg_ids=[x], ops=[neg, yield_op])
@@ -632,7 +632,7 @@ class TestIRStructure:
         assert loaded_op.regions
         neg_loaded = loaded_op.regions[0].blocks[0].ops[0]
         result_id = neg_loaded.results[0]
-        assert loaded.values[result_id].name == "%negated"
+        assert loaded.values[result_id].name == "negated"
 
 
 # ============================================================================
@@ -830,8 +830,8 @@ class TestImportRoundTrips:
 class TestDictAttributeRoundTrips:
     def test_dict_with_int_values(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -855,8 +855,8 @@ class TestDictAttributeRoundTrips:
 
     def test_dict_with_string_values(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -880,8 +880,8 @@ class TestDictAttributeRoundTrips:
 
     def test_dict_with_mixed_values(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -906,8 +906,8 @@ class TestDictAttributeRoundTrips:
 
     def test_empty_dict(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         op = Operation(
             name="test.attrs",
             operands=[x],
@@ -944,7 +944,7 @@ class TestLocationRoundTrips:
             )
         )
         module.sources.append("model.loom")
-        x = module.add_value(Value(name="%x", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
         yield_op = Operation(
             name="test.yield",
             operands=[x],
@@ -971,7 +971,7 @@ class TestLocationRoundTrips:
         module = Module(name="test")
         loc_id = module.locations.add(OpaqueLocation(source_id=0, data=b"node_id=42"))
         module.sources.append("torch")
-        x = module.add_value(Value(name="%x", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
         yield_op = Operation(
             name="test.yield",
             operands=[x],

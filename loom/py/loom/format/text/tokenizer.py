@@ -420,9 +420,12 @@ class Tokenizer:
     # --- Individual token scanners ---
 
     def _scan_ssa_value(self, location: SourceLocation) -> Token:
-        """Scan %name or %digits."""
-        start = self._position
+        """Scan %name or %digits.
+
+        Token text is the bare name without the '%' sigil: %foo -> "foo".
+        """
         self._advance()  # skip %
+        name_start = self._position
         if self._char().isdigit():
             while self._char().isdigit():
                 self._advance()
@@ -433,47 +436,57 @@ class Tokenizer:
             raise ParseError(
                 "expected identifier or digit after '%'", location, self._filename
             )
-        text = self._source[start : self._position]
+        text = self._source[name_start : self._position]
         return self._make_token(TokenKind.SSA_VALUE, text, location)
 
     def _scan_symbol(self, location: SourceLocation) -> Token:
-        """Scan @name."""
-        start = self._position
+        """Scan @name.
+
+        Token text is the bare name without the '@' sigil: @foo -> "foo".
+        """
         self._advance()  # skip @
+        name_start = self._position
         if not _is_ident_start(self._char()):
             raise ParseError("expected identifier after '@'", location, self._filename)
         while _is_ident_continue_no_dot(self._char()):
             self._advance()
-        text = self._source[start : self._position]
+        text = self._source[name_start : self._position]
         return self._make_token(TokenKind.SYMBOL, text, location)
 
     def _scan_hash(self, location: SourceLocation) -> Token:
-        """Scan #digits (result ordinal) or #name (hash attr)."""
-        start = self._position
+        """Scan #digits (result ordinal) or #name (hash attr).
+
+        Token text is the bare name/digits without the '#' sigil:
+        #42 -> "42", #q8_0 -> "q8_0".
+        """
         self._advance()  # skip #
+        name_start = self._position
         if self._char().isdigit():
             while self._char().isdigit():
                 self._advance()
-            text = self._source[start : self._position]
+            text = self._source[name_start : self._position]
             return self._make_token(TokenKind.RESULT_ORDINAL, text, location)
         if _is_ident_start(self._char()):
             while _is_ident_continue_no_dot(self._char()):
                 self._advance()
-            text = self._source[start : self._position]
+            text = self._source[name_start : self._position]
             return self._make_token(TokenKind.HASH_ATTR, text, location)
         raise ParseError(
             "expected identifier or digit after '#'", location, self._filename
         )
 
     def _scan_block_label(self, location: SourceLocation) -> Token:
-        """Scan ^name."""
-        start = self._position
+        """Scan ^name.
+
+        Token text is the bare name without the '^' sigil: ^bb0 -> "bb0".
+        """
         self._advance()  # skip ^
+        name_start = self._position
         if not _is_ident_start(self._char()) and not self._char().isdigit():
             raise ParseError("expected identifier after '^'", location, self._filename)
         while _is_ident_continue_no_dot(self._char()):
             self._advance()
-        text = self._source[start : self._position]
+        text = self._source[name_start : self._position]
         return self._make_token(TokenKind.BLOCK_LABEL, text, location)
 
     def _scan_string(self, location: SourceLocation) -> Token:

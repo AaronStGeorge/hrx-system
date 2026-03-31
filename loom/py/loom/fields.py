@@ -357,9 +357,7 @@ class ResolvedFields:
                 return f"%arg{tied.operand_index}"
         else:
             return f"%arg{tied.operand_index}"
-        if not name.startswith("%"):
-            name = "%" + name
-        return name
+        return "%" + name
 
     # --- FuncArgs support for func-like ops ---
 

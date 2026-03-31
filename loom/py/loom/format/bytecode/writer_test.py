@@ -77,7 +77,7 @@ def _make_func_op(
 
     if is_declaration:
         operand_ids = [
-            module.add_value(Value(name=f"%arg{i}", type=at))
+            module.add_value(Value(name=f"arg{i}", type=at))
             for i, at in enumerate(arg_types)
         ]
         func_op = Operation(
@@ -88,7 +88,7 @@ def _make_func_op(
         )
     else:
         arg_ids = [
-            module.add_value(Value(name=f"%arg{i}", type=at))
+            module.add_value(Value(name=f"arg{i}", type=at))
             for i, at in enumerate(arg_types)
         ]
         ops = body_ops or []
@@ -234,7 +234,7 @@ class TestStringsSection:
     def test_value_names_interned(self) -> None:
         module = _make_func_module()
         data = write_module(module)
-        assert b"%arg0" in data
+        assert b"arg0" in data
 
 
 # ============================================================================
@@ -248,7 +248,7 @@ class TestTypesSection:
         from loom.format.bytecode.reader import read_module as read
 
         module = Module(name="test")
-        vid = module.add_value(Value(name="%v", type=ir_type))
+        vid = module.add_value(Value(name="v", type=ir_type))
         yield_op = Operation(name="test.yield", operands=[vid])
         block = Block(arg_ids=[vid], ops=[yield_op])
         body = Region(blocks=[block])
@@ -389,7 +389,7 @@ class TestEncodingsSection:
         module = Module(name="test")
         module.add_encoding(enc)
         enc_type = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
-        vid = module.add_value(Value(name="%v", type=enc_type))
+        vid = module.add_value(Value(name="v", type=enc_type))
         yield_op = Operation(name="test.yield", operands=[vid])
         block = Block(arg_ids=[vid], ops=[yield_op])
         body = Region(blocks=[block])
@@ -411,8 +411,8 @@ class TestEncodingsSection:
         module.add_encoding(enc2)
         t1 = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc1)
         t2 = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc2)
-        v1 = module.add_value(Value(name="%a", type=t1))
-        v2 = module.add_value(Value(name="%b", type=t2))
+        v1 = module.add_value(Value(name="a", type=t1))
+        v2 = module.add_value(Value(name="b", type=t2))
         yield_op = Operation(name="test.yield", operands=[v1, v2])
         block = Block(arg_ids=[v1, v2], ops=[yield_op])
         body = Region(blocks=[block])
@@ -432,7 +432,7 @@ class TestEncodingsSection:
         module = Module(name="test")
         module.add_encoding(enc)
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
-        v = module.add_value(Value(name="%v", type=t))
+        v = module.add_value(Value(name="v", type=t))
         block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
         module.add_symbol(
             Symbol(
@@ -457,7 +457,7 @@ class TestEncodingsSection:
         module = Module(name="test")
         module.add_encoding(enc)
         t = ShapedType(TypeKind.TILE, F32, (StaticDim(4), StaticDim(4)), encoding=enc)
-        v = module.add_value(Value(name="%v", type=t))
+        v = module.add_value(Value(name="v", type=t))
         block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
         module.add_symbol(
             Symbol(
@@ -485,7 +485,7 @@ class TestEncodingsSection:
         module = Module(name="test")
         module.add_encoding(enc)
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(512),), encoding=enc)
-        v = module.add_value(Value(name="%v", type=t))
+        v = module.add_value(Value(name="v", type=t))
         block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
         module.add_symbol(
             Symbol(
@@ -514,7 +514,7 @@ class TestEncodingsSection:
         module = Module(name="test")
         module.add_encoding(enc)
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(128),), encoding=enc)
-        v = module.add_value(Value(name="%v", type=t))
+        v = module.add_value(Value(name="v", type=t))
         block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
         module.add_symbol(
             Symbol(
@@ -541,7 +541,7 @@ class TestEncodingsSection:
         module = Module(name="test")
         module.add_encoding(enc)
         t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),), encoding=enc)
-        v = module.add_value(Value(name="%v", type=t))
+        v = module.add_value(Value(name="v", type=t))
         block = Block(arg_ids=[v], ops=[Operation(name="test.yield", operands=[v])])
         module.add_symbol(
             Symbol(
@@ -573,8 +573,8 @@ class TestOpsSection:
 
     def test_multiple_op_kinds(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        r = module.add_value(Value(name="%r", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
         neg = Operation(name="test.neg", operands=[x], results=[r])
         yield_op = Operation(name="test.yield", operands=[r])
         block = Block(arg_ids=[x], ops=[neg, yield_op])
@@ -597,7 +597,7 @@ class TestAttributeValues:
         from loom.format.bytecode.reader import read_module as read
 
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
         op = Operation(name="test.constant", results=[], attributes={key: value})
         yield_op = Operation(name="test.yield", operands=[x])
         block = Block(arg_ids=[x], ops=[op, yield_op])
@@ -679,9 +679,9 @@ class TestOpPatterns:
 
     def test_binary_op(self) -> None:
         module = Module(name="test")
-        a = module.add_value(Value(name="%a", type=I32))
-        b = module.add_value(Value(name="%b", type=I32))
-        r = module.add_value(Value(name="%r", type=I32))
+        a = module.add_value(Value(name="a", type=I32))
+        b = module.add_value(Value(name="b", type=I32))
+        r = module.add_value(Value(name="r", type=I32))
         add = Operation(name="test.addi", operands=[a, b], results=[r])
         yield_op = Operation(name="test.yield", operands=[r])
         block = Block(arg_ids=[a, b], ops=[add, yield_op])
@@ -701,9 +701,9 @@ class TestOpPatterns:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
         module = Module(name="test")
-        tile = module.add_value(Value(name="%tile", type=tile_t))
-        tensor = module.add_value(Value(name="%tensor", type=tensor_t))
-        result = module.add_value(Value(name="%r", type=tensor_t))
+        tile = module.add_value(Value(name="tile", type=tile_t))
+        tensor = module.add_value(Value(name="tensor", type=tensor_t))
+        result = module.add_value(Value(name="r", type=tensor_t))
         update = Operation(
             name="test.update",
             operands=[tile, tensor],
@@ -729,13 +729,13 @@ class TestOpPatterns:
         tensor_dyn = ShapedType(TypeKind.TENSOR, F32, (DynamicDim(),))
         module = Module(name="test")
         input_id = module.add_value(
-            Value(name="%input", type=tensor_dyn, dim_bindings={0: 0})
+            Value(name="input", type=tensor_dyn, dim_bindings={0: 0})
         )
         # Result with ordinal dim: tensor<[#1]xf32> — ordinal #1 = -2.
         output_id = module.add_value(
-            Value(name="%output", type=tensor_dyn, dim_bindings={0: -2})
+            Value(name="output", type=tensor_dyn, dim_bindings={0: -2})
         )
-        length_id = module.add_value(Value(name="%length", type=INDEX))
+        length_id = module.add_value(Value(name="length", type=INDEX))
         deflate_op = Operation(
             name="test.deflate",
             operands=[input_id],
@@ -759,13 +759,13 @@ class TestOpPatterns:
 
     def test_nested_region(self) -> None:
         module = Module(name="test")
-        x = module.add_value(Value(name="%x", type=F32))
-        e = module.add_value(Value(name="%e", type=F32))
+        x = module.add_value(Value(name="x", type=F32))
+        e = module.add_value(Value(name="e", type=F32))
         neg = Operation(name="test.neg", operands=[e], results=[e])
         inner_yield = Operation(name="test.yield", operands=[e])
         inner_block = Block(arg_ids=[e], ops=[neg, inner_yield])
         inner_region = Region(blocks=[inner_block])
-        map_result = module.add_value(Value(name="%r", type=F32))
+        map_result = module.add_value(Value(name="r", type=F32))
         map_op = Operation(
             name="test.map", operands=[x], results=[map_result], regions=[inner_region]
         )
@@ -786,8 +786,8 @@ class TestOpPatterns:
 
     def test_no_results_op(self) -> None:
         module = Module(name="test")
-        a = module.add_value(Value(name="%a", type=F32))
-        b = module.add_value(Value(name="%b", type=I32))
+        a = module.add_value(Value(name="a", type=F32))
+        b = module.add_value(Value(name="b", type=I32))
         yield_op = Operation(name="test.yield", operands=[a, b])
         block = Block(arg_ids=[a, b], ops=[yield_op])
         body = Region(blocks=[block])
@@ -825,7 +825,7 @@ class TestOpPatterns:
 
         module = Module(name="test")
         for fn_name in ["f1", "f2", "f3"]:
-            vid = module.add_value(Value(name=f"%x_{fn_name}", type=F32))
+            vid = module.add_value(Value(name=f"x_{fn_name}", type=F32))
             yield_op = Operation(name="test.yield", operands=[vid])
             block = Block(arg_ids=[vid], ops=[yield_op])
             body = Region(blocks=[block])
@@ -907,25 +907,25 @@ class TestPredicateBytecodeRoundTrip:
             Predicate(
                 kind="mul",
                 args=(
-                    PredicateArg(tag="value", value="%M"),
+                    PredicateArg(tag="value", value="M"),
                     PredicateArg(tag="const", value=16),
                 ),
             ),
             Predicate(
                 kind="lt",
                 args=(
-                    PredicateArg(tag="value", value="%K"),
+                    PredicateArg(tag="value", value="K"),
                     PredicateArg(tag="const", value=1024),
                 ),
             ),
             Predicate(
                 kind="pow2",
-                args=(PredicateArg(tag="value", value="%N"),),
+                args=(PredicateArg(tag="value", value="N"),),
             ),
             Predicate(
                 kind="range",
                 args=(
-                    PredicateArg(tag="value", value="%M"),
+                    PredicateArg(tag="value", value="M"),
                     PredicateArg(tag="const", value=32),
                     PredicateArg(tag="const", value=512),
                 ),
@@ -934,7 +934,7 @@ class TestPredicateBytecodeRoundTrip:
                 kind="eq",
                 args=(
                     PredicateArg(tag="ordinal", value=1),
-                    PredicateArg(tag="value", value="%M"),
+                    PredicateArg(tag="value", value="M"),
                 ),
             ),
         ]
@@ -961,7 +961,7 @@ class TestPredicateBytecodeRoundTrip:
         assert loaded_preds[0].kind == "mul"
         assert len(loaded_preds[0].args) == 2
         assert loaded_preds[0].args[0].tag == "value"
-        assert loaded_preds[0].args[0].value == "%M"
+        assert loaded_preds[0].args[0].value == "M"
         assert loaded_preds[0].args[1].tag == "const"
         assert loaded_preds[0].args[1].value == 16
 
@@ -1111,7 +1111,7 @@ class TestImportExportBytecodeRoundTrip:
 
         module = Module(name="test")
         # Private function.
-        vid = module.add_value(Value(name="%x", type=F32))
+        vid = module.add_value(Value(name="x", type=F32))
         body = Region(
             blocks=[
                 Block(arg_ids=[vid], ops=[Operation(name="test.yield", operands=[vid])])
@@ -1124,7 +1124,7 @@ class TestImportExportBytecodeRoundTrip:
             Symbol(name="helper", kind=SymbolKind.FUNC_DEF, flags=0, op=helper_op)
         )
         # Public function.
-        vid2 = module.add_value(Value(name="%y", type=F32))
+        vid2 = module.add_value(Value(name="y", type=F32))
         body2 = Region(
             blocks=[
                 Block(
@@ -1178,7 +1178,7 @@ class TestImportExportBytecodeRoundTrip:
             )
         )
         # Private.
-        vid = module.add_value(Value(name="%x", type=F32))
+        vid = module.add_value(Value(name="x", type=F32))
         helper_op = Operation(
             name="func.def",
             attributes={"callee": "helper"},
@@ -1197,7 +1197,7 @@ class TestImportExportBytecodeRoundTrip:
             Symbol(name="helper", kind=SymbolKind.FUNC_DEF, flags=0, op=helper_op)
         )
         # Export.
-        vid2 = module.add_value(Value(name="%y", type=F32))
+        vid2 = module.add_value(Value(name="y", type=F32))
         entry_op = Operation(
             name="func.def",
             attributes={"callee": "entry", "visibility": "public"},

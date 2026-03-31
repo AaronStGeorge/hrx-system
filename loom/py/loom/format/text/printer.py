@@ -19,8 +19,9 @@ Canonical formatting rules:
   - Result types always use parens: -> (type).
 
 Value naming:
-  - User-assigned names (identifiers: %x, %result) are preserved exactly.
-  - Unnamed values get auto-names using their value ID: %0, %1, %2.
+  - Value.name stores the bare name without sigil ("x", not "%x").
+  - The printer adds the '%' sigil when emitting: "x" -> %x.
+  - Unnamed values (name == "") get auto-names using their value ID: %0, %1, %2.
   - Digit-only names and identifier names occupy separate syntactic
     namespaces, so no collision avoidance is needed.
   - Stable: same IR always produces identical output.
@@ -48,6 +49,7 @@ from loom.assembly import (
     Refs,
     ResultType,
     ResultTypeList,
+    Scope,
     SymbolRef,
     TypeOf,
     TypesOf,
@@ -124,17 +126,11 @@ class TypePrintContext:
     def dim_name(self, position: int) -> str | None:
         """Get the name for a dynamic dim at the given position.
 
-        For SSA value dims (value_id >= 0), returns %name.
-        For result ordinal dims (value_id < 0), returns #N where
-        the ordinal is decoded from the negative encoding:
-        -1 = #0, -2 = #1, etc.
+        Returns %name if a binding is present, or None.
         """
         value_id = self._dim_bindings.get(position)
         if value_id is None:
             return None
-        if value_id < 0:
-            ordinal = -value_id - 1
-            return f"#{ordinal}"
         return resolve_value_name(self._module, value_id)
 
     def encoding_binding_name(self) -> str | None:
@@ -403,9 +399,9 @@ class TokenStream:
 
 
 def resolve_value_name(module: Module, value_id: int) -> str:
-    """Returns the SSA name for a value.
+    """Returns the SSA name for a value with '%' sigil.
 
-    User-assigned names (identifiers) are returned with % prefix.
+    User-assigned names are returned with % prefix added.
     Unnamed values get %N where N is the value ID. These occupy
     separate syntactic namespaces (identifiers vs digit-only), so
     no collision is possible.
@@ -413,7 +409,7 @@ def resolve_value_name(module: Module, value_id: int) -> str:
     if value_id < len(module.values):
         name: str = module.values[value_id].name
         if name:
-            return name if name.startswith("%") else "%" + name
+            return "%" + name
     return f"%{value_id}"
 
 
@@ -462,10 +458,7 @@ def _format_predicate_arg(arg: PredicateArg) -> str:
     """Format a single predicate argument."""
     match arg.tag:
         case "value":
-            name = arg.value
-            if not isinstance(name, str):
-                return f"%{name}"
-            return name if name.startswith("%") else f"%{name}"
+            return f"%{arg.value}"
         case "ordinal":
             return f"#{arg.value}"
         case "const":
@@ -644,7 +637,7 @@ class Printer:
                         arg_type = print_type(module.values[arg_id].type)
                         args.append(f"{name}: {arg_type}")
                     arg_strs = "(" + ", ".join(args) + ")"
-                self._emit(f"{block.label}{arg_strs}:")
+                self._emit(f"^{block.label}{arg_strs}:")
             for op in block.ops:
                 if not op.is_dead:
                     self._print_op(op, module)
@@ -798,10 +791,7 @@ class Printer:
                     covered_attrs.add(name)
                     value = fields.attr(name)
                     if value is not None:
-                        symbol_name = str(value)
-                        if not symbol_name.startswith("@"):
-                            symbol_name = "@" + symbol_name
-                        stream.emit(symbol_name)
+                        stream.emit("@" + str(value))
 
                 case TypeOf(field=name):
                     vid = fields.value_id(name)
@@ -822,7 +812,7 @@ class Printer:
 
                 case ResultTypeList(field=name):
                     assert isinstance(fields, ResolvedFields)
-                    stream.emit(self._format_result_types(fields, name))
+                    stream.emit(self._format_result_types(fields, name, op_decl))
 
                 case Keyword(text=text):
                     stream.emit(text)
@@ -885,9 +875,7 @@ class Printer:
                         type_str = self._print_value_type(arg_value_id, module)
                         arg_name = arg_names[i] if i < len(arg_names) else ""
                         if arg_name:
-                            if not arg_name.startswith("%"):
-                                arg_name = "%" + arg_name
-                            arg_strs.append(f"{arg_name}: {type_str}")
+                            arg_strs.append(f"%{arg_name}: {type_str}")
                         else:
                             arg_strs.append(type_str)
                     stream.emit("(" + ", ".join(arg_strs) + ")", glue=True)
@@ -911,6 +899,17 @@ class Printer:
                             print_regions,
                         )
 
+                case Scope(elements=inner):
+                    stream = self._walk_format_inline(
+                        inner,
+                        op_decl,
+                        fields,
+                        module,
+                        stream,
+                        covered_attrs,
+                        print_regions,
+                    )
+
                 case Flags(field=name):
                     covered_attrs.add(name)
                     value = fields.attr(name)
@@ -930,7 +929,9 @@ class Printer:
 
     # --- Formatting helpers ---
 
-    def _format_result_types(self, fields: ResolvedFields, name: str) -> str:
+    def _format_result_types(
+        self, fields: ResolvedFields, name: str, op_decl: Op
+    ) -> str:
         """Format result types: (type) or (%operand as type, type).
 
         Always uses parens. Reads tied results from the operation.
@@ -952,6 +953,7 @@ class Printer:
 
         for result_id in result_ids:
             type_str = self._print_value_type(result_id, fields._module)
+            value = fields._module.values[result_id]
 
             # Find this result's position in the op's result list.
             try:
@@ -963,6 +965,17 @@ class Printer:
                 tied = tied_map[result_position]
                 operand_name = fields.operand_name_for_tied(tied)
                 parts.append(f"{operand_name} as {type_str}")
+            elif value.name:
+                # Named result: %name: type.
+                # Omit the name if it matches the LHS result name (to avoid
+                # redundancy in func.call and other body ops).
+                # Symbol-defining ops have no LHS results in the printed format,
+                # so we always print the name there.
+                is_symbol = _is_symbol_define(op_decl)
+                if is_symbol:
+                    parts.append(f"%{value.name}: {type_str}")
+                else:
+                    parts.append(type_str)
             else:
                 parts.append(type_str)
 

@@ -41,27 +41,27 @@ def _builder() -> IRBuilder:
 class TestValueRef:
     def test_create(self) -> None:
         b = _builder()
-        v = b.value("%x", F32)
+        v = b.value("x", F32)
         assert isinstance(v, ValueRef)
         assert v.id == 0
-        assert v.name == "%x"
+        assert v.name == "x"
         assert v.type == F32
 
     def test_repr(self) -> None:
         b = _builder()
-        v = b.value("%x", F32)
-        assert "%x" in repr(v)
+        v = b.value("x", F32)
+        assert "x" in repr(v)
 
     def test_int_conversion(self) -> None:
         b = _builder()
-        v = b.value("%x", F32)
+        v = b.value("x", F32)
         assert int(v) == 0
 
 
 class TestIndexedValue:
     def test_single_static(self) -> None:
         b = _builder()
-        tensor = b.value("%t", ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),)))
+        tensor = b.value("t", ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),)))
         indexed = tensor[0]
         assert isinstance(indexed, IndexedValue)
         base, static, dynamic = indexed.decompose()
@@ -71,8 +71,8 @@ class TestIndexedValue:
 
     def test_single_dynamic(self) -> None:
         b = _builder()
-        tensor = b.value("%t", ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),)))
-        off = b.value("%off", INDEX)
+        tensor = b.value("t", ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),)))
+        off = b.value("off", INDEX)
         indexed = tensor[off]
         base, static, dynamic = indexed.decompose()
         assert base == tensor.id
@@ -83,9 +83,9 @@ class TestIndexedValue:
     def test_mixed(self) -> None:
         b = _builder()
         tile = b.value(
-            "%t", ShapedType(TypeKind.TILE, F32, (StaticDim(64), StaticDim(64)))
+            "t", ShapedType(TypeKind.TILE, F32, (StaticDim(64), StaticDim(64)))
         )
-        off = b.value("%off", INDEX)
+        off = b.value("off", INDEX)
         indexed = tile[0, off]
         base, static, dynamic = indexed.decompose()
         sentinel = -(2**63)
@@ -94,7 +94,7 @@ class TestIndexedValue:
 
     def test_invalid_index_type(self) -> None:
         b = _builder()
-        t = b.value("%t", F32)
+        t = b.value("t", F32)
         indexed = t["bad"]
         with pytest.raises(TypeError, match="int.*or ValueRef"):
             indexed.decompose()
@@ -103,7 +103,7 @@ class TestIndexedValue:
 class TestTiedResultSpec:
     def test_tied_function(self) -> None:
         b = _builder()
-        v = b.value("%x", F32)
+        v = b.value("x", F32)
         spec = tied(v, I32)
         assert isinstance(spec, TiedResultSpec)
         assert spec.operand_id == v.id
@@ -111,7 +111,7 @@ class TestTiedResultSpec:
 
     def test_as_type_method(self) -> None:
         b = _builder()
-        v = b.value("%x", F32)
+        v = b.value("x", F32)
         spec = v.as_type(I32)
         assert isinstance(spec, TiedResultSpec)
         assert spec.operand_id == v.id
@@ -126,16 +126,16 @@ class TestTiedResultSpec:
 class TestBuild:
     def test_binary_op(self) -> None:
         b = _builder()
-        a = b.value("%a", I32)
-        c = b.value("%b", I32)
-        result = b.build("test.addi", [a, c], results=[I32], result_names=["%r"])
+        a = b.value("a", I32)
+        c = b.value("b", I32)
+        result = b.build("test.addi", [a, c], results=[I32], result_names=["r"])
         assert isinstance(result, ValueRef)
-        assert result.name == "%r"
+        assert result.name == "r"
         assert result.type == I32
 
     def test_unary_op(self) -> None:
         b = _builder()
-        x = b.value("%x", F32)
+        x = b.value("x", F32)
         result = b.build("test.neg", [x], results=[F32])
         assert isinstance(result, ValueRef)
         assert result.type == F32
@@ -146,42 +146,42 @@ class TestBuild:
             "test.constant",
             [],
             results=[I32],
-            result_names=["%c42"],
+            result_names=["c42"],
             attributes={"value": 42},
         )
         assert isinstance(result, ValueRef)
-        assert result.name == "%c42"
+        assert result.name == "c42"
 
     def test_no_results(self) -> None:
         b = _builder()
-        a = b.value("%a", F32)
+        a = b.value("a", F32)
         result = b.build("test.yield", [a])
         assert result is None
 
     def test_multi_result(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         b = _builder()
-        w = b.value("%weights", tile_t)
-        x = b.value("%input", INDEX)
+        w = b.value("weights", tile_t)
+        x = b.value("input", INDEX)
         results = b.build(
             "test.invoke",
             [w, x],
             results=[tile_t, INDEX],
-            result_names=["%out", "%count"],
+            result_names=["out", "count"],
             attributes={"callee": "compute"},
         )
         assert isinstance(results, list)
         assert len(results) == 2
-        assert results[0].name == "%out"
-        assert results[1].name == "%count"
+        assert results[0].name == "out"
+        assert results[1].name == "count"
 
     def test_tied_result_with_spec(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
         b = _builder()
-        tile = b.value("%tile", tile_t)
-        tensor = b.value("%tensor", tensor_t)
-        off = b.value("%off", INDEX)
+        tile = b.value("tile", tile_t)
+        tensor = b.value("tensor", tensor_t)
+        off = b.value("off", INDEX)
         sentinel = -(2**63)
         result = b.build(
             "test.update",
@@ -196,9 +196,9 @@ class TestBuild:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
         b = _builder()
-        tile = b.value("%tile", tile_t)
-        tensor = b.value("%tensor", tensor_t)
-        off = b.value("%off", INDEX)
+        tile = b.value("tile", tile_t)
+        tensor = b.value("tensor", tensor_t)
+        off = b.value("off", INDEX)
         sentinel = -(2**63)
         result = b.build(
             "test.update",
@@ -212,13 +212,13 @@ class TestBuild:
         """func.call-like: some results tied, some fresh."""
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         b = _builder()
-        weights = b.value("%weights", tile_t)
-        input_val = b.value("%input", INDEX)
+        weights = b.value("weights", tile_t)
+        input_val = b.value("input", INDEX)
         results = b.build(
             "test.invoke",
             [weights, input_val],
             results=[tied(weights, tile_t), INDEX],
-            result_names=["%out", "%count"],
+            result_names=["out", "count"],
             attributes={"callee": "compute"},
         )
         assert isinstance(results, list)
@@ -234,8 +234,8 @@ class TestBuild:
 
     def test_auto_named_results(self) -> None:
         b = _builder()
-        a = b.value("%a", I32)
-        c = b.value("%b", I32)
+        a = b.value("a", I32)
+        c = b.value("b", I32)
         result = b.build("test.addi", [a, c], results=[I32])
         assert isinstance(result, ValueRef)
         assert result.name == ""  # Unnamed, printer assigns at print time.
@@ -255,15 +255,15 @@ class TestGeneratedBuilders:
 
     def test_addi(self) -> None:
         b, t = self._builders()
-        a = b.value("%a", I32)
-        c = b.value("%b", I32)
+        a = b.value("a", I32)
+        c = b.value("b", I32)
         result = t.addi(lhs=a, rhs=c, result_types=[I32])
         assert isinstance(result, ValueRef)
         assert result.type == I32
 
     def test_neg(self) -> None:
         b, t = self._builders()
-        x = b.value("%x", F32)
+        x = b.value("x", F32)
         result = t.neg(input=x, result_types=[F32])
         assert result.type == F32
 
@@ -274,22 +274,22 @@ class TestGeneratedBuilders:
 
     def test_cmp(self) -> None:
         b, t = self._builders()
-        a = b.value("%a", I32)
-        c = b.value("%b", I32)
+        a = b.value("a", I32)
+        c = b.value("b", I32)
         result = t.cmp(predicate="lt", lhs=a, rhs=c, result_types=[I32])
         assert result.type == I32
 
     def test_yield(self) -> None:
         b, t = self._builders()
-        a = b.value("%a", F32)
-        c = b.value("%b", I32)
+        a = b.value("a", F32)
+        c = b.value("b", I32)
         t.yield_(values=[a, c])  # Returns None (void terminator).
 
     def test_invoke_with_tied(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         b, t = self._builders()
-        w = b.value("%weights", tile_t)
-        x = b.value("%input", INDEX)
+        w = b.value("weights", tile_t)
+        x = b.value("input", INDEX)
         results = t.invoke(
             callee="compute", operands=[w, x], results=[tied(w, tile_t), INDEX]
         )
@@ -300,9 +300,9 @@ class TestGeneratedBuilders:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
         b, t = self._builders()
-        tile = b.value("%tile", tile_t)
-        tensor = b.value("%tensor", tensor_t)
-        off = b.value("%off", INDEX)
+        tile = b.value("tile", tile_t)
+        tensor = b.value("tensor", tensor_t)
+        off = b.value("off", INDEX)
         result = t.update(
             source=tile,
             target=tensor,

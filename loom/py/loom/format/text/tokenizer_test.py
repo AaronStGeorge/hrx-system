@@ -49,24 +49,24 @@ def _texts(source: str) -> list[str]:
 
 class TestSSAValue:
     def test_named(self) -> None:
-        assert _texts("%x") == ["%x"]
+        assert _texts("%x") == ["x"]
         assert _kinds("%x") == [TokenKind.SSA_VALUE]
 
     def test_numeric(self) -> None:
-        assert _texts("%0") == ["%0"]
-        assert _texts("%42") == ["%42"]
+        assert _texts("%0") == ["0"]
+        assert _texts("%42") == ["42"]
 
     def test_complex_name(self) -> None:
-        assert _texts("%arg0") == ["%arg0"]
-        assert _texts("%contract0") == ["%contract0"]
-        assert _texts("%M") == ["%M"]
+        assert _texts("%arg0") == ["arg0"]
+        assert _texts("%contract0") == ["contract0"]
+        assert _texts("%M") == ["M"]
 
     def test_underscore(self) -> None:
-        assert _texts("%_foo") == ["%_foo"]
-        assert _texts("%foo_bar") == ["%foo_bar"]
+        assert _texts("%_foo") == ["_foo"]
+        assert _texts("%foo_bar") == ["foo_bar"]
 
     def test_dollar(self) -> None:
-        assert _texts("%$var") == ["%$var"]
+        assert _texts("%$var") == ["$var"]
 
     def test_error_bare_percent(self) -> None:
         with pytest.raises(ParseError, match="expected identifier"):
@@ -75,11 +75,11 @@ class TestSSAValue:
 
 class TestSymbol:
     def test_simple(self) -> None:
-        assert _texts("@main") == ["@main"]
+        assert _texts("@main") == ["main"]
         assert _kinds("@main") == [TokenKind.SYMBOL]
 
     def test_complex(self) -> None:
-        assert _texts("@dn_layer") == ["@dn_layer"]
+        assert _texts("@dn_layer") == ["dn_layer"]
 
     def test_error_bare_at(self) -> None:
         with pytest.raises(ParseError, match="expected identifier"):
@@ -88,21 +88,21 @@ class TestSymbol:
 
 class TestHashAttr:
     def test_simple(self) -> None:
-        assert _texts("#q8_0") == ["#q8_0"]
+        assert _texts("#q8_0") == ["q8_0"]
         assert _kinds("#q8_0") == [TokenKind.HASH_ATTR]
 
     def test_encoding_name(self) -> None:
-        assert _texts("#enc") == ["#enc"]
-        assert _texts("#q6_k") == ["#q6_k"]
+        assert _texts("#enc") == ["enc"]
+        assert _texts("#q6_k") == ["q6_k"]
 
 
 class TestResultOrdinal:
     def test_simple(self) -> None:
-        assert _texts("#0") == ["#0"]
+        assert _texts("#0") == ["0"]
         assert _kinds("#0") == [TokenKind.RESULT_ORDINAL]
 
     def test_multi_digit(self) -> None:
-        assert _texts("#12") == ["#12"]
+        assert _texts("#12") == ["12"]
 
     def test_disambiguation_from_hash_attr(self) -> None:
         tokens = _tokens("#0 #enc")
@@ -112,11 +112,11 @@ class TestResultOrdinal:
 
 class TestBlockLabel:
     def test_simple(self) -> None:
-        assert _texts("^bb0") == ["^bb0"]
+        assert _texts("^bb0") == ["bb0"]
         assert _kinds("^bb0") == [TokenKind.BLOCK_LABEL]
 
     def test_named(self) -> None:
-        assert _texts("^entry") == ["^entry"]
+        assert _texts("^entry") == ["entry"]
 
 
 class TestInteger:
@@ -314,8 +314,8 @@ class TestComments:
     def test_inline_comment(self) -> None:
         tokens = _tokens("%x // comment\n%y")
         assert len(tokens) == 2
-        assert tokens[0].text == "%x"
-        assert tokens[1].text == "%y"
+        assert tokens[0].text == "x"
+        assert tokens[1].text == "y"
 
 
 # ============================================================================
@@ -325,16 +325,16 @@ class TestComments:
 
 class TestWhitespace:
     def test_spaces(self) -> None:
-        assert _texts("%a   %b") == ["%a", "%b"]
+        assert _texts("%a   %b") == ["a", "b"]
 
     def test_tabs(self) -> None:
-        assert _texts("%a\t%b") == ["%a", "%b"]
+        assert _texts("%a\t%b") == ["a", "b"]
 
     def test_newlines(self) -> None:
-        assert _texts("%a\n%b") == ["%a", "%b"]
+        assert _texts("%a\n%b") == ["a", "b"]
 
     def test_mixed(self) -> None:
-        assert _texts("  %a \t\n  %b  ") == ["%a", "%b"]
+        assert _texts("  %a \t\n  %b  ") == ["a", "b"]
 
 
 # ============================================================================
@@ -449,7 +449,7 @@ class TestSequences:
         texts = _texts("-> (%tensor as tensor<[%M]xf32>)")
         assert texts[0] == "->"
         assert texts[1] == "("
-        assert texts[2] == "%tensor"
+        assert texts[2] == "tensor"
         assert texts[3] == "as"
 
     def test_function_signature(self) -> None:
@@ -490,28 +490,28 @@ class TestInterface:
     def test_peek_does_not_consume(self) -> None:
         tokenizer = Tokenizer("%x %y")
         first = tokenizer.peek()
-        assert first.text == "%x"
+        assert first.text == "x"
         second = tokenizer.peek()
-        assert second.text == "%x"  # same token
+        assert second.text == "x"  # same token
 
     def test_next_consumes(self) -> None:
         tokenizer = Tokenizer("%x %y")
         first = tokenizer.next()
-        assert first.text == "%x"
+        assert first.text == "x"
         second = tokenizer.next()
-        assert second.text == "%y"
+        assert second.text == "y"
 
     def test_at(self) -> None:
         tokenizer = Tokenizer("%x")
         assert tokenizer.at(TokenKind.SSA_VALUE)
-        assert tokenizer.at(TokenKind.SSA_VALUE, "%x")
+        assert tokenizer.at(TokenKind.SSA_VALUE, "x")
         assert not tokenizer.at(TokenKind.INTEGER)
-        assert not tokenizer.at(TokenKind.SSA_VALUE, "%y")
+        assert not tokenizer.at(TokenKind.SSA_VALUE, "y")
 
     def test_expect_success(self) -> None:
         tokenizer = Tokenizer("%x")
         token = tokenizer.expect(TokenKind.SSA_VALUE)
-        assert token.text == "%x"
+        assert token.text == "x"
 
     def test_expect_failure(self) -> None:
         tokenizer = Tokenizer("%x")
@@ -522,14 +522,14 @@ class TestInterface:
         tokenizer = Tokenizer("%x %y")
         token = tokenizer.try_consume(TokenKind.SSA_VALUE)
         assert token is not None
-        assert token.text == "%x"
+        assert token.text == "x"
 
     def test_try_consume_failure(self) -> None:
         tokenizer = Tokenizer("%x")
         token = tokenizer.try_consume(TokenKind.INTEGER)
         assert token is None
         # Token not consumed.
-        assert tokenizer.peek().text == "%x"
+        assert tokenizer.peek().text == "x"
 
     def test_current_location(self) -> None:
         tokenizer = Tokenizer("%x\n%y")

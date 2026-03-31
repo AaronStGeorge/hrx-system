@@ -145,7 +145,7 @@ class TestFuncDefRoundTrip:
         _roundtrip("func.def device @helper(%a: f32) -> (f32) {\n  func.return %a : f32\n}\n")
 
     def test_with_predicates(self) -> None:
-        _roundtrip("func.def @constrained(%a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)] {\n  func.return %a : tensor<[%M]xf32>\n}\n")
+        _roundtrip("func.def @constrained(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)] {\n  func.return %a : tensor<[%M]xf32>\n}\n")
 
 
 class TestFuncDeclRoundTrip:
@@ -156,7 +156,7 @@ class TestFuncDeclRoundTrip:
         _roundtrip("func.decl public @exported(%a: f32) -> (f32)\n")
 
     def test_with_predicates(self) -> None:
-        _roundtrip("func.decl @constrained(%a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)]\n")
+        _roundtrip("func.decl @constrained(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)]\n")
 
     def test_no_results(self) -> None:
         _roundtrip("func.decl @sink(%a: f32)\n")
