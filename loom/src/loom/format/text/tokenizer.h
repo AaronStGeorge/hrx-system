@@ -74,6 +74,19 @@ typedef struct loom_token_t {
   uint32_t end_column;  // Column past the last character of this token.
 } loom_token_t;
 
+// Returns a sentinel token for parser-synthesized values that have no
+// user-authored source token.
+static inline loom_token_t loom_token_none(void) {
+  loom_token_t token = {
+      .kind = LOOM_TOKEN_NONE,
+      .text = iree_string_view_empty(),
+      .line = 0,
+      .column = 0,
+      .end_column = 0,
+  };
+  return token;
+}
+
 // Lexical scanner state. Stack-allocated, no heap allocations.
 // If a scan error occurs (e.g., unterminated string), it is stored in
 // |status| and all subsequent peek/next calls return EOF. The caller

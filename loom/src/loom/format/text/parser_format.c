@@ -12,29 +12,37 @@
 // Format element parsers
 //===----------------------------------------------------------------------===//
 
-// Pushes LHS result values into a child scope so result type
-// annotations can reference co-results by name. Returns the saved
-// scope to restore after parsing.
-static iree_status_t loom_parse_format_push_result_scope(
-    loom_parser_t* parser, const loom_parsed_op_t* parsed,
-    loom_parser_scope_t** out_saved_scope) {
-  *out_saved_scope = parser->scope;
-  if (parsed->result_count == 0) {
+// Builds the parser-owned result overlay so result type annotations can
+// reference co-results by name. The overlay is reset by the caller once the
+// current RESULT_TYPE* element has been parsed.
+static iree_status_t loom_parse_format_prepare_result_scope(
+    loom_parser_t* parser, const loom_parsed_op_t* parsed) {
+  iree_host_size_t named_result_count = 0;
+  for (uint16_t result_index = 0; result_index < parsed->result_count;
+       ++result_index) {
+    loom_value_id_t value_id = parsed->result_ids[result_index];
+    loom_string_id_t name_id = parser->module->values.entries[value_id].name_id;
+    if (name_id != LOOM_STRING_ID_INVALID &&
+        name_id < parser->module->strings.count) {
+      ++named_result_count;
+    }
+  }
+  if (named_result_count == 0) {
+    loom_parser_result_scope_reset(&parser->result_scope);
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(
-      loom_scope_push(&parser->parser_arena, parser->scope, &parser->scope));
-  for (uint16_t r = 0; r < parsed->result_count; ++r) {
-    loom_value_id_t value_id = parsed->result_ids[r];
+  IREE_RETURN_IF_ERROR(loom_parser_result_scope_prepare(
+      &parser->result_scope, named_result_count, &parser->parser_arena));
+  for (uint16_t result_index = 0; result_index < parsed->result_count;
+       ++result_index) {
+    loom_value_id_t value_id = parsed->result_ids[result_index];
     loom_string_id_t name_id = parser->module->values.entries[value_id].name_id;
     if (name_id == LOOM_STRING_ID_INVALID ||
         name_id >= parser->module->strings.count) {
       continue;
     }
-    iree_string_view_t name = parser->module->strings.entries[name_id];
-    bool duplicate = false;
-    IREE_RETURN_IF_ERROR(loom_scope_define(parser->scope, &parser->parser_arena,
-                                           name, value_id, &duplicate));
+    IREE_RETURN_IF_ERROR(loom_parser_result_scope_define(
+        &parser->result_scope, name_id, value_id, /*out_duplicate=*/NULL));
   }
   return iree_ok_status();
 }
@@ -57,8 +65,8 @@ static iree_status_t loom_parse_format_result_type_list(
                               IREE_ARRAYSIZE(params), peek);
     }
   }
-  // Result name forward references are handled by the result scope push
-  // (loom_parse_format_push_result_scope), not by the type parse mode.
+  // Result name forward references are handled by parser->result_scope, not by
+  // the type parse mode.
   // Bare result type lists and function signature contexts both use BODY
   // mode — unknown names are errors.
   loom_type_parse_mode_t type_mode = LOOM_TYPE_PARSE_BODY;
@@ -79,17 +87,8 @@ static iree_status_t loom_parse_format_result_type_list(
       if (loom_tokenizer_try_consume_keyword(&parser->tokenizer,
                                              IREE_SV("as"))) {
         // Tied result: %operand as type.
-        loom_value_id_t operand_id =
-            loom_scope_lookup(parser->scope, ssa_token.text);
-        if (operand_id == LOOM_VALUE_ID_INVALID) {
-          loom_diagnostic_param_t params[] = {
-              loom_param_string(ssa_token.text),
-          };
-          IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_001,
-                                                params, IREE_ARRAYSIZE(params),
-                                                ssa_token));
-          return iree_ok_status();
-        }
+        loom_value_id_t operand_id = LOOM_VALUE_ID_INVALID;
+        LOOM_PARSE_RESOLVE_VALUE(parser, ssa_token, &operand_id);
         loom_type_t type = {0};
         IREE_RETURN_IF_ERROR(loom_parse_type(parser, type_mode, &type));
 
@@ -131,7 +130,7 @@ static iree_status_t loom_parse_format_result_type_list(
           IREE_RETURN_IF_ERROR(
               loom_module_define_value(parser->module, type, &value_id));
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
-              parsed, &parser->parser_arena, value_id));
+              parsed, &parser->parser_arena, value_id, loom_token_none()));
         }
       } else {
         // Not tied — the SSA token was actually consumed. This
@@ -157,8 +156,8 @@ static iree_status_t loom_parse_format_result_type_list(
         loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
         IREE_RETURN_IF_ERROR(
             loom_module_define_value(parser->module, type, &value_id));
-        IREE_RETURN_IF_ERROR(
-            loom_parsed_op_add_result(parsed, &parser->parser_arena, value_id));
+        IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
+            parsed, &parser->parser_arena, value_id, loom_token_none()));
       }
     }
     ++result_index;
@@ -216,16 +215,8 @@ static iree_status_t loom_parse_format_index_list(
     if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_SSA_VALUE)) {
       // Dynamic index.
       loom_token_t token = loom_tokenizer_next(&parser->tokenizer);
-      loom_value_id_t value_id = loom_scope_lookup(parser->scope, token.text);
-      if (value_id == LOOM_VALUE_ID_INVALID) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(token.text),
-        };
-        IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_001,
-                                              params, IREE_ARRAYSIZE(params),
-                                              token));
-        return iree_ok_status();
-      }
+      loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+      LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
       static_values[value_count] = INT64_MIN;  // Sentinel.
       IREE_RETURN_IF_ERROR(
           loom_parsed_op_add_operand(parsed, &parser->parser_arena, value_id));
@@ -313,16 +304,8 @@ static iree_status_t loom_parse_format_binding_list(
     // Operand.
     loom_token_t op_token = {0};
     LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &op_token);
-    loom_value_id_t operand_id =
-        loom_scope_lookup(parser->scope, op_token.text);
-    if (operand_id == LOOM_VALUE_ID_INVALID) {
-      loom_diagnostic_param_t params[] = {
-          loom_param_string(op_token.text),
-      };
-      IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_001, params,
-                                            IREE_ARRAYSIZE(params), op_token));
-      return iree_ok_status();
-    }
+    loom_value_id_t operand_id = LOOM_VALUE_ID_INVALID;
+    LOOM_PARSE_RESOLVE_VALUE(parser, op_token, &operand_id);
 
     // ':'.
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COLON)) {
@@ -362,13 +345,7 @@ static iree_status_t loom_parse_format_binding_list(
     loom_value_id_t arg_value_id = 0;
     IREE_RETURN_IF_ERROR(
         loom_module_define_value(parser->module, arg_type, &arg_value_id));
-    loom_string_id_t arg_name_id = 0;
-    IREE_RETURN_IF_ERROR(loom_module_intern_string(
-        parser->module, arg_token.text, &arg_name_id));
-    parser->module->values.entries[arg_value_id].name_id = arg_name_id;
-    IREE_RETURN_IF_ERROR(loom_scope_define(parser->scope, &parser->parser_arena,
-                                           arg_token.text, arg_value_id,
-                                           /*out_duplicate=*/NULL));
+    LOOM_PARSE_DEFINE_VALUE_NAME(parser, arg_token, arg_value_id);
 
     // Store as pending block arg for REGION to consume.
     IREE_RETURN_IF_ERROR(
@@ -393,8 +370,8 @@ static iree_status_t loom_parse_format_binding_list(
 static iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
                                                  loom_parsed_op_t* parsed) {
   parser->pre_func_arg_scope = parser->scope;
-  IREE_RETURN_IF_ERROR(
-      loom_scope_push(&parser->parser_arena, parser->scope, &parser->scope));
+  IREE_RETURN_IF_ERROR(loom_parser_scope_push(&parser->parser_arena,
+                                              parser->scope, &parser->scope));
 
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
@@ -408,7 +385,7 @@ static iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
 
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-    if (parser->pending_block_arg_count > 0) {
+    if (parser->pending_block_args.count > 0) {
       if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
         break;
       }
@@ -438,13 +415,7 @@ static iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
     loom_value_id_t value_id = 0;
     IREE_RETURN_IF_ERROR(
         loom_module_define_value(parser->module, type, &value_id));
-    loom_string_id_t name_id = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_module_intern_string(parser->module, name_token.text, &name_id));
-    parser->module->values.entries[value_id].name_id = name_id;
-    IREE_RETURN_IF_ERROR(loom_scope_define(parser->scope, &parser->parser_arena,
-                                           name_token.text, value_id,
-                                           /*out_duplicate=*/NULL));
+    LOOM_PARSE_DEFINE_VALUE_NAME(parser, name_token, value_id);
 
     // Store as pending block arg for REGION to consume.
     IREE_RETURN_IF_ERROR(loom_parser_add_pending_block_arg(parser, value_id));
@@ -683,27 +654,15 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
           IREE_RETURN_IF_ERROR(loom_module_define_value(
               parser->module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
               &iv_value_id));
-          loom_string_id_t iv_name_id = 0;
-          IREE_RETURN_IF_ERROR(loom_module_intern_string(
-              parser->module, iv_token.text, &iv_name_id));
-          parser->module->values.entries[iv_value_id].name_id = iv_name_id;
-          IREE_RETURN_IF_ERROR(loom_scope_define(
-              parser->scope, &parser->parser_arena, iv_token.text, iv_value_id,
-              /*out_duplicate=*/NULL));
+          LOOM_PARSE_DEFINE_VALUE_NAME(parser, iv_token, iv_value_id);
           IREE_RETURN_IF_ERROR(
               loom_parser_add_pending_block_arg(parser, iv_value_id));
           break;
         }
         loom_token_t token = {0};
         LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &token);
-        loom_value_id_t value_id = loom_scope_lookup(parser->scope, token.text);
-        if (value_id == LOOM_VALUE_ID_INVALID) {
-          loom_diagnostic_param_t params[] = {
-              loom_param_string(token.text),
-          };
-          return loom_parser_emit(parser, &loom_err_parse_001, params,
-                                  IREE_ARRAYSIZE(params), token);
-        }
+        loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+        LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
             parsed, &parser->parser_arena, value_id));
         break;
@@ -723,17 +682,8 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
             break;
           }
           loom_token_t token = loom_tokenizer_next(&parser->tokenizer);
-          loom_value_id_t value_id =
-              loom_scope_lookup(parser->scope, token.text);
-          if (value_id == LOOM_VALUE_ID_INVALID) {
-            loom_diagnostic_param_t params[] = {
-                loom_param_string(token.text),
-            };
-            IREE_RETURN_IF_ERROR(
-                loom_parser_emit(parser, &loom_err_parse_001, params,
-                                 IREE_ARRAYSIZE(params), token));
-            return iree_ok_status();
-          }
+          loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+          LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
               parsed, &parser->parser_arena, value_id));
           first = false;
@@ -810,12 +760,11 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
         loom_type_parse_mode_t type_mode = parser->definition_scope_depth > 0
                                                ? LOOM_TYPE_PARSE_ARG
                                                : LOOM_TYPE_PARSE_BODY;
-        loom_parser_scope_t* saved_scope = NULL;
         IREE_RETURN_IF_ERROR(
-            loom_parse_format_push_result_scope(parser, parsed, &saved_scope));
+            loom_parse_format_prepare_result_scope(parser, parsed));
         loom_type_t type = {0};
         IREE_RETURN_IF_ERROR(loom_parse_type(parser, type_mode, &type));
-        parser->scope = saved_scope;
+        loom_parser_result_scope_reset(&parser->result_scope);
         if (element->field_index < parsed->result_count) {
           parser->module->values
               .entries[parsed->result_ids[element->field_index]]
@@ -825,18 +774,17 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
           IREE_RETURN_IF_ERROR(
               loom_module_define_value(parser->module, type, &value_id));
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
-              parsed, &parser->parser_arena, value_id));
+              parsed, &parser->parser_arena, value_id, loom_token_none()));
         }
         break;
       }
 
       case LOOM_FORMAT_KIND_RESULT_TYPE_LIST: {
-        loom_parser_scope_t* saved_scope = NULL;
         IREE_RETURN_IF_ERROR(
-            loom_parse_format_push_result_scope(parser, parsed, &saved_scope));
+            loom_parse_format_prepare_result_scope(parser, parsed));
         IREE_RETURN_IF_ERROR(
             loom_parse_format_result_type_list(parser, element, parsed));
-        parser->scope = saved_scope;
+        loom_parser_result_scope_reset(&parser->result_scope);
         break;
       }
 

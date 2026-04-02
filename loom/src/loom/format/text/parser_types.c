@@ -108,9 +108,9 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
 static iree_status_t loom_resolve_type_reference(
     loom_parser_t* parser, loom_token_t name_token, loom_type_parse_mode_t mode,
     loom_value_id_t* out_value_id) {
-  iree_string_view_t name = name_token.text;
-
-  loom_value_id_t value_id = loom_scope_lookup(parser->scope, name);
+  loom_string_id_t name_id =
+      loom_module_lookup_string(parser->module, name_token.text);
+  loom_value_id_t value_id = loom_parser_lookup_value(parser, name_id);
   if (value_id != LOOM_VALUE_ID_INVALID) {
     *out_value_id = value_id;
     return iree_ok_status();
@@ -120,24 +120,26 @@ static iree_status_t loom_resolve_type_reference(
     // Forward reference in definition context — create placeholder.
     IREE_RETURN_IF_ERROR(
         loom_module_define_value(parser->module, loom_type_none(), &value_id));
-    loom_string_id_t name_id = 0;
     IREE_RETURN_IF_ERROR(
-        loom_module_intern_string(parser->module, name, &name_id));
-    parser->module->values.entries[value_id].name_id = name_id;
-    IREE_RETURN_IF_ERROR(loom_scope_define(parser->scope, &parser->parser_arena,
-                                           name, value_id,
-                                           /*out_duplicate=*/NULL));
+        loom_parser_define_value_name(parser, name_token, value_id));
     *out_value_id = value_id;
     return iree_ok_status();
   }
 
   // Body mode: undefined name is an error.
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(name),
-  };
-  return loom_parser_emit(parser, &loom_err_parse_001, params,
-                          IREE_ARRAYSIZE(params), name_token);
+  return loom_parser_resolve_value(parser, name_token, out_value_id);
 }
+
+// Resolves a type-binding SSA reference and bails out of the enclosing parse
+// function if BODY-mode resolution emits a parser diagnostic.
+#define LOOM_PARSE_RESOLVE_TYPE_REFERENCE(parser, name_token, mode,            \
+                                          out_value_id)                        \
+  do {                                                                         \
+    uint32_t _resolve_errors = (parser)->error_count;                          \
+    IREE_RETURN_IF_ERROR(loom_resolve_type_reference((parser), (name_token),   \
+                                                     (mode), (out_value_id))); \
+    if ((parser)->error_count > _resolve_errors) return iree_ok_status();      \
+  } while (0)
 
 // Assigns types to NONE-typed values referenced by a parsed type's
 // dim bindings and encoding binding. Dim binding values get index
@@ -197,9 +199,7 @@ static iree_status_t loom_parse_dim(loom_parser_t* parser,
   loom_token_t name_token;
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &name_token);
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_resolve_type_reference(parser, name_token, mode, &value_id));
-  if (value_id == LOOM_VALUE_ID_INVALID) return iree_ok_status();
+  LOOM_PARSE_RESOLVE_TYPE_REFERENCE(parser, name_token, mode, &value_id);
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACKET, NULL);
   *out_dim = loom_dim_pack_dynamic(value_id);
   return iree_ok_status();
@@ -221,9 +221,7 @@ static iree_status_t loom_parse_type_encoding(
     // SSA encoding: %enc.
     loom_tokenizer_next(&parser->tokenizer);
     loom_value_id_t enc_value_id = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_resolve_type_reference(parser, token, mode, &enc_value_id));
-    if (enc_value_id == LOOM_VALUE_ID_INVALID) return iree_ok_status();
+    LOOM_PARSE_RESOLVE_TYPE_REFERENCE(parser, token, mode, &enc_value_id);
     *out_encoding_id = (uint16_t)enc_value_id;
     *out_encoding_flags = LOOM_ENCODING_FLAG_SSA;
     return iree_ok_status();

@@ -469,6 +469,60 @@ TEST_F(ParserTest, UndefinedSSAValue) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "undefined");
 }
 
+TEST_F(ParserTest, DuplicateFunctionArgName) {
+  const auto& diagnostics = ParseExpectErrors(
+      "func.def @f(%x : f32, %x : f32) {\n"
+      "  func.return\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_002);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 23u);
+}
+
+TEST_F(ParserTest, DuplicateBlockArgName) {
+  const auto& diagnostics = ParseExpectErrors(
+      "func.def @f() {\n"
+      "^bb(%x : i32, %x : i32):\n"
+      "  func.return\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_002);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 15u);
+}
+
+TEST_F(ParserTest, DuplicateOpResultName) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%cond = test.constant 1 : i1\n"
+      "%lhs = test.constant 0 : f32\n"
+      "%rhs = test.constant 1 : f32\n"
+      "%r, %r = test.branch %cond -> (f32, f32) {\n"
+      "  test.yield %lhs, %rhs : f32, f32\n"
+      "} else {\n"
+      "  test.yield %rhs, %lhs : f32, f32\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_002);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "r");
+  EXPECT_EQ(diagnostics[0].origin_line, 4u);
+  EXPECT_EQ(diagnostics[0].origin_column, 5u);
+}
+
+TEST_F(ParserTest, DuplicateBindingListName) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%tile = test.constant 0 : f32\n"
+      "%mapped = test.map(%element = %tile : f32, %element = %tile : f32) {\n"
+      "  test.yield %element : f32\n"
+      "} -> (f32)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_002);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "element");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+}
+
 TEST_F(ParserTest, UnexpectedTokenInFuncSignature) {
   // Missing '->' in function signature triggers ERR_PARSE_003.
   const auto& diagnostics = ParseExpectErrors(

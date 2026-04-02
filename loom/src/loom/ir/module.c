@@ -115,6 +115,26 @@ static iree_status_t loom_intern_table_grow(iree_arena_allocator_t* arena,
   return iree_ok_status();
 }
 
+typedef bool (*loom_intern_equal_fn_t)(const void* context, uint32_t index);
+
+static uint32_t loom_intern_table_lookup(const loom_intern_table_t* table,
+                                         uint32_t hash,
+                                         loom_intern_equal_fn_t equal_fn,
+                                         const void* equal_context) {
+  if (table->capacity == 0) return UINT32_MAX;
+
+  iree_host_size_t mask = table->capacity - 1;
+  iree_host_size_t slot = hash & mask;
+  while (true) {
+    uint32_t index = table->indices[slot];
+    if (index == UINT32_MAX) return UINT32_MAX;
+    if (table->hashes[slot] == hash && equal_fn(equal_context, index)) {
+      return index;
+    }
+    slot = (slot + 1) & mask;
+  }
+}
+
 // Looks up or inserts an entry in the intern table.
 // |hash|: pre-computed hash of the entry.
 // |index|: the entry table index to insert if not found.
@@ -123,11 +143,9 @@ static iree_status_t loom_intern_table_grow(iree_arena_allocator_t* arena,
 // Returns true if an existing entry was found, false if newly inserted.
 // The caller must check for equality using the entry table — the intern
 // table only stores hashes and indices.
-typedef bool (*loom_intern_equal_fn)(const void* context, uint32_t index);
-
 static iree_status_t loom_intern_table_find_or_insert(
     iree_arena_allocator_t* arena, loom_intern_table_t* table, uint32_t hash,
-    uint32_t new_index, loom_intern_equal_fn equal_fn,
+    uint32_t new_index, loom_intern_equal_fn_t equal_fn,
     const void* equal_context, uint32_t* out_index) {
   // Lazy initialization.
   if (table->capacity == 0) {
@@ -499,6 +517,16 @@ iree_status_t loom_module_add_location(loom_module_t* module,
     module->locations.count = 1;
   }
 
+  // Location IDs are 32-bit and ID 0 is reserved for LOOM_LOCATION_UNKNOWN.
+  // IDs 1 through UINT32_MAX are representable, so once count advances past
+  // UINT32_MAX the next cast would wrap to 0 and forge the null sentinel.
+  if (module->locations.count > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "location table full (%" PRIhsz
+                            " entries, max id %u)",
+                            module->locations.count, (unsigned)UINT32_MAX);
+  }
+
   IREE_RETURN_IF_ERROR(iree_arena_grow_array(
       &module->arena, module->locations.count, /*minimum_capacity=*/16,
       sizeof(loom_location_entry_t), &module->locations.capacity,
@@ -517,6 +545,16 @@ iree_status_t loom_module_add_location(loom_module_t* module,
 
 iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
                                        loom_value_id_t* out_value_id) {
+  // Value IDs are 32-bit and LOOM_VALUE_ID_INVALID is the null sentinel.
+  // Fail before count reaches the sentinel value so the cast below cannot
+  // produce an invalid ID from user-controlled input size.
+  if (module->values.count >= LOOM_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "value table full (%" PRIhsz " entries, max id %u)",
+                            module->values.count,
+                            (unsigned)(LOOM_VALUE_ID_INVALID - 1));
+  }
+
   IREE_RETURN_IF_ERROR(
       loom_value_table_ensure_capacity(&module->arena, &module->values));
 
@@ -550,16 +588,33 @@ static bool loom_string_equal_fn(const void* context, uint32_t index) {
 iree_status_t loom_module_intern_string(loom_module_t* module,
                                         iree_string_view_t string,
                                         loom_string_id_t* out_string_id) {
+  uint32_t hash = loom_hash_string_view(string);
+  loom_string_equal_context_t equal_context = {module, string};
+
+  uint32_t existing_index = loom_intern_table_lookup(
+      &module->string_intern, hash, loom_string_equal_fn, &equal_context);
+  if (existing_index != UINT32_MAX) {
+    *out_string_id = (loom_string_id_t)existing_index;
+    return iree_ok_status();
+  }
+
+  // String IDs are 32-bit and LOOM_STRING_ID_INVALID is the null sentinel.
+  // Check only after the duplicate probe so an already-interned spelling
+  // still resolves when the table is full.
+  if (module->strings.count >= LOOM_STRING_ID_INVALID) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "string table full (%" PRIhsz " entries, max id %u)",
+        module->strings.count, (unsigned)(LOOM_STRING_ID_INVALID - 1));
+  }
+
   // Ensure the string table has capacity before inserting into the
   // intern hash table. This guarantees the entry slot exists if the
   // hash table insert succeeds.
   IREE_RETURN_IF_ERROR(
       loom_string_table_ensure_capacity(&module->arena, &module->strings));
 
-  uint32_t hash = loom_hash_string_view(string);
   uint32_t new_index = (uint32_t)module->strings.count;
-
-  loom_string_equal_context_t equal_context = {module, string};
   uint32_t result_index = 0;
   IREE_RETURN_IF_ERROR(loom_intern_table_find_or_insert(
       &module->arena, &module->string_intern, hash, new_index,
@@ -584,6 +639,14 @@ iree_status_t loom_module_intern_string(loom_module_t* module,
   return iree_ok_status();
 }
 
+loom_string_id_t loom_module_lookup_string(const loom_module_t* module,
+                                           iree_string_view_t string) {
+  uint32_t hash = loom_hash_string_view(string);
+  loom_string_equal_context_t equal_context = {module, string};
+  return (loom_string_id_t)loom_intern_table_lookup(
+      &module->string_intern, hash, loom_string_equal_fn, &equal_context);
+}
+
 //===----------------------------------------------------------------------===//
 // Type interning
 //===----------------------------------------------------------------------===//
@@ -601,15 +664,31 @@ static bool loom_type_equal_fn(const void* context, uint32_t index) {
 
 iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
                                       loom_type_t* out_interned_type) {
+  uint32_t hash = loom_hash_type(type);
+  loom_type_equal_context_t equal_context = {module, type};
+
+  uint32_t existing_index = loom_intern_table_lookup(
+      &module->type_intern, hash, loom_type_equal_fn, &equal_context);
+  if (existing_index != UINT32_MAX) {
+    *out_interned_type = module->types.entries[existing_index];
+    return iree_ok_status();
+  }
+
+  // Type interner slots use 32-bit indices with UINT32_MAX as the empty
+  // sentinel in loom_intern_table_t. Reject a new unique type before that
+  // sentinel value could be used as a real table index.
+  if (module->types.count >= LOOM_TYPE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "type table full (%" PRIhsz " entries, max id %u)",
+                            module->types.count,
+                            (unsigned)(LOOM_TYPE_ID_INVALID - 1));
+  }
+
   // Ensure the type table has capacity before inserting into the
   // intern hash table.
   IREE_RETURN_IF_ERROR(
       loom_type_table_ensure_capacity(&module->arena, &module->types));
-
-  uint32_t hash = loom_hash_type(type);
   uint32_t new_index = (uint32_t)module->types.count;
-
-  loom_type_equal_context_t equal_context = {module, type};
   uint32_t result_index = 0;
   IREE_RETURN_IF_ERROR(loom_intern_table_find_or_insert(
       &module->arena, &module->type_intern, hash, new_index, loom_type_equal_fn,

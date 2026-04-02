@@ -145,6 +145,21 @@ TEST_F(ModuleTest, DefineValueGrowth) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, DefineValueRejectsInvalidSentinelId) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  module->values.count = LOOM_VALUE_ID_INVALID;
+
+  loom_value_id_t id = LOOM_VALUE_ID_INVALID;
+  iree_status_t status = loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_F32), &id);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+
+  loom_module_free(module);
+}
+
 //===----------------------------------------------------------------------===//
 // String interning
 //===----------------------------------------------------------------------===//
@@ -219,6 +234,47 @@ TEST_F(ModuleTest, InternStringStress) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, LookupString) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t hello_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("hello"), &hello_id));
+
+  EXPECT_EQ(loom_module_lookup_string(module, IREE_SV("hello")), hello_id);
+  EXPECT_EQ(loom_module_lookup_string(module, IREE_SV("missing")),
+            LOOM_STRING_ID_INVALID);
+  EXPECT_EQ(module->strings.count, 2u);  // "test" module name + "hello".
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternStringRejectsInvalidSentinelIdButKeepsDedupWorking) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t existing_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("hello"), &existing_id));
+
+  module->strings.count = LOOM_STRING_ID_INVALID;
+
+  loom_string_id_t duplicate_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("hello"), &duplicate_id));
+  EXPECT_EQ(duplicate_id, existing_id);
+
+  loom_string_id_t new_id = LOOM_STRING_ID_INVALID;
+  iree_status_t status =
+      loom_module_intern_string(module, IREE_SV("world"), &new_id);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+
+  loom_module_free(module);
+}
+
 //===----------------------------------------------------------------------===//
 // Type interning
 //===----------------------------------------------------------------------===//
@@ -280,6 +336,29 @@ TEST_F(ModuleTest, InternShapedType) {
   EXPECT_EQ(interned1.dims[0], interned2.dims[0]);
   EXPECT_EQ(interned1.dims[1], interned2.dims[1]);
   EXPECT_EQ(module->types.count, 1u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternTypeRejectsInvalidSentinelIdButKeepsDedupWorking) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t interned_f32 = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32, &interned_f32));
+
+  module->types.count = LOOM_TYPE_ID_INVALID;
+
+  loom_type_t duplicate_f32 = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32, &duplicate_f32));
+  EXPECT_EQ(duplicate_f32.header, interned_f32.header);
+
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t new_i32 = {0};
+  iree_status_t status = loom_module_intern_type(module, i32, &new_i32);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+
   loom_module_free(module);
 }
 
@@ -426,6 +505,25 @@ TEST_F(ModuleTest, SizeHints) {
   EXPECT_GE(module->strings.capacity, 50u);
   EXPECT_GE(module->types.capacity, 20u);
   EXPECT_GE(module->symbols.capacity, 10u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, AddLocationRejectsWrappedIdZero) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  module->locations.count = (iree_host_size_t)UINT32_MAX + 1;
+
+  loom_location_id_t id = LOOM_LOCATION_UNKNOWN;
+  iree_status_t status = loom_module_add_location(
+      module,
+      loom_location_file_range(/*source_id=*/0, /*start_line=*/1,
+                               /*start_col=*/1, /*end_line=*/1,
+                               /*end_col=*/2),
+      &id);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+
   loom_module_free(module);
 }
 

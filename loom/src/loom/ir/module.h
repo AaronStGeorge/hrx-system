@@ -108,6 +108,11 @@ iree_status_t loom_module_intern_string(loom_module_t* module,
                                         iree_string_view_t string,
                                         loom_string_id_t* out_string_id);
 
+// Looks up a string in the module's intern table without inserting a new entry.
+// Returns LOOM_STRING_ID_INVALID if |string| has not been interned.
+loom_string_id_t loom_module_lookup_string(const loom_module_t* module,
+                                           iree_string_view_t string);
+
 // Adds an encoding instance to the module's encoding table.
 // Deduplicates by name and attribute equality: if an identical
 // encoding already exists, returns its 1-based ID without adding

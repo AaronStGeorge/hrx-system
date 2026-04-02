@@ -24,22 +24,32 @@
 extern "C" {
 #endif
 
+typedef struct loom_parser_t loom_parser_t;
+
+// Growable scratch list of value IDs that should become entry-block arguments
+// for the next parsed REGION element.
+typedef struct loom_parser_pending_block_args_t {
+  loom_value_id_t* ids;
+  uint16_t count;
+  uint16_t capacity;
+} loom_parser_pending_block_args_t;
+
 //===----------------------------------------------------------------------===//
 // Name scope
 //===----------------------------------------------------------------------===//
 
-// Open-addressed hash table entry. Keys are string views into the
-// source buffer (zero-copy). Empty slots have name.data == NULL.
-typedef struct loom_scope_entry_t {
-  iree_string_view_t name;
+// Open-addressed hash table entry keyed by interned string ID.
+// Empty slots have name_id == LOOM_STRING_ID_INVALID.
+typedef struct loom_parser_scope_entry_t {
+  loom_string_id_t name_id;
   loom_value_id_t value_id;
-} loom_scope_entry_t;
+} loom_parser_scope_entry_t;
 
 // A name scope for SSA value resolution. Inner scopes see outer
 // names via parent chain; outer scopes cannot see inner names.
 typedef struct loom_parser_scope_t {
   struct loom_parser_scope_t* parent;
-  loom_scope_entry_t* entries;
+  loom_parser_scope_entry_t* entries;
   iree_host_size_t capacity;  // Power of 2. 0 = not yet allocated.
   iree_host_size_t count;
 } loom_parser_scope_t;
@@ -47,20 +57,76 @@ typedef struct loom_parser_scope_t {
 // Defines a name in this scope. Sets |*out_duplicate| to true if the
 // name is already defined in this scope (not a parent). The caller
 // decides whether duplication is an error.
-iree_status_t loom_scope_define(loom_parser_scope_t* scope,
-                                iree_arena_allocator_t* arena,
-                                iree_string_view_t name,
-                                loom_value_id_t value_id, bool* out_duplicate);
+iree_status_t loom_parser_scope_define(loom_parser_scope_t* scope,
+                                       iree_arena_allocator_t* arena,
+                                       loom_string_id_t name_id,
+                                       loom_value_id_t value_id,
+                                       bool* out_duplicate);
 
 // Looks up a name in this scope and parent chain. Returns
 // LOOM_VALUE_ID_INVALID if not found.
-loom_value_id_t loom_scope_lookup(const loom_parser_scope_t* scope,
-                                  iree_string_view_t name);
+loom_value_id_t loom_parser_scope_lookup(const loom_parser_scope_t* scope,
+                                         loom_string_id_t name_id);
 
 // Allocates a new child scope from the parser arena.
-iree_status_t loom_scope_push(iree_arena_allocator_t* arena,
-                              loom_parser_scope_t* parent,
-                              loom_parser_scope_t** out_scope);
+iree_status_t loom_parser_scope_push(iree_arena_allocator_t* arena,
+                                     loom_parser_scope_t* parent,
+                                     loom_parser_scope_t** out_scope);
+
+//===----------------------------------------------------------------------===//
+// Result scope
+//===----------------------------------------------------------------------===//
+
+#define LOOM_PARSER_RESULT_SCOPE_INLINE_ENTRIES 16
+
+// Parser-owned scratch overlay for op result names while parsing result type
+// annotations. Small result sets use inline linear scan; larger sets spill to
+// a retained hash table with a per-op active capacity.
+typedef struct loom_parser_result_scope_t {
+  loom_parser_scope_entry_t
+      inline_entries[LOOM_PARSER_RESULT_SCOPE_INLINE_ENTRIES];
+  loom_parser_scope_entry_t* hash_entries;
+  iree_host_size_t hash_capacity;          // Active hash slots for this op.
+  iree_host_size_t hash_storage_capacity;  // Retained backing allocation.
+  uint16_t count;
+} loom_parser_result_scope_t;
+
+// Reserves result-scope storage for |entry_count| named results and clears only
+// the active spill hash slots needed by this op.
+iree_status_t loom_parser_result_scope_prepare(
+    loom_parser_result_scope_t* scope, iree_host_size_t entry_count,
+    iree_arena_allocator_t* arena);
+
+// Drops the active result overlay. Retained spill storage is left untouched.
+void loom_parser_result_scope_reset(loom_parser_result_scope_t* scope);
+
+// Defines a result name in the active result overlay. Sets |*out_duplicate| if
+// the name is already present in this overlay.
+iree_status_t loom_parser_result_scope_define(loom_parser_result_scope_t* scope,
+                                              loom_string_id_t name_id,
+                                              loom_value_id_t value_id,
+                                              bool* out_duplicate);
+
+// Resolves a value ID from the active result overlay, then the lexical scope
+// chain. Returns LOOM_VALUE_ID_INVALID if not found.
+loom_value_id_t loom_parser_lookup_value(const loom_parser_t* parser,
+                                         loom_string_id_t name_id);
+
+// Interns |name_token.text|, stores the resulting name_id on |value_id|, and
+// defines the value in the current scope. Emits ERR_PARSE_002 from
+// |name_token| if that name is already present in the current scope. No-op for
+// empty token text.
+iree_status_t loom_parser_define_value_name(loom_parser_t* parser,
+                                            loom_token_t name_token,
+                                            loom_value_id_t value_id);
+
+// Resolves an SSA name token against the current scope chain. On success,
+// sets |*out_value_id| to a valid value ID. When the name is not in scope,
+// emits ERR_PARSE_001 from |name_token|'s original source location and
+// returns iree_ok_status(); callers should detect that via error_count.
+iree_status_t loom_parser_resolve_value(loom_parser_t* parser,
+                                        loom_token_t name_token,
+                                        loom_value_id_t* out_value_id);
 
 //===----------------------------------------------------------------------===//
 // Alias table
@@ -111,6 +177,13 @@ typedef struct loom_parser_t {
   iree_arena_allocator_t parser_arena;
   loom_builder_t builder;
   loom_parser_scope_t* scope;
+
+  // Reusable result-name overlay while parsing result type annotations. This is
+  // intentionally separate from the lexical scope representation: the hot path
+  // for 0-16 result names is a tiny inline linear scan, while larger outliers
+  // use a retained spill hash table sized to the current op.
+  loom_parser_result_scope_t result_scope;
+
   loom_alias_table_t aliases;
   loom_symbol_map_t symbol_lookup;
   loom_diagnostic_sink_t diagnostic_sink;
@@ -120,13 +193,11 @@ typedef struct loom_parser_t {
   iree_string_view_t source;
   loom_source_id_t source_id;
 
-  // Pending block arguments from FUNC_ARGS or BINDING_LIST, consumed
-  // by the next REGION format element to seed the entry block.
-  // For ops with FUNC_ARGS but no REGION (func.decl), cleaned up
-  // after the format walk completes.
-  loom_value_id_t* pending_block_arg_ids;
-  uint16_t pending_block_arg_count;
-  uint16_t pending_block_arg_capacity;
+  // Pending block arguments from FUNC_ARGS, BINDING_LIST, or implicit region
+  // operands such as loop IVs. The next REGION format element consumes them to
+  // seed the entry block. For ops with FUNC_ARGS but no REGION (func.decl),
+  // loom_parse_op drains them into regular operands after the format walk.
+  loom_parser_pending_block_args_t pending_block_args;
 
   // Scope saved before FUNC_ARGS pushed its scope. Non-NULL only
   // when FUNC_ARGS has pushed a scope that hasn't been consumed by
@@ -179,6 +250,33 @@ iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
     if ((parser)->error_count > _expect_errors) return iree_ok_status();     \
   } while (0)
 
+// Resolves an SSA value token and bails out of the enclosing function when
+// resolution emits a parser diagnostic. On success: sets |out_value_id| to a
+// valid value ID and continues. On undefined name: emits ERR_PARSE_001 and
+// returns iree_ok_status() from the enclosing function. On infrastructure
+// error: propagates the error.
+#define LOOM_PARSE_RESOLVE_VALUE(parser, name_token, out_value_id)          \
+  do {                                                                      \
+    uint32_t _resolve_errors = (parser)->error_count;                       \
+    IREE_RETURN_IF_ERROR(                                                   \
+        loom_parser_resolve_value((parser), (name_token), (out_value_id))); \
+    if ((parser)->error_count > _resolve_errors) return iree_ok_status();   \
+  } while (0)
+
+// Defines an SSA value name in the current scope and bails out of the
+// enclosing function when a duplicate-name diagnostic is emitted. On success:
+// stores |name_token|'s interned string ID on |value_id|, makes the value
+// visible in the current scope, and continues. On duplicate: emits
+// ERR_PARSE_002 and returns iree_ok_status() from the enclosing function. On
+// infrastructure error: propagates the error.
+#define LOOM_PARSE_DEFINE_VALUE_NAME(parser, name_token, value_id)          \
+  do {                                                                      \
+    uint32_t _define_errors = (parser)->error_count;                        \
+    IREE_RETURN_IF_ERROR(                                                   \
+        loom_parser_define_value_name((parser), (name_token), (value_id))); \
+    if ((parser)->error_count > _define_errors) return iree_ok_status();    \
+  } while (0)
+
 // Returns true if the parser has exceeded its error limit.
 bool loom_parser_at_error_limit(const loom_parser_t* parser);
 
@@ -207,6 +305,7 @@ void loom_parser_sync_to_brace(loom_parser_t* parser);
 typedef struct loom_parsed_op_t {
   loom_value_id_t* operand_ids;
   loom_value_id_t* result_ids;
+  loom_token_t* result_name_tokens;
   loom_attribute_t* attributes;
   loom_region_t** regions;
   loom_tied_result_t* tied_results;
@@ -226,6 +325,7 @@ typedef struct loom_parsed_op_t {
 
   loom_value_id_t inline_operand_ids[LOOM_PARSED_OP_INLINE_OPERANDS];
   loom_value_id_t inline_result_ids[LOOM_PARSED_OP_INLINE_RESULTS];
+  loom_token_t inline_result_name_tokens[LOOM_PARSED_OP_INLINE_RESULTS];
   loom_attribute_t inline_attributes[LOOM_PARSED_OP_INLINE_ATTRS];
   loom_region_t* inline_regions[LOOM_PARSED_OP_INLINE_REGIONS];
   loom_tied_result_t inline_tied_results[LOOM_PARSED_OP_INLINE_TIED];
@@ -239,10 +339,13 @@ iree_status_t loom_parsed_op_add_operand(loom_parsed_op_t* parsed,
                                          iree_arena_allocator_t* arena,
                                          loom_value_id_t value_id);
 
-// Appends a result value_id. Spills to arena on overflow.
+// Appends a result value ID and its defining token. Parser-synthesized results
+// without a user-authored LHS name should pass loom_token_none(). Spills to
+// arena on overflow.
 iree_status_t loom_parsed_op_add_result(loom_parsed_op_t* parsed,
                                         iree_arena_allocator_t* arena,
-                                        loom_value_id_t value_id);
+                                        loom_value_id_t value_id,
+                                        loom_token_t name_token);
 
 // Sets the attribute at |index|. Grows the attribute array if needed,
 // zero-filling any gaps between attribute_count and |index|.
