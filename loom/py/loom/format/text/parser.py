@@ -65,6 +65,7 @@ from loom.format.text.tokenizer import (
 from loom.ir import (
     ENCODING_TYPE,
     GROUP_SCOPE_BY_NAME,
+    NONE_TYPE,
     PREDICATE_KINDS,
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
@@ -201,10 +202,163 @@ class NameScope:
 class TypeParseMode(Enum):
     """Context for how dynamic dim references are resolved."""
 
-    ARG = "arg"  # Function args: [%M] creates new index values.
     BODY = "body"  # Op body: [%M] looks up existing values.
-    RETURN = "return"  # Function returns: [%M] looks up, [#N] is ordinal.
     SIGNATURE = "signature"  # Function signature: [%M] creates placeholders.
+
+
+# ============================================================================
+# Type reference resolution
+# ============================================================================
+
+
+def _resolve_type_value(
+    name: str,
+    scope: NameScope,
+    module: Module,
+    mode: TypeParseMode,
+    token: Token,
+    filename: str,
+) -> int:
+    """Resolve an SSA value reference in a type context.
+
+    |name| is the bare name (without '%' sigil). In SIGNATURE mode,
+    creates a PlaceholderType value if not found. In BODY mode, raises
+    ParseError for undefined names.
+    """
+    try:
+        return scope.lookup(name)
+    except KeyError:
+        pass
+
+    if mode == TypeParseMode.SIGNATURE:
+        value_id = module.add_value(Value(name=name, type=PlaceholderType()))
+        scope.define(name, value_id)
+        return value_id
+
+    raise ParseError(
+        f"undefined SSA value '%{name}'",
+        token.location,
+        filename,
+    )
+
+
+def _parse_dim_from_tokens(
+    tokenizer: Tokenizer,
+    scope: NameScope,
+    module: Module,
+    mode: TypeParseMode,
+    filename: str,
+) -> tuple[StaticDim | DynamicDim, int | None]:
+    """Parse a single dimension: INTEGER (static) or [SSA_VALUE] (dynamic).
+
+    Returns (dim, binding_value_id). binding_value_id is None for static dims.
+    """
+    token = tokenizer.peek()
+    if token.kind == TokenKind.INTEGER:
+        tokenizer.next()
+        return StaticDim(int(token.text)), None
+    if token.kind == TokenKind.LBRACKET:
+        tokenizer.next()  # consume [
+        name_token = tokenizer.expect(TokenKind.SSA_VALUE)
+        value_id = _resolve_type_value(
+            name_token.text, scope, module, mode, name_token, filename
+        )
+        tokenizer.expect(TokenKind.RBRACKET)
+        return DynamicDim(), value_id
+    raise ParseError(
+        f"expected integer or '[' for dimension, got {token.kind.name} {token.text!r}",
+        token.location,
+        filename,
+    )
+
+
+def _parse_type_encoding_from_tokens(
+    tokenizer: Tokenizer,
+    scope: NameScope,
+    module: Module,
+    mode: TypeParseMode,
+    filename: str,
+) -> tuple[EncodingInstance | DynamicEncoding | None, int]:
+    """Parse a type encoding after the comma in a shaped type.
+
+    Returns (encoding, encoding_value_id). encoding_value_id is -1
+    for static encodings, or the SSA value ID for dynamic (%enc).
+    """
+    token = tokenizer.peek()
+    if token.kind == TokenKind.SSA_VALUE:
+        tokenizer.next()
+        value_id = _resolve_type_value(token.text, scope, module, mode, token, filename)
+        # Verify the referenced value has EncodingType.
+        if value_id < len(module.values):
+            value = module.values[value_id]
+            if not isinstance(value.type, EncodingType | PlaceholderType):
+                raise ParseError(
+                    f"encoding reference '%{token.text}' has type "
+                    f"'{value.type}', expected encoding",
+                    token.location,
+                    filename,
+                )
+        return DynamicEncoding(), value_id
+
+    if token.kind == TokenKind.HASH_ATTR:
+        tokenizer.next()
+        # Reconstruct full text with '#' for alias lookup.
+        full_text = f"#{token.text}"
+
+        # Check alias table.
+        if _CURRENT_ALIASES and full_text in _CURRENT_ALIASES:
+            aliased = _CURRENT_ALIASES[full_text]
+            instance = EncodingInstance(
+                name=aliased.name, alias=full_text, params=aliased.params
+            )
+            module.add_encoding(instance)
+            return instance, -1
+
+        # Parse inline encoding: #name or #name<params>.
+        name = token.text
+        params: tuple[tuple[str, str], ...] = ()
+        if tokenizer.try_consume(TokenKind.LANGLE):
+            param_list: list[tuple[str, str]] = []
+            while not tokenizer.at(TokenKind.RANGLE) and not tokenizer.at(
+                TokenKind.EOF
+            ):
+                key_token = tokenizer.expect(TokenKind.BARE_IDENT)
+                tokenizer.expect(TokenKind.EQUALS)
+                value_token = tokenizer.next()
+                param_list.append((key_token.text, value_token.text))
+                tokenizer.try_consume(TokenKind.COMMA)
+            tokenizer.expect(TokenKind.RANGLE)
+            params = tuple(param_list)
+
+        # Validate encoding name if registry is available.
+        if (
+            _CURRENT_KNOWN_ENCODINGS is not None
+            and name not in _CURRENT_KNOWN_ENCODINGS
+        ):
+            raise ParseError(
+                f"unknown encoding '{name}'. "
+                f"Known encodings: {sorted(_CURRENT_KNOWN_ENCODINGS)}",
+                token.location,
+                filename,
+            )
+
+        instance = EncodingInstance(name=name, params=params)
+        module.add_encoding(instance)
+        return instance, -1
+
+    if token.kind == TokenKind.RESULT_ORDINAL:
+        tokenizer.next()
+        raise ParseError(
+            "encoding ordinals are no longer supported; use %name",
+            token.location,
+            filename,
+        )
+
+    raise ParseError(
+        f"expected encoding (%name or #name), got {token.kind.name} {token.text!r}",
+        token.location,
+        filename,
+    )
 
 
 # ============================================================================
@@ -263,8 +417,21 @@ def parse_type_from_tokens(
             tokenizer.next()
             if type_def.is_opaque:
                 return DialectType(type_def.name), {}
-            # Parameterized: consume < interior >
             tokenizer.expect(TokenKind.LANGLE)
+            # Shaped types (tile, tensor, pool) parse from the token
+            # stream using in_dim_list for 'x' separators. Other types
+            # use the interior tokenizer approach.
+            has_shape = any(isinstance(p, ShapeParam) for p in type_def.params)
+            if has_shape:
+                result = _parse_shaped_type_from_tokens(
+                    type_def,
+                    tokenizer,
+                    scope,
+                    module,
+                    mode,
+                )
+                tokenizer.in_dim_list = False  # cleanup on error paths
+                return result
             interior = tokenizer.scan_to_matching_angle_bracket()
             return _parse_type_interior(
                 type_def,
@@ -493,6 +660,121 @@ def _parse_type_interior(
     return DialectType(type_def.name, tuple(parsed_params)), {}
 
 
+def _parse_shaped_type_from_tokens(
+    type_def: TypeDef,
+    tokenizer: Tokenizer,
+    scope: NameScope,
+    module: Module,
+    mode: TypeParseMode,
+) -> tuple[ShapedType | PoolType, dict[int, int]]:
+    """Parse a shaped type (tile, tensor, pool) from the token stream.
+
+    Called after LANGLE has been consumed. Consumes tokens through
+    RANGLE. Uses in_dim_list on the tokenizer to handle 'x' as a
+    dimension separator.
+    """
+    filename = tokenizer._filename
+
+    # Pool: single dim, no element type, no encoding.
+    if type_def.ir_kind == "pool":
+        token = tokenizer.peek()
+        if token.kind not in (TokenKind.INTEGER, TokenKind.LBRACKET):
+            raise ParseError(
+                f"expected integer or '[' for pool dim, "
+                f"got {token.kind.name} {token.text!r}",
+                token.location,
+                filename,
+            )
+        dim, binding_id = _parse_dim_from_tokens(
+            tokenizer, scope, module, mode, filename
+        )
+        tokenizer.expect(TokenKind.RANGLE)
+        dim_bindings: dict[int, int] = {}
+        if binding_id is not None:
+            dim_bindings[0] = binding_id
+        return PoolType(block_size=dim), dim_bindings
+
+    # Shaped type (tile, tensor).
+    _IR_KIND_TO_TYPE_KIND = {"tile": TypeKind.TILE, "tensor": TypeKind.TENSOR}
+    type_kind = _IR_KIND_TO_TYPE_KIND.get(type_def.ir_kind)
+    if type_kind is None:
+        token = tokenizer.peek()
+        raise ParseError(
+            f"TypeDef '{type_def.name}' has ShapeParam but ir_kind "
+            f"'{type_def.ir_kind}' is not a recognized shaped type kind.",
+            token.location,
+            filename,
+        )
+
+    # Parse dimensions. in_dim_list must be true from the start so
+    # that '0x' in '0xf32' is scanned as INTEGER(0) + DIM_X(x) +
+    # BARE_IDENT(f32), not as hex INTEGER(0xf32).
+    dims: list[StaticDim | DynamicDim] = []
+    dim_bindings = {}
+    tokenizer.in_dim_list = True
+    token = tokenizer.peek()
+    if token.kind in (TokenKind.INTEGER, TokenKind.LBRACKET):
+        dim, binding_id = _parse_dim_from_tokens(
+            tokenizer, scope, module, mode, filename
+        )
+        dims.append(dim)
+        if binding_id is not None:
+            dim_bindings[len(dims) - 1] = binding_id
+
+        while tokenizer.at(TokenKind.DIM_X):
+            tokenizer.next()  # consume 'x'
+            tokenizer.in_dim_list = False
+            token = tokenizer.peek()
+            if token.kind not in (TokenKind.INTEGER, TokenKind.LBRACKET):
+                break  # element type follows
+            tokenizer.in_dim_list = True
+            dim, binding_id = _parse_dim_from_tokens(
+                tokenizer, scope, module, mode, filename
+            )
+            dims.append(dim)
+            if binding_id is not None:
+                dim_bindings[len(dims) - 1] = binding_id
+    else:
+        # Rank 0 — no dims. Clear in_dim_list before element type.
+        tokenizer.in_dim_list = False
+
+    # Parse element type (in_dim_list is false here).
+    element_token = tokenizer.expect(TokenKind.BARE_IDENT)
+    scalar_kind = _SCALAR_NAMES.get(element_token.text)
+    if scalar_kind is None:
+        raise ParseError(
+            f"unknown element type '{element_token.text}' in shaped type",
+            element_token.location,
+            filename,
+        )
+    element_type = ScalarType(scalar_kind)
+
+    # Parse optional encoding.
+    encoding: EncodingInstance | DynamicEncoding | None = None
+    encoding_binding = -1
+    if tokenizer.try_consume(TokenKind.COMMA):
+        encoding, encoding_binding = _parse_type_encoding_from_tokens(
+            tokenizer, scope, module, mode, filename
+        )
+    if encoding_binding >= 0:
+        dim_bindings[-1] = encoding_binding
+
+    tokenizer.expect(TokenKind.RANGLE)
+
+    shaped = ShapedType(
+        type_kind=type_kind,
+        element_type=element_type,
+        dims=tuple(dims),
+        encoding=encoding,
+    )
+    return shaped, dim_bindings
+
+
+# The old character-level sub-parsers below are no longer called from
+# the main type parsing path. They are retained temporarily for
+# reference until the migration is verified complete.
+
+
 def _parse_shaped_interior(
     type_def: TypeDef,
     interior: str,
@@ -507,6 +789,8 @@ def _parse_shaped_interior(
 
     Character-level sub-parser for: 4x4xf32, [%M]x4xf32,
     256xi8, #q8_0<block=32>, f32 (0-d), etc.
+
+    DEPRECATED: Use _parse_shaped_type_from_tokens instead.
     """
     # Pool type: single dim, no element type, no encoding.
     if type_def.ir_kind == "pool":
@@ -638,7 +922,7 @@ def _parse_dims_and_element(
                         scope.define(bare_name, value_id)
                     dim_bindings[i] = value_id
                 else:
-                    # BODY or RETURN mode: look up existing value.
+                    # BODY mode: look up existing value.
                     try:
                         value_id = scope.lookup(bare_name)
                         dim_bindings[i] = value_id
@@ -778,18 +1062,18 @@ def _parse_pool_interior(
         inner = text[1:-1].strip()
         if inner.startswith("%"):
             bare_name = inner[1:]  # Strip % sigil for scope lookup.
-            if mode == TypeParseMode.ARG:
-                # Reference an existing arg if already defined,
-                # otherwise define a new implicit index arg.
+            if mode == TypeParseMode.SIGNATURE:
+                # In signature mode, define a placeholder if not found.
                 try:
                     value_id = scope.lookup(bare_name)
                 except KeyError:
                     value_id = module.add_value(
-                        Value(name=bare_name, type=ScalarType(ScalarTypeKind.INDEX))
+                        Value(name=bare_name, type=PlaceholderType())
                     )
                     scope.define(bare_name, value_id)
                 dim_bindings[0] = value_id
             else:
+                # BODY mode: look up existing value.
                 try:
                     value_id = scope.lookup(bare_name)
                     dim_bindings[0] = value_id
@@ -875,6 +1159,9 @@ class Parser:
         self._tokenizer: Tokenizer = Tokenizer("")
         self._encoding_aliases: dict[str, EncodingInstance] = {}
         self._known_encodings: set[str] = set()
+        self._reserved_result_names: list[str] = []
+        self._reserved_result_ids: list[int] = []
+        self._definition_scope_depth: int = 0
 
     def register_ops(self, ops: Sequence[Op]) -> None:
         """Register op declarations."""
@@ -1078,9 +1365,26 @@ class Parser:
                 f"unknown op '{op_name}'", op_name_tok.location, tok._filename
             )
 
-        # 3. Walk format spec.
+        # 3. Pre-allocate result values so result type annotations can
+        # reference them (e.g., tile<[%m]x[%k]xf32> where %m and %k
+        # are co-results). The values start with NoneType and get
+        # their real types assigned after the format walk. They are
+        # NOT in the main scope — _parse_result_type pushes them
+        # into a child scope only during result type parsing, so
+        # operand/argument parsing cannot see them.
         parsed = ParsedFields()
+        reserved_result_ids: list[int] = []
+        if result_names:
+            for name in result_names:
+                value_id = self._module.add_value(Value(name=name, type=NONE_TYPE))
+                reserved_result_ids.append(value_id)
+        self._reserved_result_names = result_names
+        self._reserved_result_ids = reserved_result_ids
+
+        # 4. Walk format spec.
         self._walk_format(op_decl.format, op_decl, parsed)
+        self._reserved_result_names = []
+        self._reserved_result_ids = []
 
         # After format walk: resolve func-arg semantics.
         # For declaration-style ops (no body region), func args become operands.
@@ -1089,42 +1393,27 @@ class Parser:
         if parsed.func_arg_ids and not parsed.regions:
             parsed.operand_ids.extend(parsed.func_arg_ids)
 
-        # 4. Create result Values and define in scope.
+        # 5. Assign real types to pre-allocated result values and
+        # define them in scope.
         if result_names:
-            # Body op: LHS SSA names define result values.
-            for i, name in enumerate(result_names):
-                # If the result ID was already populated (named result), use it.
-                existing_id = (
-                    parsed.result_ids[i] if i < len(parsed.result_ids) else None
-                )
-                if existing_id is not None:
-                    self._scope.define(name, existing_id)
-                    continue
-
+            for i, value_id in enumerate(reserved_result_ids):
+                value = self._module.values[value_id]
                 if i < len(parsed.result_types):
-                    result_type = parsed.result_types[i]
-                else:
-                    result_type = ScalarType(ScalarTypeKind.I32)  # Fallback.
-                # Extract bindings: dim_bindings are non-negative keys,
-                # encoding_binding uses sentinel key -1.
-                bindings = (
-                    parsed.result_bindings[i] if i < len(parsed.result_bindings) else {}
-                )
-                dim_bindings = {k: v for k, v in bindings.items() if k >= 0}
-                encoding_binding = bindings.get(-1, -1)
-                value_id = self._module.add_value(
-                    Value(
-                        name=name,
-                        type=result_type,
-                        dim_bindings=dim_bindings,
-                        encoding_binding=encoding_binding,
+                    bindings = (
+                        parsed.result_bindings[i]
+                        if i < len(parsed.result_bindings)
+                        else {}
                     )
-                )
+                    dim_bindings = {k: v for k, v in bindings.items() if k >= 0}
+                    encoding_binding = bindings.get(-1, -1)
+                    value.type = parsed.result_types[i]
+                    value.dim_bindings = dim_bindings
+                    value.encoding_binding = encoding_binding
                 if i < len(parsed.result_ids):
                     parsed.result_ids[i] = value_id
                 else:
                     parsed.result_ids.append(value_id)
-                self._scope.define(name, value_id)
+                self._scope.define(result_names[i], value_id)
         elif parsed.result_types:
             # Symbol-defining op: no LHS names, create anonymous result values
             # for any that weren't already named in the signature.
@@ -1491,6 +1780,7 @@ class Parser:
                 case Scope(elements=inner):
                     parent_scope = self._scope
                     self._scope = self._scope.push()
+                    self._definition_scope_depth += 1
                     try:
                         self._walk_format(inner, op_decl, parsed)
                         # Verify all placeholders defined in this scope are resolved.
@@ -1504,6 +1794,7 @@ class Parser:
                                     tok._filename,
                                 )
                     finally:
+                        self._definition_scope_depth -= 1
                         self._scope = parent_scope
 
                 case Flags(field=name):
@@ -1673,10 +1964,22 @@ class Parser:
     # --- Result type list ---
 
     def _parse_result_type(self, parsed: ParsedFields) -> None:
-        """Parse a single bare result type (no parentheses)."""
+        """Parse a single bare result type (no parentheses).
+
+        Pushes pre-allocated result names into a child scope so the
+        type annotation can reference co-results by name (e.g.,
+        tile<[%m]x[%k]xf32> where %m and %k are results of this op).
+        """
+        scope = self._scope
+        if self._reserved_result_names:
+            scope = scope.push()
+            for name, value_id in zip(
+                self._reserved_result_names, self._reserved_result_ids, strict=False
+            ):
+                scope.define(name, value_id)
         result_type, bindings = parse_type_from_tokens(
             self._tokenizer,
-            self._scope,
+            scope,
             self._module,
             self._type_registry,
             TypeParseMode.BODY,
@@ -1687,7 +1990,18 @@ class Parser:
     def _parse_result_type_list(
         self, parsed: ParsedFields, op_decl: Op, field_name: str
     ) -> None:
-        """Parse (type) or (%operand as type, type)."""
+        """Parse (type) or (%operand as type, type).
+
+        Pushes pre-allocated result names into a child scope so type
+        annotations can reference co-results by name.
+        """
+        saved_scope = self._scope
+        if self._reserved_result_names:
+            self._scope = self._scope.push()
+            for name, value_id in zip(
+                self._reserved_result_names, self._reserved_result_ids, strict=False
+            ):
+                self._scope.define(name, value_id)
         tok = self._tokenizer
         tok.expect(TokenKind.LPAREN)
         if not tok.at(TokenKind.RPAREN):
@@ -1695,10 +2009,20 @@ class Parser:
             while tok.try_consume(TokenKind.COMMA):
                 self._parse_one_result_type(parsed)
         tok.expect(TokenKind.RPAREN)
+        self._scope = saved_scope
 
     def _parse_one_result_type(self, parsed: ParsedFields) -> None:
         """Parse one result type entry: type, %name: type, or %operand as type."""
         tok = self._tokenizer
+        # Result types use SIGNATURE mode (creating placeholders for
+        # unknown dims) only inside a Scope. Outside a Scope, unknown
+        # dim names are errors — same as the C parser's
+        # definition_scope_depth gating.
+        result_mode = (
+            TypeParseMode.SIGNATURE
+            if self._definition_scope_depth > 0
+            else TypeParseMode.BODY
+        )
         if tok.at(TokenKind.SSA_VALUE):
             name_tok = tok.next()
             if tok.try_consume(TokenKind.COLON):
@@ -1708,7 +2032,7 @@ class Parser:
                     self._scope,
                     self._module,
                     self._type_registry,
-                    TypeParseMode.SIGNATURE,
+                    result_mode,
                 )
                 dim_bindings = {k: v for k, v in all_bindings.items() if k >= 0}
                 encoding_binding = all_bindings.get(-1, -1)
@@ -1780,7 +2104,7 @@ class Parser:
                 self._scope,
                 self._module,
                 self._type_registry,
-                TypeParseMode.SIGNATURE,
+                result_mode,
             )
             parsed.result_types.append(result_type)
             parsed.result_bindings.append(bindings)
@@ -1931,19 +2255,23 @@ class Parser:
         return Predicate(kind=kind, args=tuple(args))
 
     def _parse_predicate_arg(self) -> PredicateArg:
-        """Parse a single predicate argument: %name, #N, or integer."""
+        """Parse a single predicate argument: %name or integer."""
         tok = self._tokenizer
         if tok.at(TokenKind.SSA_VALUE):
             name_tok = tok.next()
             return PredicateArg(tag="value", value=name_tok.text)
         if tok.at(TokenKind.RESULT_ORDINAL):
             ordinal_tok = tok.next()
-            return PredicateArg(tag="ordinal", value=int(ordinal_tok.text))
+            raise ParseError(
+                f"predicate ordinals (#{ordinal_tok.text}) are no longer "
+                f"supported; use %name instead",
+                ordinal_tok.location,
+            )
         if tok.at(TokenKind.INTEGER):
             int_tok = tok.next()
             return PredicateArg(tag="const", value=int(int_tok.text))
         raise ParseError(
-            f"expected predicate argument: %name, #N, or integer, "
+            f"expected predicate argument: %name or integer, "
             f"got {tok.peek().kind.name} '{tok.peek().text}'",
             tok.peek().location,
         )

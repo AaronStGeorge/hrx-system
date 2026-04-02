@@ -537,9 +537,10 @@ typedef uint16_t loom_value_flags_t;
 // For the hot path of type checking during pattern matching, this
 // means one cache-line fetch gives you everything about a value.
 typedef iree_alignas(64) struct loom_value_t {
-  // Interned SSA name (e.g., "%x", "%tile", "%0").
-  // Used for round-trip printing. The name is a property of the value,
-  // not the type: two values can have different names but the same type.
+  // Interned bare SSA name (e.g., "x", "tile", "0") without sigil.
+  // The printer adds '%' when emitting. Used for round-trip printing.
+  // The name is a property of the value, not the type: two values can
+  // have different names but the same type.
   loom_string_id_t name_id;
 
   // Number of operations that use this value as an operand.
@@ -685,10 +686,9 @@ typedef enum loom_predicate_kind_e {
 
 // Predicate argument tag: what kind of value the argument references.
 typedef enum loom_predicate_arg_tag_e {
-  LOOM_PRED_ARG_NONE = 0,     // Unused slot.
-  LOOM_PRED_ARG_VALUE = 1,    // SSA value ID.
-  LOOM_PRED_ARG_ORDINAL = 2,  // Result ordinal (#N).
-  LOOM_PRED_ARG_CONST = 3,    // Integer constant.
+  LOOM_PRED_ARG_NONE = 0,   // Unused slot.
+  LOOM_PRED_ARG_VALUE = 1,  // SSA value ID.
+  LOOM_PRED_ARG_CONST = 2,  // Integer constant.
   LOOM_PRED_ARG_COUNT_,
 } loom_predicate_arg_tag_t;
 
@@ -696,14 +696,14 @@ typedef enum loom_predicate_arg_tag_e {
 //
 // Predicates constrain dynamic dimension values in where clauses and
 // scalar.assume ops. Each predicate has a kind (eq, mul, range, etc.)
-// and 1-3 arguments. Arguments are tagged: SSA value references,
-// result ordinals (#N), or integer constants.
+// and 1-3 arguments. Arguments are tagged: SSA value references or
+// integer constants.
 typedef struct loom_predicate_t {
   uint8_t kind;         // loom_predicate_kind_t
   uint8_t arg_count;    // 1-3
   uint8_t arg_tags[3];  // loom_predicate_arg_tag_t per arg slot.
   uint8_t reserved[3];  // Pad to 8-byte boundary.
-  int64_t args[3];      // value_id, ordinal, or constant per slot.
+  int64_t args[3];      // value_id or constant per slot.
 } loom_predicate_t;     // 32 bytes
 
 static_assert(sizeof(loom_predicate_t) == 32,

@@ -47,21 +47,21 @@ func.def @increment(%new_value: index) {
 
 // ====
 
-// Load with ordinal dims — results #1 and #2 are index-typed.
+// Load with dynamic dims — %m and %k are co-results.
 global.constant @w : tile<[%m]x[%k]xf32>
 
 func.def @load_with_dims() {
-  %tile, %m, %k = global.load @w : tile<[#1]x[#2]xf32>
+  %tile, %m, %k = global.load @w : tile<[%m]x[%k]xf32>
   func.return
 }
 
 // ====
 
-// Load with equal ordinal dims — both map to result #1.
+// Load with equal dims — both reference the same co-result.
 global.variable @sq : tile<[%n]x[%n]xf32>
 
 func.def @load_equal_dims() {
-  %tile, %n = global.load @sq : tile<[#1]x[#1]xf32>
+  %tile, %n = global.load @sq : tile<[%n]x[%n]xf32>
   func.return
 }
 
@@ -72,54 +72,54 @@ global.constant @q_weights : tile<[%m]x[%k]xi8, #q8_0<block=32>>
 
 // ====
 
-// Load from encoded global — encoding is static, dims are ordinals.
+// Load from encoded global — encoding is static, dims are co-results.
 global.constant @qw : tile<[%m]x[%k]xi8, #q8_0<block=32>>
 
 func.def @load_encoded() {
-  %tile, %m, %k = global.load @qw : tile<[#1]x[#2]xi8, #q8_0<block=32>>
+  %tile, %m, %k = global.load @qw : tile<[%m]x[%k]xi8, #q8_0<block=32>>
   func.return
 }
 
 // ====
 
-// Load with encoding ordinal — result #2 is encoding-typed.
+// Load with SSA encoding — %enc is an encoding-typed co-result.
 global.constant @dyn_enc : tile<[%m]xf32, %enc>
 
-func.def @load_encoding_ordinal() {
-  %tile, %m, %enc = global.load @dyn_enc : tile<[#1]xf32, #2>
+func.def @load_ssa_encoding() {
+  %tile, %m, %enc = global.load @dyn_enc : tile<[%m]xf32, %enc>
   test.use %tile, %m, %enc : tile<[%m]xf32, %enc>, index, encoding
   func.return
 }
 
 // ====
 
-// Load with dim ordinals and encoding ordinal — three extra results.
+// Load with dim and encoding co-results.
 global.constant @dyn_enc2 : tile<[%m]x[%k]xi8, %enc>
 
 func.def @load_dims_and_encoding() {
-  %tile, %m, %k, %enc = global.load @dyn_enc2 : tile<[#1]x[#2]xi8, #3>
+  %tile, %m, %k, %enc = global.load @dyn_enc2 : tile<[%m]x[%k]xi8, %enc>
   test.use %tile, %m, %k, %enc : tile<[%m]x[%k]xi8, %enc>, index, index, encoding
   func.return
 }
 
 // ====
 
-// Encoding ordinal with equal dim ordinals — dims share one result.
+// Equal dims with SSA encoding.
 global.variable @dyn_sq : tile<[%n]x[%n]xf32, %enc>
 
 func.def @load_equal_dims_encoding() {
-  %tile, %n, %enc = global.load @dyn_sq : tile<[#1]x[#1]xf32, #2>
+  %tile, %n, %enc = global.load @dyn_sq : tile<[%n]x[%n]xf32, %enc>
   test.use %tile, %n, %enc : tile<[%n]x[%n]xf32, %enc>, index, encoding
   func.return
 }
 
 // ====
 
-// Encoding ordinal with static dims — only the encoding is dynamic.
+// Static dims with SSA encoding co-result.
 global.constant @static_dyn_enc : tile<4x8xf32, %enc>
 
 func.def @load_static_dims_encoding() {
-  %tile, %enc = global.load @static_dyn_enc : tile<4x8xf32, #1>
+  %tile, %enc = global.load @static_dyn_enc : tile<4x8xf32, %enc>
   test.use %tile, %enc : tile<4x8xf32, %enc>, encoding
   func.return
 }

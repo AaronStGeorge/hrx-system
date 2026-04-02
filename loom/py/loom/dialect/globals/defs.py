@@ -140,18 +140,12 @@ global_variable = Op(
 global_load = Op(
     "global.load",
     group=global_ops,
-    doc=(
-        "Load a value from a global. The type annotation uses #N result "
-        "ordinals for fresh dynamic dims (new SSA values) and %name "
-        "references for bound dims (existing SSA values, assertion). "
-        "Predicates on the global definition are propagated as value facts."
-    ),
+    doc=("Load a value from a global. Dynamic dims and encodings in the type annotation reference co-results by name. Predicates on the global definition are propagated as value facts."),
     attrs=[
         AttrDef("global", "symbol"),
     ],
-    # Variadic results: the loaded value + any fresh dim/encoding values.
-    # The actual result count is determined by the type annotation at parse
-    # time (one result per #N ordinal, plus the value itself).
+    # Variadic results: the loaded value + any dim/encoding co-results.
+    # The result count is determined by the LHS result names.
     results=[Result("result", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
     verify="loom_global_load_verify",
@@ -161,9 +155,9 @@ global_load = Op(
         ResultType("result"),
     ],
     examples=[
-        "%tile, %m, %k = global.load @weights : tile<[#1]x[#2]xf32>",
+        "%tile, %m, %k = global.load @weights : tile<[%m]x[%k]xf32>",
         "%tile = global.load @bias : tile<[%m]xf32>",
-        "%cache, %s, %d = global.load @kv_cache : tile<[#1]x[#1]x[#2]xf32>",
+        "%cache, %s, %d = global.load @kv_cache : tile<[%s]x[%s]x[%d]xf32>",
     ],
 )
 

@@ -87,8 +87,7 @@ static bool loom_global_types_match(loom_type_t global_type,
       continue;
     }
 
-    if (loom_dim_is_ordinal(global_dim) || !loom_dim_is_dynamic(use_dim) ||
-        loom_dim_is_ordinal(use_dim)) {
+    if (!loom_dim_is_dynamic(use_dim)) {
       return false;
     }
 
@@ -98,14 +97,12 @@ static bool loom_global_types_match(loom_type_t global_type,
          ++prior_dimension) {
       uint64_t prior_global_dim = loom_type_dim(global_type, prior_dimension);
       if (!loom_dim_is_dynamic(prior_global_dim) ||
-          loom_dim_is_ordinal(prior_global_dim) ||
           loom_dim_value_id(prior_global_dim) != global_value_id) {
         continue;
       }
 
       uint64_t prior_use_dim = loom_type_dim(use_type, prior_dimension);
       if (!loom_dim_is_dynamic(prior_use_dim) ||
-          loom_dim_is_ordinal(prior_use_dim) ||
           loom_dim_value_id(prior_use_dim) != use_value_id) {
         return false;
       }
@@ -129,7 +126,7 @@ static bool loom_global_type_references_dim_result(loom_type_t value_type,
   uint8_t rank = loom_type_rank(value_type);
   for (uint8_t dimension = 0; dimension < rank; ++dimension) {
     uint64_t dim = loom_type_dim(value_type, dimension);
-    if (!loom_dim_is_dynamic(dim) || loom_dim_is_ordinal(dim)) continue;
+    if (!loom_dim_is_dynamic(dim)) continue;
     if (loom_dim_value_id(dim) == value_id) return true;
   }
   return false;

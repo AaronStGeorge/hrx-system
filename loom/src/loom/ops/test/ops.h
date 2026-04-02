@@ -328,8 +328,8 @@ iree_status_t loom_test_attrs_build(
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_attrs_vtable;
 
-// LOOM_OP_TEST_DEFLATE: Test op with result ordinal dim.
-// %output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[#1]xf32>, index)
+// LOOM_OP_TEST_DEFLATE: Test op with result type referencing a co-result dim.
+// %output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[%length]xf32>, index)
 LOOM_DEFINE_ISA(loom_test_deflate_isa, LOOM_OP_TEST_DEFLATE)
 LOOM_DEFINE_OPERAND(loom_test_deflate_input, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_test_deflate_results, 0)

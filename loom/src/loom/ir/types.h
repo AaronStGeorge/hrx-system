@@ -15,17 +15,15 @@
 //   Group types:     group<scope>         (barrier scoping)
 //   Function types:  (f32, i32) -> (f64)  (callable signatures)
 //
-// Shape dimensions are either static integers, dynamic SSA value
-// references, or result ordinal references. Static dims are known
-// at compile time. Dynamic dims reference SSA values (index-typed)
-// that provide the runtime size. Ordinal dims reference another
-// co-result by position, enabling ops that return both data and
-// its size:
+// Shape dimensions are either static integers or dynamic SSA value
+// references. Static dims are known at compile time. Dynamic dims
+// reference SSA values (index-typed) that provide the runtime size.
+// Within function signatures, Scope() enables forward references so
+// result types can reference co-result dims by name:
 //
 //   tile<4x4xf32>           All static.
 //   tile<[%M]x4xf32>        First dim dynamic, named %M.
 //   tensor<[%M]x[%K]xf32>   Both dims dynamic.
-//   tensor<[#1]xf32>        First dim references result #1.
 //
 // Every dynamic dim has a name. In function signatures, named dims
 // implicitly define index-typed SSA values in the function body.
@@ -53,10 +51,9 @@
 //   bytes 8-23: dims (inline for rank <= 2, overflow pointer otherwise)
 //
 // Inline dim packing (rank <= 2):
-//   Each dim is a uint64_t. Top two bits encode the kind:
-//   bits 63:62 = 00: static (bits 0-61 = size).
-//   bits 63:62 = 10: dynamic SSA value (bits 0-61 = value_id).
-//   bits 63:62 = 11: result ordinal (bits 0-61 = ordinal index).
+//   Each dim is a uint64_t. Top bit encodes the kind:
+//   bit 63 = 0: static (bits 0-62 = size).
+//   bit 63 = 1: dynamic SSA value (bits 0-61 = value_id, bit 62 reserved).
 //
 // Overflow (rank > 2):
 //   dims[0] = pointer to arena-allocated loom_dim_t array.
@@ -170,44 +167,28 @@ int32_t loom_scalar_type_bitwidth(loom_scalar_type_t type);
 bool loom_scalar_type_parse(iree_string_view_t name,
                             loom_scalar_type_t* out_type);
 
-// Dimension packing uses the top two bits (63:62) to distinguish
-// three kinds of dimension:
+// Dimension packing uses the top bit to distinguish two kinds:
 //
-//   bits 63:62 = 00: static dimension (bits 0-61 = size).
-//   bits 63:62 = 10: dynamic SSA value (bits 0-61 = value_id).
-//   bits 63:62 = 11: result ordinal (bits 0-61 = ordinal index).
+//   bit 63 = 0: static dimension (bits 0-62 = size).
+//   bit 63 = 1: dynamic SSA value (bits 0-61 = value_id).
 //
-// Bit pattern 01 is reserved (static sizes never need bit 62 since
-// max static size is 2^62 - 1, which is still astronomical).
-//
-// Result ordinal dims reference another co-result by position:
-// tensor<[#1]xf32> means "my first dimension equals whatever result
-// #1 is at runtime." This enables operations that return both data
-// and its size without requiring separate dispatches or readback.
+// Bit 62 is reserved for dynamic dims (always 0 for now).
 
-// Dynamic flag: top bit of a packed dimension value. Set for both
-// SSA value dims and result ordinal dims.
+// Dynamic flag: top bit of a packed dimension value.
 #define LOOM_DIM_DYNAMIC_FLAG ((uint64_t)1 << 63)
-
-// Ordinal flag: bits 63:62 both set. Distinguishes result ordinal
-// dims from SSA value dims (which have only bit 63 set).
-#define LOOM_DIM_ORDINAL_FLAG ((uint64_t)3 << 62)
 
 // Mask covering the payload bits (0-61).
 #define LOOM_DIM_PAYLOAD_MASK (((uint64_t)1 << 62) - 1)
 
-// Maximum static dimension size (2^62 - 1).
-#define LOOM_DIM_MAX_STATIC_SIZE (((int64_t)1 << 62) - 1)
+// Maximum static dimension size (2^63 - 1).
+#define LOOM_DIM_MAX_STATIC_SIZE (((int64_t)1 << 63) - 1)
 
 // Maximum SSA value ID that fits in a packed dim.
 #define LOOM_DIM_MAX_VALUE_ID (((uint64_t)1 << 62) - 1)
 
-// Maximum result ordinal that fits in a packed dim.
-#define LOOM_DIM_MAX_ORDINAL (((uint32_t)1 << 30) - 1)
-
 // Packs a static dimension into the inline format.
 static inline uint64_t loom_dim_pack_static(int64_t size) {
-  return (uint64_t)size;  // Top two bits clear = static.
+  return (uint64_t)size;  // Top bit clear = static.
 }
 
 // Packs a dynamic dimension (SSA value ID) into the inline format.
@@ -215,27 +196,9 @@ static inline uint64_t loom_dim_pack_dynamic(uint64_t value_id) {
   return LOOM_DIM_DYNAMIC_FLAG | value_id;
 }
 
-// Packs a result ordinal dimension into the inline format.
-static inline uint64_t loom_dim_pack_ordinal(uint32_t ordinal) {
-  return LOOM_DIM_ORDINAL_FLAG | (uint64_t)ordinal;
-}
-
-// Returns true if a packed dimension is dynamic (either SSA value or
-// result ordinal — the size is not statically known in either case).
+// Returns true if a packed dimension is dynamic (SSA value reference).
 static inline bool loom_dim_is_dynamic(uint64_t packed) {
   return (packed & LOOM_DIM_DYNAMIC_FLAG) != 0;
-}
-
-// Returns true if a packed dimension is a result ordinal reference.
-// Ordinal dims have both bits 63 and 62 set.
-static inline bool loom_dim_is_ordinal(uint64_t packed) {
-  return (packed >> 62) == 3;
-}
-
-// Returns the result ordinal index from a packed ordinal dimension.
-// Caller must check loom_dim_is_ordinal() first.
-static inline uint32_t loom_dim_ordinal(uint64_t packed) {
-  return (uint32_t)(packed & LOOM_DIM_PAYLOAD_MASK);
 }
 
 // Returns the static size from a packed dimension.
@@ -245,7 +208,7 @@ static inline int64_t loom_dim_static_size(uint64_t packed) {
 }
 
 // Returns the SSA value ID from a packed dynamic dimension.
-// Caller must check loom_dim_is_dynamic() && !loom_dim_is_ordinal().
+// Caller must check loom_dim_is_dynamic() first.
 static inline loom_value_id_t loom_dim_value_id(uint64_t packed) {
   uint64_t payload = packed & LOOM_DIM_PAYLOAD_MASK;
   IREE_ASSERT(payload <= UINT32_MAX,
@@ -310,13 +273,8 @@ enum loom_type_flags_e {
 // module encoding table index. This enables dynamic encodings that
 // propagate through function signatures as SSA values.
 //
-// When LOOM_ENCODING_FLAG_ORDINAL is set, encoding_id holds a result
-// ordinal index (like dim ordinals [#N]). The referenced co-result
-// is encoding-typed. Used in return types: tile<[#1]xf32, #2> means
-// result #2 is the encoding value for this tile.
 enum loom_encoding_flag_bits_e {
   LOOM_ENCODING_FLAG_SSA = (1u << 0),
-  LOOM_ENCODING_FLAG_ORDINAL = (1u << 1),
 };
 typedef uint16_t loom_encoding_flags_t;
 
@@ -537,7 +495,7 @@ static inline bool loom_type_rank_equals(loom_type_t a, loom_type_t b) {
 }
 
 // Returns true if two types have identical shapes (same rank and all
-// dims match — static sizes, dynamic value IDs, and ordinal refs).
+// dims match — static sizes and dynamic value IDs).
 static inline bool loom_type_shape_equals(loom_type_t a, loom_type_t b) {
   uint8_t rank_a = loom_type_rank(a);
   if (rank_a != loom_type_rank(b)) return false;
@@ -560,10 +518,10 @@ static inline bool loom_type_encoding_equals(loom_type_t a, loom_type_t b) {
   return a.encoding_id == b.encoding_id && a.encoding_flags == b.encoding_flags;
 }
 
-// Returns true if the type carries any encoding (static, SSA, or ordinal).
-// Static encodings have encoding_id > 0 with no flags. SSA and ordinal
-// encodings may have encoding_id == 0 (valid value_id or ordinal index),
-// so we also check encoding_flags.
+// Returns true if the type carries any encoding (static or SSA).
+// Static encodings have encoding_id > 0 with no flags. SSA encodings
+// may have encoding_id == 0 (valid value_id), so we also check
+// encoding_flags.
 static inline bool loom_type_has_encoding(loom_type_t type) {
   return type.encoding_id != 0 || type.encoding_flags != 0;
 }
@@ -574,27 +532,14 @@ static inline bool loom_type_has_ssa_encoding(loom_type_t type) {
   return (type.encoding_flags & LOOM_ENCODING_FLAG_SSA) != 0;
 }
 
-// Returns true if the encoding is a result ordinal reference (#N in
-// encoding position). The encoding_id holds the ordinal index.
-static inline bool loom_type_has_ordinal_encoding(loom_type_t type) {
-  return (type.encoding_flags & LOOM_ENCODING_FLAG_ORDINAL) != 0;
-}
-
-// Returns true if the type has a static (non-SSA, non-ordinal) encoding.
+// Returns true if the type has a static (non-SSA) encoding.
 static inline bool loom_type_has_static_encoding(loom_type_t type) {
-  return type.encoding_id != 0 && !loom_type_has_ssa_encoding(type) &&
-         !loom_type_has_ordinal_encoding(type);
+  return type.encoding_id != 0 && !loom_type_has_ssa_encoding(type);
 }
 
 // Returns the SSA value_id for a dynamic encoding. Only valid when
 // loom_type_has_ssa_encoding() returns true.
 static inline uint16_t loom_type_encoding_value_id(loom_type_t type) {
-  return type.encoding_id;
-}
-
-// Returns the result ordinal index for an ordinal encoding. Only valid
-// when loom_type_has_ordinal_encoding() returns true.
-static inline uint32_t loom_type_encoding_ordinal(loom_type_t type) {
   return type.encoding_id;
 }
 
@@ -623,6 +568,9 @@ static inline loom_type_t loom_type_pool(uint64_t block_size_dim) {
   type.dims[0] = block_size_dim;
   return type;
 }
+
+// Creates a none type (placeholder for values whose type is not yet known).
+static inline loom_type_t loom_type_none(void) { return (loom_type_t){0}; }
 
 // Creates a scalar type (rank 0, no shape, no encoding).
 static inline loom_type_t loom_type_scalar(loom_scalar_type_t scalar_type) {

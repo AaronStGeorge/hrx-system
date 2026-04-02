@@ -137,49 +137,16 @@ TEST(PrintType, TileLargeStatic) {
   EXPECT_EQ(print_type(type), "tile<256x256xf16>");
 }
 
-TEST(DimPacking, OrdinalRoundTrip) {
-  // Pack and unpack ordinal dims.
-  uint64_t packed = loom_dim_pack_ordinal(42);
-  EXPECT_TRUE(loom_dim_is_dynamic(packed));
-  EXPECT_TRUE(loom_dim_is_ordinal(packed));
-  EXPECT_EQ(loom_dim_ordinal(packed), 42u);
-}
-
-TEST(DimPacking, DynamicNotOrdinal) {
-  // Dynamic SSA dims must not be misidentified as ordinals.
+TEST(DimPacking, DynamicRoundTrip) {
   uint64_t packed = loom_dim_pack_dynamic(42);
   EXPECT_TRUE(loom_dim_is_dynamic(packed));
-  EXPECT_FALSE(loom_dim_is_ordinal(packed));
   EXPECT_EQ(loom_dim_value_id(packed), 42u);
 }
 
-TEST(DimPacking, StaticNotDynamicOrOrdinal) {
+TEST(DimPacking, StaticNotDynamic) {
   uint64_t packed = loom_dim_pack_static(256);
   EXPECT_FALSE(loom_dim_is_dynamic(packed));
-  EXPECT_FALSE(loom_dim_is_ordinal(packed));
   EXPECT_EQ(loom_dim_static_size(packed), 256);
-}
-
-TEST(PrintType, OrdinalDim) {
-  // tensor<[#0]xf32> — first dim references result ordinal 0.
-  loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
-                                         loom_dim_pack_ordinal(0), 0);
-  EXPECT_EQ(print_type(type), "tensor<[#0]xf32>");
-}
-
-TEST(PrintType, OrdinalDimNonZero) {
-  // tensor<[#1]xf32> — first dim references result ordinal 1.
-  loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
-                                         loom_dim_pack_ordinal(1), 0);
-  EXPECT_EQ(print_type(type), "tensor<[#1]xf32>");
-}
-
-TEST(PrintType, OrdinalDimWithStaticDim) {
-  // tensor<[#0]x4xf32> — ordinal + static.
-  loom_type_t type =
-      loom_type_shaped_2d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
-                          loom_dim_pack_ordinal(0), loom_dim_pack_static(4), 0);
-  EXPECT_EQ(print_type(type), "tensor<[#0]x4xf32>");
 }
 
 // RAII wrapper for function types in tests. Builds via
@@ -948,29 +915,34 @@ TEST_F(PrintOpTest, AttrsOpWithDictEntries) {
 }
 
 //===----------------------------------------------------------------------===//
-// Result ordinal dims
+// Result dim references
 //===----------------------------------------------------------------------===//
 
-TEST_F(PrintOpTest, DeflateWithOrdinalDim) {
-  // test.deflate: 1 tensor input, variadic results.
-  // Result 0: tensor<[#1]xf32> (ordinal dim referencing result 1).
-  // Result 1: index.
+TEST_F(PrintOpTest, DeflateWithResultDimReference) {
+  // test.deflate with result 0's dim referencing result 1 (the length).
+  // Uses loom_builder_reserve_results so the result value_ids are known
+  // before constructing the result types.
   loom_type_t tensor_dyn = loom_type_shaped_1d(
       LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(0), 0);
-  loom_type_t tensor_ord = loom_type_shaped_1d(
-      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_ordinal(1), 0);
   loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   loom_value_id_t input = def(tensor_dyn);
 
-  // Build the deflate op with ordinal result type.
-  loom_type_t result_types[] = {tensor_ord, index_type};
+  // Reserve 2 result value_ids so we can reference result[1] in
+  // result[0]'s type.
+  loom_value_id_t result_ids[2];
+  IREE_ASSERT_OK(loom_builder_reserve_results(&builder_, 2, result_ids));
+  loom_type_t tensor_ref =
+      loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(result_ids[1]), 0);
+  loom_type_t result_types[] = {tensor_ref, index_type};
+
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_test_deflate_build(&builder_, input, result_types, 2,
                                          NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_EQ(output,
-            "%1, %2 = test.deflate %0 : tensor<[%?]xf32>"
-            " -> (tensor<[#1]xf32>, index)\n");
+            "%1, %2 = test.deflate %0 : tensor<[%0]xf32>"
+            " -> (tensor<[%2]xf32>, index)\n");
 }
 
 //===----------------------------------------------------------------------===//
@@ -1383,7 +1355,6 @@ TEST(PredicateLayout, AllArgTagsValid) {
   loom_predicate_arg_tag_t tags[] = {
       LOOM_PRED_ARG_NONE,
       LOOM_PRED_ARG_VALUE,
-      LOOM_PRED_ARG_ORDINAL,
       LOOM_PRED_ARG_CONST,
   };
   loom_predicate_t predicate = {0};
@@ -1393,7 +1364,7 @@ TEST(PredicateLayout, AllArgTagsValid) {
   }
   EXPECT_EQ(predicate.arg_tags[0], LOOM_PRED_ARG_NONE);
   EXPECT_EQ(predicate.arg_tags[1], LOOM_PRED_ARG_VALUE);
-  EXPECT_EQ(predicate.arg_tags[2], LOOM_PRED_ARG_ORDINAL);
+  EXPECT_EQ(predicate.arg_tags[2], LOOM_PRED_ARG_CONST);
 }
 
 TEST(PredicateLayout, LargeConstants) {
@@ -1669,21 +1640,6 @@ TEST_F(PrintPredicateTest, RangeThreeArgs) {
             "test.predtest [range(%M, 1, 4096)]\n");
 }
 
-TEST_F(PrintPredicateTest, OrdinalArg) {
-  // Build: [eq(#0, 42)]
-  loom_predicate_t predicates[1] = {};
-  predicates[0].kind = LOOM_PREDICATE_EQ;
-  predicates[0].arg_count = 2;
-  predicates[0].arg_tags[0] = LOOM_PRED_ARG_ORDINAL;
-  predicates[0].arg_tags[1] = LOOM_PRED_ARG_CONST;
-  predicates[0].args[0] = 0;
-  predicates[0].args[1] = 42;
-
-  loom_op_t* op = build_pred_op(predicates, 1);
-  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
-            "test.predtest [eq(#0, 42)]\n");
-}
-
 TEST_F(PrintPredicateTest, EmptyPredicateList) {
   // An empty predicate list: no attribute data to print.
   // The PREDICATE_LIST case checks for NULL predicate_list and skips.
@@ -1824,6 +1780,49 @@ TEST_F(PrintOpTest, TypeWithEncodingNoModule) {
   loom_type_t tile = loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
                                          256, /*encoding_id=*/3);
   EXPECT_EQ(print_type(tile), "tile<256xf32, #encoding_3>");
+}
+
+TEST_F(PrintOpTest, DynamicDimNamedValue) {
+  // Dynamic dim referencing a named value prints [%name].
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_value_id_t dim_id = def(index_type);
+  module_->values.entries[dim_id].name_id = intern("M");
+  loom_type_t tensor = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(dim_id), 0);
+  EXPECT_EQ(print_type(tensor, module_), "tensor<[%M]xf32>");
+}
+
+TEST_F(PrintOpTest, DynamicDimUnnamedValue) {
+  // Dynamic dim referencing an unnamed value prints [%N] (auto-name).
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_value_id_t dim_id = def(index_type);
+  loom_type_t tile = loom_type_shaped_2d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F16,
+                                         loom_dim_pack_dynamic(dim_id),
+                                         loom_dim_pack_static(4), 0);
+  EXPECT_EQ(print_type(tile, module_), "tile<[%0]x4xf16>");
+}
+
+TEST_F(PrintOpTest, TypeWithSSAEncoding) {
+  // SSA encoding prints as %name when the value is named.
+  loom_type_t encoding_type = loom_type_encoding();
+  loom_value_id_t enc_id = def(encoding_type);
+  module_->values.entries[enc_id].name_id = intern("enc");
+  loom_type_t tile = loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I8,
+                                         loom_dim_pack_static(256),
+                                         /*encoding_id=*/(uint16_t)enc_id);
+  tile.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  EXPECT_EQ(print_type(tile, module_), "tile<256xi8, %enc>");
+}
+
+TEST_F(PrintOpTest, TypeWithSSAEncodingUnnamed) {
+  // SSA encoding with unnamed value prints %N (auto-name).
+  loom_type_t encoding_type = loom_type_encoding();
+  loom_value_id_t enc_id = def(encoding_type);
+  loom_type_t tile = loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I8,
+                                         loom_dim_pack_static(256),
+                                         /*encoding_id=*/(uint16_t)enc_id);
+  tile.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  EXPECT_EQ(print_type(tile, module_), "tile<256xi8, %0>");
 }
 
 //===----------------------------------------------------------------------===//

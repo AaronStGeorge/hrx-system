@@ -253,10 +253,10 @@ class TestBuilders:
         return cast(ValueRef, self._b.build("test.attrs", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def deflate(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
-        """Test op with result ordinal dim.
+        """Test op with result type referencing a co-result dim.
 
         Example::
-            %output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[#1]xf32>, index)
+            %output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[%length]xf32>, index)
         """
         _operands: list[ValueRef | int] = []
         _attributes: dict[str, Any] = {}

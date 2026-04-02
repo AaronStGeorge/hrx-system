@@ -73,6 +73,7 @@ void loom_tokenizer_initialize(iree_string_view_t source,
   out_tokenizer->peeked.kind = LOOM_TOKEN_NONE;
   out_tokenizer->filename = filename;
   out_tokenizer->status = iree_ok_status();
+  out_tokenizer->in_dim_list = false;
 }
 
 void loom_tokenizer_deinitialize(loom_tokenizer_t* tokenizer) {
@@ -126,6 +127,8 @@ iree_string_view_t loom_token_kind_name(loom_token_kind_t kind) {
       return IREE_SV("','");
     case LOOM_TOKEN_ARROW:
       return IREE_SV("'->'");
+    case LOOM_TOKEN_DIM_X:
+      return IREE_SV("'x'");
     case LOOM_TOKEN_PIPE:
       return IREE_SV("'|'");
     case LOOM_TOKEN_EOF:
@@ -275,8 +278,10 @@ static loom_token_t loom_tokenizer_scan_number(loom_tokenizer_t* t) {
     ++t->column;
   }
 
-  // Check for hex: 0x...
-  if (loom_tokenizer_char(t) == '0' && loom_tokenizer_char_at(t, 1) == 'x') {
+  // Check for hex: 0x... (but not when in_dim_list — 'x' is a
+  // dimension separator, so '0' is a static dim of size 0).
+  if (loom_tokenizer_char(t) == '0' && loom_tokenizer_char_at(t, 1) == 'x' &&
+      !t->in_dim_list) {
     t->position += 2;
     t->column += 2;
     while (loom_is_hex_digit(loom_tokenizer_char(t))) {
@@ -404,7 +409,9 @@ static iree_status_t loom_tokenizer_scan_symbol(loom_tokenizer_t* t,
 
 // Scans a '#' prefixed token (hash attr or result ordinal). The returned
 // token text excludes the '#' prefix (e.g., '#q8_0' → 'q8_0', '#0' → '0').
-// Rejects bare '#' with no identifier or digit following.
+// Result ordinals (#digit) are still tokenized for targeted error messages
+// but are no longer accepted by the grammar. Rejects bare '#' with no
+// identifier or digit following.
 static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
                                               loom_token_t* out_token) {
   uint32_t start_line = t->line;
@@ -417,7 +424,7 @@ static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
 
   char next = loom_tokenizer_char(t);
   if (loom_is_digit(next)) {
-    // Result ordinal: #0, #1.
+    // Result ordinal: #0, #1 (no longer valid, tokenized for error messages).
     while (loom_is_digit(loom_tokenizer_char(t))) {
       ++t->position;
       ++t->column;
@@ -603,7 +610,7 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
     return loom_tokenizer_scan_symbol(t, out_token);
   }
 
-  // Hash (attr or result ordinal).
+  // Hash attr or result ordinal (ordinals rejected at parse time).
   if (c == '#') {
     return loom_tokenizer_scan_hash(t, out_token);
   }
@@ -611,6 +618,18 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
   // Block label.
   if (c == '^') {
     return loom_tokenizer_scan_block_label(t, out_token);
+  }
+
+  // Dimension separator: in a dim list, 'x' is a single-character
+  // separator token rather than an identifier start. The parser sets
+  // in_dim_list during shaped type dim parsing and clears it before
+  // scanning element types or encoding parameters.
+  if (t->in_dim_list && c == 'x') {
+    ++t->position;
+    ++t->column;
+    *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_DIM_X, start,
+                                           start_line, start_column);
+    return iree_ok_status();
   }
 
   // Identifier or op name.

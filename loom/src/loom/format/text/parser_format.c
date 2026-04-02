@@ -12,62 +12,36 @@
 // Format element parsers
 //===----------------------------------------------------------------------===//
 
-// Sets the type of results referenced by ordinal dims [#N] and
-// ordinal encodings (#N) in parsed result types. Dim ordinals produce
-// index-typed results; encoding ordinals produce encoding-typed
-// results. If any ordinal references a result beyond
-// parsed->result_count, emits a parse error.
-//
-// The results must already exist from the LHS (%a, %b, %c = ...).
-// This function only fills in their types.
-static iree_status_t loom_parse_format_expand_ordinal_results(
-    loom_parser_t* parser, loom_parsed_op_t* parsed) {
-  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
-  loom_type_t encoding_type = loom_type_encoding();
+// Pushes LHS result values into a child scope so result type
+// annotations can reference co-results by name. Returns the saved
+// scope to restore after parsing.
+static iree_status_t loom_parse_format_push_result_scope(
+    loom_parser_t* parser, const loom_parsed_op_t* parsed,
+    loom_parser_scope_t** out_saved_scope) {
+  *out_saved_scope = parser->scope;
+  if (parsed->result_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_scope_push(&parser->parser_arena, parser->scope, &parser->scope));
   for (uint16_t r = 0; r < parsed->result_count; ++r) {
-    loom_type_t type = parsed->result_types[r];
-
-    // Expand dim ordinals [#N] → index-typed results.
-    uint8_t rank = loom_type_rank(type);
-    for (uint8_t d = 0; d < rank; ++d) {
-      uint64_t dim = loom_type_dim(type, d);
-      if (!loom_dim_is_ordinal(dim)) continue;
-      uint32_t ordinal = loom_dim_ordinal(dim);
-      if (ordinal >= parsed->result_count) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_u32(ordinal),
-            loom_param_u32((uint32_t)parsed->result_count),
-        };
-        return loom_parser_emit(parser, &loom_err_parse_015, params,
-                                IREE_ARRAYSIZE(params),
-                                loom_tokenizer_peek(&parser->tokenizer));
-      }
-      parsed->result_types[ordinal] = index_type;
+    loom_value_id_t value_id = parsed->result_ids[r];
+    loom_string_id_t name_id = parser->module->values.entries[value_id].name_id;
+    if (name_id == LOOM_STRING_ID_INVALID ||
+        name_id >= parser->module->strings.count) {
+      continue;
     }
-
-    // Expand encoding ordinal #N → encoding-typed result.
-    if (loom_type_has_ordinal_encoding(type)) {
-      uint32_t ordinal = loom_type_encoding_ordinal(type);
-      if (ordinal >= parsed->result_count) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_u32(ordinal),
-            loom_param_u32((uint32_t)parsed->result_count),
-        };
-        return loom_parser_emit(parser, &loom_err_parse_015, params,
-                                IREE_ARRAYSIZE(params),
-                                loom_tokenizer_peek(&parser->tokenizer));
-      }
-      parsed->result_types[ordinal] = encoding_type;
-    }
+    iree_string_view_t name = parser->module->strings.entries[name_id];
+    bool duplicate = false;
+    IREE_RETURN_IF_ERROR(loom_scope_define(parser->scope, &parser->parser_arena,
+                                           name, value_id, &duplicate));
   }
   return iree_ok_status();
 }
 
 // Parses a result type list: (type, %operand as type, ...).
 // Handles tied results (in-place operations) and func signature
-// return types (no LHS result names). In bare mode (parens=false),
-// ordinal dims [#N] in the parsed type are expanded into additional
-// index-typed results with names inherited from the referenced symbol.
+// return types (no LHS result names).
 static iree_status_t loom_parse_format_result_type_list(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
@@ -83,13 +57,11 @@ static iree_status_t loom_parse_format_result_type_list(
                               IREE_ARRAYSIZE(params), peek);
     }
   }
-  // Bare result type lists (global.load) always use RETURN mode so that
-  // [#N] ordinals are accepted. Parenthesized lists use RETURN mode only
-  // in function signature context (pending block args from FuncArgs).
-  loom_type_parse_mode_t type_mode =
-      (!use_parens || parser->pending_block_arg_count > 0)
-          ? LOOM_TYPE_PARSE_RETURN
-          : LOOM_TYPE_PARSE_BODY;
+  // Result name forward references are handled by the result scope push
+  // (loom_parse_format_push_result_scope), not by the type parse mode.
+  // Bare result type lists and function signature contexts both use BODY
+  // mode — unknown names are errors.
+  loom_type_parse_mode_t type_mode = LOOM_TYPE_PARSE_BODY;
   uint16_t result_index = 0;
   while ((!use_parens ||
           !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN)) &&
@@ -150,12 +122,16 @@ static iree_status_t loom_parse_format_result_type_list(
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_tied_result(
             parsed, &parser->parser_arena, tied));
 
-        // Update or add the result type.
+        // Assign the result type.
         if (result_index < parsed->result_count) {
-          parsed->result_types[result_index] = type;
+          parser->module->values.entries[parsed->result_ids[result_index]]
+              .type = type;
         } else {
+          loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+          IREE_RETURN_IF_ERROR(
+              loom_module_define_value(parser->module, type, &value_id));
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
-              parsed, &parser->parser_arena, iree_string_view_empty(), type));
+              parsed, &parser->parser_arena, value_id));
         }
       } else {
         // Not tied — the SSA token was actually consumed. This
@@ -175,20 +151,18 @@ static iree_status_t loom_parse_format_result_type_list(
       loom_type_t type = {0};
       IREE_RETURN_IF_ERROR(loom_parse_type(parser, type_mode, &type));
       if (result_index < parsed->result_count) {
-        parsed->result_types[result_index] = type;
+        parser->module->values.entries[parsed->result_ids[result_index]].type =
+            type;
       } else {
-        IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
-            parsed, &parser->parser_arena, iree_string_view_empty(), type));
+        loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+        IREE_RETURN_IF_ERROR(
+            loom_module_define_value(parser->module, type, &value_id));
+        IREE_RETURN_IF_ERROR(
+            loom_parsed_op_add_result(parsed, &parser->parser_arena, value_id));
       }
     }
     ++result_index;
   }
-  // Expand ordinal dim references into additional index-typed results.
-  if (!use_parens) {
-    IREE_RETURN_IF_ERROR(
-        loom_parse_format_expand_ordinal_results(parser, parsed));
-  }
-
   // Consume the closing ')' if parenthesized.
   if (use_parens) {
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {
@@ -833,32 +807,36 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
 
       case LOOM_FORMAT_KIND_RESULT_TYPE:
       case LOOM_FORMAT_KIND_RESULT_TYPE_SINGLE: {
-        // Result types use RETURN mode to accept [#N] ordinals. In
-        // definition scope (globals), use ARG mode so [%name] creates
-        // new values. Both modes accept ordinals.
         loom_type_parse_mode_t type_mode = parser->definition_scope_depth > 0
                                                ? LOOM_TYPE_PARSE_ARG
-                                               : LOOM_TYPE_PARSE_RETURN;
+                                               : LOOM_TYPE_PARSE_BODY;
+        loom_parser_scope_t* saved_scope = NULL;
+        IREE_RETURN_IF_ERROR(
+            loom_parse_format_push_result_scope(parser, parsed, &saved_scope));
         loom_type_t type = {0};
         IREE_RETURN_IF_ERROR(loom_parse_type(parser, type_mode, &type));
+        parser->scope = saved_scope;
         if (element->field_index < parsed->result_count) {
-          parsed->result_types[element->field_index] = type;
+          parser->module->values
+              .entries[parsed->result_ids[element->field_index]]
+              .type = type;
         } else {
-          IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
-              parsed, &parser->parser_arena, iree_string_view_empty(), type));
-        }
-        // Expand ordinal dim/encoding references into additional
-        // typed results (same as RESULT_TYPE_LIST does for bare lists).
-        if (element->kind == LOOM_FORMAT_KIND_RESULT_TYPE_SINGLE) {
+          loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
           IREE_RETURN_IF_ERROR(
-              loom_parse_format_expand_ordinal_results(parser, parsed));
+              loom_module_define_value(parser->module, type, &value_id));
+          IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
+              parsed, &parser->parser_arena, value_id));
         }
         break;
       }
 
       case LOOM_FORMAT_KIND_RESULT_TYPE_LIST: {
+        loom_parser_scope_t* saved_scope = NULL;
+        IREE_RETURN_IF_ERROR(
+            loom_parse_format_push_result_scope(parser, parsed, &saved_scope));
         IREE_RETURN_IF_ERROR(
             loom_parse_format_result_type_list(parser, element, parsed));
+        parser->scope = saved_scope;
         break;
       }
 

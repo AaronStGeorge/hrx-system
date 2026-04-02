@@ -40,17 +40,17 @@ global.variable @square : tile<[%n]x[%n]xf32>
 
 func.def @load_square_mismatch() {
   // ERROR@+1: TYPE/001 "loaded value"
-  %tile, %m, %k = global.load @square : tile<[#1]x[#2]xf32>
+  %tile, %m, %k = global.load @square : tile<[%m]x[%k]xf32>
   func.return
 }
 
 // ====
 
-// Repeated ordinal refs count as one co-result.
+// Equal dim refs count as one co-result.
 global.variable @square_ok : tile<[%n]x[%n]xf32>
 
 func.def @load_square_ok() {
-  %tile, %n = global.load @square_ok : tile<[#1]x[#1]xf32>
+  %tile, %n = global.load @square_ok : tile<[%n]x[%n]xf32>
   func.return
 }
 

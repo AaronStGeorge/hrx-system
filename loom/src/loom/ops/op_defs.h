@@ -792,6 +792,13 @@ typedef struct loom_builder_t {
   iree_arena_allocator_t* arena;
   loom_builder_ip_t ip;
   loom_builder_callback_t on_op_finalized;
+  // Pre-allocated result value_ids for the next op build. When
+  // reserved_result_count > 0, loom_builder_define_value consumes
+  // from this array instead of allocating new value_ids. Cleared
+  // by loom_builder_finalize_op after verifying all were consumed.
+  const loom_value_id_t* reserved_result_ids;
+  iree_host_size_t reserved_result_count;
+  iree_host_size_t reserved_result_next;
 } loom_builder_t;
 
 // Initializes a builder that appends to |block|.
@@ -831,9 +838,32 @@ loom_builder_ip_t loom_builder_save(const loom_builder_t* builder);
 // Restores a previously saved insertion point.
 void loom_builder_restore(loom_builder_t* builder, loom_builder_ip_t ip);
 
+// Pre-allocates |count| result value_ids in the module's value table.
+// The values are real entries with uninitialized types. The next |count|
+// calls to loom_builder_define_value (typically from a generated builder)
+// will assign types to these values instead of allocating fresh ones.
+// loom_builder_finalize_op verifies all reserved results were consumed.
+//
+// This enables constructing result types that reference other results
+// by value_id before the build call:
+//
+//   loom_value_id_t result_ids[2];
+//   loom_builder_reserve_results(&builder, 2, result_ids);
+//   loom_type_t output_type = loom_type_shaped_1d(
+//       LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+//       loom_dim_pack_dynamic(result_ids[1]), 0);
+//   loom_type_t result_types[] = {output_type, index_type};
+//   loom_test_deflate_build(&builder, input, result_types, 2, ...);
+//
+iree_status_t loom_builder_reserve_results(loom_builder_t* builder,
+                                           iree_host_size_t count,
+                                           loom_value_id_t* out_result_ids);
+
 // Creates a fresh value in the module's value table with the given type.
 // Returns the value ID. The value has no defining op yet (set by the
-// builder when the op is inserted).
+// builder when the op is inserted). If results were reserved via
+// loom_builder_reserve_results, consumes the next reserved id and
+// assigns the type to it.
 iree_status_t loom_builder_define_value(loom_builder_t* builder,
                                         loom_type_t type,
                                         loom_value_id_t* out_value_id);

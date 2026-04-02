@@ -553,6 +553,65 @@ TEST_F(ParserTest, ErrorPointsAtCorrectColumn) {
 }
 
 //===----------------------------------------------------------------------===//
+// Type interior diagnostic positions
+//===----------------------------------------------------------------------===//
+
+TEST_F(ParserTest, UndefinedDimReportsRealPosition) {
+  // Body mode: [%UNDEF] produces PARSE/001 at the '%' of %UNDEF.
+  // Line 2, column layout: %r = test.cast %x : tile<[%UNDEF]xf32> to i32
+  //                         1                       2627
+  // '%' of %UNDEF is at column 27.
+  const auto& diagnostics = ParseExpectErrors(
+      "%x = test.constant 0 : i32\n"
+      "%r = test.cast %x : tile<[%UNDEF]xf32> to i32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 27u);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "UNDEF");
+}
+
+TEST_F(ParserTest, UndefinedDimSecondPositionIsDistinct) {
+  // Second dim [%BAD] at a different column than first dim.
+  // Line 2: %r = test.cast %x : tile<4x[%BAD]xf32> to i32
+  //                              21   2526272829
+  // '%' of %BAD is at column 29.
+  const auto& diagnostics = ParseExpectErrors(
+      "%x = test.constant 0 : i32\n"
+      "%r = test.cast %x : tile<4x[%BAD]xf32> to i32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 29u);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "BAD");
+}
+
+TEST_F(ParserTest, PoolDimReportsRealPosition) {
+  // pool<bad> — BARE_IDENT "bad" at column 26 (after "pool<").
+  // Line 2: %r = test.cast %x : pool<bad> to i32
+  //                              21   2526
+  const auto& diagnostics = ParseExpectErrors(
+      "%x = test.constant 0 : i32\n"
+      "%r = test.cast %x : pool<bad> to i32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 26u);
+}
+
+TEST_F(ParserTest, GroupScopeReportsRealPosition) {
+  // group<bad> — BARE_IDENT "bad" at column 27 (after "group<").
+  // Line 2: %r = test.cast %x : group<bad> to i32
+  //                              21    2627
+  const auto& diagnostics = ParseExpectErrors(
+      "%x = test.constant 0 : i32\n"
+      "%r = test.cast %x : group<bad> to i32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_018);
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 27u);
+}
+
+//===----------------------------------------------------------------------===//
 // Error recovery
 //===----------------------------------------------------------------------===//
 

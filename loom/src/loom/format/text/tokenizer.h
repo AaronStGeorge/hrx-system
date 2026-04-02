@@ -54,6 +54,7 @@ typedef enum loom_token_kind_e {
   LOOM_TOKEN_COLON = 19,
   LOOM_TOKEN_COMMA = 20,
   LOOM_TOKEN_ARROW = 21,
+  LOOM_TOKEN_DIM_X = 22,  // 'x' dimension separator (only when in_dim_list).
   LOOM_TOKEN_PIPE = 23,
 
   // Special.
@@ -92,6 +93,12 @@ typedef struct loom_tokenizer_t {
   // compute source ranges spanning multiple tokens.
   uint32_t consumed_end_line;
   uint32_t consumed_end_column;
+
+  // When true, 'x' at identifier-start position produces DIM_X instead
+  // of starting an identifier. Set by the shaped type parser during
+  // dimension list parsing (e.g., "4x[%M]xf32") and cleared before
+  // scanning element types or encoding parameters.
+  bool in_dim_list;
 } loom_tokenizer_t;
 
 // Initializes a tokenizer over the given source buffer. The source

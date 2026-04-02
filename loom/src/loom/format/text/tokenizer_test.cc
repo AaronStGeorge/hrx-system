@@ -681,5 +681,123 @@ TEST(Tokenizer, Utf8InStringEscapeInteraction) {
   IREE_EXPECT_OK(loom_tokenizer_consume_status(t.get()));
 }
 
+//===----------------------------------------------------------------------===//
+// Dimension separator (in_dim_list mode)
+//===----------------------------------------------------------------------===//
+
+TEST(Tokenizer, DimXInDimList) {
+  ScopedTokenizer t("4x4xf32");
+  t.get()->in_dim_list = true;
+  loom_token_t t0 = t.next();
+  EXPECT_EQ(t0.kind, LOOM_TOKEN_INTEGER);
+  EXPECT_TRUE(iree_string_view_equal(t0.text, IREE_SV("4")));
+  loom_token_t t1 = t.next();
+  EXPECT_EQ(t1.kind, LOOM_TOKEN_DIM_X);
+  EXPECT_TRUE(iree_string_view_equal(t1.text, IREE_SV("x")));
+  loom_token_t t2 = t.next();
+  EXPECT_EQ(t2.kind, LOOM_TOKEN_INTEGER);
+  EXPECT_TRUE(iree_string_view_equal(t2.text, IREE_SV("4")));
+  loom_token_t t3 = t.next();
+  EXPECT_EQ(t3.kind, LOOM_TOKEN_DIM_X);
+  EXPECT_TRUE(iree_string_view_equal(t3.text, IREE_SV("x")));
+  loom_token_t t4 = t.next();
+  EXPECT_EQ(t4.kind, LOOM_TOKEN_BARE_IDENT);
+  EXPECT_TRUE(iree_string_view_equal(t4.text, IREE_SV("f32")));
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+}
+
+TEST(Tokenizer, DimXNotActiveOutsideDimList) {
+  // Without in_dim_list, 'x' starts an identifier as before.
+  ScopedTokenizer t("4x4xf32");
+  loom_token_t t0 = t.next();
+  EXPECT_EQ(t0.kind, LOOM_TOKEN_INTEGER);
+  EXPECT_TRUE(iree_string_view_equal(t0.text, IREE_SV("4")));
+  loom_token_t t1 = t.next();
+  EXPECT_EQ(t1.kind, LOOM_TOKEN_BARE_IDENT);
+  EXPECT_TRUE(iree_string_view_equal(t1.text, IREE_SV("x4xf32")));
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+}
+
+TEST(Tokenizer, DimXWithDynamicDims) {
+  ScopedTokenizer t("[%M]x4xf32");
+  t.get()->in_dim_list = true;
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_LBRACKET);
+  loom_token_t ssa = t.next();
+  EXPECT_EQ(ssa.kind, LOOM_TOKEN_SSA_VALUE);
+  EXPECT_TRUE(iree_string_view_equal(ssa.text, IREE_SV("M")));
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_RBRACKET);
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_DIM_X);
+  loom_token_t dim = t.next();
+  EXPECT_EQ(dim.kind, LOOM_TOKEN_INTEGER);
+  EXPECT_TRUE(iree_string_view_equal(dim.text, IREE_SV("4")));
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_DIM_X);
+  loom_token_t elem = t.next();
+  EXPECT_EQ(elem.kind, LOOM_TOKEN_BARE_IDENT);
+  EXPECT_TRUE(iree_string_view_equal(elem.text, IREE_SV("f32")));
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+}
+
+TEST(Tokenizer, DimXPositionTracking) {
+  // "4x[%M]xf32" — verify each token has correct column.
+  // Columns are 1-indexed.
+  ScopedTokenizer t("4x[%M]xf32");
+  t.get()->in_dim_list = true;
+  loom_token_t t0 = t.next();  // '4' at column 1
+  EXPECT_EQ(t0.kind, LOOM_TOKEN_INTEGER);
+  EXPECT_EQ(t0.column, 1u);
+  loom_token_t t1 = t.next();  // 'x' at column 2
+  EXPECT_EQ(t1.kind, LOOM_TOKEN_DIM_X);
+  EXPECT_EQ(t1.column, 2u);
+  loom_token_t t2 = t.next();  // '[' at column 3
+  EXPECT_EQ(t2.kind, LOOM_TOKEN_LBRACKET);
+  EXPECT_EQ(t2.column, 3u);
+  loom_token_t t3 = t.next();  // '%M' at column 4 (column of '%')
+  EXPECT_EQ(t3.kind, LOOM_TOKEN_SSA_VALUE);
+  EXPECT_EQ(t3.column, 4u);
+  loom_token_t t4 = t.next();  // ']' at column 6
+  EXPECT_EQ(t4.kind, LOOM_TOKEN_RBRACKET);
+  EXPECT_EQ(t4.column, 6u);
+  loom_token_t t5 = t.next();  // 'x' at column 7
+  EXPECT_EQ(t5.kind, LOOM_TOKEN_DIM_X);
+  EXPECT_EQ(t5.column, 7u);
+  loom_token_t t6 = t.next();  // 'f32' at column 8
+  EXPECT_EQ(t6.kind, LOOM_TOKEN_BARE_IDENT);
+  EXPECT_EQ(t6.column, 8u);
+}
+
+TEST(Tokenizer, DimXKindName) {
+  EXPECT_TRUE(iree_string_view_equal(loom_token_kind_name(LOOM_TOKEN_DIM_X),
+                                     IREE_SV("'x'")));
+}
+
+TEST(Tokenizer, DimXZeroDimNotHex) {
+  // "0xf32" in dim list mode: '0' is a static dim, 'x' is DIM_X,
+  // 'f32' is the element type. Must NOT scan '0xf32' as hex integer.
+  ScopedTokenizer t("0xf32");
+  t.get()->in_dim_list = true;
+  loom_token_t t0 = t.next();
+  EXPECT_EQ(t0.kind, LOOM_TOKEN_INTEGER);
+  EXPECT_TRUE(iree_string_view_equal(t0.text, IREE_SV("0")));
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_DIM_X);
+  loom_token_t t2 = t.next();
+  EXPECT_EQ(t2.kind, LOOM_TOKEN_BARE_IDENT);
+  EXPECT_TRUE(iree_string_view_equal(t2.text, IREE_SV("f32")));
+}
+
+TEST(Tokenizer, DimXClearedBeforeElementType) {
+  // Simulates the parser lifecycle: set in_dim_list for dims, clear
+  // before scanning element type. Verifies that clearing mid-stream
+  // produces BARE_IDENT for the element type.
+  ScopedTokenizer t("4xf32");
+  t.get()->in_dim_list = true;
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_INTEGER);  // 4
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_DIM_X);    // x
+  // Parser clears in_dim_list after consuming DIM_X.
+  t.get()->in_dim_list = false;
+  loom_token_t elem = t.next();  // f32
+  EXPECT_EQ(elem.kind, LOOM_TOKEN_BARE_IDENT);
+  EXPECT_TRUE(iree_string_view_equal(elem.text, IREE_SV("f32")));
+}
+
 }  // namespace
 }  // namespace loom

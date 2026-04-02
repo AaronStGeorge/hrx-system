@@ -98,8 +98,6 @@ typedef enum loom_type_parse_mode_e {
   LOOM_TYPE_PARSE_ARG = 0,
   // Op body context: [%M] must already be defined in scope.
   LOOM_TYPE_PARSE_BODY = 1,
-  // Function return context: [%M] looks up, [#N] is ordinal.
-  LOOM_TYPE_PARSE_RETURN = 2,
 } loom_type_parse_mode_t;
 
 //===----------------------------------------------------------------------===//
@@ -181,11 +179,6 @@ iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
     if ((parser)->error_count > _expect_errors) return iree_ok_status();     \
   } while (0)
 
-// Creates a synthetic token for diagnostic emission in character-level
-// parsing contexts (e.g., shaped type interiors). The text view must
-// point into the source buffer so byte offsets resolve correctly.
-loom_token_t loom_make_synthetic_token(iree_string_view_t text);
-
 // Returns true if the parser has exceeded its error limit.
 bool loom_parser_at_error_limit(const loom_parser_t* parser);
 
@@ -213,8 +206,7 @@ void loom_parser_sync_to_brace(loom_parser_t* parser);
 // storage, to eliminate padding.
 typedef struct loom_parsed_op_t {
   loom_value_id_t* operand_ids;
-  iree_string_view_t* result_names;
-  loom_type_t* result_types;
+  loom_value_id_t* result_ids;
   loom_attribute_t* attributes;
   loom_region_t** regions;
   loom_tied_result_t* tied_results;
@@ -233,8 +225,7 @@ typedef struct loom_parsed_op_t {
   uint8_t reserved_;
 
   loom_value_id_t inline_operand_ids[LOOM_PARSED_OP_INLINE_OPERANDS];
-  iree_string_view_t inline_result_names[LOOM_PARSED_OP_INLINE_RESULTS];
-  loom_type_t inline_result_types[LOOM_PARSED_OP_INLINE_RESULTS];
+  loom_value_id_t inline_result_ids[LOOM_PARSED_OP_INLINE_RESULTS];
   loom_attribute_t inline_attributes[LOOM_PARSED_OP_INLINE_ATTRS];
   loom_region_t* inline_regions[LOOM_PARSED_OP_INLINE_REGIONS];
   loom_tied_result_t inline_tied_results[LOOM_PARSED_OP_INLINE_TIED];
@@ -248,11 +239,10 @@ iree_status_t loom_parsed_op_add_operand(loom_parsed_op_t* parsed,
                                          iree_arena_allocator_t* arena,
                                          loom_value_id_t value_id);
 
-// Appends a result name and placeholder type. Spills to arena on overflow.
+// Appends a result value_id. Spills to arena on overflow.
 iree_status_t loom_parsed_op_add_result(loom_parsed_op_t* parsed,
                                         iree_arena_allocator_t* arena,
-                                        iree_string_view_t name,
-                                        loom_type_t type);
+                                        loom_value_id_t value_id);
 
 // Sets the attribute at |index|. Grows the attribute array if needed,
 // zero-filling any gaps between attribute_count and |index|.
@@ -278,7 +268,7 @@ iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
                                                 loom_value_id_t value_id);
 
 //===----------------------------------------------------------------------===//
-// Type parsing (parser_types.c)
+// Type parsing
 //===----------------------------------------------------------------------===//
 
 // Parses a type from the token stream according to |mode|.
@@ -286,18 +276,16 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
                               loom_type_parse_mode_t mode,
                               loom_type_t* out_type);
 
-// Parses encoding parameters from a string slice containing
-// comma-separated key=value pairs (e.g., "bits=8, type=q6_k").
-// Arena-allocates the output array in the module arena. Used by
-// both inline encoding in types (#name<params>) and top-level
-// encoding alias definitions (#alias = #name<params>).
+// Parses encoding parameters from the token stream. Called after
+// LANGLE has been consumed. Reads key=value pairs separated by
+// commas and consumes the closing RANGLE. Arena-allocates the
+// output array in the module arena.
 iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
-                                         iree_string_view_t params_text,
                                          loom_named_attr_t** out_attrs,
                                          uint8_t* out_count);
 
 //===----------------------------------------------------------------------===//
-// Value parsing helpers (parser.c)
+// Value parsing helpers
 //===----------------------------------------------------------------------===//
 
 // Parses an attribute value according to the descriptor's kind
@@ -329,7 +317,7 @@ iree_status_t loom_parse_region(loom_parser_t* parser,
                                 loom_region_t** out_region);
 
 //===----------------------------------------------------------------------===//
-// Format walker (parser_format.c)
+// Format walker
 //===----------------------------------------------------------------------===//
 
 // Walks a vtable's format elements, parsing each according to its kind.

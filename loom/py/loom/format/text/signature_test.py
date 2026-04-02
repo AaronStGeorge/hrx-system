@@ -74,7 +74,7 @@ def test_unresolved_placeholder() -> None:
 def test_result_ordinal_fail() -> None:
     # #0 ordinals are no longer supported.
     text = "func.def @f() -> (tile<[#0]xf32>) {\n  func.return\n}"
-    with pytest.raises(ParseError, match=r"invalid dynamic dim '\[#0\]'"):
+    with pytest.raises(ParseError, match=r"expected SSA_VALUE.*got RESULT_ORDINAL"):
         _roundtrip(text)
 
 

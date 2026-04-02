@@ -456,9 +456,8 @@ typedef enum loom_bytecode_section_kind_e {
 //                           5=mul, 6=min, 7=max, 8=pow2, 9=range)
 //       [arg_count: byte]
 //       For each arg:
-//         [tag: byte]      (1=value, 2=ordinal, 3=const)
+//         [tag: byte]      (1=value, 2=const)
 //         (VALUE:   [name_id: varint]  string table index)
-//         (ORDINAL: [ordinal: varint])
 //         (CONST:   [value: signed_varint])
 //
 //     // Template/ukernel metadata (FUNC_TEMPLATE or FUNC_UKERNEL):
@@ -505,9 +504,8 @@ typedef enum loom_bytecode_section_kind_e {
 //       [type_index: varint]    (structural type from TYPES section)
 //       [dim_binding_count: varint]  (number of dynamic dims in this type)
 //       For each dynamic dim (in shape order, skipping static dims):
-//         [value_ref: signed_varint]  Signed zigzag encoding.
-//              Non-negative: block-local value number (SSA dim).
-//              Negative: result ordinal (-1 = #0, -2 = #1, etc.).
+//         [value_ref: signed_varint]  Block-local value number
+//              referencing an index-typed SSA value.
 //       [encoding_binding: varint]    0 = no encoding binding.
 //              N > 0: the value is (N-1), a block-local value number
 //              referencing an encoding-typed SSA value.

@@ -903,13 +903,6 @@ class TestPredicateEvaluation:
         assert not evaluate_predicate(pred, self._vals(M=31))
         assert not evaluate_predicate(pred, self._vals(M=513))
 
-    def test_ordinal_always_true(self) -> None:
-        """Ordinal args can't be evaluated without call-site context."""
-        assert evaluate_predicate(
-            self._pred("eq", ("ordinal", 1), ("value", "M")),
-            self._vals(M=42),
-        )
-
     def test_missing_value_always_true(self) -> None:
         """Missing values can't be evaluated — defer judgment."""
         assert evaluate_predicate(

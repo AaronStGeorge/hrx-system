@@ -937,18 +937,12 @@ static iree_status_t loom_bytecode_write_value_def(
   for (uint8_t i = 0; i < rank; ++i) {
     uint64_t packed = loom_type_dim(type, i);
     if (!loom_dim_is_dynamic(packed)) continue;
-    if (loom_dim_is_ordinal(packed)) {
-      int64_t ordinal_ref = -(int64_t)(loom_dim_ordinal(packed) + 1);
-      IREE_RETURN_IF_ERROR(
-          loom_bytecode_page_writer_write_svarint(writer, ordinal_ref));
-    } else {
-      loom_value_id_t dim_value_id = loom_dim_value_id(packed);
-      uint32_t value_number = 0;
-      IREE_RETURN_IF_ERROR(loom_bytecode_resolve_value_number(
-          value_numbering, dim_value_id, &value_number));
-      IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_svarint(
-          writer, (int64_t)value_number));
-    }
+    loom_value_id_t dim_value_id = loom_dim_value_id(packed);
+    uint32_t value_number = 0;
+    IREE_RETURN_IF_ERROR(loom_bytecode_resolve_value_number(
+        value_numbering, dim_value_id, &value_number));
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_page_writer_write_svarint(writer, (int64_t)value_number));
   }
 
   // Encoding binding.
@@ -1073,11 +1067,6 @@ static iree_status_t loom_bytecode_write_attr_value(
                   numbering, name_id, &string_writer_id));
               IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
                   writer, string_writer_id));
-              break;
-            }
-            case LOOM_PRED_ARG_ORDINAL: {
-              IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
-                  writer, (uint64_t)predicate->args[arg_index]));
               break;
             }
             case LOOM_PRED_ARG_CONST: {
@@ -1424,11 +1413,6 @@ static iree_status_t loom_bytecode_write_func_metadata(
               numbering, name_id, &string_writer_id));
           IREE_RETURN_IF_ERROR(
               loom_bytecode_emit_uvarint(builder, string_writer_id));
-          break;
-        }
-        case LOOM_PRED_ARG_ORDINAL: {
-          IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(
-              builder, (uint64_t)predicate->args[arg_index]));
           break;
         }
         case LOOM_PRED_ARG_CONST: {

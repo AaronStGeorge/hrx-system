@@ -382,9 +382,8 @@ class PredicateList:
     Prints/parses: [mul(%M, 16), lt(%K, 1024), range(%N, 32, 512)]
 
     Predicates constrain dynamic dimension values. Each predicate is
-    a named function applied to SSA values, result ordinals, and/or
-    integer constants. Used in function where clauses and
-    scalar.assume ops.
+    a named function applied to SSA values and/or integer constants.
+    Used in function where clauses and scalar.assume ops.
 
     For builders: maps to a list of Predicate instances.
     """

@@ -231,7 +231,7 @@ static void fuzz_strategy_grammar_aware(fuzz_input_t* input) {
       "@mod",
       "@_init",
 
-      // Hash (attrs and result ordinals).
+      // Hash attrs and result ordinals (ordinals rejected at parse time).
       "#q8_0",
       "#enc",
       "#0",

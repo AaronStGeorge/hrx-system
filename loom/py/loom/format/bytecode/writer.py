@@ -47,6 +47,7 @@ from loom.ir import (
     SymbolKind,
     Type,
     TypeKind,
+    Value,
 )
 
 __all__ = [
@@ -572,31 +573,39 @@ class BytecodeWriter:
             name_id = self._ctx.strings.get(value.name, 0)
             buf.write_varint(name_id)
             buf.write_varint(self._ctx.intern_type(value.type))
-            # Dim bindings: signed varint to support result ordinals.
-            # Ordinals are negative (-1 = #0, -2 = #1), SSA refs are
-            # non-negative value numbers.
-            dynamic_count = sum(
-                1
-                for d in (value.type.dims if hasattr(value.type, "dims") else ())
-                if isinstance(d, DynamicDim)
-            )
-            buf.write_varint(dynamic_count)
-            for _pos, vid in sorted(value.dim_bindings.items()):
-                if vid < 0:
-                    buf.write_signed_varint(vid)
-                else:
-                    buf.write_signed_varint(value_numbers.get(vid, 0))
-            # Encoding binding: 0 = none, else 1 + value_number.
-            if value.encoding_binding >= 0:
-                buf.write_varint(1 + value_numbers.get(value.encoding_binding, 0))
-            else:
-                buf.write_varint(0)
+            self._write_dim_bindings(buf, value, value_numbers)
 
         # Operations.
         buf.write_varint(len(block.ops))
         for op in block.ops:
             if not op.is_dead:
                 self._write_operation(buf, op, value_numbers)
+
+    def _write_dim_bindings(
+        self, buf: ByteBuffer, value: Value, value_numbers: dict[int, int]
+    ) -> None:
+        """Write dim bindings and encoding binding for a value.
+
+        Every dynamic dim in the value's type must have a corresponding
+        entry in dim_bindings referencing an SSA value. Missing bindings
+        indicate invalid IR (anonymous dynamic dims are not permitted).
+        """
+        dims = value.type.dims if hasattr(value.type, "dims") else ()
+        dynamic_count = sum(1 for d in dims if isinstance(d, DynamicDim))
+        if dynamic_count > 0 and len(value.dim_bindings) != dynamic_count:
+            raise ValueError(
+                f"value '{value.name}' has {dynamic_count} dynamic dim(s) "
+                f"but {len(value.dim_bindings)} dim binding(s) — every "
+                f"dynamic dim must reference an SSA value"
+            )
+        buf.write_varint(dynamic_count)
+        for _position, value_id in sorted(value.dim_bindings.items()):
+            buf.write_signed_varint(value_numbers.get(value_id, 0))
+        # Encoding binding: 0 = none, else 1 + value_number.
+        if value.encoding_binding >= 0:
+            buf.write_varint(1 + value_numbers.get(value.encoding_binding, 0))
+        else:
+            buf.write_varint(0)
 
     def _write_operation(
         self, buf: ByteBuffer, op: Operation, value_numbers: dict[int, int]
@@ -618,23 +627,7 @@ class BytecodeWriter:
             name_id = self._ctx.strings.get(value.name, 0)
             buf.write_varint(name_id)
             buf.write_varint(self._ctx.intern_type(value.type))
-            # Dim bindings: signed varint to support result ordinals.
-            dynamic_count = sum(
-                1
-                for d in (value.type.dims if hasattr(value.type, "dims") else ())
-                if isinstance(d, DynamicDim)
-            )
-            buf.write_varint(dynamic_count)
-            for _pos, vid in sorted(value.dim_bindings.items()):
-                if vid < 0:
-                    buf.write_signed_varint(vid)
-                else:
-                    buf.write_signed_varint(value_numbers.get(vid, 0))
-            # Encoding binding: 0 = none, else 1 + value_number.
-            if value.encoding_binding >= 0:
-                buf.write_varint(1 + value_numbers.get(value.encoding_binding, 0))
-            else:
-                buf.write_varint(0)
+            self._write_dim_bindings(buf, value, value_numbers)
 
         # Tied results.
         buf.write_varint(len(op.tied_results))
@@ -695,8 +688,7 @@ class BytecodeWriter:
 
     # Predicate arg tag bytes.
     _PRED_ARG_TAG_VALUE = 1
-    _PRED_ARG_TAG_ORDINAL = 2
-    _PRED_ARG_TAG_CONST = 3
+    _PRED_ARG_TAG_CONST = 2
 
     # Predicate kind name → byte mapping.
     _PRED_KIND_BYTES: ClassVar[dict[str, int]] = {
@@ -734,10 +726,6 @@ class BytecodeWriter:
                 # Intern the value name string.
                 name = arg.value if isinstance(arg.value, str) else str(arg.value)
                 buf.write_varint(self._ctx.intern_string(name))
-            case "ordinal":
-                buf.write_u8(self._PRED_ARG_TAG_ORDINAL)
-                assert isinstance(arg.value, int)
-                buf.write_varint(arg.value)
             case "const":
                 buf.write_u8(self._PRED_ARG_TAG_CONST)
                 assert isinstance(arg.value, int)

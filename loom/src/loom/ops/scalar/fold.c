@@ -454,19 +454,19 @@ void loom_scalar_assume_fold(const loom_module_t* module, const loom_op_t* op,
   uint16_t predicate_count = pred_attr.count;
   for (uint16_t p = 0; p < predicate_count; ++p) {
     const loom_predicate_t* pred = &predicates[p];
+    if (pred->arg_tags[0] != LOOM_PRED_ARG_VALUE) continue;
+    loom_value_slice_t values = loom_scalar_assume_values(op);
+    loom_value_id_t target_id = (loom_value_id_t)pred->args[0];
     uint16_t target = 0;
-    if (pred->arg_tags[0] == LOOM_PRED_ARG_ORDINAL) {
-      target = (uint16_t)pred->args[0];
-    } else if (pred->arg_tags[0] == LOOM_PRED_ARG_VALUE) {
-      loom_value_slice_t values = loom_scalar_assume_values(op);
-      loom_value_id_t target_id = (loom_value_id_t)pred->args[0];
-      for (uint16_t i = 0; i < values.count; ++i) {
-        if (values.values[i] == target_id) {
-          target = i;
-          break;
-        }
+    bool found = false;
+    for (uint16_t i = 0; i < values.count; ++i) {
+      if (values.values[i] == target_id) {
+        target = i;
+        found = true;
+        break;
       }
     }
+    if (!found) continue;
     if (target < op->result_count) {
       loom_value_facts_apply_predicate(&result_facts[target], pred);
     }

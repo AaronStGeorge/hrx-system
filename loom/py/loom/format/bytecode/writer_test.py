@@ -244,13 +244,26 @@ class TestStringsSection:
 
 class TestTypesSection:
     def _roundtrip_type(self, ir_type: Type) -> None:
-        """Write a module with a value of this type, read back, verify."""
+        """Write a module with a value of this type, read back, verify.
+
+        For types with dynamic dims, creates index-typed SSA values
+        for each dynamic dim and populates dim_bindings accordingly.
+        Every dynamic dim must have a binding.
+        """
         from loom.format.bytecode.reader import read_module as read
 
         module = Module(name="test")
-        vid = module.add_value(Value(name="v", type=ir_type))
+        # Create dim values for any dynamic dims in the type.
+        dim_bindings: dict[int, int] = {}
+        if hasattr(ir_type, "dims"):
+            for i, dim in enumerate(ir_type.dims):
+                if isinstance(dim, DynamicDim):
+                    dim_id = module.add_value(Value(name=f"d{i}", type=INDEX))
+                    dim_bindings[i] = dim_id
+        vid = module.add_value(Value(name="v", type=ir_type, dim_bindings=dim_bindings))
+        all_arg_ids = [*dim_bindings.values(), vid]
         yield_op = Operation(name="test.yield", operands=[vid])
-        block = Block(arg_ids=[vid], ops=[yield_op])
+        block = Block(arg_ids=all_arg_ids, ops=[yield_op])
         body = Region(blocks=[block])
         func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
         module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
@@ -259,7 +272,8 @@ class TestTypesSection:
         loaded = read(data)
         loaded_op = loaded.symbols[0].op
         assert loaded_op is not None
-        arg_id = loaded_op.regions[0].blocks[0].arg_ids[0]
+        # The value under test is the last block arg.
+        arg_id = loaded_op.regions[0].blocks[0].arg_ids[-1]
         loaded_type = loaded.values[arg_id].type
         assert loaded_type == ir_type, f"Type mismatch: {loaded_type} != {ir_type}"
 
@@ -312,6 +326,22 @@ class TestTypesSection:
         self._roundtrip_type(
             ShapedType(TypeKind.TILE, F32, (DynamicDim(), DynamicDim()))
         )
+
+    def test_dynamic_dim_missing_binding_raises(self) -> None:
+        """Dynamic dims without dim_bindings are invalid IR."""
+        import pytest
+
+        module = Module(name="test")
+        vid = module.add_value(
+            Value(name="v", type=ShapedType(TypeKind.TILE, F32, (DynamicDim(),)))
+        )
+        yield_op = Operation(name="test.yield", operands=[vid])
+        block = Block(arg_ids=[vid], ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        with pytest.raises(ValueError, match="1 dynamic dim.*0 dim binding"):
+            write_module(module)
 
     def test_tensor_1d(self) -> None:
         self._roundtrip_type(ShapedType(TypeKind.TENSOR, I8, (StaticDim(256),)))
@@ -724,18 +754,19 @@ class TestOpPatterns:
         assert update_op.tied_results[0].result_index == 0
         assert update_op.tied_results[0].operand_index == 1
 
-    def test_ordinal_dim_roundtrip(self) -> None:
-        """Result ordinal dims survive bytecode round-trip."""
+    def test_result_dim_reference_roundtrip(self) -> None:
+        """Result dim referencing another result survives bytecode round-trip."""
         tensor_dyn = ShapedType(TypeKind.TENSOR, F32, (DynamicDim(),))
         module = Module(name="test")
         input_id = module.add_value(
             Value(name="input", type=tensor_dyn, dim_bindings={0: 0})
         )
-        # Result with ordinal dim: tensor<[#1]xf32> — ordinal #1 = -2.
-        output_id = module.add_value(
-            Value(name="output", type=tensor_dyn, dim_bindings={0: -2})
-        )
+        # Create length first so we can reference it in output's dim.
         length_id = module.add_value(Value(name="length", type=INDEX))
+        # Result 0: tensor<[%length]xf32> — dim references length directly.
+        output_id = module.add_value(
+            Value(name="output", type=tensor_dyn, dim_bindings={0: length_id})
+        )
         deflate_op = Operation(
             name="test.deflate",
             operands=[input_id],
@@ -753,9 +784,10 @@ class TestOpPatterns:
         deflate = loaded_op.regions[0].blocks[0].ops[0]
         assert deflate.name == "test.deflate"
         assert len(deflate.results) == 2
-        # Check the output value's dim binding has the ordinal preserved.
+        # Check the output value's dim binding references the loaded length.
         output_value = loaded.values[deflate.results[0]]
-        assert output_value.dim_bindings[0] == -2  # #1 ordinal
+        length_value_id = deflate.results[1]
+        assert output_value.dim_bindings[0] == length_value_id
 
     def test_nested_region(self) -> None:
         module = Module(name="test")
@@ -930,13 +962,6 @@ class TestPredicateBytecodeRoundTrip:
                     PredicateArg(tag="const", value=512),
                 ),
             ),
-            Predicate(
-                kind="eq",
-                args=(
-                    PredicateArg(tag="ordinal", value=1),
-                    PredicateArg(tag="value", value="M"),
-                ),
-            ),
         ]
         arg_id = module.add_value(Value(name="", type=F32))
         result_id = module.add_value(Value(name="", type=F32))
@@ -955,7 +980,7 @@ class TestPredicateBytecodeRoundTrip:
         loaded_op = loaded.symbols[0].op
         assert loaded_op is not None
         loaded_preds = loaded_op.attributes.get("predicates", [])
-        assert len(loaded_preds) == 5
+        assert len(loaded_preds) == 4
 
         # Verify each predicate survived.
         assert loaded_preds[0].kind == "mul"
@@ -973,10 +998,6 @@ class TestPredicateBytecodeRoundTrip:
 
         assert loaded_preds[3].kind == "range"
         assert len(loaded_preds[3].args) == 3
-
-        assert loaded_preds[4].kind == "eq"
-        assert loaded_preds[4].args[0].tag == "ordinal"
-        assert loaded_preds[4].args[0].value == 1
 
     def test_empty_predicates_roundtrip(self) -> None:
         """Function with no predicates survives bytecode round-trip."""

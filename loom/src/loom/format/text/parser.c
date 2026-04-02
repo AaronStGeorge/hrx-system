@@ -210,13 +210,6 @@ iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
   return iree_ok_status();
 }
 
-loom_token_t loom_make_synthetic_token(iree_string_view_t text) {
-  return (loom_token_t){
-      .kind = LOOM_TOKEN_NONE,
-      .text = text,
-  };
-}
-
 bool loom_parser_at_error_limit(const loom_parser_t* parser) {
   return parser->max_errors > 0 && parser->error_count >= parser->max_errors;
 }
@@ -266,8 +259,7 @@ void loom_parsed_op_initialize(loom_parsed_op_t* parsed) {
   memset(parsed, 0, sizeof(*parsed));
   parsed->operand_ids = parsed->inline_operand_ids;
   parsed->operand_capacity = LOOM_PARSED_OP_INLINE_OPERANDS;
-  parsed->result_names = parsed->inline_result_names;
-  parsed->result_types = parsed->inline_result_types;
+  parsed->result_ids = parsed->inline_result_ids;
   parsed->result_capacity = LOOM_PARSED_OP_INLINE_RESULTS;
   parsed->attributes = parsed->inline_attributes;
   parsed->attribute_capacity = LOOM_PARSED_OP_INLINE_ATTRS;
@@ -293,22 +285,15 @@ iree_status_t loom_parsed_op_add_operand(loom_parsed_op_t* parsed,
 
 iree_status_t loom_parsed_op_add_result(loom_parsed_op_t* parsed,
                                         iree_arena_allocator_t* arena,
-                                        iree_string_view_t name,
-                                        loom_type_t type) {
+                                        loom_value_id_t value_id) {
   if (parsed->result_count >= parsed->result_capacity) {
-    iree_host_size_t name_capacity = parsed->result_capacity;
+    iree_host_size_t capacity = parsed->result_capacity;
     IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        arena, parsed->result_count, 0, sizeof(iree_string_view_t),
-        &name_capacity, (void**)&parsed->result_names));
-    iree_host_size_t type_capacity = parsed->result_capacity;
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        arena, parsed->result_count, 0, sizeof(loom_type_t), &type_capacity,
-        (void**)&parsed->result_types));
-    parsed->result_capacity = (uint16_t)name_capacity;
+        arena, parsed->result_count, 0, sizeof(loom_value_id_t), &capacity,
+        (void**)&parsed->result_ids));
+    parsed->result_capacity = (uint16_t)capacity;
   }
-  parsed->result_names[parsed->result_count] = name;
-  parsed->result_types[parsed->result_count] = type;
-  ++parsed->result_count;
+  parsed->result_ids[parsed->result_count++] = value_id;
   return iree_ok_status();
 }
 
@@ -676,19 +661,15 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
         }
         predicate.arg_tags[predicate.arg_count] = LOOM_PRED_ARG_VALUE;
         predicate.args[predicate.arg_count] = (int64_t)value_id;
-      } else if (arg_token.kind == LOOM_TOKEN_HASH_ATTR) {
-        // Ordinal reference: #N.
-        loom_tokenizer_next(&parser->tokenizer);
-        int64_t ordinal = 0;
-        if (!iree_string_view_atoi_int64(arg_token.text, &ordinal)) {
-          loom_diagnostic_param_t params[] = {
-              loom_param_string(arg_token.text),
-          };
-          return loom_parser_emit(parser, &loom_err_parse_015, params,
-                                  IREE_ARRAYSIZE(params), arg_token);
-        }
-        predicate.arg_tags[predicate.arg_count] = LOOM_PRED_ARG_ORDINAL;
-        predicate.args[predicate.arg_count] = ordinal;
+      } else if (arg_token.kind == LOOM_TOKEN_RESULT_ORDINAL) {
+        // Predicate ordinals (#N) are no longer supported.
+        loom_diagnostic_param_t params[] = {
+            loom_param_string(arg_token.text),
+            loom_param_string(
+                IREE_SV("a predicate argument (%name or integer)")),
+        };
+        return loom_parser_emit(parser, &loom_err_parse_003, params,
+                                IREE_ARRAYSIZE(params), arg_token);
       } else if (arg_token.kind == LOOM_TOKEN_INTEGER) {
         // Constant.
         loom_tokenizer_next(&parser->tokenizer);
@@ -949,88 +930,6 @@ iree_status_t loom_parse_keyword(loom_parser_t* parser, uint16_t keyword_id) {
 }
 
 //===----------------------------------------------------------------------===//
-// Ordinal resolution
-//===----------------------------------------------------------------------===//
-
-// Resolves ordinal references in a shaped type to SSA value refs.
-// Ordinal dims ([#N]) become dynamic dims referencing result_ids[N].
-// Ordinal encodings (#N) become SSA encoding refs to result_ids[N].
-// Returns the original type unchanged if it contains no ordinals.
-static iree_status_t loom_resolve_ordinals_in_type(
-    loom_module_t* module, loom_type_t type, const loom_value_id_t* result_ids,
-    loom_type_t* out_type) {
-  uint8_t rank = loom_type_rank(type);
-  bool has_ordinal = loom_type_has_ordinal_encoding(type);
-  if (!has_ordinal) {
-    for (uint8_t d = 0; d < rank; ++d) {
-      if (loom_dim_is_ordinal(loom_type_dim(type, d))) {
-        has_ordinal = true;
-        break;
-      }
-    }
-  }
-  if (!has_ordinal) {
-    *out_type = type;
-    return iree_ok_status();
-  }
-
-  // Resolve dims.
-  uint64_t dims[16];
-  for (uint8_t d = 0; d < rank; ++d) {
-    uint64_t dim = loom_type_dim(type, d);
-    if (loom_dim_is_ordinal(dim)) {
-      dims[d] = loom_dim_pack_dynamic(result_ids[loom_dim_ordinal(dim)]);
-    } else {
-      dims[d] = dim;
-    }
-  }
-
-  // Resolve encoding.
-  uint16_t encoding_id = type.encoding_id;
-  loom_encoding_flags_t encoding_flags = type.encoding_flags;
-  if (loom_type_has_ordinal_encoding(type)) {
-    encoding_id = (uint16_t)result_ids[loom_type_encoding_ordinal(type)];
-    encoding_flags = LOOM_ENCODING_FLAG_SSA;
-  }
-
-  // Construct the resolved type using the same paths as the parser.
-  loom_type_kind_t kind = loom_type_kind(type);
-  loom_scalar_type_t element_type = loom_type_element_type(type);
-  loom_type_t resolved = {0};
-  if (rank == 0) {
-    resolved = loom_type_shaped_0d(kind, element_type, encoding_id);
-  } else if (rank == 1) {
-    resolved = loom_type_shaped_1d(kind, element_type, dims[0], encoding_id);
-  } else if (rank == 2) {
-    resolved =
-        loom_type_shaped_2d(kind, element_type, dims[0], dims[1], encoding_id);
-  } else {
-    loom_overflow_dim_t* overflow = NULL;
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        &module->arena, rank, sizeof(loom_overflow_dim_t), (void**)&overflow));
-    memcpy(overflow, dims, rank * sizeof(uint64_t));
-    uint8_t flags = 0;
-    bool all_static = true;
-    for (uint8_t d = 0; d < rank; ++d) {
-      if (loom_dim_is_dynamic(dims[d])) {
-        all_static = false;
-        break;
-      }
-    }
-    if (all_static) flags |= LOOM_TYPE_FLAG_ALL_STATIC;
-    resolved.header = loom_type_make_header(kind, element_type, rank, flags);
-    resolved.encoding_id = encoding_id;
-    resolved.dims[0] = (uint64_t)(uintptr_t)overflow;
-    uint64_t hash = 0;
-    for (uint8_t d = 0; d < rank; ++d) hash = hash * 31 + dims[d];
-    resolved.dims[1] = hash;
-  }
-  resolved.encoding_flags = encoding_flags;
-
-  return loom_module_intern_type(module, resolved, out_type);
-}
-
-//===----------------------------------------------------------------------===//
 // Op finalization — accumulator -> loom_op_t
 //===----------------------------------------------------------------------===//
 
@@ -1058,49 +957,38 @@ static iree_status_t loom_finalize_op(
 
   // Fill in implicit result types from result descriptors. When the
   // format doesn't include a RESULT_TYPE element for a result, the
-  // parsed type is zero-initialized. Fixed-type constraints (e.g.,
-  // I1 for comparison results) provide the concrete type.
+  // value's type is NONE. Fixed-type constraints (e.g., I1 for
+  // comparison results) provide the concrete type.
   if (vtable->result_descriptors) {
     for (uint16_t i = 0;
          i < parsed->result_count && i < vtable->fixed_result_count; ++i) {
-      if (parsed->result_types[i].header != 0) continue;
+      loom_value_t* value =
+          &parser->module->values.entries[parsed->result_ids[i]];
+      if (value->type.header != 0) {
+        continue;
+      }
       if (vtable->result_descriptors[i].type_constraint ==
           LOOM_TYPE_CONSTRAINT_I1) {
-        parsed->result_types[i] = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+        value->type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
       }
     }
   }
 
-  // Create result values in the module and write directly into the
-  // op's result slots. Define names in scope for named results.
+  // Copy result value_ids into the op and define names in scope.
+  // Values already have their types and names set during LHS parsing
+  // and the format walk.
   loom_value_id_t* result_slots = loom_op_results(op);
   for (uint16_t i = 0; i < parsed->result_count; ++i) {
-    loom_value_id_t value_id = 0;
-    IREE_RETURN_IF_ERROR(loom_module_define_value(
-        parser->module, parsed->result_types[i], &value_id));
+    loom_value_id_t value_id = parsed->result_ids[i];
     result_slots[i] = value_id;
-    if (parsed->result_names[i].size > 0) {
-      loom_string_id_t name_id = 0;
-      IREE_RETURN_IF_ERROR(loom_module_intern_string(
-          parser->module, parsed->result_names[i], &name_id));
-      parser->module->values.entries[value_id].name_id = name_id;
-      // Define in scope. Duplicates are tolerated here because
-      // result #0 of a symbol-defining op (e.g., func.def) may have
-      // already been forward-declared.
+    loom_string_id_t name_id = parser->module->values.entries[value_id].name_id;
+    if (name_id != LOOM_STRING_ID_INVALID &&
+        name_id < parser->module->strings.count) {
       bool duplicate = false;
-      IREE_RETURN_IF_ERROR(
-          loom_scope_define(parser->scope, &parser->parser_arena,
-                            parsed->result_names[i], value_id, &duplicate));
+      IREE_RETURN_IF_ERROR(loom_scope_define(
+          parser->scope, &parser->parser_arena,
+          parser->module->strings.entries[name_id], value_id, &duplicate));
     }
-  }
-
-  // Resolve ordinal dims/encodings to SSA value refs now that all
-  // result value_ids are known.
-  for (uint16_t i = 0; i < parsed->result_count; ++i) {
-    loom_type_t resolved = {0};
-    IREE_RETURN_IF_ERROR(loom_resolve_ordinals_in_type(
-        parser->module, parsed->result_types[i], result_slots, &resolved));
-    parser->module->values.entries[result_slots[i]].type = resolved;
   }
 
   // Copy regions.
@@ -1161,9 +1049,18 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
         break;
       }
       loom_token_t name_token = loom_tokenizer_next(&parser->tokenizer);
-      loom_type_t placeholder = {0};
-      IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
-          &parsed, &parser->parser_arena, name_token.text, placeholder));
+      loom_type_t none_type = {0};
+      loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(
+          loom_module_define_value(parser->module, none_type, &value_id));
+      if (name_token.text.size > 0) {
+        loom_string_id_t name_id = 0;
+        IREE_RETURN_IF_ERROR(loom_module_intern_string(
+            parser->module, name_token.text, &name_id));
+        parser->module->values.entries[value_id].name_id = name_id;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_parsed_op_add_result(&parsed, &parser->parser_arena, value_id));
     }
     // Expect '='.
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
@@ -1451,15 +1348,10 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
           // Parse optional params.
           if (loom_tokenizer_try_consume(&parser->tokenizer,
                                          LOOM_TOKEN_LANGLE)) {
-            // Parse params until '>'.
-            iree_string_view_t interior = {0};
-            IREE_RETURN_IF_ERROR(loom_tokenizer_scan_angle_interior(
-                &parser->tokenizer, &interior));
-            // Parse key=value pairs from the encoding params.
             loom_named_attr_t* attrs = NULL;
             uint8_t attr_count = 0;
-            IREE_RETURN_IF_ERROR(loom_parse_encoding_params(
-                parser, interior, &attrs, &attr_count));
+            IREE_RETURN_IF_ERROR(
+                loom_parse_encoding_params(parser, &attrs, &attr_count));
             encoding.attribute_count = attr_count;
             encoding.attributes = attrs;
           }

@@ -650,14 +650,12 @@ PREDICATE_KINDS: dict[str, int | None] = {
 class PredicateArg:
     """A single argument to a predicate.
 
-    tag: "value" for SSA value references, "ordinal" for result
-         ordinals, "const" for integer constants.
+    tag: "value" for SSA value references, "const" for integer constants.
     value: For "value" tag, the bare SSA name as a string (no % prefix).
-           For "ordinal" tag, the ordinal index as an int.
            For "const" tag, the integer constant value.
     """
 
-    tag: str  # "value", "ordinal", "const"
+    tag: str  # "value", "const"
     value: int | str
 
 
@@ -679,8 +677,7 @@ class Predicate:
 def _resolve_predicate_arg(arg: PredicateArg, values: dict[str, int]) -> int | None:
     """Resolve a predicate argument to a concrete integer.
 
-    Returns None if the argument cannot be resolved (ordinal with no
-    call-site context, or value name not in the values dict).
+    Returns None if the value name is not in the values dict.
     """
     match arg.tag:
         case "const":
@@ -688,8 +685,6 @@ def _resolve_predicate_arg(arg: PredicateArg, values: dict[str, int]) -> int | N
             return arg.value
         case "value":
             return values.get(str(arg.value))
-        case "ordinal":
-            return None  # Ordinals need call-site context.
         case _:
             raise ValueError(f"unknown predicate arg tag: {arg.tag!r}")
 
@@ -699,7 +694,7 @@ def evaluate_predicate(predicate: Predicate, values: dict[str, int]) -> bool:
 
     values maps bare SSA names ("M", "K") to their integer values.
     Returns True if the predicate is satisfied or if any argument
-    cannot be resolved (ordinal args defer to the call site).
+    cannot be resolved (value name not in the dict).
     """
     resolved = [_resolve_predicate_arg(a, values) for a in predicate.args]
     if any(v is None for v in resolved):

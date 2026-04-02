@@ -126,11 +126,6 @@
 //   Hash attr:     '#' identifier
 //                  Examples: #q6_k, #enc, #q8_0
 //
-//   Result ordinal: '#' digit+
-//                  References a result by position in function return
-//                  types and where clauses. Not an SSA value.
-//                  Examples: #0, #1, #2
-//
 //   Integer:       [-] digit+ | '0x' hexdigit+
 //                  Examples: 42, -1, 0xFF
 //
@@ -168,8 +163,8 @@
 // Identifiers: [a-zA-Z_$] [a-zA-Z0-9_$.]*
 // Op names include dots; bare identifiers do not.
 //
-// Disambiguation: '#' followed by a digit is a result ordinal.
-// '#' followed by a letter is a hash attr (encoding reference).
+// Disambiguation: '#' followed by a letter is a hash attr (encoding
+// reference or alias). '#' followed by a digit is a parse error.
 //
 // ==========================================================================
 // Types
@@ -195,7 +190,6 @@
 //               | '[' dim-ref ']'     // dynamic
 //
 // dim-ref     ::= SSA-VALUE           // [%M] — references an SSA value
-//               | '#' DIGIT+          // [#1] — references a result ordinal
 //
 // encoding    ::= '#' identifier ('<' param (',' param)* '>')?
 //               | SSA-VALUE
@@ -216,7 +210,6 @@
 //   tensor<[%N]xi8, #q8_0<block=32>>   Dynamic dim + parameterized encoding.
 //   tile<4xf32, %enc>                  SSA encoding (dynamic).
 //   tile<f32>                           0-d (scalar) tile.
-//   tensor<[#1]xf32>                   Dim references result ordinal #1.
 //
 // Static encodings are pluggable: each has a name ("q8_0", "q6_k")
 // and optional parameters. The encoding name indexes into a vtable
@@ -226,10 +219,9 @@
 // values. The compiler's encoding resolution pass converts SSA
 // encodings to static attributes once all call sites are known.
 //
-// Named dynamic dims: every dynamic dimension references an SSA value
-// (or, in function return types, a result ordinal). In function
-// signatures, named dims in argument types implicitly define index-
-// typed SSA values available in the function body.
+// Named dynamic dims: every dynamic dimension references an SSA value.
+// In function signatures, named dims in argument types implicitly
+// define index-typed SSA values available in the function body.
 //
 // --- Encoding type ---
 //
@@ -310,7 +302,7 @@
 // Dimension references
 // ==========================================================================
 //
-// Dynamic dimensions in types reference values by two mechanisms:
+// Dynamic dimensions in types reference SSA values:
 //
 //   [%name]  SSA value reference. The value must be in scope:
 //            - In function arg types: implicitly defines %name as an
@@ -318,11 +310,6 @@
 //            - In op result types: %name must be defined on the LHS
 //              of the current op or by a prior op in the block.
 //            - In function return types: %name must be an arg dim.
-//
-//   [#N]     Result ordinal reference. Only valid in function return
-//            types and where clauses. References result number N
-//            (0-based). Not an SSA value — it's a positional
-//            reference resolved at the call site.
 //
 // At a call site, the caller names results on the LHS and can
 // reference them in the result type annotations:
@@ -541,9 +528,8 @@
 //
 // --- Return dim semantics ---
 //
-// Return types may reference:
-//   - Arg dim names: [%M] where %M was defined by an arg type.
-//   - Result ordinals: [#N] referencing the Nth result.
+// Return types may reference arg dim names: [%M] where %M was
+// defined by an arg type.
 //
 // --- Tied returns ---
 //
@@ -718,11 +704,9 @@
 // predicate ::= pred-name '(' pred-arg (',' pred-arg)* ')'
 // pred-name ::= 'eq' | 'lt' | 'le' | 'gt' | 'ge'
 //             | 'min' | 'max' | 'mul' | 'pow2' | 'range'
-// pred-arg  ::= SSA-VALUE | '#' DIGIT+ | INTEGER
+// pred-arg  ::= SSA-VALUE | INTEGER
 //
 // Predicates constrain dim values in where clauses and scalar.assume.
-// Result ordinals (#N) are valid in where clauses on function
-// declarations, allowing constraints on computed return dims.
 //
 // Examples:
 //   mul(%M, 16)          %M is a multiple of 16.
@@ -730,7 +714,6 @@
 //   range(%K, 32, 512)   32 <= %K <= 512.
 //   pow2(%N)             %N is a power of 2.
 //   eq(%M, %K)           %M == %K.
-//   eq(#1, div(%M, 2))   Result #1 equals %M / 2.
 //
 // ==========================================================================
 // Complete example
@@ -776,10 +759,9 @@
 // functions. The parser and printer implementations live in parser.h
 // and printer.h respectively.
 //
-// The grammar is LL(1) with three lookahead points:
+// The grammar is LL(1) with two lookahead points:
 //   1. After '->', check '%' (tied) vs type keyword (fresh).
-//   2. After '#', check digit (result ordinal) vs letter (hash attr).
-//   3. In encoding position (after ',' in shaped type interior),
+//   2. In encoding position (after ',' in shaped type interior),
 //      check '%' (SSA encoding) vs '#' (static encoding).
 
 #endif  // LOOM_FORMAT_TEXT_FORMAT_H_

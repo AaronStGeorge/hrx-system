@@ -601,13 +601,13 @@ test_attrs = Op(
 )
 
 # ============================================================================
-# test.deflate — result ordinal dim
+# test.deflate — result dim references
 # ============================================================================
 
 test_deflate = Op(
     "test.deflate",
     group=test_ops,
-    doc="Test op with result ordinal dim.",
+    doc="Test op with result type referencing a co-result dim.",
     operands=[Operand("input", TENSOR)],
     results=[Result("results", ANY, variadic=True)],
     traits=[PURE],
@@ -621,7 +621,7 @@ test_deflate = Op(
         ),
     ],
     examples=[
-        "%output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[#1]xf32>, index)",
+        "%output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[%length]xf32>, index)",
     ],
 )
 

@@ -120,8 +120,11 @@ static iree_status_t loom_print_scalar_type(loom_output_stream_t* stream,
   return loom_output_stream_write_cstring(stream, name);
 }
 
-// Writes %name for a value_id to the stream. Falls back to %? when
-// the name cannot be resolved (no module context or unnamed value).
+// Writes %name for a value_id to the stream. Named values use their
+// string name (%foo). Unnamed values use their value_id (%0, %1, ...).
+// These occupy separate syntactic namespaces (identifiers vs digits)
+// so no collision is possible. Falls back to %? only when the module
+// context is missing or the value_id is out of range.
 static iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
                                           const loom_module_t* module,
                                           loom_value_id_t value_id) {
@@ -131,18 +134,10 @@ static iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '%'));
       return loom_output_stream_write(stream, module->strings.entries[name_id]);
     }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '%'));
+    return loom_output_stream_write_format(stream, "%" PRIu32, value_id);
   }
   return loom_output_stream_write_cstring(stream, "%?");
-}
-
-static int32_t loom_find_result_ordinal(const loom_op_t* op,
-                                        loom_value_id_t value_id) {
-  if (!op) return -1;
-  const loom_value_id_t* results = loom_op_const_results(op);
-  for (uint16_t i = 0; i < op->result_count; ++i) {
-    if (results[i] == value_id) return i;
-  }
-  return -1;
 }
 
 static iree_status_t loom_print_dim(loom_output_stream_t* stream,
@@ -150,13 +145,6 @@ static iree_status_t loom_print_dim(loom_output_stream_t* stream,
                                     iree_host_size_t dim_index,
                                     const loom_module_t* module) {
   uint64_t packed = loom_type_dim(type, dim_index);
-  if (loom_dim_is_ordinal(packed)) {
-    // Result ordinal: [#N].
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "[#"));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, "%" PRIu32, loom_dim_ordinal(packed)));
-    return loom_output_stream_write_cstring(stream, "]");
-  }
   if (loom_dim_is_dynamic(packed)) {
     // SSA value reference: [%name].
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
@@ -185,12 +173,7 @@ static iree_status_t loom_print_shaped_interior(loom_output_stream_t* stream,
       loom_print_scalar_type(stream, loom_type_element_type(type)));
   if (loom_type_has_encoding(type)) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
-    if (loom_type_has_ordinal_encoding(type)) {
-      // Encoding ordinal: #N (result ordinal referencing an
-      // encoding-typed co-result).
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          stream, "#%" PRIu32, loom_type_encoding_ordinal(type)));
-    } else if (loom_type_has_ssa_encoding(type)) {
+    if (loom_type_has_ssa_encoding(type)) {
       // SSA encoding: %name (or %N if unnamed).
       IREE_RETURN_IF_ERROR(loom_print_value_ref(
           stream, module, loom_type_encoding_value_id(type)));
@@ -330,24 +313,12 @@ iree_status_t loom_text_print_type(loom_type_t type,
 static iree_status_t loom_print_result_type_dim(loom_output_stream_t* stream,
                                                 loom_type_t type,
                                                 iree_host_size_t dim_index,
-                                                const loom_module_t* module,
-                                                const loom_op_t* op) {
-  uint64_t packed = loom_type_dim(type, dim_index);
-  if (loom_dim_is_dynamic(packed) && !loom_dim_is_ordinal(packed)) {
-    int32_t ordinal = loom_find_result_ordinal(op, loom_dim_value_id(packed));
-    if (ordinal >= 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "[#"));
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_format(stream, "%d", ordinal));
-      return loom_output_stream_write_cstring(stream, "]");
-    }
-  }
+                                                const loom_module_t* module) {
   return loom_print_dim(stream, type, dim_index, module);
 }
 
 static iree_status_t loom_text_print_result_type(loom_type_t type,
                                                  const loom_module_t* module,
-                                                 const loom_op_t* op,
                                                  loom_output_stream_t* stream) {
   switch (loom_type_kind(type)) {
     case LOOM_TYPE_TILE:
@@ -361,7 +332,7 @@ static iree_status_t loom_text_print_result_type(loom_type_t type,
           IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "x"));
         }
         IREE_RETURN_IF_ERROR(
-            loom_print_result_type_dim(stream, type, i, module, op));
+            loom_print_result_type_dim(stream, type, i, module));
       }
       if (rank > 0) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "x"));
@@ -370,19 +341,9 @@ static iree_status_t loom_text_print_result_type(loom_type_t type,
           loom_print_scalar_type(stream, loom_type_element_type(type)));
       if (loom_type_has_encoding(type)) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
-        if (loom_type_has_ordinal_encoding(type)) {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-              stream, "#%" PRIu32, loom_type_encoding_ordinal(type)));
-        } else if (loom_type_has_ssa_encoding(type)) {
-          int32_t ordinal =
-              loom_find_result_ordinal(op, loom_type_encoding_value_id(type));
-          if (ordinal >= 0) {
-            IREE_RETURN_IF_ERROR(
-                loom_output_stream_write_format(stream, "#%d", ordinal));
-          } else {
-            IREE_RETURN_IF_ERROR(loom_print_value_ref(
-                stream, module, loom_type_encoding_value_id(type)));
-          }
+        if (loom_type_has_ssa_encoding(type)) {
+          IREE_RETURN_IF_ERROR(loom_print_value_ref(
+              stream, module, loom_type_encoding_value_id(type)));
         } else if (module && type.encoding_id > 0 &&
                    type.encoding_id <= module->encodings.count) {
           const loom_encoding_t* encoding =
@@ -673,8 +634,6 @@ static iree_status_t loom_print_predicate_arg(loom_print_context_t* ctx,
           ctx->module, (loom_value_id_t)value, buffer, sizeof(buffer));
       return loom_output_stream_write(ctx->stream, name);
     }
-    case LOOM_PRED_ARG_ORDINAL:
-      return loom_output_stream_write_format(ctx->stream, "#%" PRId64, value);
     case LOOM_PRED_ARG_CONST:
       return loom_output_stream_write_format(ctx->stream, "%" PRId64, value);
     default:
@@ -766,12 +725,10 @@ static iree_status_t loom_print_value_type(loom_print_context_t* ctx,
 }
 
 static iree_status_t loom_print_result_value_type(loom_print_context_t* ctx,
-                                                  const loom_op_t* op,
                                                   loom_value_id_t value_id) {
   if (value_id < ctx->module->values.count) {
     return loom_text_print_result_type(
-        ctx->module->values.entries[value_id].type, ctx->module, op,
-        ctx->stream);
+        ctx->module->values.entries[value_id].type, ctx->module, ctx->stream);
   }
   return loom_output_stream_write_cstring(ctx->stream, "<unknown>");
 }
@@ -879,7 +836,7 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         }
         IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
         IREE_RETURN_IF_ERROR(loom_print_result_value_type(
-            ctx, op, loom_op_const_results(op)[element->field_index]));
+            ctx, loom_op_const_results(op)[element->field_index]));
         loom_print_did_write(ctx);
         break;
       }
@@ -906,7 +863,7 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         }
         IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
         IREE_RETURN_IF_ERROR(loom_print_result_value_type(
-            ctx, op, loom_op_const_results(op)[element->field_index]));
+            ctx, loom_op_const_results(op)[element->field_index]));
         loom_print_did_write(ctx);
         break;
       }
@@ -939,8 +896,8 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
             }
           }
           IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-          IREE_RETURN_IF_ERROR(loom_print_result_value_type(
-              ctx, op, loom_op_const_results(op)[j]));
+          IREE_RETURN_IF_ERROR(
+              loom_print_result_value_type(ctx, loom_op_const_results(op)[j]));
           loom_print_did_write(ctx);
         }
         if (use_parens) {

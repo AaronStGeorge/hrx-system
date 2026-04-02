@@ -11,7 +11,7 @@ its kind, text, and source location (line:col) for error reporting.
 
 This is a single-pass scanner with one character of lookahead. No
 regex. The scanner handles all disambiguation:
-  - '#' digit → RESULT_ORDINAL, '#' letter → HASH_ATTR
+  - '#' digit → RESULT_ORDINAL (rejected at parse time), '#' letter → HASH_ATTR
   - '-' '>' → ARROW, '-' digit → negative number
   - identifier '.' identifier → OP_NAME, bare identifier → BARE_IDENT
   - 'tile' before '<' → BARE_IDENT (type keyword), 'tile' before '.' → OP_NAME
@@ -87,6 +87,7 @@ class TokenKind(IntEnum):
     COLON = 19
     COMMA = 20
     ARROW = 21  # ->
+    DIM_X = 22  # 'x' dimension separator (only when in_dim_list)
     PIPE = 23  # |
 
     # Special.
@@ -171,6 +172,7 @@ class Tokenizer:
         "_column",
         "_peeked",
         "_comments",
+        "in_dim_list",
     )
 
     def __init__(self, source: str, filename: str = "<input>") -> None:
@@ -181,6 +183,7 @@ class Tokenizer:
         self._column = 1
         self._peeked: Token | None = None
         self._comments: list[str] = []
+        self.in_dim_list: bool = False
 
     # --- Public interface ---
 
@@ -386,6 +389,12 @@ class Tokenizer:
         if character.isdigit():
             return self._scan_number(location)
 
+        # Dimension separator: in a dim list, 'x' is a single-character
+        # separator token rather than an identifier start.
+        if self.in_dim_list and character == "x":
+            self._advance()
+            return self._make_token(TokenKind.DIM_X, "x", location)
+
         # Identifier (may become BARE_IDENT or OP_NAME).
         if _is_ident_start(character):
             return self._scan_identifier(location)
@@ -532,8 +541,13 @@ class Tokenizer:
         if is_negative:
             self._advance()
 
-        # Hex integer: 0x...
-        if self._char() == "0" and self._peek_char() in ("x", "X"):
+        # Hex integer: 0x... (but not when in_dim_list — 'x' is a
+        # dimension separator, so '0' is a static dim of size 0).
+        if (
+            self._char() == "0"
+            and self._peek_char() in ("x", "X")
+            and not self.in_dim_list
+        ):
             self._advance()  # 0
             self._advance()  # x
             if self._char() not in "0123456789abcdefABCDEF":

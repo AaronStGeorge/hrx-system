@@ -459,8 +459,6 @@ def _format_predicate_arg(arg: PredicateArg) -> str:
     match arg.tag:
         case "value":
             return f"%{arg.value}"
-        case "ordinal":
-            return f"#{arg.value}"
         case "const":
             return str(arg.value)
         case _:

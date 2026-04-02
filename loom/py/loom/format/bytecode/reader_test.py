@@ -59,6 +59,27 @@ def _roundtrip(module: Module) -> Module:
     return read_module(write_module(module))
 
 
+def _make_value_with_bindings(
+    module: Module, name: str, value_type: Type
+) -> tuple[int, list[int]]:
+    """Create a value with proper dim_bindings for any dynamic dims.
+
+    Returns (value_id, list of dim value_ids that must be block args).
+    """
+    dim_bindings: dict[int, int] = {}
+    dim_value_ids: list[int] = []
+    if hasattr(value_type, "dims"):
+        for i, dim in enumerate(value_type.dims):
+            if isinstance(dim, DynamicDim):
+                dim_id = module.add_value(Value(name=f"{name}_d{i}", type=INDEX))
+                dim_bindings[i] = dim_id
+                dim_value_ids.append(dim_id)
+    value_id = module.add_value(
+        Value(name=name, type=value_type, dim_bindings=dim_bindings)
+    )
+    return value_id, dim_value_ids
+
+
 def _make_func(
     module: Module,
     name: str,
@@ -76,14 +97,18 @@ def _make_func(
         attrs["visibility"] = "public"
 
     # Create anonymous result value IDs at module level.
-    result_ids = [module.add_value(Value(name="", type=rt)) for rt in result_types]
+    result_ids = []
+    for rt in result_types:
+        rid, _ = _make_value_with_bindings(module, "", rt)
+        result_ids.append(rid)
 
     if is_declaration:
         # func.decl: args are operands.
-        operand_ids = [
-            module.add_value(Value(name=f"{name}_arg{i}", type=at))
-            for i, at in enumerate(arg_types)
-        ]
+        operand_ids = []
+        for i, at in enumerate(arg_types):
+            vid, dim_ids = _make_value_with_bindings(module, f"{name}_arg{i}", at)
+            operand_ids.extend(dim_ids)
+            operand_ids.append(vid)
         op = Operation(
             name="func.decl",
             operands=operand_ids,
@@ -93,12 +118,13 @@ def _make_func(
         sym_kind = SymbolKind.FUNC_DECL
     else:
         # func.def: args are entry block arguments.
-        arg_ids = [
-            module.add_value(Value(name=f"{name}_arg{i}", type=at))
-            for i, at in enumerate(arg_types)
-        ]
+        arg_ids = []
+        for i, at in enumerate(arg_types):
+            vid, dim_ids = _make_value_with_bindings(module, f"{name}_arg{i}", at)
+            arg_ids.extend(dim_ids)
+            arg_ids.append(vid)
         body_ops = ops or [
-            Operation(name="test.yield", operands=arg_ids[:1] if arg_ids else [])
+            Operation(name="test.yield", operands=arg_ids[-1:] if arg_ids else [])
         ]
         block = Block(arg_ids=arg_ids, ops=body_ops)
         body = Region(blocks=[block])
@@ -215,8 +241,9 @@ class TestTypeRoundTrips:
         loaded = _roundtrip(module)
         loaded_op = loaded.symbols[0].op
         assert loaded_op is not None
-        # func.def: args are in the entry block.
-        arg_id = loaded_op.regions[0].blocks[0].arg_ids[0]
+        # func.def: args are in the entry block. The value under test
+        # is the last arg (dim values for dynamic dims come first).
+        arg_id = loaded_op.regions[0].blocks[0].arg_ids[-1]
         return loaded.values[arg_id].type
 
     # Scalars.

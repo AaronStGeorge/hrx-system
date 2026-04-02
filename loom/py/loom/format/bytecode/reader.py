@@ -665,14 +665,10 @@ class BytecodeReader:
             dim_count, offset = decode_varint(data, offset)
             dim_bindings = {}
             for d in range(dim_count):
-                # Signed: negative = result ordinal, non-negative = value ref.
                 value_ref, offset = decode_signed_varint(data, offset)
-                if value_ref >= 0:
-                    value_ref = (
-                        value_map[value_ref]
-                        if value_ref < len(value_map)
-                        else value_ref
-                    )
+                value_ref = (
+                    value_map[value_ref] if value_ref < len(value_map) else value_ref
+                )
                 dim_bindings[d] = value_ref
             # Encoding binding: 0 = none, else 1 + value_number.
             enc_binding_raw, offset = decode_varint(data, offset)
@@ -735,14 +731,10 @@ class BytecodeReader:
             dim_count, offset = decode_varint(data, offset)
             dim_bindings = {}
             for d in range(dim_count):
-                # Signed: negative = result ordinal, non-negative = value ref.
                 value_ref, offset = decode_signed_varint(data, offset)
-                if value_ref >= 0:
-                    value_ref = (
-                        value_map[value_ref]
-                        if value_ref < len(value_map)
-                        else value_ref
-                    )
+                value_ref = (
+                    value_map[value_ref] if value_ref < len(value_map) else value_ref
+                )
                 dim_bindings[d] = value_ref
             # Encoding binding: 0 = none, else 1 + value_number.
             enc_binding_raw, offset = decode_varint(data, offset)
@@ -889,10 +881,7 @@ class BytecodeReader:
             case 1:  # VALUE
                 string_id, offset = decode_varint(data, offset)
                 return PredicateArg(tag="value", value=self._strings[string_id]), offset
-            case 2:  # ORDINAL
-                ordinal, offset = decode_varint(data, offset)
-                return PredicateArg(tag="ordinal", value=ordinal), offset
-            case 3:  # CONST
+            case 2:  # CONST
                 value, offset = decode_signed_varint(data, offset)
                 return PredicateArg(tag="const", value=value), offset
             case _:

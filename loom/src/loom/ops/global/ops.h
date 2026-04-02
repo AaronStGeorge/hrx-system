@@ -55,8 +55,8 @@ iree_status_t loom_global_variable_build(
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_global_variable_vtable;
 
-// LOOM_OP_GLOBAL_LOAD: Load a value from a global. The type annotation uses #N result ordinals for fresh dynamic dims (new SSA values) and %name references for bound dims (existing SSA values, assertion). Predicates on the global definition are propagated as value facts.
-// %tile, %m, %k = global.load @weights : tile<[#1]x[#2]xf32>
+// LOOM_OP_GLOBAL_LOAD: Load a value from a global. Dynamic dims and encodings in the type annotation reference co-results by name. Predicates on the global definition are propagated as value facts.
+// %tile, %m, %k = global.load @weights : tile<[%m]x[%k]xf32>
 LOOM_DEFINE_ISA(loom_global_load_isa, LOOM_OP_GLOBAL_LOAD)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_global_load_result, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_global_load_global, 0)

@@ -259,7 +259,7 @@ class TestParseDynamicDims:
         assert bindings[1] == k_id
 
     def test_undefined_dim_fails(self) -> None:
-        with pytest.raises(ParseError, match="undefined dim"):
+        with pytest.raises(ParseError, match="undefined SSA value"):
             _parse("tile<[%M]xf32>")
 
 
@@ -301,7 +301,7 @@ class TestParseEncoding:
         """Malformed params raise ParseError, not bare ValueError."""
         from loom.format.text.tokenizer import ParseError as TokenError
 
-        with pytest.raises((ParseError, TokenError), match="invalid encoding"):
+        with pytest.raises((ParseError, TokenError), match="expected EQUALS"):
             _parse("tile<256xi8, #q8_0<block32>>")
 
     def test_encoding_multiple_params(self) -> None:
@@ -1180,7 +1180,7 @@ class TestPredicateRoundTrip:
             " where [pow2(%N)]\n"
         )
 
-    def test_ordinal_predicate(self) -> None:
+    def test_result_name_predicate(self) -> None:
         self._roundtrip_text(
             "func.decl @f(%M: index, %a: tensor<[%M]xf32>) -> (tensor<[%M]xf32>, %idx: index)"
             " where [eq(%idx, %M)]\n"
