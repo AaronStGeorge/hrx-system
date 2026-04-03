@@ -233,7 +233,7 @@ class TestFormatSpecs:
 
     def test_scf_for(self) -> None:
         # %r = scf.for %i = %lb to %ub step %s
-        #     iter_args(%out = %init : type) -> (type) { ... }
+        #     iter_args(%out = %init : type) -> (%init as type) { ... }
         fmt = [
             Ref("iv"),
             EQUALS,

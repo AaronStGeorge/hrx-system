@@ -87,6 +87,29 @@ static inline loom_token_t loom_token_none(void) {
   return token;
 }
 
+// Returns the original source spelling of |token|, including any sigil or
+// quotes stripped from |token.text| by the tokenizer. Semantic parser code that
+// needs the bare SSA/symbol/hash payload should keep using |token.text|; this
+// helper is for diagnostics and alias spellings that need the full lexeme.
+static inline iree_string_view_t loom_token_lexeme(loom_token_t token) {
+  switch (token.kind) {
+    case LOOM_TOKEN_NONE:
+      return iree_string_view_empty();
+    case LOOM_TOKEN_EOF:
+      return token.text;
+    case LOOM_TOKEN_STRING:
+      return iree_make_string_view(token.text.data - 1, token.text.size + 2);
+    case LOOM_TOKEN_SSA_VALUE:
+    case LOOM_TOKEN_SYMBOL:
+    case LOOM_TOKEN_HASH_ATTR:
+    case LOOM_TOKEN_RESULT_ORDINAL:
+    case LOOM_TOKEN_BLOCK_LABEL:
+      return iree_make_string_view(token.text.data - 1, token.text.size + 1);
+    default:
+      return token.text;
+  }
+}
+
 // Lexical scanner state. Stack-allocated, no heap allocations.
 // If a scan error occurs (e.g., unterminated string), it is stored in
 // |status| and all subsequent peek/next calls return EOF. The caller

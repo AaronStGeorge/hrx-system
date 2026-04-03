@@ -168,9 +168,9 @@ class TestBuilders:
         """Test for-loop with iter_args and tied results.
 
         Example::
-            %result = test.loop %i = %c0 to %count step %c1 iter_args(%accumulator = %init : f32) -> (f32) {
-              %next = test.addi %accumulator, %c1 : i32
-              test.yield %next : i32
+            %result = test.loop %i = %c0 to %count step %c1 iter_args(%accumulator = %init : f32) -> (%init as f32) {
+              %next = test.neg %accumulator : f32
+              test.yield %next : f32
             }
         """
         _operands: list[ValueRef | int] = []

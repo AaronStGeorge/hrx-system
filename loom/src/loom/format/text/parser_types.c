@@ -42,7 +42,7 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
         value_token.kind != LOOM_TOKEN_STRING &&
         value_token.kind != LOOM_TOKEN_BARE_IDENT) {
       loom_diagnostic_param_t params[] = {
-          loom_param_string(value_token.text),
+          loom_param_string(loom_token_lexeme(value_token)),
           loom_param_string(IREE_SV("integer, string, or identifier")),
       };
       return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -53,7 +53,7 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
     if (attr_count >= capacity) {
       loom_token_t overflow_token = name_token;
       loom_diagnostic_param_t params[] = {
-          loom_param_string(name_token.text),
+          loom_param_string(loom_token_lexeme(name_token)),
       };
       return loom_parser_emit(parser, &loom_err_parse_004, params,
                               IREE_ARRAYSIZE(params), overflow_token);
@@ -234,8 +234,7 @@ static iree_status_t loom_parse_type_encoding(
     // Reconstruct the full encoding text including '#' for alias
     // table lookup. The '#' byte is always immediately before the
     // token text in the source buffer.
-    iree_string_view_t full_text =
-        iree_make_string_view(token.text.data - 1, token.text.size + 1);
+    iree_string_view_t full_text = loom_token_lexeme(token);
 
     uint16_t alias_id = loom_alias_table_lookup(&parser->aliases, full_text);
     if (alias_id != 0) {
@@ -265,14 +264,14 @@ static iree_status_t loom_parse_type_encoding(
     // '#' followed by a digit is not a valid encoding reference.
     loom_tokenizer_next(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(token.text),
+        loom_param_string(loom_token_lexeme(token)),
     };
     return loom_parser_emit(parser, &loom_err_parse_004, params,
                             IREE_ARRAYSIZE(params), token);
   }
 
   loom_diagnostic_param_t params[] = {
-      loom_param_string(token.text),
+      loom_param_string(loom_token_lexeme(token)),
   };
   return loom_parser_emit(parser, &loom_err_parse_008, params,
                           IREE_ARRAYSIZE(params), token);
@@ -373,7 +372,7 @@ static iree_status_t loom_parse_shaped_type(loom_parser_t* parser,
       }
       if (rank >= 16) {
         loom_diagnostic_param_t params[] = {
-            loom_param_string(token.text),
+            loom_param_string(loom_token_lexeme(token)),
         };
         return loom_parser_emit(parser, &loom_err_parse_004, params,
                                 IREE_ARRAYSIZE(params), token);
@@ -425,7 +424,7 @@ static iree_status_t loom_parse_pool_type(loom_parser_t* parser,
   loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
   if (token.kind != LOOM_TOKEN_INTEGER && token.kind != LOOM_TOKEN_LBRACKET) {
     loom_diagnostic_param_t params[] = {
-        loom_param_string(token.text),
+        loom_param_string(loom_token_lexeme(token)),
         loom_param_string(IREE_SV("integer or '['")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -503,7 +502,7 @@ static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
     if (param_count >= 8) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(name_token.text),
+          loom_param_string(loom_token_lexeme(name_token)),
       };
       return loom_parser_emit(parser, &loom_err_parse_004, params,
                               IREE_ARRAYSIZE(params), peek);
@@ -515,7 +514,7 @@ static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("'>'")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -556,7 +555,7 @@ static iree_status_t loom_parse_type_list(loom_parser_t* parser,
     if (count >= capacity) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(peek.text),
+          loom_param_string(loom_token_lexeme(peek)),
       };
       return loom_parser_emit(parser, &loom_err_parse_004, params,
                               IREE_ARRAYSIZE(params), peek);
@@ -567,7 +566,7 @@ static iree_status_t loom_parse_type_list(loom_parser_t* parser,
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("')'")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -590,7 +589,7 @@ static iree_status_t loom_parse_function_type(loom_parser_t* parser,
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_ARROW)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("'->'")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -599,7 +598,7 @@ static iree_status_t loom_parse_function_type(loom_parser_t* parser,
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("'('")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -629,7 +628,7 @@ static iree_status_t loom_parse_angle_bracketed_type(
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("'<'")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -707,7 +706,7 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
   }
 
   loom_diagnostic_param_t params[] = {
-      loom_param_string(token.text),
+      loom_param_string(loom_token_lexeme(token)),
       loom_param_string(IREE_SV("a type")),
   };
   return loom_parser_emit(parser, &loom_err_parse_003, params,

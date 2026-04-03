@@ -897,25 +897,108 @@ class TestParseMapOp:
         assert len(body.blocks) == 1
         assert len(body.blocks[0].ops) == 2  # neg + yield
 
+    def test_binding_name_can_shadow_outer_scope_name(self) -> None:
+        tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
+        module = _op_parser().parse(
+            "func.def @shadow(%x: f32, %tile: tile<4xf32>) -> (f32) {\n"
+            "  %mapped = test.map(%x = %tile : tile<4xf32>) {\n"
+            "    test.yield %x : f32\n"
+            "  } -> (f32)\n"
+            "  %negated = test.neg %x : f32\n"
+            "  test.yield %negated : f32\n"
+            "}\n"
+        )
+        func_op = module.symbols[0].op
+        assert func_op is not None
+        func_entry = func_op.regions[0].blocks[0]
+        map_op = func_entry.ops[0]
+        map_entry = map_op.regions[0].blocks[0]
+        assert map_entry.arg_ids[0] != func_entry.arg_ids[0]
+        assert map_entry.ops[0].operands[0] == map_entry.arg_ids[0]
+        assert func_entry.ops[1].operands[0] == func_entry.arg_ids[0]
+        assert module.values[func_entry.arg_ids[1]].type == tile_t
+
+    def test_binding_name_is_region_local(self) -> None:
+        with pytest.raises(ParseError, match="undefined SSA value '%element'"):
+            _op_parser().parse(
+                "func.def @leak(%tile: tile<4xf32>) -> (f32) {\n"
+                "  %mapped = test.map(%element = %tile : tile<4xf32>) {\n"
+                "    test.yield %element : f32\n"
+                "  } -> (f32)\n"
+                "  %bad = test.neg %element : f32\n"
+                "  test.yield %bad : f32\n"
+                "}\n"
+            )
+
 
 class TestParseLoopOp:
     def test_with_iter_args(self) -> None:
-        ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
         module, scope = _setup_scope(
             ("c0", INDEX), ("n", INDEX), ("c1", INDEX), ("init", F32)
         )
         op = _parse_op(
             "%r = test.loop %i = %c0 to %n step %c1"
-            " iter_args(%acc = %init : f32) -> (f32) {\n"
+            " iter_args(%acc = %init : f32) -> (%init as f32) {\n"
             "  test.yield %acc : f32\n"
             "}",
             module=module,
             scope=scope,
         )
         assert op.name == "test.loop"
-        assert len(op.operands) >= 3  # lb, ub, step + iter_args
+        assert len(op.operands) == 4  # lb, ub, step + %init iter_arg
         assert len(op.regions) == 1
         assert len(op.results) == 1
+        assert len(op.tied_results) == 1
+        assert op.tied_results[0].result_index == 0
+        assert op.tied_results[0].operand_index == 3
+        assert len(op.regions[0].blocks[0].arg_ids) == 2
+        assert (
+            op.regions[0].blocks[0].ops[0].operands[0]
+            == (op.regions[0].blocks[0].arg_ids[1])
+        )
+
+    def test_iter_arg_name_is_not_tied_result_target(self) -> None:
+        module, scope = _setup_scope(
+            ("c0", INDEX), ("n", INDEX), ("c1", INDEX), ("init", F32)
+        )
+        with pytest.raises(
+            ParseError, match="tied result 'acc' not found in args or operands"
+        ):
+            _parse_op(
+                "%r = test.loop %i = %c0 to %n step %c1"
+                " iter_args(%acc = %init : f32) -> (%acc as f32) {\n"
+                "  test.yield %acc : f32\n"
+                "}",
+                module=module,
+                scope=scope,
+            )
+
+    def test_iv_name_is_not_tied_result_target(self) -> None:
+        module, scope = _setup_scope(
+            ("c0", INDEX), ("n", INDEX), ("c1", INDEX), ("init", F32)
+        )
+        with pytest.raises(
+            ParseError, match="tied result 'i' not found in args or operands"
+        ):
+            _parse_op(
+                "%r = test.loop %i = %c0 to %n step %c1"
+                " iter_args(%acc = %init : f32) -> (%i as f32) {\n"
+                "  test.yield %acc : f32\n"
+                "}",
+                module=module,
+                scope=scope,
+            )
+
+    def test_iv_name_is_region_local(self) -> None:
+        with pytest.raises(ParseError, match="undefined SSA value '%i'"):
+            _op_parser().parse(
+                "func.def @loop(%lo: index, %hi: index, %step: index) {\n"
+                "  test.loop %i = %lo to %hi step %step {\n"
+                "  }\n"
+                "  test.loop %again = %i to %hi step %step {\n"
+                "  }\n"
+                "}\n"
+            )
 
 
 class TestParseBranchOp:

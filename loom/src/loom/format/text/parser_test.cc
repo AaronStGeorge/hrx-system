@@ -39,6 +39,7 @@ struct CapturedDiagnostic {
   loom_emitter_t emitter;
   uint32_t origin_line;
   uint32_t origin_column;
+  uint32_t origin_end_column;
   std::vector<loom_diagnostic_param_t> params;
   std::vector<std::string> string_storage;
 };
@@ -56,6 +57,9 @@ static iree_status_t CaptureDiagnostic(void* user_data,
   entry.emitter = diagnostic->emitter;
   entry.origin_line = diagnostic->origin.start_line;
   entry.origin_column = diagnostic->origin.start_column;
+  entry.origin_end_column = diagnostic->origin.end_column;
+  entry.params.reserve(diagnostic->param_count);
+  entry.string_storage.reserve(diagnostic->param_count);
   for (iree_host_size_t i = 0; i < diagnostic->param_count; ++i) {
     loom_diagnostic_param_t param = diagnostic->params[i];
     if (param.kind == LOOM_PARAM_STRING) {
@@ -208,6 +212,16 @@ class ParserTest : public ::testing::Test {
   loom_context_t context_;
   DiagnosticCapture capture_;
 };
+
+static loom_op_t* GetFirstFunctionOp(const loom_module_t* module) {
+  if (!module || module->symbols.count == 0) return nullptr;
+  return module->symbols.entries[0].defining_op;
+}
+
+static loom_block_t* GetEntryBlock(loom_region_t* region) {
+  if (!region || region->block_count == 0) return nullptr;
+  return &region->blocks[0];
+}
 
 //===----------------------------------------------------------------------===//
 // Valid parse — no diagnostics
@@ -386,7 +400,7 @@ TEST_F(ParserTest, LoopWithIterArgs) {
       "func.def @loop(%lo: index, %hi: index, %step: index, %init: f32)"
       " -> (f32) {\n"
       "  %r = test.loop %iv = %lo to %hi step %step"
-      " iter_args(%acc = %init : f32) -> (f32) {\n"
+      " iter_args(%acc = %init : f32) -> (%init as f32) {\n"
       "    test.yield %acc : f32\n"
       "  }\n"
       "  func.return %r : f32\n"
@@ -397,8 +411,36 @@ TEST_F(ParserTest, LoopWithIterArgs) {
         << "IV not found in: " << text;
     EXPECT_NE(text.find("iter_args(%acc ="), std::string::npos)
         << "iter_args not found in: " << text;
+    EXPECT_NE(text.find("-> (%init as f32)"), std::string::npos)
+        << "iter_arg tie should name the init operand in: " << text;
     EXPECT_NE(text.find("func.return %r : f32"), std::string::npos)
         << "return type wrong in: " << text;
+
+    loom_op_t* func_op = GetFirstFunctionOp(module);
+    ASSERT_NE(func_op, nullptr);
+    ASSERT_EQ(func_op->region_count, 1u);
+    loom_block_t* func_entry = GetEntryBlock(loom_op_regions(func_op)[0]);
+    ASSERT_NE(func_entry, nullptr);
+    ASSERT_GE(func_entry->op_count, 2u);
+
+    loom_op_t* loop_op = func_entry->ops[0];
+    ASSERT_NE(loop_op, nullptr);
+    ASSERT_EQ(loop_op->operand_count, 4u);
+    ASSERT_EQ(loop_op->region_count, 1u);
+    ASSERT_EQ(loop_op->tied_result_count, 1u);
+    const loom_tied_result_t* tied_results = loom_op_tied_results(loop_op);
+    EXPECT_EQ(tied_results[0].result_index, 0u);
+    EXPECT_EQ(tied_results[0].operand_index, 3u);
+    EXPECT_FALSE(tied_results[0].has_type_change);
+
+    loom_block_t* loop_entry = GetEntryBlock(loom_op_regions(loop_op)[0]);
+    ASSERT_NE(loop_entry, nullptr);
+    ASSERT_EQ(loop_entry->arg_count, 2u);
+    ASSERT_EQ(loop_entry->op_count, 1u);
+    loom_op_t* yield_op = loop_entry->ops[0];
+    ASSERT_NE(yield_op, nullptr);
+    ASSERT_EQ(yield_op->operand_count, 1u);
+    EXPECT_EQ(loom_op_const_operands(yield_op)[0], loop_entry->arg_ids[1]);
     loom_module_free(module);
   }
 }
@@ -460,6 +502,16 @@ TEST_F(ParserTest, UnknownOp) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "bogus.nonexistent");
 }
 
+TEST_F(ParserTest, UnexpectedTokenRetainsSigilAndSpan) {
+  const auto& diagnostics = ParseExpectErrors("%r = @callee\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "@callee");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 6u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 13u);
+}
+
 TEST_F(ParserTest, UndefinedSSAValue) {
   const auto& diagnostics = ParseExpectErrors(
       "%c = test.constant 1 : i32\n"
@@ -467,6 +519,109 @@ TEST_F(ParserTest, UndefinedSSAValue) {
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0], &loom_err_parse_001);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "undefined");
+}
+
+TEST_F(ParserTest, BindingListNameIsRegionLocal) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%tile = test.constant 0 : f32\n"
+      "%mapped = test.map(%element = %tile : f32) {\n"
+      "  test.yield %element : f32\n"
+      "} -> (f32)\n"
+      "%leak = test.neg %element : f32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "element");
+  EXPECT_EQ(diagnostics[0].origin_line, 5u);
+  EXPECT_EQ(diagnostics[0].origin_column, 18u);
+}
+
+TEST_F(ParserTest, BindingListNameCanShadowOuterScopeName) {
+  loom_module_t* module = ParseOk(
+      "func.def @shadow(%x : f32) -> (f32) {\n"
+      "  %tile = test.constant 0 : f32\n"
+      "  %mapped = test.map(%x = %tile : f32) {\n"
+      "    test.yield %x : f32\n"
+      "  } -> (f32)\n"
+      "  %negated = test.neg %x : f32\n"
+      "  func.return %negated : f32\n"
+      "}\n");
+  if (module) {
+    loom_op_t* func_op = GetFirstFunctionOp(module);
+    ASSERT_NE(func_op, nullptr);
+    ASSERT_EQ(func_op->region_count, 1u);
+    loom_block_t* func_entry = GetEntryBlock(loom_op_regions(func_op)[0]);
+    ASSERT_NE(func_entry, nullptr);
+    ASSERT_EQ(func_entry->arg_count, 1u);
+    ASSERT_GE(func_entry->op_count, 3u);
+
+    loom_op_t* map_op = func_entry->ops[1];
+    ASSERT_NE(map_op, nullptr);
+    ASSERT_EQ(map_op->region_count, 1u);
+    loom_block_t* map_entry = GetEntryBlock(loom_op_regions(map_op)[0]);
+    ASSERT_NE(map_entry, nullptr);
+    ASSERT_EQ(map_entry->arg_count, 1u);
+
+    loom_op_t* yield_op = map_entry->ops[0];
+    ASSERT_NE(yield_op, nullptr);
+    ASSERT_EQ(yield_op->operand_count, 1u);
+    EXPECT_EQ(loom_op_const_operands(yield_op)[0], map_entry->arg_ids[0]);
+
+    loom_op_t* neg_op = func_entry->ops[2];
+    ASSERT_NE(neg_op, nullptr);
+    ASSERT_EQ(neg_op->operand_count, 1u);
+    EXPECT_EQ(loom_op_const_operands(neg_op)[0], func_entry->arg_ids[0]);
+    EXPECT_NE(map_entry->arg_ids[0], func_entry->arg_ids[0]);
+    loom_module_free(module);
+  }
+}
+
+TEST_F(ParserTest, LoopIvNameIsRegionLocal) {
+  const auto& diagnostics = ParseExpectErrors(
+      "func.def @simple_loop(%lo: index, %hi: index, %step: index) {\n"
+      "  test.loop %iv = %lo to %hi step %step {\n"
+      "  }\n"
+      "  test.loop %again = %iv to %hi step %step {\n"
+      "  }\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "iv");
+  EXPECT_EQ(diagnostics[0].origin_line, 4u);
+  EXPECT_EQ(diagnostics[0].origin_column, 22u);
+}
+
+TEST_F(ParserTest, LoopIterArgNameIsNotATiedResultTarget) {
+  const auto& diagnostics = ParseExpectErrors(
+      "func.def @loop(%lo: index, %hi: index, %step: index, %init: f32)"
+      " -> (f32) {\n"
+      "  %r = test.loop %iv = %lo to %hi step %step"
+      " iter_args(%acc = %init : f32) -> (%acc as f32) {\n"
+      "    test.yield %acc : f32\n"
+      "  }\n"
+      "  func.return %r : f32\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "acc");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 80u);
+}
+
+TEST_F(ParserTest, LoopIvNameIsNotATiedResultTarget) {
+  const auto& diagnostics = ParseExpectErrors(
+      "func.def @loop(%lo: index, %hi: index, %step: index, %init: f32)"
+      " -> (f32) {\n"
+      "  %r = test.loop %iv = %lo to %hi step %step"
+      " iter_args(%acc = %init : f32) -> (%iv as f32) {\n"
+      "    test.yield %acc : f32\n"
+      "  }\n"
+      "  func.return %r : f32\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "iv");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 80u);
 }
 
 TEST_F(ParserTest, DuplicateFunctionArgName) {
@@ -509,6 +664,27 @@ TEST_F(ParserTest, DuplicateOpResultName) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "r");
   EXPECT_EQ(diagnostics[0].origin_line, 4u);
   EXPECT_EQ(diagnostics[0].origin_column, 5u);
+}
+
+TEST_F(ParserTest, ResultBodyOpRequiresLhsNames) {
+  const auto& diagnostics = ParseExpectErrors("test.constant 42 : i32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_009);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "test.constant");
+  ExpectU32Param(diagnostics[0], 1, 1u);
+  ExpectU32Param(diagnostics[0], 2, 0u);
+}
+
+TEST_F(ParserTest, SymbolDefinitionRejectsLhsNames) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%fn = func.def @named() {\n"
+      "  func.return\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_009);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "func.def");
+  ExpectU32Param(diagnostics[0], 1, 0u);
+  ExpectU32Param(diagnostics[0], 2, 1u);
 }
 
 TEST_F(ParserTest, DuplicateBindingListName) {
@@ -565,6 +741,16 @@ TEST_F(ParserTest, EncodingAlias) {
     EXPECT_NE(text.find("#enc"), std::string::npos);
     loom_module_free(module);
   }
+}
+
+TEST_F(ParserTest, InvalidEncodingAliasReportsAliasToken) {
+  const auto& diagnostics = ParseExpectErrors("#enc test.constant 0 : i32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_014);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "#enc");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 5u);
 }
 
 TEST_F(ParserTest, InlineEncoding) {

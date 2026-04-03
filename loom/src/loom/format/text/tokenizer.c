@@ -59,6 +59,12 @@ static inline bool loom_is_hex_digit(char c) {
   return loom_is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
+static iree_string_view_t loom_tokenizer_eof_text(
+    const loom_tokenizer_t* tokenizer) {
+  if (iree_string_view_is_empty(tokenizer->source)) return tokenizer->source;
+  return iree_make_string_view(tokenizer->source.data + tokenizer->position, 0);
+}
+
 //===----------------------------------------------------------------------===//
 // Tokenizer
 //===----------------------------------------------------------------------===//
@@ -483,9 +489,10 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
 
   if (t->position >= t->source.size) {
     out_token->kind = LOOM_TOKEN_EOF;
-    out_token->text = iree_string_view_empty();
+    out_token->text = loom_tokenizer_eof_text(t);
     out_token->line = t->line;
     out_token->column = t->column;
+    out_token->end_column = t->column;
     return iree_ok_status();
   }
 
@@ -664,9 +671,10 @@ loom_token_t loom_tokenizer_peek(loom_tokenizer_t* tokenizer) {
     // If a previous scan already failed, keep returning EOF.
     if (!iree_status_is_ok(tokenizer->status)) {
       tokenizer->peeked.kind = LOOM_TOKEN_EOF;
-      tokenizer->peeked.text = iree_string_view_empty();
+      tokenizer->peeked.text = loom_tokenizer_eof_text(tokenizer);
       tokenizer->peeked.line = tokenizer->line;
       tokenizer->peeked.column = tokenizer->column;
+      tokenizer->peeked.end_column = tokenizer->column;
       return tokenizer->peeked;
     }
     iree_status_t status = loom_tokenizer_scan(tokenizer, &tokenizer->peeked);
@@ -674,9 +682,10 @@ loom_token_t loom_tokenizer_peek(loom_tokenizer_t* tokenizer) {
       // Store the error for the caller to retrieve.
       tokenizer->status = status;
       tokenizer->peeked.kind = LOOM_TOKEN_EOF;
-      tokenizer->peeked.text = iree_string_view_empty();
+      tokenizer->peeked.text = loom_tokenizer_eof_text(tokenizer);
       tokenizer->peeked.line = tokenizer->line;
       tokenizer->peeked.column = tokenizer->column;
+      tokenizer->peeked.end_column = tokenizer->column;
     }
   }
   return tokenizer->peeked;

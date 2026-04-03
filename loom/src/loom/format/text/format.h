@@ -58,7 +58,7 @@
 //
 //   %c0 = scalar.constant 0 : index
 //   %slice0 = tensor.slice %input[%c0] : tensor<4xf32> -> (tile<4xf32>)
-//   %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%out as tensor<[%M]xf32>) {
+//   %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%output as tensor<[%M]xf32>) {
 //     %w = tensor.slice %weights[%i, %c0] : tensor<[%M]x4xf32> -> (tile<4x4xf32>)
 //     %partial = tile.contract %w, %slice0 : tile<4x4xf32>, tile<4xf32> -> (tile<4xf32>)
 //     %update0 = tensor.update %partial, %out[%i] : tile<4xf32> -> (%out as tensor<[%M]xf32>)
@@ -576,14 +576,16 @@
 //
 // --- For-like ops ---
 //
-//   %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%out as tensor<[%M]xf32>) {
+//   %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%output as tensor<[%M]xf32>) {
 //     ...
 //     scf.yield %out_new : tensor<[%M]xf32>
 //   }
 //
 // The iter_args clause is a BindingList: (%name = %init : type, ...).
 // The body's entry block receives the IV followed by the iter_arg
-// values. scf.yield returns values matching the iter_args.
+// values. Tied result names refer to the parent-scope init operands
+// (for example %output above), not the region-local iter_arg block args.
+// scf.yield returns values matching the iter_args.
 //
 // --- If-like ops ---
 //
@@ -727,7 +729,7 @@
 //     %c0 = scalar.constant 0 : index
 //     %c4 = scalar.constant 4 : index
 //     %tile = tensor.slice %input[%c0] : tensor<4xf32> -> (tile<4xf32>)
-//     %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%out as tensor<[%M]xf32>) {
+//     %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%output as tensor<[%M]xf32>) {
 //       %w = tensor.slice %weights[%i, %c0] : tensor<[%M]x4xf32> -> (tile<4x4xf32>)
 //       %partial = tile.contract %w, %tile : tile<4x4xf32>, tile<4xf32> -> (tile<4xf32>)
 //       %updated = tensor.update %partial, %out[%i] : tile<4xf32> -> (%out as tensor<[%M]xf32>)
@@ -742,7 +744,7 @@
 //     %3 = scalar.constant 0 : index
 //     %4 = scalar.constant 4 : index
 //     %5 = tensor.slice %1[%3] : tensor<4xf32> -> (tile<4xf32>)
-//     %6 = scf.for %7 = %3 to %M step %4 iter_args(%8 = %2 : tensor<[%M]xf32>) -> (%8 as tensor<[%M]xf32>) {
+//     %6 = scf.for %7 = %3 to %M step %4 iter_args(%8 = %2 : tensor<[%M]xf32>) -> (%2 as tensor<[%M]xf32>) {
 //       %9 = tensor.slice %0[%7, %3] : tensor<[%M]x4xf32> -> (tile<4x4xf32>)
 //       %10 = tile.contract %9, %5 : tile<4x4xf32>, tile<4xf32> -> (tile<4xf32>)
 //       %11 = tensor.update %10, %8[%7] : tile<4xf32> -> (%8 as tensor<[%M]xf32>)

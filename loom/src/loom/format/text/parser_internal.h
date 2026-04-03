@@ -26,10 +26,19 @@ extern "C" {
 
 typedef struct loom_parser_t loom_parser_t;
 
-// Growable scratch list of value IDs that should become entry-block arguments
-// for the next parsed REGION element.
+// Pending block argument prepared by FUNC_ARGS, BINDING_LIST, or an implicit
+// region operand such as a loop IV.
+typedef struct loom_parser_pending_block_arg_t {
+  loom_value_id_t value_id;
+  // Name to define in the child region scope when REGION consumes this arg.
+  // Already-scoped function arguments use loom_token_none().
+  loom_token_t name_token;
+} loom_parser_pending_block_arg_t;
+
+// Growable scratch list of values that should become entry-block arguments for
+// the next parsed REGION element.
 typedef struct loom_parser_pending_block_args_t {
-  loom_value_id_t* ids;
+  loom_parser_pending_block_arg_t* entries;
   uint16_t count;
   uint16_t capacity;
 } loom_parser_pending_block_args_t;
@@ -195,8 +204,9 @@ typedef struct loom_parser_t {
 
   // Pending block arguments from FUNC_ARGS, BINDING_LIST, or implicit region
   // operands such as loop IVs. The next REGION format element consumes them to
-  // seed the entry block. For ops with FUNC_ARGS but no REGION (func.decl),
-  // loom_parse_op drains them into regular operands after the format walk.
+  // seed the entry block and define child-scope-only names for region-local
+  // args. For ops with FUNC_ARGS but no REGION (func.decl), loom_parse_op
+  // drains their value IDs into regular operands after the format walk.
   loom_parser_pending_block_args_t pending_block_args;
 
   // Scope saved before FUNC_ARGS pushed its scope. Non-NULL only
@@ -364,11 +374,12 @@ iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
                                              iree_arena_allocator_t* arena,
                                              loom_tied_result_t tied);
 
-// Appends a value ID to the parser's pending block arg list. These
-// are consumed by the next REGION format element to seed the entry
-// block. Arena-allocated with growth.
+// Appends a block arg to the parser's pending block arg list. These entries are
+// consumed by the next REGION format element to seed the entry block.
+// Arena-allocated with growth.
 iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
-                                                loom_value_id_t value_id);
+                                                loom_value_id_t value_id,
+                                                loom_token_t name_token);
 
 //===----------------------------------------------------------------------===//
 // Type parsing
@@ -419,6 +430,12 @@ iree_status_t loom_parse_keyword(loom_parser_t* parser, uint16_t keyword_id);
 iree_status_t loom_parse_region(loom_parser_t* parser,
                                 loom_region_t** out_region);
 
+// Emits ERR_PARSE_009 for a result arity mismatch on |vtable| at
+// |op_name_token|.
+iree_status_t loom_parser_emit_result_count_mismatch(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    loom_token_t op_name_token, uint16_t expected_count, uint16_t actual_count);
+
 //===----------------------------------------------------------------------===//
 // Format walker
 //===----------------------------------------------------------------------===//
@@ -427,6 +444,7 @@ iree_status_t loom_parse_region(loom_parser_t* parser,
 // Populates |parsed| with operands, results, attributes, and regions.
 iree_status_t loom_parser_walk_format(loom_parser_t* parser,
                                       const loom_op_vtable_t* vtable,
+                                      loom_token_t op_name_token,
                                       loom_parsed_op_t* parsed);
 
 #ifdef __cplusplus

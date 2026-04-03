@@ -486,7 +486,7 @@ test_loop = Op(
         Region("body"),
     ],
     examples=[
-        "%result = test.loop %i = %c0 to %count step %c1 iter_args(%accumulator = %init : f32) -> (f32) {\n  %next = test.addi %accumulator, %c1 : i32\n  test.yield %next : i32\n}",
+        "%result = test.loop %i = %c0 to %count step %c1 iter_args(%accumulator = %init : f32) -> (%init as f32) {\n  %next = test.neg %accumulator : f32\n  test.yield %next : f32\n}",
     ],
 )
 

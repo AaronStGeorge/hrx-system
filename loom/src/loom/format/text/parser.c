@@ -266,6 +266,19 @@ iree_status_t loom_parser_resolve_value(loom_parser_t* parser,
                           IREE_ARRAYSIZE(params), name_token);
 }
 
+iree_status_t loom_parser_emit_result_count_mismatch(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    loom_token_t op_name_token, uint16_t expected_count,
+    uint16_t actual_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_vtable_name(vtable)),
+      loom_param_u32(expected_count),
+      loom_param_u32(actual_count),
+  };
+  return loom_parser_emit(parser, &loom_err_parse_009, params,
+                          IREE_ARRAYSIZE(params), op_name_token);
+}
+
 //===----------------------------------------------------------------------===//
 // Alias table
 //===----------------------------------------------------------------------===//
@@ -299,6 +312,27 @@ uint16_t loom_alias_table_lookup(const loom_alias_table_t* table,
 // Diagnostic emission
 //===----------------------------------------------------------------------===//
 
+static loom_source_range_t loom_parser_token_origin(iree_string_view_t filename,
+                                                    iree_string_view_t source,
+                                                    loom_token_t token) {
+  if (token.kind == LOOM_TOKEN_NONE || token.kind == LOOM_TOKEN_EOF) {
+    return (loom_source_range_t){
+        .filename = filename,
+        .source = source,
+        .start = source.size,
+        .end = source.size,
+        .start_line = token.line,
+        .start_column = token.column,
+        .end_line = token.line,
+        .end_column = token.end_column,
+    };
+  }
+
+  return loom_source_range_from_token(filename, source,
+                                      loom_token_lexeme(token), token.line,
+                                      token.column, token.end_column);
+}
+
 iree_status_t loom_parser_emit(loom_parser_t* parser,
                                const loom_error_def_t* error,
                                const loom_diagnostic_param_t* params,
@@ -307,8 +341,8 @@ iree_status_t loom_parser_emit(loom_parser_t* parser,
   if (error->severity == LOOM_DIAGNOSTIC_ERROR) {
     ++parser->error_count;
   }
-  loom_source_range_t origin = loom_source_range_from_token(
-      parser->filename, parser->source, token.text, token.line, token.column);
+  loom_source_range_t origin =
+      loom_parser_token_origin(parser->filename, parser->source, token);
   loom_diagnostic_t diagnostic = {
       .severity = error->severity,
       .error = error,
@@ -316,6 +350,9 @@ iree_status_t loom_parser_emit(loom_parser_t* parser,
       .param_count = param_count,
       .emitter = LOOM_EMITTER_PARSER,
       .origin = origin,
+      // The text parser currently reports the parse token itself as the
+      // user-facing location. Parsed loc() metadata can diverge from origin in
+      // later verifier/reader diagnostics.
       .source_location = origin,
   };
   IREE_RETURN_IF_ERROR(
@@ -356,7 +393,7 @@ iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
   }
   if (token.kind != kind) {
     loom_diagnostic_param_t params[] = {
-        loom_param_string(token.text),
+        loom_param_string(loom_token_lexeme(token)),
         loom_param_string(loom_token_kind_name(kind)),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -512,25 +549,31 @@ iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
 }
 
 iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
-                                                loom_value_id_t value_id) {
+                                                loom_value_id_t value_id,
+                                                loom_token_t name_token) {
   loom_parser_pending_block_args_t* pending_block_args =
       &parser->pending_block_args;
   if (pending_block_args->count >= pending_block_args->capacity) {
     iree_host_size_t capacity = pending_block_args->capacity;
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        &parser->parser_arena, pending_block_args->count, 8,
-        sizeof(loom_value_id_t), &capacity, (void**)&pending_block_args->ids));
+    IREE_RETURN_IF_ERROR(
+        iree_arena_grow_array(&parser->parser_arena, pending_block_args->count,
+                              8, sizeof(loom_parser_pending_block_arg_t),
+                              &capacity, (void**)&pending_block_args->entries));
     pending_block_args->capacity = (uint16_t)capacity;
   }
-  pending_block_args->ids[pending_block_args->count++] = value_id;
+  pending_block_args->entries[pending_block_args->count++] =
+      (loom_parser_pending_block_arg_t){
+          .value_id = value_id,
+          .name_token = name_token,
+      };
   return iree_ok_status();
 }
 
+// Clears the active pending-arg list while retaining arena-backed storage for
+// reuse by later REGION elements.
 static void loom_parser_pending_block_args_reset(
     loom_parser_pending_block_args_t* pending_block_args) {
-  pending_block_args->ids = NULL;
   pending_block_args->count = 0;
-  pending_block_args->capacity = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -542,7 +585,7 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
                                     loom_attribute_t* out_attr) {
   switch (descriptor->attr_kind) {
     case LOOM_ATTR_I64: {
-      loom_token_t token = {0};
+      loom_token_t token = loom_token_none();
       LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_INTEGER, &token);
       int64_t value = 0;
       if (!iree_string_view_atoi_int64(token.text, &value)) {
@@ -556,7 +599,7 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
       return iree_ok_status();
     }
     case LOOM_ATTR_F64: {
-      loom_token_t token = {0};
+      loom_token_t token = loom_token_none();
       LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_FLOAT, &token);
       double value = 0.0;
       if (!iree_string_view_atod(token.text, &value)) {
@@ -570,7 +613,7 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
       return iree_ok_status();
     }
     case LOOM_ATTR_STRING: {
-      loom_token_t token = {0};
+      loom_token_t token = loom_token_none();
       LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &token);
       // Token text is the content without surrounding quotes (the
       // tokenizer strips them, like %, @, #, ^ on other token types).
@@ -590,7 +633,7 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
       } else {
         loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
         loom_diagnostic_param_t params[] = {
-            loom_param_string(peek.text),
+            loom_param_string(loom_token_lexeme(peek)),
             loom_param_string(IREE_SV("'true' or 'false'")),
         };
         return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -599,7 +642,7 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
       return iree_ok_status();
     }
     case LOOM_ATTR_ENUM: {
-      loom_token_t token = {0};
+      loom_token_t token = loom_token_none();
       LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &token);
       // Look up the enum case name.
       if (!descriptor->enum_case_names) {
@@ -633,7 +676,7 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
                                       LOOM_TOKEN_LBRACKET)) {
         loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
         loom_diagnostic_param_t params[] = {
-            loom_param_string(peek.text),
+            loom_param_string(loom_token_lexeme(peek)),
             loom_param_string(IREE_SV("'['")),
         };
         return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -650,11 +693,11 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
             break;
           }
         }
-        loom_token_t token = {0};
+        loom_token_t token = loom_token_none();
         LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_INTEGER, &token);
         if (count >= 32) {
           loom_diagnostic_param_t params[] = {
-              loom_param_string(token.text),
+              loom_param_string(loom_token_lexeme(token)),
           };
           return loom_parser_emit(parser, &loom_err_parse_004, params,
                                   IREE_ARRAYSIZE(params), token);
@@ -673,7 +716,7 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
                                       LOOM_TOKEN_RBRACKET)) {
         loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
         loom_diagnostic_param_t params[] = {
-            loom_param_string(peek.text),
+            loom_param_string(loom_token_lexeme(peek)),
             loom_param_string(IREE_SV("']'")),
         };
         return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -741,7 +784,7 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LBRACKET)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("'['")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -761,14 +804,14 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
     if (count >= 16) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(peek.text),
+          loom_param_string(loom_token_lexeme(peek)),
       };
       return loom_parser_emit(parser, &loom_err_parse_004, params,
                               IREE_ARRAYSIZE(params), peek);
     }
 
     // Parse predicate kind name.
-    loom_token_t name_token = {0};
+    loom_token_t name_token = loom_token_none();
     LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &name_token);
 
     uint8_t pred_kind = UINT8_MAX;
@@ -791,7 +834,7 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(peek.text),
+          loom_param_string(loom_token_lexeme(peek)),
           loom_param_string(IREE_SV("'('")),
       };
       return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -813,7 +856,7 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
       if (predicate.arg_count >= 3) {
         loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
         loom_diagnostic_param_t params[] = {
-            loom_param_string(peek.text),
+            loom_param_string(loom_token_lexeme(peek)),
         };
         return loom_parser_emit(parser, &loom_err_parse_004, params,
                                 IREE_ARRAYSIZE(params), peek);
@@ -830,7 +873,7 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
       } else if (arg_token.kind == LOOM_TOKEN_RESULT_ORDINAL) {
         // Predicate ordinals (#N) are no longer supported.
         loom_diagnostic_param_t params[] = {
-            loom_param_string(arg_token.text),
+            loom_param_string(loom_token_lexeme(arg_token)),
             loom_param_string(
                 IREE_SV("a predicate argument (%name or integer)")),
         };
@@ -851,7 +894,7 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
         predicate.args[predicate.arg_count] = value;
       } else {
         loom_diagnostic_param_t params[] = {
-            loom_param_string(arg_token.text),
+            loom_param_string(loom_token_lexeme(arg_token)),
             loom_param_string(IREE_SV("a predicate argument")),
         };
         return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -863,7 +906,7 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(peek.text),
+          loom_param_string(loom_token_lexeme(peek)),
           loom_param_string(IREE_SV("')'")),
       };
       return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -876,7 +919,7 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RBRACKET)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("']'")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -918,14 +961,14 @@ iree_status_t loom_parse_attr_dict(loom_parser_t* parser,
     if (count >= 16) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(peek.text),
+          loom_param_string(loom_token_lexeme(peek)),
       };
       return loom_parser_emit(parser, &loom_err_parse_004, params,
                               IREE_ARRAYSIZE(params), peek);
     }
 
     // Key.
-    loom_token_t key_token = {0};
+    loom_token_t key_token = loom_token_none();
     LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &key_token);
     loom_string_id_t key_id = 0;
     IREE_RETURN_IF_ERROR(
@@ -935,7 +978,7 @@ iree_status_t loom_parse_attr_dict(loom_parser_t* parser,
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(peek.text),
+          loom_param_string(loom_token_lexeme(peek)),
           loom_param_string(IREE_SV("'='")),
       };
       return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -983,7 +1026,7 @@ iree_status_t loom_parse_attr_dict(loom_parser_t* parser,
       value = loom_attr_bool(false);
     } else {
       loom_diagnostic_param_t params[] = {
-          loom_param_string(val_token.text),
+          loom_param_string(loom_token_lexeme(val_token)),
           loom_param_string(IREE_SV("an attribute value")),
       };
       return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -999,7 +1042,7 @@ iree_status_t loom_parse_attr_dict(loom_parser_t* parser,
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RBRACE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
+        loom_param_string(loom_token_lexeme(peek)),
         loom_param_string(IREE_SV("'}'")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -1084,7 +1127,7 @@ iree_status_t loom_parse_keyword(loom_parser_t* parser, uint16_t keyword_id) {
       if (!loom_tokenizer_try_consume_keyword(&parser->tokenizer, expected)) {
         loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
         loom_diagnostic_param_t params[] = {
-            loom_param_string(peek.text),
+            loom_param_string(loom_token_lexeme(peek)),
             loom_param_string(expected),
         };
         return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -1198,6 +1241,7 @@ static iree_status_t loom_finalize_op(
 //===----------------------------------------------------------------------===//
 
 static iree_status_t loom_parse_op(loom_parser_t* parser) {
+  uint32_t errors_before = parser->error_count;
   loom_parsed_op_t parsed;
   loom_parsed_op_initialize(&parsed);
 
@@ -1236,7 +1280,7 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(peek.text),
+          loom_param_string(loom_token_lexeme(peek)),
           loom_param_string(IREE_SV("'='")),
       };
       return loom_parser_emit(parser, &loom_err_parse_003, params,
@@ -1245,7 +1289,7 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
   }
 
   // Parse op name.
-  loom_token_t op_name_token = {0};
+  loom_token_t op_name_token = loom_token_none();
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_OP_NAME, &op_name_token);
 
   // Look up the op vtable.
@@ -1260,8 +1304,17 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
                             IREE_ARRAYSIZE(params), op_name_token);
   }
 
+  bool is_symbol_definition =
+      iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE);
+  if (is_symbol_definition && parsed.result_count > 0) {
+    return loom_parser_emit_result_count_mismatch(parser, vtable, op_name_token,
+                                                  /*expected_count=*/0,
+                                                  parsed.result_count);
+  }
+
   // Walk the format elements.
-  IREE_RETURN_IF_ERROR(loom_parser_walk_format(parser, vtable, &parsed));
+  IREE_RETURN_IF_ERROR(
+      loom_parser_walk_format(parser, vtable, op_name_token, &parsed));
 
   // If FUNC_ARGS pushed a scope but no REGION consumed the pending
   // block args (e.g., func.decl, func.ukernel), the args represent
@@ -1271,7 +1324,8 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
     if (parser->pending_block_args.count > 0) {
       for (uint16_t i = 0; i < parser->pending_block_args.count; ++i) {
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
-            &parsed, &parser->parser_arena, parser->pending_block_args.ids[i]));
+            &parsed, &parser->parser_arena,
+            parser->pending_block_args.entries[i].value_id));
       }
     }
     parser->scope = parser->pre_func_arg_scope;
@@ -1280,6 +1334,16 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
   }
   if (parser->error_count > 0) {
     loom_parser_pending_block_args_reset(&parser->pending_block_args);
+  }
+
+  bool has_variadic_results =
+      (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS) != 0;
+  if (!is_symbol_definition && !has_variadic_results &&
+      parser->error_count == errors_before &&
+      parsed.result_count != vtable->fixed_result_count) {
+    IREE_RETURN_IF_ERROR(loom_parser_emit_result_count_mismatch(
+        parser, vtable, op_name_token, vtable->fixed_result_count,
+        parsed.result_count));
   }
 
   // Create a source location spanning the full op text.
@@ -1322,53 +1386,26 @@ static iree_status_t loom_parse_block_body(loom_parser_t* parser,
   return iree_ok_status();
 }
 
-iree_status_t loom_parse_region(loom_parser_t* parser,
-                                loom_region_t** out_region) {
-  // Expect '{'.
-  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LBRACE)) {
-    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
-        loom_param_string(IREE_SV("'{'")),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_003, params,
-                            IREE_ARRAYSIZE(params), peek);
-  }
+static iree_status_t loom_parse_region_body(loom_parser_t* parser,
+                                            loom_region_t* region,
+                                            bool* out_region_end_consumed) {
+  *out_region_end_consumed = false;
 
-  // Push a new scope for the region — unless FUNC_ARGS already pushed
-  // one. In that case, the func-arg scope IS the region scope (args and
-  // dim values defined during FUNC_ARGS are visible in the body).
-  loom_parser_scope_t* outer_scope = NULL;
-  if (parser->pre_func_arg_scope) {
-    // FUNC_ARGS already pushed a scope. The current scope is the func-arg
-    // scope, which becomes the region scope. Restore to pre_func_arg_scope
-    // when the region ends.
-    outer_scope = parser->pre_func_arg_scope;
-    parser->pre_func_arg_scope = NULL;
-  } else {
-    outer_scope = parser->scope;
-    IREE_RETURN_IF_ERROR(loom_parser_scope_push(&parser->parser_arena,
-                                                outer_scope, &parser->scope));
-  }
-
-  // Allocate the region with a single entry block initially.
-  loom_region_t* region = NULL;
-  IREE_RETURN_IF_ERROR(loom_module_allocate_region(parser->module, 1, &region));
-
-  // Seed the entry block with pending block args from FUNC_ARGS or
-  // BINDING_LIST. These values were already defined in the module and
-  // scope — now attach them to the block so the IR structure is correct.
+  // Seed the entry block with pending block args from FUNC_ARGS, BINDING_LIST,
+  // or implicit region operands. Values are already defined in the module;
+  // region-local names are defined in the child scope here.
   if (parser->pending_block_args.count > 0) {
     loom_block_t* entry_block = &region->blocks[0];
     for (uint16_t i = 0; i < parser->pending_block_args.count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_block_add_arg(
-          parser->module, entry_block, parser->pending_block_args.ids[i]));
+      const loom_parser_pending_block_arg_t pending_arg =
+          parser->pending_block_args.entries[i];
+      LOOM_PARSE_DEFINE_VALUE_NAME(parser, pending_arg.name_token,
+                                   pending_arg.value_id);
+      IREE_RETURN_IF_ERROR(loom_block_add_arg(parser->module, entry_block,
+                                              pending_arg.value_id));
     }
     loom_parser_pending_block_args_reset(&parser->pending_block_args);
   }
-
-  // Save and set builder insertion point.
-  loom_builder_ip_t saved_ip = loom_builder_save(&parser->builder);
 
   // Parse blocks. The entry block may not have an explicit label.
   bool first_block = true;
@@ -1405,20 +1442,9 @@ iree_status_t loom_parse_region(loom_parser_t* parser,
               break;
             }
           }
-          loom_token_t arg_name_token = {0};
+          loom_token_t arg_name_token = loom_token_none();
           LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &arg_name_token);
-          if (!loom_tokenizer_try_consume(&parser->tokenizer,
-                                          LOOM_TOKEN_COLON)) {
-            loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-            loom_diagnostic_param_t params[] = {
-                loom_param_string(peek.text),
-                loom_param_string(IREE_SV("':'")),
-            };
-            IREE_RETURN_IF_ERROR(
-                loom_parser_emit(parser, &loom_err_parse_003, params,
-                                 IREE_ARRAYSIZE(params), peek));
-            return iree_ok_status();
-          }
+          LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
           loom_type_t arg_type = {0};
           IREE_RETURN_IF_ERROR(
               loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &arg_type));
@@ -1428,48 +1454,72 @@ iree_status_t loom_parse_region(loom_parser_t* parser,
               &parser->builder, block, arg_type, &arg_value_id));
           LOOM_PARSE_DEFINE_VALUE_NAME(parser, arg_name_token, arg_value_id);
         }
-        if (!loom_tokenizer_try_consume(&parser->tokenizer,
-                                        LOOM_TOKEN_RPAREN)) {
-          loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-          loom_diagnostic_param_t params[] = {
-              loom_param_string(peek.text),
-              loom_param_string(IREE_SV("')'")),
-          };
-          return loom_parser_emit(parser, &loom_err_parse_003, params,
-                                  IREE_ARRAYSIZE(params), peek);
-        }
+        LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RPAREN, NULL);
       }
 
-      // Expect ':' after block label.
-      if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COLON)) {
-        loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(peek.text),
-            loom_param_string(IREE_SV("':'")),
-        };
-        return loom_parser_emit(parser, &loom_err_parse_003, params,
-                                IREE_ARRAYSIZE(params), peek);
-      }
+      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
     }
 
-    // Parse ops in this block.
     IREE_RETURN_IF_ERROR(loom_parse_block_body(parser, block));
   }
 
-  // Restore scope and insertion point.
-  parser->scope = outer_scope;
-  loom_builder_restore(&parser->builder, saved_ip);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACE, NULL);
+  *out_region_end_consumed = true;
+  return iree_ok_status();
+}
 
-  // Expect '}'.
-  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RBRACE)) {
+iree_status_t loom_parse_region(loom_parser_t* parser,
+                                loom_region_t** out_region) {
+  uint32_t errors_before = parser->error_count;
+
+  // Expect '{'.
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LBRACE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(peek.text),
-        loom_param_string(IREE_SV("'}'")),
+        loom_param_string(loom_token_lexeme(peek)),
+        loom_param_string(IREE_SV("'{'")),
     };
     return loom_parser_emit(parser, &loom_err_parse_003, params,
                             IREE_ARRAYSIZE(params), peek);
   }
+
+  // Push a new scope for the region — unless FUNC_ARGS already pushed
+  // one. In that case, the func-arg scope IS the region scope (args and
+  // dim values defined during FUNC_ARGS are visible in the body).
+  loom_parser_scope_t* outer_scope = NULL;
+  if (parser->pre_func_arg_scope) {
+    // FUNC_ARGS already pushed a scope. The current scope is the func-arg
+    // scope, which becomes the region scope. Restore to pre_func_arg_scope
+    // when the region ends.
+    outer_scope = parser->pre_func_arg_scope;
+    parser->pre_func_arg_scope = NULL;
+  } else {
+    outer_scope = parser->scope;
+    IREE_RETURN_IF_ERROR(loom_parser_scope_push(&parser->parser_arena,
+                                                outer_scope, &parser->scope));
+  }
+
+  // Allocate the region with a single entry block initially.
+  loom_region_t* region = NULL;
+  IREE_RETURN_IF_ERROR(loom_module_allocate_region(parser->module, 1, &region));
+
+  // Save and set builder insertion point.
+  loom_builder_ip_t saved_ip = loom_builder_save(&parser->builder);
+
+  bool region_end_consumed = false;
+  iree_status_t status =
+      loom_parse_region_body(parser, region, &region_end_consumed);
+  if (parser->error_count > errors_before && !region_end_consumed &&
+      !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    loom_parser_sync_to_brace(parser);
+  }
+  loom_parser_pending_block_args_reset(&parser->pending_block_args);
+
+  // Restore scope and insertion point.
+  parser->scope = outer_scope;
+  loom_builder_restore(&parser->builder, saved_ip);
+  IREE_RETURN_IF_ERROR(status);
+  if (parser->error_count > errors_before) return iree_ok_status();
 
   *out_region = region;
   return iree_ok_status();
@@ -1530,13 +1580,12 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
         continue;
       }
       // Not an alias — this is an error.
-      loom_token_t error_token = loom_tokenizer_peek(&parser->tokenizer);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(alias_token.text),
+          loom_param_string(loom_token_lexeme(alias_token)),
       };
       IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_014, params,
                                             IREE_ARRAYSIZE(params),
-                                            error_token));
+                                            alias_token));
       loom_parser_sync_to_newline(parser);
       continue;
     }

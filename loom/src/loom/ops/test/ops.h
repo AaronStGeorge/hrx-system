@@ -237,7 +237,7 @@ iree_status_t loom_test_slice_build(
 extern const loom_op_vtable_t loom_test_slice_vtable;
 
 // LOOM_OP_TEST_LOOP: Test for-loop with iter_args and tied results.
-// %result = test.loop %i = %c0 to %count step %c1 iter_args(%accumulator = %init : f32) -> (f32) {
+// %result = test.loop %i = %c0 to %count step %c1 iter_args(%accumulator = %init : f32) -> (%init as f32) {
 LOOM_DEFINE_ISA(loom_test_loop_isa, LOOM_OP_TEST_LOOP)
 LOOM_DEFINE_OPERAND(loom_test_loop_lower_bound, 0)
 LOOM_DEFINE_OPERAND(loom_test_loop_upper_bound, 1)

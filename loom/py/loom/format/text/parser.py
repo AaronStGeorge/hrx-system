@@ -1114,6 +1114,9 @@ class ParsedFields:
     func_arg_ids holds value IDs created by FuncArgs parsing. After
     the format walk, they are either consumed as region entry-block
     pre-args (body ops) or moved to operand_ids (declaration ops).
+
+    implicit_values holds parser-created region block args such as loop IVs.
+    RegionFmt defines those names in the child scope when the region starts.
     """
 
     __slots__ = (
@@ -1628,15 +1631,16 @@ class Parser:
             match element:
                 case Ref(field=name):
                     if name in ("iv",):
-                        # Implicit field: define a new value.
+                        # Implicit region argument: create the value now, but
+                        # defer defining its name until RegionFmt pushes the
+                        # child scope.
                         ssa_tok = tok.expect(TokenKind.SSA_VALUE)
                         value_id = self._module.add_value(
                             Value(
                                 name=ssa_tok.text, type=ScalarType(ScalarTypeKind.INDEX)
                             )
                         )
-                        self._scope.define(ssa_tok.text, value_id)
-                        parsed.implicit_values[name] = value_id
+                        parsed.implicit_values[ssa_tok.text] = value_id
                     else:
                         ssa_tok = tok.expect(TokenKind.SSA_VALUE)
                         try:
@@ -1740,16 +1744,21 @@ class Parser:
                         self._parse_attr_dict(parsed, dict_field)
 
                 case RegionFmt(field=name):
+                    implicit_arg_ids = (
+                        parsed.implicit_values if parsed.implicit_values else None
+                    )
                     # Get block arg info from binding list if available.
                     binding_names = parsed.attributes.pop("_binding_arg_names", None)
                     binding_types = parsed.attributes.pop("_binding_arg_types", None)
                     # Func arg IDs (from FuncArgs) become the entry block's args.
                     pre_arg_ids = parsed.func_arg_ids if parsed.func_arg_ids else None
                     region = self._parse_region(
+                        implicit_arg_ids=implicit_arg_ids,
                         block_arg_names=binding_names,
                         block_arg_types=binding_types,
                         pre_arg_ids=pre_arg_ids,
                     )
+                    parsed.implicit_values = {}
                     parsed.regions.append(region)
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
@@ -2076,7 +2085,14 @@ class Parser:
                 parsed.result_bindings.append(bindings)
                 parsed.result_ids.append(None)
                 # Find the operand index.
-                operand_id = self._scope.lookup(operand_name)
+                try:
+                    operand_id = self._scope.lookup(operand_name)
+                except KeyError as exc:
+                    raise ParseError(
+                        f"tied result {operand_name!r} not found in args or operands",
+                        name_tok.location,
+                        tok._filename,
+                    ) from exc
                 if operand_id in parsed.func_arg_ids:
                     operand_index = parsed.func_arg_ids.index(operand_id)
                 elif operand_id in parsed.operand_ids:
@@ -2280,6 +2296,7 @@ class Parser:
 
     def _parse_region(
         self,
+        implicit_arg_ids: dict[str, int] | None = None,
         block_arg_names: list[str] | None = None,
         block_arg_types: list[Type] | None = None,
         pre_arg_ids: list[int] | None = None,
@@ -2291,6 +2308,9 @@ class Parser:
         pre_arg_ids: already-defined value IDs (from function args).
           These are EXISTING values already in scope — just add to
           the entry block's arg list without re-defining.
+        implicit_arg_ids: parser-created values from implicit region
+          operands such as loop IVs. These are NEW names defined in the
+          region's child scope.
         """
         tok = self._tokenizer
         tok.expect(TokenKind.LBRACE)
@@ -2306,6 +2326,11 @@ class Parser:
                 # Don't re-define — just make visible in child scope.
                 self._scope._names[value.name] = vid
                 entry_arg_ids.append(vid)
+
+        if implicit_arg_ids:
+            for name, value_id in implicit_arg_ids.items():
+                self._scope.define(name, value_id)
+                entry_arg_ids.append(value_id)
 
         # For binding list args: define new values in the child scope.
         if block_arg_names and block_arg_types:
