@@ -39,11 +39,13 @@ loom_cc_library(
   NAME
     ir
   HDRS
+    "attribute.h"
     "context.h"
     "ir.h"
     "module.h"
     "types.h"
   SRCS
+    "attribute.c"
     "context.c"
     "module.c"
     "types.c"
@@ -63,6 +65,7 @@ loom_cc_test(
   DEPS
     ::ir
     iree::base::internal::arena
+    loom::src::loom::ops::test
     iree::testing::gtest
     iree::testing::gtest_main
 )

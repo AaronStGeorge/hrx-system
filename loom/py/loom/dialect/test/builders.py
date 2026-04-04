@@ -240,6 +240,22 @@ class TestBuilders:
             _regions.append(body)
         return cast(list[ValueRef], self._b.build("test.func", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def decl(self, *, visibility: str | None = None, cc: str | None = None, callee: str, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
+        """Test function declaration with no body and signature arguments stored as op operands.
+
+        Example::
+            test.decl @identity(%input: f32) -> (%input as f32)
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: dict[str, Any] = {}
+        _regions: list[Region] = []
+        if visibility is not None:
+            _attributes["visibility"] = visibility
+        if cc is not None:
+            _attributes["cc"] = cc
+        _attributes["callee"] = callee
+        return cast(list[ValueRef], self._b.build("test.decl", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def attrs(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Test op with attribute dictionary.
 

@@ -50,8 +50,8 @@ class CanonicalizeTest : public ::testing::Test {
                                         LOOM_LOCATION_UNKNOWN, &func_op));
     func_like_ = loom_func_like_cast(module_, func_op);
     body_ = loom_func_like_body(func_like_);
-    loom_builder_initialize(module_, &module_->arena, &body_->blocks[0],
-                            &builder_);
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_region_entry_block(body_), &builder_);
   }
 
   void TearDown() override {
@@ -447,8 +447,8 @@ TEST_F(CanonicalizeTest, NestedRegionOpsCanonicalized) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   loom_op_t* map_op = NULL;
   IREE_ASSERT_OK(loom_test_map_build(&builder_, &arg, 1, i32, NULL, 0,

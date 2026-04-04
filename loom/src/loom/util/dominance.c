@@ -57,10 +57,10 @@ static bool loom_entry_block_dominates(const loom_op_t* parent_op,
   for (uint8_t r = 0; r < parent_op->region_count; ++r) {
     loom_region_t* region = regions[r];
     if (!region || region->block_count < 2) continue;
-    if (&region->blocks[0] == a_block) {
+    if (loom_region_entry_block(region) == a_block) {
       // a is the entry block. Check if b is a sibling.
       for (uint16_t b = 1; b < region->block_count; ++b) {
-        if (&region->blocks[b] == b_block) return true;
+        if (loom_region_block(region, b) == b_block) return true;
       }
     }
   }

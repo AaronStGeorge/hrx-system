@@ -36,11 +36,13 @@ loom_cc_test(
 loom_cc_library(
     name = "ir",
     srcs = [
+        "attribute.c",
         "context.c",
         "module.c",
         "types.c",
     ],
     hdrs = [
+        "attribute.h",
         "context.h",
         "ir.h",
         "module.h",
@@ -59,6 +61,7 @@ loom_cc_test(
     srcs = ["module_test.cc"],
     deps = [
         ":ir",
+        "//loom/src/loom/ops/test",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

@@ -19,6 +19,7 @@ identical bytes. This is required for caching and CAS storage.
 from __future__ import annotations
 
 import struct
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from loom.format.bytecode.encoding import ByteBuffer
@@ -306,7 +307,7 @@ class BytecodeWriter:
         """Intern strings referenced by attribute values."""
         if isinstance(value, str):
             self._ctx.intern_string(value)
-        elif isinstance(value, dict):
+        elif isinstance(value, Mapping):
             for k, v in value.items():
                 self._ctx.intern_string(k)
                 self._number_attr_value(v)
@@ -665,7 +666,7 @@ class BytecodeWriter:
         elif isinstance(value, str):
             buf.write_u8(ATTR_KIND_STRING)
             buf.write_varint(self._ctx.strings[value])
-        elif isinstance(value, dict):
+        elif isinstance(value, Mapping):
             buf.write_u8(ATTR_KIND_DICT)
             buf.write_varint(len(value))
             for k, v in value.items():

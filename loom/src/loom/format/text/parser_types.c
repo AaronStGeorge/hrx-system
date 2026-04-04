@@ -41,22 +41,14 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
     if (value_token.kind != LOOM_TOKEN_INTEGER &&
         value_token.kind != LOOM_TOKEN_STRING &&
         value_token.kind != LOOM_TOKEN_BARE_IDENT) {
-      loom_diagnostic_param_t params[] = {
-          loom_param_string(loom_token_lexeme(value_token)),
-          loom_param_string(IREE_SV("integer, string, or identifier")),
-      };
-      return loom_parser_emit(parser, &loom_err_parse_003, params,
-                              IREE_ARRAYSIZE(params), value_token);
+      return loom_parser_emit_unexpected_token(
+          parser, value_token, IREE_SV("integer, string, or identifier"));
     }
     loom_tokenizer_next(&parser->tokenizer);
 
     if (attr_count >= capacity) {
-      loom_token_t overflow_token = name_token;
-      loom_diagnostic_param_t params[] = {
-          loom_param_string(loom_token_lexeme(name_token)),
-      };
-      return loom_parser_emit(parser, &loom_err_parse_004, params,
-                              IREE_ARRAYSIZE(params), overflow_token);
+      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
+                                               name_token);
     }
 
     loom_string_id_t param_name_id = 0;
@@ -100,9 +92,13 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
 //
 // If the name is already in scope, returns its value_id.
 //
-// In definition context (ARG mode or definition_scope_depth > 0),
-// creates a new NONE-typed placeholder value and defines it in scope.
-// The actual type is assigned later by loom_assign_type_binding_types.
+// In definition context (ARG mode), creates a new NONE-typed placeholder value
+// and defines it in scope. The surrounding Scope(...) format element controls
+// that mode for signatures/globals, so BODY-mode tied result annotations still
+// reject unknown names even inside a signature scope. Type parsing still
+// infers the placeholder's value type from each use (index for dims, encoding
+// for SSA encodings), but scope-exit resolution is tracked separately so an
+// inferred use without a matching declaration still diagnoses precisely.
 //
 // In body context (BODY mode), emits PARSE/001 for undefined names.
 static iree_status_t loom_resolve_type_reference(
@@ -116,12 +112,14 @@ static iree_status_t loom_resolve_type_reference(
     return iree_ok_status();
   }
 
-  if (mode == LOOM_TYPE_PARSE_ARG || parser->definition_scope_depth > 0) {
+  if (mode == LOOM_TYPE_PARSE_ARG) {
     // Forward reference in definition context — create placeholder.
     IREE_RETURN_IF_ERROR(
         loom_module_define_value(parser->module, loom_type_none(), &value_id));
     IREE_RETURN_IF_ERROR(
         loom_parser_define_value_name(parser, name_token, value_id));
+    IREE_RETURN_IF_ERROR(
+        loom_parser_add_unresolved_placeholder(parser, value_id, name_token));
     *out_value_id = value_id;
     return iree_ok_status();
   }
@@ -146,14 +144,29 @@ static iree_status_t loom_resolve_type_reference(
 // type, encoding binding values get encoding type. Values that
 // already have a type are left untouched (they were defined elsewhere
 // and their types are authoritative).
-static void loom_assign_type_binding_types(loom_module_t* module,
+static bool loom_type_binding_is_unresolved_placeholder(
+    const loom_parser_t* parser, loom_value_id_t value_id) {
+  if (!loom_parser_in_definition_scope(parser)) return false;
+  for (iree_host_size_t i = parser->definition_scope.placeholder_start;
+       i < parser->unresolved_placeholders.count; ++i) {
+    if (parser->unresolved_placeholders.entries[i].value_id == value_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void loom_assign_type_binding_types(loom_parser_t* parser,
                                            loom_type_t type) {
   // Dim bindings.
   uint8_t rank = loom_type_rank(type);
   for (uint8_t i = 0; i < rank; ++i) {
     if (loom_type_dim_is_dynamic_at(type, i)) {
       loom_value_id_t value_id = loom_type_dim_value_id_at(type, i);
-      loom_value_t* value = &module->values.entries[value_id];
+      if (loom_type_binding_is_unresolved_placeholder(parser, value_id)) {
+        continue;
+      }
+      loom_value_t* value = &parser->module->values.entries[value_id];
       if (loom_type_kind(value->type) == LOOM_TYPE_NONE) {
         value->type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
       }
@@ -163,7 +176,8 @@ static void loom_assign_type_binding_types(loom_module_t* module,
   // Encoding binding (SSA encoding).
   if (loom_type_has_ssa_encoding(type)) {
     loom_value_id_t enc_id = loom_type_encoding_value_id(type);
-    loom_value_t* value = &module->values.entries[enc_id];
+    if (loom_type_binding_is_unresolved_placeholder(parser, enc_id)) return;
+    loom_value_t* value = &parser->module->values.entries[enc_id];
     if (loom_type_kind(value->type) == LOOM_TYPE_NONE) {
       value->type = loom_type_encoding();
     }
@@ -231,9 +245,7 @@ static iree_status_t loom_parse_type_encoding(
     // Static encoding: #alias or #name<params>.
     loom_tokenizer_next(&parser->tokenizer);
 
-    // Reconstruct the full encoding text including '#' for alias
-    // table lookup. The '#' byte is always immediately before the
-    // token text in the source buffer.
+    // Alias table keys use the source spelling with '#'.
     iree_string_view_t full_text = loom_token_lexeme(token);
 
     uint16_t alias_id = loom_alias_table_lookup(&parser->aliases, full_text);
@@ -263,15 +275,12 @@ static iree_status_t loom_parse_type_encoding(
   if (token.kind == LOOM_TOKEN_RESULT_ORDINAL) {
     // '#' followed by a digit is not a valid encoding reference.
     loom_tokenizer_next(&parser->tokenizer);
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_token_lexeme(token)),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_004, params,
-                            IREE_ARRAYSIZE(params), token);
+    return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
+                                             token);
   }
 
   loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_token_lexeme(token)),
+      loom_param_string(token.text),
   };
   return loom_parser_emit(parser, &loom_err_parse_008, params,
                           IREE_ARRAYSIZE(params), token);
@@ -329,7 +338,7 @@ static iree_status_t loom_intern_shaped_type(
   }
 
   IREE_RETURN_IF_ERROR(loom_module_intern_type(parser->module, type, out_type));
-  loom_assign_type_binding_types(parser->module, *out_type);
+  loom_assign_type_binding_types(parser, *out_type);
   return iree_ok_status();
 }
 
@@ -371,11 +380,8 @@ static iree_status_t loom_parse_shaped_type(loom_parser_t* parser,
         break;  // element type follows
       }
       if (rank >= 16) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(loom_token_lexeme(token)),
-        };
-        return loom_parser_emit(parser, &loom_err_parse_004, params,
-                                IREE_ARRAYSIZE(params), token);
+        return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
+                                                 token);
       }
       parser->tokenizer.in_dim_list = true;
       IREE_RETURN_IF_ERROR(loom_parse_dim(parser, mode, &dims[rank++]));
@@ -423,19 +429,15 @@ static iree_status_t loom_parse_pool_type(loom_parser_t* parser,
                                           loom_type_t* out_type) {
   loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
   if (token.kind != LOOM_TOKEN_INTEGER && token.kind != LOOM_TOKEN_LBRACKET) {
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_token_lexeme(token)),
-        loom_param_string(IREE_SV("integer or '['")),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_003, params,
-                            IREE_ARRAYSIZE(params), token);
+    return loom_parser_emit_unexpected_token(parser, token,
+                                             IREE_SV("integer or '['"));
   }
   uint64_t dim = 0;
   IREE_RETURN_IF_ERROR(loom_parse_dim(parser, mode, &dim));
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
 
   *out_type = loom_type_pool(dim);
-  loom_assign_type_binding_types(parser->module, *out_type);
+  loom_assign_type_binding_types(parser, *out_type);
   return iree_ok_status();
 }
 
@@ -500,12 +502,8 @@ static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
       }
     }
     if (param_count >= 8) {
-      loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-      loom_diagnostic_param_t params[] = {
-          loom_param_string(loom_token_lexeme(name_token)),
-      };
-      return loom_parser_emit(parser, &loom_err_parse_004, params,
-                              IREE_ARRAYSIZE(params), peek);
+      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
+                                               name_token);
     }
     IREE_RETURN_IF_ERROR(
         loom_parse_type(parser, mode, &param_types[param_count]));
@@ -513,12 +511,7 @@ static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
   }
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_token_lexeme(peek)),
-        loom_param_string(IREE_SV("'>'")),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_003, params,
-                            IREE_ARRAYSIZE(params), peek);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
   }
   if (param_count > 0) {
     loom_type_t* arena_params = NULL;
@@ -554,23 +547,15 @@ static iree_status_t loom_parse_type_list(loom_parser_t* parser,
     }
     if (count >= capacity) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-      loom_diagnostic_param_t params[] = {
-          loom_param_string(loom_token_lexeme(peek)),
-      };
-      return loom_parser_emit(parser, &loom_err_parse_004, params,
-                              IREE_ARRAYSIZE(params), peek);
+      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
+                                               peek);
     }
     IREE_RETURN_IF_ERROR(loom_parse_type(parser, mode, &types[count]));
     ++count;
   }
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_token_lexeme(peek)),
-        loom_param_string(IREE_SV("')'")),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_003, params,
-                            IREE_ARRAYSIZE(params), peek);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("')'"));
   }
   *out_count = count;
   return iree_ok_status();
@@ -588,21 +573,11 @@ static iree_status_t loom_parse_function_type(loom_parser_t* parser,
 
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_ARROW)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_token_lexeme(peek)),
-        loom_param_string(IREE_SV("'->'")),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_003, params,
-                            IREE_ARRAYSIZE(params), peek);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'->'"));
   }
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_token_lexeme(peek)),
-        loom_param_string(IREE_SV("'('")),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_003, params,
-                            IREE_ARRAYSIZE(params), peek);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'('"));
   }
 
   loom_type_t result_types[16];
@@ -627,12 +602,7 @@ static iree_status_t loom_parse_angle_bracketed_type(
   loom_tokenizer_next(&parser->tokenizer);  // consume type keyword
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_token_lexeme(peek)),
-        loom_param_string(IREE_SV("'<'")),
-    };
-    return loom_parser_emit(parser, &loom_err_parse_003, params,
-                            IREE_ARRAYSIZE(params), peek);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'<'"));
   }
   iree_status_t status;
   if (kind == LOOM_TYPE_POOL) {
@@ -705,10 +675,5 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
     return loom_parse_function_type(parser, mode, out_type);
   }
 
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_token_lexeme(token)),
-      loom_param_string(IREE_SV("a type")),
-  };
-  return loom_parser_emit(parser, &loom_err_parse_003, params,
-                          IREE_ARRAYSIZE(params), token);
+  return loom_parser_emit_unexpected_token(parser, token, IREE_SV("a type"));
 }

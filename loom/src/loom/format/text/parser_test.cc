@@ -220,7 +220,7 @@ static loom_op_t* GetFirstFunctionOp(const loom_module_t* module) {
 
 static loom_block_t* GetEntryBlock(loom_region_t* region) {
   if (!region || region->block_count == 0) return nullptr;
-  return &region->blocks[0];
+  return loom_region_entry_block(region);
 }
 
 //===----------------------------------------------------------------------===//
@@ -258,6 +258,97 @@ TEST_F(ParserTest, ConstantNegative) {
 TEST_F(ParserTest, ConstantZero) {
   std::string text = RoundTrip("%c = test.constant 0 : index\n");
   EXPECT_NE(text.find("test.constant 0 : index"), std::string::npos);
+}
+
+TEST_F(ParserTest, AttrDictStringEscapesRoundTripDecodedPayload) {
+  std::string text = RoundTrip(
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c {label = \"row\\n\\t\\\"slash\\\\\"} : f32\n");
+  EXPECT_NE(
+      text.find("test.attrs %c {label = \"row\\n\\t\\\"slash\\\\\"} : f32"),
+      std::string::npos);
+}
+
+TEST_F(ParserTest, AttrDictUnsortedKeysRoundTripInCanonicalOrder) {
+  std::string text = RoundTrip(
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c {zeta = 2, axis = 0, label = \"foo\"} : f32\n");
+  EXPECT_NE(
+      text.find("test.attrs %c {axis = 0, label = \"foo\", zeta = 2} : f32"),
+      std::string::npos)
+      << "attribute dictionary keys should print in canonical order: " << text;
+}
+
+TEST_F(ParserTest, AttrDictNestedDictRoundTripInCanonicalOrder) {
+  std::string text = RoundTrip(
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c "
+      "{phase = {zeta = 2, alpha = 1}, axis = 0, empty = {}} : f32\n");
+  EXPECT_NE(
+      text.find(
+          "test.attrs %c {axis = 0, empty = {}, phase = {alpha = 1, zeta = 2}}"
+          " : f32"),
+      std::string::npos)
+      << "nested attribute dictionaries should print in canonical order: "
+      << text;
+}
+
+TEST_F(ParserTest, AttrDictEmptyArrayPayloadIsCanonical) {
+  loom_module_t* module = ParseOk(
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c {shape = []} : f32\n");
+  if (!module) return;
+
+  loom_block_t* body = loom_module_block(module);
+  ASSERT_NE(body, nullptr);
+  ASSERT_GE(body->op_count, 2u);
+  loom_op_t* attrs_op = body->ops[1];
+  ASSERT_NE(attrs_op, nullptr);
+  ASSERT_TRUE(loom_test_attrs_isa(attrs_op));
+  ASSERT_GE(attrs_op->attribute_count, 1u);
+
+  loom_attribute_t dict_attr = loom_op_attrs(attrs_op)[0];
+  IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, dict_attr));
+  ASSERT_EQ(dict_attr.kind, LOOM_ATTR_DICT);
+  ASSERT_EQ(dict_attr.count, 1u);
+  ASSERT_NE(dict_attr.dict, nullptr);
+  EXPECT_EQ(dict_attr.dict[0].value.kind, LOOM_ATTR_I64_ARRAY);
+  EXPECT_EQ(dict_attr.dict[0].value.count, 0u);
+  EXPECT_EQ(dict_attr.dict[0].value.i64_array, nullptr);
+
+  std::string text = PrintModule(module);
+  EXPECT_NE(text.find("test.attrs %c {shape = []} : f32"), std::string::npos)
+      << "empty i64 array dict values should round-trip canonically: " << text;
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, EmptyPredicateListPayloadIsCanonical) {
+  loom_module_t* module = ParseOk(
+      "%x = test.constant 0 : index\n"
+      "%y = test.assume %x [] : index\n");
+  if (!module) return;
+
+  loom_block_t* body = loom_module_block(module);
+  ASSERT_NE(body, nullptr);
+  ASSERT_GE(body->op_count, 2u);
+  loom_op_t* assume_op = body->ops[1];
+  ASSERT_NE(assume_op, nullptr);
+  ASSERT_TRUE(loom_test_assume_isa(assume_op));
+  ASSERT_GE(assume_op->attribute_count, 1u);
+
+  loom_attribute_t predicates = loom_op_attrs(assume_op)[0];
+  EXPECT_EQ(predicates.kind, LOOM_ATTR_PREDICATE_LIST);
+  EXPECT_EQ(predicates.count, 0u);
+  EXPECT_EQ(predicates.predicate_list, nullptr);
+
+  std::string text = PrintModule(module);
+  EXPECT_NE(text.find("test.assume %x : index"), std::string::npos)
+      << "empty optional predicate lists should elide to canonical text: "
+      << text;
+  EXPECT_EQ(text.find("test.assume %x [] : index"), std::string::npos)
+      << "printer should not preserve empty predicate-list source spelling: "
+      << text;
+  loom_module_free(module);
 }
 
 TEST_F(ParserTest, BinaryOp) {
@@ -317,6 +408,117 @@ TEST_F(ParserTest, FuncDef) {
   }
 }
 
+TEST_F(ParserTest, FuncDefResultTiedToEntryArg) {
+  loom_module_t* module = ParseOk(
+      "test.func @identity(%x: f32) -> (%x as f32) {\n"
+      "  test.yield %x : f32\n"
+      "}\n");
+  if (!module) return;
+
+  std::string text = PrintModule(module);
+  EXPECT_NE(text.find("-> (%x as f32)"), std::string::npos)
+      << "expected tied signature result in: " << text;
+
+  loom_op_t* func_op = GetFirstFunctionOp(module);
+  ASSERT_NE(func_op, nullptr);
+  ASSERT_EQ(func_op->tied_result_count, 1u);
+  const loom_tied_result_t* tied_results = loom_op_tied_results(func_op);
+  EXPECT_EQ(tied_results[0].result_index, 0u);
+  EXPECT_EQ(tied_results[0].operand_index, 0u);
+  EXPECT_FALSE(tied_results[0].has_type_change);
+  ASSERT_EQ(func_op->region_count, 1u);
+  loom_block_t* entry = GetEntryBlock(loom_op_regions(func_op)[0]);
+  ASSERT_NE(entry, nullptr);
+  ASSERT_EQ(entry->arg_count, 1u);
+  ASSERT_EQ(entry->op_count, 1u);
+  EXPECT_EQ(loom_op_const_operands(entry->ops[0])[0], entry->arg_ids[0]);
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, FuncDeclResultTiedToArgOperand) {
+  loom_module_t* module =
+      ParseOk("test.decl @identity(%x: f32) -> (%x as f32)\n");
+  if (!module) return;
+
+  std::string text = PrintModule(module);
+  EXPECT_NE(text.find("test.decl @identity(%x: f32) -> (%x as f32)"),
+            std::string::npos)
+      << "expected tied declaration result in: " << text;
+
+  loom_op_t* func_op = GetFirstFunctionOp(module);
+  ASSERT_NE(func_op, nullptr);
+  EXPECT_EQ(func_op->operand_count, 1u);
+  EXPECT_EQ(func_op->result_count, 1u);
+  ASSERT_EQ(func_op->tied_result_count, 1u);
+  const loom_tied_result_t* tied_results = loom_op_tied_results(func_op);
+  EXPECT_EQ(tied_results[0].result_index, 0u);
+  EXPECT_EQ(tied_results[0].operand_index, 0u);
+  EXPECT_FALSE(tied_results[0].has_type_change);
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, FuncDeclBareArgTypesRoundTrip) {
+  std::string text = RoundTrip("test.decl @extern(f32) -> (f32)\n");
+  EXPECT_NE(text.find("test.decl @extern(%0: f32) -> (f32)"), std::string::npos)
+      << "unnamed declaration args should round-trip through autogenerated "
+         "SSA names: "
+      << text;
+}
+
+TEST_F(ParserTest, FuncDeclNamedResultCanReferenceSignatureArg) {
+  std::string text = RoundTrip(
+      "test.decl @shape(%M: index, %x: tensor<[%M]xf32>)"
+      " -> (%x as tensor<[%M]xf32>, %count: index)\n");
+  EXPECT_NE(text.find("test.decl @shape(%M: index, %x: tensor<[%M]xf32>)"
+                      " -> (%x as tensor<[%M]xf32>, %count: index)"),
+            std::string::npos)
+      << "named/tied declaration signature results should round-trip: " << text;
+}
+
+TEST_F(ParserTest, FuncDeclForwardReferenceDimArgCanBindLaterArg) {
+  std::string text = RoundTrip(
+      "test.decl @shape(%x: tensor<[%M]xf32>, %M: index)"
+      " -> (%x as tensor<[%M]xf32>)\n");
+  EXPECT_NE(text.find("test.decl @shape(%x: tensor<[%M]xf32>, %M: index)"
+                      " -> (%x as tensor<[%M]xf32>)"),
+            std::string::npos)
+      << "forward-referenced signature dims should bind the later arg: "
+      << text;
+}
+
+TEST_F(ParserTest, FuncDeclForwardSignatureDimBindingResolves) {
+  std::string text =
+      RoundTrip("test.decl @shape(%x: tile<[%M]xf32>, %M: index)\n");
+  EXPECT_NE(text.find("test.decl @shape(%x: tile<[%M]xf32>, %M: index)"),
+            std::string::npos)
+      << "forward dimension refs in declaration args should resolve: " << text;
+}
+
+TEST_F(ParserTest, FuncDeclUnresolvedPlaceholderReportsOriginalNameToken) {
+  const auto& diagnostics =
+      ParseExpectErrors("test.decl @shape(%x: tile<[%M]xf32>)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_022);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "M");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 28u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 30u);
+}
+
+TEST_F(ParserTest, FuncDeclSignatureScopeDoesNotLeakPlaceholderNames) {
+  const auto& diagnostics = ParseExpectErrors(
+      "test.decl @shape(%M: index, %x: tile<[%M]xf32>)"
+      " -> (%x as tile<[%M]xf32>)\n"
+      "%u = test.constant 0 : index\n"
+      "%bad = test.cast %u : index to tile<[%M]xf32>\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "M");
+  EXPECT_EQ(diagnostics[0].origin_line, 3u);
+  EXPECT_EQ(diagnostics[0].origin_column, 38u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 40u);
+}
+
 TEST_F(ParserTest, FuncDefZeroOperandReturn) {
   loom_module_t* module = ParseOk(
       "func.def @empty() {\n"
@@ -354,6 +556,31 @@ TEST_F(ParserTest, FuncDefMultipleArgs) {
   if (module) {
     std::string text = PrintModule(module);
     EXPECT_NE(text.find("func.def @add"), std::string::npos);
+    loom_module_free(module);
+  }
+}
+
+TEST_F(ParserTest, TestFuncMultipleBlocks) {
+  loom_module_t* module = ParseOk(
+      "test.func @multi_block() {\n"
+      "^entry:\n"
+      "  test.yield\n"
+      "^exit:\n"
+      "  test.yield\n"
+      "}\n");
+  if (module) {
+    loom_op_t* func_op = GetFirstFunctionOp(module);
+    ASSERT_NE(func_op, nullptr);
+    ASSERT_EQ(func_op->region_count, 1u);
+    loom_region_t* body = loom_op_regions(func_op)[0];
+    ASSERT_NE(body, nullptr);
+    ASSERT_EQ(body->block_count, 2u);
+    EXPECT_EQ(loom_region_entry_block(body)->op_count, 1u);
+    EXPECT_EQ(loom_region_block(body, 1)->op_count, 1u);
+
+    std::string text = PrintModule(module);
+    EXPECT_NE(text.find("^entry:"), std::string::npos) << text;
+    EXPECT_NE(text.find("^exit:"), std::string::npos) << text;
     loom_module_free(module);
   }
 }
@@ -512,6 +739,39 @@ TEST_F(ParserTest, UnexpectedTokenRetainsSigilAndSpan) {
   EXPECT_EQ(diagnostics[0].origin_end_column, 13u);
 }
 
+TEST_F(ParserTest, UnexpectedStringTokenRendersQuotesAndSpan) {
+  const auto& diagnostics = ParseExpectErrors("\"hello\"\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "\"hello\"");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1), "op name");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 8u);
+}
+
+TEST_F(ParserTest, UnexpectedStringTokenEscapesDecodedPayload) {
+  const auto& diagnostics = ParseExpectErrors("\"row\\n\\t\\\"slash\\\\\"\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "\"row\\n\\t\\\"slash\\\\\"");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1), "op name");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 19u);
+}
+
+TEST_F(ParserTest, UnexpectedBlockLabelTokenRendersSigilAndSpan) {
+  const auto& diagnostics = ParseExpectErrors("^bb\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "^bb");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1), "op name");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 4u);
+}
+
 TEST_F(ParserTest, UndefinedSSAValue) {
   const auto& diagnostics = ParseExpectErrors(
       "%c = test.constant 1 : i32\n"
@@ -519,6 +779,9 @@ TEST_F(ParserTest, UndefinedSSAValue) {
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0], &loom_err_parse_001);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "undefined");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 20u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 30u);
 }
 
 TEST_F(ParserTest, BindingListNameIsRegionLocal) {
@@ -532,6 +795,20 @@ TEST_F(ParserTest, BindingListNameIsRegionLocal) {
   ExpectError(diagnostics[0], &loom_err_parse_001);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "element");
   EXPECT_EQ(diagnostics[0].origin_line, 5u);
+  EXPECT_EQ(diagnostics[0].origin_column, 18u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 26u);
+}
+
+TEST_F(ParserTest, FuncResultNameIsSignatureLocal) {
+  const auto& diagnostics = ParseExpectErrors(
+      "func.def @f() -> (%n: index) {\n"
+      "  %x = test.cast %n : index to index\n"
+      "  func.return %x : index\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_001);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "n");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 18u);
 }
 
@@ -588,6 +865,7 @@ TEST_F(ParserTest, LoopIvNameIsRegionLocal) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "iv");
   EXPECT_EQ(diagnostics[0].origin_line, 4u);
   EXPECT_EQ(diagnostics[0].origin_column, 22u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 25u);
 }
 
 TEST_F(ParserTest, LoopIterArgNameIsNotATiedResultTarget) {
@@ -697,6 +975,49 @@ TEST_F(ParserTest, DuplicateBindingListName) {
   ExpectError(diagnostics[0], &loom_err_parse_002);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "element");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
+}
+
+TEST_F(ParserTest, DuplicateAttrDictKey) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c {alpha = 1, alpha = 2} : f32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_020);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "alpha");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 32u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 37u);
+}
+
+TEST_F(ParserTest, DuplicateNestedAttrDictKey) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c {config = {zeta = 1, zeta = 2}} : f32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_020);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "zeta");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 41u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 45u);
+}
+
+TEST_F(ParserTest, AttrDictTooDeep) {
+  std::string source =
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c ";
+  for (uint32_t depth = 0; depth <= LOOM_ATTR_DICT_MAX_NESTING_DEPTH; ++depth) {
+    source += "{k" + std::to_string(depth) + " = ";
+  }
+  source += "0";
+  for (uint32_t depth = 0; depth <= LOOM_ATTR_DICT_MAX_NESTING_DEPTH; ++depth) {
+    source += "}";
+  }
+  source += " : f32\n";
+
+  const auto& diagnostics = ParseExpectErrors(source.c_str());
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_021);
+  ExpectU32Param(diagnostics[0], 0, LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
 }
 
 TEST_F(ParserTest, UnexpectedTokenInFuncSignature) {

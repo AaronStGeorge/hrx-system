@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 typedef struct loom_parser_t loom_parser_t;
+typedef struct loom_parser_scope_t loom_parser_scope_t;
 
 // Pending block argument prepared by FUNC_ARGS, BINDING_LIST, or an implicit
 // region operand such as a loop IV.
@@ -42,6 +43,35 @@ typedef struct loom_parser_pending_block_args_t {
   uint16_t count;
   uint16_t capacity;
 } loom_parser_pending_block_args_t;
+
+// Placeholder SSA value created by ARG-mode type parsing inside the current
+// Scope(...). |resolved| tracks whether a later declaration in the same scope
+// bound that placeholder name, and |name_token| is retained so scope-exit
+// diagnostics can point at the original forward reference without storing
+// source locations on every lexical scope entry.
+typedef struct loom_parser_unresolved_placeholder_t {
+  loom_value_id_t value_id;
+  loom_token_t name_token;
+  bool resolved;
+} loom_parser_unresolved_placeholder_t;
+
+// Growable scratch list of signature/global placeholders created by ARG-mode
+// type parsing. Entries are appended as placeholders are created and truncated
+// when the one active Scope(...) exits.
+typedef struct loom_parser_unresolved_placeholders_t {
+  loom_parser_unresolved_placeholder_t* entries;
+  iree_host_size_t count;
+  iree_host_size_t capacity;
+} loom_parser_unresolved_placeholders_t;
+
+// Tracks the one active Scope(...) declaration scope in an op format. Nested
+// Scope(...) is intentionally unsupported by the DSL, so the C parser only
+// needs one saved parent scope and one pop index.
+typedef struct loom_parser_definition_scope_t {
+  loom_parser_scope_t* parent_scope;
+  iree_host_size_t placeholder_start;
+  uint16_t pop_at;  // UINT16_MAX when no Scope(...) is active.
+} loom_parser_definition_scope_t;
 
 //===----------------------------------------------------------------------===//
 // Name scope
@@ -76,6 +106,11 @@ iree_status_t loom_parser_scope_define(loom_parser_scope_t* scope,
 // LOOM_VALUE_ID_INVALID if not found.
 loom_value_id_t loom_parser_scope_lookup(const loom_parser_scope_t* scope,
                                          loom_string_id_t name_id);
+
+// Looks up a name in only this scope (not parents). Returns
+// LOOM_VALUE_ID_INVALID if not found.
+loom_value_id_t loom_parser_scope_lookup_local(const loom_parser_scope_t* scope,
+                                               loom_string_id_t name_id);
 
 // Allocates a new child scope from the parser arena.
 iree_status_t loom_parser_scope_push(iree_arena_allocator_t* arena,
@@ -129,6 +164,21 @@ iree_status_t loom_parser_define_value_name(loom_parser_t* parser,
                                             loom_token_t name_token,
                                             loom_value_id_t value_id);
 
+// Defines a typed SSA value in the current scope and returns its value ID.
+// If |name_token| names an unresolved placeholder in the one active
+// declaration Scope(...), that existing placeholder value is rebound to |type|
+// and returned instead of allocating a second SSA value. If the placeholder
+// already carries an incompatible inferred type from an earlier ARG-mode use,
+// emits a parser diagnostic from |name_token|.
+iree_status_t loom_parser_define_value(loom_parser_t* parser,
+                                       loom_token_t name_token,
+                                       loom_type_t type,
+                                       loom_value_id_t* out_value_id);
+
+// Emits ERR_PARSE_002 for a duplicate SSA value or block argument name.
+iree_status_t loom_parser_emit_duplicate_value_name(loom_parser_t* parser,
+                                                    loom_token_t name_token);
+
 // Resolves an SSA name token against the current scope chain. On success,
 // sets |*out_value_id| to a valid value ID. When the name is not in scope,
 // emits ERR_PARSE_001 from |name_token|'s original source location and
@@ -136,6 +186,28 @@ iree_status_t loom_parser_define_value_name(loom_parser_t* parser,
 iree_status_t loom_parser_resolve_value(loom_parser_t* parser,
                                         loom_token_t name_token,
                                         loom_value_id_t* out_value_id);
+
+// Enters a one-level declaration scope that should pop after format element
+// |pop_at|. Returns a non-OK status if the op format attempts nested
+// Scope(...), which is rejected by the Python DSL and unsupported in C.
+iree_status_t loom_parser_definition_scope_push(loom_parser_t* parser,
+                                                uint16_t pop_at);
+
+// Pops the active declaration scope when |format_index| reaches pop_at and
+// emits an unresolved-placeholder diagnostic for any Scope-local placeholder
+// values that were never bound by a concrete declaration.
+iree_status_t loom_parser_definition_scope_pop_if_needed(loom_parser_t* parser,
+                                                         uint16_t format_index);
+
+// Discards the active declaration scope without diagnostics. Used when a parse
+// error inside Scope(...) triggers op-level recovery before normal scope exit.
+void loom_parser_definition_scope_discard(loom_parser_t* parser);
+
+// Tracks a newly created ARG-mode placeholder so Scope(...) exit can diagnose
+// unresolved forward references precisely.
+iree_status_t loom_parser_add_unresolved_placeholder(loom_parser_t* parser,
+                                                     loom_value_id_t value_id,
+                                                     loom_token_t name_token);
 
 //===----------------------------------------------------------------------===//
 // Alias table
@@ -209,23 +281,21 @@ typedef struct loom_parser_t {
   // drains their value IDs into regular operands after the format walk.
   loom_parser_pending_block_args_t pending_block_args;
 
-  // Scope saved before FUNC_ARGS pushed its scope. Non-NULL only
-  // when FUNC_ARGS has pushed a scope that hasn't been consumed by
-  // a REGION yet. BINDING_LIST does not push a scope.
-  loom_parser_scope_t* pre_func_arg_scope;
+  // Placeholder values created by ARG-mode type parsing inside the one active
+  // Scope(...) declaration wrapper.
+  loom_parser_unresolved_placeholders_t unresolved_placeholders;
 
-  // Definition scope for global definitions. When > 0, type parsing
-  // uses ARG mode (creates new index values for unknown [%name] dims)
-  // rather than BODY mode (requires existing names). Incremented by
-  // SCOPE format elements, decremented after the last child element.
-  uint8_t definition_scope_depth;
-
-  // Format element index at which to pop the current definition scope.
-  // UINT16_MAX when no scope pop is pending. Zero-init safe: the pop
-  // check requires definition_scope_depth > 0, which is only true
-  // after a SCOPE element has been processed.
-  uint16_t scope_pop_at;
+  // One active Scope(...) declaration wrapper, used for func/global signatures.
+  // Region/block lexical scopes still nest through |scope|'s parent chain.
+  loom_parser_definition_scope_t definition_scope;
 } loom_parser_t;
+
+// Returns true while parsing the body of the one active Scope(...) declaration
+// wrapper.
+static inline bool loom_parser_in_definition_scope(
+    const loom_parser_t* parser) {
+  return parser->definition_scope.pop_at != UINT16_MAX;
+}
 
 //===----------------------------------------------------------------------===//
 // Diagnostics and error recovery
@@ -238,6 +308,20 @@ iree_status_t loom_parser_emit(loom_parser_t* parser,
                                const loom_diagnostic_param_t* params,
                                iree_host_size_t param_count,
                                loom_token_t token);
+
+// Emits ERR_PARSE_003 with |actual_token| rendered from |token.kind| and
+// |token.text|, not by slicing the source spelling back out of the file.
+iree_status_t loom_parser_emit_unexpected_token(loom_parser_t* parser,
+                                                loom_token_t token,
+                                                iree_string_view_t expected);
+
+// Emits a one-string parser diagnostic whose token text should be rendered from
+// |token.kind| and |token.text|. Intended for syntax errors that want the
+// concrete token spelling as a parameter but do not need token-specific error
+// definitions yet.
+iree_status_t loom_parser_emit_token_text_error(loom_parser_t* parser,
+                                                const loom_error_def_t* error,
+                                                loom_token_t token);
 
 // Consumes the next token and verifies it matches |kind|. On match,
 // sets |*out_token| (if non-NULL) and returns iree_ok_status(). On

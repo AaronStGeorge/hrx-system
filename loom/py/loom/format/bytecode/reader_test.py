@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from loom.format.bytecode.reader import BytecodeError, read_module
+from loom.format.bytecode.reader import BytecodeError, BytecodeReader, read_module
 from loom.format.bytecode.writer import write_module
 from loom.ir import (
     BF16,
@@ -28,6 +28,7 @@ from loom.ir import (
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
     Block,
+    CanonicalAttrDict,
     DialectType,
     DynamicDim,
     EncodingInstance,
@@ -876,7 +877,8 @@ class TestDictAttributeRoundTrips:
         assert loaded_sym_op.regions
         loaded_op = loaded_sym_op.regions[0].blocks[0].ops[0]
         d = loaded_op.attributes.get("dict")
-        assert isinstance(d, dict)
+        assert isinstance(d, CanonicalAttrDict)
+        assert list(d.items()) == [("axis", 0), ("count", 42)]
         assert d["axis"] == 0
         assert d["count"] == 42
 
@@ -901,7 +903,8 @@ class TestDictAttributeRoundTrips:
         assert loaded_sym_op.regions
         loaded_op = loaded_sym_op.regions[0].blocks[0].ops[0]
         d = loaded_op.attributes.get("dict")
-        assert isinstance(d, dict)
+        assert isinstance(d, CanonicalAttrDict)
+        assert list(d.items()) == [("label", "hello"), ("tag", "world")]
         assert d["label"] == "hello"
         assert d["tag"] == "world"
 
@@ -926,7 +929,8 @@ class TestDictAttributeRoundTrips:
         assert loaded_sym_op.regions
         loaded_op = loaded_sym_op.regions[0].blocks[0].ops[0]
         d = loaded_op.attributes.get("dict")
-        assert isinstance(d, dict)
+        assert isinstance(d, CanonicalAttrDict)
+        assert list(d.items()) == [("axis", 0), ("enabled", True), ("label", "foo")]
         assert d["axis"] == 0
         assert d["label"] == "foo"
         assert d["enabled"] is True
@@ -952,7 +956,64 @@ class TestDictAttributeRoundTrips:
         assert loaded_sym_op.regions
         loaded_op = loaded_sym_op.regions[0].blocks[0].ops[0]
         d = loaded_op.attributes.get("dict")
-        assert d is None or d == {}
+        assert d is None or d == CanonicalAttrDict()
+
+    def test_nested_dict_round_trip_is_canonical(self) -> None:
+        module = Module(name="test")
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
+        op = Operation(
+            name="test.attrs",
+            operands=[x],
+            results=[r],
+            attributes={"dict": {"meta": {"phase": "link", "opt": 3}, "axis": 0}},
+        )
+        yield_op = Operation(name="test.yield", operands=[x])
+        block = Block(arg_ids=[x], ops=[op, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = _roundtrip(module)
+        loaded_sym_op = loaded.symbols[0].op
+        assert loaded_sym_op is not None
+        loaded_op = loaded_sym_op.regions[0].blocks[0].ops[0]
+        d = loaded_op.attributes["dict"]
+        assert isinstance(d, CanonicalAttrDict)
+        assert list(d.items()) == [
+            ("axis", 0),
+            ("meta", {"opt": 3, "phase": "link"}),
+        ]
+        assert isinstance(d["meta"], CanonicalAttrDict)
+        assert list(d["meta"].items()) == [("opt", 3), ("phase", "link")]
+
+
+class TestMalformedDictAttributeWireOrder:
+    def _read_dict_value(
+        self, strings: list[str], data: bytes
+    ) -> tuple[CanonicalAttrDict, int]:
+        reader = BytecodeReader(b"")
+        reader._strings = strings
+        value, offset = reader._read_attr_value(data, 0)
+        assert isinstance(value, CanonicalAttrDict)
+        return value, offset
+
+    def test_unsorted_dict_keys_are_rejected(self) -> None:
+        # dict<z = 0, a = 1>
+        data = bytes([9, 2, 1, 0, 0, 2, 0, 2])
+        with pytest.raises(BytecodeError, match="not in canonical order"):
+            self._read_dict_value(["", "z", "a"], data)
+
+    def test_duplicate_dict_keys_are_rejected(self) -> None:
+        # dict<axis = 0, axis = 1>
+        data = bytes([9, 2, 1, 0, 0, 1, 0, 2])
+        with pytest.raises(BytecodeError, match="duplicate dict attr key"):
+            self._read_dict_value(["", "axis"], data)
+
+    def test_unsorted_nested_dict_keys_are_rejected(self) -> None:
+        # dict<meta = dict<z = 0, a = 1>>
+        data = bytes([9, 1, 1, 9, 2, 2, 0, 0, 3, 0, 2])
+        with pytest.raises(BytecodeError, match="not in canonical order"):
+            self._read_dict_value(["", "meta", "z", "a"], data)
 
 
 # ============================================================================

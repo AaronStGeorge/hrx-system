@@ -21,6 +21,7 @@ from loom.ir import (
     INDEX,
     NONE_TYPE,
     Block,
+    CanonicalAttrDict,
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
@@ -458,13 +459,11 @@ class TestPrintAttrDict:
             name="test.attrs",
             operands=[x],
             results=[r],
-            attributes={"dict": {"axis": 0, "label": "foo"}},
+            attributes={"dict": {"label": "foo", "axis": 0}},
         )
+        assert isinstance(op.attributes["dict"], CanonicalAttrDict)
         text = _printer().print_operation(op, module)
-        assert text.startswith("%r = test.attrs %x")
-        assert "axis = 0" in text
-        assert 'label = "foo"' in text
-        assert text.endswith(" : f32")
+        assert text == '%r = test.attrs %x {axis = 0, label = "foo"} : f32'
 
     def test_empty_dict(self) -> None:
         module, [x, r] = _module_with(("x", F32), ("r", F32))
@@ -484,6 +483,20 @@ class TestPrintAttrDict:
         text = _printer().print_operation(op, module)
         assert "{" not in text
         assert text == "%r = test.attrs %x : f32"
+
+    def test_nested_dict_attrs_print_canonical_order(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        op = Operation(
+            name="test.attrs",
+            operands=[x],
+            results=[r],
+            attributes={"dict": {"meta": {"phase": "link", "opt": 3}, "axis": 0}},
+        )
+        text = _printer().print_operation(op, module)
+        assert (
+            text
+            == '%r = test.attrs %x {axis = 0, meta = {opt = 3, phase = "link"}} : f32'
+        )
 
 
 # ============================================================================

@@ -76,10 +76,54 @@ ERR_DOMINANCE_005 = ErrorDef(
     ),
 )
 
+# ERR_DOMINANCE_006: Duplicate tied result index.
+ERR_DOMINANCE_006 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=6,
+    severity=Severity.ERROR,
+    summary="Duplicate tied result index.",
+    message="result {result_index} of '{op_name}' is tied more than once",
+    params=(
+        ErrorParam("result_index", ParamKind.U32),
+        ErrorParam("op_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_DOMINANCE_007: Duplicate tied operand index.
+ERR_DOMINANCE_007 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=7,
+    severity=Severity.ERROR,
+    summary="Duplicate tied operand index.",
+    message="operand {operand_index} of '{op_name}' is tied by more than one result",
+    params=(
+        ErrorParam("operand_index", ParamKind.U32),
+        ErrorParam("op_name", ParamKind.STRING),
+    ),
+)
+
+# ERR_DOMINANCE_008: Ambiguous tied operand value.
+ERR_DOMINANCE_008 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=8,
+    severity=Severity.ERROR,
+    summary="Ambiguous tied operand value.",
+    message="operand {operand_index} of '{op_name}' ties value '%{value_name}', "
+    "but that value appears in multiple operand slots",
+    params=(
+        ErrorParam("operand_index", ParamKind.U32),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+    ),
+)
+
 ALL_DOMINANCE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_DOMINANCE_001,
     ERR_DOMINANCE_002,
     ERR_DOMINANCE_003,
     ERR_DOMINANCE_004,
     ERR_DOMINANCE_005,
+    ERR_DOMINANCE_006,
+    ERR_DOMINANCE_007,
+    ERR_DOMINANCE_008,
 )

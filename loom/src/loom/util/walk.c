@@ -96,17 +96,17 @@ static void loom_walk_push_region_frames(loom_walk_stack_t* stack,
     loom_region_t* region = regions[r];
     if (!region || region->block_count == 0) continue;
     if (region->block_count == 1) {
-      loom_walk_stack_push(stack, &region->blocks[0], region, (loom_op_t*)op,
-                           child_depth);
+      loom_walk_stack_push(stack, loom_region_entry_block(region), region,
+                           (loom_op_t*)op, child_depth);
     } else {
       // Push non-entry blocks in reverse order.
       for (int32_t b = (int32_t)region->block_count - 1; b >= 1; --b) {
-        loom_walk_stack_push(stack, &region->blocks[b], region, (loom_op_t*)op,
-                             child_depth);
+        loom_walk_stack_push(stack, loom_region_block(region, (uint16_t)b),
+                             region, (loom_op_t*)op, child_depth);
       }
       // Push entry block on top — processed first.
-      loom_walk_stack_push(stack, &region->blocks[0], region, (loom_op_t*)op,
-                           child_depth);
+      loom_walk_stack_push(stack, loom_region_entry_block(region), region,
+                           (loom_op_t*)op, child_depth);
     }
   }
 }
@@ -131,12 +131,15 @@ iree_status_t loom_walk_region(const loom_module_t* module,
   IREE_RETURN_IF_ERROR(
       loom_walk_stack_reserve(&stack, arena, region->block_count));
   if (region->block_count == 1) {
-    loom_walk_stack_push(&stack, &region->blocks[0], region, NULL, 0);
+    loom_walk_stack_push(&stack, loom_region_entry_block(region), region, NULL,
+                         0);
   } else {
     for (int32_t b = (int32_t)region->block_count - 1; b >= 1; --b) {
-      loom_walk_stack_push(&stack, &region->blocks[b], region, NULL, 0);
+      loom_walk_stack_push(&stack, loom_region_block(region, (uint16_t)b),
+                           region, NULL, 0);
     }
-    loom_walk_stack_push(&stack, &region->blocks[0], region, NULL, 0);
+    loom_walk_stack_push(&stack, loom_region_entry_block(region), region, NULL,
+                         0);
   }
 
   while (stack.count > 0) {
@@ -169,7 +172,7 @@ iree_status_t loom_walk_region(const loom_module_t* module,
       continue;
     }
 
-    loom_op_t* op = frame->block->ops[frame->next_op_index++];
+    loom_op_t* op = loom_block_op(frame->block, frame->next_op_index++);
     if (op->flags & LOOM_OP_FLAG_DEAD) continue;
 
     loom_walk_context_t context = {

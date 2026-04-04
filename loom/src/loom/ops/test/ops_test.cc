@@ -40,10 +40,11 @@ TEST(OpKind, AllDistinct) {
       LOOM_OP_TEST_CONSTANT, LOOM_OP_TEST_CMP,    LOOM_OP_TEST_MAP,
       LOOM_OP_TEST_UPDATE,   LOOM_OP_TEST_INVOKE, LOOM_OP_TEST_SLICE,
       LOOM_OP_TEST_LOOP,     LOOM_OP_TEST_BRANCH, LOOM_OP_TEST_YIELD,
-      LOOM_OP_TEST_FUNC,     LOOM_OP_TEST_ATTRS,  LOOM_OP_TEST_DEFLATE,
+      LOOM_OP_TEST_FUNC,     LOOM_OP_TEST_DECL,   LOOM_OP_TEST_ATTRS,
+      LOOM_OP_TEST_DEFLATE,
   };
-  for (int i = 0; i < 15; ++i) {
-    for (int j = i + 1; j < 15; ++j) {
+  for (int i = 0; i < 16; ++i) {
+    for (int j = i + 1; j < 16; ++j) {
       EXPECT_NE(kinds[i], kinds[j])
           << "kinds[" << i << "] == kinds[" << j << "]";
     }
@@ -388,7 +389,7 @@ TEST_F(BuilderTest, MapBuilder) {
   EXPECT_EQ(body->block_count, 1);
 
   // Entry block has 2 block args (one per input) with element types.
-  loom_block_t* entry = &body->blocks[0];
+  loom_block_t* entry = loom_region_entry_block(body);
   EXPECT_EQ(entry->arg_count, 2);
   loom_type_t arg0_type = loom_block_arg_type(module_, entry, 0);
   EXPECT_EQ(loom_type_kind(arg0_type), LOOM_TYPE_SCALAR);
@@ -449,7 +450,7 @@ TEST_F(BuilderTest, LoopBuilder) {
   // Region was auto-created. Entry block has IV (index) + 1 iter_arg (f32).
   loom_region_t* body = loom_test_loop_body(op);
   ASSERT_NE(body, nullptr);
-  loom_block_t* entry = &body->blocks[0];
+  loom_block_t* entry = loom_region_entry_block(body);
   EXPECT_EQ(entry->arg_count, 2);
 
   EXPECT_EQ(loom_type_element_type(loom_block_arg_type(module_, entry, 0)),
@@ -485,8 +486,8 @@ TEST_F(BuilderTest, BranchBuilder) {
   ASSERT_NE(else_region, nullptr);
   EXPECT_EQ(then_region->block_count, 1);
   EXPECT_EQ(else_region->block_count, 1);
-  EXPECT_EQ(then_region->blocks[0].arg_count, 0);
-  EXPECT_EQ(else_region->blocks[0].arg_count, 0);
+  EXPECT_EQ(loom_region_entry_arg_count(then_region), 0);
+  EXPECT_EQ(loom_region_entry_arg_count(else_region), 0);
 }
 
 TEST_F(BuilderTest, SliceBuilder) {
@@ -557,7 +558,7 @@ TEST_F(BuilderTest, FuncBuilder) {
   loom_region_t* body = loom_test_func_body(op);
   ASSERT_NE(body, nullptr);
   EXPECT_EQ(body->block_count, 1);
-  loom_block_t* entry = &body->blocks[0];
+  loom_block_t* entry = loom_region_entry_block(body);
   EXPECT_EQ(entry->arg_count, 2);
   EXPECT_EQ(loom_type_element_type(loom_block_arg_type(module_, entry, 0)),
             LOOM_SCALAR_TYPE_F32);
@@ -1469,8 +1470,8 @@ TEST(AttributeEqual, DictSameContent) {
   loom_named_attr_t entries_b[2];
   memcpy(entries_b, entries_a, sizeof(entries_a));
 
-  loom_attribute_t a = loom_make_attr_dict(entries_a, 2);
-  loom_attribute_t b = loom_make_attr_dict(entries_b, 2);
+  loom_attribute_t a = loom_make_canonical_attr_dict(entries_a, 2);
+  loom_attribute_t b = loom_make_canonical_attr_dict(entries_b, 2);
   EXPECT_NE(a.dict, b.dict);
   EXPECT_TRUE(loom_attribute_equal(&a, &b));
 }
@@ -1485,8 +1486,8 @@ TEST(AttributeEqual, DictDifferentName) {
   memcpy(entries_b, entries_a, sizeof(entries_a));
   entries_b[0].name_id = 99;
 
-  loom_attribute_t a = loom_make_attr_dict(entries_a, 1);
-  loom_attribute_t b = loom_make_attr_dict(entries_b, 1);
+  loom_attribute_t a = loom_make_canonical_attr_dict(entries_a, 1);
+  loom_attribute_t b = loom_make_canonical_attr_dict(entries_b, 1);
   EXPECT_FALSE(loom_attribute_equal(&a, &b));
 }
 
@@ -1504,8 +1505,8 @@ TEST(AttributeEqual, DictWithNestedArray) {
   entries_b[0].name_id = 1;
   entries_b[0].value = loom_attr_i64_array(arr_b, 3);
 
-  loom_attribute_t a = loom_make_attr_dict(entries_a, 1);
-  loom_attribute_t b = loom_make_attr_dict(entries_b, 1);
+  loom_attribute_t a = loom_make_canonical_attr_dict(entries_a, 1);
+  loom_attribute_t b = loom_make_canonical_attr_dict(entries_b, 1);
   // Nested array attribute with different pointers, same content.
   EXPECT_TRUE(loom_attribute_equal(&a, &b));
 }
@@ -1559,7 +1560,7 @@ static loom_attribute_t make_nested_dict(loom_named_attr_t* buffer, int depth) {
     memset(&buffer[i], 0, sizeof(buffer[i]));
     buffer[i].name_id = (loom_string_id_t)(i + 1);
     buffer[i].value = inner;
-    inner = loom_make_attr_dict(&buffer[i], 1);
+    inner = loom_make_canonical_attr_dict(&buffer[i], 1);
   }
   return inner;
 }

@@ -220,6 +220,42 @@ ERR_PARSE_019 = ErrorDef(
     fix_hint="The source file must be valid UTF-8",
 )
 
+# ERR_PARSE_020: Duplicate dictionary attribute key.
+ERR_PARSE_020 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Duplicate dictionary attribute key.",
+    message="dictionary attribute key '{key_name}' is already defined",
+    params=(ErrorParam("key_name", ParamKind.STRING),),
+    fix_hint="Each key in an attribute dictionary must be unique",
+)
+
+# ERR_PARSE_021: Dictionary attribute nesting exceeds the supported depth.
+ERR_PARSE_021 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Dictionary attribute nesting is too deep.",
+    message="dictionary attribute nesting exceeds the maximum depth {max_depth}",
+    params=(ErrorParam("max_depth", ParamKind.U32),),
+    fix_hint="Flatten deeply nested attribute dictionaries",
+)
+
+# ERR_PARSE_022: Unresolved forward reference in a declaration scope.
+ERR_PARSE_022 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=22,
+    severity=Severity.ERROR,
+    summary="Unresolved declaration-scope forward reference.",
+    message="unresolved forward reference to '%{value_name}' in declaration scope",
+    params=(ErrorParam("value_name", ParamKind.STRING),),
+    fix_hint=(
+        "Define the SSA name in the same Scope(...) signature, "
+        "for example as a function argument or named symbol result"
+    ),
+)
+
 ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_001,
     ERR_PARSE_002,
@@ -240,4 +276,7 @@ ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_017,
     ERR_PARSE_018,
     ERR_PARSE_019,
+    ERR_PARSE_020,
+    ERR_PARSE_021,
+    ERR_PARSE_022,
 )

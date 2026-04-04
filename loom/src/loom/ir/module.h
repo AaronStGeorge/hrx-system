@@ -61,7 +61,7 @@ void loom_module_free(loom_module_t* module);
 // Returns the module's body block. All top-level ops (function
 // definitions, globals, executables) live in this block.
 static inline loom_block_t* loom_module_block(loom_module_t* module) {
-  return &module->body->blocks[0];
+  return loom_region_entry_block(module->body);
 }
 
 // Returns a pointer to a value by ID.
@@ -112,6 +112,23 @@ iree_status_t loom_module_intern_string(loom_module_t* module,
 // Returns LOOM_STRING_ID_INVALID if |string| has not been interned.
 loom_string_id_t loom_module_lookup_string(const loom_module_t* module,
                                            iree_string_view_t string);
+
+// Builds a canonical DICT attribute in |module| from |entries|.
+//
+// The input entries may be in any order and may point to temporary storage.
+// Each name_id must refer to a string interned in |module|. The builder
+// recursively canonicalizes nested DICT values, sorts entries by key spelling,
+// rejects duplicate keys, arena-copies the resulting immutable entry array,
+// and stores the canonical wrapper in |out_attr|.
+iree_status_t loom_module_make_canonical_attr_dict(
+    loom_module_t* module, const loom_named_attr_t* entries,
+    iree_host_size_t count, loom_attribute_t* out_attr);
+
+// Verifies that |attr| is a canonical DICT attribute relative to |module|.
+// Non-empty entries must be sorted by key spelling, duplicate-free, and
+// recursively canonical. Returns INVALID_ARGUMENT for malformed dict attrs.
+iree_status_t loom_module_verify_canonical_attr_dict(
+    const loom_module_t* module, loom_attribute_t attr);
 
 // Adds an encoding instance to the module's encoding table.
 // Deduplicates by name and attribute equality: if an identical
@@ -167,10 +184,19 @@ iree_status_t loom_module_allocate_block(loom_module_t* module,
                                          loom_block_t** out_block);
 
 // Allocates a region with |block_count| blocks in the module's arena.
-// Each block is initialized with default op capacity.
+// The entry block is embedded in the region object and additional blocks
+// are arena-allocated individually. |block_count| may be 0; in that case the
+// embedded entry block is initialized and becomes block 0 on the first append.
 iree_status_t loom_module_allocate_region(loom_module_t* module,
                                           uint16_t block_count,
                                           loom_region_t** out_region);
+
+// Appends a new block to |region| and returns it in |*out_block|. Existing
+// block objects are never relocated; only the region's block pointer table may
+// grow.
+iree_status_t loom_region_append_block(loom_module_t* module,
+                                       loom_region_t* region,
+                                       loom_block_t** out_block);
 
 // Adds a block argument. The value_id must already be defined in the
 // module's value table (via loom_module_define_value). Sets

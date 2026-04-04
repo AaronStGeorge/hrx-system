@@ -762,6 +762,57 @@ const loom_error_def_t loom_err_dominance_005 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_dominance_006_params[] = {
+    {"result_index", LOOM_PARAM_U32},
+    {"op_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_dominance_006 = {
+    .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 6,
+    .summary = "Duplicate tied result index.",
+    .message_template =
+        "result {result_index} of '{op_name}' is tied more than once",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_dominance_006_params,
+    .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_dominance_007_params[] = {
+    {"operand_index", LOOM_PARAM_U32},
+    {"op_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_dominance_007 = {
+    .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 7,
+    .summary = "Duplicate tied operand index.",
+    .message_template =
+        "operand {operand_index} of '{op_name}' is tied by more than one "
+        "result",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_dominance_007_params,
+    .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_dominance_008_params[] = {
+    {"operand_index", LOOM_PARAM_U32},
+    {"op_name", LOOM_PARAM_STRING},
+    {"value_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_dominance_008 = {
+    .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 8,
+    .summary = "Ambiguous tied operand value.",
+    .message_template =
+        "operand {operand_index} of '{op_name}' ties value '%{value_name}', "
+        "but that value appears in multiple operand slots",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_dominance_008_params,
+    .param_count = 3,
+};
+
 static const loom_error_param_def_t loom_err_symbol_001_params[] = {
     {"symbol_index", LOOM_PARAM_U32},
     {"max_index", LOOM_PARAM_U32},
@@ -1086,6 +1137,53 @@ const loom_error_def_t loom_err_parse_019 = {
     .param_count = 1,
 };
 
+static const loom_error_param_def_t loom_err_parse_020_params[] = {
+    {"key_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_parse_020 = {
+    .domain = LOOM_ERROR_DOMAIN_PARSE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 20,
+    .summary = "Duplicate dictionary attribute key.",
+    .message_template =
+        "dictionary attribute key '{key_name}' is already defined",
+    .fix_hint_template = "Each key in an attribute dictionary must be unique",
+    .param_defs = loom_err_parse_020_params,
+    .param_count = 1,
+};
+
+static const loom_error_param_def_t loom_err_parse_021_params[] = {
+    {"max_depth", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_parse_021 = {
+    .domain = LOOM_ERROR_DOMAIN_PARSE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 21,
+    .summary = "Dictionary attribute nesting is too deep.",
+    .message_template =
+        "dictionary attribute nesting exceeds the maximum depth {max_depth}",
+    .fix_hint_template = "Flatten deeply nested attribute dictionaries",
+    .param_defs = loom_err_parse_021_params,
+    .param_count = 1,
+};
+
+static const loom_error_param_def_t loom_err_parse_022_params[] = {
+    {"value_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_parse_022 = {
+    .domain = LOOM_ERROR_DOMAIN_PARSE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 22,
+    .summary = "Unresolved declaration-scope forward reference.",
+    .message_template =
+        "unresolved forward reference to '%{value_name}' in declaration scope",
+    .fix_hint_template =
+        "Define the SSA name in the same Scope(...) signature, for example as "
+        "a function argument or named symbol result",
+    .param_defs = loom_err_parse_022_params,
+    .param_count = 1,
+};
+
 static const loom_error_param_def_t loom_err_bytecode_001_params[] = {
     {"expected_magic", LOOM_PARAM_STRING},
     {"actual_magic", LOOM_PARAM_STRING},
@@ -1264,6 +1362,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_structure_008, &loom_err_structure_009, &loom_err_structure_010,
     &loom_err_structure_011, &loom_err_dominance_001, &loom_err_dominance_002,
     &loom_err_dominance_003, &loom_err_dominance_004, &loom_err_dominance_005,
+    &loom_err_dominance_006, &loom_err_dominance_007, &loom_err_dominance_008,
     &loom_err_symbol_001,    &loom_err_symbol_002,    &loom_err_symbol_003,
     &loom_err_parse_001,     &loom_err_parse_002,     &loom_err_parse_003,
     &loom_err_parse_004,     &loom_err_parse_005,     &loom_err_parse_006,
@@ -1271,7 +1370,8 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_parse_010,     &loom_err_parse_011,     &loom_err_parse_012,
     &loom_err_parse_013,     &loom_err_parse_014,     &loom_err_parse_015,
     &loom_err_parse_016,     &loom_err_parse_017,     &loom_err_parse_018,
-    &loom_err_parse_019,     &loom_err_bytecode_001,  &loom_err_bytecode_002,
+    &loom_err_parse_019,     &loom_err_parse_020,     &loom_err_parse_021,
+    &loom_err_parse_022,     &loom_err_bytecode_001,  &loom_err_bytecode_002,
     &loom_err_bytecode_003,  &loom_err_bytecode_004,  &loom_err_bytecode_005,
     &loom_err_fold_001,      &loom_err_fold_002,      &loom_err_fold_003,
     &loom_err_fold_004,      &loom_err_fold_005,

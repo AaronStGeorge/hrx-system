@@ -429,13 +429,13 @@ class OptionalGroup:
 class Scope:
     """A scoped group of format elements.
 
-    Pushes a new name scope before processing children and pops it
-    after. Within the scope, type parsing uses definition mode:
+    Pushes one temporary declaration name scope before processing children and
+    pops it after. Within the scope, type parsing uses definition mode:
     [%name] in types creates new index-typed SSA values (like
     function argument dims) rather than requiring existing names.
 
-    Used for global definitions where type annotations introduce
-    named type variables that predicates can reference:
+    Used for function/global signatures where type annotations introduce named
+    type variables that later result types and predicates can reference:
 
       global.constant @weights : Scope([ tile<[%m]xf32> where [...] ])
 
@@ -443,8 +443,8 @@ class Scope:
     that created values get proper value table entries (enabling
     value facts attachment).
 
-    Nesting guarantees balanced push/pop — structurally impossible
-    to leave a scope open.
+    Nested Scope(...) is intentionally unsupported; region/block lexical
+    nesting is represented by Region and BindingList instead.
     """
 
     elements: tuple[FormatElement, ...]

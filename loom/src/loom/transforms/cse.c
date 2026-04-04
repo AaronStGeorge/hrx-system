@@ -382,24 +382,27 @@ static iree_status_t loom_cse_push_region_frames(
     if (!region || region->block_count == 0) continue;
     if (region->block_count == 1) {
       // Common case: single-block region.
+      loom_block_t* entry_block = loom_region_entry_block(region);
       loom_cse_scope_t* child_scope = NULL;
-      IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(
-          scope_arena, parent_scope, &region->blocks[0], &child_scope));
-      loom_cse_stack_push(stack, &region->blocks[0], child_scope);
+      IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
+                                                   entry_block, &child_scope));
+      loom_cse_stack_push(stack, entry_block, child_scope);
     } else {
       // Multi-block region: entry block dominates all siblings.
+      loom_block_t* entry_block = loom_region_entry_block(region);
       loom_cse_scope_t* entry_scope = NULL;
-      IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(
-          scope_arena, parent_scope, &region->blocks[0], &entry_scope));
+      IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
+                                                   entry_block, &entry_scope));
       // Push non-entry blocks in reverse order (parent = entry_scope).
       for (int32_t b = (int32_t)region->block_count - 1; b >= 1; --b) {
+        loom_block_t* block = loom_region_block(region, (uint16_t)b);
         loom_cse_scope_t* sibling_scope = NULL;
-        IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(
-            scope_arena, entry_scope, &region->blocks[b], &sibling_scope));
-        loom_cse_stack_push(stack, &region->blocks[b], sibling_scope);
+        IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, entry_scope,
+                                                     block, &sibling_scope));
+        loom_cse_stack_push(stack, block, sibling_scope);
       }
       // Push entry block on top — processed first.
-      loom_cse_stack_push(stack, &region->blocks[0], entry_scope);
+      loom_cse_stack_push(stack, entry_block, entry_scope);
     }
   }
   return iree_ok_status();
@@ -458,7 +461,7 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         continue;
       }
 
-      loom_op_t* op = frame->block->ops[frame->next_op_index++];
+      loom_op_t* op = loom_block_op(frame->block, frame->next_op_index++);
       if (op->flags & LOOM_OP_FLAG_DEAD) continue;
 
       const loom_op_vtable_t* vtable = loom_op_vtable(module, op);

@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "iree/base/internal/arena.h"
 #include "loom/format/text/tokenizer.h"
 
 //===----------------------------------------------------------------------===//
@@ -38,6 +39,29 @@ typedef struct {
   const uint8_t* data;
   size_t remaining;
 } fuzz_input_t;
+
+typedef struct {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_allocator_t scratch_arena;
+  loom_tokenizer_t tokenizer;
+} fuzz_tokenizer_t;
+
+static void fuzz_tokenizer_initialize(iree_string_view_t source,
+                                      iree_string_view_t filename,
+                                      fuzz_tokenizer_t* out_tokenizer) {
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                   &out_tokenizer->block_pool);
+  iree_arena_initialize(&out_tokenizer->block_pool,
+                        &out_tokenizer->scratch_arena);
+  loom_tokenizer_initialize(source, filename, &out_tokenizer->scratch_arena,
+                            &out_tokenizer->tokenizer);
+}
+
+static void fuzz_tokenizer_deinitialize(fuzz_tokenizer_t* tokenizer) {
+  loom_tokenizer_deinitialize(&tokenizer->tokenizer);
+  iree_arena_deinitialize(&tokenizer->scratch_arena);
+  iree_arena_block_pool_deinitialize(&tokenizer->block_pool);
+}
 
 static uint8_t fuzz_consume_u8(fuzz_input_t* input) {
   if (input->remaining == 0) return 0;
@@ -67,29 +91,42 @@ static void fuzz_assert_position_invariant(const loom_tokenizer_t* tokenizer) {
   }
 }
 
-// Verifies that a token's text is a valid slice of the source buffer.
-// Every token must point into [source.data, source.data + source.size).
-// A token pointing outside the source buffer would indicate a scanner
-// bug that computed the wrong start/end positions.
+static bool fuzz_string_view_in_bounds(iree_string_view_t haystack,
+                                       iree_string_view_t needle) {
+  uintptr_t haystack_start = (uintptr_t)haystack.data;
+  uintptr_t haystack_end = haystack_start + haystack.size;
+  uintptr_t needle_start = (uintptr_t)needle.data;
+  uintptr_t needle_end = needle_start + needle.size;
+  return needle_start >= haystack_start && needle_start <= haystack_end &&
+         needle_end >= needle_start && needle_end <= haystack_end;
+}
+
+// Verifies token slice invariants. |source_text| must always alias source
+// bytes for diagnostics. |text| aliases |source_text| for non-string tokens;
+// string payloads may instead point at decoded scratch storage when escapes
+// were present.
 static void fuzz_assert_token_slice_valid(const loom_tokenizer_t* tokenizer,
                                           const loom_token_t* token) {
   if (token->kind == LOOM_TOKEN_EOF || token->kind == LOOM_TOKEN_NONE) {
     return;
   }
-  const char* source_start = tokenizer->source.data;
-  const char* source_end = source_start + tokenizer->source.size;
-  const char* token_start = token->text.data;
-  const char* token_end = token_start + token->text.size;
+  if (!fuzz_string_view_in_bounds(tokenizer->source, token->source_text)) {
+    __builtin_trap();
+  }
 
-  // Token text must be within [source_start, source_end].
-  if (token_start < source_start || token_start > source_end) {
-    __builtin_trap();
+  if (token->kind == LOOM_TOKEN_STRING) {
+    if (token->source_text.size < 2 || token->source_text.data[0] != '"' ||
+        token->source_text.data[token->source_text.size - 1] != '"') {
+      __builtin_trap();
+    }
+    if (token->text.size > token->source_text.size - 2) {
+      __builtin_trap();
+    }
+    return;
   }
-  if (token_end < token_start || token_end > source_end) {
-    __builtin_trap();
-  }
-  // Token text must be non-empty for all non-EOF/NONE tokens.
-  if (token->text.size == 0) {
+
+  if (iree_string_view_is_empty(token->text) ||
+      !fuzz_string_view_in_bounds(token->source_text, token->text)) {
     __builtin_trap();
   }
 }
@@ -120,8 +157,8 @@ static void fuzz_assert_line_monotonic(uint32_t previous_line,
 
 static void fuzz_strategy_raw_tokenize(const uint8_t* data, size_t size) {
   iree_string_view_t source = {reinterpret_cast<const char*>(data), size};
-  loom_tokenizer_t tokenizer;
-  loom_tokenizer_initialize(source, IREE_SV("<fuzz>"), &tokenizer);
+  fuzz_tokenizer_t tokenizer;
+  fuzz_tokenizer_initialize(source, IREE_SV("<fuzz>"), &tokenizer);
 
   uint32_t previous_line = 0;
   // Cap iterations to prevent infinite loops from consuming the entire
@@ -130,11 +167,11 @@ static void fuzz_strategy_raw_tokenize(const uint8_t* data, size_t size) {
   // the peek/next interleaving.
   size_t max_iterations = size + 16;
   for (size_t i = 0; i < max_iterations; ++i) {
-    fuzz_assert_position_invariant(&tokenizer);
+    fuzz_assert_position_invariant(&tokenizer.tokenizer);
 
-    loom_token_t token = loom_tokenizer_next(&tokenizer);
-    fuzz_assert_position_invariant(&tokenizer);
-    fuzz_assert_token_slice_valid(&tokenizer, &token);
+    loom_token_t token = loom_tokenizer_next(&tokenizer.tokenizer);
+    fuzz_assert_position_invariant(&tokenizer.tokenizer);
+    fuzz_assert_token_slice_valid(&tokenizer.tokenizer, &token);
     fuzz_assert_line_monotonic(previous_line, &token);
 
     if (token.kind != LOOM_TOKEN_EOF && token.kind != LOOM_TOKEN_NONE) {
@@ -144,9 +181,9 @@ static void fuzz_strategy_raw_tokenize(const uint8_t* data, size_t size) {
   }
 
   // Consume any deferred scan error to prevent leaks.
-  iree_status_t status = loom_tokenizer_consume_status(&tokenizer);
+  iree_status_t status = loom_tokenizer_consume_status(&tokenizer.tokenizer);
   iree_status_ignore(status);
-  loom_tokenizer_deinitialize(&tokenizer);
+  fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
 //===----------------------------------------------------------------------===//
@@ -289,19 +326,19 @@ static void fuzz_strategy_grammar_aware(fuzz_input_t* input) {
 
   // Tokenize the constructed source.
   iree_string_view_t source = {source_buffer, source_length};
-  loom_tokenizer_t tokenizer;
-  loom_tokenizer_initialize(source, IREE_SV("<fuzz-grammar>"), &tokenizer);
+  fuzz_tokenizer_t tokenizer;
+  fuzz_tokenizer_initialize(source, IREE_SV("<fuzz-grammar>"), &tokenizer);
 
   for (size_t i = 0; i < source_length + 16; ++i) {
-    fuzz_assert_position_invariant(&tokenizer);
-    loom_token_t token = loom_tokenizer_next(&tokenizer);
-    fuzz_assert_position_invariant(&tokenizer);
-    fuzz_assert_token_slice_valid(&tokenizer, &token);
+    fuzz_assert_position_invariant(&tokenizer.tokenizer);
+    loom_token_t token = loom_tokenizer_next(&tokenizer.tokenizer);
+    fuzz_assert_position_invariant(&tokenizer.tokenizer);
+    fuzz_assert_token_slice_valid(&tokenizer.tokenizer, &token);
     if (token.kind == LOOM_TOKEN_EOF) break;
   }
 
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer));
-  loom_tokenizer_deinitialize(&tokenizer);
+  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
 //===----------------------------------------------------------------------===//
@@ -349,19 +386,19 @@ static void fuzz_strategy_truncation(fuzz_input_t* input) {
   size_t truncation_point = raw_position % (kRichSourceSize + 1);
 
   iree_string_view_t source = {kRichSource, truncation_point};
-  loom_tokenizer_t tokenizer;
-  loom_tokenizer_initialize(source, IREE_SV("<fuzz-trunc>"), &tokenizer);
+  fuzz_tokenizer_t tokenizer;
+  fuzz_tokenizer_initialize(source, IREE_SV("<fuzz-trunc>"), &tokenizer);
 
   for (size_t i = 0; i < truncation_point + 16; ++i) {
-    fuzz_assert_position_invariant(&tokenizer);
-    loom_token_t token = loom_tokenizer_next(&tokenizer);
-    fuzz_assert_position_invariant(&tokenizer);
-    fuzz_assert_token_slice_valid(&tokenizer, &token);
+    fuzz_assert_position_invariant(&tokenizer.tokenizer);
+    loom_token_t token = loom_tokenizer_next(&tokenizer.tokenizer);
+    fuzz_assert_position_invariant(&tokenizer.tokenizer);
+    fuzz_assert_token_slice_valid(&tokenizer.tokenizer, &token);
     if (token.kind == LOOM_TOKEN_EOF) break;
   }
 
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer));
-  loom_tokenizer_deinitialize(&tokenizer);
+  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
 //===----------------------------------------------------------------------===//
@@ -444,14 +481,14 @@ static void fuzz_strategy_angle_nesting(fuzz_input_t* input) {
 
   // Consume the opening '<' and test scan_angle_interior.
   iree_string_view_t source = {source_buffer, source_length};
-  loom_tokenizer_t tokenizer;
-  loom_tokenizer_initialize(source, IREE_SV("<fuzz-angles>"), &tokenizer);
+  fuzz_tokenizer_t tokenizer;
+  fuzz_tokenizer_initialize(source, IREE_SV("<fuzz-angles>"), &tokenizer);
 
-  loom_token_t opening = loom_tokenizer_next(&tokenizer);
+  loom_token_t opening = loom_tokenizer_next(&tokenizer.tokenizer);
   if (opening.kind == LOOM_TOKEN_LANGLE) {
     iree_string_view_t interior;
     iree_status_t status =
-        loom_tokenizer_scan_angle_interior(&tokenizer, &interior);
+        loom_tokenizer_scan_angle_interior(&tokenizer.tokenizer, &interior);
     if (iree_status_is_ok(status)) {
       // Interior must be within the source buffer.
       if (interior.data < source_buffer ||
@@ -462,9 +499,9 @@ static void fuzz_strategy_angle_nesting(fuzz_input_t* input) {
     iree_status_ignore(status);
   }
 
-  fuzz_assert_position_invariant(&tokenizer);
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer));
-  loom_tokenizer_deinitialize(&tokenizer);
+  fuzz_assert_position_invariant(&tokenizer.tokenizer);
+  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
 //===----------------------------------------------------------------------===//
@@ -484,36 +521,36 @@ static void fuzz_strategy_angle_nesting(fuzz_input_t* input) {
 static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
                                          fuzz_input_t* input) {
   iree_string_view_t source = {reinterpret_cast<const char*>(data), size};
-  loom_tokenizer_t tokenizer;
-  loom_tokenizer_initialize(source, IREE_SV("<fuzz-api>"), &tokenizer);
+  fuzz_tokenizer_t tokenizer;
+  fuzz_tokenizer_initialize(source, IREE_SV("<fuzz-api>"), &tokenizer);
 
   // Use the original source as both the source text and the control
   // sequence. The first half is source, the second half drives API calls.
   uint8_t call_count = fuzz_consume_u8(input) % 128 + 1;
 
   for (uint8_t i = 0; i < call_count && input->remaining > 0; ++i) {
-    fuzz_assert_position_invariant(&tokenizer);
+    fuzz_assert_position_invariant(&tokenizer.tokenizer);
 
     uint8_t action = fuzz_consume_u8(input) % 10;
     switch (action) {
       case 0: {
         // peek — should be idempotent.
-        loom_token_t first = loom_tokenizer_peek(&tokenizer);
-        loom_token_t second = loom_tokenizer_peek(&tokenizer);
+        loom_token_t first = loom_tokenizer_peek(&tokenizer.tokenizer);
+        loom_token_t second = loom_tokenizer_peek(&tokenizer.tokenizer);
         if (first.kind != second.kind) __builtin_trap();
-        fuzz_assert_token_slice_valid(&tokenizer, &first);
+        fuzz_assert_token_slice_valid(&tokenizer.tokenizer, &first);
         break;
       }
       case 1: {
         // next — consume a token.
-        loom_token_t token = loom_tokenizer_next(&tokenizer);
-        fuzz_assert_token_slice_valid(&tokenizer, &token);
+        loom_token_t token = loom_tokenizer_next(&tokenizer.tokenizer);
+        fuzz_assert_token_slice_valid(&tokenizer.tokenizer, &token);
         break;
       }
       case 2: {
         // peek then next — must return same token.
-        loom_token_t peeked = loom_tokenizer_peek(&tokenizer);
-        loom_token_t consumed = loom_tokenizer_next(&tokenizer);
+        loom_token_t peeked = loom_tokenizer_peek(&tokenizer.tokenizer);
+        loom_token_t consumed = loom_tokenizer_next(&tokenizer.tokenizer);
         if (peeked.kind != consumed.kind) __builtin_trap();
         if (peeked.text.data != consumed.text.data) __builtin_trap();
         if (peeked.text.size != consumed.text.size) __builtin_trap();
@@ -524,19 +561,19 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
         uint8_t kind_byte = fuzz_consume_u8(input);
         loom_token_kind_t kind =
             static_cast<loom_token_kind_t>(kind_byte % (LOOM_TOKEN_EOF + 1));
-        loom_tokenizer_at(&tokenizer, kind);
+        loom_tokenizer_at(&tokenizer.tokenizer, kind);
         break;
       }
       case 4: {
         // try_consume — should not advance on mismatch.
-        loom_token_t before = loom_tokenizer_peek(&tokenizer);
+        loom_token_t before = loom_tokenizer_peek(&tokenizer.tokenizer);
         uint8_t kind_byte = fuzz_consume_u8(input);
         loom_token_kind_t kind =
             static_cast<loom_token_kind_t>(kind_byte % (LOOM_TOKEN_EOF + 1));
-        bool consumed = loom_tokenizer_try_consume(&tokenizer, kind);
+        bool consumed = loom_tokenizer_try_consume(&tokenizer.tokenizer, kind);
         if (!consumed) {
           // Should not have advanced.
-          loom_token_t after = loom_tokenizer_peek(&tokenizer);
+          loom_token_t after = loom_tokenizer_peek(&tokenizer.tokenizer);
           if (before.kind != after.kind) __builtin_trap();
         }
         break;
@@ -546,7 +583,7 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
         uint8_t kind_byte = fuzz_consume_u8(input);
         loom_token_kind_t kind =
             static_cast<loom_token_kind_t>(kind_byte % (LOOM_TOKEN_EOF + 1));
-        loom_tokenizer_try_consume(&tokenizer, kind);
+        loom_tokenizer_try_consume(&tokenizer.tokenizer, kind);
         break;
       }
       case 6: {
@@ -556,7 +593,8 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
             IREE_SV("else"), IREE_SV("group"),
         };
         uint8_t keyword_index = fuzz_consume_u8(input) % 5;
-        loom_tokenizer_at_keyword(&tokenizer, keywords[keyword_index]);
+        loom_tokenizer_at_keyword(&tokenizer.tokenizer,
+                                  keywords[keyword_index]);
         break;
       }
       case 7: {
@@ -566,29 +604,31 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
             IREE_SV("else"), IREE_SV("group"),
         };
         uint8_t keyword_index = fuzz_consume_u8(input) % 5;
-        loom_tokenizer_try_consume_keyword(&tokenizer, keywords[keyword_index]);
+        loom_tokenizer_try_consume_keyword(&tokenizer.tokenizer,
+                                           keywords[keyword_index]);
         break;
       }
       case 8: {
         // Consume '<' then scan angle interior if we're at '<'.
-        if (loom_tokenizer_try_consume(&tokenizer, LOOM_TOKEN_LANGLE)) {
+        if (loom_tokenizer_try_consume(&tokenizer.tokenizer,
+                                       LOOM_TOKEN_LANGLE)) {
           iree_string_view_t interior;
-          iree_status_t status =
-              loom_tokenizer_scan_angle_interior(&tokenizer, &interior);
+          iree_status_t status = loom_tokenizer_scan_angle_interior(
+              &tokenizer.tokenizer, &interior);
           iree_status_ignore(status);
         }
         break;
       }
       case 9: {
         // consume_status — retrieve and discard any pending error.
-        iree_status_ignore(loom_tokenizer_consume_status(&tokenizer));
+        iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
         break;
       }
     }
   }
 
-  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer));
-  loom_tokenizer_deinitialize(&tokenizer);
+  iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
+  fuzz_tokenizer_deinitialize(&tokenizer);
 }
 
 //===----------------------------------------------------------------------===//

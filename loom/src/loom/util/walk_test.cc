@@ -55,8 +55,8 @@ class WalkTest : public ::testing::Test {
                                         LOOM_LOCATION_UNKNOWN, &func_op));
     func_like_ = loom_func_like_cast(module_, func_op);
     body_ = loom_func_like_body(func_like_);
-    loom_builder_initialize(module_, &module_->arena, &body_->blocks[0],
-                            &builder_);
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_region_entry_block(body_), &builder_);
     // Set parent_op so nested region builders inherit correct ancestry.
     builder_.ip.parent_op = func_op;
   }
@@ -377,7 +377,7 @@ TEST_F(WalkTest, DeepNesting) {
 
   enter_region(outer_map, loom_test_map_body(outer_map));
   loom_value_id_t inner_arg =
-      loom_test_map_body(outer_map)->blocks[0].arg_ids[0];
+      loom_region_entry_arg_id(loom_test_map_body(outer_map), 0);
   loom_op_t* inner_map = NULL;
   IREE_ASSERT_OK(loom_test_map_build(&builder_, &inner_arg, 1, f32, NULL, 0,
                                      LOOM_LOCATION_UNKNOWN, &inner_map));

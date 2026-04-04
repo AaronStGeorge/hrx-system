@@ -29,7 +29,7 @@ Value naming:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from loom.assembly import (
@@ -443,6 +443,9 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
     if isinstance(value, list | tuple):
         parts = [_format_attr_value(v) for v in value]
         return "[" + ", ".join(parts) + "]"
+    if isinstance(value, Mapping):
+        parts = [f"{key} = {_format_attr_value(item)}" for key, item in value.items()]
+        return "{" + ", ".join(parts) + "}"
     return str(value)
 
 
@@ -820,7 +823,7 @@ class Printer:
                         # Named dict attribute: read the dict value directly.
                         covered_attrs.add(dict_field)
                         dict_value = fields._op.attributes.get(dict_field)
-                        if isinstance(dict_value, dict) and dict_value:
+                        if isinstance(dict_value, Mapping) and dict_value:
                             attr_str = self._format_named_dict(dict_value, op_decl)
                             if attr_str:
                                 stream.emit(attr_str)
@@ -1033,7 +1036,7 @@ class Printer:
 
         return "(" + ", ".join(parts) + ")"
 
-    def _format_named_dict(self, dict_value: dict[str, Any], op_decl: Op) -> str:
+    def _format_named_dict(self, dict_value: Mapping[str, Any], op_decl: Op) -> str:
         """Format {key = value, ...} from a named dict attribute."""
         if not dict_value:
             return ""
@@ -1043,7 +1046,7 @@ class Printer:
         return "{" + ", ".join(parts) + "}"
 
     def _format_attr_dict(
-        self, attributes: dict[str, Any], covered: set[str], op_decl: Op
+        self, attributes: Mapping[str, Any], covered: set[str], op_decl: Op
     ) -> str:
         """Format {key = value, ...} for uncovered attributes."""
         extras = {k: v for k, v in attributes.items() if k not in covered}

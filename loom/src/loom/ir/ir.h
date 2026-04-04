@@ -80,6 +80,12 @@
 // Tied results are stored per-operation as a mapping from result
 // index to the tied operand index. The operand is consumed: no uses
 // after the consuming op (verified statically).
+//
+// Well-formed tied metadata has three invariants:
+//   - Each result index appears in at most one tied-result entry.
+//   - Each operand index appears in at most one tied-result entry.
+//   - A tied operand's value appears in exactly one operand slot on
+//     the operation, so name-based surface syntax cannot be ambiguous.
 
 #ifndef LOOM_IR_IR_H_
 #define LOOM_IR_IR_H_
@@ -87,6 +93,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/error/emitter.h"
+#include "loom/ir/attribute.h"
 #include "loom/ir/types.h"
 #include "loom/util/bstring.h"
 
@@ -124,28 +131,6 @@ typedef struct loom_rewriter_t loom_rewriter_t;
 // Used by the constraint system, printer field callbacks, and
 // diagnostic highlighting.
 typedef uint8_t loom_field_ref_t;
-
-#define LOOM_SYMBOL_ID_INVALID ((uint16_t)UINT16_MAX)
-#define LOOM_MODULE_ID_INVALID ((uint16_t)UINT16_MAX)
-
-// Identifies a symbol across module boundaries.
-// module_id indexes into context->modules.entries[].
-// symbol_id indexes into that module's symbol table.
-// For local references (same module), module_id is self.
-// Total size: 4 bytes. Fits in a register.
-typedef struct loom_symbol_ref_t {
-  uint16_t module_id;
-  uint16_t symbol_id;
-} loom_symbol_ref_t;
-
-static inline bool loom_symbol_ref_is_valid(loom_symbol_ref_t ref) {
-  return ref.symbol_id != LOOM_SYMBOL_ID_INVALID;
-}
-
-static inline loom_symbol_ref_t loom_symbol_ref_null(void) {
-  loom_symbol_ref_t ref = {LOOM_MODULE_ID_INVALID, LOOM_SYMBOL_ID_INVALID};
-  return ref;
-}
 
 //===----------------------------------------------------------------------===//
 // Source locations
@@ -666,247 +651,6 @@ static inline uint16_t loom_value_def_index(const loom_value_t* value) {
 }
 
 //===----------------------------------------------------------------------===//
-// Predicates
-//===----------------------------------------------------------------------===//
-
-// Predicate kinds for where-clause constraints.
-typedef enum loom_predicate_kind_e {
-  LOOM_PREDICATE_EQ = 0,     // eq(a, b)
-  LOOM_PREDICATE_LT = 1,     // lt(a, b)
-  LOOM_PREDICATE_LE = 2,     // le(a, b)
-  LOOM_PREDICATE_GT = 3,     // gt(a, b)
-  LOOM_PREDICATE_GE = 4,     // ge(a, b)
-  LOOM_PREDICATE_MUL = 5,    // mul(a, n) — a is multiple of n
-  LOOM_PREDICATE_MIN = 6,    // min(a, n) — a >= n
-  LOOM_PREDICATE_MAX = 7,    // max(a, n) — a <= n
-  LOOM_PREDICATE_POW2 = 8,   // pow2(a)   — a is power of 2
-  LOOM_PREDICATE_RANGE = 9,  // range(a, lo, hi) — lo <= a <= hi
-  LOOM_PREDICATE_COUNT_,
-} loom_predicate_kind_t;
-
-// Predicate argument tag: what kind of value the argument references.
-typedef enum loom_predicate_arg_tag_e {
-  LOOM_PRED_ARG_NONE = 0,   // Unused slot.
-  LOOM_PRED_ARG_VALUE = 1,  // SSA value ID.
-  LOOM_PRED_ARG_CONST = 2,  // Integer constant.
-  LOOM_PRED_ARG_COUNT_,
-} loom_predicate_arg_tag_t;
-
-// A single predicate constraint. 32 bytes, arena-allocated.
-//
-// Predicates constrain dynamic dimension values in where clauses and
-// scalar.assume ops. Each predicate has a kind (eq, mul, range, etc.)
-// and 1-3 arguments. Arguments are tagged: SSA value references or
-// integer constants.
-typedef struct loom_predicate_t {
-  uint8_t kind;         // loom_predicate_kind_t
-  uint8_t arg_count;    // 1-3
-  uint8_t arg_tags[3];  // loom_predicate_arg_tag_t per arg slot.
-  uint8_t reserved[3];  // Pad to 8-byte boundary.
-  int64_t args[3];      // value_id or constant per slot.
-} loom_predicate_t;     // 32 bytes
-
-static_assert(sizeof(loom_predicate_t) == 32,
-              "loom_predicate_t must be 32 bytes");
-
-//===----------------------------------------------------------------------===//
-// Attributes
-//===----------------------------------------------------------------------===//
-
-// Attribute value kind tag. Determines which union member of
-// loom_attribute_t is active.
-typedef enum loom_attr_kind_e {
-  // 64-bit signed integer.
-  LOOM_ATTR_I64 = 0,
-  // 64-bit IEEE 754 double.
-  LOOM_ATTR_F64 = 1,
-  // Interned string reference (loom_string_id_t).
-  LOOM_ATTR_STRING = 2,
-  // Boolean (payload raw field is 0 or 1).
-  LOOM_ATTR_BOOL = 3,
-  // Enum case index (payload raw field is the case ordinal).
-  LOOM_ATTR_ENUM = 4,
-  // Arena-allocated int64_t array (count in header, pointer in payload).
-  LOOM_ATTR_I64_ARRAY = 5,
-  // Symbol reference (module_id + symbol_id packed in payload).
-  LOOM_ATTR_SYMBOL = 6,
-  // Type table index (uint32_t in payload).
-  LOOM_ATTR_TYPE = 7,
-  // Arena-allocated predicate list (count in header, pointer in payload).
-  LOOM_ATTR_PREDICATE_LIST = 8,
-  // Arena-allocated dictionary of named attributes (count in header,
-  // pointer to loom_named_attr_t array in payload). Used by ops with
-  // AttrDict format elements for extensible metadata.
-  LOOM_ATTR_DICT = 9,
-  LOOM_ATTR_COUNT_,
-} loom_attr_kind_t;
-
-// A 16-byte tagged value. Used in operation trailing data, encoding
-// parameters, and anywhere a typed scalar/aggregate is needed.
-//
-// The kind tag (byte 0) determines which union member is active.
-// For I64_ARRAY, the count field holds the element count and the
-// payload holds a pointer to an arena-allocated int64_t array.
-typedef struct loom_attribute_t {
-  uint8_t kind;
-  uint8_t reserved_0;
-  uint16_t count;
-  uint32_t reserved_1;
-  union {
-    int64_t i64;
-    double f64;
-    loom_string_id_t string_id;
-    loom_symbol_ref_t symbol;
-    int64_t* i64_array;
-    loom_type_id_t type_id;
-    loom_predicate_t* predicate_list;
-    struct loom_named_attr_t* dict;
-    uint64_t raw;
-  };
-} loom_attribute_t;
-
-static_assert(sizeof(loom_attribute_t) == 16,
-              "loom_attribute_t must be exactly 16 bytes");
-
-// Constructs an integer attribute.
-static inline loom_attribute_t loom_attr_i64(int64_t value) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_I64;
-  attr.i64 = value;
-  return attr;
-}
-
-// Constructs a floating-point attribute.
-static inline loom_attribute_t loom_attr_f64(double value) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_F64;
-  attr.f64 = value;
-  return attr;
-}
-
-// Constructs a string attribute from an interned string ID.
-static inline loom_attribute_t loom_attr_string(loom_string_id_t string_id) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_STRING;
-  attr.string_id = string_id;
-  return attr;
-}
-
-// Constructs a boolean attribute.
-static inline loom_attribute_t loom_attr_bool(bool value) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_BOOL;
-  attr.raw = value ? 1 : 0;
-  return attr;
-}
-
-// Constructs an enum attribute from a case index.
-static inline loom_attribute_t loom_attr_enum(uint8_t case_index) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_ENUM;
-  attr.raw = case_index;
-  return attr;
-}
-
-// Constructs a symbol reference attribute.
-static inline loom_attribute_t loom_attr_symbol(loom_symbol_ref_t ref) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_SYMBOL;
-  attr.symbol = ref;
-  return attr;
-}
-
-// Constructs a type reference attribute from a type table index.
-static inline loom_attribute_t loom_attr_type(loom_type_id_t type_id) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_TYPE;
-  attr.type_id = type_id;
-  return attr;
-}
-
-// Constructs an integer array attribute. The values array must be
-// arena-allocated and outlive the attribute.
-static inline loom_attribute_t loom_attr_i64_array(int64_t* values,
-                                                   uint16_t count) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_I64_ARRAY;
-  attr.count = count;
-  attr.i64_array = values;
-  return attr;
-}
-
-// Constructs a predicate list attribute. The predicates array must be
-// arena-allocated and outlive the attribute.
-static inline loom_attribute_t loom_attr_predicate_list(
-    loom_predicate_t* predicates, uint16_t count) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_PREDICATE_LIST;
-  attr.count = count;
-  attr.predicate_list = predicates;
-  return attr;
-}
-
-// Constructs a dictionary attribute from an arena-allocated array
-// of named attribute entries.
-static inline loom_attribute_t loom_make_attr_dict(
-    struct loom_named_attr_t* entries, uint16_t count) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_DICT;
-  attr.count = count;
-  attr.dict = entries;
-  return attr;
-}
-
-// A named attribute: interned name paired with a typed value.
-// Used for encoding parameters (block=32, layout="nchw"),
-// dictionary attributes on ops, and anywhere else a key-value
-// attribute pair is needed.
-typedef struct loom_named_attr_t {
-  loom_string_id_t name_id;
-  uint32_t reserved;
-  loom_attribute_t value;
-} loom_named_attr_t;
-
-//===----------------------------------------------------------------------===//
-// Attribute accessors
-//===----------------------------------------------------------------------===//
-
-// Returns the integer value of an I64 attribute.
-static inline int64_t loom_attr_as_i64(loom_attribute_t attr) {
-  return attr.i64;
-}
-
-// Returns the floating-point value of an F64 attribute.
-static inline double loom_attr_as_f64(loom_attribute_t attr) {
-  return attr.f64;
-}
-
-// Returns the string ID of a STRING attribute.
-static inline loom_string_id_t loom_attr_as_string_id(loom_attribute_t attr) {
-  return attr.string_id;
-}
-
-// Returns the boolean value of a BOOL attribute.
-static inline bool loom_attr_as_bool(loom_attribute_t attr) {
-  return attr.raw != 0;
-}
-
-// Returns the enum case index of an ENUM attribute.
-static inline uint8_t loom_attr_as_enum(loom_attribute_t attr) {
-  return (uint8_t)attr.raw;
-}
-
-// Returns the symbol reference of a SYMBOL attribute.
-static inline loom_symbol_ref_t loom_attr_as_symbol(loom_attribute_t attr) {
-  return attr.symbol;
-}
-
-// Returns the type table index of a TYPE attribute.
-static inline loom_type_id_t loom_attr_as_type_id(loom_attribute_t attr) {
-  return attr.type_id;
-}
-
-//===----------------------------------------------------------------------===//
 // Tied result
 //===----------------------------------------------------------------------===//
 
@@ -1379,6 +1123,30 @@ typedef struct loom_block_t {
 
 static_assert(sizeof(loom_block_t) == 32, "loom_block_t must be 32 bytes");
 
+// Returns the |arg_index|-th block argument value ID.
+static inline loom_value_id_t loom_block_arg_id(const loom_block_t* block,
+                                                uint16_t arg_index) {
+  IREE_ASSERT(arg_index < block->arg_count);
+  return block->arg_ids[arg_index];
+}
+
+// Returns the |op_index|-th operation in |block|.
+static inline const loom_op_t* loom_block_const_op(const loom_block_t* block,
+                                                   uint16_t op_index) {
+  IREE_ASSERT(op_index < block->op_count);
+  return block->ops[op_index];
+}
+static inline loom_op_t* loom_block_op(loom_block_t* block, uint16_t op_index) {
+  return (loom_op_t*)loom_block_const_op(block, op_index);
+}
+
+// Returns the terminator/last op in |block|. |block| must be non-empty.
+static inline const loom_op_t* loom_block_const_last_op(
+    const loom_block_t* block) {
+  IREE_ASSERT(block->op_count > 0);
+  return loom_block_const_op(block, (uint16_t)(block->op_count - 1));
+}
+
 //===----------------------------------------------------------------------===//
 // Region
 //===----------------------------------------------------------------------===//
@@ -1404,11 +1172,58 @@ typedef uint16_t loom_region_instance_flags_t;
 // loop bodies (scf.for), conditional branches (scf.if then/else).
 // Regions nest: a region's block contains ops that may have their
 // own regions.
+//
+// Block 0 is embedded directly in the region for the common single-block
+// case and is always the entry block when block_count > 0. Additional blocks
+// are arena-allocated individually and referenced through the growable
+// |blocks| table, so appending blocks does not relocate existing block
+// objects or invalidate loom_value_def_t / loom_op_t block pointers.
 typedef struct loom_region_t {
   uint16_t block_count;
+  uint16_t block_capacity;
   loom_region_instance_flags_t flags;
-  loom_block_t* blocks;
+  uint16_t reserved;
+  loom_block_t entry_block;
+  loom_block_t** blocks;
+  loom_block_t* inline_blocks[1];
 } loom_region_t;
+
+static_assert(sizeof(loom_region_t) == 56, "loom_region_t must be 56 bytes");
+
+// Returns the block at |block_index| in |region|.
+static inline loom_block_t* loom_region_block(loom_region_t* region,
+                                              uint16_t block_index) {
+  IREE_ASSERT(block_index < region->block_count);
+  return region->blocks[block_index];
+}
+static inline const loom_block_t* loom_region_const_block(
+    const loom_region_t* region, uint16_t block_index) {
+  IREE_ASSERT(block_index < region->block_count);
+  return region->blocks[block_index];
+}
+
+// Returns the entry block for |region|.
+static inline loom_block_t* loom_region_entry_block(loom_region_t* region) {
+  return loom_region_block(region, 0);
+}
+static inline const loom_block_t* loom_region_const_entry_block(
+    const loom_region_t* region) {
+  return loom_region_const_block(region, 0);
+}
+
+// Returns the number of arguments on the entry block of |region|. |region|
+// must be non-empty.
+static inline uint16_t loom_region_entry_arg_count(
+    const loom_region_t* region) {
+  return loom_region_const_entry_block(region)->arg_count;
+}
+
+// Returns the |arg_index|-th argument ID from the entry block of |region|.
+// |region| must be non-empty and |arg_index| must be in range.
+static inline loom_value_id_t loom_region_entry_arg_id(
+    const loom_region_t* region, uint16_t arg_index) {
+  return loom_block_arg_id(loom_region_const_entry_block(region), arg_index);
+}
 
 //===----------------------------------------------------------------------===//
 // Function kind, flags, and calling convention
@@ -1699,7 +1514,7 @@ typedef struct loom_encoding_vtable_list_t {
 //
 //   const loom_use_t* use = NULL;
 //   loom_value_for_each_use(value, use) {
-//     loom_op_t* user = loom_block_op(block, use->user_op_id);
+//     loom_op_t* user = loom_use_user_op(*use);
 //     // Process user.
 //   }
 
@@ -1712,7 +1527,7 @@ typedef struct loom_encoding_vtable_list_t {
 // Walk all blocks in a region.
 #define loom_region_for_each_block(region, block_var)                         \
   for (iree_host_size_t _blk_i = 0; _blk_i < (region)->block_count; ++_blk_i) \
-    if (((block_var) = &(region)->blocks[_blk_i]))
+    if (((block_var) = (region)->blocks[_blk_i]))
 
 // Walk all uses of a value.
 #define loom_value_for_each_use(value, use_var)                            \

@@ -129,9 +129,9 @@ class VerifyTest : public ::testing::Test {
         &builder_, 0, 0, callee, arg_types, arg_count, nullptr, 0, nullptr, 0,
         nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
     loom_region_t* body = loom_test_func_body(func_op);
-    loom_builder_set_block(&builder_, &body->blocks[0]);
+    loom_builder_set_block(&builder_, loom_region_entry_block(body));
     for (iree_host_size_t i = 0; i < arg_count; ++i) {
-      out_args[i] = body->blocks[0].arg_ids[i];
+      out_args[i] = loom_region_entry_arg_id(body, (uint16_t)i);
     }
   }
 
@@ -141,6 +141,15 @@ class VerifyTest : public ::testing::Test {
     loom_op_t* yield_op = nullptr;
     IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
                                          LOOM_LOCATION_UNKNOWN, &yield_op));
+  }
+
+  loom_symbol_ref_t DefineTestCallee() {
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_EXPECT_OK(
+        loom_builder_intern_string(&builder_, IREE_SV("callee"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_EXPECT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+    return (loom_symbol_ref_t){.module_id = 0, .symbol_id = symbol_id};
   }
 
   loom_verify_result_t Verify() {
@@ -782,6 +791,168 @@ TEST_F(VerifyTest, StructuredDominanceError) {
 }
 
 //===----------------------------------------------------------------------===//
+// Tied result validation
+//===----------------------------------------------------------------------===//
+
+TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t arg_types[] = {f32_type, f32_type};
+  loom_value_id_t args[2];
+  EnterTestFunc(arg_types, 2, args);
+
+  loom_type_t result_types[] = {f32_type, f32_type};
+  loom_tied_result_t tied_results[] = {
+      {.result_index = 0, .operand_index = 0, .has_type_change = false},
+      {.result_index = 0, .operand_index = 1, .has_type_change = false},
+  };
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_invoke_build(
+      &builder_, DefineTestCallee(), args, 2, result_types, 2, tied_results,
+      IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  auto result = Verify();
+  EXPECT_GT(result.error_count, 0u);
+  bool found_duplicate_result = false;
+  for (const auto& message : collector_.errors) {
+    if (message.find("result 0 of 'test.invoke' is tied more than once") !=
+        std::string::npos) {
+      found_duplicate_result = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_duplicate_result)
+      << "Expected duplicate tied result error, got: "
+      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+}
+
+TEST_F(VerifyTest, DuplicateTiedOperandIndexDetected) {
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t arg_types[] = {f32_type};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, 1, args);
+
+  loom_type_t result_types[] = {f32_type, f32_type};
+  loom_tied_result_t tied_results[] = {
+      {.result_index = 0, .operand_index = 0, .has_type_change = false},
+      {.result_index = 1, .operand_index = 0, .has_type_change = false},
+  };
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_invoke_build(
+      &builder_, DefineTestCallee(), args, 1, result_types, 2, tied_results,
+      IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  auto result = Verify();
+  EXPECT_GT(result.error_count, 0u);
+  bool found_duplicate_operand = false;
+  for (const auto& message : collector_.errors) {
+    if (message.find(
+            "operand 0 of 'test.invoke' is tied by more than one result") !=
+        std::string::npos) {
+      found_duplicate_operand = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_duplicate_operand)
+      << "Expected duplicate tied operand error, got: "
+      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+}
+
+TEST_F(VerifyTest, AmbiguousRepeatedOperandValueDetected) {
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t arg_types[] = {f32_type};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, 1, args);
+
+  loom_value_id_t operands[] = {args[0], args[0]};
+  loom_type_t result_types[] = {f32_type};
+  loom_tied_result_t tied_results[] = {
+      {.result_index = 0, .operand_index = 1, .has_type_change = false},
+  };
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_invoke_build(
+      &builder_, DefineTestCallee(), operands, IREE_ARRAYSIZE(operands),
+      result_types, 1, tied_results, IREE_ARRAYSIZE(tied_results),
+      LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  auto result = Verify();
+  EXPECT_GT(result.error_count, 0u);
+  bool found_ambiguous_value = false;
+  for (const auto& message : collector_.errors) {
+    if (message.find("operand 1 of 'test.invoke' ties value") !=
+            std::string::npos &&
+        message.find("multiple operand slots") != std::string::npos) {
+      found_ambiguous_value = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found_ambiguous_value)
+      << "Expected ambiguous tied operand-value error, got: "
+      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+}
+
+TEST_F(VerifyTest, FuncDefTiedResultUsesEntryBlockArgsWithoutConsumingThem) {
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("identity"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_tied_result_t tied_results[] = {
+      {.result_index = 0, .operand_index = 0, .has_type_change = false},
+  };
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, callee, &f32_type, 1,
+                                      &f32_type, 1, tied_results,
+                                      IREE_ARRAYSIZE(tied_results), nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(body->block_count, 1u);
+  ASSERT_EQ(loom_region_entry_arg_count(body), 1u);
+  loom_builder_set_block(&builder_, loom_region_entry_block(body));
+
+  loom_value_id_t arg_id = loom_region_entry_arg_id(body, 0);
+  loom_op_t* return_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, &arg_id, 1,
+                                       LOOM_LOCATION_UNKNOWN, &return_op));
+
+  auto result = Verify();
+  EXPECT_EQ(result.error_count, 0u)
+      << (collector_.errors.empty() ? "" : collector_.errors[0]);
+}
+
+TEST_F(VerifyTest, FuncDeclTiedResultUsesSignatureOperandsWithoutDominance) {
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_intern_string(
+      &builder_, IREE_SV("extern_identity"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_tied_result_t tied_results[] = {
+      {.result_index = 0, .operand_index = 0, .has_type_change = false},
+  };
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_decl_build(
+      &builder_, 0, 0, callee, &f32_type, 1, &f32_type, 1, tied_results,
+      IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &func_op));
+
+  EXPECT_EQ(func_op->operand_count, 1u);
+  EXPECT_EQ(func_op->tied_result_count, 1u);
+
+  auto result = Verify();
+  EXPECT_EQ(result.error_count, 0u)
+      << (collector_.errors.empty() ? "" : collector_.errors[0]);
+}
+
+//===----------------------------------------------------------------------===//
 // SSA encoding reference validation
 //===----------------------------------------------------------------------===//
 
@@ -1231,7 +1402,7 @@ TEST_F(VerifyTest, AllSamePassesIdenticalShapes) {
   // for the tile inputs).
   loom_region_t* body = loom_test_map_body(op);
   loom_builder_ip_t saved = loom_builder_enter_region(&builder_, op, body);
-  loom_value_id_t yield_val = body->blocks[0].arg_ids[0];
+  loom_value_id_t yield_val = loom_region_entry_arg_id(body, 0);
   loom_op_t* yield_op = nullptr;
   IREE_ASSERT_OK(loom_test_yield_build(&builder_, &yield_val, 1,
                                        LOOM_LOCATION_UNKNOWN, &yield_op));
@@ -1263,12 +1434,12 @@ TEST_F(VerifyTest, RegionArgCountViolation) {
   loom_region_t* body = loom_test_map_body(op);
   loom_type_t scalar_f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_value_id_t extra_arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body->blocks[0],
-                                               scalar_f32, &extra_arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body), scalar_f32, &extra_arg));
 
   // Add a yield using the first block arg so we don't trip unrelated checks.
   loom_builder_ip_t saved = loom_builder_enter_region(&builder_, op, body);
-  loom_value_id_t yield_val = body->blocks[0].arg_ids[0];
+  loom_value_id_t yield_val = loom_region_entry_arg_id(body, 0);
   loom_op_t* yield_op = nullptr;
   IREE_ASSERT_OK(loom_test_yield_build(&builder_, &yield_val, 1,
                                        LOOM_LOCATION_UNKNOWN, &yield_op));
@@ -1310,13 +1481,14 @@ TEST_F(VerifyTest, RegionArgMatchViolation) {
   // Change the block arg type to i32.
   loom_region_t* body = loom_test_map_body(op);
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
-  loom_module_set_value_type(module_, body->blocks[0].arg_ids[0], i32_type);
+  loom_module_set_value_type(module_, loom_region_entry_arg_id(body, 0),
+                             i32_type);
 
   // Yield the (now i32) block arg. This yields an i32 for a tile<4xf32>
   // result, which will also trigger a yield type mismatch, but the specific
   // error we care about is the block arg type mismatch.
   loom_builder_ip_t saved = loom_builder_enter_region(&builder_, op, body);
-  loom_value_id_t yield_val = body->blocks[0].arg_ids[0];
+  loom_value_id_t yield_val = loom_region_entry_arg_id(body, 0);
   loom_op_t* yield_op = nullptr;
   IREE_ASSERT_OK(loom_test_yield_build(&builder_, &yield_val, 1,
                                        LOOM_LOCATION_UNKNOWN, &yield_op));
@@ -1596,7 +1768,7 @@ TEST_F(VerifyTest, PairwiseEqPassesTestMap) {
   // Yield the body's block arg (f32 element type matching the tile result).
   loom_region_t* body = loom_test_map_body(op);
   loom_builder_ip_t saved = loom_builder_enter_region(&builder_, op, body);
-  loom_value_id_t yield_val = body->blocks[0].arg_ids[0];
+  loom_value_id_t yield_val = loom_region_entry_arg_id(body, 0);
   loom_op_t* yield_op = nullptr;
   IREE_ASSERT_OK(loom_test_yield_build(&builder_, &yield_val, 1,
                                        LOOM_LOCATION_UNKNOWN, &yield_op));

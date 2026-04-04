@@ -32,27 +32,43 @@ enum {
   LOOM_OP_TEST_BRANCH = LOOM_OP_KIND(LOOM_DIALECT_TEST, 11),
   LOOM_OP_TEST_YIELD = LOOM_OP_KIND(LOOM_DIALECT_TEST, 12),
   LOOM_OP_TEST_FUNC = LOOM_OP_KIND(LOOM_DIALECT_TEST, 13),
-  LOOM_OP_TEST_ATTRS = LOOM_OP_KIND(LOOM_DIALECT_TEST, 14),
-  LOOM_OP_TEST_DEFLATE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 15),
-  LOOM_OP_TEST_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_TEST, 16),
-  LOOM_OP_TEST_CONVERT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 17),
-  LOOM_OP_TEST_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 18),
-  LOOM_OP_TEST_READ_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 19),
-  LOOM_OP_TEST_WRITE_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 20),
-  LOOM_OP_TEST_MUTATE_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 21),
-  LOOM_OP_TEST_ALLOC = LOOM_OP_KIND(LOOM_DIALECT_TEST, 22),
-  LOOM_OP_TEST_ISOLATED_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 23),
-  LOOM_OP_TEST_COUNTER = LOOM_OP_KIND(LOOM_DIALECT_TEST, 24),
-  LOOM_OP_TEST_DIM = LOOM_OP_KIND(LOOM_DIALECT_TEST, 25),
-  LOOM_OP_TEST_FACT_RANGE_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 26),
-  LOOM_OP_TEST_FACT_RANGE_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 27),
-  LOOM_OP_TEST_FACT_DIVISOR = LOOM_OP_KIND(LOOM_DIALECT_TEST, 28),
-  LOOM_OP_TEST_FACT_NON_NEGATIVE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 29),
-  LOOM_OP_TEST_FACT_NON_ZERO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 30),
-  LOOM_OP_TEST_FACT_POSITIVE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 31),
-  LOOM_OP_TEST_FACT_POWER_OF_TWO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 32),
-  LOOM_OP_TEST_COUNT_ = 33,
+  LOOM_OP_TEST_DECL = LOOM_OP_KIND(LOOM_DIALECT_TEST, 14),
+  LOOM_OP_TEST_ATTRS = LOOM_OP_KIND(LOOM_DIALECT_TEST, 15),
+  LOOM_OP_TEST_DEFLATE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 16),
+  LOOM_OP_TEST_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_TEST, 17),
+  LOOM_OP_TEST_CONVERT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 18),
+  LOOM_OP_TEST_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 19),
+  LOOM_OP_TEST_READ_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 20),
+  LOOM_OP_TEST_WRITE_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 21),
+  LOOM_OP_TEST_MUTATE_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 22),
+  LOOM_OP_TEST_ALLOC = LOOM_OP_KIND(LOOM_DIALECT_TEST, 23),
+  LOOM_OP_TEST_ISOLATED_REGION = LOOM_OP_KIND(LOOM_DIALECT_TEST, 24),
+  LOOM_OP_TEST_COUNTER = LOOM_OP_KIND(LOOM_DIALECT_TEST, 25),
+  LOOM_OP_TEST_DIM = LOOM_OP_KIND(LOOM_DIALECT_TEST, 26),
+  LOOM_OP_TEST_FACT_RANGE_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 27),
+  LOOM_OP_TEST_FACT_RANGE_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 28),
+  LOOM_OP_TEST_FACT_DIVISOR = LOOM_OP_KIND(LOOM_DIALECT_TEST, 29),
+  LOOM_OP_TEST_FACT_NON_NEGATIVE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 30),
+  LOOM_OP_TEST_FACT_NON_ZERO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 31),
+  LOOM_OP_TEST_FACT_POSITIVE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 32),
+  LOOM_OP_TEST_FACT_POWER_OF_TWO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 33),
+  LOOM_OP_TEST_COUNT_ = 34,
 };
+
+// Function visibility. Absent (0) means private.
+typedef enum loom_test_visibility_e {
+  LOOM_TEST_VISIBILITY_PUBLIC = 1,
+  LOOM_TEST_VISIBILITY_COUNT_ = 2,
+} loom_test_visibility_t;
+
+// Function calling convention. Absent (0) means host.
+typedef enum loom_test_cc_e {
+  LOOM_TEST_CC_HOST = 1,
+  LOOM_TEST_CC_DEVICE = 2,
+  LOOM_TEST_CC_INITIALIZER = 3,
+  LOOM_TEST_CC_DEINITIALIZER = 4,
+  LOOM_TEST_CC_COUNT_ = 5,
+} loom_test_cc_t;
 
 typedef enum loom_test_cmp_predicate_e {
   LOOM_TEST_CMP_PREDICATE_EQ = 0,
@@ -63,21 +79,6 @@ typedef enum loom_test_cmp_predicate_e {
   LOOM_TEST_CMP_PREDICATE_GE = 5,
   LOOM_TEST_CMP_PREDICATE_COUNT_ = 6,
 } loom_test_cmp_predicate_t;
-
-// Function visibility. Absent (0) means private.
-typedef enum loom_test_func_visibility_e {
-  LOOM_TEST_FUNC_VISIBILITY_PUBLIC = 1,
-  LOOM_TEST_FUNC_VISIBILITY_COUNT_ = 2,
-} loom_test_func_visibility_t;
-
-// Function calling convention. Absent (0) means host.
-typedef enum loom_test_func_cc_e {
-  LOOM_TEST_FUNC_CC_HOST = 1,
-  LOOM_TEST_FUNC_CC_DEVICE = 2,
-  LOOM_TEST_FUNC_CC_INITIALIZER = 3,
-  LOOM_TEST_FUNC_CC_DEINITIALIZER = 4,
-  LOOM_TEST_FUNC_CC_COUNT_ = 5,
-} loom_test_func_cc_t;
 
 // LOOM_OP_TEST_ADDI: Test binary integer op.
 // %result = test.addi %lhs, %rhs : i32
@@ -314,6 +315,28 @@ iree_status_t loom_test_func_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_func_vtable;
+
+// LOOM_OP_TEST_DECL: Test function declaration with no body and signature arguments stored as op operands.
+// test.decl @identity(%input: f32) -> (%input as f32)
+LOOM_DEFINE_ISA(loom_test_decl_isa, LOOM_OP_TEST_DECL)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_test_decl_results, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_test_decl_callee, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_test_decl_visibility, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_test_decl_cc, 2)
+iree_status_t loom_test_decl_build(
+    loom_builder_t* builder,
+    loom_optional uint8_t visibility,
+    loom_optional uint8_t cc,
+    loom_symbol_ref_t callee,
+    const loom_type_t* arg_types,
+    iree_host_size_t arg_types_count,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_test_decl_vtable;
 
 // LOOM_OP_TEST_ATTRS: Test op with attribute dictionary.
 // %result = test.attrs %input {axis = 0, label = "foo"} : f32

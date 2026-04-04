@@ -36,7 +36,7 @@ Value references:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,6 +50,7 @@ from loom.ir import (
     ShapedType,
     Type,
     Value,
+    canonicalize_attr_dict,
 )
 from loom.ir import (
     TiedResult as IRTiedResult,
@@ -274,7 +275,7 @@ class IRBuilder:
         *,
         results: Sequence[Type | TiedResultSpec] | None = None,
         result_names: Sequence[str] | None = None,
-        attributes: dict[str, Any] | None = None,
+        attributes: Mapping[str, Any] | None = None,
         regions: Sequence[Region] | None = None,
     ) -> ValueRef | list[ValueRef] | None:
         """Build an operation and return the result ValueRef(s).
@@ -302,7 +303,7 @@ class IRBuilder:
 
         operand_ids = self._resolve_operands(operands or [])
         result_specs = results or []
-        attr_dict = attributes or {}
+        attr_dict = canonicalize_attr_dict(attributes)
         region_list = list(regions) if regions else []
 
         # Process result specs: extract types and tied bindings.

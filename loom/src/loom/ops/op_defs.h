@@ -39,29 +39,6 @@ extern "C" {
 #endif
 
 //===----------------------------------------------------------------------===//
-// Attribute equality and hashing
-//===----------------------------------------------------------------------===//
-
-// Returns true if two attributes are structurally equal.
-//
-// For inline kinds (I64, F64, STRING, BOOL, ENUM, SYMBOL, TYPE),
-// compares the raw 16-byte struct. For pointer-valued kinds
-// (I64_ARRAY, PREDICATE_LIST, DICT), compares the pointed-to
-// content element-by-element. Two attributes that print identically
-// in text format will compare equal.
-//
-// Use this instead of memcmp on loom_attribute_t — memcmp fails for
-// pointer-valued kinds where identical content has different addresses.
-bool loom_attribute_equal(const loom_attribute_t* a, const loom_attribute_t* b);
-
-// Returns a content-based hash of an attribute.
-//
-// For pointer-valued kinds, hashes the pointed-to content (not the
-// pointer value). Guarantee: if loom_attribute_equal(a, b) then
-// loom_attribute_hash(a) == loom_attribute_hash(b).
-uint32_t loom_attribute_hash(const loom_attribute_t* attr);
-
-//===----------------------------------------------------------------------===//
 // Value slices
 //===----------------------------------------------------------------------===//
 
@@ -575,8 +552,9 @@ static inline const loom_value_id_t* loom_func_like_arg_ids(
   if (!func.vtable->args_as_operands) {
     loom_region_t* body = loom_func_like_body(func);
     if (body && body->block_count > 0) {
-      *out_count = body->blocks[0].arg_count;
-      return body->blocks[0].arg_ids;
+      loom_block_t* entry = loom_region_entry_block(body);
+      *out_count = entry->arg_count;
+      return entry->arg_ids;
     }
     *out_count = 0;
     return NULL;

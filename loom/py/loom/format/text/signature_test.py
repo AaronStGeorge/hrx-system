@@ -58,6 +58,16 @@ def test_named_result() -> None:
     assert "tile<0xf32>" in rt
 
 
+def test_tied_result_to_function_arg() -> None:
+    text = "func.def @f(%x: f32) -> (%x as f32) {\n  func.return %x : f32\n}"
+    assert _roundtrip(text) == text
+
+
+def test_decl_tied_result_to_function_arg() -> None:
+    text = "func.decl @f(%x: f32) -> (%x as f32)"
+    assert _roundtrip(text) == text
+
+
 def test_ssa_encoding() -> None:
     # SSA encoding value in type.
     text = "func.def @f(%enc: encoding, %arg: tile<4xf32, %enc>) {\n  func.return %arg : tile<4xf32, %enc>\n}"
@@ -67,8 +77,12 @@ def test_ssa_encoding() -> None:
 def test_unresolved_placeholder() -> None:
     # %m is never defined.
     text = "func.def @f(%arg: tile<[%m]xf32>) {\n  func.return %arg : tile<[%m]xf32>\n}"
-    with pytest.raises(ParseError, match="unresolved forward reference to '%m'"):
+    with pytest.raises(
+        ParseError, match="unresolved forward reference to '%m'"
+    ) as exc_info:
         _roundtrip(text)
+    assert exc_info.value.location.line == 1
+    assert exc_info.value.location.column == 25
 
 
 def test_result_ordinal_fail() -> None:

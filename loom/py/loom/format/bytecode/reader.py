@@ -35,6 +35,7 @@ from loom.ir import (
     ENCODING_TYPE,
     NONE_TYPE,
     Block,
+    CanonicalAttrDict,
     DialectType,
     DynamicDim,
     DynamicEncoding,
@@ -768,12 +769,7 @@ class BytecodeReader:
 
         # Attributes.
         attr_count, offset = decode_varint(data, offset)
-        attributes: dict[str, Any] = {}
-        for _ in range(attr_count):
-            key_id, offset = decode_varint(data, offset)
-            key = self._strings[key_id]
-            value, offset = self._read_attr_value(data, offset)
-            attributes[key] = value
+        attributes, offset = self._read_attr_dict_entries(data, offset, attr_count)
 
         # Regions.
         region_count, offset = decode_varint(data, offset)
@@ -829,14 +825,35 @@ class BytecodeReader:
                 return predicates, offset
             case 9:  # DICT
                 count, offset = decode_varint(data, offset)
-                result: dict[str, Any] = {}
-                for _ in range(count):
-                    key_id, offset = decode_varint(data, offset)
-                    value, offset = self._read_attr_value(data, offset)
-                    result[self._strings[key_id]] = value
-                return result, offset
+                return self._read_attr_dict_entries(data, offset, count)
             case _:
                 raise BytecodeError(f"unknown attr value kind: {kind}")
+
+    def _read_attr_dict_entries(
+        self, data: bytes, offset: int, count: int
+    ) -> tuple[CanonicalAttrDict, int]:
+        """Read canonical dict attr entries and verify sorted/deduped order."""
+        entries: list[tuple[str, Any]] = []
+        previous_key: str | None = None
+        for _ in range(count):
+            key_id, offset = decode_varint(data, offset)
+            if key_id >= len(self._strings):
+                raise BytecodeError(
+                    f"dict attr key string_id {key_id} out of range "
+                    f"(string table has {len(self._strings)} entries)"
+                )
+            key = self._strings[key_id]
+            if previous_key is not None and key <= previous_key:
+                if key == previous_key:
+                    raise BytecodeError(f"duplicate dict attr key: {key!r}")
+                raise BytecodeError(
+                    "dict attr keys are not in canonical order: "
+                    f"{previous_key!r} appears before {key!r}"
+                )
+            value, offset = self._read_attr_value(data, offset)
+            entries.append((key, value))
+            previous_key = key
+        return CanonicalAttrDict.from_sorted_items(entries), offset
 
     # Predicate kind byte → name mapping (inverse of writer).
     _PRED_KIND_NAMES: ClassVar[list[str]] = [

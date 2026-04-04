@@ -1,0 +1,322 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Loom IR attribute values and symbol/predicate payloads.
+//
+// Attributes are 16-byte tagged values used in op trailing storage, encoding
+// parameters, and any API that needs a small typed scalar/aggregate payload.
+// Pointer-valued attributes reference arena-owned immutable storage. DICT
+// attributes have an additional canonicalization contract: non-empty entries
+// are sorted by key spelling, duplicate-free, and recursively canonical.
+
+#ifndef LOOM_IR_ATTRIBUTE_H_
+#define LOOM_IR_ATTRIBUTE_H_
+
+#include "iree/base/api.h"
+#include "loom/ir/types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//===----------------------------------------------------------------------===//
+// Symbol references
+//===----------------------------------------------------------------------===//
+
+#define LOOM_SYMBOL_ID_INVALID ((uint16_t)UINT16_MAX)
+#define LOOM_MODULE_ID_INVALID ((uint16_t)UINT16_MAX)
+
+// Identifies a symbol across module boundaries.
+// module_id indexes into context->modules.entries[].
+// symbol_id indexes into that module's symbol table.
+// For local references (same module), module_id is self.
+// Total size: 4 bytes. Fits in a register.
+typedef struct loom_symbol_ref_t {
+  uint16_t module_id;
+  uint16_t symbol_id;
+} loom_symbol_ref_t;
+
+static inline bool loom_symbol_ref_is_valid(loom_symbol_ref_t ref) {
+  return ref.symbol_id != LOOM_SYMBOL_ID_INVALID;
+}
+
+static inline loom_symbol_ref_t loom_symbol_ref_null(void) {
+  loom_symbol_ref_t ref = {LOOM_MODULE_ID_INVALID, LOOM_SYMBOL_ID_INVALID};
+  return ref;
+}
+
+//===----------------------------------------------------------------------===//
+// Predicates
+//===----------------------------------------------------------------------===//
+
+// Predicate kind. Evaluated at runtime for dynamic dimensions. Stored in the
+// kind field of loom_predicate_t.
+typedef enum loom_predicate_kind_e {
+  LOOM_PREDICATE_EQ = 0,     // eq(a, b)
+  LOOM_PREDICATE_LT = 1,     // lt(a, b)
+  LOOM_PREDICATE_LE = 2,     // le(a, b)
+  LOOM_PREDICATE_GT = 3,     // gt(a, b)
+  LOOM_PREDICATE_GE = 4,     // ge(a, b)
+  LOOM_PREDICATE_MUL = 5,    // mul(a, n): a is multiple of n.
+  LOOM_PREDICATE_MIN = 6,    // min(a, n): a >= n.
+  LOOM_PREDICATE_MAX = 7,    // max(a, n): a <= n.
+  LOOM_PREDICATE_POW2 = 8,   // pow2(a): a is power of 2.
+  LOOM_PREDICATE_RANGE = 9,  // range(a, lo, hi): lo <= a <= hi.
+  LOOM_PREDICATE_COUNT_,
+} loom_predicate_kind_t;
+
+// Predicate argument tag: immediate constant or SSA value reference.
+typedef enum loom_predicate_arg_tag_e {
+  LOOM_PRED_ARG_NONE = 0,   // Unused slot.
+  LOOM_PRED_ARG_VALUE = 1,  // SSA value ID.
+  LOOM_PRED_ARG_CONST = 2,  // Integer constant.
+  LOOM_PRED_ARG_COUNT_,
+} loom_predicate_arg_tag_t;
+
+// A single predicate constraint. 32 bytes, arena-allocated.
+//
+// Predicates constrain dynamic dimension values in where clauses and
+// scalar.assume ops. Each predicate has a kind (eq, mul, range, etc.)
+// and 1-3 arguments. Arguments are tagged: SSA value references or
+// integer constants.
+typedef struct loom_predicate_t {
+  uint8_t kind;         // loom_predicate_kind_t
+  uint8_t arg_count;    // 1-3
+  uint8_t arg_tags[3];  // loom_predicate_arg_tag_t per arg slot.
+  uint8_t reserved[3];  // Pad to 8-byte boundary.
+  int64_t args[3];      // value_id or constant per slot.
+} loom_predicate_t;     // 32 bytes
+
+static_assert(sizeof(loom_predicate_t) == 32,
+              "loom_predicate_t must be 32 bytes");
+
+//===----------------------------------------------------------------------===//
+// Attributes
+//===----------------------------------------------------------------------===//
+
+// Attribute value kind tag. Determines which union member of
+// loom_attribute_t is active.
+typedef enum loom_attr_kind_e {
+  // 64-bit signed integer.
+  LOOM_ATTR_I64 = 0,
+  // 64-bit IEEE 754 double.
+  LOOM_ATTR_F64 = 1,
+  // Interned string reference (loom_string_id_t).
+  LOOM_ATTR_STRING = 2,
+  // Boolean (payload raw field is 0 or 1).
+  LOOM_ATTR_BOOL = 3,
+  // Enum case index (payload raw field is the case ordinal).
+  LOOM_ATTR_ENUM = 4,
+  // Arena-allocated int64_t array (count in header, pointer in payload).
+  LOOM_ATTR_I64_ARRAY = 5,
+  // Symbol reference (module_id + symbol_id packed in payload).
+  LOOM_ATTR_SYMBOL = 6,
+  // Type table index (uint32_t in payload).
+  LOOM_ATTR_TYPE = 7,
+  // Arena-allocated predicate list (count in header, pointer in payload).
+  LOOM_ATTR_PREDICATE_LIST = 8,
+  // Arena-allocated dictionary of named attributes (count in header,
+  // pointer to loom_named_attr_t array in payload). Non-empty dict entries
+  // are canonicalized by key spelling, contain no duplicate keys, and nested
+  // DICT values recursively follow the same invariant. Used by ops with
+  // AttrDict format elements for extensible metadata.
+  LOOM_ATTR_DICT = 9,
+  LOOM_ATTR_COUNT_,
+} loom_attr_kind_t;
+
+// Maximum supported nesting depth for DICT attribute values. This keeps
+// recursive verification, equality, and hashing bounded while still covering
+// practical metadata shapes.
+#define LOOM_ATTR_DICT_MAX_NESTING_DEPTH 16
+
+// A 16-byte tagged value. Used in operation trailing data, encoding
+// parameters, and anywhere a typed scalar/aggregate is needed.
+//
+// The kind tag (byte 0) determines which union member is active.
+// For I64_ARRAY, the count field holds the element count and the
+// payload holds a pointer to an arena-allocated int64_t array.
+typedef struct loom_attribute_t {
+  uint8_t kind;
+  uint8_t reserved_0;
+  uint16_t count;
+  uint32_t reserved_1;
+  union {
+    int64_t i64;
+    double f64;
+    loom_string_id_t string_id;
+    loom_symbol_ref_t symbol;
+    int64_t* i64_array;
+    loom_type_id_t type_id;
+    loom_predicate_t* predicate_list;
+    const struct loom_named_attr_t* dict;
+    uint64_t raw;
+  };
+} loom_attribute_t;
+
+static_assert(sizeof(loom_attribute_t) == 16,
+              "loom_attribute_t must be exactly 16 bytes");
+
+// Constructs an integer attribute.
+static inline loom_attribute_t loom_attr_i64(int64_t value) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_I64;
+  attr.i64 = value;
+  return attr;
+}
+
+// Constructs a floating-point attribute.
+static inline loom_attribute_t loom_attr_f64(double value) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_F64;
+  attr.f64 = value;
+  return attr;
+}
+
+// Constructs a string attribute from an interned string ID.
+static inline loom_attribute_t loom_attr_string(loom_string_id_t string_id) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_STRING;
+  attr.string_id = string_id;
+  return attr;
+}
+
+// Constructs a boolean attribute.
+static inline loom_attribute_t loom_attr_bool(bool value) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_BOOL;
+  attr.raw = value ? 1 : 0;
+  return attr;
+}
+
+// Constructs an enum attribute from a case index.
+static inline loom_attribute_t loom_attr_enum(uint8_t case_index) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_ENUM;
+  attr.raw = case_index;
+  return attr;
+}
+
+// Constructs a symbol reference attribute.
+static inline loom_attribute_t loom_attr_symbol(loom_symbol_ref_t ref) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_SYMBOL;
+  attr.symbol = ref;
+  return attr;
+}
+
+// Constructs a type reference attribute from a type table index.
+static inline loom_attribute_t loom_attr_type(loom_type_id_t type_id) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_TYPE;
+  attr.type_id = type_id;
+  return attr;
+}
+
+// Constructs an integer array attribute. The values array must be
+// arena-allocated and outlive the attribute.
+static inline loom_attribute_t loom_attr_i64_array(int64_t* values,
+                                                   uint16_t count) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_I64_ARRAY;
+  attr.count = count;
+  attr.i64_array = values;
+  return attr;
+}
+
+// Constructs a predicate list attribute. The predicates array must be
+// arena-allocated and outlive the attribute.
+static inline loom_attribute_t loom_attr_predicate_list(
+    loom_predicate_t* predicates, uint16_t count) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_PREDICATE_LIST;
+  attr.count = count;
+  attr.predicate_list = predicates;
+  return attr;
+}
+
+// Constructs a dictionary attribute from an already-canonical entry array.
+// This helper is an unchecked representation wrapper: it does not sort,
+// dedupe, copy, or verify |entries|. Non-empty entries must already be sorted
+// by key spelling, duplicate-free, recursively canonical, and lifetime-stable.
+// Use loom_module_make_canonical_attr_dict for normal construction from
+// unsorted or temporary input.
+static inline loom_attribute_t loom_make_canonical_attr_dict(
+    const struct loom_named_attr_t* entries, uint16_t count) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_DICT;
+  attr.count = count;
+  attr.dict = count > 0 ? entries : NULL;
+  return attr;
+}
+
+// A named attribute: interned name paired with a typed value.
+// Used for encoding parameters (block=32, layout="nchw"),
+// dictionary attributes on ops, and anywhere else a key-value
+// attribute pair is needed.
+typedef struct loom_named_attr_t {
+  loom_string_id_t name_id;
+  uint32_t reserved;
+  loom_attribute_t value;
+} loom_named_attr_t;
+
+// Returns true if two attributes are structurally equal.
+//
+// Pointer-valued kinds compare by pointee contents, not pointer identity. For
+// DICT attributes this comparison is positional over the canonical entry order,
+// so callers should build or verify the dict invariant at construction
+// boundaries instead of using unsorted ad hoc storage.
+bool loom_attribute_equal(const loom_attribute_t* a, const loom_attribute_t* b);
+
+// Returns a content-based hash of an attribute.
+//
+// Guarantee: if loom_attribute_equal(a, b), then
+// loom_attribute_hash(a) == loom_attribute_hash(b).
+uint32_t loom_attribute_hash(const loom_attribute_t* attr);
+
+//===----------------------------------------------------------------------===//
+// Attribute accessors
+//===----------------------------------------------------------------------===//
+
+// Returns the integer value of an I64 attribute.
+static inline int64_t loom_attr_as_i64(loom_attribute_t attr) {
+  return attr.i64;
+}
+
+// Returns the floating-point value of an F64 attribute.
+static inline double loom_attr_as_f64(loom_attribute_t attr) {
+  return attr.f64;
+}
+
+// Returns the string ID of a STRING attribute.
+static inline loom_string_id_t loom_attr_as_string_id(loom_attribute_t attr) {
+  return attr.string_id;
+}
+
+// Returns the boolean value of a BOOL attribute.
+static inline bool loom_attr_as_bool(loom_attribute_t attr) {
+  return attr.raw != 0;
+}
+
+// Returns the enum case index of an ENUM attribute.
+static inline uint8_t loom_attr_as_enum(loom_attribute_t attr) {
+  return (uint8_t)attr.raw;
+}
+
+// Returns the symbol reference of a SYMBOL attribute.
+static inline loom_symbol_ref_t loom_attr_as_symbol(loom_attribute_t attr) {
+  return attr.symbol;
+}
+
+// Returns the type table index of a TYPE attribute.
+static inline loom_type_id_t loom_attr_as_type_id(loom_attribute_t attr) {
+  return attr.type_id;
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // LOOM_IR_ATTRIBUTE_H_

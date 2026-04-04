@@ -26,6 +26,7 @@ from loom.ir import (
     VALUE_FLAG_BLOCK_ARG,
     VALUE_FLAG_CONSUMED,
     Block,
+    CanonicalAttrDict,
     Context,
     DynamicDim,
     DynamicEncoding,
@@ -60,6 +61,7 @@ from loom.ir import (
     evaluate_predicate,
     evaluate_predicates,
     parse_scalar_type_kind,
+    replace_canonical_attr_dict,
     scalar_type_name,
 )
 
@@ -445,6 +447,47 @@ class TestValues:
 # ============================================================================
 
 
+class TestCanonicalAttrDict:
+    def test_entries_are_sorted_and_nested_dicts_are_canonicalized(self) -> None:
+        attrs = CanonicalAttrDict(
+            [("z", 1), ("meta", {"phase": "link", "opt": 3}), ("axis", 0)]
+        )
+        assert list(attrs.items()) == [
+            ("axis", 0),
+            ("meta", {"opt": 3, "phase": "link"}),
+            ("z", 1),
+        ]
+        assert isinstance(attrs["meta"], CanonicalAttrDict)
+        assert list(attrs["meta"].items()) == [("opt", 3), ("phase", "link")]
+
+    def test_duplicate_keys_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate attribute dict key 'axis'"):
+            CanonicalAttrDict([("axis", 0), ("axis", 1)])
+
+    def test_from_sorted_items_rejects_unsorted_input(self) -> None:
+        with pytest.raises(ValueError, match="must be sorted in canonical order"):
+            CanonicalAttrDict.from_sorted_items([("z", 1), ("a", 2)])
+
+    def test_replace_canonical_attr_dict_updates_and_removes_keys(self) -> None:
+        attrs = CanonicalAttrDict(
+            [("phase", "compile"), ("config", {"threads": 4, "debug": True})]
+        )
+        updated = replace_canonical_attr_dict(
+            attrs,
+            {
+                "config": {"threads": 8, "debug": None},
+                "phase": None,
+                "target": "llvm-cpu",
+            },
+        )
+        assert isinstance(updated, CanonicalAttrDict)
+        assert list(updated.items()) == [
+            ("config", {"debug": None, "threads": 8}),
+            ("target", "llvm-cpu"),
+        ]
+        assert isinstance(updated["config"], CanonicalAttrDict)
+
+
 class TestOperations:
     def test_basic_op(self) -> None:
         op = Operation(kind=1, name="test.unary", operands=[0], results=[1])
@@ -474,10 +517,37 @@ class TestOperations:
 
     def test_op_with_attributes(self) -> None:
         op = Operation(
-            kind=4, name="test.attrs", attributes={"axis": 0, "combine": "add"}
+            kind=4, name="test.attrs", attributes={"combine": "add", "axis": 0}
         )
+        assert isinstance(op.attributes, CanonicalAttrDict)
+        assert list(op.attributes.items()) == [("axis", 0), ("combine", "add")]
         assert op.attributes["axis"] == 0
         assert op.attributes["combine"] == "add"
+
+    def test_op_with_nested_canonical_attr_dict(self) -> None:
+        op = Operation(
+            kind=4,
+            name="test.attrs",
+            attributes={"dict": {"meta": {"phase": "link", "opt": 3}, "axis": 0}},
+        )
+        assert list(op.attributes.items()) == [
+            ("dict", {"axis": 0, "meta": {"opt": 3, "phase": "link"}})
+        ]
+        dict_attr = op.attributes["dict"]
+        assert isinstance(dict_attr, CanonicalAttrDict)
+        assert list(dict_attr.items()) == [
+            ("axis", 0),
+            ("meta", {"opt": 3, "phase": "link"}),
+        ]
+        assert isinstance(dict_attr["meta"], CanonicalAttrDict)
+        assert list(dict_attr["meta"].items()) == [("opt", 3), ("phase", "link")]
+
+    def test_op_attributes_are_immutable(self) -> None:
+        op = Operation(kind=4, name="test.attrs", attributes={"axis": 0})
+        with pytest.raises(TypeError):
+            op.attributes["axis"] = 1  # type: ignore[index]
+        with pytest.raises(AttributeError, match="immutable"):
+            op.attributes = {"axis": 1}
 
     def test_op_dead_flag(self) -> None:
         op = Operation(kind=1, name="test.unary")

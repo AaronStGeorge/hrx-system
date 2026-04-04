@@ -19,7 +19,7 @@ and the C implementation.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum, unique
 from typing import Any
@@ -72,6 +72,9 @@ __all__ = [
     "DynamicEncoding",
     "EncodingInstance",
     # Predicates.
+    "CanonicalAttrDict",
+    "canonicalize_attr_dict",
+    "replace_canonical_attr_dict",
     "PredicateArg",
     "Predicate",
     "PREDICATE_KINDS",
@@ -751,6 +754,121 @@ class TiedResult:
 
 
 # ============================================================================
+# Canonical attribute dictionaries
+# ============================================================================
+
+
+class CanonicalAttrDict(Mapping[str, Any]):
+    """An immutable dict attribute with canonical key order.
+
+    Keys are stored in ascending string order, and duplicate keys are rejected at
+    construction time. Nested dict values are recursively canonicalized so text
+    parsing, bytecode reading, and programmatic construction all converge to the
+    same representation.
+    """
+
+    __slots__ = ("_items", "_index")
+
+    def __init__(self, entries: Iterable[tuple[str, Any]] = ()) -> None:
+        items: list[tuple[str, Any]] = []
+        seen: set[str] = set()
+        for key, value in entries:
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"attribute dict keys must be strings, got {type(key).__name__}"
+                )
+            if key in seen:
+                raise ValueError(f"duplicate attribute dict key {key!r}")
+            seen.add(key)
+            items.append((key, _canonicalize_attr_value(value)))
+        items.sort(key=lambda entry: entry[0])
+        self._items = tuple(items)
+        self._index = dict(self._items)
+
+    @classmethod
+    def from_sorted_items(cls, entries: Iterable[tuple[str, Any]]) -> CanonicalAttrDict:
+        """Build a canonical dict from already sorted and deduped entries."""
+        items: list[tuple[str, Any]] = []
+        previous_key: str | None = None
+        for key, value in entries:
+            if not isinstance(key, str):
+                raise TypeError(
+                    f"attribute dict keys must be strings, got {type(key).__name__}"
+                )
+            if previous_key is not None and key <= previous_key:
+                if key == previous_key:
+                    raise ValueError(f"duplicate attribute dict key {key!r}")
+                raise ValueError(
+                    "attribute dict keys must be sorted in canonical order: "
+                    f"{previous_key!r} appears before {key!r}"
+                )
+            items.append((key, _canonicalize_attr_value(value)))
+            previous_key = key
+        attr_dict = cls.__new__(cls)
+        attr_dict._items = tuple(items)
+        attr_dict._index = dict(attr_dict._items)
+        return attr_dict
+
+    def __getitem__(self, key: str) -> Any:
+        return self._index[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return (key for key, _value in self._items)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __repr__(self) -> str:
+        return (
+            "{" + ", ".join(f"{key!r}: {value!r}" for key, value in self._items) + "}"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Mapping):
+            return dict(self.items()) == dict(other.items())
+        return NotImplemented
+
+
+def canonicalize_attr_dict(attributes: Mapping[str, Any] | None) -> CanonicalAttrDict:
+    """Canonicalize an operation or nested dict attribute."""
+    if attributes is None:
+        return CanonicalAttrDict()
+    if isinstance(attributes, CanonicalAttrDict):
+        return attributes
+    return CanonicalAttrDict(attributes.items())
+
+
+def replace_canonical_attr_dict(
+    attributes: Mapping[str, Any] | None,
+    replacements: Mapping[str, Any | None],
+) -> CanonicalAttrDict:
+    """Build a new canonical dict attr from key updates/removals.
+
+    replacements maps key -> new value, with None meaning remove the key.
+    """
+    merged = dict(canonicalize_attr_dict(attributes).items())
+    for key, value in replacements.items():
+        if value is None:
+            merged.pop(key, None)
+        else:
+            merged[key] = _canonicalize_attr_value(value)
+    return CanonicalAttrDict(merged.items())
+
+
+def _canonicalize_attr_value(value: Any) -> Any:
+    """Recursively canonicalize nested dict-valued attributes."""
+    if isinstance(value, CanonicalAttrDict):
+        return value
+    if isinstance(value, Mapping):
+        return canonicalize_attr_dict(value)
+    if isinstance(value, list):
+        return [_canonicalize_attr_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_canonicalize_attr_value(item) for item in value)
+    return value
+
+
+# ============================================================================
 # Use-def tracking
 # ============================================================================
 
@@ -828,11 +946,24 @@ class Operation:
     operands: list[int] = field(default_factory=list)
     results: list[int] = field(default_factory=list)
     tied_results: list[TiedResult] = field(default_factory=list)
-    attributes: dict[str, Any] = field(default_factory=dict)
+    attributes: Mapping[str, Any] = field(default_factory=CanonicalAttrDict)
     regions: list[Region] = field(default_factory=list)
     location_id: int = LOCATION_UNKNOWN
     name: str = ""
     is_dead: bool = False
+    _attributes_frozen: bool = field(default=False, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "attributes", canonicalize_attr_dict(self.attributes))
+        object.__setattr__(self, "_attributes_frozen", True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "attributes" and getattr(self, "_attributes_frozen", False):
+            raise AttributeError(
+                "Operation.attributes is immutable after construction; build a "
+                "replacement Operation or use a dedicated attr replacement helper"
+            )
+        object.__setattr__(self, name, value)
 
 
 # ============================================================================

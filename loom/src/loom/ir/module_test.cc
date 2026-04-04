@@ -10,6 +10,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
+#include "loom/ops/test/ops.h"
 
 namespace loom {
 namespace {
@@ -66,6 +67,51 @@ TEST_F(ModuleTest, BodyBlock) {
   ASSERT_NE(block, nullptr);
   EXPECT_EQ(block->op_count, 0);
   EXPECT_GT(block->op_capacity, 0);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_region_t* body = module->body;
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(body->block_count, 1u);
+  ASSERT_EQ(body->block_capacity, 1u);
+
+  loom_block_t* old_entry = loom_region_entry_block(body);
+
+  loom_value_id_t arg_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_I32), &arg_id));
+  IREE_ASSERT_OK(loom_block_add_arg(module, old_entry, arg_id));
+
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(
+      iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op));
+  memset(op, 0, sizeof(loom_op_t));
+  op->kind = LOOM_OP_TEST_CONSTANT;
+  op->parent_block = old_entry;
+  IREE_ASSERT_OK(loom_block_append_op(module, old_entry, op));
+
+  loom_block_t* appended = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &appended));
+
+  ASSERT_EQ(body->block_count, 2u);
+  EXPECT_GE(body->block_capacity, body->block_count);
+  EXPECT_EQ(appended, loom_region_block(body, 1));
+  EXPECT_EQ(loom_region_entry_block(body), old_entry);
+  EXPECT_EQ(appended->label_id, LOOM_STRING_ID_INVALID);
+  EXPECT_EQ(appended->arg_count, 0u);
+  EXPECT_EQ(appended->op_count, 0u);
+  EXPECT_GT(appended->op_capacity, 0u);
+
+  loom_block_t* entry = loom_region_entry_block(body);
+  EXPECT_EQ(loom_value_def_block(&module->values.entries[arg_id]), entry);
+  EXPECT_EQ(loom_value_def_index(&module->values.entries[arg_id]), 0u);
+  EXPECT_EQ(op->parent_block, entry);
+
   loom_module_free(module);
 }
 
@@ -247,6 +293,301 @@ TEST_F(ModuleTest, LookupString) {
   EXPECT_EQ(loom_module_lookup_string(module, IREE_SV("missing")),
             LOOM_STRING_ID_INVALID);
   EXPECT_EQ(module->strings.count, 2u);  // "test" module name + "hello".
+
+  loom_module_free(module);
+}
+
+//===----------------------------------------------------------------------===//
+// Canonical dictionary attributes
+//===----------------------------------------------------------------------===//
+
+TEST_F(ModuleTest, MakeCanonicalAttrDictSortsByKeySpellingAndCopiesEntries) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("zeta"), &zeta_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("alpha"), &alpha_id));
+  ASSERT_LT(zeta_id, alpha_id)
+      << "setup should prove string_id order is not the"
+         " same as spelling order";
+
+  loom_named_attr_t entries[2] = {
+      {.name_id = zeta_id, .value = loom_attr_i64(2)},
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+  };
+
+  loom_attribute_t attr = {0};
+  IREE_ASSERT_OK(
+      loom_module_make_canonical_attr_dict(module, entries, 2, &attr));
+
+  EXPECT_EQ(attr.kind, LOOM_ATTR_DICT);
+  EXPECT_EQ(attr.count, 2);
+  ASSERT_NE(attr.dict, nullptr);
+  EXPECT_NE(attr.dict, entries);
+  EXPECT_EQ(attr.dict[0].name_id, alpha_id);
+  EXPECT_EQ(attr.dict[0].reserved, 0u);
+  EXPECT_EQ(attr.dict[0].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(attr.dict[0].value.i64, 1);
+  EXPECT_EQ(attr.dict[1].name_id, zeta_id);
+  EXPECT_EQ(attr.dict[1].reserved, 0u);
+  EXPECT_EQ(attr.dict[1].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(attr.dict[1].value.i64, 2);
+
+  IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, attr));
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, MakeCanonicalAttrDictRecursivelyCanonicalizesNestedDicts) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t outer_zeta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t outer_axis_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t inner_zeta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t inner_alpha_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("zeta"), &outer_zeta_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("axis"), &outer_axis_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("inner_z"), &inner_zeta_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("inner_a"), &inner_alpha_id));
+
+  int64_t original_values[3] = {7, 8, 9};
+  loom_predicate_t original_predicates[1] = {{
+      .kind = LOOM_PREDICATE_RANGE,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_CONST, LOOM_PRED_ARG_CONST, 0},
+      .args = {0, 16, 0},
+  }};
+  loom_named_attr_t inner_entries[2] = {
+      {
+          .name_id = inner_zeta_id,
+          .value = loom_attr_i64_array(original_values, 3),
+      },
+      {
+          .name_id = inner_alpha_id,
+          .value = loom_attr_predicate_list(original_predicates, 1),
+      },
+  };
+  loom_named_attr_t outer_entries[2] = {
+      {
+          .name_id = outer_zeta_id,
+          .value = loom_make_canonical_attr_dict(inner_entries, 2),
+      },
+      {.name_id = outer_axis_id, .value = loom_attr_i64(4)},
+  };
+
+  loom_attribute_t attr = {0};
+  IREE_ASSERT_OK(
+      loom_module_make_canonical_attr_dict(module, outer_entries, 2, &attr));
+
+  // Mutate the caller-owned buffers after construction. The canonical dict
+  // must keep its own arena-owned snapshots.
+  inner_entries[0].name_id = outer_axis_id;
+  inner_entries[0].value = loom_attr_i64(99);
+  outer_entries[0].name_id = outer_axis_id;
+  outer_entries[0].value = loom_attr_i64(42);
+  original_values[0] = 1234;
+  original_predicates[0].kind = LOOM_PREDICATE_EQ;
+
+  EXPECT_EQ(attr.count, 2);
+  ASSERT_NE(attr.dict, nullptr);
+  EXPECT_EQ(attr.dict[0].name_id, outer_axis_id);
+  EXPECT_EQ(attr.dict[0].value.i64, 4);
+  EXPECT_EQ(attr.dict[1].name_id, outer_zeta_id);
+  ASSERT_EQ(attr.dict[1].value.kind, LOOM_ATTR_DICT);
+
+  loom_attribute_t nested = attr.dict[1].value;
+  EXPECT_EQ(nested.count, 2);
+  ASSERT_NE(nested.dict, nullptr);
+  EXPECT_EQ(nested.dict[0].name_id, inner_alpha_id);
+  EXPECT_EQ(nested.dict[0].reserved, 0u);
+  EXPECT_EQ(nested.dict[0].value.kind, LOOM_ATTR_PREDICATE_LIST);
+  ASSERT_NE(nested.dict[0].value.predicate_list, original_predicates);
+  EXPECT_EQ(nested.dict[0].value.count, 1);
+  EXPECT_EQ(nested.dict[0].value.predicate_list[0].kind, LOOM_PREDICATE_RANGE);
+  EXPECT_EQ(nested.dict[1].name_id, inner_zeta_id);
+  EXPECT_EQ(nested.dict[1].reserved, 0u);
+  EXPECT_EQ(nested.dict[1].value.kind, LOOM_ATTR_I64_ARRAY);
+  ASSERT_NE(nested.dict[1].value.i64_array, original_values);
+  ASSERT_EQ(nested.dict[1].value.count, 3);
+  EXPECT_EQ(nested.dict[1].value.i64_array[0], 7);
+  EXPECT_EQ(nested.dict[1].value.i64_array[1], 8);
+  EXPECT_EQ(nested.dict[1].value.i64_array[2], 9);
+
+  IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, attr));
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsDuplicateKeys) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("axis"), &key_id));
+
+  loom_named_attr_t entries[2] = {
+      {.name_id = key_id, .value = loom_attr_i64(0)},
+      {.name_id = key_id, .value = loom_attr_i64(1)},
+  };
+
+  loom_attribute_t attr = {0};
+  iree_status_t status =
+      loom_module_make_canonical_attr_dict(module, entries, 2, &attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsNonEmptyNullEntries) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_attribute_t attr = {0};
+  iree_status_t status = loom_module_make_canonical_attr_dict(
+      module, /*entries=*/NULL, /*count=*/1, &attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, MakeCanonicalAttrDictNormalizesEqualityAndHash) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("zeta"), &zeta_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("alpha"), &alpha_id));
+
+  loom_named_attr_t zeta_first_entries[2] = {
+      {.name_id = zeta_id, .value = loom_attr_i64(2)},
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+  };
+  loom_named_attr_t alpha_first_entries[2] = {
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+      {.name_id = zeta_id, .value = loom_attr_i64(2)},
+  };
+
+  loom_attribute_t zeta_first_attr = {0};
+  loom_attribute_t alpha_first_attr = {0};
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+      module, zeta_first_entries, 2, &zeta_first_attr));
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+      module, alpha_first_entries, 2, &alpha_first_attr));
+
+  EXPECT_TRUE(loom_attribute_equal(&zeta_first_attr, &alpha_first_attr));
+  EXPECT_EQ(loom_attribute_hash(&zeta_first_attr),
+            loom_attribute_hash(&alpha_first_attr));
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsUnknownKeyStringId) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_named_attr_t entries[1] = {{
+      .name_id = 99,
+      .value = loom_attr_i64(1),
+  }};
+
+  loom_attribute_t attr = {0};
+  iree_status_t status =
+      loom_module_make_canonical_attr_dict(module, entries, 1, &attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsUnsortedInput) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("zeta"), &zeta_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("alpha"), &alpha_id));
+
+  loom_named_attr_t entries[2] = {
+      {.name_id = zeta_id, .value = loom_attr_i64(2)},
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+  };
+  loom_attribute_t attr = loom_make_canonical_attr_dict(entries, 2);
+
+  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsDuplicateKeys) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("axis"), &key_id));
+
+  loom_named_attr_t entries[2] = {
+      {.name_id = key_id, .value = loom_attr_i64(0)},
+      {.name_id = key_id, .value = loom_attr_i64(1)},
+  };
+  loom_attribute_t attr = loom_make_canonical_attr_dict(entries, 2);
+
+  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsNonEmptyNullEntries) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_attribute_t attr =
+      loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1);
+
+  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsEmptyDictWithNonNullEntries) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("axis"), &key_id));
+  loom_named_attr_t entries[1] = {{
+      .name_id = key_id,
+      .value = loom_attr_i64(0),
+  }};
+  loom_attribute_t attr = {
+      .kind = LOOM_ATTR_DICT,
+      .count = 0,
+      .dict = entries,
+  };
+
+  iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   loom_module_free(module);
 }

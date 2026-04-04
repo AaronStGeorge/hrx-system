@@ -47,17 +47,18 @@ typedef struct loom_source_range_t {
   uint32_t end_column;
 } loom_source_range_t;
 
-// Constructs a source range from a token's position and text.
+// Constructs a source range from a token's position and source spelling.
 static inline loom_source_range_t loom_source_range_from_token(
     iree_string_view_t filename, iree_string_view_t source,
-    iree_string_view_t token_text, uint32_t line, uint32_t column,
+    iree_string_view_t token_source_text, uint32_t line, uint32_t column,
     uint32_t end_column) {
-  iree_host_size_t start = (iree_host_size_t)(token_text.data - source.data);
+  iree_host_size_t start =
+      (iree_host_size_t)(token_source_text.data - source.data);
   return (loom_source_range_t){
       .filename = filename,
       .source = source,
       .start = start,
-      .end = start + token_text.size,
+      .end = start + token_source_text.size,
       .start_line = line,
       .start_column = column,
       .end_line = line,

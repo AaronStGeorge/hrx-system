@@ -39,6 +39,7 @@ from loom.assembly import (
     Refs,
     ResultType,
     ResultTypeList,
+    Scope,
     SymbolRef,
     TypeOf,
     TypesOf,
@@ -194,6 +195,9 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                     )
 
                 case OptionalGroup(elements=inner, anchor=_anchor):
+                    walk(inner)
+
+                case Scope(elements=inner):
                     walk(inner)
 
                 case Flags(field=name):

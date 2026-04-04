@@ -597,10 +597,10 @@ static void loom_bytecode_value_numbering_assign_region(
     const loom_module_t* module, const loom_region_t* region) {
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
-    const loom_block_t* block = &region->blocks[block_index];
+    const loom_block_t* block = loom_region_const_block(region, block_index);
     // Block arguments define values.
     for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
-      loom_value_id_t value_id = block->arg_ids[arg_index];
+      loom_value_id_t value_id = loom_block_arg_id(block, arg_index);
       if (value_id < value_numbering->capacity &&
           value_numbering->map[value_id] == LOOM_WRITER_ID_NONE) {
         value_numbering->map[value_id] = value_numbering->next_number++;
@@ -608,7 +608,7 @@ static void loom_bytecode_value_numbering_assign_region(
     }
     // Op results define values.
     for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-      const loom_op_t* op = block->ops[op_index];
+      const loom_op_t* op = loom_block_const_op(block, op_index);
       if (op->flags & LOOM_OP_FLAG_DEAD) continue;
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
@@ -766,7 +766,7 @@ static iree_status_t loom_bytecode_number_region(
   uint32_t unused_id = 0;
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
-    const loom_block_t* block = &region->blocks[block_index];
+    const loom_block_t* block = loom_region_const_block(region, block_index);
 
     // Block label.
     if (block->label_id != LOOM_STRING_ID_INVALID) {
@@ -776,7 +776,7 @@ static iree_status_t loom_bytecode_number_region(
 
     // Block arg names and types.
     for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
-      loom_value_id_t value_id = block->arg_ids[arg_index];
+      loom_value_id_t value_id = loom_block_arg_id(block, arg_index);
       const loom_value_t* value = &numbering->module->values.entries[value_id];
       if (value->name_id != LOOM_STRING_ID_INVALID) {
         IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
@@ -788,7 +788,7 @@ static iree_status_t loom_bytecode_number_region(
 
     // Operations.
     for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-      const loom_op_t* op = block->ops[op_index];
+      const loom_op_t* op = loom_block_const_op(block, op_index);
       if (op->flags & LOOM_OP_FLAG_DEAD) continue;
       IREE_RETURN_IF_ERROR(
           loom_bytecode_number_operation(numbering, op, depth));
@@ -1228,7 +1228,7 @@ static iree_status_t loom_bytecode_write_block(
   IREE_RETURN_IF_ERROR(
       loom_bytecode_page_writer_write_uvarint(writer, block->arg_count));
   for (uint16_t i = 0; i < block->arg_count; ++i) {
-    loom_value_id_t value_id = block->arg_ids[i];
+    loom_value_id_t value_id = loom_block_arg_id(block, i);
     const loom_value_t* value = &module->values.entries[value_id];
     IREE_RETURN_IF_ERROR(loom_bytecode_write_value_def(writer, numbering,
                                                        value_numbering, value));
@@ -1237,12 +1237,15 @@ static iree_status_t loom_bytecode_write_block(
   // Ops (skip dead ops, matching Python which checks is_dead).
   uint16_t live_op_count = 0;
   for (uint16_t i = 0; i < block->op_count; ++i) {
-    if (!(block->ops[i]->flags & LOOM_OP_FLAG_DEAD)) ++live_op_count;
+    if (!iree_any_bit_set(loom_block_const_op(block, i)->flags,
+                          LOOM_OP_FLAG_DEAD)) {
+      ++live_op_count;
+    }
   }
   IREE_RETURN_IF_ERROR(
       loom_bytecode_page_writer_write_uvarint(writer, live_op_count));
   for (uint16_t i = 0; i < block->op_count; ++i) {
-    const loom_op_t* op = block->ops[i];
+    const loom_op_t* op = loom_block_const_op(block, i);
     if (op->flags & LOOM_OP_FLAG_DEAD) continue;
     IREE_RETURN_IF_ERROR(loom_bytecode_write_operation(
         writer, numbering, value_numbering, op, depth));
@@ -1263,8 +1266,9 @@ static iree_status_t loom_bytecode_write_region(
   IREE_RETURN_IF_ERROR(
       loom_bytecode_page_writer_write_uvarint(writer, region->block_count));
   for (uint16_t i = 0; i < region->block_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_bytecode_write_block(
-        writer, numbering, value_numbering, &region->blocks[i], depth));
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_write_block(writer, numbering, value_numbering,
+                                  loom_region_const_block(region, i), depth));
   }
   return iree_ok_status();
 }

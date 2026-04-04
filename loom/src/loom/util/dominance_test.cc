@@ -55,8 +55,8 @@ class DominanceTest : public ::testing::Test {
     func_like_ = loom_func_like_cast(module_, func_op);
     func_op_ = func_op;
     body_ = loom_func_like_body(func_like_);
-    loom_builder_initialize(module_, &module_->arena, &body_->blocks[0],
-                            &builder_);
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_region_entry_block(body_), &builder_);
     builder_.ip.parent_op = func_op;
 
     iree_arena_initialize(&block_pool_, &dom_arena_);
@@ -193,7 +193,8 @@ TEST_F(DominanceTest, NestingDepth) {
                                      LOOM_LOCATION_UNKNOWN, &map1));
 
   enter_region(map1, loom_test_map_body(map1));
-  loom_value_id_t inner_arg = loom_test_map_body(map1)->blocks[0].arg_ids[0];
+  loom_value_id_t inner_arg =
+      loom_region_entry_arg_id(loom_test_map_body(map1), 0);
   loom_op_t* map2 = NULL;
   IREE_ASSERT_OK(loom_test_map_build(&builder_, &inner_arg, 1, f32, NULL, 0,
                                      LOOM_LOCATION_UNKNOWN, &map2));
@@ -258,7 +259,7 @@ TEST_F(DominanceTest, ValueDominanceBlockArg) {
   enter_region(map_op, loom_test_map_body(map_op));
   // The map body has a block arg (the element from the input tile).
   loom_value_id_t block_arg_id =
-      loom_test_map_body(map_op)->blocks[0].arg_ids[0];
+      loom_region_entry_arg_id(loom_test_map_body(map_op), 0);
 
   loom_op_t* inner_const = NULL;
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32,

@@ -6,6 +6,7 @@
 
 #include "loom/format/text/tokenizer.h"
 
+#include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -16,15 +17,24 @@ namespace {
 class ScopedTokenizer {
  public:
   explicit ScopedTokenizer(const char* text) {
+    iree_arena_block_pool_initialize(4096, iree_allocator_system(),
+                                     &block_pool_);
+    iree_arena_initialize(&block_pool_, &scratch_arena_);
     loom_tokenizer_initialize(iree_make_cstring_view(text), IREE_SV("<test>"),
-                              &t_);
+                              &scratch_arena_, &t_);
   }
-  ~ScopedTokenizer() { loom_tokenizer_deinitialize(&t_); }
+  ~ScopedTokenizer() {
+    loom_tokenizer_deinitialize(&t_);
+    iree_arena_deinitialize(&scratch_arena_);
+    iree_arena_block_pool_deinitialize(&block_pool_);
+  }
   loom_tokenizer_t* get() { return &t_; }
   loom_token_t next() { return loom_tokenizer_next(&t_); }
   loom_token_t peek() { return loom_tokenizer_peek(&t_); }
 
  private:
+  iree_arena_block_pool_t block_pool_;
+  iree_arena_allocator_t scratch_arena_;
   loom_tokenizer_t t_;
 };
 
@@ -53,6 +63,7 @@ TEST(Tokenizer, Arrow) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_ARROW);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("->")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("->")));
 }
 
 TEST(Tokenizer, ColonBeforeColon) {
@@ -70,6 +81,7 @@ TEST(Tokenizer, Integer) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_INTEGER);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("42")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("42")));
 }
 
 TEST(Tokenizer, NegativeInteger) {
@@ -77,6 +89,7 @@ TEST(Tokenizer, NegativeInteger) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_INTEGER);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("-1")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("-1")));
 }
 
 TEST(Tokenizer, HexInteger) {
@@ -84,6 +97,7 @@ TEST(Tokenizer, HexInteger) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_INTEGER);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("0xFF")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("0xFF")));
 }
 
 TEST(Tokenizer, Float) {
@@ -91,6 +105,7 @@ TEST(Tokenizer, Float) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_FLOAT);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("3.14")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("3.14")));
 }
 
 TEST(Tokenizer, FloatExponent) {
@@ -122,12 +137,27 @@ TEST(Tokenizer, SimpleString) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_STRING);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("hello")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("\"hello\"")));
+  EXPECT_EQ(token.text.data, token.source_text.data + 1);
 }
 
 TEST(Tokenizer, StringWithEscapes) {
   ScopedTokenizer t("\"has \\\"quotes\\\"\"");
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_STRING);
+  EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("has \"quotes\"")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text,
+                                     IREE_SV("\"has \\\"quotes\\\"\"")));
+  EXPECT_NE(token.text.data, token.source_text.data + 1);
+}
+
+TEST(Tokenizer, StringWithNewlineAndTabEscapes) {
+  ScopedTokenizer t("\"row\\n\\tcol\"");
+  loom_token_t token = t.next();
+  EXPECT_EQ(token.kind, LOOM_TOKEN_STRING);
+  EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("row\n\tcol")));
+  EXPECT_TRUE(
+      iree_string_view_equal(token.source_text, IREE_SV("\"row\\n\\tcol\"")));
 }
 
 TEST(Tokenizer, EmptyString) {
@@ -135,6 +165,7 @@ TEST(Tokenizer, EmptyString) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_STRING);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("\"\"")));
 }
 
 //===----------------------------------------------------------------------===//
@@ -154,6 +185,7 @@ TEST(Tokenizer, SSAValueText) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_SSA_VALUE);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("tile")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("%tile")));
 }
 
 TEST(Tokenizer, Symbol) {
@@ -161,6 +193,7 @@ TEST(Tokenizer, Symbol) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_SYMBOL);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("main")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("@main")));
 }
 
 TEST(Tokenizer, HashAttr) {
@@ -168,6 +201,7 @@ TEST(Tokenizer, HashAttr) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_HASH_ATTR);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("q8_0")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("#q8_0")));
 }
 
 TEST(Tokenizer, ResultOrdinal) {
@@ -175,9 +209,11 @@ TEST(Tokenizer, ResultOrdinal) {
   loom_token_t token0 = t.next();
   EXPECT_EQ(token0.kind, LOOM_TOKEN_RESULT_ORDINAL);
   EXPECT_TRUE(iree_string_view_equal(token0.text, IREE_SV("0")));
+  EXPECT_TRUE(iree_string_view_equal(token0.source_text, IREE_SV("#0")));
   loom_token_t token1 = t.next();
   EXPECT_EQ(token1.kind, LOOM_TOKEN_RESULT_ORDINAL);
   EXPECT_TRUE(iree_string_view_equal(token1.text, IREE_SV("1")));
+  EXPECT_TRUE(iree_string_view_equal(token1.source_text, IREE_SV("#1")));
 }
 
 TEST(Tokenizer, BlockLabel) {
@@ -185,6 +221,7 @@ TEST(Tokenizer, BlockLabel) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_BLOCK_LABEL);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("bb0")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("^bb0")));
 }
 
 //===----------------------------------------------------------------------===//
@@ -196,6 +233,14 @@ TEST(Tokenizer, BareIdent) {
   for (int i = 0; i < 6; ++i) {
     EXPECT_EQ(t.next().kind, LOOM_TOKEN_BARE_IDENT) << "token " << i;
   }
+}
+
+TEST(Tokenizer, BareIdentText) {
+  ScopedTokenizer t("tile");
+  loom_token_t token = t.next();
+  EXPECT_EQ(token.kind, LOOM_TOKEN_BARE_IDENT);
+  EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("tile")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("tile")));
 }
 
 TEST(Tokenizer, OpName) {
@@ -210,6 +255,7 @@ TEST(Tokenizer, OpNameText) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_OP_NAME);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("test.addi")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("test.addi")));
 }
 
 TEST(Tokenizer, TokenKindName) {
@@ -243,7 +289,10 @@ TEST(Tokenizer, SkipsComments) {
 
 TEST(Tokenizer, EmptyInput) {
   ScopedTokenizer t("");
-  EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+  loom_token_t token = t.next();
+  EXPECT_EQ(token.kind, LOOM_TOKEN_EOF);
+  EXPECT_TRUE(iree_string_view_is_empty(token.text));
+  EXPECT_TRUE(iree_string_view_is_empty(token.source_text));
 }
 
 TEST(Tokenizer, OnlyWhitespace) {
@@ -360,6 +409,13 @@ TEST(Tokenizer, UnexpectedCharacterError) {
                         loom_tokenizer_consume_status(t.get()));
 }
 
+TEST(Tokenizer, InvalidStringEscapeError) {
+  ScopedTokenizer t("\"\\x\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_tokenizer_consume_status(t.get()));
+}
+
 TEST(Tokenizer, BarePercentError) {
   ScopedTokenizer t("% ");
   EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
@@ -408,8 +464,10 @@ TEST(Tokenizer, PrefixStrippedFromSSAValue) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_SSA_VALUE);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("arg0")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("%arg0")));
   // Source location still points at the '%'.
   EXPECT_EQ(token.column, 1u);
+  EXPECT_EQ(token.end_column, 6u);
 }
 
 TEST(Tokenizer, PrefixStrippedFromSymbol) {
@@ -418,7 +476,9 @@ TEST(Tokenizer, PrefixStrippedFromSymbol) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_SYMBOL);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("main")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("@main")));
   EXPECT_EQ(token.column, 1u);
+  EXPECT_EQ(token.end_column, 6u);
 }
 
 TEST(Tokenizer, PrefixStrippedFromHashAttr) {
@@ -427,7 +487,9 @@ TEST(Tokenizer, PrefixStrippedFromHashAttr) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_HASH_ATTR);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("enc")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("#enc")));
   EXPECT_EQ(token.column, 1u);
+  EXPECT_EQ(token.end_column, 5u);
 }
 
 TEST(Tokenizer, PrefixStrippedFromResultOrdinal) {
@@ -436,7 +498,9 @@ TEST(Tokenizer, PrefixStrippedFromResultOrdinal) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_RESULT_ORDINAL);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("42")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("#42")));
   EXPECT_EQ(token.column, 1u);
+  EXPECT_EQ(token.end_column, 4u);
 }
 
 TEST(Tokenizer, PrefixStrippedFromBlockLabel) {
@@ -445,7 +509,9 @@ TEST(Tokenizer, PrefixStrippedFromBlockLabel) {
   loom_token_t token = t.next();
   EXPECT_EQ(token.kind, LOOM_TOKEN_BLOCK_LABEL);
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("entry")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("^entry")));
   EXPECT_EQ(token.column, 1u);
+  EXPECT_EQ(token.end_column, 7u);
 }
 
 //===----------------------------------------------------------------------===//
@@ -475,6 +541,14 @@ TEST(Tokenizer, AngleInteriorWithEscapedQuotes) {
   iree_string_view_t interior;
   IREE_ASSERT_OK(loom_tokenizer_scan_angle_interior(t.get(), &interior));
   EXPECT_TRUE(iree_string_view_equal(interior, IREE_SV("label=\"a\\\"b\"")));
+}
+
+TEST(Tokenizer, AngleInteriorInvalidStringEscapeError) {
+  ScopedTokenizer t("<label=\"\\x\">");
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_LANGLE);
+  iree_string_view_t interior;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_tokenizer_scan_angle_interior(t.get(), &interior));
 }
 
 TEST(Tokenizer, AngleInteriorEscapeAtEOF) {

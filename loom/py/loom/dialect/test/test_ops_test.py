@@ -26,6 +26,7 @@ from loom.assembly import (
     Region,
     ResultType,
     ResultTypeList,
+    Scope,
     SymbolRef,
     TypeOf,
     TypesOf,
@@ -114,6 +115,8 @@ class TestFormatFieldsMatchDeclarations:
                     fields.add(s)
                 case OptionalGroup(elements=inner):
                     fields |= self._collect_fields(inner)
+                case Scope(elements=inner):
+                    fields |= self._collect_fields(inner)
                 case Keyword() | AttrDict():
                     pass
         return fields
@@ -184,7 +187,7 @@ class TestFormatElementCoverage:
     ) -> None:
         for elem in elements:
             types.add(type(elem))
-            if isinstance(elem, OptionalGroup):
+            if isinstance(elem, OptionalGroup | Scope):
                 self._collect_types(elem.elements, types)
 
     def test_all_element_types_covered(self) -> None:
@@ -304,10 +307,15 @@ class TestSpecificOps:
         assert len(test_yield.results) == 0
 
     def test_func(self) -> None:
-        # Optional groups: visibility, cc, results, predicates.
-        # Body is a Region, not an OptionalGroup (always present for test.func).
+        # Top-level optional groups: visibility, cc.
         optional_elements = [e for e in test_func.format if isinstance(e, OptionalGroup)]
-        assert len(optional_elements) == 4
+        assert len(optional_elements) == 2
+        signature_scope = [e for e in test_func.format if isinstance(e, Scope)]
+        assert len(signature_scope) == 1
+        # Signature-scope optional groups: results, predicates.
+        signature_optional_elements = [e for e in signature_scope[0].elements if isinstance(e, OptionalGroup)]
+        assert len(signature_optional_elements) == 2
+        # Body is a Region, not an OptionalGroup (always present for test.func).
         assert test_func.region("body") is not None
 
     def test_attrs(self) -> None:

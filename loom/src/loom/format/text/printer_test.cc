@@ -823,6 +823,41 @@ TEST_F(PrintOpTest, FuncDefOp) {
             "}\n");
 }
 
+TEST_F(PrintOpTest, FuncDefTiedResultPrintsEntryArgName) {
+  loom_symbol_ref_t callee = make_symbol("identity");
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_type_t arg_types[] = {f32};
+  loom_type_t result_types[] = {f32};
+  loom_tied_result_t tied_results[] = {
+      {.result_index = 0, .operand_index = 0, .has_type_change = false},
+  };
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &builder_, 0, 0, callee, arg_types, 1, result_types, 1, tied_results,
+      IREE_ARRAYSIZE(tied_results), NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
+  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
+            "test.func @identity(%0: f32) -> (%0 as f32) {\n"
+            "}\n");
+}
+
+TEST_F(PrintOpTest, FuncDeclTiedResultPrintsArgOperandName) {
+  loom_symbol_ref_t callee = make_symbol("identity");
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_type_t arg_types[] = {f32};
+  loom_type_t result_types[] = {f32};
+  loom_tied_result_t tied_results[] = {
+      {.result_index = 0, .operand_index = 0, .has_type_change = false},
+  };
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_decl_build(
+      &builder_, 0, 0, callee, arg_types, 1, result_types, 1, tied_results,
+      IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
+  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
+            "test.decl @identity(%0: f32) -> (%0 as f32)\n");
+}
+
 TEST_F(PrintOpTest, FuncTemplateOpRef) {
   loom_symbol_ref_t callee = make_symbol("vnni_q8");
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
@@ -907,11 +942,74 @@ TEST_F(PrintOpTest, AttrsOpWithDictEntries) {
       {.name_id = label_id, .value = loom_attr_string(foo_id)},
   };
   // The dict attr is at index 0 (the only declared attr on test.attrs).
-  loom_op_attrs(op)[0] = loom_make_attr_dict(entries, 2);
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(module_, entries, 2,
+                                                      &loom_op_attrs(op)[0]));
 
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_NE(output.find("{axis = 0, label = \"foo\"}"), std::string::npos)
       << "Expected attr dict in output, got: " << output;
+}
+
+TEST_F(PrintOpTest, AttrsOpWithNestedDictEntries) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(
+      loom_test_attrs_build(&builder_, input, f32, LOOM_LOCATION_UNKNOWN, &op));
+
+  loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t phase_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t empty_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("axis"), &axis_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("phase"), &phase_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("empty"), &empty_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("alpha"), &alpha_id));
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("zeta"), &zeta_id));
+
+  loom_named_attr_t nested_entries[2] = {
+      {.name_id = zeta_id, .value = loom_attr_i64(2)},
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+  };
+  loom_attribute_t nested_dict = {0};
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(module_, nested_entries,
+                                                      2, &nested_dict));
+
+  loom_named_attr_t entries[3] = {
+      {.name_id = phase_id, .value = nested_dict},
+      {.name_id = axis_id, .value = loom_attr_i64(0)},
+      {.name_id = empty_id,
+       .value = loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/0)},
+  };
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(module_, entries, 3,
+                                                      &loom_op_attrs(op)[0]));
+
+  std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
+  EXPECT_NE(
+      output.find("{axis = 0, empty = {}, phase = {alpha = 1, zeta = 2}}"),
+      std::string::npos)
+      << "Expected nested attr dict in output, got: " << output;
+}
+
+TEST_F(PrintOpTest,
+       AttrsOpWithMalformedNonEmptyNullDictReturnsInvalidArgument) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(
+      loom_test_attrs_build(&builder_, input, f32, LOOM_LOCATION_UNKNOWN, &op));
+
+  loom_op_attrs(op)[0] =
+      loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1);
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        print_op_status(op, LOOM_TEXT_PRINT_DEFAULT));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1257,7 +1355,7 @@ TEST_F(PrintOpTest, BlockLabel) {
   // Replace the auto-created then_region with a 2-block region.
   loom_region_t* then_region = NULL;
   IREE_ASSERT_OK(loom_module_allocate_region(module_, 2, &then_region));
-  loom_block_t* second_block = &then_region->blocks[1];
+  loom_block_t* second_block = loom_region_block(then_region, 1);
   IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("next"),
                                            &second_block->label_id));
   IREE_ASSERT_OK(loom_block_add_arg(module_, second_block, def(f32)));

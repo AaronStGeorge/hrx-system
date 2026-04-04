@@ -309,7 +309,7 @@ TEST(Diagnostic, SourceRangeFromToken) {
   iree_string_view_t token_text =
       iree_make_string_view(source.data + 20, 2);  // "%y"
   loom_source_range_t range = loom_source_range_from_token(
-      IREE_SV("test.loom"), source, token_text, 1, 21);
+      IREE_SV("test.loom"), source, token_text, 1, 21, 23);
   EXPECT_EQ(range.start, 20u);
   EXPECT_EQ(range.end, 22u);
   EXPECT_EQ(range.start_line, 1u);

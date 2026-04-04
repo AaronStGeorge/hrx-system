@@ -8,6 +8,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "iree/base/internal/unicode.h"
@@ -24,6 +25,25 @@
 // onto the scope stack. 32 levels covers any realistic IR (function →
 // loop → branch → ...).
 #define LOOM_VERIFY_MAX_SCOPE_DEPTH 32
+
+// Reusable scratch tables for validating one op's tied-result metadata.
+//
+// `result_index_bits` and `operand_index_bits` track whether a result or
+// operand index has already appeared in the current op's tied-result list.
+// `operand_value_ids` is a reusable sorted scratch copy of the current op's
+// valid operand value IDs, used to detect repeated operand values that would
+// make name-based tied-result syntax ambiguous.
+typedef struct loom_verify_tied_table_t {
+  uint64_t* result_index_bits;
+  iree_host_size_t result_index_word_capacity;
+
+  uint64_t* operand_index_bits;
+  iree_host_size_t operand_index_word_capacity;
+
+  loom_value_id_t* operand_value_ids;
+  iree_host_size_t operand_value_count;
+  iree_host_size_t operand_value_capacity;
+} loom_verify_tied_table_t;
 
 typedef struct loom_verify_state_t {
   const loom_module_t* module;
@@ -51,6 +71,9 @@ typedef struct loom_verify_state_t {
   // by a tied result. Any subsequent use of a consumed value is an
   // error.
   uint64_t* consumed_bits;
+
+  // Reusable per-op scratch for tied-result uniqueness checks.
+  loom_verify_tied_table_t tied_table;
 
   // Stack of value_ids that have been marked as defined during the
   // walk. Used for scope cleanup: when exiting a region, we clear
@@ -107,6 +130,116 @@ static inline void loom_bitset_clear(uint64_t* bits, uint32_t index) {
 
 static inline bool loom_bitset_test(const uint64_t* bits, uint32_t index) {
   return (bits[index / 64] & ((uint64_t)1 << (index % 64))) != 0;
+}
+
+static inline iree_host_size_t loom_bitset_word_count(
+    iree_host_size_t bit_count) {
+  return bit_count > 0 ? (bit_count + 63) / 64 : 0;
+}
+
+static int loom_compare_value_ids(const void* lhs, const void* rhs) {
+  loom_value_id_t lhs_id = *(const loom_value_id_t*)lhs;
+  loom_value_id_t rhs_id = *(const loom_value_id_t*)rhs;
+  return (lhs_id > rhs_id) - (lhs_id < rhs_id);
+}
+
+// Prepares the reusable tied-result scratch tables for an op with
+// |result_count| results and |operand_count| operands. Grows the
+// scratch storage from the verifier arena on demand, then clears only the
+// active index-bitset words needed by the current op.
+static iree_status_t loom_verify_tied_table_reset(
+    loom_verify_tied_table_t* tied_table, iree_arena_allocator_t* arena,
+    iree_host_size_t result_count, iree_host_size_t operand_count) {
+  iree_host_size_t result_word_count = loom_bitset_word_count(result_count);
+  if (result_word_count > tied_table->result_index_word_capacity) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_grow_array(arena, 0, result_word_count, sizeof(uint64_t),
+                              &tied_table->result_index_word_capacity,
+                              (void**)&tied_table->result_index_bits));
+  }
+  if (result_word_count > 0) {
+    memset(tied_table->result_index_bits, 0,
+           result_word_count * sizeof(tied_table->result_index_bits[0]));
+  }
+
+  iree_host_size_t operand_word_count = loom_bitset_word_count(operand_count);
+  if (operand_word_count > tied_table->operand_index_word_capacity) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_grow_array(arena, 0, operand_word_count, sizeof(uint64_t),
+                              &tied_table->operand_index_word_capacity,
+                              (void**)&tied_table->operand_index_bits));
+  }
+  if (operand_word_count > 0) {
+    memset(tied_table->operand_index_bits, 0,
+           operand_word_count * sizeof(tied_table->operand_index_bits[0]));
+  }
+
+  if (operand_count > tied_table->operand_value_capacity) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_grow_array(arena, 0, operand_count, sizeof(loom_value_id_t),
+                              &tied_table->operand_value_capacity,
+                              (void**)&tied_table->operand_value_ids));
+  }
+  tied_table->operand_value_count = 0;
+
+  return iree_ok_status();
+}
+
+// Returns true if |value_id| appears in more than one operand slot in the
+// current op's sorted operand-value scratch array.
+static bool loom_verify_tied_table_has_duplicate_operand_value(
+    const loom_verify_tied_table_t* tied_table, loom_value_id_t value_id) {
+  iree_host_size_t low = 0;
+  iree_host_size_t high = tied_table->operand_value_count;
+  while (low < high) {
+    iree_host_size_t mid = low + (high - low) / 2;
+    if (tied_table->operand_value_ids[mid] < value_id) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low < tied_table->operand_value_count &&
+         tied_table->operand_value_ids[low] == value_id &&
+         (low + 1 < tied_table->operand_value_count &&
+          tied_table->operand_value_ids[low + 1] == value_id);
+}
+
+// Returns true if this op's FuncArgs are stored as op operands and therefore
+// represent signature definitions instead of ordinary SSA uses.
+static bool loom_verify_func_args_are_operands(const loom_op_vtable_t* vtable) {
+  return vtable->func_like != NULL && vtable->func_like->args_as_operands;
+}
+
+// Returns true if this op has a function signature scope whose arguments are
+// defined by FuncArgs and may be referenced by result types/predicates/ties.
+static bool loom_verify_has_func_signature_scope(
+    const loom_op_vtable_t* vtable) {
+  return vtable->func_like != NULL &&
+         iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE);
+}
+
+// Returns the argument IDs that form a func-like symbol's signature operand
+// domain. Bodyful functions read entry block args; bodyless declarations read
+// op operands.
+static const loom_value_id_t* loom_verify_func_signature_arg_ids(
+    const loom_op_t* op, const loom_op_vtable_t* vtable,
+    uint16_t* out_arg_count) {
+  *out_arg_count = 0;
+  if (!vtable->func_like) return NULL;
+  if (vtable->func_like->args_as_operands) {
+    *out_arg_count = op->operand_count;
+    return loom_op_const_operands(op);
+  }
+  uint8_t body_index = vtable->func_like->body_region_index;
+  if (body_index == LOOM_REGION_INDEX_NONE || body_index >= op->region_count) {
+    return NULL;
+  }
+  loom_region_t* body = loom_op_regions(op)[body_index];
+  if (!body || body->block_count == 0) return NULL;
+  const loom_block_t* entry = loom_region_const_entry_block(body);
+  *out_arg_count = entry->arg_count;
+  return entry->arg_ids;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1067,7 +1200,7 @@ static void loom_verify_semantic_constraint(
       if (region_index >= op->region_count) break;
       loom_region_t* region = loom_op_regions(op)[region_index];
       if (!region || region->block_count == 0) break;
-      uint16_t block_arg_count = region->blocks[0].arg_count;
+      uint16_t block_arg_count = loom_region_entry_arg_count(region);
       uint16_t input_count =
           loom_verify_variadic_count(op, vtable, constraint->args[1]);
       if (block_arg_count != input_count) {
@@ -1091,7 +1224,7 @@ static void loom_verify_semantic_constraint(
       if (region_index >= op->region_count) break;
       loom_region_t* region = loom_op_regions(op)[region_index];
       if (!region || region->block_count == 0) break;
-      loom_block_t* entry = &region->blocks[0];
+      loom_block_t* entry = loom_region_entry_block(region);
 
       uint8_t input_ref = constraint->args[1];
       uint8_t input_category = LOOM_FIELD_REF_CATEGORY(input_ref);
@@ -1108,7 +1241,7 @@ static void loom_verify_semantic_constraint(
           entry->arg_count < input_count ? entry->arg_count : input_count;
       for (uint16_t i = 0; i < check_count; ++i) {
         loom_type_t block_arg_type =
-            loom_verify_value_type(state, entry->arg_ids[i]);
+            loom_verify_value_type(state, loom_block_arg_id(entry, i));
         loom_type_t input_type = loom_verify_value_type(state, input_values[i]);
         if (!loom_constraint_property_equals(block_arg_type, input_type,
                                              constraint->property)) {
@@ -1136,10 +1269,10 @@ static void loom_verify_semantic_constraint(
       if (region_index >= op->region_count) break;
       loom_region_t* region = loom_op_regions(op)[region_index];
       if (!region || region->block_count == 0) break;
-      loom_block_t* entry = &region->blocks[0];
+      loom_block_t* entry = loom_region_entry_block(region);
       if (entry->op_count == 0) break;
 
-      const loom_op_t* terminator = entry->ops[entry->op_count - 1];
+      const loom_op_t* terminator = loom_block_const_last_op(entry);
       uint16_t yield_count = terminator->operand_count;
 
       uint16_t result_count =
@@ -1171,10 +1304,10 @@ static void loom_verify_semantic_constraint(
       if (region_index >= op->region_count) break;
       loom_region_t* region = loom_op_regions(op)[region_index];
       if (!region || region->block_count == 0) break;
-      loom_block_t* entry = &region->blocks[0];
+      loom_block_t* entry = loom_region_entry_block(region);
       if (entry->op_count == 0) break;
 
-      const loom_op_t* terminator = entry->ops[entry->op_count - 1];
+      const loom_op_t* terminator = loom_block_const_last_op(entry);
       const loom_value_id_t* yield_operands =
           loom_op_const_operands(terminator);
 
@@ -1231,6 +1364,10 @@ static void loom_verify_semantic_constraints(loom_verify_state_t* state,
 static void loom_verify_operand_dominance(loom_verify_state_t* state,
                                           const loom_op_t* op,
                                           const loom_op_vtable_t* vtable) {
+  if (loom_verify_func_args_are_operands(vtable) &&
+      iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE)) {
+    return;
+  }
   iree_string_view_t op_name = loom_op_vtable_name(vtable);
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
@@ -1342,7 +1479,7 @@ static void loom_verify_block_arg_encoding_refs(loom_verify_state_t* state,
                                                 const loom_block_t* block) {
   char name_buffer[32];
   for (uint16_t a = 0; a < block->arg_count; ++a) {
-    loom_value_id_t arg_id = block->arg_ids[a];
+    loom_value_id_t arg_id = loom_block_arg_id(block, a);
     if (arg_id == LOOM_VALUE_ID_INVALID) continue;
     if (arg_id >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, arg_id);
@@ -1355,11 +1492,45 @@ static void loom_verify_block_arg_encoding_refs(loom_verify_state_t* state,
 // Tied result validation
 //===----------------------------------------------------------------------===//
 
-static void loom_verify_tied_results(loom_verify_state_t* state,
-                                     const loom_op_t* op,
-                                     const loom_op_vtable_t* vtable) {
+static iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
+                                              const loom_op_t* op,
+                                              const loom_op_vtable_t* vtable) {
+  if (op->tied_result_count == 0) return iree_ok_status();
+
+  const bool has_signature_ties = loom_verify_has_func_signature_scope(vtable);
+  uint16_t tied_operand_count = 0;
+  const loom_value_id_t* tied_operands = NULL;
+  if (has_signature_ties) {
+    tied_operands =
+        loom_verify_func_signature_arg_ids(op, vtable, &tied_operand_count);
+  } else {
+    tied_operand_count = op->operand_count;
+    tied_operands = loom_op_const_operands(op);
+  }
+
+  IREE_RETURN_IF_ERROR(loom_verify_tied_table_reset(
+      &state->tied_table, &state->arena, op->result_count, tied_operand_count));
+
   iree_string_view_t op_name = loom_op_vtable_name(vtable);
   const loom_tied_result_t* tied = loom_op_tied_results(op);
+
+  // Copy and sort this op's valid operand values so ties to repeated operand
+  // values can be diagnosed as ambiguous.
+  for (uint16_t i = 0; i < tied_operand_count; ++i) {
+    loom_value_id_t value_id = tied_operands[i];
+    if (value_id == LOOM_VALUE_ID_INVALID ||
+        value_id >= state->module->values.count) {
+      continue;
+    }
+    state->tied_table
+        .operand_value_ids[state->tied_table.operand_value_count++] = value_id;
+  }
+  if (state->tied_table.operand_value_count > 1) {
+    qsort(state->tied_table.operand_value_ids,
+          state->tied_table.operand_value_count, sizeof(loom_value_id_t),
+          loom_compare_value_ids);
+  }
+
   for (uint16_t i = 0; i < op->tied_result_count; ++i) {
     if (tied[i].result_index >= op->result_count) {
       loom_diagnostic_param_t params[] = {
@@ -1369,23 +1540,64 @@ static void loom_verify_tied_results(loom_verify_state_t* state,
       };
       loom_verify_emit_structured(state, op, &loom_err_dominance_004, params,
                                   3);
+    } else if (loom_bitset_test(state->tied_table.result_index_bits,
+                                tied[i].result_index)) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_u32(tied[i].result_index),
+          loom_param_string(op_name),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_dominance_006, params,
+                                  2);
+    } else {
+      loom_bitset_set(state->tied_table.result_index_bits,
+                      tied[i].result_index);
     }
-    if (tied[i].operand_index >= op->operand_count) {
+    if (tied[i].operand_index >= tied_operand_count || !tied_operands) {
       loom_diagnostic_param_t params[] = {
           loom_param_u32(tied[i].operand_index),
           loom_param_string(op_name),
-          loom_param_u32(op->operand_count),
+          loom_param_u32(tied_operand_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_dominance_005, params,
                                   3);
+      continue;
     }
-    // Mark the tied operand as consumed.
-    if (tied[i].operand_index < op->operand_count) {
-      loom_value_id_t consumed_id =
-          loom_op_const_operands(op)[tied[i].operand_index];
+    if (loom_bitset_test(state->tied_table.operand_index_bits,
+                         tied[i].operand_index)) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_u32(tied[i].operand_index),
+          loom_param_string(op_name),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_dominance_007, params,
+                                  2);
+    } else {
+      loom_bitset_set(state->tied_table.operand_index_bits,
+                      tied[i].operand_index);
+    }
+
+    loom_value_id_t consumed_id = tied_operands[tied[i].operand_index];
+    if (consumed_id != LOOM_VALUE_ID_INVALID &&
+        consumed_id < state->module->values.count &&
+        loom_verify_tied_table_has_duplicate_operand_value(&state->tied_table,
+                                                           consumed_id)) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_u32(tied[i].operand_index),
+          loom_param_string(op_name),
+          loom_param_string(loom_verify_value_name(state, consumed_id)),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_dominance_008, params,
+                                  3);
+    }
+
+    // Ties on regular body ops consume the operand's storage. Func-like symbol
+    // signatures are caller-side ownership contracts, so their entry args are
+    // validated as tie targets but not marked consumed at function entry.
+    if (!has_signature_ties) {
       loom_verify_consume_value(state, consumed_id);
     }
   }
+
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1455,9 +1667,9 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
     }
     // Check that each non-empty block has a terminator as its last op.
     for (uint16_t b = 0; b < region->block_count; ++b) {
-      loom_block_t* block = &region->blocks[b];
+      loom_block_t* block = loom_region_block(region, b);
       if (block->op_count == 0) continue;
-      const loom_op_t* last_op = block->ops[block->op_count - 1];
+      const loom_op_t* last_op = loom_block_const_last_op(block);
       const loom_op_vtable_t* last_vtable =
           loom_verify_lookup_vtable(state, last_op->kind);
       if (last_vtable && !(last_vtable->traits & LOOM_TRAIT_TERMINATOR)) {
@@ -1484,12 +1696,13 @@ static iree_status_t loom_verify_region(loom_verify_state_t* state,
   if (!region) return iree_ok_status();
   IREE_RETURN_IF_ERROR(loom_verify_push_scope(state));
   for (uint16_t b = 0; b < region->block_count; ++b) {
-    loom_block_t* block = &region->blocks[b];
+    loom_block_t* block = loom_region_block(region, b);
     // Define block arguments, then validate any SSA encoding
     // references in their types (encoding values must be visible
     // from the enclosing scope).
     for (uint16_t a = 0; a < block->arg_count; ++a) {
-      IREE_RETURN_IF_ERROR(loom_verify_define_value(state, block->arg_ids[a]));
+      IREE_RETURN_IF_ERROR(
+          loom_verify_define_value(state, loom_block_arg_id(block, a)));
     }
     loom_verify_block_arg_encoding_refs(state, block);
     iree_status_t diagnostic_status =
@@ -1500,7 +1713,7 @@ static iree_status_t loom_verify_region(loom_verify_state_t* state,
     }
     for (uint16_t i = 0; i < block->op_count; ++i) {
       if (loom_verify_at_error_limit(state)) break;
-      loom_op_t* current = block->ops[i];
+      loom_op_t* current = loom_block_op(block, i);
       if (current->flags & LOOM_OP_FLAG_DEAD) continue;
       IREE_RETURN_IF_ERROR(loom_verify_op(state, current));
     }
@@ -1528,6 +1741,17 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
           loom_verify_define_value(state, loom_op_const_results(op)[i]));
     }
     return iree_ok_status();
+  }
+
+  const bool has_signature_scope = loom_verify_has_func_signature_scope(vtable);
+  if (has_signature_scope) {
+    IREE_RETURN_IF_ERROR(loom_verify_push_scope(state));
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_verify_func_signature_arg_ids(op, vtable, &arg_count);
+    for (uint16_t i = 0; i < arg_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_verify_define_value(state, arg_ids[i]));
+    }
   }
 
   // Operand references must be valid and in scope. This must run
@@ -1558,7 +1782,7 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Tied result validation and linear ownership consume marking.
-  loom_verify_tied_results(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_tied_results(state, op, vtable));
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Symbol reference attributes must point to valid symbol table entries.
@@ -1571,9 +1795,13 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
 
   // Define result values. Must happen after all checks on this op
   // so that a result cannot appear to dominate its own defining op.
-  for (uint16_t i = 0; i < op->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_verify_define_value(state, loom_op_const_results(op)[i]));
+  if (has_signature_scope) {
+    loom_verify_pop_scope(state);
+  } else {
+    for (uint16_t i = 0; i < op->result_count; ++i) {
+      IREE_RETURN_IF_ERROR(
+          loom_verify_define_value(state, loom_op_const_results(op)[i]));
+    }
   }
 
   // Recurse into regions. Region contents see this op's results
@@ -1710,15 +1938,17 @@ static iree_status_t loom_verify_state_initialize(
       iree_arena_allocate_array(&state->arena, state->defined_bits_length,
                                 sizeof(uint64_t), (void**)&state->defined_bits);
   if (iree_status_is_ok(status)) {
-    memset(state->defined_bits, 0,
-           state->defined_bits_length * sizeof(uint64_t));
     status = iree_arena_allocate_array(
         &state->arena, state->defined_bits_length, sizeof(uint64_t),
         (void**)&state->consumed_bits);
   }
   if (iree_status_is_ok(status)) {
+    memset(state->defined_bits, 0,
+           state->defined_bits_length * sizeof(uint64_t));
     memset(state->consumed_bits, 0,
            state->defined_bits_length * sizeof(uint64_t));
+  }
+  if (iree_status_is_ok(status)) {
     // Allocate defined stack. Start with value_count/4 capacity (most
     // values are results that get defined). Grows dynamically via
     // iree_arena_grow_array if the heuristic undersizes.
@@ -1763,9 +1993,9 @@ iree_status_t loom_verify_module(const loom_module_t* module,
     // func.decl, etc.) are allowed at the top level. Ops without
     // LOOM_TRAIT_SYMBOL_DEFINE belong inside function bodies.
     if (module->body->block_count > 0) {
-      loom_block_t* entry = &module->body->blocks[0];
+      loom_block_t* entry = loom_region_entry_block(module->body);
       for (uint16_t i = 0; i < entry->op_count; ++i) {
-        const loom_op_t* op = entry->ops[i];
+        const loom_op_t* op = loom_block_const_op(entry, i);
         if (op->flags & LOOM_OP_FLAG_DEAD) continue;
         const loom_op_vtable_t* vtable =
             loom_verify_lookup_vtable(&state, op->kind);
@@ -1816,25 +2046,10 @@ iree_status_t loom_verify_function(const loom_module_t* module,
   IREE_RETURN_IF_ERROR(
       loom_verify_state_initialize(&state, module, options, out_result));
 
-  // Define function arguments.
-  uint16_t arg_count = 0;
-  const loom_value_id_t* arg_ids = loom_func_like_arg_ids(function, &arg_count);
-  for (uint16_t i = 0; i < arg_count; ++i) {
-    iree_status_t define_status = loom_verify_define_value(&state, arg_ids[i]);
-    if (!iree_status_is_ok(define_status)) {
-      loom_verify_state_deinitialize(&state);
-      return define_status;
-    }
-  }
-
-  // Walk the function body.
-  loom_region_t* body = loom_func_like_body(function);
-  if (body) {
-    iree_status_t walk_status = loom_verify_region(&state, body);
-    if (!iree_status_is_ok(walk_status)) {
-      loom_verify_state_deinitialize(&state);
-      return walk_status;
-    }
+  iree_status_t verify_status = loom_verify_op(&state, function.op);
+  if (!iree_status_is_ok(verify_status)) {
+    loom_verify_state_deinitialize(&state);
+    return verify_status;
   }
 
   loom_verify_state_deinitialize(&state);

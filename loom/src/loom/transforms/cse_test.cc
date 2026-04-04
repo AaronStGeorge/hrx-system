@@ -50,8 +50,8 @@ class CSETest : public ::testing::Test {
                                         LOOM_LOCATION_UNKNOWN, &func_op));
     func_like_ = loom_func_like_cast(module_, func_op);
     body_ = loom_func_like_body(func_like_);
-    loom_builder_initialize(module_, &module_->arena, &body_->blocks[0],
-                            &builder_);
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_region_entry_block(body_), &builder_);
   }
 
   void TearDown() override {
@@ -188,6 +188,56 @@ TEST_F(CSETest, DistinguishesDifferentAttributes) {
   EXPECT_EQ(count_live_ops(), 3);  // No change.
 }
 
+TEST_F(CSETest, CanonicalAttrDictOrderDoesNotBlockCSE) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), f32, &input));
+
+  loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t label_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t foo_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("axis"), &axis_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("label"), &label_id));
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("foo"), &foo_id));
+
+  loom_op_t* attrs0 = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input, f32,
+                                       LOOM_LOCATION_UNKNOWN, &attrs0));
+  loom_named_attr_t label_first_entries[2] = {
+      {.name_id = label_id, .value = loom_attr_string(foo_id)},
+      {.name_id = axis_id, .value = loom_attr_i64(0)},
+  };
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+      module_, label_first_entries, 2, &loom_op_attrs(attrs0)[0]));
+
+  loom_op_t* attrs1 = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input, f32,
+                                       LOOM_LOCATION_UNKNOWN, &attrs1));
+  loom_named_attr_t axis_first_entries[2] = {
+      {.name_id = axis_id, .value = loom_attr_i64(0)},
+      {.name_id = label_id, .value = loom_attr_string(foo_id)},
+  };
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+      module_, axis_first_entries, 2, &loom_op_attrs(attrs1)[0]));
+
+  loom_value_id_t values[] = {
+      loom_test_attrs_result(attrs0),
+      loom_test_attrs_result(attrs1),
+  };
+  loom_op_t* reduce = NULL;
+  IREE_ASSERT_OK(loom_test_reduce_build(&builder_, values, 2, f32,
+                                        LOOM_LOCATION_UNKNOWN, &reduce));
+
+  EXPECT_EQ(count_live_ops(), 3);
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_EQ(count_live_ops(), 2);
+  EXPECT_EQ(loom_op_const_operands(reduce)[0],
+            loom_op_const_operands(reduce)[1]);
+}
+
 TEST_F(CSETest, EliminatesIdenticalBinaryOps) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
@@ -227,8 +277,8 @@ TEST_F(CSETest, ReadOnlyOpsCSEWithoutInterveningWrite) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // Two identical reads from the same pool, no writes between them.
   loom_op_t* read1 = NULL;
@@ -256,8 +306,8 @@ TEST_F(CSETest, ReadOnlyOpsBlockedByInterveningWrite) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // First read.
   loom_op_t* read1 = NULL;
@@ -295,8 +345,8 @@ TEST_F(CSETest, PureOpsSurviveWriteBarrier) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // First constant (pure).
   loom_op_t* const1 = NULL;
@@ -337,8 +387,8 @@ TEST_F(CSETest, MutateResourceNotCSEd) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   loom_op_t* const_op = NULL;
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32,
@@ -391,8 +441,8 @@ TEST_F(CSETest, DuplicatesInsideNestedRegion) {
 
   // Build a block arg to feed as input to map.
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   // Build test.map with one input.
   loom_op_t* map_op = NULL;
@@ -428,8 +478,8 @@ TEST_F(CSETest, CrossScopeCSEIntoNestedRegion) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   // Outer constant.
   loom_op_t* outer_const = NULL;
@@ -493,8 +543,8 @@ TEST_F(CSETest, WriteInsideNestedRegionInvalidatesOuterReads) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // Outer read.
   loom_op_t* read1 = NULL;
@@ -547,8 +597,8 @@ TEST_F(CSETest, PureOpSurvivesWriteInsideNestedRegion) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // Outer PURE constant.
   loom_op_t* const1 = NULL;
@@ -599,8 +649,8 @@ TEST_F(CSETest, DeepNestingDoesNotStackOverflow) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   // Build 200 levels of nested test.map ops, each with a duplicate
   // constant pair. This exercises the iterative DFS without blowing
@@ -646,8 +696,8 @@ TEST_F(CSETest, DifferentResultTypesNotCSEd) {
 
   // Block arg as the shared input.
   loom_value_id_t input = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &input));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &input));
 
   // Two casts of the same input to different result types.
   // Same kind, same operands, zero attributes — only the result
@@ -676,8 +726,8 @@ TEST_F(CSETest, SameResultTypesCSEd) {
   loom_type_t i64 = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
 
   loom_value_id_t input = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &input));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &input));
 
   // Two identical casts — same operand AND same result type.
   loom_op_t* cast1 = NULL;
@@ -712,8 +762,8 @@ TEST_F(CSETest, PureOpFoundThroughTombstone) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // Insert a read (non-PURE) into the hash table.
   loom_op_t* read_op = NULL;
@@ -764,8 +814,8 @@ TEST_F(CSETest, CSEAcrossMultipleNestingLevels) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   // Outer constant at depth 0.
   loom_op_t* outer_const = NULL;
@@ -842,8 +892,8 @@ TEST_F(CSETest, UniqueIdentityNotCSEd) {
 
   // Create an index block arg for the allocation size.
   loom_value_id_t size_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               index_type, &size_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), index_type, &size_id));
 
   // Two identical alloc ops with the same size operand and result type.
   loom_op_t* alloc1 = NULL;
@@ -878,11 +928,11 @@ TEST_F(CSETest, UniqueIdentityDoesNotTriggerWriteBarrier) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
   loom_value_id_t size_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               index_type, &size_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), index_type, &size_id));
 
   // First read from the pool.
   loom_op_t* read1 = NULL;

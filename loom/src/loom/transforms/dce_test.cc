@@ -56,8 +56,8 @@ class DCETest : public ::testing::Test {
                                         LOOM_LOCATION_UNKNOWN, &func_op));
     func_like_ = loom_func_like_cast(module_, func_op);
     body_ = loom_func_like_body(func_like_);
-    loom_builder_initialize(module_, &module_->arena, &body_->blocks[0],
-                            &builder_);
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_region_entry_block(body_), &builder_);
   }
 
   void TearDown() override {
@@ -208,8 +208,8 @@ TEST_F(DCETest, RemovesReadOnlyOpWithUnusedResult) {
 
   // Create a pool-typed block arg so we have a resource value.
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // %tile = test.read_resource %pool (reads pool, result unused → dead).
   loom_op_t* read_op = NULL;
@@ -226,8 +226,8 @@ TEST_F(DCETest, PreservesWriteOp) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // Create a data value for the write.
   loom_op_t* const_op = NULL;
@@ -251,8 +251,8 @@ TEST_F(DCETest, PreservesMutateOpRemovesUnusedResult) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   loom_op_t* const_op = NULL;
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32,
@@ -304,8 +304,8 @@ TEST_F(DCETest, PartialLiveness) {
   loom_type_t pool_type = loom_type_pool(loom_dim_pack_static(4096));
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // %a = const 42
   // %b = neg %a   (unused — dead)
@@ -355,8 +355,8 @@ TEST_F(DCETest, NonDeterministicReadWithUnusedResultIsDead) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // A read-only op with an unused result is dead — a read with no
   // observer is a no-op, even if the read itself is non-deterministic.
@@ -394,8 +394,8 @@ TEST_F(DCETest, NestedRegionDeadOpsRemoved) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   // Build test.map with an unused result — the map itself is dead.
   loom_op_t* map_op = NULL;
@@ -422,11 +422,11 @@ TEST_F(DCETest, InnerDeadOpRemovedWhileOuterLives) {
   loom_type_t pool_type = loom_type_pool(loom_dim_pack_static(4096));
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
   loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               pool_type, &pool_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), pool_type, &pool_id));
 
   // Build test.map — keep its result alive via a write.
   loom_op_t* map_op = NULL;
@@ -458,8 +458,8 @@ TEST_F(DCETest, CascadingAcrossRegionBoundary) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   // Outer constant — its only use is inside a nested region.
   loom_op_t* outer_const = NULL;
@@ -493,8 +493,8 @@ TEST_F(DCETest, DeepNestedDeadOpsRemoved) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_define_block_arg(&builder_, &body_->blocks[0], i32, &arg));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
 
   // Build 50 levels of nested test.map, each with a dead constant.
   static const int kDepth = 50;
@@ -549,8 +549,8 @@ TEST_F(DCETest, UnusedAllocationIsRemoved) {
 
   // Create an index block arg for the allocation size.
   loom_value_id_t size_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               index_type, &size_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), index_type, &size_id));
 
   // An alloc with no uses — should be eliminated by DCE.
   loom_op_t* alloc_op = NULL;
@@ -568,8 +568,8 @@ TEST_F(DCETest, UsedAllocationSurvives) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t size_id = LOOM_VALUE_ID_INVALID;
-  IREE_ASSERT_OK(loom_builder_define_block_arg(&builder_, &body_->blocks[0],
-                                               index_type, &size_id));
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), index_type, &size_id));
 
   // An alloc whose pool is used by a write (which has side effects
   // and keeps the entire chain alive).

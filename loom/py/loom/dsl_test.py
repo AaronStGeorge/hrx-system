@@ -16,6 +16,8 @@ from loom.assembly import (
     Keyword,
     Ref,
     Region,
+    ResultType,
+    Scope,
     TypeOf,
     kw,
 )
@@ -707,6 +709,15 @@ class TestOp:
                     Ref("source"),
                     IndexList("offsets", "static_offsets"),  # Neither declared!
                 ],
+            )
+
+    def test_nested_scope_rejected(self) -> None:
+        """Scope(...) is one-level only; nested Scope is a declaration error."""
+        with pytest.raises(ValueError, match="nested Scope is not supported"):
+            Op(
+                "test.bad",
+                results=[Result("result", ANY)],
+                format=[Scope([Scope([ResultType("result")])])],
             )
 
 

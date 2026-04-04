@@ -248,6 +248,47 @@ static iree_status_t loom_block_ops_ensure_capacity(
   return iree_ok_status();
 }
 
+static iree_status_t loom_module_initialize_block(loom_module_t* module,
+                                                  loom_block_t* block) {
+  memset(block, 0, sizeof(*block));
+  block->label_id = LOOM_STRING_ID_INVALID;
+  block->op_capacity = 16;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&module->arena, block->op_capacity,
+                                sizeof(loom_op_t*), (void**)&block->ops));
+  memset(block->ops, 0,
+         (iree_host_size_t)block->op_capacity * sizeof(loom_op_t*));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_region_blocks_ensure_capacity(loom_module_t* module,
+                                                        loom_region_t* region) {
+  if (region->block_count < region->block_capacity) return iree_ok_status();
+  if (region->block_capacity == UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "region block count exceeds UINT16_MAX");
+  }
+
+  iree_host_size_t old_capacity = region->block_capacity;
+  iree_host_size_t new_capacity =
+      old_capacity > 0 ? old_capacity * 2 : (iree_host_size_t)4;
+  if (new_capacity > UINT16_MAX) new_capacity = UINT16_MAX;
+
+  loom_block_t** new_blocks = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, new_capacity,
+                                                 sizeof(loom_block_t*),
+                                                 (void**)&new_blocks));
+  memset(new_blocks, 0, new_capacity * sizeof(loom_block_t*));
+  if (region->block_count > 0) {
+    memcpy(new_blocks, region->blocks,
+           (iree_host_size_t)region->block_count * sizeof(loom_block_t*));
+  }
+
+  region->blocks = new_blocks;
+  region->block_capacity = (uint16_t)new_capacity;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Module
 //===----------------------------------------------------------------------===//
@@ -648,6 +689,328 @@ loom_string_id_t loom_module_lookup_string(const loom_module_t* module,
 }
 
 //===----------------------------------------------------------------------===//
+// Canonical dictionary attributes
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_module_resolve_attr_dict_key_name(
+    const loom_module_t* module, loom_string_id_t name_id,
+    iree_string_view_t* out_name) {
+  if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "dict attribute key string id %u is out of range (module has %" PRIhsz
+        " strings)",
+        name_id, module->strings.count);
+  }
+  *out_name = module->strings.entries[name_id];
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_canonicalize_attr_dict_value_impl(
+    loom_module_t* module, loom_attribute_t value, iree_host_size_t depth,
+    loom_attribute_t* out_value);
+
+static iree_status_t loom_module_make_canonical_attr_dict_impl(
+    loom_module_t* module, const loom_named_attr_t* entries,
+    iree_host_size_t count, iree_host_size_t depth,
+    loom_attribute_t* out_attr) {
+  if (depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dict attribute nesting exceeds max depth %u",
+                            (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
+  }
+  if (count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "dict attribute has %" PRIhsz " entries, max %u",
+                            count, (unsigned)UINT16_MAX);
+  }
+  if (count > 0 && !entries) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty dict attribute has a NULL entry pointer");
+  }
+
+  if (count == 0) {
+    *out_attr = loom_make_canonical_attr_dict(NULL, 0);
+    return iree_ok_status();
+  }
+
+  loom_named_attr_t* canonical_entries = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, count,
+                                                 sizeof(loom_named_attr_t),
+                                                 (void**)&canonical_entries));
+
+  iree_host_size_t canonical_count = 0;
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    iree_string_view_t key_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_module_resolve_attr_dict_key_name(
+        module, entries[i].name_id, &key_name));
+
+    loom_named_attr_t entry = {
+        .name_id = entries[i].name_id,
+        .value = {0},
+    };
+    IREE_RETURN_IF_ERROR(loom_module_canonicalize_attr_dict_value_impl(
+        module, entries[i].value, depth + 1, &entry.value));
+
+    iree_host_size_t insert_index = canonical_count;
+    while (insert_index > 0) {
+      iree_string_view_t previous_key_name = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_module_resolve_attr_dict_key_name(
+          module, canonical_entries[insert_index - 1].name_id,
+          &previous_key_name));
+
+      int comparison = iree_string_view_compare(key_name, previous_key_name);
+      if (comparison == 0) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate dict attribute key '%.*s'",
+                                (int)key_name.size, key_name.data);
+      }
+      if (comparison > 0) break;
+
+      canonical_entries[insert_index] = canonical_entries[insert_index - 1];
+      --insert_index;
+    }
+
+    canonical_entries[insert_index] = entry;
+    ++canonical_count;
+  }
+
+  *out_attr = loom_make_canonical_attr_dict(canonical_entries,
+                                            (uint16_t)canonical_count);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_canonicalize_attr_dict_value_impl(
+    loom_module_t* module, loom_attribute_t value, iree_host_size_t depth,
+    loom_attribute_t* out_value) {
+  value.reserved_0 = 0;
+  value.reserved_1 = 0;
+
+  switch ((loom_attr_kind_t)value.kind) {
+    case LOOM_ATTR_I64:
+    case LOOM_ATTR_F64:
+    case LOOM_ATTR_BOOL:
+    case LOOM_ATTR_ENUM:
+    case LOOM_ATTR_SYMBOL:
+      *out_value = value;
+      return iree_ok_status();
+    case LOOM_ATTR_STRING:
+      if (value.string_id == LOOM_STRING_ID_INVALID ||
+          value.string_id >= module->strings.count) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "dict attribute string value id %u is out of "
+                                "range (module has %" PRIhsz " strings)",
+                                value.string_id, module->strings.count);
+      }
+      *out_value = value;
+      return iree_ok_status();
+    case LOOM_ATTR_TYPE:
+      if (value.type_id == LOOM_TYPE_ID_INVALID ||
+          value.type_id >= module->types.count) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "dict attribute type value id %u is out of "
+                                "range (module has %" PRIhsz " types)",
+                                value.type_id, module->types.count);
+      }
+      *out_value = value;
+      return iree_ok_status();
+    case LOOM_ATTR_I64_ARRAY:
+      if (value.count == 0) {
+        value.i64_array = NULL;
+      } else if (!value.i64_array) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "non-empty dict attribute i64 array value has a NULL payload");
+      } else {
+        int64_t* values = NULL;
+        IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+            &module->arena, value.count, sizeof(int64_t), (void**)&values));
+        memcpy(values, value.i64_array,
+               (iree_host_size_t)value.count * sizeof(int64_t));
+        value.i64_array = values;
+      }
+      *out_value = value;
+      return iree_ok_status();
+    case LOOM_ATTR_PREDICATE_LIST:
+      if (value.count == 0) {
+        value.predicate_list = NULL;
+      } else if (!value.predicate_list) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "non-empty dict attribute predicate list has a NULL payload");
+      } else {
+        loom_predicate_t* predicates = NULL;
+        IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+            &module->arena, value.count, sizeof(loom_predicate_t),
+            (void**)&predicates));
+        memcpy(predicates, value.predicate_list,
+               (iree_host_size_t)value.count * sizeof(loom_predicate_t));
+        value.predicate_list = predicates;
+      }
+      *out_value = value;
+      return iree_ok_status();
+    case LOOM_ATTR_DICT:
+      return loom_module_make_canonical_attr_dict_impl(
+          module, value.dict, value.count, depth, out_value);
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "dict attribute value has unknown kind %u",
+                              (unsigned)value.kind);
+  }
+}
+
+iree_status_t loom_module_make_canonical_attr_dict(
+    loom_module_t* module, const loom_named_attr_t* entries,
+    iree_host_size_t count, loom_attribute_t* out_attr) {
+  return loom_module_make_canonical_attr_dict_impl(module, entries, count, 0,
+                                                   out_attr);
+}
+
+static iree_status_t loom_module_verify_canonical_attr_dict_value_impl(
+    const loom_module_t* module, const loom_attribute_t* value,
+    iree_host_size_t depth);
+
+static iree_status_t loom_module_verify_canonical_attr_dict_impl(
+    const loom_module_t* module, const loom_attribute_t* attr,
+    iree_host_size_t depth) {
+  if (attr->kind != LOOM_ATTR_DICT) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected a DICT attribute, got kind %u",
+                            (unsigned)attr->kind);
+  }
+  if (attr->reserved_0 != 0 || attr->reserved_1 != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dict attribute has non-zero reserved bits");
+  }
+  if (depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dict attribute nesting exceeds max depth %u",
+                            (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
+  }
+  if (attr->count == 0) {
+    if (attr->dict != NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "empty dict attribute must use a NULL entry pointer");
+    }
+    return iree_ok_status();
+  }
+  if (!attr->dict) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty dict attribute has a NULL entry pointer");
+  }
+
+  iree_string_view_t previous_key_name = iree_string_view_empty();
+  for (uint16_t i = 0; i < attr->count; ++i) {
+    const loom_named_attr_t* entry = &attr->dict[i];
+    if (entry->reserved != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "dict attribute entry %u has non-zero reserved bits", i);
+    }
+
+    iree_string_view_t key_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_module_resolve_attr_dict_key_name(
+        module, entry->name_id, &key_name));
+    if (i > 0) {
+      int comparison = iree_string_view_compare(key_name, previous_key_name);
+      if (comparison == 0) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate dict attribute key '%.*s'",
+                                (int)key_name.size, key_name.data);
+      }
+      if (comparison < 0) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "dict attribute key '%.*s' appears after '%.*s' out of canonical "
+            "order",
+            (int)key_name.size, key_name.data, (int)previous_key_name.size,
+            previous_key_name.data);
+      }
+    }
+
+    IREE_RETURN_IF_ERROR(loom_module_verify_canonical_attr_dict_value_impl(
+        module, &entry->value, depth + 1));
+    previous_key_name = key_name;
+  }
+
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_verify_canonical_attr_dict_value_impl(
+    const loom_module_t* module, const loom_attribute_t* value,
+    iree_host_size_t depth) {
+  if (value->reserved_0 != 0 || value->reserved_1 != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dict attribute value has non-zero reserved bits");
+  }
+
+  switch ((loom_attr_kind_t)value->kind) {
+    case LOOM_ATTR_I64:
+    case LOOM_ATTR_F64:
+    case LOOM_ATTR_BOOL:
+    case LOOM_ATTR_ENUM:
+    case LOOM_ATTR_SYMBOL:
+      return iree_ok_status();
+    case LOOM_ATTR_STRING:
+      if (value->string_id == LOOM_STRING_ID_INVALID ||
+          value->string_id >= module->strings.count) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "dict attribute string value id %u is out of "
+                                "range (module has %" PRIhsz " strings)",
+                                value->string_id, module->strings.count);
+      }
+      return iree_ok_status();
+    case LOOM_ATTR_TYPE:
+      if (value->type_id == LOOM_TYPE_ID_INVALID ||
+          value->type_id >= module->types.count) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "dict attribute type value id %u is out of "
+                                "range (module has %" PRIhsz " types)",
+                                value->type_id, module->types.count);
+      }
+      return iree_ok_status();
+    case LOOM_ATTR_I64_ARRAY:
+      if (value->count > 0 && !value->i64_array) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "non-empty dict attribute i64 array value has a NULL payload");
+      }
+      if (value->count == 0 && value->i64_array != NULL) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "empty dict attribute i64 array value must use a NULL payload");
+      }
+      return iree_ok_status();
+    case LOOM_ATTR_PREDICATE_LIST:
+      if (value->count > 0 && !value->predicate_list) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "non-empty dict attribute predicate list has a NULL payload");
+      }
+      if (value->count == 0 && value->predicate_list != NULL) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "empty dict attribute predicate list must use a NULL payload");
+      }
+      return iree_ok_status();
+    case LOOM_ATTR_DICT:
+      return loom_module_verify_canonical_attr_dict_impl(module, value, depth);
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "dict attribute value has unknown kind %u",
+                              (unsigned)value->kind);
+  }
+}
+
+iree_status_t loom_module_verify_canonical_attr_dict(
+    const loom_module_t* module, loom_attribute_t attr) {
+  return loom_module_verify_canonical_attr_dict_impl(module, &attr, 0);
+}
+
+//===----------------------------------------------------------------------===//
 // Type interning
 //===----------------------------------------------------------------------===//
 
@@ -729,16 +1092,8 @@ iree_status_t loom_module_allocate_block(loom_module_t* module,
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_arena_allocate(&module->arena, sizeof(loom_block_t),
                               (void**)&block));
-  memset(block, 0, sizeof(loom_block_t));
-  block->label_id = LOOM_STRING_ID_INVALID;
-
-  block->op_capacity = 16;
-  iree_status_t status =
-      iree_arena_allocate_array(&module->arena, block->op_capacity,
-                                sizeof(loom_op_t*), (void**)&block->ops);
+  iree_status_t status = loom_module_initialize_block(module, block);
   if (iree_status_is_ok(status)) {
-    memset(block->ops, 0,
-           (iree_host_size_t)block->op_capacity * sizeof(loom_op_t*));
     *out_block = block;
   }
   IREE_TRACE_ZONE_END(z0);
@@ -754,34 +1109,45 @@ iree_status_t loom_module_allocate_region(loom_module_t* module,
       &module->arena, sizeof(loom_region_t), (void**)&region);
   if (iree_status_is_ok(status)) {
     memset(region, 0, sizeof(loom_region_t));
-    region->block_count = block_count;
+    region->blocks = region->inline_blocks;
+    region->inline_blocks[0] = &region->entry_block;
+    region->block_capacity = 1;
+    status = loom_module_initialize_block(module, &region->entry_block);
   }
-  if (iree_status_is_ok(status) && block_count > 0) {
+  if (iree_status_is_ok(status) && block_count > 1) {
+    region->block_capacity = block_count;
     status = iree_arena_allocate_array(&module->arena, block_count,
-                                       sizeof(loom_block_t),
+                                       sizeof(loom_block_t*),
                                        (void**)&region->blocks);
     if (iree_status_is_ok(status)) {
       memset(region->blocks, 0,
-             (iree_host_size_t)block_count * sizeof(loom_block_t));
+             (iree_host_size_t)block_count * sizeof(loom_block_t*));
+      region->blocks[0] = &region->entry_block;
     }
-    for (uint16_t i = 0; i < block_count && iree_status_is_ok(status); ++i) {
-      loom_block_t* block = &region->blocks[i];
-      block->label_id = LOOM_STRING_ID_INVALID;
-      block->op_capacity = 16;
-      status =
-          iree_arena_allocate_array(&module->arena, block->op_capacity,
-                                    sizeof(loom_op_t*), (void**)&block->ops);
-      if (iree_status_is_ok(status)) {
-        memset(block->ops, 0,
-               (iree_host_size_t)block->op_capacity * sizeof(loom_op_t*));
-      }
+    for (uint16_t i = 1; i < block_count && iree_status_is_ok(status); ++i) {
+      status = loom_module_allocate_block(module, &region->blocks[i]);
     }
   }
   if (iree_status_is_ok(status)) {
+    region->block_count = block_count;
     *out_region = region;
   }
   IREE_TRACE_ZONE_END(z0);
   return status;
+}
+
+iree_status_t loom_region_append_block(loom_module_t* module,
+                                       loom_region_t* region,
+                                       loom_block_t** out_block) {
+  IREE_RETURN_IF_ERROR(loom_region_blocks_ensure_capacity(module, region));
+  loom_block_t* block = &region->entry_block;
+  if (region->block_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_module_allocate_block(module, &block));
+  }
+  region->blocks[region->block_count] = block;
+  ++region->block_count;
+  *out_block = block;
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//

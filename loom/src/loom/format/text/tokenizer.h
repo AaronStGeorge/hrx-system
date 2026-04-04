@@ -7,9 +7,10 @@
 // Lexical scanner for the loom IR textual format.
 //
 // The tokenizer operates on an iree_string_view_t source buffer (no NUL
-// termination required). All tokens are slices into the source buffer —
-// zero allocations. The tokenizer is stack-allocated and supports
-// one-token lookahead via peek/next.
+// termination required). Most token payloads are zero-copy slices into that
+// buffer. Escaped string literals are decoded into caller-provided scratch
+// arena storage, while unescaped strings stay zero-copy. The tokenizer is
+// stack-allocated and supports one-token lookahead via peek/next.
 //
 // Character access is bounds-checked: position < source.size. EOF is
 // detected by the bounds check, not by a sentinel character.
@@ -18,6 +19,8 @@
 #define LOOM_FORMAT_TEXT_TOKENIZER_H_
 
 #include "iree/base/api.h"
+
+typedef struct iree_arena_allocator_t iree_arena_allocator_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -65,13 +68,20 @@ typedef enum loom_token_kind_e {
   LOOM_TOKEN_NONE = 255,
 } loom_token_kind_t;
 
-// A token: kind + slice into the source buffer + source location.
+// A token's semantic payload and exact source spelling.
+//
+// |text| is the payload the parser should intern or resolve. For prefixed
+// tokens (%, @, #, ^), this excludes the prefix. For string literals, this
+// excludes the surrounding quotes and decodes the supported escape set
+// (\" \\ \n \t). |source_text| is the exact byte slice from the input file,
+// including sigils/quotes, for diagnostics and source ranges.
 typedef struct loom_token_t {
-  loom_token_kind_t kind;
   iree_string_view_t text;
+  iree_string_view_t source_text;
   uint32_t line;
   uint32_t column;
   uint32_t end_column;  // Column past the last character of this token.
+  loom_token_kind_t kind;
 } loom_token_t;
 
 // Returns a sentinel token for parser-synthesized values that have no
@@ -80,6 +90,7 @@ static inline loom_token_t loom_token_none(void) {
   loom_token_t token = {
       .kind = LOOM_TOKEN_NONE,
       .text = iree_string_view_empty(),
+      .source_text = iree_string_view_empty(),
       .line = 0,
       .column = 0,
       .end_column = 0,
@@ -88,33 +99,16 @@ static inline loom_token_t loom_token_none(void) {
 }
 
 // Returns the original source spelling of |token|, including any sigil or
-// quotes stripped from |token.text| by the tokenizer. Semantic parser code that
-// needs the bare SSA/symbol/hash payload should keep using |token.text|; this
-// helper is for diagnostics and alias spellings that need the full lexeme.
+// quotes excluded from |token.text|.
 static inline iree_string_view_t loom_token_lexeme(loom_token_t token) {
-  switch (token.kind) {
-    case LOOM_TOKEN_NONE:
-      return iree_string_view_empty();
-    case LOOM_TOKEN_EOF:
-      return token.text;
-    case LOOM_TOKEN_STRING:
-      return iree_make_string_view(token.text.data - 1, token.text.size + 2);
-    case LOOM_TOKEN_SSA_VALUE:
-    case LOOM_TOKEN_SYMBOL:
-    case LOOM_TOKEN_HASH_ATTR:
-    case LOOM_TOKEN_RESULT_ORDINAL:
-    case LOOM_TOKEN_BLOCK_LABEL:
-      return iree_make_string_view(token.text.data - 1, token.text.size + 1);
-    default:
-      return token.text;
-  }
+  return token.source_text;
 }
 
-// Lexical scanner state. Stack-allocated, no heap allocations.
-// If a scan error occurs (e.g., unterminated string), it is stored in
-// |status| and all subsequent peek/next calls return EOF. The caller
-// must check loom_tokenizer_consume_status after parsing to retrieve
-// any deferred scan error.
+// Lexical scanner state. Stack-allocated; only escaped string payloads allocate
+// from |scratch_arena|. If a scan error occurs (e.g., unterminated string), it
+// is stored in |status| and all subsequent peek/next calls return EOF. The
+// caller must check loom_tokenizer_consume_status after parsing to retrieve any
+// deferred scan error.
 typedef struct loom_tokenizer_t {
   iree_string_view_t source;
   iree_host_size_t position;
@@ -122,6 +116,7 @@ typedef struct loom_tokenizer_t {
   uint32_t column;
   loom_token_t peeked;
   iree_string_view_t filename;
+  iree_arena_allocator_t* scratch_arena;
   iree_status_t status;
 
   // Position of the most recently consumed token's end. Updated on
@@ -137,10 +132,12 @@ typedef struct loom_tokenizer_t {
   bool in_dim_list;
 } loom_tokenizer_t;
 
-// Initializes a tokenizer over the given source buffer. The source
-// buffer must remain valid for the lifetime of the tokenizer.
+// Initializes a tokenizer over the given source buffer. The source buffer must
+// remain valid for the lifetime of the tokenizer. |scratch_arena| backs decoded
+// escaped string payloads and must outlive the tokenizer.
 void loom_tokenizer_initialize(iree_string_view_t source,
                                iree_string_view_t filename,
+                               iree_arena_allocator_t* scratch_arena,
                                loom_tokenizer_t* out_tokenizer);
 
 // Deinitializes the tokenizer, freeing any unconsumed error status.

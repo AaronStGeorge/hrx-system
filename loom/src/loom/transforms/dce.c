@@ -77,7 +77,7 @@ static iree_status_t loom_dce_collect_blocks(iree_arena_allocator_t* arena,
 
       // Push nested regions from ops in this block.
       for (uint16_t i = 0; i < block->op_count; ++i) {
-        loom_op_t* op = block->ops[i];
+        loom_op_t* op = loom_block_op(block, i);
         if (op->flags & LOOM_OP_FLAG_DEAD) continue;
         if (op->region_count == 0) continue;
         loom_region_t** regions = loom_op_regions(op);
@@ -125,7 +125,7 @@ iree_status_t loom_dce_run(loom_pass_t* pass, loom_module_t* module,
     for (iree_host_size_t b = 0; b < block_count; ++b) {
       loom_block_t* block = all_blocks[b];
       for (int32_t i = (int32_t)block->op_count - 1; i >= 0; --i) {
-        loom_op_t* op = block->ops[i];
+        loom_op_t* op = loom_block_op(block, (uint16_t)i);
         if (op->flags & LOOM_OP_FLAG_DEAD) continue;
         if (loom_op_is_trivially_dead(module, op)) {
           IREE_RETURN_IF_ERROR(loom_op_erase(module, op));

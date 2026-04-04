@@ -232,6 +232,17 @@ def _find_func_like(op: Op) -> FuncLikeInterface | None:
     return None
 
 
+def _func_args_are_operands(op: Op) -> bool:
+    """Returns true if FuncArgs should be stored in the op's operand array.
+
+    Bodyless func-like ops (func.decl, func.ukernel) have no entry block, so
+    their signature args live as op operands. Bodyful funcs keep signature args
+    as body entry block args and must not duplicate them as operands.
+    """
+    func_like_iface = _find_func_like(op)
+    return bool(func_like_iface and func_like_iface.args_as_operands)
+
+
 # Maps op name suffixes to symbol kind constants for SYMBOL_DEFINE ops.
 _SYMBOL_KIND_MAP: dict[str, str] = {
     "func.def": "LOOM_SYMBOL_FUNC_DEF",
@@ -1019,6 +1030,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
     """Generates the C builder function implementation for a complex op."""
     params = _extract_c_params(op)
     layout = compute_layout(op)
+    func_args_are_operands = _func_args_are_operands(op)
     lines: list[str] = []
 
     # Compute counts for op_alloc.
@@ -1034,6 +1046,9 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             break
         if param["kind"] == "index_list":
             variadic_operand_param = param["dynamic_field"]
+            break
+        if param["kind"] == "func_args" and func_args_are_operands:
+            variadic_operand_param = param["name"]
             break
 
     c_params = _build_c_param_list(params, layout)
@@ -1090,6 +1105,13 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             lines.append(f"    memcpy(loom_op_operands(*out_op) + {fixed_operand_count},")
             lines.append(f"           {dyn}, {dyn}_count * sizeof(loom_value_id_t));")
             lines.append("  }")
+        elif param["kind"] == "func_args" and func_args_are_operands:
+            lines.append("  for (iree_host_size_t _i = 0; _i < arg_types_count; ++_i) {")
+            lines.append("    loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+            lines.append("    IREE_RETURN_IF_ERROR(")
+            lines.append("        loom_builder_define_value(builder, arg_types[_i], &_arg_id));")
+            lines.append(f"    loom_op_operands(*out_op)[{fixed_operand_count} + _i] = _arg_id;")
+            lines.append("  }")
 
     # Auto-create regions with typed entry block args.
     for param in params:
@@ -1104,7 +1126,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
         lines.append("    IREE_RETURN_IF_ERROR(")
         lines.append("        loom_module_allocate_region(builder->module, 1, &_region));")
         if has_block_args:
-            lines.append("    loom_block_t* _block = &_region->blocks[0];")
+            lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
 
         # Implicit args (e.g., loop IV).
         for _arg_name, arg_type_kw in param.get("implicit_args", ()):
@@ -1539,7 +1561,8 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
 
     # Operand descriptors.
     for op in ops:
-        if not op.operands:
+        func_args_are_operands = _func_args_are_operands(op)
+        if not op.operands and not func_args_are_operands:
             continue
         prefix = _c_prefix(op)
         # Build effect map from declared effects.
@@ -1561,6 +1584,8 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 flags_parts.append("LOOM_OPERAND_WRITES")
             flags = " | ".join(flags_parts) if flags_parts else "0"
             lines.append(f"    {{{type_constraint}, {flags}}},")
+        if func_args_are_operands:
+            lines.append("    {LOOM_TYPE_CONSTRAINT_ANY, LOOM_OPERAND_VARIADIC},")
         lines.append("};")
     lines.append("")
 
@@ -1759,7 +1784,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
 
         # Build vtable_flags bitfield.
         vtable_flag_bits: list[str] = []
-        if layout.variadic_operand:
+        if layout.variadic_operand or _func_args_are_operands(op):
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_OPERANDS")
         if layout.variadic_result:
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_RESULTS")
@@ -1776,7 +1801,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         eff_traits = op.effective_traits or "NULL"
         func_like_ptr = f"&{prefix}_func_like" if _find_func_like(op) is not None else "NULL"
         attr_desc_ptr = f"{prefix}_attr_desc" if non_flags else "NULL"
-        operand_desc_ptr = f"{prefix}_operand_desc" if op.operands else "NULL"
+        operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or _func_args_are_operands(op) else "NULL"
         result_desc_ptr = f"{prefix}_result_desc" if op.results else "NULL"
         region_desc_ptr = f"{prefix}_region_desc" if op.regions else "NULL"
         constraint_ptr = f"{prefix}_constraints" if op.constraints else "NULL"

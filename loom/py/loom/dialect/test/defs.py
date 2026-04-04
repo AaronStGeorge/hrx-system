@@ -39,6 +39,7 @@ from loom.assembly import (
     Region,
     ResultType,
     ResultTypeList,
+    Scope,
     SymbolRef,
     TypeOf,
     TypesOf,
@@ -539,7 +540,7 @@ test_yield = Op(
 )
 
 # ============================================================================
-# test.func — function definition and declaration
+# test.func / test.decl — function definitions and declarations
 # ============================================================================
 
 test_func = Op(
@@ -560,19 +561,61 @@ test_func = Op(
         OptionalGroup([Attr("visibility")], anchor="visibility"),
         OptionalGroup([Attr("cc")], anchor="cc"),
         SymbolRef("callee"),
-        FuncArgs("args"),
-        OptionalGroup(
-            [ARROW, ResultTypeList("results")],
-            anchor="results",
-        ),
-        OptionalGroup(
-            [kw("where"), PredicateList("predicates")],
-            anchor="predicates",
+        Scope(
+            [
+                FuncArgs("args"),
+                OptionalGroup(
+                    [ARROW, ResultTypeList("results")],
+                    anchor="results",
+                ),
+                OptionalGroup(
+                    [kw("where"), PredicateList("predicates")],
+                    anchor="predicates",
+                ),
+            ]
         ),
         Region("body"),
     ],
     examples=[
         "test.func @identity(%input: f32) -> (f32) {\n  test.yield %input : f32\n}",
+    ],
+)
+
+test_decl = Op(
+    "test.decl",
+    group=test_ops,
+    doc="Test function declaration with no body and signature arguments stored as op operands.",
+    traits=[SYMBOL_DEFINE],
+    interfaces=[
+        FuncLikeInterface(
+            callee="callee",
+            visibility="visibility",
+            cc="cc",
+            args_as_operands=True,
+        )
+    ],
+    attrs=[
+        AttrDef("callee", "symbol"),
+        AttrDef("visibility", "enum", enum_def=_Visibility, optional=True),
+        AttrDef("cc", "enum", enum_def=_CallingConv, optional=True),
+    ],
+    results=[Result("results", ANY, variadic=True)],
+    format=[
+        OptionalGroup([Attr("visibility")], anchor="visibility"),
+        OptionalGroup([Attr("cc")], anchor="cc"),
+        SymbolRef("callee"),
+        Scope(
+            [
+                FuncArgs("args"),
+                OptionalGroup(
+                    [ARROW, ResultTypeList("results")],
+                    anchor="results",
+                ),
+            ]
+        ),
+    ],
+    examples=[
+        "test.decl @identity(%input: f32) -> (%input as f32)",
     ],
 )
 
@@ -890,6 +933,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_branch,
     test_yield,
     test_func,
+    test_decl,
     test_attrs,
     test_deflate,
     test_assume,

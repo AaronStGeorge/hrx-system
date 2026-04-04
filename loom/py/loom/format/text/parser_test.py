@@ -32,6 +32,7 @@ from loom.ir import (
     I32,
     I64,
     INDEX,
+    CanonicalAttrDict,
     DialectType,
     DynamicDim,
     DynamicEncoding,
@@ -603,6 +604,8 @@ class TestParseAttrDictOp:
         )
         assert "dict" in op.attributes
         d = op.attributes["dict"]
+        assert isinstance(d, CanonicalAttrDict)
+        assert list(d.items()) == [("axis", 0), ("label", "foo")]
         assert d["axis"] == 0
         assert d["label"] == "foo"
 
@@ -656,6 +659,26 @@ class TestParseAttrDictOp:
         text = p.print_operation(op, module)
         assert "axis = 0" in text
         assert 'label = "hello"' in text
+
+    def test_unsorted_input_is_canonicalized(self) -> None:
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(
+            '%r = test.attrs %x {label = "foo", axis = 0} : f32',
+            module=module,
+            scope=scope,
+        )
+        d = op.attributes["dict"]
+        assert isinstance(d, CanonicalAttrDict)
+        assert list(d.items()) == [("axis", 0), ("label", "foo")]
+
+    def test_duplicate_key_is_rejected(self) -> None:
+        module, scope = _setup_scope(("x", F32))
+        with pytest.raises(ParseError, match="duplicate attribute dict key 'axis'"):
+            _parse_op(
+                "%r = test.attrs %x {axis = 0, axis = 1} : f32",
+                module=module,
+                scope=scope,
+            )
 
 
 class TestParseSliceOp:
@@ -1895,7 +1918,8 @@ class TestNestedDictAttr:
             scope=scope,
         )
         d = op.attributes["dict"]
-        assert isinstance(d["meta"], dict)
+        assert isinstance(d["meta"], CanonicalAttrDict)
+        assert list(d["meta"].items()) == [("depth", 3), ("name", "layer0")]
         assert d["meta"]["depth"] == 3
         assert d["meta"]["name"] == "layer0"
 
@@ -1908,4 +1932,32 @@ class TestNestedDictAttr:
             scope=scope,
         )
         d = op.attributes["dict"]
+        assert isinstance(d["a"], CanonicalAttrDict)
+        assert isinstance(d["a"]["b"], CanonicalAttrDict)
         assert d["a"]["b"]["c"] == 99
+
+    def test_nested_duplicate_key_is_rejected(self) -> None:
+        module, scope = _setup_scope(("x", F32))
+        with pytest.raises(ParseError, match="duplicate attribute dict key 'depth'"):
+            _parse_op(
+                "%r = test.attrs %x {meta = {depth = 3, depth = 4}} : f32",
+                module=module,
+                scope=scope,
+            )
+
+    def test_unsorted_nested_dict_cross_format_round_trip(self) -> None:
+        text = (
+            "func.def @f(%x: f32) -> (f32) {\n"
+            '  %r = test.attrs %x {meta = {phase = "link", opt = 3}, axis = 0} : f32\n'
+            "  test.yield %r : f32\n"
+            "}\n"
+        )
+        module = _op_parser().parse(text)
+        loaded = read_module(write_module(module))
+        printed = _op_printer().print_module(loaded)
+        assert printed == (
+            "func.def @f(%x: f32) -> (f32) {\n"
+            '  %r = test.attrs %x {axis = 0, meta = {opt = 3, phase = "link"}} : f32\n'
+            "  test.yield %r : f32\n"
+            "}\n"
+        )

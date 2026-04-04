@@ -95,6 +95,7 @@ loom_cc_library(
     "tokenizer.c"
   DEPS
     iree::base
+    iree::base::internal::arena
     iree::base::internal::unicode
   PUBLIC
 )
@@ -106,6 +107,7 @@ loom_cc_test(
     "tokenizer_test.cc"
   DEPS
     ::tokenizer
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -118,6 +120,7 @@ loom_cc_fuzz(
   DEPS
     ::tokenizer
     iree::base
+    iree::base::internal::arena
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

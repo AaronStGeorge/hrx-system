@@ -8,7 +8,9 @@
 
 #include <inttypes.h>
 #include <stdarg.h>
+#include <string.h>
 
+#include "iree/base/internal/arena.h"
 #include "iree/base/internal/unicode.h"
 
 //===----------------------------------------------------------------------===//
@@ -65,12 +67,26 @@ static iree_string_view_t loom_tokenizer_eof_text(
   return iree_make_string_view(tokenizer->source.data + tokenizer->position, 0);
 }
 
+static loom_token_t loom_tokenizer_make_eof_token(
+    const loom_tokenizer_t* tokenizer) {
+  iree_string_view_t text = loom_tokenizer_eof_text(tokenizer);
+  return (loom_token_t){
+      .text = text,
+      .source_text = text,
+      .line = tokenizer->line,
+      .column = tokenizer->column,
+      .end_column = tokenizer->column,
+      .kind = LOOM_TOKEN_EOF,
+  };
+}
+
 //===----------------------------------------------------------------------===//
 // Tokenizer
 //===----------------------------------------------------------------------===//
 
 void loom_tokenizer_initialize(iree_string_view_t source,
                                iree_string_view_t filename,
+                               iree_arena_allocator_t* scratch_arena,
                                loom_tokenizer_t* out_tokenizer) {
   out_tokenizer->source = source;
   out_tokenizer->position = 0;
@@ -78,6 +94,7 @@ void loom_tokenizer_initialize(iree_string_view_t source,
   out_tokenizer->column = 1;
   out_tokenizer->peeked.kind = LOOM_TOKEN_NONE;
   out_tokenizer->filename = filename;
+  out_tokenizer->scratch_arena = scratch_arena;
   out_tokenizer->status = iree_ok_status();
   out_tokenizer->in_dim_list = false;
 }
@@ -200,59 +217,124 @@ static void loom_tokenizer_skip_whitespace(loom_tokenizer_t* t) {
   }
 }
 
-// Creates a token from the range [start, t->position) in the source.
-static loom_token_t loom_tokenizer_make_token(const loom_tokenizer_t* t,
-                                              loom_token_kind_t kind,
-                                              iree_host_size_t start,
-                                              uint32_t start_line,
-                                              uint32_t start_column) {
-  loom_token_t token = {0};
-  token.kind = kind;
-  token.text =
-      iree_make_string_view(t->source.data + start, t->position - start);
-  token.line = start_line;
-  token.column = start_column;
-  token.end_column = t->column;
-  return token;
+// Creates a token whose source spelling is [source_start, t->position) and
+// whose semantic payload is |text|, which may be a source slice or
+// scratch-arena storage for decoded strings.
+static loom_token_t loom_tokenizer_make_text_token(
+    const loom_tokenizer_t* t, loom_token_kind_t kind,
+    iree_host_size_t source_start, iree_string_view_t text, uint32_t start_line,
+    uint32_t start_column) {
+  return (loom_token_t){
+      .text = text,
+      .source_text = iree_make_string_view(t->source.data + source_start,
+                                           t->position - source_start),
+      .line = start_line,
+      .column = start_column,
+      .end_column = t->column,
+      .kind = kind,
+  };
 }
 
-// Scans a string literal (opening '"' already matched at position).
-// The returned token text is the content without surrounding quotes
-// (e.g., "hello" → hello), consistent with how other prefix tokens
-// strip their sigils (%, @, #, ^).
-static iree_status_t loom_tokenizer_scan_string(loom_tokenizer_t* t,
-                                                loom_token_t* out_token) {
-  uint32_t start_line = t->line;
-  uint32_t start_column = t->column;
-  ++t->position;  // Skip opening '"'.
-  ++t->column;
-  iree_host_size_t content_start = t->position;
+// Creates a token whose source spelling is [source_start, t->position) and
+// whose semantic payload is [text_start, text_end) in the same source buffer.
+static loom_token_t loom_tokenizer_make_token(
+    const loom_tokenizer_t* t, loom_token_kind_t kind,
+    iree_host_size_t source_start, iree_host_size_t text_start,
+    iree_host_size_t text_end, uint32_t start_line, uint32_t start_column) {
+  return loom_tokenizer_make_text_token(
+      t, kind, source_start,
+      iree_make_string_view(t->source.data + text_start, text_end - text_start),
+      start_line, start_column);
+}
 
+// Creates a token whose semantic payload is the full source spelling.
+static loom_token_t loom_tokenizer_make_verbatim_token(
+    const loom_tokenizer_t* t, loom_token_kind_t kind,
+    iree_host_size_t source_start, uint32_t start_line, uint32_t start_column) {
+  return loom_tokenizer_make_token(t, kind, source_start, source_start,
+                                   t->position, start_line, start_column);
+}
+
+static iree_status_t loom_tokenizer_decode_string_text(
+    loom_tokenizer_t* t, iree_host_size_t content_start,
+    iree_host_size_t content_end, iree_string_view_t* out_text) {
+  iree_host_size_t max_decoded_size = content_end - content_start;
+  char* decoded_text = NULL;
+  if (max_decoded_size > 0) {
+    if (!t->scratch_arena) {
+      return loom_tokenizer_error(
+          t, IREE_SV("string literal escapes require a scratch arena"));
+    }
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(t->scratch_arena, max_decoded_size,
+                                             (void**)&decoded_text));
+  }
+
+  iree_host_size_t decoded_size = 0;
+  for (iree_host_size_t i = content_start; i < content_end; ++i) {
+    char c = t->source.data[i];
+    if (c != '\\') {
+      decoded_text[decoded_size++] = c;
+      continue;
+    }
+
+    ++i;
+    switch (t->source.data[i]) {
+      case '"':
+        decoded_text[decoded_size++] = '"';
+        break;
+      case '\\':
+        decoded_text[decoded_size++] = '\\';
+        break;
+      case 'n':
+        decoded_text[decoded_size++] = '\n';
+        break;
+      case 't':
+        decoded_text[decoded_size++] = '\t';
+        break;
+      default:
+        IREE_ASSERT_UNREACHABLE("validated by scan pass");
+        break;
+    }
+  }
+
+  *out_text = iree_make_string_view(decoded_text, decoded_size);
+  return iree_ok_status();
+}
+
+// Scans a string literal body after the opening quote has been consumed.
+// Advances through the closing quote, validates escapes and UTF-8, and updates
+// line/column tracking. If non-NULL, |out_content_end| receives the byte offset
+// of the closing quote and |out_has_escapes| reports whether any backslash
+// escapes were seen in the content.
+static iree_status_t loom_tokenizer_scan_string_content(
+    loom_tokenizer_t* t, iree_host_size_t* out_content_end,
+    bool* out_has_escapes) {
+  bool has_escapes = false;
   while (t->position < t->source.size) {
     char c = t->source.data[t->position];
     if (c == '"') {
-      // Build token from content (between the quotes), then advance
-      // past the closing quote so the next scan starts after it.
-      iree_host_size_t content_end = t->position;
+      if (out_content_end) *out_content_end = t->position;
+      if (out_has_escapes) *out_has_escapes = has_escapes;
       ++t->position;
       ++t->column;
-      out_token->kind = LOOM_TOKEN_STRING;
-      out_token->text = iree_make_string_view(t->source.data + content_start,
-                                              content_end - content_start);
-      out_token->line = start_line;
-      out_token->column = start_column;
-      out_token->end_column = t->column;
       return iree_ok_status();
     }
     if (c == '\\') {
-      // Escape: skip the backslash and the next character.
+      has_escapes = true;
       ++t->position;
       ++t->column;
       if (t->position >= t->source.size) break;
-      // Fall through to advance past the escaped character.
+      char escaped = t->source.data[t->position];
+      if (escaped != '"' && escaped != '\\' && escaped != 'n' &&
+          escaped != 't') {
+        return loom_tokenizer_error(
+            t, IREE_SV("invalid escape sequence in string literal"));
+      }
+      ++t->position;
+      ++t->column;
+      continue;
     }
-    // Multi-byte UTF-8: decode, validate, advance position by sequence length.
-    if ((uint8_t)t->source.data[t->position] >= 0x80) {
+    if ((uint8_t)c >= 0x80) {
       uint32_t codepoint = loom_tokenizer_advance_utf8(t);
       if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR) {
         return loom_tokenizer_error(
@@ -260,7 +342,7 @@ static iree_status_t loom_tokenizer_scan_string(loom_tokenizer_t* t,
       }
       continue;
     }
-    if (t->source.data[t->position] == '\n') {
+    if (c == '\n') {
       ++t->line;
       t->column = 1;
     } else {
@@ -268,8 +350,39 @@ static iree_status_t loom_tokenizer_scan_string(loom_tokenizer_t* t,
     }
     ++t->position;
   }
-
   return loom_tokenizer_error(t, IREE_SV("unterminated string literal"));
+}
+
+// Scans a string literal (opening '"' already matched at position).
+// The returned token text is the decoded content without surrounding quotes
+// (e.g., "hello" → hello, "a\n" → a<newline>), consistent with how other
+// prefix tokens strip their sigils (%, @, #, ^).
+static iree_status_t loom_tokenizer_scan_string(loom_tokenizer_t* t,
+                                                loom_token_t* out_token) {
+  uint32_t start_line = t->line;
+  uint32_t start_column = t->column;
+  iree_host_size_t source_start = t->position;
+  ++t->position;  // Skip opening '"'.
+  ++t->column;
+  iree_host_size_t content_start = t->position;
+  bool has_escapes = false;
+  iree_host_size_t content_end = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_tokenizer_scan_string_content(t, &content_end, &has_escapes));
+  if (!has_escapes) {
+    *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_STRING, source_start,
+                                           content_start, content_end,
+                                           start_line, start_column);
+    return iree_ok_status();
+  }
+
+  iree_string_view_t decoded_text = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_tokenizer_decode_string_text(
+      t, content_start, content_end, &decoded_text));
+  *out_token =
+      loom_tokenizer_make_text_token(t, LOOM_TOKEN_STRING, source_start,
+                                     decoded_text, start_line, start_column);
+  return iree_ok_status();
 }
 
 // Scans a number (integer or float). Position is at the first digit or '-'.
@@ -294,8 +407,8 @@ static loom_token_t loom_tokenizer_scan_number(loom_tokenizer_t* t) {
       ++t->position;
       ++t->column;
     }
-    return loom_tokenizer_make_token(t, LOOM_TOKEN_INTEGER, start, start_line,
-                                     start_column);
+    return loom_tokenizer_make_verbatim_token(t, LOOM_TOKEN_INTEGER, start,
+                                              start_line, start_column);
   }
 
   // Decimal digits.
@@ -335,7 +448,7 @@ static loom_token_t loom_tokenizer_scan_number(loom_tokenizer_t* t) {
     }
   }
 
-  return loom_tokenizer_make_token(
+  return loom_tokenizer_make_verbatim_token(
       t, is_float ? LOOM_TOKEN_FLOAT : LOOM_TOKEN_INTEGER, start, start_line,
       start_column);
 }
@@ -356,7 +469,8 @@ static loom_token_t loom_tokenizer_scan_identifier(loom_tokenizer_t* t) {
   }
 
   loom_token_kind_t kind = has_dot ? LOOM_TOKEN_OP_NAME : LOOM_TOKEN_BARE_IDENT;
-  return loom_tokenizer_make_token(t, kind, start, start_line, start_column);
+  return loom_tokenizer_make_verbatim_token(t, kind, start, start_line,
+                                            start_column);
 }
 
 // Scans a '%' prefixed SSA value reference. The returned token text
@@ -366,6 +480,7 @@ static iree_status_t loom_tokenizer_scan_ssa_value(loom_tokenizer_t* t,
                                                    loom_token_t* out_token) {
   uint32_t start_line = t->line;
   uint32_t start_column = t->column;
+  iree_host_size_t source_start = t->position;
   ++t->position;  // Skip '%'.
   ++t->column;
 
@@ -381,8 +496,9 @@ static iree_status_t loom_tokenizer_scan_ssa_value(loom_tokenizer_t* t,
     return loom_tokenizer_error(t, IREE_SV("expected identifier after '%'"));
   }
 
-  *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_SSA_VALUE, name_start,
-                                         start_line, start_column);
+  *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_SSA_VALUE, source_start,
+                                         name_start, t->position, start_line,
+                                         start_column);
   return iree_ok_status();
 }
 
@@ -393,6 +509,7 @@ static iree_status_t loom_tokenizer_scan_symbol(loom_tokenizer_t* t,
                                                 loom_token_t* out_token) {
   uint32_t start_line = t->line;
   uint32_t start_column = t->column;
+  iree_host_size_t source_start = t->position;
   ++t->position;  // Skip '@'.
   ++t->column;
 
@@ -408,8 +525,9 @@ static iree_status_t loom_tokenizer_scan_symbol(loom_tokenizer_t* t,
     return loom_tokenizer_error(t, IREE_SV("expected identifier after '@'"));
   }
 
-  *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_SYMBOL, name_start,
-                                         start_line, start_column);
+  *out_token =
+      loom_tokenizer_make_token(t, LOOM_TOKEN_SYMBOL, source_start, name_start,
+                                t->position, start_line, start_column);
   return iree_ok_status();
 }
 
@@ -422,6 +540,7 @@ static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
                                               loom_token_t* out_token) {
   uint32_t start_line = t->line;
   uint32_t start_column = t->column;
+  iree_host_size_t source_start = t->position;
   ++t->position;  // Skip '#'.
   ++t->column;
 
@@ -436,7 +555,8 @@ static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
       ++t->column;
     }
     *out_token = loom_tokenizer_make_token(
-        t, LOOM_TOKEN_RESULT_ORDINAL, name_start, start_line, start_column);
+        t, LOOM_TOKEN_RESULT_ORDINAL, source_start, name_start, t->position,
+        start_line, start_column);
     return iree_ok_status();
   }
 
@@ -450,8 +570,9 @@ static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
     return loom_tokenizer_error(t, IREE_SV("expected identifier after '#'"));
   }
 
-  *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_HASH_ATTR, name_start,
-                                         start_line, start_column);
+  *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_HASH_ATTR, source_start,
+                                         name_start, t->position, start_line,
+                                         start_column);
   return iree_ok_status();
 }
 
@@ -461,6 +582,7 @@ static iree_status_t loom_tokenizer_scan_block_label(loom_tokenizer_t* t,
                                                      loom_token_t* out_token) {
   uint32_t start_line = t->line;
   uint32_t start_column = t->column;
+  iree_host_size_t source_start = t->position;
   ++t->position;  // Skip '^'.
   ++t->column;
 
@@ -476,7 +598,8 @@ static iree_status_t loom_tokenizer_scan_block_label(loom_tokenizer_t* t,
     return loom_tokenizer_error(t, IREE_SV("expected identifier after '^'"));
   }
 
-  *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_BLOCK_LABEL, name_start,
+  *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_BLOCK_LABEL,
+                                         source_start, name_start, t->position,
                                          start_line, start_column);
   return iree_ok_status();
 }
@@ -488,11 +611,7 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
   loom_tokenizer_skip_whitespace(t);
 
   if (t->position >= t->source.size) {
-    out_token->kind = LOOM_TOKEN_EOF;
-    out_token->text = loom_tokenizer_eof_text(t);
-    out_token->line = t->line;
-    out_token->column = t->column;
-    out_token->end_column = t->column;
+    *out_token = loom_tokenizer_make_eof_token(t);
     return iree_ok_status();
   }
 
@@ -506,68 +625,68 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
     case '(':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_LPAREN, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_LPAREN, start, start_line, start_column);
       return iree_ok_status();
     case ')':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_RPAREN, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_RPAREN, start, start_line, start_column);
       return iree_ok_status();
     case '{':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_LBRACE, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_LBRACE, start, start_line, start_column);
       return iree_ok_status();
     case '}':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_RBRACE, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_RBRACE, start, start_line, start_column);
       return iree_ok_status();
     case '[':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_LBRACKET, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_LBRACKET, start, start_line, start_column);
       return iree_ok_status();
     case ']':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_RBRACKET, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_RBRACKET, start, start_line, start_column);
       return iree_ok_status();
     case '<':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_LANGLE, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_LANGLE, start, start_line, start_column);
       return iree_ok_status();
     case '>':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_RANGLE, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_RANGLE, start, start_line, start_column);
       return iree_ok_status();
     case '=':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_EQUALS, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_EQUALS, start, start_line, start_column);
       return iree_ok_status();
     case ',':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_COMMA, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(
+          t, LOOM_TOKEN_COMMA, start, start_line, start_column);
       return iree_ok_status();
     case '|':
       ++t->position;
       ++t->column;
-      *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_PIPE, start,
-                                             start_line, start_column);
+      *out_token = loom_tokenizer_make_verbatim_token(t, LOOM_TOKEN_PIPE, start,
+                                                      start_line, start_column);
       return iree_ok_status();
     default:
       break;
@@ -577,16 +696,16 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
   if (c == '-' && loom_tokenizer_char_at(t, 1) == '>') {
     t->position += 2;
     t->column += 2;
-    *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_ARROW, start,
-                                           start_line, start_column);
+    *out_token = loom_tokenizer_make_verbatim_token(t, LOOM_TOKEN_ARROW, start,
+                                                    start_line, start_column);
     return iree_ok_status();
   }
 
   if (c == ':') {
     ++t->position;
     ++t->column;
-    *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_COLON, start,
-                                           start_line, start_column);
+    *out_token = loom_tokenizer_make_verbatim_token(t, LOOM_TOKEN_COLON, start,
+                                                    start_line, start_column);
     return iree_ok_status();
   }
 
@@ -634,8 +753,8 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
   if (t->in_dim_list && c == 'x') {
     ++t->position;
     ++t->column;
-    *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_DIM_X, start,
-                                           start_line, start_column);
+    *out_token = loom_tokenizer_make_verbatim_token(t, LOOM_TOKEN_DIM_X, start,
+                                                    start_line, start_column);
     return iree_ok_status();
   }
 
@@ -670,22 +789,14 @@ loom_token_t loom_tokenizer_peek(loom_tokenizer_t* tokenizer) {
   if (tokenizer->peeked.kind == LOOM_TOKEN_NONE) {
     // If a previous scan already failed, keep returning EOF.
     if (!iree_status_is_ok(tokenizer->status)) {
-      tokenizer->peeked.kind = LOOM_TOKEN_EOF;
-      tokenizer->peeked.text = loom_tokenizer_eof_text(tokenizer);
-      tokenizer->peeked.line = tokenizer->line;
-      tokenizer->peeked.column = tokenizer->column;
-      tokenizer->peeked.end_column = tokenizer->column;
+      tokenizer->peeked = loom_tokenizer_make_eof_token(tokenizer);
       return tokenizer->peeked;
     }
     iree_status_t status = loom_tokenizer_scan(tokenizer, &tokenizer->peeked);
     if (!iree_status_is_ok(status)) {
       // Store the error for the caller to retrieve.
       tokenizer->status = status;
-      tokenizer->peeked.kind = LOOM_TOKEN_EOF;
-      tokenizer->peeked.text = loom_tokenizer_eof_text(tokenizer);
-      tokenizer->peeked.line = tokenizer->line;
-      tokenizer->peeked.column = tokenizer->column;
-      tokenizer->peeked.end_column = tokenizer->column;
+      tokenizer->peeked = loom_tokenizer_make_eof_token(tokenizer);
     }
   }
   return tokenizer->peeked;
@@ -760,35 +871,8 @@ iree_status_t loom_tokenizer_scan_angle_interior(
       // Skip string literals inside angle brackets.
       ++tokenizer->position;
       ++tokenizer->column;
-      while (tokenizer->position < tokenizer->source.size) {
-        char sc = tokenizer->source.data[tokenizer->position];
-        if (sc == '"') {
-          ++tokenizer->position;
-          ++tokenizer->column;
-          break;
-        }
-        if (sc == '\\') {
-          ++tokenizer->position;
-          ++tokenizer->column;
-          if (tokenizer->position >= tokenizer->source.size) break;
-        }
-        if ((uint8_t)tokenizer->source.data[tokenizer->position] >= 0x80) {
-          uint32_t codepoint = loom_tokenizer_advance_utf8(tokenizer);
-          if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR) {
-            return loom_tokenizer_error(
-                tokenizer,
-                IREE_SV("invalid UTF-8 byte sequence in string literal"));
-          }
-          continue;
-        }
-        if (tokenizer->source.data[tokenizer->position] == '\n') {
-          ++tokenizer->line;
-          tokenizer->column = 1;
-        } else {
-          ++tokenizer->column;
-        }
-        ++tokenizer->position;
-      }
+      IREE_RETURN_IF_ERROR(
+          loom_tokenizer_scan_string_content(tokenizer, NULL, NULL));
       continue;
     } else if (c == '\n') {
       ++tokenizer->line;

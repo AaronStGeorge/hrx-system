@@ -70,6 +70,7 @@ from loom.ir import (
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
     Block,
+    CanonicalAttrDict,
     DialectType,
     DynamicDim,
     DynamicEncoding,
@@ -164,11 +165,12 @@ class NameScope:
     names, outer scopes cannot see inner names after the region ends.
     """
 
-    __slots__ = ("_names", "_parent")
+    __slots__ = ("_names", "_parent", "_placeholder_locations")
 
     def __init__(self, parent: NameScope | None = None) -> None:
         self._names: dict[str, int] = {}
         self._parent = parent
+        self._placeholder_locations: dict[str, SourceLocation] = {}
 
     def define(self, name: str, value_id: int) -> None:
         """Define a new SSA name in this scope."""
@@ -179,6 +181,17 @@ class NameScope:
                 f"new value ID {value_id})"
             )
         self._names[name] = value_id
+
+    def define_placeholder(
+        self, name: str, value_id: int, location: SourceLocation
+    ) -> None:
+        """Define a forward placeholder and retain its original source location."""
+        self.define(name, value_id)
+        self._placeholder_locations[name] = location
+
+    def placeholder_location(self, name: str) -> SourceLocation | None:
+        """Returns the source location of a local forward placeholder."""
+        return self._placeholder_locations.get(name)
 
     def lookup(self, name: str) -> int:
         """Look up an SSA name, searching parent scopes."""
@@ -232,7 +245,7 @@ def _resolve_type_value(
 
     if mode == TypeParseMode.SIGNATURE:
         value_id = module.add_value(Value(name=name, type=PlaceholderType()))
-        scope.define(name, value_id)
+        scope.define_placeholder(name, value_id, token.location)
         return value_id
 
     raise ParseError(
@@ -919,7 +932,7 @@ def _parse_dims_and_element(
                         value_id = module.add_value(
                             Value(name=bare_name, type=PlaceholderType())
                         )
-                        scope.define(bare_name, value_id)
+                        scope.define_placeholder(bare_name, value_id, location)
                     dim_bindings[i] = value_id
                 else:
                     # BODY mode: look up existing value.
@@ -1070,7 +1083,7 @@ def _parse_pool_interior(
                     value_id = module.add_value(
                         Value(name=bare_name, type=PlaceholderType())
                     )
-                    scope.define(bare_name, value_id)
+                    scope.define_placeholder(bare_name, value_id, location)
                 dim_bindings[0] = value_id
             else:
                 # BODY mode: look up existing value.
@@ -1164,7 +1177,7 @@ class Parser:
         self._known_encodings: set[str] = set()
         self._reserved_result_names: list[str] = []
         self._reserved_result_ids: list[int] = []
-        self._definition_scope_depth: int = 0
+        self._definition_scope_active: bool = False
 
     def register_ops(self, ops: Sequence[Op]) -> None:
         """Register op declarations."""
@@ -1787,23 +1800,31 @@ class Parser:
                         self._walk_format(inner, op_decl, parsed)
 
                 case Scope(elements=inner):
+                    if self._definition_scope_active:
+                        raise RuntimeError(
+                            "nested Scope(...) format elements are not supported"
+                        )
                     parent_scope = self._scope
                     self._scope = self._scope.push()
-                    self._definition_scope_depth += 1
+                    self._definition_scope_active = True
                     try:
                         self._walk_format(inner, op_decl, parsed)
                         # Verify all placeholders defined in this scope are resolved.
                         for name, value_id in self._scope._names.items():
                             value = self._module.values[value_id]
                             if isinstance(value.type, PlaceholderType):
+                                origin = (
+                                    self._scope.placeholder_location(name)
+                                    or tok.current_location()
+                                )
                                 raise ParseError(
                                     f"unresolved forward reference to "
                                     f"'%{name}' in signature",
-                                    tok.current_location(),
+                                    origin,
                                     tok._filename,
                                 )
                     finally:
-                        self._definition_scope_depth -= 1
+                        self._definition_scope_active = False
                         self._scope = parent_scope
 
                 case Flags(field=name):
@@ -1943,15 +1964,24 @@ class Parser:
         if tok.at(TokenKind.LBRACE):
             # Nested dict: {key = value, ...}
             tok.next()  # consume '{'
-            entries: dict[str, Any] = {}
+            entries: list[tuple[str, Any]] = []
+            seen_keys: set[str] = set()
             while not tok.at(TokenKind.RBRACE):
-                key = tok.expect(TokenKind.BARE_IDENT).text
+                key_tok = tok.expect(TokenKind.BARE_IDENT)
+                key = key_tok.text
+                if key in seen_keys:
+                    raise ParseError(
+                        f"duplicate attribute dict key '{key}'",
+                        key_tok.location,
+                        tok._filename,
+                    )
+                seen_keys.add(key)
                 tok.expect(TokenKind.EQUALS)
                 value = self._parse_any_attr_value()
-                entries[key] = value
+                entries.append((key, value))
                 tok.try_consume(TokenKind.COMMA)
             tok.expect(TokenKind.RBRACE)
-            return entries
+            return CanonicalAttrDict(entries)
         raise ParseError(
             f"expected attribute value, got {tok.peek().kind.name}",
             tok.peek().location,
@@ -2026,10 +2056,10 @@ class Parser:
         # Result types use SIGNATURE mode (creating placeholders for
         # unknown dims) only inside a Scope. Outside a Scope, unknown
         # dim names are errors — same as the C parser's
-        # definition_scope_depth gating.
+        # one-level declaration-scope state.
         result_mode = (
             TypeParseMode.SIGNATURE
-            if self._definition_scope_depth > 0
+            if self._definition_scope_active
             else TypeParseMode.BODY
         )
         if tok.at(TokenKind.SSA_VALUE):
@@ -2401,15 +2431,30 @@ class Parser:
         """Parse {key = value, ...} into a named dict attribute."""
         tok = self._tokenizer
         tok.expect(TokenKind.LBRACE)
-        entries: dict[str, Any] = {}
+        entries: list[tuple[str, Any]] = []
+        seen_keys: set[str] = set()
         while not tok.at(TokenKind.RBRACE):
-            key = tok.expect(TokenKind.BARE_IDENT).text
+            key_tok = tok.expect(TokenKind.BARE_IDENT)
+            key = key_tok.text
+            if key in seen_keys:
+                raise ParseError(
+                    f"duplicate attribute dict key '{key}'",
+                    key_tok.location,
+                    tok._filename,
+                )
+            if not field and key in parsed.attributes:
+                raise ParseError(
+                    f"duplicate attribute '{key}'",
+                    key_tok.location,
+                    tok._filename,
+                )
+            seen_keys.add(key)
             tok.expect(TokenKind.EQUALS)
             value = self._parse_any_attr_value()
-            entries[key] = value
+            entries.append((key, value))
             tok.try_consume(TokenKind.COMMA)
         tok.expect(TokenKind.RBRACE)
         if field:
-            parsed.attributes[field] = entries
+            parsed.attributes[field] = CanonicalAttrDict(entries)
         else:
-            parsed.attributes.update(entries)
+            parsed.attributes.update(CanonicalAttrDict(entries))

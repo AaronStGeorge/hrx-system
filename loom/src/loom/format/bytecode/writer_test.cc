@@ -382,7 +382,8 @@ TEST_F(WriterTest, ModuleWithFunction) {
   // Build an addi op in the function body.
   loom_region_t* body = loom_func_like_body(func_like);
   loom_builder_t builder;
-  loom_builder_initialize(module, &module->arena, &body->blocks[0], &builder);
+  loom_builder_initialize(module, &module->arena, loom_region_entry_block(body),
+                          &builder);
   loom_op_t* addi_op = nullptr;
   IREE_ASSERT_OK(loom_test_addi_build(&builder, arg_ids[0], arg_ids[1],
                                       i32_type, LOOM_LOCATION_UNKNOWN,

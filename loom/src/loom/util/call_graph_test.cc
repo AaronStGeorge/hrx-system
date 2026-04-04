@@ -86,7 +86,8 @@ class CallGraphTest : public ::testing::Test {
   // Adds a func.call inside a function body.
   void add_call(FuncInfo& caller, uint16_t callee_symbol_id) {
     loom_builder_t body_builder;
-    loom_builder_initialize(module_, &module_->arena, &caller.body->blocks[0],
+    loom_builder_initialize(module_, &module_->arena,
+                            loom_region_entry_block(caller.body),
                             &body_builder);
     body_builder.ip.parent_op = caller.func_op;
     loom_symbol_ref_t callee_ref = {.module_id = 0,

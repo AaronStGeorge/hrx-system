@@ -1011,6 +1011,77 @@
     ]
   },
   {
+    "error_id": "ERR_DOMINANCE_006",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate tied result index.",
+    "message_template": "result {result_index} of '{op_name}' is tied more than once",
+    "params": [
+      {
+        "name": "result_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_DOMINANCE_007",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate tied operand index.",
+    "message_template": "operand {operand_index} of '{op_name}' is tied by more than one result",
+    "params": [
+      {
+        "name": "operand_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_DOMINANCE_008",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Ambiguous tied operand value.",
+    "message_template": "operand {operand_index} of '{op_name}' ties value '%{value_name}', but that value appears in multiple operand slots",
+    "params": [
+      {
+        "name": "operand_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
     "error_id": "ERR_SYMBOL_001",
     "domain": 6,
     "domain_name": "SYMBOL",
@@ -1430,6 +1501,60 @@
       }
     ],
     "fix_hint_template": "The source file must be valid UTF-8"
+  },
+  {
+    "error_id": "ERR_PARSE_020",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 20,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate dictionary attribute key.",
+    "message_template": "dictionary attribute key '{key_name}' is already defined",
+    "params": [
+      {
+        "name": "key_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Each key in an attribute dictionary must be unique"
+  },
+  {
+    "error_id": "ERR_PARSE_021",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 21,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Dictionary attribute nesting is too deep.",
+    "message_template": "dictionary attribute nesting exceeds the maximum depth {max_depth}",
+    "params": [
+      {
+        "name": "max_depth",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Flatten deeply nested attribute dictionaries"
+  },
+  {
+    "error_id": "ERR_PARSE_022",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 22,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unresolved declaration-scope forward reference.",
+    "message_template": "unresolved forward reference to '%{value_name}' in declaration scope",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Define the SSA name in the same Scope(...) signature, for example as a function argument or named symbol result"
   },
   {
     "error_id": "ERR_BYTECODE_001",
