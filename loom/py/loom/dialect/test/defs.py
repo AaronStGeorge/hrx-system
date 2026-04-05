@@ -71,6 +71,7 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     FuncLikeInterface,
+    ImplicitTerminator,
     OffsetCountMatchesRank,
     Op,
     Operand,
@@ -328,7 +329,7 @@ test_map = Op(
         YieldCountMatchesResults("body", "result"),
         YieldElementTypesMatchResults("body", "result"),
     ],
-    traits=[PURE, ELEMENTWISE],
+    traits=[PURE, ELEMENTWISE, ImplicitTerminator("test.yield")],
     format=[
         BindingList("inputs", kind=BINDING_ELEMENT),
         Region("body"),
@@ -468,6 +469,7 @@ test_loop = Op(
             implicit_args=(("iv", "index"),),
         )
     ],
+    traits=[ImplicitTerminator("test.yield")],
     format=[
         Ref("iv"),
         EQUALS,
@@ -505,6 +507,7 @@ test_branch = Op(
         RegionDef("then_region", doc="Then branch.", single_block=True),
         RegionDef("else_region", doc="Else branch.", single_block=True),
     ],
+    traits=[ImplicitTerminator("test.yield")],
     format=[
         Ref("condition"),
         OptionalGroup(

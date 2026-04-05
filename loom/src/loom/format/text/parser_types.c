@@ -516,7 +516,7 @@ static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
   if (param_count > 0) {
     loom_type_t* arena_params = NULL;
     IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(&parser->module->arena, param_count,
+        iree_arena_allocate_array(&parser->parser_arena, param_count,
                                   sizeof(loom_type_t), (void**)&arena_params));
     memcpy(arena_params, param_types, param_count * sizeof(loom_type_t));
     *out_type = loom_type_dialect(name_id, param_count, arena_params);
@@ -587,7 +587,7 @@ static iree_status_t loom_parse_function_type(loom_parser_t* parser,
 
   return loom_type_function_build(
       arg_types, arg_count, result_types, result_count,
-      iree_arena_allocator(&parser->module->arena), out_type);
+      iree_arena_allocator(&parser->parser_arena), out_type);
 }
 
 //===----------------------------------------------------------------------===//

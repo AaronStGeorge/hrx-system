@@ -43,7 +43,8 @@
 //
 // Types are 24 bytes, fitting 2-3 per cache line. For the common case
 // (rank <= 2 tiles/vectors), everything is inline with no pointer
-// chases. Types are interned per module, so pointer equality works.
+// chases. Values store types by value, while each module also interns
+// canonical type entries for deduplication.
 //
 //   bytes 0-3:  packed header (kind, element_type, rank, flags)
 //   bytes 4-5:  encoding_id
@@ -57,7 +58,7 @@
 //
 // Overflow (rank > 2):
 //   dims[0] = pointer to arena-allocated loom_dim_t array.
-//   dims[1] = precomputed hash for fast inequality rejection.
+//   dims[1] = unused.
 //
 // Function types use dims[0] as a pointer to an arena-allocated
 // loom_func_type_data_t containing the arg and result type arrays.
@@ -65,14 +66,16 @@
 // arg/result types, so the embedded types are stored by value (24
 // bytes each), not interned.
 //
-// Type equality: since types are interned, pointer comparison suffices.
-// During construction, the type table deduplicates by content, so
-// structurally identical types share the same pointer.
+// Type equality is structural: callers should use loom_type_equal() on the
+// by-value representation. The module type table deduplicates equal entries,
+// but pointer identity only applies to table entries themselves, not arbitrary
+// loom_type_t values copied into SSA values or temporary parser storage.
 
 #ifndef LOOM_IR_TYPES_H_
 #define LOOM_IR_TYPES_H_
 
 #include "iree/base/api.h"
+#include "loom/ir/scalar_type.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,77 +105,15 @@ typedef uint32_t loom_type_id_t;
 #define LOOM_TYPE_ID_INVALID ((loom_type_id_t)UINT32_MAX)
 
 //===----------------------------------------------------------------------===//
-// Scalars, dims, and enums
+// Dims and enums
 //===----------------------------------------------------------------------===//
-
-// Scalar element type kind.
-//
-// These are internal compiler values, NOT bytecode-stable. The bytecode
-// format has its own encoding with independent versioning. Mapping
-// between internal and bytecode representations lives in bytecode/
-// reader.c and writer.c.
-//
-// Ordered: address types, integers by width, floats by width.
-typedef enum loom_scalar_type_e {
-  // Signed target-width integer for loop bounds, dimension sizes, and
-  // general indexing arithmetic. Arithmetic follows signed semantics
-  // (divsi, remsi, signed comparisons).
-  LOOM_SCALAR_TYPE_INDEX = 0,
-  // Unsigned target-width integer for buffer byte offsets and
-  // addressing. Arithmetic follows unsigned semantics (divui, remui,
-  // unsigned comparisons). Same bitwidth as index.
-  LOOM_SCALAR_TYPE_OFFSET = 1,
-  // 1-bit integer. Boolean results (comparisons, predicates).
-  LOOM_SCALAR_TYPE_I1 = 2,
-  // 8-bit signed integer. Quantized weights, byte-level data.
-  LOOM_SCALAR_TYPE_I8 = 3,
-  // 16-bit signed integer. Intermediate quantized computations.
-  LOOM_SCALAR_TYPE_I16 = 4,
-  // 32-bit signed integer. General-purpose integer arithmetic.
-  LOOM_SCALAR_TYPE_I32 = 5,
-  // 64-bit signed integer. Large counts, hash values.
-  LOOM_SCALAR_TYPE_I64 = 6,
-  // 8-bit float, E4M3 variant (1 sign, 4 exponent, 3 mantissa).
-  // Range [-448, 448], no infinities. FP8 training/inference.
-  // IEEE draft: https://arxiv.org/abs/2209.05433
-  LOOM_SCALAR_TYPE_F8E4M3 = 7,
-  // 8-bit float, E5M2 variant (1 sign, 5 exponent, 2 mantissa).
-  // Range [-57344, 57344], has infinities and NaN. FP8 gradients.
-  // IEEE draft: https://arxiv.org/abs/2209.05433
-  LOOM_SCALAR_TYPE_F8E5M2 = 8,
-  // IEEE 754 binary16 half-precision (1 sign, 5 exponent, 10 mantissa).
-  // Range [-65504, 65504]. Mobile inference, GPU compute.
-  LOOM_SCALAR_TYPE_F16 = 9,
-  // bfloat16 (1 sign, 8 exponent, 7 mantissa). Same exponent range
-  // as f32, reduced mantissa precision. Training and inference on
-  // TPUs, GPUs with bf16 support.
-  LOOM_SCALAR_TYPE_BF16 = 10,
-  // IEEE 754 binary32 single-precision (1 sign, 8 exponent, 23 mantissa).
-  // Standard floating-point type.
-  LOOM_SCALAR_TYPE_F32 = 11,
-  // IEEE 754 binary64 double-precision (1 sign, 11 exponent, 52 mantissa).
-  // High-precision accumulation, loss computation.
-  LOOM_SCALAR_TYPE_F64 = 12,
-  LOOM_SCALAR_TYPE_COUNT_,
-} loom_scalar_type_t;
-
-// Returns the name string for a scalar type (e.g., "f32", "index").
-// The returned string is static and does not need to be freed.
-const char* loom_scalar_type_name(loom_scalar_type_t type);
-
-// Returns the bitwidth of a scalar type. Index returns 64.
-int32_t loom_scalar_type_bitwidth(loom_scalar_type_t type);
-
-// Parses a scalar type name. Returns true on success.
-bool loom_scalar_type_parse(iree_string_view_t name,
-                            loom_scalar_type_t* out_type);
 
 // Dimension packing uses the top bit to distinguish two kinds:
 //
 //   bit 63 = 0: static dimension (bits 0-62 = size).
 //   bit 63 = 1: dynamic SSA value (bits 0-61 = value_id).
 //
-// Bit 62 is reserved for dynamic dims (always 0 for now).
+// Bit 62 is reserved for dynamic dims and must remain zero.
 
 // Dynamic flag: top bit of a packed dimension value.
 #define LOOM_DIM_DYNAMIC_FLAG ((uint64_t)1 << 63)
@@ -181,18 +122,22 @@ bool loom_scalar_type_parse(iree_string_view_t name,
 #define LOOM_DIM_PAYLOAD_MASK (((uint64_t)1 << 62) - 1)
 
 // Maximum static dimension size (2^63 - 1).
-#define LOOM_DIM_MAX_STATIC_SIZE (((int64_t)1 << 63) - 1)
+#define LOOM_DIM_MAX_STATIC_SIZE INT64_MAX
 
 // Maximum SSA value ID that fits in a packed dim.
 #define LOOM_DIM_MAX_VALUE_ID (((uint64_t)1 << 62) - 1)
 
 // Packs a static dimension into the inline format.
 static inline uint64_t loom_dim_pack_static(int64_t size) {
+  IREE_ASSERT(size >= 0 && size <= LOOM_DIM_MAX_STATIC_SIZE,
+              "static dim size out of range");
   return (uint64_t)size;  // Top bit clear = static.
 }
 
 // Packs a dynamic dimension (SSA value ID) into the inline format.
 static inline uint64_t loom_dim_pack_dynamic(uint64_t value_id) {
+  IREE_ASSERT(value_id <= LOOM_DIM_MAX_VALUE_ID,
+              "dynamic dim value ID out of range");
   return LOOM_DIM_DYNAMIC_FLAG | value_id;
 }
 
@@ -224,7 +169,8 @@ typedef uint64_t loom_overflow_dim_t;
 //
 // These are internal compiler values. The bytecode format has its own
 // wire enum (loom_bytecode_type_kind_t in format.h) with independent
-// versioning. Currently identity-mapped; append-only, do not reorder.
+// versioning. Keep this enum append-only and map values explicitly in the
+// bytecode reader/writer when the wire format diverges.
 typedef enum loom_type_kind_e {
   LOOM_TYPE_NONE = 0,      // Absence of a type (no-result ops).
   LOOM_TYPE_SCALAR = 1,    // f32, i8, index, etc.
@@ -282,8 +228,10 @@ typedef uint16_t loom_encoding_flags_t;
 // Type struct and accessors
 //===----------------------------------------------------------------------===//
 
-// 24-byte interned type. Fits 2-3 per cache line.
-// Types are interned per module: pointer equality ≡ structural equality.
+// 24-byte by-value type representation. Fits 2-3 per cache line.
+//
+// Modules also intern canonical copies for deduplication, but a loom_type_t
+// value itself should be compared with loom_type_equal(), not pointer identity.
 typedef struct loom_type_t {
   // Packed header:
   //   [0:7]   loom_type_kind_t
@@ -303,8 +251,8 @@ typedef struct loom_type_t {
 
   // Inline dim storage for rank <= 2. Each element is a packed dim
   // (see loom_dim_pack_*). For rank > 2, dims[0] is a pointer to an
-  // arena-allocated loom_overflow_dim_t array and dims[1] is a
-  // precomputed hash for fast inequality rejection. For function
+  // arena-allocated loom_overflow_dim_t array and dims[1] is unused. For
+  // function
   // types, dims[0] is a pointer to loom_func_type_data_t.
   uint64_t dims[2];
 } loom_type_t;
@@ -505,12 +453,19 @@ static inline bool loom_type_shape_equals(loom_type_t a, loom_type_t b) {
   return true;
 }
 
-// Returns true if two types are structurally equal: same kind, element
-// type, rank, all dims (including overflow dims for rank > 2), and
-// encoding. This is the full equality check — use the narrower
-// predicates above (element_type_equals, shape_equals, etc.) when
-// only a specific aspect needs comparison.
+// Returns true if two types are structurally equal.
+//
+// Shaped/pool types compare kind, element type, rank, dimensions, and
+// encoding. Function types compare argument/result type sequences
+// recursively. Dialect types compare the dialect type name and parameter
+// list recursively.
 bool loom_type_equal(loom_type_t a, loom_type_t b);
+
+// Returns a content-based hash for |type|.
+//
+// Guarantee: if loom_type_equal(a, b), then
+// loom_type_hash(a) == loom_type_hash(b).
+uint32_t loom_type_hash(loom_type_t type);
 
 // Returns true if two types have the same encoding (same encoding_id
 // and encoding_flags). Both types having no encoding counts as equal.
@@ -518,23 +473,27 @@ static inline bool loom_type_encoding_equals(loom_type_t a, loom_type_t b) {
   return a.encoding_id == b.encoding_id && a.encoding_flags == b.encoding_flags;
 }
 
-// Returns true if the type carries any encoding (static or SSA).
-// Static encodings have encoding_id > 0 with no flags. SSA encodings
-// may have encoding_id == 0 (valid value_id), so we also check
-// encoding_flags.
+// Returns true if a shaped type carries any encoding (static or SSA).
+//
+// Static encodings have encoding_id > 0 with no flags. SSA encodings may have
+// encoding_id == 0 (valid value_id), so we also check encoding_flags. Returns
+// false for non-shaped types.
 static inline bool loom_type_has_encoding(loom_type_t type) {
-  return type.encoding_id != 0 || type.encoding_flags != 0;
+  return loom_type_is_shaped(type) &&
+         (type.encoding_id != 0 || type.encoding_flags != 0);
 }
 
 // Returns true if the encoding is an SSA value reference rather than
-// a static encoding table index.
+// a static encoding table index. Returns false for non-shaped types.
 static inline bool loom_type_has_ssa_encoding(loom_type_t type) {
-  return (type.encoding_flags & LOOM_ENCODING_FLAG_SSA) != 0;
+  return loom_type_is_shaped(type) &&
+         (type.encoding_flags & LOOM_ENCODING_FLAG_SSA) != 0;
 }
 
-// Returns true if the type has a static (non-SSA) encoding.
+// Returns true if the shaped type has a static (non-SSA) encoding.
 static inline bool loom_type_has_static_encoding(loom_type_t type) {
-  return type.encoding_id != 0 && !loom_type_has_ssa_encoding(type);
+  return loom_type_is_shaped(type) && type.encoding_id != 0 &&
+         !loom_type_has_ssa_encoding(type);
 }
 
 // Returns the SSA value_id for a dynamic encoding. Only valid when
@@ -569,7 +528,8 @@ static inline loom_type_t loom_type_pool(uint64_t block_size_dim) {
   return type;
 }
 
-// Creates a none type (placeholder for values whose type is not yet known).
+// Creates a none type used as a parser/construction placeholder before the
+// value's real type is assigned.
 static inline loom_type_t loom_type_none(void) { return (loom_type_t){0}; }
 
 // Creates a scalar type (rank 0, no shape, no encoding).
@@ -650,10 +610,10 @@ iree_status_t loom_type_function_build(const loom_type_t* arg_types,
 //
 // Dialect types represent types from external dialects (hal.buffer,
 // vm.ref<T>, etc.). They reuse the 24-byte loom_type_t layout:
-//   encoding_id    → string_id (type name in the module string table)
+//   dims[1]        → string_id (type name in the module string table)
+//   encoding_id    → unused
 //   encoding_flags → param_count (number of type parameters)
 //   dims[0]        → pointer to loom_type_t* array (params), or 0
-//   dims[1]        → unused
 
 // Creates an opaque dialect type (no parameters). For types like
 // hal.buffer that have no interior syntax.
@@ -661,8 +621,8 @@ static inline loom_type_t loom_type_dialect_opaque(loom_string_id_t name_id) {
   loom_type_t type = {0};
   type.header = loom_type_make_header(LOOM_TYPE_DIALECT, (loom_scalar_type_t)0,
                                       0, LOOM_TYPE_FLAG_INLINE_DIMS);
-  type.encoding_id = (uint16_t)name_id;
   type.encoding_flags = 0;
+  type.dims[1] = name_id;
   return type;
 }
 
@@ -674,15 +634,15 @@ static inline loom_type_t loom_type_dialect(loom_string_id_t name_id,
   loom_type_t type = {0};
   type.header = loom_type_make_header(LOOM_TYPE_DIALECT, (loom_scalar_type_t)0,
                                       0, LOOM_TYPE_FLAG_INLINE_DIMS);
-  type.encoding_id = (uint16_t)name_id;
   type.encoding_flags = param_count;
   type.dims[0] = (uint64_t)(uintptr_t)params;
+  type.dims[1] = name_id;
   return type;
 }
 
 // Returns the string_id for the dialect type name.
 static inline loom_string_id_t loom_type_dialect_name_id(loom_type_t type) {
-  return (loom_string_id_t)type.encoding_id;
+  return (loom_string_id_t)type.dims[1];
 }
 
 // Returns the number of type parameters.

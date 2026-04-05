@@ -121,8 +121,20 @@ loom_string_id_t loom_module_lookup_string(const loom_module_t* module,
 // rejects duplicate keys, arena-copies the resulting immutable entry array,
 // and stores the canonical wrapper in |out_attr|.
 iree_status_t loom_module_make_canonical_attr_dict(
-    loom_module_t* module, const loom_named_attr_t* entries,
-    iree_host_size_t count, loom_attribute_t* out_attr);
+    loom_module_t* module, loom_named_attr_slice_t entries,
+    loom_attribute_t* out_attr);
+
+// Builds a fresh canonical DICT attribute from |base_entries| plus |updates|.
+//
+// |base_entries| is the existing dict content to patch, usually from a
+// generated AttrDict accessor. |updates| may be in any order. Each update
+// either inserts/replaces one key or removes it. Duplicate keys in |updates|
+// are rejected so patch semantics stay order-independent. Replacement values
+// are recursively canonicalized, unchanged base values are reused by value, and
+// the resulting entry array is arena-owned by |module|.
+iree_status_t loom_module_replace_canonical_attr_dict(
+    loom_module_t* module, loom_named_attr_slice_t base_entries,
+    loom_named_attr_update_slice_t updates, loom_attribute_t* out_attr);
 
 // Verifies that |attr| is a canonical DICT attribute relative to |module|.
 // Non-empty entries must be sorted by key spelling, duplicate-free, and
@@ -148,8 +160,10 @@ static inline const loom_encoding_t* loom_module_encoding(
 
 // Interns a type in the module's type table. If a structurally identical
 // type already exists, returns the existing entry (by value). Otherwise,
-// appends a new entry. For overflow-dim types (rank > 2), the overflow
-// array is arena-allocated in the module.
+// appends a new entry. Any heap-backed payload owned by |type| (overflow dims,
+// function signatures, dialect params) is recursively copied into the module
+// arena before storage, so callers may pass temporary or foreign-allocator
+// payloads.
 iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
                                       loom_type_t* out_interned_type);
 

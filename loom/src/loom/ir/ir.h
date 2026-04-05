@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Loom IR graph: Module -> Function -> Block -> Operation -> Value.
+// Loom IR graph: Module -> Region -> Block -> Operation -> Value.
 //
 // The IR is a lightweight, arena-allocated graph that represents loom
 // programs. All IR for a module lives in a single arena: creation is
@@ -17,15 +17,12 @@
 // Module:     Top-level container. Owns the arena, string table, type
 //             table, value table, symbol table. One per file/compilation.
 //
-// Symbol:     A named module-level entity: function, global, executable.
-//             Flat symbol table per module (no nesting). Symbols carry
-//             use lists for efficient "find all references" queries.
+// Symbol:     A named module-level entity: function-like op, global,
+//             executable. Flat symbol table per module (no nesting).
+//             Symbols carry use lists for efficient "find all
+//             references" queries.
 //
-// Function:   A callable symbol with a calling convention, signature,
-//             and optionally a body (list of blocks). Functions are the
-//             unit of parallel compilation.
-//
-// Block:      A basic block within a function. Contains a linear
+// Block:      A basic block within a region. Contains a linear
 //             sequence of operations. May have block arguments (for
 //             function entry, loop carried values, branch targets).
 //
@@ -38,7 +35,7 @@
 //             Carries the type inline (24 bytes) and up to 3 uses
 //             inline (no pointer chase for the common case).
 //
-// Region:     A list of blocks. Used for function bodies, loop bodies,
+// Region:     A list of blocks. Used for function-like bodies, loop bodies,
 //             conditional branches. Regions nest (a region's block
 //             contains ops that may have their own regions).
 //
@@ -46,27 +43,28 @@
 // ID-based references
 // ==========================================================================
 //
-// All cross-references use integer IDs, not pointers:
+// Table-owned entities use integer IDs; ownership/backreference edges use
+// stable arena pointers:
 //   value_id   -> index into module->values.entries[]
-//   op_id      -> index into block->ops[] (block-local)
 //   symbol_id  -> index into module->symbols.entries[]
 //   string_id  -> index into module->strings.entries[]
 //   type_id    -> index into module->types.entries[] (for interned types)
+//   use/def    -> loom_op_t* / loom_block_t* stable arena pointers
 //
-// Benefits: stable across serialization, no dangling pointers when
-// ops are erased, compact storage, cache-friendly iteration.
+// Benefits: stable table references for serialization, compact scalar IDs
+// where the IR already has dense tables, and direct pointers for hot local
+// walks where arena allocation keeps objects stable.
 //
 // ==========================================================================
 // Symbol references
 // ==========================================================================
 //
 // A symbol reference is (module_id, symbol_id): 4 bytes total.
-// module_id indexes into the context's module list.
-// symbol_id indexes into that module's symbol table.
-// For local references, module_id is the current module.
 //
-//   Resolution: context->modules.entries[ref.module_id]
-//                 ->symbols.entries[ref.symbol_id]
+// In the in-memory IR, symbol references are module-local: valid refs use
+// module_id = 0 and symbol_id indexes into the current module's symbol table.
+// The module_id field is retained so the same payload shape can represent
+// cross-module links in serialized formats and external linker metadata.
 //
 // ==========================================================================
 // Tied results (ownership transfer)
@@ -94,6 +92,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/attribute.h"
+#include "loom/ir/location.h"
 #include "loom/ir/types.h"
 #include "loom/util/bstring.h"
 
@@ -131,171 +130,6 @@ typedef struct loom_rewriter_t loom_rewriter_t;
 // Used by the constraint system, printer field callbacks, and
 // diagnostic highlighting.
 typedef uint8_t loom_field_ref_t;
-
-//===----------------------------------------------------------------------===//
-// Source locations
-//===----------------------------------------------------------------------===//
-//
-// Every IR operation carries a location for diagnostics, source mapping,
-// and debug info generation. Locations are interned per module and
-// referenced by a 4-byte loom_location_id_t on each operation.
-//
-// Three kinds of location:
-//
-//   File:    Source range from a .loom file. Stores file:start:end so
-//            tooling can extract exact text spans for diagnostics,
-//            diffs, and agent-driven code modification.
-//   Fused:   Derived from multiple source locations when a pass creates
-//            an op from several inputs (inlining, fusion, rewrites).
-//   Opaque:  External system identifier for JIT (torch node ID, JAX
-//            trace position). Round-trips through compilation.
-//
-// File locations are 16 bytes with full range (start line:col to end
-// line:col). This enables precise caret diagnostics with underlines:
-//
-//   error: element types do not match
-//     --> model.loom:42:3
-//      |
-//   42 |   %r = tile.contract %w, %x : tile<4x4xf32>, tile<4xi8>
-//      |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-//
-// Locations can be stripped for release/embedded builds. A stripped
-// location preserves the interned ID (for bytecode stability) but
-// carries no data. Fusing stripped locations produces stripped.
-//
-// Text format:
-//   loc("model.loom":42:3 to 42:58)
-//   loc(fused<"model.loom":42:3, "recipe.loom":15:1>)
-//   loc(opaque<"torch", "node_id=42">)
-
-// Index into the module's location table.
-// ID 0 is always LOOM_LOCATION_NONE (unknown/absent).
-// When locations are stripped, all ops point to ID 0 and the
-// location table is empty. No per-entry stripped flag needed.
-typedef uint32_t loom_location_id_t;
-#define LOOM_LOCATION_UNKNOWN ((loom_location_id_t)0)
-
-// Index into the context's source table.
-// The source table is a small, context-level table of unique source
-// identifiers: filenames ("model.loom", "recipe_x86.loom"), external
-// system tags ("torch", "jax"), or any other provenance label.
-// Shared across modules because the same source can be referenced
-// by multiple modules. Separate from the per-module string table.
-typedef uint16_t loom_source_id_t;
-#define LOOM_SOURCE_ID_INVALID ((loom_source_id_t)UINT16_MAX)
-
-// Source table stored on the context. Entries are interned copies
-// of source names (filenames, system tags). The table is append-only
-// and deduplicates by exact string match.
-typedef struct loom_source_table_t {
-  iree_host_size_t count;
-  iree_host_size_t capacity;
-  iree_string_view_t* entries;
-} loom_source_table_t;
-
-// Location kind.
-typedef enum loom_location_kind_e {
-  // No location information. Synthetic or stripped.
-  LOOM_LOCATION_NONE = 0,
-  // Source range from a .loom file: file + start + end positions.
-  LOOM_LOCATION_FILE = 1,
-  // Derived from multiple source locations (inlining, fusion).
-  // Children are arena-allocated location IDs.
-  LOOM_LOCATION_FUSED = 2,
-  // External system identifier (torch node ID, JAX trace).
-  // Tag + opaque data blob, round-tripped verbatim.
-  LOOM_LOCATION_OPAQUE = 3,
-  LOOM_LOCATION_COUNT_,
-} loom_location_kind_t;
-
-// Location flags.
-enum loom_location_flag_bits_e {
-  // Compiler-generated op, not from user source.
-  LOOM_LOCATION_FLAG_SYNTHETIC = 1u << 0,
-};
-typedef uint8_t loom_location_flags_t;
-
-// A source location entry. 16 bytes. Tagged union.
-//
-// The kind field (byte 0) determines which union variant is active.
-// All three variants fit in exactly 16 bytes with no wasted space.
-//
-// File locations (the 90% case) use uint16_t for line numbers,
-// supporting up to 65K lines per file. Agent-authored .loom files
-// are typically hundreds of lines; linked module dumps are diagnostic
-// output, not round-tripped source.
-//
-// The source_id field indexes into the context's source table, which
-// stores filenames, system tags, and any other provenance labels.
-// This keeps location entries small (16-bit ID) while supporting
-// arbitrary source identifiers.
-//
-// Text format:
-//   loc("model.loom":42:3 to 42:58)
-//   loc(fused<"model.loom":42:3, "recipe.loom":15:1>)
-//   loc(opaque<"torch", "node_id=42">)
-typedef struct loom_location_entry_t {
-  loom_location_kind_t kind;
-  loom_location_flags_t flags;
-  union {
-    // LOOM_LOCATION_FILE: source range.
-    struct {
-      loom_source_id_t source_id;
-      uint16_t start_line;
-      uint16_t start_col;
-      uint16_t end_line;
-      uint16_t end_col;
-    } file;
-
-    // LOOM_LOCATION_FUSED: multiple source locations.
-    struct {
-      uint32_t count;
-      loom_location_id_t* children;
-    } fused;
-
-    // LOOM_LOCATION_OPAQUE: external identifier.
-    struct {
-      loom_source_id_t source_id;
-      uint32_t data_length;
-      const uint8_t* data;
-    } opaque;
-  };
-} loom_location_entry_t;
-
-static_assert(sizeof(loom_location_entry_t) == 24,
-              "loom_location_entry_t must be 24 bytes");
-
-// Location table stored on the module.
-// Entry 0 is always LOOM_LOCATION_NONE.
-// When locations are stripped, the table is empty and all ops
-// reference LOOM_LOCATION_UNKNOWN (ID 0).
-typedef struct loom_location_table_t {
-  iree_host_size_t count;
-  iree_host_size_t capacity;
-  loom_location_entry_t* entries;
-} loom_location_table_t;
-
-//===----------------------------------------------------------------------===//
-// Location accessors
-//===----------------------------------------------------------------------===//
-
-static inline loom_location_kind_t loom_location_get_kind(
-    loom_location_entry_t entry) {
-  return (loom_location_kind_t)entry.kind;
-}
-
-// Construct a file source range location.
-static inline loom_location_entry_t loom_location_file_range(
-    loom_source_id_t source_id, uint16_t start_line, uint16_t start_col,
-    uint16_t end_line, uint16_t end_col) {
-  loom_location_entry_t entry = {.kind = LOOM_LOCATION_FILE};
-  entry.file.source_id = source_id;
-  entry.file.start_line = start_line;
-  entry.file.start_col = start_col;
-  entry.file.end_line = end_line;
-  entry.file.end_col = end_col;
-  return entry;
-}
 
 //===----------------------------------------------------------------------===//
 // Use-def tracking
@@ -410,7 +244,7 @@ static inline loom_value_def_t loom_value_def_make_block(loom_block_t* block,
   return (uint64_t)(uintptr_t)block | ((uint64_t)arg_index << 48);
 }
 
-// Creates an empty def pointer (value not yet associated with a def site).
+// Creates an empty def pointer before the value's defining site is wired.
 static inline loom_value_def_t loom_value_def_make_none(void) { return 0; }
 
 // Extracts the defining op pointer. Caller must check that the value
@@ -662,7 +496,6 @@ static inline uint16_t loom_value_def_index(const loom_value_t* value) {
 // result has a different type than the operand (e.g., a reshape or
 // encoding change over the same storage).
 typedef struct loom_tied_result_t {
-  // TODO(benvanik): pack this better - that bool is costing bytes.
   uint16_t result_index;
   uint16_t operand_index;
   bool has_type_change;
@@ -1226,10 +1059,6 @@ static inline loom_value_id_t loom_region_entry_arg_id(
 }
 
 //===----------------------------------------------------------------------===//
-// Function kind, flags, and calling convention
-//===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
 // Symbol flags and kinds
 //===----------------------------------------------------------------------===//
 
@@ -1304,12 +1133,6 @@ typedef struct loom_symbol_t {
   // an op with LOOM_TRAIT_SYMBOL_DEFINE is finalized. NULL until then (e.g.,
   // during parsing before the op is fully built).
   loom_op_t* defining_op;
-  union {
-    // Typed pointers for future non-func symbol kinds. Both are void* until
-    // the corresponding IR nodes are added (globals and executables).
-    void* global;
-    void* executable;
-  };
   union {
     loom_symbol_use_t inline_uses[2];
     loom_symbol_use_t* overflow_uses;
@@ -1468,9 +1291,9 @@ typedef struct loom_module_t {
   // reference LOOM_LOCATION_UNKNOWN (0).
   loom_location_table_t locations;
 
-  // Module body: a region with a single entry block. All top-level ops
-  // (function definitions, globals, executables) live in this block.
-  // Created automatically by loom_module_create.
+  // Module body: a region with a single entry block. All top-level symbol ops
+  // and other module-scope ops live in this block. Created automatically by
+  // loom_module_allocate().
   loom_region_t* body;
 
   // Intern hash tables for deduplicating strings and types during
@@ -1482,12 +1305,6 @@ typedef struct loom_module_t {
 //===----------------------------------------------------------------------===//
 // Context
 //===----------------------------------------------------------------------===//
-
-// Module list within the context (for cross-module linking).
-typedef struct loom_module_list_t {
-  iree_host_size_t count;
-  loom_module_t** entries;
-} loom_module_list_t;
 
 // Encoding vtable list (one per encoding kind).
 typedef struct loom_encoding_vtable_list_t {

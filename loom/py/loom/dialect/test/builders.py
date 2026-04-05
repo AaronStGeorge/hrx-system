@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import builtins
+from collections.abc import Mapping
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
@@ -12,6 +14,8 @@ from loom.ir import Predicate, Region, Type
 
 class TestBuilders:
     """Typed builder methods for test ops."""
+
+    __test__ = False
 
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
@@ -23,7 +27,7 @@ class TestBuilders:
             %result = test.addi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -36,7 +40,7 @@ class TestBuilders:
             %result = test.neg %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("test.neg", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -48,7 +52,7 @@ class TestBuilders:
             %result = test.cast %input : i32 to f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("test.cast", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -60,7 +64,7 @@ class TestBuilders:
             %c42 = test.constant 42 : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["value"] = value
         return cast(ValueRef, self._b.build("test.constant", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -72,7 +76,7 @@ class TestBuilders:
             test.use %a : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.extend(values)
         self._b.build("test.use", _operands, attributes=_attributes, regions=_regions)
@@ -84,7 +88,7 @@ class TestBuilders:
             %result = test.cmp lt, %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["predicate"] = predicate
         _operands.append(lhs)
@@ -101,7 +105,7 @@ class TestBuilders:
             } -> (tile<4xf32>)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.extend(inputs)
         if body is not None:
@@ -115,7 +119,7 @@ class TestBuilders:
             %result = test.update %tile, %tensor[%offset] : tile<4xf32> -> (%tensor as tensor<[%M]xf32>)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(source)
         _operands.append(target)
@@ -137,7 +141,7 @@ class TestBuilders:
             %output, %count = test.invoke @callee(%weights, %input) : (tile<4xf32>, index) -> (%weights as tile<4xf32>, index)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["callee"] = callee
         _operands.extend(operands)
@@ -150,7 +154,7 @@ class TestBuilders:
             %subtile = test.slice %source[0, %offset] : tile<64x64xf16> -> (tile<16x16xf16>)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(source)
         _sentinel = -(2**63)
@@ -174,7 +178,7 @@ class TestBuilders:
             }
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lower_bound)
         _operands.append(upper_bound)
@@ -195,7 +199,7 @@ class TestBuilders:
             }
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(condition)
         if then_region is not None:
@@ -211,13 +215,21 @@ class TestBuilders:
             test.yield
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.extend(values)
         self._b.build("test.yield", _operands, attributes=_attributes, regions=_regions)
 
     def func(
-        self, *, visibility: str | None = None, cc: str | None = None, callee: str, results: list[Type | TiedResultSpec], predicates: list[Predicate] | None = None, body: Region | None = None
+        self,
+        *,
+        visibility: str | None = None,
+        cc: str | None = None,
+        callee: str,
+        args: list[ValueRef] | None = None,
+        results: list[Type | TiedResultSpec],
+        predicates: list[Predicate] | None = None,
+        body: Region | None = None,
     ) -> list[ValueRef]:
         """Test function definition with body always present.
 
@@ -227,45 +239,53 @@ class TestBuilders:
             }
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _func_args: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if visibility is not None:
             _attributes["visibility"] = visibility
         if cc is not None:
             _attributes["cc"] = cc
         _attributes["callee"] = callee
+        if args is not None:
+            _func_args.extend(args)
         if predicates:
             _attributes["predicates"] = predicates
         if body is not None:
             _regions.append(body)
-        return cast(list[ValueRef], self._b.build("test.func", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("test.func", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))
 
-    def decl(self, *, visibility: str | None = None, cc: str | None = None, callee: str, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
+    def decl(self, *, visibility: str | None = None, cc: str | None = None, callee: str, args: list[ValueRef] | None = None, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
         """Test function declaration with no body and signature arguments stored as op operands.
 
         Example::
             test.decl @identity(%input: f32) -> (%input as f32)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _func_args: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if visibility is not None:
             _attributes["visibility"] = visibility
         if cc is not None:
             _attributes["cc"] = cc
         _attributes["callee"] = callee
-        return cast(list[ValueRef], self._b.build("test.decl", _operands, results=results, attributes=_attributes, regions=_regions))
+        if args is not None:
+            _func_args.extend(args)
+        return cast(list[ValueRef], self._b.build("test.decl", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))
 
-    def attrs(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+    def attrs(self, *, input: ValueRef, dict: Mapping[str, Any] | None = None, result_types: list[Type]) -> ValueRef:
         """Test op with attribute dictionary.
 
         Example::
             %result = test.attrs %input {axis = 0, label = "foo"} : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
+        if dict is not None:
+            _attributes["dict"] = dict
         return cast(ValueRef, self._b.build("test.attrs", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def deflate(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
@@ -275,7 +295,7 @@ class TestBuilders:
             %output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[%length]xf32>, index)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(list[ValueRef], self._b.build("test.deflate", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -287,7 +307,7 @@ class TestBuilders:
             %M2 = test.assume %M [mul(%M, 16)] : index
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.extend(values)
         _attributes["predicates"] = predicates
@@ -300,7 +320,7 @@ class TestBuilders:
             %result = test.convert %input : i32 -> f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("test.convert", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -312,7 +332,7 @@ class TestBuilders:
             %sum = test.reduce %a, %b, %c : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.extend(inputs)
         return cast(ValueRef, self._b.build("test.reduce", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -324,7 +344,7 @@ class TestBuilders:
             %tile = test.read_resource %pool : pool<[%BS]> -> tile<4xf32>
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(source)
         return cast(ValueRef, self._b.build("test.read_resource", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -336,7 +356,7 @@ class TestBuilders:
             test.write_resource %pool, %tile : pool<[%BS]>, tile<4xf32>
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(target)
         _operands.append(data)
@@ -349,7 +369,7 @@ class TestBuilders:
             %old = test.mutate_resource %pool, %delta : pool<[%BS]>, i32 -> i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(target)
         _operands.append(value)
@@ -362,7 +382,7 @@ class TestBuilders:
             %pool = test.alloc %sz : index -> pool<[%BS]>
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(size)
         return cast(ValueRef, self._b.build("test.alloc", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -377,7 +397,7 @@ class TestBuilders:
             }
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if body is not None:
             _regions.append(body)
@@ -390,7 +410,7 @@ class TestBuilders:
             %c = test.counter 3 : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["value"] = value
         return cast(ValueRef, self._b.build("test.counter", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -402,7 +422,7 @@ class TestBuilders:
             %d = test.dim %t[0] : tile<4xf32> -> index
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(source)
         _attributes["dim_index"] = dim_index
@@ -415,7 +435,7 @@ class TestBuilders:
             %lo = test.fact_range_lo %x : index -> i64
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_range_lo", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -427,7 +447,7 @@ class TestBuilders:
             %hi = test.fact_range_hi %x : index -> i64
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_range_hi", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -439,7 +459,7 @@ class TestBuilders:
             %div = test.fact_divisor %x : index -> i64
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_divisor", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -451,7 +471,7 @@ class TestBuilders:
             %nn = test.fact_non_negative %x : index -> i1
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_non_negative", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -463,7 +483,7 @@ class TestBuilders:
             %nz = test.fact_non_zero %x : index -> i1
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_non_zero", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -475,7 +495,7 @@ class TestBuilders:
             %pos = test.fact_positive %x : index -> i1
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_positive", _operands, results=results, attributes=_attributes, regions=_regions))
@@ -487,7 +507,7 @@ class TestBuilders:
             %p2 = test.fact_power_of_two %x : index -> i1
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_power_of_two", _operands, results=results, attributes=_attributes, regions=_regions))

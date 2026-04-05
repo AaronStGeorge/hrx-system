@@ -1415,6 +1415,18 @@ iree_status_t loom_parse_keyword(loom_parser_t* parser, uint16_t keyword_id) {
 // Op finalization — accumulator -> loom_op_t
 //===----------------------------------------------------------------------===//
 
+static void loom_parser_set_region_parent_op(loom_region_t* region,
+                                             loom_op_t* parent_op) {
+  if (!region) return;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    loom_block_t* block = loom_region_block(region, block_index);
+    for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
+      loom_block_op(block, op_index)->parent_op = parent_op;
+    }
+  }
+}
+
 static iree_status_t loom_finalize_op(
     loom_parser_t* parser, loom_op_kind_t kind, const loom_op_vtable_t* vtable,
     loom_parsed_op_t* parsed, loom_location_id_t location, loom_op_t** out_op) {
@@ -1483,6 +1495,9 @@ static iree_status_t loom_finalize_op(
   if (parsed->region_count > 0) {
     memcpy(loom_op_regions(op), parsed->regions,
            parsed->region_count * sizeof(loom_region_t*));
+    for (uint8_t i = 0; i < parsed->region_count; ++i) {
+      loom_parser_set_region_parent_op(parsed->regions[i], op);
+    }
   }
 
   // Copy tied results.
@@ -1656,9 +1671,48 @@ static iree_status_t loom_parse_block_body(loom_parser_t* parser,
   return iree_ok_status();
 }
 
-static iree_status_t loom_parse_region_body(loom_parser_t* parser,
-                                            loom_region_t* region,
-                                            bool* out_region_end_consumed) {
+static bool loom_parser_block_has_explicit_terminator(
+    loom_parser_t* parser, const loom_block_t* block) {
+  if (block->op_count == 0) return false;
+  const loom_op_t* last_op = loom_block_const_last_op(block);
+  const loom_op_vtable_t* last_vtable =
+      loom_context_resolve_op(parser->context, last_op->kind);
+  return last_vtable &&
+         iree_any_bit_set(last_vtable->traits, LOOM_TRAIT_TERMINATOR);
+}
+
+static iree_status_t loom_parser_append_implicit_terminator(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_block_t* block) {
+  IREE_ASSERT_ARGUMENT(region_descriptor);
+  if (region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN ||
+      loom_parser_block_has_explicit_terminator(parser, block)) {
+    return iree_ok_status();
+  }
+
+  loom_builder_set_block(&parser->builder, block);
+  loom_location_id_t location = LOOM_LOCATION_UNKNOWN;
+  if (parser->source_id != LOOM_SOURCE_ID_INVALID) {
+    loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+    if (token.kind != LOOM_TOKEN_EOF && token.kind != LOOM_TOKEN_NONE) {
+      loom_location_entry_t entry = loom_location_file_range(
+          parser->source_id, (uint16_t)token.line, (uint16_t)token.column,
+          (uint16_t)token.line, (uint16_t)token.end_column);
+      IREE_RETURN_IF_ERROR(
+          loom_module_add_location(parser->module, entry, &location));
+    }
+  }
+  loom_op_t* terminator = NULL;
+  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
+      &parser->builder, region_descriptor->implicit_terminator,
+      /*operand_count=*/0, /*result_count=*/0, /*region_count=*/0,
+      /*tied_result_count=*/0, /*attribute_count=*/0, location, &terminator));
+  return loom_builder_finalize_op(&parser->builder, terminator);
+}
+
+static iree_status_t loom_parse_region_body(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t* region, bool* out_region_end_consumed) {
   *out_region_end_consumed = false;
 
   // Seed the entry block with pending block args from FUNC_ARGS, BINDING_LIST,
@@ -1728,7 +1782,17 @@ static iree_status_t loom_parse_region_body(loom_parser_t* parser,
       LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
     }
 
+    const uint32_t block_errors_before = parser->error_count;
     IREE_RETURN_IF_ERROR(loom_parse_block_body(parser, block));
+    if (parser->error_count == block_errors_before) {
+      IREE_RETURN_IF_ERROR(loom_parser_append_implicit_terminator(
+          parser, region_descriptor, block));
+    }
+  }
+
+  if (first_block && !loom_parser_at_error_limit(parser)) {
+    IREE_RETURN_IF_ERROR(loom_parser_append_implicit_terminator(
+        parser, region_descriptor, loom_region_entry_block(region)));
   }
 
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACE, NULL);
@@ -1736,8 +1800,10 @@ static iree_status_t loom_parse_region_body(loom_parser_t* parser,
   return iree_ok_status();
 }
 
-iree_status_t loom_parse_region(loom_parser_t* parser,
-                                loom_region_t** out_region) {
+iree_status_t loom_parse_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t** out_region) {
+  IREE_ASSERT_ARGUMENT(region_descriptor);
   uint32_t errors_before = parser->error_count;
 
   // Expect '{'.
@@ -1762,8 +1828,8 @@ iree_status_t loom_parse_region(loom_parser_t* parser,
   loom_builder_ip_t saved_ip = loom_builder_save(&parser->builder);
 
   bool region_end_consumed = false;
-  iree_status_t status =
-      loom_parse_region_body(parser, region, &region_end_consumed);
+  iree_status_t status = loom_parse_region_body(parser, region_descriptor,
+                                                region, &region_end_consumed);
   if (parser->error_count > errors_before && !region_end_consumed &&
       !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
     loom_parser_sync_to_brace(parser);

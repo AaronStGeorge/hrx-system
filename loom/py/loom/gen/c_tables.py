@@ -549,6 +549,28 @@ def _translate_format_elements(
 # ============================================================================
 
 
+def _implicit_terminator_kind(op: Op, ops_by_name: dict[str, Op]) -> str:
+    """Returns the C op kind for this op's implicit terminator trait."""
+    terminator_traits = [trait for trait in op.traits if trait.name == "ImplicitTerminator"]
+    if not terminator_traits:
+        return "LOOM_OP_KIND_UNKNOWN"
+    if len(terminator_traits) > 1:
+        raise ValueError(f"Op '{op.name}': duplicate ImplicitTerminator traits are not supported")
+    trait = terminator_traits[0]
+    if len(trait.args) != 1:
+        raise ValueError(f"Op '{op.name}': ImplicitTerminator requires one op name argument")
+    terminator_name = trait.args[0]
+    terminator_op = ops_by_name.get(terminator_name)
+    if terminator_op is None:
+        raise ValueError(f"Op '{op.name}': ImplicitTerminator '{terminator_name}' must name an op in the '{op.namespace}' dialect")
+    if not any(trait.name == "Terminator" for trait in terminator_op.traits):
+        raise ValueError(f"Op '{op.name}': ImplicitTerminator '{terminator_name}' is not marked with the Terminator trait")
+    terminator_layout = compute_layout(terminator_op)
+    if terminator_layout.fixed_operand_count != 0 or terminator_layout.fixed_result_count != 0 or terminator_op.attrs or terminator_op.regions:
+        raise ValueError(f"Op '{op.name}': ImplicitTerminator '{terminator_name}' must be instantiable with zero operands, results, attrs, and regions")
+    return _c_enum_name(terminator_op)
+
+
 def _trait_flags(op: Op) -> str:
     """Returns the C trait bitfield expression for an op.
 
@@ -669,6 +691,7 @@ _C_ATTR_TYPE_MAP: dict[str, str] = {
     "symbol": "loom_symbol_ref_t",
     "i64_array": "const int64_t*",
     "type": "uint32_t",
+    "dict": "loom_named_attr_slice_t",
     "any": "loom_attribute_t",
 }
 
@@ -927,7 +950,22 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             }
                         )
 
-                case Keyword() | TypeOf() | TypesOf() | AttrDict() | Glue() | OpRef():
+                case AttrDict(field=name):
+                    if name:
+                        attr_def = op.attr(name)
+                        if attr_def is not None:
+                            params.append(
+                                {
+                                    "name": name,
+                                    "kind": "attr",
+                                    "c_type": _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t"),
+                                    "attr_type": attr_def.attr_type,
+                                    "optional": attr_def.optional,
+                                    "attr_index": layout.fields[name].index,
+                                }
+                            )
+
+                case Keyword() | TypeOf() | TypesOf() | Glue() | OpRef():
                     pass
 
     walk(op.format)
@@ -1218,6 +1256,19 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             }
             if attr_type == "i64_array":
                 lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){name}, (uint16_t){name}_count);")
+            elif attr_type == "dict":
+                if is_optional:
+                    lines.append(f"  if ({name}.count > 0) {{")
+                    lines.append("    IREE_RETURN_IF_ERROR(")
+                    lines.append("        loom_module_make_canonical_attr_dict(")
+                    lines.append(f"            builder->module, {name},")
+                    lines.append(f"            &loom_op_attrs(*out_op)[{idx}]));")
+                    lines.append("  }")
+                else:
+                    lines.append("  IREE_RETURN_IF_ERROR(")
+                    lines.append("      loom_module_make_canonical_attr_dict(")
+                    lines.append(f"          builder->module, {name},")
+                    lines.append(f"          &loom_op_attrs(*out_op)[{idx}]));")
             elif is_optional and attr_type in optional_guard:
                 guard = optional_guard[attr_type]
                 lines.append(f"  if ({guard}) {{")
@@ -1422,6 +1473,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 "f64": "LOOM_DEFINE_ATTR_F64",
                 "string": "LOOM_DEFINE_ATTR_STRING",
                 "bool": "LOOM_DEFINE_ATTR_BOOL",
+                "dict": "LOOM_DEFINE_ATTR_DICT",
                 "enum": "LOOM_DEFINE_ATTR_ENUM",
                 "symbol": "LOOM_DEFINE_ATTR_SYMBOL",
             }
@@ -1527,6 +1579,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
 def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str:
     """Generates the tables.c file for a dialect (.rodata)."""
     lines: list[str] = []
+    ops_by_name = {op.name: op for op in ops}
 
     lines.append(COPYRIGHT)
     lines.append("// GENERATED by loom.gen.c_tables — do not edit.")
@@ -1700,10 +1753,11 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         if not op.regions:
             continue
         prefix = _c_prefix(op)
+        implicit_terminator = _implicit_terminator_kind(op, ops_by_name)
         lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
         for region_def in op.regions:
             flags = "LOOM_REGION_SINGLE_BLOCK" if region_def.single_block else "0"
-            lines.append(f"    {{{flags}}},")
+            lines.append(f"    {{{flags}, {implicit_terminator}}},")
         lines.append("};")
     lines.append("")
 

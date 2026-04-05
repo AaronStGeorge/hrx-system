@@ -511,8 +511,9 @@ loom_token_kind_t loom_keyword_token_kind(uint16_t keyword_id);
 iree_status_t loom_parse_keyword(loom_parser_t* parser, uint16_t keyword_id);
 
 // Parses a region: '{' block* '}'.
-iree_status_t loom_parse_region(loom_parser_t* parser,
-                                loom_region_t** out_region);
+iree_status_t loom_parse_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t** out_region);
 
 // Emits ERR_PARSE_009 for a result arity mismatch on |vtable| at
 // |op_name_token|.

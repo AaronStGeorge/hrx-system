@@ -569,13 +569,66 @@ TEST_F(BuilderTest, FuncBuilder) {
 TEST_F(BuilderTest, AttrsBuilder) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_test_attrs_build(&builder_, 42, f32, LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, 42,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &op));
   ASSERT_NE(op, nullptr);
   EXPECT_EQ(op->kind, LOOM_OP_TEST_ATTRS);
   EXPECT_EQ(op->operand_count, 1);
   EXPECT_EQ(op->result_count, 1);
   EXPECT_EQ(loom_test_attrs_input(op), 42u);
+  loom_named_attr_slice_t dict = loom_test_attrs_dict(op);
+  EXPECT_EQ(dict.entries, nullptr);
+  EXPECT_EQ(dict.count, 0u);
+}
+
+TEST_F(BuilderTest, AttrsBuilderCanonicalizesDict) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("zeta"), &zeta_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("alpha"), &alpha_id));
+
+  loom_named_attr_t entries[2] = {
+      {.name_id = zeta_id, .value = loom_attr_i64(2)},
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+  };
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, 42,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &op));
+
+  loom_named_attr_slice_t dict = loom_test_attrs_dict(op);
+  loom_attribute_t dict_attr =
+      loom_make_canonical_attr_dict(dict.entries, dict.count);
+  IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module_, dict_attr));
+  ASSERT_EQ(dict.count, 2u);
+  ASSERT_NE(dict.entries, nullptr);
+  EXPECT_EQ(dict.entries[0].name_id, alpha_id);
+  EXPECT_EQ(loom_attr_as_i64(dict.entries[0].value), 1);
+  EXPECT_EQ(dict.entries[1].name_id, zeta_id);
+  EXPECT_EQ(loom_attr_as_i64(dict.entries[1].value), 2);
+}
+
+TEST_F(BuilderTest, AttrsBuilderRejectsDuplicateDictKeys) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("axis"), &axis_id));
+
+  loom_named_attr_t entries[2] = {
+      {.name_id = axis_id, .value = loom_attr_i64(0)},
+      {.name_id = axis_id, .value = loom_attr_i64(1)},
+  };
+  loom_op_t* op = NULL;
+  iree_status_t status = loom_test_attrs_build(
+      &builder_, 42,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &op);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST_F(BuilderTest, DeflateBuilder) {
@@ -1472,7 +1525,7 @@ TEST(AttributeEqual, DictSameContent) {
 
   loom_attribute_t a = loom_make_canonical_attr_dict(entries_a, 2);
   loom_attribute_t b = loom_make_canonical_attr_dict(entries_b, 2);
-  EXPECT_NE(a.dict, b.dict);
+  EXPECT_NE(a.dict_entries, b.dict_entries);
   EXPECT_TRUE(loom_attribute_equal(&a, &b));
 }
 

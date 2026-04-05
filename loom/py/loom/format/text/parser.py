@@ -67,8 +67,6 @@ from loom.ir import (
     GROUP_SCOPE_BY_NAME,
     NONE_TYPE,
     PREDICATE_KINDS,
-    SYMBOL_FLAG_IMPORT,
-    SYMBOL_FLAG_PUBLIC,
     Block,
     CanonicalAttrDict,
     DialectType,
@@ -92,12 +90,11 @@ from loom.ir import (
     ScalarTypeKind,
     ShapedType,
     StaticDim,
-    Symbol,
-    SymbolKind,
     Type,
     TypeKind,
     Value,
     binding_element_type,
+    symbol_from_operation,
 )
 from loom.ir import (
     TiedResult as IRTiedResult,
@@ -142,15 +139,16 @@ _SCALAR_NAMES: dict[str, ScalarTypeKind] = {
 }
 
 
-# Maps symbol-defining op names to their SymbolKind. Used when registering
-# symbols after parsing top-level ops. Ops not in this map (e.g., test.func)
-# default to FUNC_DEF.
-_OP_NAME_TO_SYMBOL_KIND: dict[str, SymbolKind] = {
-    "func.def": SymbolKind.FUNC_DEF,
-    "func.decl": SymbolKind.FUNC_DECL,
-    "func.template": SymbolKind.FUNC_TEMPLATE,
-    "func.ukernel": SymbolKind.FUNC_UKERNEL,
-}
+def _implicit_terminator_name(op_decl: Op) -> str | None:
+    """Returns the implicit terminator op name for regions owned by op_decl."""
+    traits = [trait for trait in op_decl.traits if trait.name == "ImplicitTerminator"]
+    if not traits:
+        return None
+    if len(traits) != 1 or len(traits[0].args) != 1:
+        raise ValueError(
+            f"Op '{op_decl.name}' has malformed ImplicitTerminator trait: {traits!r}"
+        )
+    return traits[0].args[0]
 
 
 # ============================================================================
@@ -1266,28 +1264,8 @@ class Parser:
         """Register a top-level symbol-defining op in the module's symbol table.
 
         Called after _parse_operation() for any op appearing at module level.
-        Extracts the symbol name, kind, and visibility from the op's attributes
-        and adds a Symbol entry pointing to the defining op.
         """
-        sym_name = op.attributes.get("callee", "")
-        sym_kind = _OP_NAME_TO_SYMBOL_KIND.get(op.name, SymbolKind.FUNC_DEF)
-
-        sym_flags = 0
-        if op.attributes.get("visibility") == "public":
-            sym_flags |= SYMBOL_FLAG_PUBLIC
-        import_module = op.attributes.get("import_module", "")
-        if import_module:
-            sym_flags |= SYMBOL_FLAG_IMPORT
-
-        symbol = Symbol(
-            name=sym_name,
-            kind=sym_kind,
-            flags=sym_flags,
-            op=op,
-            source_module=import_module,
-            source_symbol=op.attributes.get("import_symbol", ""),
-        )
-        self._module.add_symbol(symbol)
+        self._module.add_symbol(symbol_from_operation(op))
 
     def _parse_func_arg(self) -> tuple[str, Type, int]:
         """Parse one function argument: %name: type.
@@ -1757,6 +1735,7 @@ class Parser:
                         self._parse_attr_dict(parsed, dict_field)
 
                 case RegionFmt(field=name):
+                    implicit_terminator_decl = self._implicit_terminator_decl(op_decl)
                     implicit_arg_ids = (
                         parsed.implicit_values if parsed.implicit_values else None
                     )
@@ -1766,6 +1745,7 @@ class Parser:
                     # Func arg IDs (from FuncArgs) become the entry block's args.
                     pre_arg_ids = parsed.func_arg_ids if parsed.func_arg_ids else None
                     region = self._parse_region(
+                        implicit_terminator_decl=implicit_terminator_decl,
                         implicit_arg_ids=implicit_arg_ids,
                         block_arg_names=binding_names,
                         block_arg_types=binding_types,
@@ -2324,8 +2304,41 @@ class Parser:
 
     # --- Region ---
 
+    def _implicit_terminator_decl(self, op_decl: Op) -> Op | None:
+        """Returns the validated implicit terminator declaration for op_decl."""
+        terminator_name = _implicit_terminator_name(op_decl)
+        if terminator_name is None:
+            return None
+
+        terminator_decl = self._op_registry.get(terminator_name)
+        if terminator_decl is None:
+            raise ValueError(
+                f"Op '{op_decl.name}' references unknown implicit terminator "
+                f"'{terminator_name}'"
+            )
+        if not terminator_decl.is_terminator:
+            raise ValueError(
+                f"Op '{op_decl.name}' references non-terminator "
+                f"'{terminator_name}' in ImplicitTerminator"
+            )
+
+        terminator_layout = self._layout(terminator_decl)
+        if (
+            terminator_layout.fixed_operand_count != 0
+            or terminator_layout.fixed_result_count != 0
+            or terminator_decl.attrs
+            or terminator_decl.regions
+        ):
+            raise ValueError(
+                f"Op '{op_decl.name}' implicit terminator '{terminator_name}' "
+                "must be instantiable with zero operands, results, attrs, "
+                "and regions"
+            )
+        return terminator_decl
+
     def _parse_region(
         self,
+        implicit_terminator_decl: Op | None = None,
         implicit_arg_ids: dict[str, int] | None = None,
         block_arg_names: list[str] | None = None,
         block_arg_types: list[Type] | None = None,
@@ -2372,17 +2385,28 @@ class Parser:
         blocks: list[Block] = []
         is_first = True
         while not tok.at(TokenKind.RBRACE):
-            block = self._parse_block()
+            block = self._parse_block(implicit_terminator_decl=implicit_terminator_decl)
             if is_first and entry_arg_ids:
                 block.arg_ids = entry_arg_ids + block.arg_ids
                 is_first = False
             blocks.append(block)
 
+        if not blocks and implicit_terminator_decl is not None:
+            blocks.append(
+                Block(
+                    arg_ids=entry_arg_ids,
+                    ops=[Operation(name=implicit_terminator_decl.name)],
+                )
+            )
+
         tok.expect(TokenKind.RBRACE)
         self._scope = parent_scope
         return Region(blocks=blocks)
 
-    def _parse_block(self) -> Block:
+    def _parse_block(
+        self,
+        implicit_terminator_decl: Op | None = None,
+    ) -> Block:
         """Parse a block (optional label, then operations)."""
         tok = self._tokenizer
         label = ""
@@ -2422,6 +2446,16 @@ class Parser:
         ):
             op = self._parse_operation()
             ops.append(op)
+
+        if implicit_terminator_decl is not None:
+            has_terminator = False
+            if ops:
+                final_op_decl = self._op_registry.get(ops[-1].name)
+                has_terminator = (
+                    final_op_decl is not None and final_op_decl.is_terminator
+                )
+            if not has_terminator:
+                ops.append(Operation(name=implicit_terminator_decl.name))
 
         return Block(label=label, arg_ids=arg_ids, ops=ops)
 

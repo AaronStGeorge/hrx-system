@@ -29,16 +29,20 @@ extern "C" {
 #define LOOM_SYMBOL_ID_INVALID ((uint16_t)UINT16_MAX)
 #define LOOM_MODULE_ID_INVALID ((uint16_t)UINT16_MAX)
 
-// Identifies a symbol across module boundaries.
-// module_id indexes into context->modules.entries[].
-// symbol_id indexes into that module's symbol table.
-// For local references (same module), module_id is self.
-// Total size: 4 bytes. Fits in a register.
+// Identifies a module-local symbol.
+//
+// Valid in-memory refs use module_id = 0 and symbol_id indexes into the
+// current module's symbol table. LOOM_MODULE_ID_INVALID is used only for the
+// null sentinel returned by loom_symbol_ref_null(). The module_id field keeps
+// the payload ABI aligned with serialized/linker symbol refs that may carry a
+// non-local module selector.
 typedef struct loom_symbol_ref_t {
   uint16_t module_id;
   uint16_t symbol_id;
 } loom_symbol_ref_t;
 
+// Returns true if |ref| is not the null sentinel. Module-locality and
+// symbol-id range are separate verifier invariants.
 static inline bool loom_symbol_ref_is_valid(loom_symbol_ref_t ref) {
   return ref.symbol_id != LOOM_SYMBOL_ID_INVALID;
 }
@@ -97,6 +101,28 @@ static_assert(sizeof(loom_predicate_t) == 32,
 // Attributes
 //===----------------------------------------------------------------------===//
 
+typedef struct loom_named_attr_t loom_named_attr_t;
+
+// A borrowed range of named attributes.
+//
+// This is the pass-facing view of DICT attribute entries and the input shape
+// for canonical dict builders. Keeping the pointer/count pair bundled avoids
+// the usual "which order were those parameters in again?" foot-gun at rebuild
+// callsites.
+typedef struct loom_named_attr_slice_t {
+  const loom_named_attr_t* entries;
+  iree_host_size_t count;
+} loom_named_attr_slice_t;
+
+static inline loom_named_attr_slice_t loom_make_named_attr_slice(
+    const loom_named_attr_t* entries, iree_host_size_t count) {
+  loom_named_attr_slice_t slice = {
+      .entries = count > 0 ? entries : NULL,
+      .count = count,
+  };
+  return slice;
+}
+
 // Attribute value kind tag. Determines which union member of
 // loom_attribute_t is active.
 typedef enum loom_attr_kind_e {
@@ -151,7 +177,7 @@ typedef struct loom_attribute_t {
     int64_t* i64_array;
     loom_type_id_t type_id;
     loom_predicate_t* predicate_list;
-    const struct loom_named_attr_t* dict;
+    const loom_named_attr_t* dict_entries;
     uint64_t raw;
   };
 } loom_attribute_t;
@@ -244,23 +270,75 @@ static inline loom_attribute_t loom_attr_predicate_list(
 // Use loom_module_make_canonical_attr_dict for normal construction from
 // unsorted or temporary input.
 static inline loom_attribute_t loom_make_canonical_attr_dict(
-    const struct loom_named_attr_t* entries, uint16_t count) {
+    const loom_named_attr_t* entries, iree_host_size_t count) {
+  IREE_ASSERT(count <= UINT16_MAX);
   loom_attribute_t attr = {0};
   attr.kind = LOOM_ATTR_DICT;
-  attr.count = count;
-  attr.dict = count > 0 ? entries : NULL;
+  attr.count = (uint16_t)count;
+  attr.dict_entries = count > 0 ? entries : NULL;
   return attr;
+}
+
+// Returns true if |attr| is the all-zero optional-absent sentinel.
+static inline bool loom_attr_is_absent(loom_attribute_t attr) {
+  return attr.kind == LOOM_ATTR_I64 && attr.reserved_0 == 0 &&
+         attr.count == 0 && attr.reserved_1 == 0 && attr.raw == 0;
 }
 
 // A named attribute: interned name paired with a typed value.
 // Used for encoding parameters (block=32, layout="nchw"),
 // dictionary attributes on ops, and anywhere else a key-value
 // attribute pair is needed.
-typedef struct loom_named_attr_t {
+struct loom_named_attr_t {
   loom_string_id_t name_id;
   uint32_t reserved;
   loom_attribute_t value;
-} loom_named_attr_t;
+};
+
+// A named attribute update applied to an existing DICT attribute.
+//
+// When |remove| is true, the key is deleted and |value| is ignored. Otherwise
+// the key is inserted or replaced with |value|.
+typedef struct loom_named_attr_update_t {
+  loom_string_id_t name_id;
+  bool remove;
+  loom_attribute_t value;
+} loom_named_attr_update_t;
+
+// A borrowed range of named attribute updates.
+typedef struct loom_named_attr_update_slice_t {
+  const loom_named_attr_update_t* updates;
+  iree_host_size_t count;
+} loom_named_attr_update_slice_t;
+
+static inline loom_named_attr_update_t loom_named_attr_replace(
+    loom_string_id_t name_id, loom_attribute_t value) {
+  loom_named_attr_update_t update = {
+      .name_id = name_id,
+      .remove = false,
+      .value = value,
+  };
+  return update;
+}
+
+static inline loom_named_attr_update_t loom_named_attr_remove(
+    loom_string_id_t name_id) {
+  loom_named_attr_update_t update = {
+      .name_id = name_id,
+      .remove = true,
+      .value = {0},
+  };
+  return update;
+}
+
+static inline loom_named_attr_update_slice_t loom_make_named_attr_update_slice(
+    const loom_named_attr_update_t* updates, iree_host_size_t count) {
+  loom_named_attr_update_slice_t slice = {
+      .updates = count > 0 ? updates : NULL,
+      .count = count,
+  };
+  return slice;
+}
 
 // Returns true if two attributes are structurally equal.
 //
@@ -313,6 +391,18 @@ static inline loom_symbol_ref_t loom_attr_as_symbol(loom_attribute_t attr) {
 // Returns the type table index of a TYPE attribute.
 static inline loom_type_id_t loom_attr_as_type_id(loom_attribute_t attr) {
   return attr.type_id;
+}
+
+// Returns the dictionary entries of a DICT attribute.
+//
+// A zero-initialized optional attribute slot is interpreted as an empty slice
+// so generated accessors remain ergonomic for optional AttrDict fields.
+static inline loom_named_attr_slice_t loom_attr_as_dict(loom_attribute_t attr) {
+  if (loom_attr_is_absent(attr)) {
+    return loom_make_named_attr_slice(NULL, 0);
+  }
+  IREE_ASSERT(attr.kind == LOOM_ATTR_DICT);
+  return loom_make_named_attr_slice(attr.dict_entries, attr.count);
 }
 
 #ifdef __cplusplus

@@ -236,6 +236,27 @@ TEST_F(VerifyTest, ValidAddiPasses) {
   EXPECT_EQ(result.error_count, 0u);
 }
 
+TEST_F(VerifyTest, LoopBodyImplicitTerminatorPasses) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t arg_types[] = {index_type, index_type, index_type};
+  loom_value_id_t args[3];
+  EnterTestFunc(arg_types, 3, args);
+
+  loom_op_t* loop_op = nullptr;
+  IREE_ASSERT_OK(loom_test_loop_build(&builder_, args[0], args[1], args[2],
+                                      nullptr, 0, nullptr, 0, nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &loop_op));
+  ASSERT_NE(loop_op, nullptr);
+  loom_region_t* body = loom_test_loop_body(loop_op);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(loom_region_entry_block(body)->op_count, 0u);
+
+  TerminateFunc();
+  auto result = Verify();
+  EXPECT_EQ(result.error_count, 0u)
+      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+}
+
 TEST_F(VerifyTest, WrongOperandCountDetected) {
   // Manually create an op with wrong operand count.
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
@@ -268,6 +289,30 @@ TEST_F(VerifyTest, WrongOperandCountDetected) {
   EXPECT_TRUE(found_count_error)
       << "Expected operand count error, got: "
       << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+}
+
+TEST_F(VerifyTest, OpAfterTerminatorDetected) {
+  EnterTestFunc(nullptr, 0, nullptr);
+  TerminateFunc();
+
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* constant_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0), i32_type,
+                                          LOOM_LOCATION_UNKNOWN, &constant_op));
+
+  auto result = Verify();
+  EXPECT_GT(result.error_count, 0u);
+  bool found = false;
+  for (const auto& msg : collector_.errors) {
+    if (msg.find("'test.constant' appears after a block terminator") !=
+        std::string::npos) {
+      found = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found) << "Expected op-after-terminator error, got: "
+                     << (collector_.errors.empty() ? "(no errors)"
+                                                   : collector_.errors[0]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -952,6 +997,27 @@ TEST_F(VerifyTest, FuncDeclTiedResultUsesSignatureOperandsWithoutDominance) {
       << (collector_.errors.empty() ? "" : collector_.errors[0]);
 }
 
+TEST_F(VerifyTest, RejectsNonLocalSymbolRef) {
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("foreign"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 1, .symbol_id = symbol_id};
+
+  loom_op_t* decl_op = nullptr;
+  IREE_ASSERT_OK(loom_test_decl_build(&builder_, 0, 0, callee, nullptr, 0,
+                                      nullptr, 0, nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &decl_op));
+
+  auto result = Verify();
+  EXPECT_GT(result.error_count, 0u);
+  ASSERT_FALSE(collector_.errors.empty());
+  EXPECT_THAT(collector_.errors[0],
+              ::testing::HasSubstr(
+                  "symbol references in in-memory IR must use module_id 0"));
+}
+
 //===----------------------------------------------------------------------===//
 // SSA encoding reference validation
 //===----------------------------------------------------------------------===//
@@ -1549,6 +1615,40 @@ TEST_F(VerifyTest, YieldCountViolation) {
     }
   }
   EXPECT_TRUE(found) << "Expected yield count mismatch error";
+}
+
+TEST_F(VerifyTest, YieldCountViolationWithImplicitTerminator) {
+  // test.map has one result but the body is empty. The verifier should
+  // interpret that as an implicit zero-operand test.yield and reject the
+  // result/yield count mismatch.
+  loom_type_t tile4 = loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                                          loom_dim_pack_static(4), 0);
+
+  loom_type_t arg_types[] = {tile4};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, 1, args);
+
+  loom_op_t* map_op = nullptr;
+  IREE_ASSERT_OK(loom_test_map_build(&builder_, args, 1, tile4, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &map_op));
+  ASSERT_NE(map_op, nullptr);
+  loom_region_t* body = loom_test_map_body(map_op);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(loom_region_entry_block(body)->op_count, 0u);
+
+  TerminateFunc();
+  auto result = Verify();
+  EXPECT_GT(result.error_count, 0u);
+  bool found = false;
+  for (const auto& msg : collector_.errors) {
+    if (msg.find("yield has 0 operands, expected 1") != std::string::npos) {
+      found = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(found) << "Expected implicit-yield count mismatch error, got: "
+                     << (collector_.errors.empty() ? "(no errors)"
+                                                   : collector_.errors[0]);
 }
 
 // --- YIELD_MATCH (relation 7): yield types must match result types ---

@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Global compilation context: dialect registration, op vtable lookup,
-// encoding registration, and module registry.
+// context-owned encoding vtables, and source interning.
 //
 // Lifecycle:
 //   1. loom_context_initialize() — zero-init with allocator.
@@ -14,8 +14,10 @@
 //   4. Use: create modules, parse, compile, verify.
 //   5. loom_context_deinitialize() — release resources.
 //
-// After finalization the context is immutable. Any thread can read
-// from it without synchronization.
+// After finalization, the dialect/op registries and op-name table are
+// immutable and can be read from any thread without synchronization. Source
+// registration remains append-only; callers must provide external
+// synchronization if multiple threads register source names concurrently.
 
 #ifndef LOOM_IR_CONTEXT_H_
 #define LOOM_IR_CONTEXT_H_
@@ -66,17 +68,12 @@ typedef struct loom_op_name_table_t {
   uint32_t count;
 } loom_op_name_table_t;
 
-// Vtable for a specific encoding kind (q6_k, q8_0, dense, etc.).
+// Vtable for a specific encoding family (q6_k, q8_0, dense, etc.).
 //
-// Registered with the context at startup. Looked up by the
-// encoding_kind byte in loom_type_t.header. The instance_params
-// argument to each function comes from the module's encoding
-// instance table and is in whatever format the vtable expects
-// (arena-allocated by parse_params during IR construction).
-//
-// Adding a new encoding: implement the vtable, register with the
-// context. No changes to the type system, parser, printer, or
-// bytecode format needed.
+// Module encoding instances store a symbolic name plus canonical parameter
+// attributes. This vtable defines the runtime hooks for interpreting one such
+// family: computing storage size, encoding/decoding bytes, and parsing or
+// printing family-specific parameter payloads.
 typedef struct loom_encoding_vtable_t {
   // Encoding name for printing ("q6_k", "q8_0", "dense").
   iree_string_view_t name;
@@ -105,10 +102,11 @@ typedef struct loom_encoding_vtable_t {
                                 const void** out_instance_params);
 } loom_encoding_vtable_t;
 
-// The global context: vtables, allocator, module registry.
+// The global context: vtables, allocator, and source/name registries.
 //
 // Created once at startup, shared across all modules and threads.
-// Immutable after finalization: all vtable lookups are read-only.
+// Dialect/op lookup state is immutable after finalization. Source names may
+// still be appended through loom_context_register_source().
 //
 // Lifetime: the context must outlive all modules created from it.
 struct loom_context_t {
@@ -117,21 +115,18 @@ struct loom_context_t {
   // Source table: filenames, system tags, provenance labels.
   loom_source_table_t sources;
 
-  // Encoding vtables indexed by the encoding_kind byte in loom_type_t.
+  // Context-owned encoding vtables.
   loom_encoding_vtable_list_t encoding_vtables;
 
   // Op vtable registry: two-level lookup by dialect_id then op_index.
   loom_op_vtable_registry_t op_vtables;
 
-  // Registered modules for cross-module symbol resolution.
-  loom_module_list_t modules;
-
   // Op name hash table for string → vtable resolution.
   loom_op_name_table_t op_name_table;
 };
 
-// Initializes a context with the given host allocator. After
-// initialization, register dialects and encodings, then call
+// Initializes a context with the given host allocator. After initialization,
+// register dialects and populate any context-owned encoding tables, then call
 // loom_context_finalize().
 void loom_context_initialize(iree_allocator_t allocator,
                              loom_context_t* out_context);
@@ -149,9 +144,9 @@ iree_status_t loom_context_register_dialect(
     loom_context_t* context, uint8_t dialect_id,
     const loom_op_vtable_t* const* vtables, uint16_t op_count);
 
-// Finalizes the context after all dialects and encodings have been
-// registered. Builds acceleration structures for fast op name lookup.
-// Must be called before creating modules or parsing.
+// Finalizes the context after dialect registration and encoding-table setup.
+// Builds acceleration structures for fast op name lookup. Must be called
+// before creating modules or parsing.
 iree_status_t loom_context_finalize(loom_context_t* context);
 
 // Resolves an op kind to its vtable. Returns NULL if the dialect is

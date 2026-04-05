@@ -955,6 +955,26 @@ class TestParseMapOp:
 
 
 class TestParseLoopOp:
+    def test_without_iter_args_synthesizes_implicit_terminator(self) -> None:
+        module, scope = _setup_scope(("c0", INDEX), ("n", INDEX), ("c1", INDEX))
+        op = _parse_op(
+            "test.loop %i = %c0 to %n step %c1 {\n}",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.loop"
+        assert len(op.regions) == 1
+        body = op.regions[0]
+        assert len(body.blocks) == 1
+        assert len(body.blocks[0].arg_ids) == 1
+        assert len(body.blocks[0].ops) == 1
+        assert body.blocks[0].ops[0].name == "test.yield"
+        assert body.blocks[0].ops[0].operands == []
+        assert (
+            _op_printer().print_operation(op, module)
+            == "test.loop %i = %c0 to %n step %c1 {\n}"
+        )
+
     def test_with_iter_args(self) -> None:
         module, scope = _setup_scope(
             ("c0", INDEX), ("n", INDEX), ("c1", INDEX), ("init", F32)
@@ -1025,6 +1045,28 @@ class TestParseLoopOp:
 
 
 class TestParseBranchOp:
+    def test_empty_regions_synthesize_implicit_terminators(self) -> None:
+        module, scope = _setup_scope(("cond", I32))
+        op = _parse_op(
+            "test.branch %cond {\n} else {\n}",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.branch"
+        assert len(op.regions) == 2
+        assert len(op.regions[0].blocks) == 1
+        assert len(op.regions[1].blocks) == 1
+        assert len(op.regions[0].blocks[0].ops) == 1
+        assert len(op.regions[1].blocks[0].ops) == 1
+        assert op.regions[0].blocks[0].ops[0].name == "test.yield"
+        assert op.regions[1].blocks[0].ops[0].name == "test.yield"
+        assert op.regions[0].blocks[0].ops[0].operands == []
+        assert op.regions[1].blocks[0].ops[0].operands == []
+        assert (
+            _op_printer().print_operation(op, module)
+            == "test.branch %cond {\n} else {\n}"
+        )
+
     def test_if_else(self) -> None:
         module, scope = _setup_scope(("cond", I32), ("a", F32), ("b", F32))
         op = _parse_op(

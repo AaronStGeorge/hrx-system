@@ -599,6 +599,12 @@ TEST_F(PrintOpTest, BranchEmptyRegions) {
   // Both regions are always auto-created by the builder.
   IREE_ASSERT_OK(loom_test_branch_build(&builder_, condition, result_types, 1,
                                         NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
+  loom_region_t* then_region = loom_test_branch_then_region(op);
+  loom_region_t* else_region = loom_test_branch_else_region(op);
+  ASSERT_NE(then_region, nullptr);
+  ASSERT_NE(else_region, nullptr);
+  ASSERT_EQ(loom_region_entry_block(then_region)->op_count, 0u);
+  ASSERT_EQ(loom_region_entry_block(else_region)->op_count, 0u);
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "%1 = test.branch %0 -> (f32) {\n"
             "} else {\n"
@@ -913,8 +919,9 @@ TEST_F(PrintOpTest, AttrsOpEmptyDict) {
   loom_value_id_t input = def(f32);
 
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_test_attrs_build(&builder_, input, f32, LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &op));
   // Dict attribute is empty (count=0), so ATTR_DICT prints nothing.
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "%1 = test.attrs %0 : f32\n");
@@ -924,11 +931,6 @@ TEST_F(PrintOpTest, AttrsOpWithDictEntries) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_value_id_t input = def(f32);
 
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_test_attrs_build(&builder_, input, f32, LOOM_LOCATION_UNKNOWN, &op));
-
-  // Manually populate the dict attribute with two entries.
   loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
   loom_string_id_t label_id = LOOM_STRING_ID_INVALID;
   loom_string_id_t foo_id = LOOM_STRING_ID_INVALID;
@@ -941,9 +943,11 @@ TEST_F(PrintOpTest, AttrsOpWithDictEntries) {
       {.name_id = axis_id, .value = loom_attr_i64(0)},
       {.name_id = label_id, .value = loom_attr_string(foo_id)},
   };
-  // The dict attr is at index 0 (the only declared attr on test.attrs).
-  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(module_, entries, 2,
-                                                      &loom_op_attrs(op)[0]));
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &op));
 
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_NE(output.find("{axis = 0, label = \"foo\"}"), std::string::npos)
@@ -953,10 +957,6 @@ TEST_F(PrintOpTest, AttrsOpWithDictEntries) {
 TEST_F(PrintOpTest, AttrsOpWithNestedDictEntries) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_value_id_t input = def(f32);
-
-  loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_test_attrs_build(&builder_, input, f32, LOOM_LOCATION_UNKNOWN, &op));
 
   loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
   loom_string_id_t phase_id = LOOM_STRING_ID_INVALID;
@@ -977,8 +977,11 @@ TEST_F(PrintOpTest, AttrsOpWithNestedDictEntries) {
       {.name_id = alpha_id, .value = loom_attr_i64(1)},
   };
   loom_attribute_t nested_dict = {0};
-  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(module_, nested_entries,
-                                                      2, &nested_dict));
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+      module_,
+      loom_make_named_attr_slice(nested_entries,
+                                 IREE_ARRAYSIZE(nested_entries)),
+      &nested_dict));
 
   loom_named_attr_t entries[3] = {
       {.name_id = phase_id, .value = nested_dict},
@@ -986,8 +989,11 @@ TEST_F(PrintOpTest, AttrsOpWithNestedDictEntries) {
       {.name_id = empty_id,
        .value = loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/0)},
   };
-  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(module_, entries, 3,
-                                                      &loom_op_attrs(op)[0]));
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &op));
 
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_NE(
@@ -1002,8 +1008,9 @@ TEST_F(PrintOpTest,
   loom_value_id_t input = def(f32);
 
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_test_attrs_build(&builder_, input, f32, LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &op));
 
   loom_op_attrs(op)[0] =
       loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1);
@@ -2000,8 +2007,9 @@ TEST_F(PrintOpTest, BoundsCheckAttrDictOutOfRange) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_value_id_t input = def(f32);
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(
-      loom_test_attrs_build(&builder_, input, f32, LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &op));
   // Corrupt: pretend the op has no attributes.
   op->attribute_count = 0;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,

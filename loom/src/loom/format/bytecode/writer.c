@@ -681,9 +681,9 @@ static iree_status_t loom_bytecode_number_attr_value(
     case LOOM_ATTR_DICT: {
       for (uint16_t i = 0; i < attr.count; ++i) {
         IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
-            numbering, attr.dict[i].name_id, &unused_id));
+            numbering, attr.dict_entries[i].name_id, &unused_id));
         IREE_RETURN_IF_ERROR(loom_bytecode_number_attr_value(
-            numbering, attr.dict[i].value, NULL));
+            numbering, attr.dict_entries[i].value, NULL));
       }
       break;
     }
@@ -1087,7 +1087,7 @@ static iree_status_t loom_bytecode_write_attr_value(
       IREE_RETURN_IF_ERROR(
           loom_bytecode_page_writer_write_uvarint(writer, attr.count));
       for (uint16_t i = 0; i < attr.count; ++i) {
-        const struct loom_named_attr_t* entry = &attr.dict[i];
+        const loom_named_attr_t* entry = &attr.dict_entries[i];
         uint32_t key_writer_id = 0;
         IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
             numbering, entry->name_id, &key_writer_id));

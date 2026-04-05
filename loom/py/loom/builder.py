@@ -40,9 +40,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from loom.dsl import Op, TypeDef
+from loom.dsl import FuncLikeInterface, Op, TypeDef
 from loom.fields import FieldLayout
 from loom.ir import (
+    Block,
     Module,
     Operation,
     Region,
@@ -51,6 +52,7 @@ from loom.ir import (
     Type,
     Value,
     canonicalize_attr_dict,
+    symbol_from_operation,
 )
 from loom.ir import (
     TiedResult as IRTiedResult,
@@ -203,16 +205,30 @@ def tied(operand: ValueRef | int, result_type: Type) -> TiedResultSpec:
     return TiedResultSpec(operand_id, result_type)
 
 
+def _find_func_like_interface(op_decl: Op) -> FuncLikeInterface | None:
+    """Return op_decl's FuncLikeInterface implementation, if any."""
+    for interface in op_decl.interfaces:
+        if isinstance(interface, FuncLikeInterface):
+            return interface
+    return None
+
+
 class IRBuilder:
     """Generic IR builder: constructs Operations from Op declarations.
 
     The builder manages a Module and provides methods to create values
     and operations. It validates types and constraints at construction
     time (fail-fast, no silent errors).
+
+    Symbol-defining ops are appended to module.symbols. Non-symbol ops are
+    appended to insertion_block, which must be set before building body ops.
     """
 
-    def __init__(self, module: Module | None = None) -> None:
+    def __init__(
+        self, module: Module | None = None, insertion_block: Block | None = None
+    ) -> None:
         self._module = module if module is not None else Module()
+        self._insertion_block = insertion_block
         self._op_registry: dict[str, Op] = {}
         self._type_registry: dict[str, TypeDef] = {}
         self._layouts: dict[str, FieldLayout] = {}
@@ -221,6 +237,15 @@ class IRBuilder:
     def module(self) -> Module:
         """The module being built."""
         return self._module
+
+    @property
+    def insertion_block(self) -> Block | None:
+        """The block where non-symbol ops are appended."""
+        return self._insertion_block
+
+    def set_insertion_block(self, block: Block | None) -> None:
+        """Set the insertion block for subsequent non-symbol ops."""
+        self._insertion_block = block
 
     def register_ops(self, ops: Sequence[Op]) -> None:
         """Register op declarations."""
@@ -266,6 +291,89 @@ class IRBuilder:
         """Resolve a list of operands to value IDs."""
         return [self._resolve_operand(op) for op in operands]
 
+    def _prepare_func_like_args(
+        self,
+        op_decl: Op,
+        operand_ids: list[int],
+        region_list: list[Region],
+        func_args: Sequence[ValueRef | int] | None,
+    ) -> list[int]:
+        """Lower FuncArgs values into the op's abstract signature arg domain.
+
+        For declaration-style ops, signature args are op operands. For bodyful
+        funcs, signature args are the entry block arguments of the body region.
+
+        Returns the value IDs that tied result specs should resolve against.
+        """
+        func_like = _find_func_like_interface(op_decl)
+        func_arg_ids = self._resolve_operands(func_args or [])
+        if func_like is None:
+            if func_arg_ids:
+                raise ValueError(
+                    f"Op '{op_decl.name}' does not implement FuncLikeInterface "
+                    "and cannot accept func_args."
+                )
+            return operand_ids
+
+        if func_like.args_as_operands:
+            operand_ids.extend(func_arg_ids)
+            return operand_ids
+
+        body_field = func_like.body
+        if body_field is None:
+            if func_arg_ids:
+                raise ValueError(
+                    f"Op '{op_decl.name}' stores signature args in a body region "
+                    "but FuncLikeInterface.body is not set."
+                )
+            return operand_ids
+
+        body_region_index = next(
+            (
+                i
+                for i, region_def in enumerate(op_decl.regions)
+                if region_def.name == body_field
+            ),
+            None,
+        )
+        if body_region_index is None:
+            raise ValueError(
+                f"Op '{op_decl.name}' FuncLikeInterface.body='{body_field}' does not "
+                "name a declared region."
+            )
+
+        while len(region_list) <= body_region_index:
+            region_list.append(Region())
+        body_region = region_list[body_region_index]
+        if not body_region.blocks:
+            body_region.blocks.append(Block(arg_ids=list(func_arg_ids)))
+            return list(body_region.blocks[0].arg_ids)
+
+        entry_block = body_region.blocks[0]
+        if func_arg_ids:
+            if entry_block.arg_ids and entry_block.arg_ids != list(func_arg_ids):
+                raise ValueError(
+                    f"Op '{op_decl.name}' body entry block arg_ids "
+                    f"{entry_block.arg_ids} do not match func_args "
+                    f"{list(func_arg_ids)}."
+                )
+            if not entry_block.arg_ids:
+                entry_block.arg_ids.extend(func_arg_ids)
+        return list(entry_block.arg_ids)
+
+    def _insert_operation(self, op_decl: Op, operation: Operation) -> None:
+        """Insert operation into module symbol state or the current block."""
+        if op_decl.has_trait("SymbolDefine"):
+            self._module.add_symbol(symbol_from_operation(operation))
+            return
+
+        if self._insertion_block is None:
+            raise ValueError(
+                f"Op '{op_decl.name}' is not a module symbol and no insertion "
+                "block is set."
+            )
+        self._insertion_block.ops.append(operation)
+
     # --- Generic op building ---
 
     def build(
@@ -273,6 +381,7 @@ class IRBuilder:
         op_name: str,
         operands: Sequence[ValueRef | int] | None = None,
         *,
+        func_args: Sequence[ValueRef | int] | None = None,
         results: Sequence[Type | TiedResultSpec] | None = None,
         result_names: Sequence[str] | None = None,
         attributes: Mapping[str, Any] | None = None,
@@ -283,6 +392,9 @@ class IRBuilder:
         Parameters:
           op_name: Full op name (e.g., "test.addi").
           operands: ValueRefs or ints for operands.
+          func_args: Func-like signature argument ValueRefs. Declaration-style
+            funcs store these as op operands; bodyful funcs store them as body
+            entry block args.
           results: Result specs. Each is either:
             - A Type (fresh result): INDEX, F32, tensor_t
             - A TiedResultSpec (tied): tied(operand, type) or operand.as_type(type)
@@ -291,7 +403,8 @@ class IRBuilder:
           regions: Nested regions.
 
         Returns:
-          Single result: ValueRef.
+          Single fixed result: ValueRef.
+          Variadic results: list[ValueRef], even if the concrete count is 0 or 1.
           Multiple results: list[ValueRef].
           No results: None.
         """
@@ -305,6 +418,12 @@ class IRBuilder:
         result_specs = results or []
         attr_dict = canonicalize_attr_dict(attributes)
         region_list = list(regions) if regions else []
+        tied_operand_ids = self._prepare_func_like_args(
+            op_decl,
+            operand_ids,
+            region_list,
+            func_args,
+        )
 
         # Process result specs: extract types and tied bindings.
         result_ids: list[int] = []
@@ -312,7 +431,7 @@ class IRBuilder:
         for i, spec in enumerate(result_specs):
             if isinstance(spec, TiedResultSpec):
                 # Tied result: find the operand index.
-                operand_index = operand_ids.index(spec.operand_id)
+                operand_index = tied_operand_ids.index(spec.operand_id)
                 tied_results.append(
                     IRTiedResult(result_index=i, operand_index=operand_index)
                 )
@@ -328,8 +447,7 @@ class IRBuilder:
             value_id = self._module.add_value(Value(name=name, type=result_type))
             result_ids.append(value_id)
 
-        # Create operation.
-        Operation(
+        operation = Operation(
             name=op_name,
             operands=operand_ids,
             results=result_ids,
@@ -337,10 +455,13 @@ class IRBuilder:
             attributes=attr_dict,
             regions=region_list,
         )
+        self._insert_operation(op_decl, operation)
 
-        # Return based on result count.
-        if len(result_ids) == 0:
+        result_refs = [ValueRef(result_id, self) for result_id in result_ids]
+        if any(result.variadic for result in op_decl.results):
+            return result_refs
+        if len(result_refs) == 0:
             return None
-        if len(result_ids) == 1:
-            return ValueRef(result_ids[0], self)
-        return [ValueRef(rid, self) for rid in result_ids]
+        if len(result_refs) == 1:
+            return result_refs[0]
+        return result_refs

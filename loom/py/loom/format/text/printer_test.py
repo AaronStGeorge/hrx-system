@@ -560,6 +560,19 @@ class TestStringEscaping:
 class TestRegionPrinting:
     """Regions must print inline with correct indentation and separators."""
 
+    def test_empty_branch_regions_elide_implicit_terminators(self) -> None:
+        module, [cond] = _module_with(("cond", I1))
+        then_region = Region(blocks=[Block(ops=[Operation(name="test.yield")])])
+        else_region = Region(blocks=[Block(ops=[Operation(name="test.yield")])])
+        op = Operation(
+            name="test.branch",
+            operands=[cond],
+            regions=[then_region, else_region],
+        )
+        assert _printer().print_operation(op, module) == (
+            "test.branch %cond {\n} else {\n}"
+        )
+
     def test_single_region_with_body(self) -> None:
         module, [cond] = _module_with(("cond", I1))
         tv = module.add_value(Value(name="tv", type=F32))

@@ -404,7 +404,13 @@ static inline iree_string_view_t loom_attr_descriptor_name(
 // Per-region metadata in the op vtable.
 typedef struct loom_region_descriptor_t {
   loom_region_flags_t flags;
+  // Op kind of the implicit terminator for this region, or
+  // LOOM_OP_KIND_UNKNOWN if every block must end with an explicit terminator.
+  loom_op_kind_t implicit_terminator;
 } loom_region_descriptor_t;
+
+static_assert(sizeof(loom_region_descriptor_t) == 4,
+              "loom_region_descriptor_t must be 4 bytes");
 
 // Binding kind for BindingList format elements.
 typedef enum loom_binding_kind_e {
@@ -714,6 +720,13 @@ static inline int64_t loom_func_like_priority(loom_func_like_t func) {
   enum { func_name##_ATTR_INDEX = (index) };              \
   static inline bool func_name(const loom_op_t* op) {     \
     return loom_attr_as_bool(loom_op_attrs(op)[(index)]); \
+  }
+
+// Defines a function that reads a DICT attribute by index.
+#define LOOM_DEFINE_ATTR_DICT(func_name, index)                          \
+  enum { func_name##_ATTR_INDEX = (index) };                             \
+  static inline loom_named_attr_slice_t func_name(const loom_op_t* op) { \
+    return loom_attr_as_dict(loom_op_attrs(op)[(index)]);                \
   }
 
 // Defines a function that reads the per-instance flags byte.

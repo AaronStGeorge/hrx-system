@@ -37,6 +37,32 @@ TEST_F(SymbolMapTest, FindEmpty) {
   EXPECT_EQ(loom_symbol_map_find(&map_, 42), LOOM_SYMBOL_ID_INVALID);
 }
 
+TEST_F(SymbolMapTest, ReservedNameIdsAreRejected) {
+  EXPECT_EQ(loom_symbol_map_find(&map_, LOOM_STRING_ID_INVALID),
+            LOOM_SYMBOL_ID_INVALID);
+  EXPECT_EQ(loom_symbol_map_find(&map_, LOOM_SYMBOL_MAP_TOMBSTONE),
+            LOOM_SYMBOL_ID_INVALID);
+  EXPECT_FALSE(loom_symbol_map_erase(&map_, LOOM_STRING_ID_INVALID));
+  EXPECT_FALSE(loom_symbol_map_erase(&map_, LOOM_SYMBOL_MAP_TOMBSTONE));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_symbol_map_insert(&map_, &arena_, LOOM_STRING_ID_INVALID, 1));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_symbol_map_insert(&map_, &arena_, LOOM_SYMBOL_MAP_TOMBSTONE, 1));
+
+  uint16_t symbol_id = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_symbol_map_find_or_insert(&map_, &arena_, LOOM_STRING_ID_INVALID, 1,
+                                     &symbol_id));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_symbol_map_find_or_insert(&map_, &arena_, LOOM_SYMBOL_MAP_TOMBSTONE,
+                                     1, &symbol_id));
+}
+
 TEST_F(SymbolMapTest, InsertAndFind) {
   IREE_ASSERT_OK(loom_symbol_map_insert(&map_, &arena_, 10, 5));
   EXPECT_EQ(loom_symbol_map_find(&map_, 10), 5);

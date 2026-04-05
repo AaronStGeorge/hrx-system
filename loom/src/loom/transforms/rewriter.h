@@ -200,6 +200,13 @@ iree_status_t loom_rewriter_set_attr(loom_rewriter_t* rewriter, loom_op_t* op,
                                      uint16_t attr_index,
                                      loom_attribute_t value);
 
+// Applies key-level updates to a DICT attribute on |op| and stores the fresh
+// canonical dict back into the same attribute slot. Adds all users of |op|'s
+// results to the worklist, just like loom_rewriter_set_attr.
+iree_status_t loom_rewriter_replace_attr_dict(
+    loom_rewriter_t* rewriter, loom_op_t* op, uint16_t attr_index,
+    loom_named_attr_update_slice_t updates);
+
 // Sets the instance flags on an op. Adds all users of the op's results
 // to the worklist since their effective traits may change.
 iree_status_t loom_rewriter_set_instance_flags(loom_rewriter_t* rewriter,

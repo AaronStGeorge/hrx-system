@@ -895,6 +895,24 @@
     "fix_hint_template": "Move '{op_name}' inside a function body"
   },
   {
+    "error_id": "ERR_STRUCTURE_012",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operation appears after a block terminator.",
+    "message_template": "'{op_name}' appears after a block terminator",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Move '{op_name}' before the block terminator or remove the unreachable op"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",
@@ -1144,6 +1162,23 @@
         "name": "expected_kind",
         "kind": 0,
         "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_SYMBOL_004",
+    "domain": 6,
+    "domain_name": "SYMBOL",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Symbol reference targets a non-local module.",
+    "message_template": "symbol references in in-memory IR must use module_id 0, got module_id {module_id}",
+    "params": [
+      {
+        "name": "module_id",
+        "kind": 2,
+        "kind_name": "U32"
       }
     ]
   },

@@ -45,8 +45,22 @@ ERR_SYMBOL_003 = ErrorDef(
     ),
 )
 
+# ERR_SYMBOL_004: Symbol references must be module-local in in-memory IR.
+ERR_SYMBOL_004 = ErrorDef(
+    domain=ErrorDomain.SYMBOL,
+    code=4,
+    severity=Severity.ERROR,
+    summary="Symbol reference targets a non-local module.",
+    message=(
+        "symbol references in in-memory IR must use module_id 0, got "
+        "module_id {module_id}"
+    ),
+    params=(ErrorParam("module_id", ParamKind.U32),),
+)
+
 ALL_SYMBOL_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SYMBOL_001,
     ERR_SYMBOL_002,
     ERR_SYMBOL_003,
+    ERR_SYMBOL_004,
 )

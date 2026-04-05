@@ -38,14 +38,18 @@ loom_cc_library(
     srcs = [
         "attribute.c",
         "context.c",
+        "location.c",
         "module.c",
+        "scalar_type.c",
         "types.c",
     ],
     hdrs = [
         "attribute.h",
         "context.h",
         "ir.h",
+        "location.h",
         "module.h",
+        "scalar_type.h",
         "types.h",
     ],
     deps = [
@@ -53,6 +57,16 @@ loom_cc_library(
         "//loom/src/loom/util:bstring",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "context_test",
+    srcs = ["context_test.cc"],
+    deps = [
+        ":ir",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -68,6 +82,16 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "types_test",
+    srcs = ["types_test.cc"],
+    deps = [
+        ":ir",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "symbol_map",
     srcs = ["symbol_map.c"],
@@ -76,6 +100,16 @@ loom_cc_library(
         ":ir",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "scalar_type_test",
+    srcs = ["scalar_type_test.cc"],
+    deps = [
+        ":ir",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

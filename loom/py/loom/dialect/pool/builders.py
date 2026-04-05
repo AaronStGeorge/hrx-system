@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
@@ -12,6 +13,8 @@ from loom.ir import Region, Type
 
 class PoolBuilders:
     """Typed builder methods for pool ops."""
+
+    __test__ = False
 
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
@@ -23,7 +26,7 @@ class PoolBuilders:
             %tile = pool.load %pool, %pid, %pb : pool<[%BS]>, i32, index -> tile<[16, 128]xf16>
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(pool)
         _operands.append(page_id)
@@ -37,7 +40,7 @@ class PoolBuilders:
             pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, index, i32, tile<[16, 128]xf16>
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(pool)
         _operands.append(page_id)
@@ -53,7 +56,7 @@ class PoolBuilders:
             pool.pin %pool, %bid : pool<[%BS]>, i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(pool)
         _operands.append(block_id)
@@ -66,7 +69,7 @@ class PoolBuilders:
             pool.unpin %pool, %bid : pool<[%BS]>, i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(pool)
         _operands.append(block_id)
@@ -79,7 +82,7 @@ class PoolBuilders:
             %buf = pool.buffer %pool : pool<[%BS]> -> hal.buffer
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(pool)
         return cast(ValueRef, self._b.build("pool.buffer", _operands, results=results, attributes=_attributes, regions=_regions))

@@ -162,6 +162,18 @@ ERR_STRUCTURE_011 = ErrorDef(
     fix_hint="Move '{op_name}' inside a function body",
 )
 
+# ERR_STRUCTURE_012: Operation appears after a block terminator.
+ERR_STRUCTURE_012 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=12,
+    severity=Severity.ERROR,
+    summary="Operation appears after a block terminator.",
+    message="'{op_name}' appears after a block terminator",
+    params=(ErrorParam("op_name", ParamKind.STRING),),
+    fix_hint="Move '{op_name}' before the block terminator or remove the "
+    "unreachable op",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -174,4 +186,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_009,
     ERR_STRUCTURE_010,
     ERR_STRUCTURE_011,
+    ERR_STRUCTURE_012,
 )

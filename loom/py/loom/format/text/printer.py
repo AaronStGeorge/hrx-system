@@ -66,6 +66,7 @@ from loom.fields import (
     resolve_fields,
 )
 from loom.ir import (
+    Block,
     DialectType,
     DynamicDim,
     DynamicEncoding,
@@ -485,6 +486,18 @@ def _is_symbol_define(op_decl: Op) -> bool:
     return any(t.name == "SymbolDefine" for t in op_decl.traits)
 
 
+def _implicit_terminator_name(op_decl: Op) -> str | None:
+    """Returns the implicit terminator op name for regions owned by op_decl."""
+    traits = [trait for trait in op_decl.traits if trait.name == "ImplicitTerminator"]
+    if not traits:
+        return None
+    if len(traits) != 1 or len(traits[0].args) != 1:
+        raise ValueError(
+            f"Op '{op_decl.name}' has malformed ImplicitTerminator trait: {traits!r}"
+        )
+    return traits[0].args[0]
+
+
 # ============================================================================
 # Printer
 # ============================================================================
@@ -625,7 +638,12 @@ class Printer:
 
     # --- Region body printing ---
 
-    def _print_region_body(self, region: Region, module: Module) -> None:
+    def _print_region_body(
+        self,
+        region: Region,
+        module: Module,
+        implicit_terminator_name: str | None = None,
+    ) -> None:
         """Print the blocks of a region."""
         for block in region.blocks:
             # Block label (if named and not the entry block).
@@ -639,9 +657,66 @@ class Printer:
                         args.append(f"{name}: {arg_type}")
                     arg_strs = "(" + ", ".join(args) + ")"
                 self._emit(f"^{block.label}{arg_strs}:")
-            for op in block.ops:
+            final_live_op_index = self._printable_final_op_index(block)
+            for i, op in enumerate(block.ops):
                 if not op.is_dead:
+                    if (
+                        i == final_live_op_index
+                        and self._should_elide_implicit_terminator(
+                            op, implicit_terminator_name
+                        )
+                    ):
+                        continue
                     self._print_op(op, module)
+
+    def _printable_final_op_index(self, block: Block) -> int:
+        """Returns the index of the final non-dead op, or -1 if none."""
+        for i in range(len(block.ops) - 1, -1, -1):
+            if not block.ops[i].is_dead:
+                return i
+        return -1
+
+    def _should_elide_implicit_terminator(
+        self,
+        op: Operation,
+        implicit_terminator_name: str | None,
+    ) -> bool:
+        """Returns true if op is the final empty implicit terminator."""
+        return (
+            implicit_terminator_name is not None
+            and op.name == implicit_terminator_name
+            and not op.operands
+            and not op.results
+            and not op.tied_results
+            and not op.attributes
+            and not op.regions
+        )
+
+    def _implicit_region_arg_id(
+        self,
+        op_decl: Op,
+        fields: FormatFields,
+        name: str,
+    ) -> int | None:
+        """Returns the entry-block arg ID for an implicit region Ref field."""
+        for region_decl in op_decl.regions:
+            for arg_index, (arg_name, _arg_type) in enumerate(
+                region_decl.implicit_args
+            ):
+                if arg_name != name:
+                    continue
+                region = fields.region(region_decl.name)
+                if (
+                    region is None
+                    or not region.blocks
+                    or arg_index >= len(region.blocks[0].arg_ids)
+                ):
+                    raise ValueError(
+                        f"Op '{op_decl.name}' region '{region_decl.name}' has no "
+                        f"entry block arg for implicit field '{name}'"
+                    )
+                return region.blocks[0].arg_ids[arg_index]
+        return None
 
     # --- Op printing ---
 
@@ -772,7 +847,15 @@ class Printer:
         for element in elements:
             match element:
                 case Ref(field=name):
-                    vid = fields.value_id(name)
+                    try:
+                        vid = fields.value_id(name)
+                    except KeyError:
+                        implicit_arg_id = self._implicit_region_arg_id(
+                            op_decl, fields, name
+                        )
+                        if implicit_arg_id is None:
+                            raise
+                        vid = implicit_arg_id
                     stream.emit(self._value_name(vid))
 
                 case Refs(field=name):
@@ -839,6 +922,7 @@ class Printer:
 
                 case RegionFmt(field=name):
                     region = fields.region(name)
+                    implicit_terminator_name = _implicit_terminator_name(op_decl)
                     if not print_regions:
                         # Declaration mode: placeholder braces.
                         stream.emit("{ ... }")
@@ -848,7 +932,11 @@ class Printer:
                         # Print region body indented.
                         if region is not None:
                             self._indent += 1
-                            self._print_region_body(region, module)
+                            self._print_region_body(
+                                region,
+                                module,
+                                implicit_terminator_name=implicit_terminator_name,
+                            )
                             self._indent -= 1
                         # Start new token accumulation with "}".
                         stream = TokenStream()

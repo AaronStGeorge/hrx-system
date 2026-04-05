@@ -94,6 +94,7 @@ __all__ = [
     # Symbols.
     "SymbolKind",
     "Symbol",
+    "symbol_from_operation",
     "SymbolRef",
     "SYMBOL_FLAG_IMPORT",
     "SYMBOL_FLAG_PUBLIC",
@@ -1046,6 +1047,38 @@ class Symbol:
     @property
     def is_public(self) -> bool:
         return (self.flags & SYMBOL_FLAG_PUBLIC) != 0
+
+
+_OP_NAME_TO_SYMBOL_KIND: dict[str, SymbolKind] = {
+    "func.def": SymbolKind.FUNC_DEF,
+    "func.decl": SymbolKind.FUNC_DECL,
+    "func.template": SymbolKind.FUNC_TEMPLATE,
+    "func.ukernel": SymbolKind.FUNC_UKERNEL,
+}
+
+
+def symbol_from_operation(operation: Operation) -> Symbol:
+    """Build a module Symbol entry for a symbol-defining operation.
+
+    Ops not listed in _OP_NAME_TO_SYMBOL_KIND default to FUNC_DEF. This keeps
+    test dialect symbol ops working without a dialect-specific symbol-kind map.
+    """
+    symbol_flags = 0
+    if operation.attributes.get("visibility") == "public":
+        symbol_flags |= SYMBOL_FLAG_PUBLIC
+
+    source_module = operation.attributes.get("import_module", "")
+    if source_module:
+        symbol_flags |= SYMBOL_FLAG_IMPORT
+
+    return Symbol(
+        name=operation.attributes.get("callee", ""),
+        kind=_OP_NAME_TO_SYMBOL_KIND.get(operation.name, SymbolKind.FUNC_DEF),
+        flags=symbol_flags,
+        op=operation,
+        source_module=source_module,
+        source_symbol=operation.attributes.get("import_symbol", ""),
+    )
 
 
 # ============================================================================

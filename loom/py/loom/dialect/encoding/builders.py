@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import Any, cast
 
 from loom.builder import IRBuilder, ValueRef
@@ -12,6 +13,8 @@ from loom.ir import Region, Type
 
 class EncodingBuilders:
     """Typed builder methods for encoding ops."""
+
+    __test__ = False
 
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
@@ -23,7 +26,7 @@ class EncodingBuilders:
             %enc = encoding.define #q8_0<block=32> : encoding
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["spec"] = spec
         _operands.extend(captures)
@@ -36,7 +39,7 @@ class EncodingBuilders:
             %is_quantized = encoding.isa %enc, "quantized" : i1
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(enc)
         _attributes["category"] = category

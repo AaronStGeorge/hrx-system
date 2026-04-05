@@ -13,6 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
+#include "loom/transforms/rewriter.h"
 
 namespace loom {
 namespace {
@@ -203,25 +204,27 @@ TEST_F(CSETest, CanonicalAttrDictOrderDoesNotBlockCSE) {
       loom_module_intern_string(module_, IREE_SV("label"), &label_id));
   IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("foo"), &foo_id));
 
-  loom_op_t* attrs0 = NULL;
-  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input, f32,
-                                       LOOM_LOCATION_UNKNOWN, &attrs0));
   loom_named_attr_t label_first_entries[2] = {
       {.name_id = label_id, .value = loom_attr_string(foo_id)},
       {.name_id = axis_id, .value = loom_attr_i64(0)},
   };
-  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
-      module_, label_first_entries, 2, &loom_op_attrs(attrs0)[0]));
+  loom_op_t* attrs0 = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(label_first_entries,
+                                 IREE_ARRAYSIZE(label_first_entries)),
+      f32, LOOM_LOCATION_UNKNOWN, &attrs0));
 
-  loom_op_t* attrs1 = NULL;
-  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input, f32,
-                                       LOOM_LOCATION_UNKNOWN, &attrs1));
   loom_named_attr_t axis_first_entries[2] = {
       {.name_id = axis_id, .value = loom_attr_i64(0)},
       {.name_id = label_id, .value = loom_attr_string(foo_id)},
   };
-  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
-      module_, axis_first_entries, 2, &loom_op_attrs(attrs1)[0]));
+  loom_op_t* attrs1 = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(axis_first_entries,
+                                 IREE_ARRAYSIZE(axis_first_entries)),
+      f32, LOOM_LOCATION_UNKNOWN, &attrs1));
 
   loom_value_id_t values[] = {
       loom_test_attrs_result(attrs0),
@@ -236,6 +239,72 @@ TEST_F(CSETest, CanonicalAttrDictOrderDoesNotBlockCSE) {
   EXPECT_EQ(count_live_ops(), 2);
   EXPECT_EQ(loom_op_const_operands(reduce)[0],
             loom_op_const_operands(reduce)[1]);
+}
+
+TEST_F(CSETest, RewriterReplaceAttrDictBuildsFreshCanonicalDict) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), f32, &input));
+
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("zeta"), &zeta_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("alpha"), &alpha_id));
+
+  loom_named_attr_update_t updates[2] = {
+      loom_named_attr_replace(zeta_id, loom_attr_i64(2)),
+      loom_named_attr_replace(alpha_id, loom_attr_i64(1)),
+  };
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_rewriter_t rewriter;
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
+  IREE_ASSERT_OK(loom_rewriter_replace_attr_dict(
+      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+      loom_make_named_attr_update_slice(updates, IREE_ARRAYSIZE(updates))));
+  loom_rewriter_deinitialize(&rewriter);
+  iree_arena_deinitialize(&pass_arena);
+
+  loom_named_attr_slice_t dict = loom_test_attrs_dict(attrs_op);
+  ASSERT_EQ(dict.count, 2u);
+  ASSERT_NE(dict.entries, nullptr);
+  EXPECT_EQ(dict.entries[0].name_id, alpha_id);
+  EXPECT_EQ(loom_attr_as_i64(dict.entries[0].value), 1);
+  EXPECT_EQ(dict.entries[1].name_id, zeta_id);
+  EXPECT_EQ(loom_attr_as_i64(dict.entries[1].value), 2);
+}
+
+TEST_F(CSETest, RewriterSetAttrRejectsMalformedDictAttr) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), f32, &input));
+
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_rewriter_t rewriter;
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
+  iree_status_t status = loom_rewriter_set_attr(
+      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+      loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  loom_rewriter_deinitialize(&rewriter);
+  iree_arena_deinitialize(&pass_arena);
 }
 
 TEST_F(CSETest, EliminatesIdenticalBinaryOps) {

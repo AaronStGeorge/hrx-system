@@ -28,6 +28,11 @@ static bool loom_symbol_map_slot_is_occupied(loom_string_id_t name_id) {
          !loom_symbol_map_slot_is_tombstone(name_id);
 }
 
+static bool loom_symbol_map_name_id_is_reserved(loom_string_id_t name_id) {
+  return loom_symbol_map_slot_is_empty(name_id) ||
+         loom_symbol_map_slot_is_tombstone(name_id);
+}
+
 // Ensures the map has room for at least one more entry. Lazily
 // allocates on first use, then grows by doubling with full rehash.
 // Tombstones are dropped during rehash.
@@ -81,7 +86,9 @@ static iree_status_t loom_symbol_map_ensure_capacity(
 
 uint16_t loom_symbol_map_find(const loom_symbol_map_t* map,
                               loom_string_id_t name_id) {
-  if (map->capacity == 0) return LOOM_SYMBOL_ID_INVALID;
+  if (map->capacity == 0 || loom_symbol_map_name_id_is_reserved(name_id)) {
+    return LOOM_SYMBOL_ID_INVALID;
+  }
   iree_host_size_t mask = map->capacity - 1;
   iree_host_size_t slot = loom_symbol_map_hash(name_id) & mask;
   while (true) {
@@ -101,6 +108,10 @@ iree_status_t loom_symbol_map_insert(loom_symbol_map_t* map,
                                      iree_arena_allocator_t* arena,
                                      loom_string_id_t name_id,
                                      uint16_t symbol_id) {
+  if (loom_symbol_map_name_id_is_reserved(name_id)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "reserved symbol-map name id %u", name_id);
+  }
   IREE_RETURN_IF_ERROR(loom_symbol_map_ensure_capacity(map, arena));
   iree_host_size_t mask = map->capacity - 1;
   iree_host_size_t slot = loom_symbol_map_hash(name_id) & mask;
@@ -132,6 +143,10 @@ iree_status_t loom_symbol_map_find_or_insert(loom_symbol_map_t* map,
                                              loom_string_id_t name_id,
                                              uint16_t new_symbol_id,
                                              uint16_t* out_symbol_id) {
+  if (loom_symbol_map_name_id_is_reserved(name_id)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "reserved symbol-map name id %u", name_id);
+  }
   IREE_RETURN_IF_ERROR(loom_symbol_map_ensure_capacity(map, arena));
   iree_host_size_t mask = map->capacity - 1;
   iree_host_size_t slot = loom_symbol_map_hash(name_id) & mask;
@@ -164,7 +179,9 @@ iree_status_t loom_symbol_map_find_or_insert(loom_symbol_map_t* map,
 }
 
 bool loom_symbol_map_erase(loom_symbol_map_t* map, loom_string_id_t name_id) {
-  if (map->capacity == 0) return false;
+  if (map->capacity == 0 || loom_symbol_map_name_id_is_reserved(name_id)) {
+    return false;
+  }
   iree_host_size_t mask = map->capacity - 1;
   iree_host_size_t slot = loom_symbol_map_hash(name_id) & mask;
   while (true) {

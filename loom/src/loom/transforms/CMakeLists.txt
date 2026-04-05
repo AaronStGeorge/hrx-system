@@ -68,6 +68,7 @@ loom_cc_test(
   DEPS
     ::cse
     ::pass
+    ::rewriter
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::op_defs

@@ -27,34 +27,6 @@ static uint32_t loom_hash_string_view(iree_string_view_t string) {
   return loom_hash_bytes(string.data, string.size);
 }
 
-// Hashes a loom_type_t. For inline-dim types (rank <= 2), hashes all
-// 24 bytes. For overflow types, hashes the header fields and each
-// overflow dim individually.
-static uint32_t loom_hash_type(loom_type_t type) {
-  if (loom_type_has_inline_dims(type)) {
-    return loom_hash_bytes(&type, sizeof(loom_type_t));
-  }
-  // Overflow: hash header + encoding_id + encoding_flags + each dim.
-  uint32_t hash = 2166136261u;
-  hash ^= type.header;
-  hash *= 16777619u;
-  hash ^= type.encoding_id;
-  hash *= 16777619u;
-  hash ^= type.encoding_flags;
-  hash *= 16777619u;
-  uint8_t rank = loom_type_rank(type);
-  const loom_overflow_dim_t* dims =
-      (const loom_overflow_dim_t*)(uintptr_t)type.dims[0];
-  for (uint8_t i = 0; i < rank; ++i) {
-    uint64_t dim = dims[i];
-    hash ^= (uint32_t)dim;
-    hash *= 16777619u;
-    hash ^= (uint32_t)(dim >> 32);
-    hash *= 16777619u;
-  }
-  return hash;
-}
-
 //===----------------------------------------------------------------------===//
 // Intern table
 //===----------------------------------------------------------------------===//
@@ -776,8 +748,7 @@ static iree_status_t loom_module_make_canonical_attr_dict_impl(
     ++canonical_count;
   }
 
-  *out_attr = loom_make_canonical_attr_dict(canonical_entries,
-                                            (uint16_t)canonical_count);
+  *out_attr = loom_make_canonical_attr_dict(canonical_entries, canonical_count);
   return iree_ok_status();
 }
 
@@ -852,7 +823,7 @@ static iree_status_t loom_module_canonicalize_attr_dict_value_impl(
       return iree_ok_status();
     case LOOM_ATTR_DICT:
       return loom_module_make_canonical_attr_dict_impl(
-          module, value.dict, value.count, depth, out_value);
+          module, value.dict_entries, value.count, depth, out_value);
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "dict attribute value has unknown kind %u",
@@ -861,10 +832,124 @@ static iree_status_t loom_module_canonicalize_attr_dict_value_impl(
 }
 
 iree_status_t loom_module_make_canonical_attr_dict(
-    loom_module_t* module, const loom_named_attr_t* entries,
-    iree_host_size_t count, loom_attribute_t* out_attr) {
-  return loom_module_make_canonical_attr_dict_impl(module, entries, count, 0,
-                                                   out_attr);
+    loom_module_t* module, loom_named_attr_slice_t entries,
+    loom_attribute_t* out_attr) {
+  return loom_module_make_canonical_attr_dict_impl(module, entries.entries,
+                                                   entries.count, 0, out_attr);
+}
+
+iree_status_t loom_module_replace_canonical_attr_dict(
+    loom_module_t* module, loom_named_attr_slice_t base_entries,
+    loom_named_attr_update_slice_t updates, loom_attribute_t* out_attr) {
+  if (base_entries.count > 0 && !base_entries.entries) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty base dict attribute has a NULL entry pointer");
+  }
+  if (updates.count > 0 && !updates.updates) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty dict attribute update list has a NULL update pointer");
+  }
+  if (base_entries.count > UINT16_MAX || updates.count > UINT16_MAX ||
+      base_entries.count + updates.count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "dict attribute replacement would exceed %u "
+                            "entries (%" PRIhsz " base + %" PRIhsz " updates)",
+                            (unsigned)UINT16_MAX, base_entries.count,
+                            updates.count);
+  }
+
+  loom_attribute_t base_attr =
+      loom_make_canonical_attr_dict(base_entries.entries, base_entries.count);
+  IREE_RETURN_IF_ERROR(
+      loom_module_verify_canonical_attr_dict(module, base_attr));
+
+  for (iree_host_size_t i = 0; i < updates.count; ++i) {
+    iree_string_view_t key_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_module_resolve_attr_dict_key_name(
+        module, updates.updates[i].name_id, &key_name));
+    for (iree_host_size_t j = 0; j < i; ++j) {
+      if (updates.updates[j].name_id == updates.updates[i].name_id) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate dict attribute update key '%.*s'",
+                                (int)key_name.size, key_name.data);
+      }
+    }
+  }
+
+  if (base_entries.count == 0 && updates.count == 0) {
+    *out_attr = loom_make_canonical_attr_dict(NULL, 0);
+    return iree_ok_status();
+  }
+
+  iree_host_size_t max_count = base_entries.count + updates.count;
+  loom_named_attr_t* merged_entries = NULL;
+  if (max_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, max_count,
+                                                   sizeof(loom_named_attr_t),
+                                                   (void**)&merged_entries));
+  }
+  iree_host_size_t merged_count = base_entries.count;
+  if (base_entries.count > 0) {
+    memcpy(merged_entries, base_entries.entries,
+           base_entries.count * sizeof(loom_named_attr_t));
+  }
+
+  for (iree_host_size_t update_index = 0; update_index < updates.count;
+       ++update_index) {
+    const loom_named_attr_update_t* update = &updates.updates[update_index];
+    iree_string_view_t update_key_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_module_resolve_attr_dict_key_name(
+        module, update->name_id, &update_key_name));
+
+    iree_host_size_t entry_index = 0;
+    bool found_existing = false;
+    while (entry_index < merged_count) {
+      iree_string_view_t entry_key_name = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_module_resolve_attr_dict_key_name(
+          module, merged_entries[entry_index].name_id, &entry_key_name));
+      int comparison =
+          iree_string_view_compare(entry_key_name, update_key_name);
+      if (comparison == 0) {
+        found_existing = true;
+        break;
+      }
+      if (comparison > 0) break;
+      ++entry_index;
+    }
+
+    if (update->remove) {
+      if (!found_existing) continue;
+      for (iree_host_size_t i = entry_index + 1; i < merged_count; ++i) {
+        merged_entries[i - 1] = merged_entries[i];
+      }
+      --merged_count;
+      continue;
+    }
+
+    loom_attribute_t canonical_value = {0};
+    IREE_RETURN_IF_ERROR(loom_module_canonicalize_attr_dict_value_impl(
+        module, update->value, /*depth=*/1, &canonical_value));
+    if (found_existing) {
+      merged_entries[entry_index].value = canonical_value;
+      merged_entries[entry_index].reserved = 0;
+      continue;
+    }
+
+    for (iree_host_size_t i = merged_count; i > entry_index; --i) {
+      merged_entries[i] = merged_entries[i - 1];
+    }
+    merged_entries[entry_index] = (loom_named_attr_t){
+        .name_id = update->name_id,
+        .reserved = 0,
+        .value = canonical_value,
+    };
+    ++merged_count;
+  }
+
+  *out_attr = loom_make_canonical_attr_dict(merged_entries, merged_count);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_module_verify_canonical_attr_dict_value_impl(
@@ -889,14 +974,14 @@ static iree_status_t loom_module_verify_canonical_attr_dict_impl(
                             (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
   }
   if (attr->count == 0) {
-    if (attr->dict != NULL) {
+    if (attr->dict_entries != NULL) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "empty dict attribute must use a NULL entry pointer");
     }
     return iree_ok_status();
   }
-  if (!attr->dict) {
+  if (!attr->dict_entries) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "non-empty dict attribute has a NULL entry pointer");
@@ -904,7 +989,7 @@ static iree_status_t loom_module_verify_canonical_attr_dict_impl(
 
   iree_string_view_t previous_key_name = iree_string_view_empty();
   for (uint16_t i = 0; i < attr->count; ++i) {
-    const loom_named_attr_t* entry = &attr->dict[i];
+    const loom_named_attr_t* entry = &attr->dict_entries[i];
     if (entry->reserved != 0) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -1025,9 +1110,105 @@ static bool loom_type_equal_fn(const void* context, uint32_t index) {
   return loom_type_equal(ctx->module->types.entries[index], ctx->type);
 }
 
+static iree_status_t loom_module_clone_type_payload(loom_module_t* module,
+                                                    loom_type_t type,
+                                                    loom_type_t* out_type) {
+  *out_type = type;
+
+  switch (loom_type_kind(type)) {
+    case LOOM_TYPE_FUNCTION: {
+      const loom_func_type_data_t* func_data = loom_type_func_data(type);
+      if (!func_data) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "function type has a NULL argument/result payload");
+      }
+
+      iree_host_size_t type_count =
+          (iree_host_size_t)func_data->arg_count + func_data->result_count;
+      iree_host_size_t alloc_size = 0;
+      IREE_RETURN_IF_ERROR(
+          IREE_STRUCT_LAYOUT(sizeof(loom_func_type_data_t), &alloc_size,
+                             IREE_STRUCT_FIELD_FAM(type_count, loom_type_t)));
+
+      loom_func_type_data_t* cloned_data = NULL;
+      IREE_RETURN_IF_ERROR(iree_arena_allocate(&module->arena, alloc_size,
+                                               (void**)&cloned_data));
+      cloned_data->arg_count = func_data->arg_count;
+      cloned_data->result_count = func_data->result_count;
+      cloned_data->reserved = 0;
+      for (iree_host_size_t i = 0; i < type_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_module_clone_type_payload(
+            module, func_data->types[i], &cloned_data->types[i]));
+      }
+      *out_type = loom_type_function(cloned_data);
+      return iree_ok_status();
+    }
+
+    case LOOM_TYPE_DIALECT: {
+      uint16_t param_count = loom_type_dialect_param_count(type);
+      loom_string_id_t name_id = loom_type_dialect_name_id(type);
+      if (param_count == 0) {
+        *out_type = loom_type_dialect_opaque(name_id);
+        return iree_ok_status();
+      }
+
+      const loom_type_t* params = loom_type_dialect_params(type);
+      if (!params) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "dialect type '%u' has %u params but a NULL payload",
+            (unsigned)name_id, (unsigned)param_count);
+      }
+
+      loom_type_t* cloned_params = NULL;
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          &module->arena, param_count, sizeof(loom_type_t),
+          (void**)&cloned_params));
+      for (uint16_t i = 0; i < param_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_module_clone_type_payload(module, params[i],
+                                                            &cloned_params[i]));
+      }
+      *out_type = loom_type_dialect(name_id, param_count, cloned_params);
+      return iree_ok_status();
+    }
+
+    default:
+      break;
+  }
+
+  if (loom_type_has_inline_dims(type)) {
+    return iree_ok_status();
+  }
+
+  uint8_t rank = loom_type_rank(type);
+  if (rank == 0) {
+    out_type->dims[0] = 0;
+    out_type->dims[1] = 0;
+    return iree_ok_status();
+  }
+
+  const loom_overflow_dim_t* src_dims =
+      (const loom_overflow_dim_t*)(uintptr_t)type.dims[0];
+  if (!src_dims) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "rank-%u type has a NULL overflow dim payload",
+                            rank);
+  }
+
+  loom_overflow_dim_t* cloned_dims = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      &module->arena, rank, sizeof(loom_overflow_dim_t), (void**)&cloned_dims));
+  memcpy(cloned_dims, src_dims,
+         (iree_host_size_t)rank * sizeof(loom_overflow_dim_t));
+  out_type->dims[0] = (uint64_t)(uintptr_t)cloned_dims;
+  out_type->dims[1] = 0;
+  return iree_ok_status();
+}
+
 iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
                                       loom_type_t* out_interned_type) {
-  uint32_t hash = loom_hash_type(type);
+  uint32_t hash = loom_type_hash(type);
   loom_type_equal_context_t equal_context = {module, type};
 
   uint32_t existing_index = loom_intern_table_lookup(
@@ -1062,17 +1243,7 @@ iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
     return iree_ok_status();
   }
 
-  // For overflow types (rank > 2), arena-allocate the dim array.
-  if (!loom_type_has_inline_dims(type)) {
-    uint8_t rank = loom_type_rank(type);
-    const loom_overflow_dim_t* src_dims =
-        (const loom_overflow_dim_t*)(uintptr_t)type.dims[0];
-    loom_overflow_dim_t* new_dims = NULL;
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        &module->arena, rank, sizeof(loom_overflow_dim_t), (void**)&new_dims));
-    memcpy(new_dims, src_dims, rank * sizeof(loom_overflow_dim_t));
-    type.dims[0] = (uint64_t)(uintptr_t)new_dims;
-  }
+  IREE_RETURN_IF_ERROR(loom_module_clone_type_payload(module, type, &type));
 
   module->types.entries[new_index] = type;
   module->types.count++;

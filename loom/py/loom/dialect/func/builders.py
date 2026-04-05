@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
@@ -12,6 +13,8 @@ from loom.ir import Predicate, Region, Type
 
 class FuncBuilders:
     """Typed builder methods for func ops."""
+
+    __test__ = False
 
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
@@ -23,6 +26,7 @@ class FuncBuilders:
         cc: str | None = None,
         purity: str | None = None,
         callee: str,
+        args: list[ValueRef] | None = None,
         results: list[Type | TiedResultSpec],
         predicates: list[Predicate] | None = None,
         body: Region | None = None,
@@ -35,7 +39,8 @@ class FuncBuilders:
             }
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _func_args: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if visibility is not None:
             _attributes["visibility"] = visibility
@@ -44,11 +49,13 @@ class FuncBuilders:
         if purity is not None:
             _attributes["purity"] = purity
         _attributes["callee"] = callee
+        if args is not None:
+            _func_args.extend(args)
         if predicates:
             _attributes["predicates"] = predicates
         if body is not None:
             _regions.append(body)
-        return cast(list[ValueRef], self._b.build("func.def", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.def", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))
 
     def decl(
         self,
@@ -59,6 +66,7 @@ class FuncBuilders:
         cc: str | None = None,
         purity: str | None = None,
         callee: str,
+        args: list[ValueRef] | None = None,
         results: list[Type | TiedResultSpec],
         predicates: list[Predicate] | None = None,
     ) -> list[ValueRef]:
@@ -68,7 +76,8 @@ class FuncBuilders:
             func.decl @extern_matmul(%a: tensor<[%M]xf32>, %b: tensor<[%K]xf32>) -> (tensor<[%M]xf32>)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _func_args: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if visibility is not None:
             _attributes["visibility"] = visibility
@@ -81,9 +90,11 @@ class FuncBuilders:
         if purity is not None:
             _attributes["purity"] = purity
         _attributes["callee"] = callee
+        if args is not None:
+            _func_args.extend(args)
         if predicates:
             _attributes["predicates"] = predicates
-        return cast(list[ValueRef], self._b.build("func.decl", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.decl", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))
 
     def template(
         self,
@@ -94,6 +105,7 @@ class FuncBuilders:
         purity: str | None = None,
         priority: int | None = None,
         callee: str,
+        args: list[ValueRef] | None = None,
         results: list[Type | TiedResultSpec],
         predicates: list[Predicate] | None = None,
         body: Region | None = None,
@@ -106,7 +118,8 @@ class FuncBuilders:
             }
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _func_args: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["implements"] = implements
         if visibility is not None:
@@ -118,11 +131,13 @@ class FuncBuilders:
         if priority is not None:
             _attributes["priority"] = priority
         _attributes["callee"] = callee
+        if args is not None:
+            _func_args.extend(args)
         if predicates:
             _attributes["predicates"] = predicates
         if body is not None:
             _regions.append(body)
-        return cast(list[ValueRef], self._b.build("func.template", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.template", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))
 
     def ukernel(
         self,
@@ -133,6 +148,7 @@ class FuncBuilders:
         purity: str | None = None,
         priority: int | None = None,
         callee: str,
+        args: list[ValueRef] | None = None,
         results: list[Type | TiedResultSpec],
         predicates: list[Predicate] | None = None,
     ) -> list[ValueRef]:
@@ -142,7 +158,8 @@ class FuncBuilders:
             func.ukernel<tile.contract> device @vnni_q8_asm(%w: tensor<[%M]xi8>, %x: tensor<[%K]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)]
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _func_args: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["implements"] = implements
         if visibility is not None:
@@ -154,9 +171,11 @@ class FuncBuilders:
         if priority is not None:
             _attributes["priority"] = priority
         _attributes["callee"] = callee
+        if args is not None:
+            _func_args.extend(args)
         if predicates:
             _attributes["predicates"] = predicates
-        return cast(list[ValueRef], self._b.build("func.ukernel", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(list[ValueRef], self._b.build("func.ukernel", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))
 
     def call(self, *, purity: str | None = None, callee: str, operands: list[ValueRef], results: list[Type | TiedResultSpec]) -> list[ValueRef]:
         """Runtime function call. Target must be func.def or func.decl.
@@ -165,7 +184,7 @@ class FuncBuilders:
             %r = func.call @add(%a, %b) : (f32, f32) -> (f32)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if purity is not None:
             _attributes["purity"] = purity
@@ -180,7 +199,7 @@ class FuncBuilders:
             %r = func.apply @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if purity is not None:
             _attributes["purity"] = purity
@@ -195,7 +214,7 @@ class FuncBuilders:
             func.return
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.extend(operands)
         self._b.build("func.return", _operands, attributes=_attributes, regions=_regions)

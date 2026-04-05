@@ -16,8 +16,11 @@ from loom.ir import (
     F32,
     I32,
     INDEX,
+    Block,
+    Region,
     ShapedType,
     StaticDim,
+    SymbolKind,
     TypeKind,
 )
 
@@ -27,7 +30,7 @@ from loom.ir import (
 
 
 def _builder() -> IRBuilder:
-    b = IRBuilder()
+    b = IRBuilder(insertion_block=Block())
     b.register_ops(ALL_TEST_OPS)
     b.register_types(ALL_BUILTIN_TYPES)
     return b
@@ -240,6 +243,89 @@ class TestBuild:
         assert isinstance(result, ValueRef)
         assert result.name == ""  # Unnamed, printer assigns at print time.
 
+    def test_body_op_is_inserted_into_current_block(self) -> None:
+        b = _builder()
+        a = b.value("a", I32)
+        c = b.value("b", I32)
+        result = b.build("test.addi", [a, c], results=[I32], result_names=["sum"])
+        assert isinstance(result, ValueRef)
+        assert b.insertion_block is not None
+        assert len(b.insertion_block.ops) == 1
+        op = b.insertion_block.ops[0]
+        assert op.name == "test.addi"
+        assert op.operands == [a.id, c.id]
+        assert op.results == [result.id]
+
+    def test_symbol_op_is_inserted_into_module_symbols(self) -> None:
+        b = _builder()
+        x = b.value("x", F32)
+        body = Region(blocks=[Block(arg_ids=[x.id])])
+        result = b.build(
+            "test.func",
+            func_args=[x],
+            results=[F32],
+            attributes={"callee": "identity", "visibility": "public"},
+            regions=[body],
+        )
+        assert isinstance(result, list)
+        assert len(b.module.symbols) == 1
+        symbol = b.module.symbols[0]
+        assert symbol.name == "identity"
+        assert symbol.kind == SymbolKind.FUNC_DEF
+        assert symbol.is_public
+        assert symbol.op is not None
+        assert symbol.op.name == "test.func"
+        assert symbol.op.regions[0].blocks[0].arg_ids == [x.id]
+
+    def test_non_symbol_without_insertion_block_fails(self) -> None:
+        b = IRBuilder()
+        b.register_ops(ALL_TEST_OPS)
+        a = b.value("a", I32)
+        c = b.value("b", I32)
+        with pytest.raises(ValueError, match="no insertion block is set"):
+            b.build("test.addi", [a, c], results=[I32])
+
+    def test_decl_signature_args_resolve_tied_results(self) -> None:
+        b = _builder()
+        x = b.value("x", F32)
+        result = b.build(
+            "test.decl",
+            func_args=[x],
+            results=[x.as_type(F32)],
+            attributes={"callee": "identity"},
+        )
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0].type == F32
+        assert len(b.module.symbols) == 1
+        assert b.module.symbols[0].op is not None
+        assert b.module.symbols[0].op.operands == [x.id]
+        assert b.module.symbols[0].op.tied_results[0].operand_index == 0
+
+    def test_func_signature_args_seed_body_entry_block(self) -> None:
+        b = _builder()
+        x = b.value("x", F32)
+        body = Region(blocks=[Block()])
+        result = b.build(
+            "test.func",
+            func_args=[x],
+            results=[x.as_type(F32)],
+            attributes={"callee": "identity"},
+            regions=[body],
+        )
+        assert isinstance(result, list)
+        assert body.blocks[0].arg_ids == [x.id]
+        assert len(b.module.symbols) == 1
+        assert b.module.symbols[0].op is not None
+        assert b.module.symbols[0].op.operands == []
+        assert b.module.symbols[0].op.tied_results[0].operand_index == 0
+
+    def test_func_args_on_non_func_like_op_fails(self) -> None:
+        b = _builder()
+        x = b.value("x", F32)
+        with pytest.raises(ValueError, match="does not implement FuncLikeInterface"):
+            b.build("test.neg", [x], func_args=[x], results=[F32])
+
 
 # ============================================================================
 # Generated builder stubs
@@ -316,6 +402,24 @@ class TestGeneratedBuilders:
         # visibility, cc, and predicates are optional.
         t.func(callee="main", results=[F32])
         # Should not raise — optional attrs have defaults.
+
+    def test_func_signature_args(self) -> None:
+        b, t = self._builders()
+        x = b.value("x", F32)
+        body = Region(blocks=[Block()])
+        results = t.func(
+            args=[x], callee="identity", results=[x.as_type(F32)], body=body
+        )
+        assert isinstance(results, list)
+        assert len(results) == 1
+        assert body.blocks[0].arg_ids == [x.id]
+
+    def test_decl_signature_args(self) -> None:
+        b, t = self._builders()
+        x = b.value("x", F32)
+        results = t.decl(args=[x], callee="identity", results=[x.as_type(F32)])
+        assert isinstance(results, list)
+        assert len(results) == 1
 
     def test_assume_with_predicates(self) -> None:
         from loom.ir import Predicate, PredicateArg

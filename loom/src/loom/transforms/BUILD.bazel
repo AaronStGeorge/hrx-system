@@ -61,6 +61,7 @@ loom_cc_test(
     deps = [
         ":cse",
         ":pass",
+        ":rewriter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/test",

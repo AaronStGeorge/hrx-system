@@ -81,6 +81,7 @@ static iree_status_t loom_context_build_op_name_table(loom_context_t* context) {
   IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(context->allocator, capacity,
                                                    sizeof(loom_op_name_entry_t),
                                                    (void**)&entries));
+  memset(entries, 0, (iree_host_size_t)capacity * sizeof(*entries));
 
   uint32_t mask = capacity - 1;
   uint32_t count = 0;
@@ -127,6 +128,15 @@ iree_status_t loom_context_register_source(loom_context_t* context,
     }
   }
 
+  // Source IDs are 0-based uint16_t. LOOM_SOURCE_ID_INVALID is the null
+  // sentinel, so the maximum valid ID is LOOM_SOURCE_ID_INVALID - 1.
+  if (context->sources.count >= LOOM_SOURCE_ID_INVALID) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "source table full (%" PRIhsz " entries, max id %u)",
+        context->sources.count, (unsigned)(LOOM_SOURCE_ID_INVALID - 1));
+  }
+
   // Grow the entries array if needed.
   if (context->sources.count >= context->sources.capacity) {
     IREE_RETURN_IF_ERROR(iree_allocator_grow_array(
@@ -136,9 +146,11 @@ iree_status_t loom_context_register_source(loom_context_t* context,
 
   // Intern the name string.
   char* interned = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_allocator_malloc(context->allocator, name.size, (void**)&interned));
-  memcpy(interned, name.data, name.size);
+  if (!iree_string_view_is_empty(name)) {
+    IREE_RETURN_IF_ERROR(iree_allocator_malloc(context->allocator, name.size,
+                                               (void**)&interned));
+    memcpy(interned, name.data, name.size);
+  }
 
   iree_host_size_t index = context->sources.count++;
   context->sources.entries[index] = iree_make_string_view(interned, name.size);

@@ -321,21 +321,22 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictSortsByKeySpellingAndCopiesEntries) {
   };
 
   loom_attribute_t attr = {0};
-  IREE_ASSERT_OK(
-      loom_module_make_canonical_attr_dict(module, entries, 2, &attr));
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+      module, loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)),
+      &attr));
 
   EXPECT_EQ(attr.kind, LOOM_ATTR_DICT);
   EXPECT_EQ(attr.count, 2);
-  ASSERT_NE(attr.dict, nullptr);
-  EXPECT_NE(attr.dict, entries);
-  EXPECT_EQ(attr.dict[0].name_id, alpha_id);
-  EXPECT_EQ(attr.dict[0].reserved, 0u);
-  EXPECT_EQ(attr.dict[0].value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(attr.dict[0].value.i64, 1);
-  EXPECT_EQ(attr.dict[1].name_id, zeta_id);
-  EXPECT_EQ(attr.dict[1].reserved, 0u);
-  EXPECT_EQ(attr.dict[1].value.kind, LOOM_ATTR_I64);
-  EXPECT_EQ(attr.dict[1].value.i64, 2);
+  ASSERT_NE(attr.dict_entries, nullptr);
+  EXPECT_NE(attr.dict_entries, entries);
+  EXPECT_EQ(attr.dict_entries[0].name_id, alpha_id);
+  EXPECT_EQ(attr.dict_entries[0].reserved, 0u);
+  EXPECT_EQ(attr.dict_entries[0].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(attr.dict_entries[0].value.i64, 1);
+  EXPECT_EQ(attr.dict_entries[1].name_id, zeta_id);
+  EXPECT_EQ(attr.dict_entries[1].reserved, 0u);
+  EXPECT_EQ(attr.dict_entries[1].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(attr.dict_entries[1].value.i64, 2);
 
   IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, attr));
   loom_module_free(module);
@@ -379,14 +380,17 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRecursivelyCanonicalizesNestedDicts) {
   loom_named_attr_t outer_entries[2] = {
       {
           .name_id = outer_zeta_id,
-          .value = loom_make_canonical_attr_dict(inner_entries, 2),
+          .value = loom_make_canonical_attr_dict(inner_entries,
+                                                 IREE_ARRAYSIZE(inner_entries)),
       },
       {.name_id = outer_axis_id, .value = loom_attr_i64(4)},
   };
 
   loom_attribute_t attr = {0};
-  IREE_ASSERT_OK(
-      loom_module_make_canonical_attr_dict(module, outer_entries, 2, &attr));
+  IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
+      module,
+      loom_make_named_attr_slice(outer_entries, IREE_ARRAYSIZE(outer_entries)),
+      &attr));
 
   // Mutate the caller-owned buffers after construction. The canonical dict
   // must keep its own arena-owned snapshots.
@@ -398,29 +402,30 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRecursivelyCanonicalizesNestedDicts) {
   original_predicates[0].kind = LOOM_PREDICATE_EQ;
 
   EXPECT_EQ(attr.count, 2);
-  ASSERT_NE(attr.dict, nullptr);
-  EXPECT_EQ(attr.dict[0].name_id, outer_axis_id);
-  EXPECT_EQ(attr.dict[0].value.i64, 4);
-  EXPECT_EQ(attr.dict[1].name_id, outer_zeta_id);
-  ASSERT_EQ(attr.dict[1].value.kind, LOOM_ATTR_DICT);
+  ASSERT_NE(attr.dict_entries, nullptr);
+  EXPECT_EQ(attr.dict_entries[0].name_id, outer_axis_id);
+  EXPECT_EQ(attr.dict_entries[0].value.i64, 4);
+  EXPECT_EQ(attr.dict_entries[1].name_id, outer_zeta_id);
+  ASSERT_EQ(attr.dict_entries[1].value.kind, LOOM_ATTR_DICT);
 
-  loom_attribute_t nested = attr.dict[1].value;
+  loom_attribute_t nested = attr.dict_entries[1].value;
   EXPECT_EQ(nested.count, 2);
-  ASSERT_NE(nested.dict, nullptr);
-  EXPECT_EQ(nested.dict[0].name_id, inner_alpha_id);
-  EXPECT_EQ(nested.dict[0].reserved, 0u);
-  EXPECT_EQ(nested.dict[0].value.kind, LOOM_ATTR_PREDICATE_LIST);
-  ASSERT_NE(nested.dict[0].value.predicate_list, original_predicates);
-  EXPECT_EQ(nested.dict[0].value.count, 1);
-  EXPECT_EQ(nested.dict[0].value.predicate_list[0].kind, LOOM_PREDICATE_RANGE);
-  EXPECT_EQ(nested.dict[1].name_id, inner_zeta_id);
-  EXPECT_EQ(nested.dict[1].reserved, 0u);
-  EXPECT_EQ(nested.dict[1].value.kind, LOOM_ATTR_I64_ARRAY);
-  ASSERT_NE(nested.dict[1].value.i64_array, original_values);
-  ASSERT_EQ(nested.dict[1].value.count, 3);
-  EXPECT_EQ(nested.dict[1].value.i64_array[0], 7);
-  EXPECT_EQ(nested.dict[1].value.i64_array[1], 8);
-  EXPECT_EQ(nested.dict[1].value.i64_array[2], 9);
+  ASSERT_NE(nested.dict_entries, nullptr);
+  EXPECT_EQ(nested.dict_entries[0].name_id, inner_alpha_id);
+  EXPECT_EQ(nested.dict_entries[0].reserved, 0u);
+  EXPECT_EQ(nested.dict_entries[0].value.kind, LOOM_ATTR_PREDICATE_LIST);
+  ASSERT_NE(nested.dict_entries[0].value.predicate_list, original_predicates);
+  EXPECT_EQ(nested.dict_entries[0].value.count, 1);
+  EXPECT_EQ(nested.dict_entries[0].value.predicate_list[0].kind,
+            LOOM_PREDICATE_RANGE);
+  EXPECT_EQ(nested.dict_entries[1].name_id, inner_zeta_id);
+  EXPECT_EQ(nested.dict_entries[1].reserved, 0u);
+  EXPECT_EQ(nested.dict_entries[1].value.kind, LOOM_ATTR_I64_ARRAY);
+  ASSERT_NE(nested.dict_entries[1].value.i64_array, original_values);
+  ASSERT_EQ(nested.dict_entries[1].value.count, 3);
+  EXPECT_EQ(nested.dict_entries[1].value.i64_array[0], 7);
+  EXPECT_EQ(nested.dict_entries[1].value.i64_array[1], 8);
+  EXPECT_EQ(nested.dict_entries[1].value.i64_array[2], 9);
 
   IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, attr));
   loom_module_free(module);
@@ -440,8 +445,9 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsDuplicateKeys) {
   };
 
   loom_attribute_t attr = {0};
-  iree_status_t status =
-      loom_module_make_canonical_attr_dict(module, entries, 2, &attr);
+  iree_status_t status = loom_module_make_canonical_attr_dict(
+      module, loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)),
+      &attr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   loom_module_free(module);
@@ -454,7 +460,7 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsNonEmptyNullEntries) {
 
   loom_attribute_t attr = {0};
   iree_status_t status = loom_module_make_canonical_attr_dict(
-      module, /*entries=*/NULL, /*count=*/1, &attr);
+      module, loom_make_named_attr_slice(/*entries=*/NULL, /*count=*/1), &attr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   loom_module_free(module);
@@ -483,9 +489,15 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictNormalizesEqualityAndHash) {
   loom_attribute_t zeta_first_attr = {0};
   loom_attribute_t alpha_first_attr = {0};
   IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
-      module, zeta_first_entries, 2, &zeta_first_attr));
+      module,
+      loom_make_named_attr_slice(zeta_first_entries,
+                                 IREE_ARRAYSIZE(zeta_first_entries)),
+      &zeta_first_attr));
   IREE_ASSERT_OK(loom_module_make_canonical_attr_dict(
-      module, alpha_first_entries, 2, &alpha_first_attr));
+      module,
+      loom_make_named_attr_slice(alpha_first_entries,
+                                 IREE_ARRAYSIZE(alpha_first_entries)),
+      &alpha_first_attr));
 
   EXPECT_TRUE(loom_attribute_equal(&zeta_first_attr, &alpha_first_attr));
   EXPECT_EQ(loom_attribute_hash(&zeta_first_attr),
@@ -505,9 +517,133 @@ TEST_F(ModuleTest, MakeCanonicalAttrDictRejectsUnknownKeyStringId) {
   }};
 
   loom_attribute_t attr = {0};
-  iree_status_t status =
-      loom_module_make_canonical_attr_dict(module, entries, 1, &attr);
+  iree_status_t status = loom_module_make_canonical_attr_dict(
+      module, loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)),
+      &attr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest,
+       ReplaceCanonicalAttrDictAppliesAddReplaceRemoveAndKeepsSortedOrder) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t beta_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("alpha"), &alpha_id));
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("beta"), &beta_id));
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("zeta"), &zeta_id));
+
+  loom_named_attr_t base_entries[2] = {
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+      {.name_id = zeta_id, .value = loom_attr_i64(3)},
+  };
+  loom_named_attr_update_t updates[3] = {
+      loom_named_attr_replace(zeta_id, loom_attr_i64(30)),
+      loom_named_attr_remove(alpha_id),
+      loom_named_attr_replace(beta_id, loom_attr_i64(20)),
+  };
+
+  loom_attribute_t attr = {0};
+  IREE_ASSERT_OK(loom_module_replace_canonical_attr_dict(
+      module,
+      loom_make_named_attr_slice(base_entries, IREE_ARRAYSIZE(base_entries)),
+      loom_make_named_attr_update_slice(updates, IREE_ARRAYSIZE(updates)),
+      &attr));
+
+  IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, attr));
+  ASSERT_EQ(attr.kind, LOOM_ATTR_DICT);
+  ASSERT_EQ(attr.count, 2u);
+  ASSERT_NE(attr.dict_entries, nullptr);
+  EXPECT_EQ(attr.dict_entries[0].name_id, beta_id);
+  EXPECT_EQ(loom_attr_as_i64(attr.dict_entries[0].value), 20);
+  EXPECT_EQ(attr.dict_entries[1].name_id, zeta_id);
+  EXPECT_EQ(loom_attr_as_i64(attr.dict_entries[1].value), 30);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, ReplaceCanonicalAttrDictRejectsDuplicateUpdateKeysByNameId) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("alpha"), &alpha_id));
+
+  loom_named_attr_t base_entries[1] = {
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+  };
+  loom_named_attr_update_t updates[2] = {
+      loom_named_attr_replace(alpha_id, loom_attr_i64(2)),
+      loom_named_attr_remove(alpha_id),
+  };
+
+  loom_attribute_t attr = {0};
+  iree_status_t status = loom_module_replace_canonical_attr_dict(
+      module,
+      loom_make_named_attr_slice(base_entries, IREE_ARRAYSIZE(base_entries)),
+      loom_make_named_attr_update_slice(updates, IREE_ARRAYSIZE(updates)),
+      &attr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest,
+       ReplaceCanonicalAttrDictRecursivelyCanonicalizesNestedUpdateValues) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t alpha_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t outer_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t zeta_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("alpha"), &alpha_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("outer"), &outer_id));
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("zeta"), &zeta_id));
+
+  loom_named_attr_t nested_entries[2] = {
+      {.name_id = zeta_id, .value = loom_attr_i64(2)},
+      {.name_id = alpha_id, .value = loom_attr_i64(1)},
+  };
+  loom_named_attr_t base_entries[1] = {
+      {.name_id = outer_id, .value = loom_attr_i64(0)},
+  };
+  loom_named_attr_update_t updates[1] = {
+      loom_named_attr_replace(
+          outer_id, loom_make_canonical_attr_dict(
+                        nested_entries, IREE_ARRAYSIZE(nested_entries))),
+  };
+
+  loom_attribute_t attr = {0};
+  IREE_ASSERT_OK(loom_module_replace_canonical_attr_dict(
+      module,
+      loom_make_named_attr_slice(base_entries, IREE_ARRAYSIZE(base_entries)),
+      loom_make_named_attr_update_slice(updates, IREE_ARRAYSIZE(updates)),
+      &attr));
+
+  IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, attr));
+  ASSERT_EQ(attr.count, 1u);
+  ASSERT_NE(attr.dict_entries, nullptr);
+  ASSERT_EQ(attr.dict_entries[0].name_id, outer_id);
+  ASSERT_EQ(attr.dict_entries[0].value.kind, LOOM_ATTR_DICT);
+  loom_attribute_t nested = attr.dict_entries[0].value;
+  ASSERT_EQ(nested.count, 2u);
+  ASSERT_NE(nested.dict_entries, nullptr);
+  EXPECT_NE(nested.dict_entries, nested_entries);
+  EXPECT_EQ(nested.dict_entries[0].name_id, alpha_id);
+  EXPECT_EQ(loom_attr_as_i64(nested.dict_entries[0].value), 1);
+  EXPECT_EQ(nested.dict_entries[1].name_id, zeta_id);
+  EXPECT_EQ(loom_attr_as_i64(nested.dict_entries[1].value), 2);
 
   loom_module_free(module);
 }
@@ -527,7 +663,8 @@ TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsUnsortedInput) {
       {.name_id = zeta_id, .value = loom_attr_i64(2)},
       {.name_id = alpha_id, .value = loom_attr_i64(1)},
   };
-  loom_attribute_t attr = loom_make_canonical_attr_dict(entries, 2);
+  loom_attribute_t attr =
+      loom_make_canonical_attr_dict(entries, IREE_ARRAYSIZE(entries));
 
   iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
@@ -547,7 +684,8 @@ TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsDuplicateKeys) {
       {.name_id = key_id, .value = loom_attr_i64(0)},
       {.name_id = key_id, .value = loom_attr_i64(1)},
   };
-  loom_attribute_t attr = loom_make_canonical_attr_dict(entries, 2);
+  loom_attribute_t attr =
+      loom_make_canonical_attr_dict(entries, IREE_ARRAYSIZE(entries));
 
   iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
@@ -583,7 +721,7 @@ TEST_F(ModuleTest, VerifyCanonicalAttrDictRejectsEmptyDictWithNonNullEntries) {
   loom_attribute_t attr = {
       .kind = LOOM_ATTR_DICT,
       .count = 0,
-      .dict = entries,
+      .dict_entries = entries,
   };
 
   iree_status_t status = loom_module_verify_canonical_attr_dict(module, attr);
@@ -677,6 +815,95 @@ TEST_F(ModuleTest, InternShapedType) {
   EXPECT_EQ(interned1.dims[0], interned2.dims[0]);
   EXPECT_EQ(interned1.dims[1], interned2.dims[1]);
   EXPECT_EQ(module->types.count, 1u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternFunctionTypeDedupsStructurallyAndOwnsPayload) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_type_t arg_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t result_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_type_t source_a = {0};
+  IREE_ASSERT_OK(loom_type_function_build(&arg_type, 1, &result_type, 1,
+                                          iree_allocator_system(), &source_a));
+  const loom_func_type_data_t* source_a_data = loom_type_func_data(source_a);
+
+  loom_type_t source_b = {0};
+  IREE_ASSERT_OK(loom_type_function_build(&arg_type, 1, &result_type, 1,
+                                          iree_allocator_system(), &source_b));
+
+  loom_type_t interned_a = {0};
+  loom_type_t interned_b = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, source_a, &interned_a));
+  IREE_ASSERT_OK(loom_module_intern_type(module, source_b, &interned_b));
+
+  EXPECT_EQ(module->types.count, 1u);
+  EXPECT_TRUE(loom_type_equal(interned_a, interned_b));
+  EXPECT_EQ(loom_type_hash(interned_a), loom_type_hash(interned_b));
+  EXPECT_NE(loom_type_func_data(interned_a), source_a_data);
+
+  iree_allocator_free(iree_allocator_system(), (void*)source_a_data);
+  iree_allocator_free(iree_allocator_system(),
+                      (void*)loom_type_func_data(source_b));
+
+  ASSERT_EQ(loom_type_func_arg_count(interned_a), 1u);
+  ASSERT_EQ(loom_type_func_result_count(interned_a), 1u);
+  EXPECT_TRUE(
+      loom_type_equal(loom_type_func_arg_types(interned_a)[0], arg_type));
+  EXPECT_TRUE(
+      loom_type_equal(loom_type_func_result_types(interned_a)[0], result_type));
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternDialectTypeCopiesTemporaryParamsAndPreservesNameId) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("dialect.type"), &name_id));
+
+  loom_type_t params[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_F32),
+      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I32,
+                          loom_dim_pack_static(4), 0),
+  };
+  loom_type_t source =
+      loom_type_dialect(name_id, IREE_ARRAYSIZE(params), params);
+
+  loom_type_t interned = {0};
+  IREE_ASSERT_OK(loom_module_intern_type(module, source, &interned));
+
+  params[0] = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+
+  EXPECT_EQ(loom_type_dialect_name_id(interned), name_id);
+  ASSERT_EQ(loom_type_dialect_param_count(interned), 2u);
+  EXPECT_TRUE(loom_type_equal(loom_type_dialect_params(interned)[0],
+                              loom_type_scalar(LOOM_SCALAR_TYPE_F32)));
+  EXPECT_TRUE(
+      loom_type_equal(loom_type_dialect_params(interned)[1],
+                      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I32,
+                                          loom_dim_pack_static(4), 0)));
+
+  loom_type_t duplicate_params[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_F32),
+      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I32,
+                          loom_dim_pack_static(4), 0),
+  };
+  loom_type_t duplicate_source = loom_type_dialect(
+      name_id, IREE_ARRAYSIZE(duplicate_params), duplicate_params);
+  loom_type_t duplicate_interned = {0};
+  IREE_ASSERT_OK(
+      loom_module_intern_type(module, duplicate_source, &duplicate_interned));
+
+  EXPECT_EQ(module->types.count, 1u);
+  EXPECT_TRUE(loom_type_equal(interned, duplicate_interned));
+
   loom_module_free(module);
 }
 

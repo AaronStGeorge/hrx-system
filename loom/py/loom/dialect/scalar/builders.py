@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import builtins
 from typing import Any, cast
 
 from loom.builder import IRBuilder, ValueRef
@@ -12,6 +13,8 @@ from loom.ir import Predicate, Region, Type
 
 class ScalarBuilders:
     """Typed builder methods for scalar ops."""
+
+    __test__ = False
 
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
@@ -23,7 +26,7 @@ class ScalarBuilders:
             %result = scalar.addi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if overflow is not None:
             _attributes["overflow"] = overflow
@@ -38,7 +41,7 @@ class ScalarBuilders:
             %result = scalar.subi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if overflow is not None:
             _attributes["overflow"] = overflow
@@ -53,7 +56,7 @@ class ScalarBuilders:
             %result = scalar.muli %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if overflow is not None:
             _attributes["overflow"] = overflow
@@ -68,7 +71,7 @@ class ScalarBuilders:
             %result = scalar.divsi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -81,7 +84,7 @@ class ScalarBuilders:
             %result = scalar.divui %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -94,7 +97,7 @@ class ScalarBuilders:
             %result = scalar.remsi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -107,7 +110,7 @@ class ScalarBuilders:
             %result = scalar.remui %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -120,7 +123,7 @@ class ScalarBuilders:
             %result = scalar.ceildivsi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -133,7 +136,7 @@ class ScalarBuilders:
             %result = scalar.ceildivui %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -146,7 +149,7 @@ class ScalarBuilders:
             %result = scalar.floordivsi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -159,7 +162,7 @@ class ScalarBuilders:
             %result = scalar.negi %input : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.negi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -171,7 +174,7 @@ class ScalarBuilders:
             %result = scalar.absi %input : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.absi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -183,7 +186,7 @@ class ScalarBuilders:
             %result = scalar.minsi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -196,7 +199,7 @@ class ScalarBuilders:
             %result = scalar.maxsi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -209,7 +212,7 @@ class ScalarBuilders:
             %result = scalar.minui %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -222,7 +225,7 @@ class ScalarBuilders:
             %result = scalar.maxui %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -235,7 +238,7 @@ class ScalarBuilders:
             %result = scalar.fmai %a, %b, %c : i64
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if overflow is not None:
             _attributes["overflow"] = overflow
@@ -251,7 +254,7 @@ class ScalarBuilders:
             %result = scalar.addf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -266,7 +269,7 @@ class ScalarBuilders:
             %result = scalar.subf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -281,7 +284,7 @@ class ScalarBuilders:
             %result = scalar.mulf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -296,7 +299,7 @@ class ScalarBuilders:
             %result = scalar.divf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -311,7 +314,7 @@ class ScalarBuilders:
             %result = scalar.remf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -326,7 +329,7 @@ class ScalarBuilders:
             %result = scalar.negf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -340,7 +343,7 @@ class ScalarBuilders:
             %result = scalar.absf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -354,7 +357,7 @@ class ScalarBuilders:
             %result = scalar.minimumf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -369,7 +372,7 @@ class ScalarBuilders:
             %result = scalar.maximumf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -384,7 +387,7 @@ class ScalarBuilders:
             %result = scalar.minnumf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -399,7 +402,7 @@ class ScalarBuilders:
             %result = scalar.maxnumf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -414,7 +417,7 @@ class ScalarBuilders:
             %result = scalar.copysignf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -427,7 +430,7 @@ class ScalarBuilders:
             %result = scalar.expf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -441,7 +444,7 @@ class ScalarBuilders:
             %result = scalar.exp2f %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -455,7 +458,7 @@ class ScalarBuilders:
             %result = scalar.expm1f %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -469,7 +472,7 @@ class ScalarBuilders:
             %result = scalar.logf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -483,7 +486,7 @@ class ScalarBuilders:
             %result = scalar.log2f %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -497,7 +500,7 @@ class ScalarBuilders:
             %result = scalar.log10f %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -511,7 +514,7 @@ class ScalarBuilders:
             %result = scalar.log1pf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -525,7 +528,7 @@ class ScalarBuilders:
             %result = scalar.powf %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -540,7 +543,7 @@ class ScalarBuilders:
             %result = scalar.sqrtf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -554,7 +557,7 @@ class ScalarBuilders:
             %result = scalar.rsqrtf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -568,7 +571,7 @@ class ScalarBuilders:
             %result = scalar.cbrtf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -582,7 +585,7 @@ class ScalarBuilders:
             %result = scalar.sinf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -596,7 +599,7 @@ class ScalarBuilders:
             %result = scalar.cosf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -610,7 +613,7 @@ class ScalarBuilders:
             %result = scalar.tanf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -624,7 +627,7 @@ class ScalarBuilders:
             %result = scalar.asinf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -638,7 +641,7 @@ class ScalarBuilders:
             %result = scalar.acosf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -652,7 +655,7 @@ class ScalarBuilders:
             %result = scalar.atanf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -666,7 +669,7 @@ class ScalarBuilders:
             %result = scalar.atan2f %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -681,7 +684,7 @@ class ScalarBuilders:
             %result = scalar.sinhf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -695,7 +698,7 @@ class ScalarBuilders:
             %result = scalar.coshf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -709,7 +712,7 @@ class ScalarBuilders:
             %result = scalar.tanhf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -723,7 +726,7 @@ class ScalarBuilders:
             %result = scalar.asinhf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -737,7 +740,7 @@ class ScalarBuilders:
             %result = scalar.acoshf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -751,7 +754,7 @@ class ScalarBuilders:
             %result = scalar.atanhf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -765,7 +768,7 @@ class ScalarBuilders:
             %result = scalar.erff %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -779,7 +782,7 @@ class ScalarBuilders:
             %result = scalar.erfcf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -793,7 +796,7 @@ class ScalarBuilders:
             %result = scalar.fmaf %a, %b, %c : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -809,7 +812,7 @@ class ScalarBuilders:
             %result = scalar.ceilf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -823,7 +826,7 @@ class ScalarBuilders:
             %result = scalar.floorf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -837,7 +840,7 @@ class ScalarBuilders:
             %result = scalar.roundf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -851,7 +854,7 @@ class ScalarBuilders:
             %result = scalar.roundevenf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -865,7 +868,7 @@ class ScalarBuilders:
             %result = scalar.truncf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -879,7 +882,7 @@ class ScalarBuilders:
             %result = scalar.cmpi eq, %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["predicate"] = predicate
         _operands.append(lhs)
@@ -893,7 +896,7 @@ class ScalarBuilders:
             %result = scalar.cmpf olt, %lhs, %rhs : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if fastmath is not None:
             _attributes["fastmath"] = fastmath
@@ -909,7 +912,7 @@ class ScalarBuilders:
             %result = scalar.select %cond, %t, %f : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(condition)
         _operands.append(true_value)
@@ -923,7 +926,7 @@ class ScalarBuilders:
             %result = scalar.isnanf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.isnanf", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -935,7 +938,7 @@ class ScalarBuilders:
             %result = scalar.isinff %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.isinff", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -947,7 +950,7 @@ class ScalarBuilders:
             %result = scalar.isfinitef %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.isfinitef", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -959,7 +962,7 @@ class ScalarBuilders:
             %result = scalar.signf %input : f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.signf", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -971,7 +974,7 @@ class ScalarBuilders:
             %result = scalar.signi %input : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.signi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -983,7 +986,7 @@ class ScalarBuilders:
             %result = scalar.sitofp %input : i32 to f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.sitofp", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -995,7 +998,7 @@ class ScalarBuilders:
             %result = scalar.uitofp %input : i32 to f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.uitofp", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1007,7 +1010,7 @@ class ScalarBuilders:
             %result = scalar.fptosi %input : f32 to i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.fptosi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1019,7 +1022,7 @@ class ScalarBuilders:
             %result = scalar.fptoui %input : f32 to i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.fptoui", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1031,7 +1034,7 @@ class ScalarBuilders:
             %result = scalar.extf %input : f16 to f32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.extf", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1043,7 +1046,7 @@ class ScalarBuilders:
             %result = scalar.fptrunc %input : f32 to f16
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.fptrunc", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1055,7 +1058,7 @@ class ScalarBuilders:
             %result = scalar.extsi %input : i8 to i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.extsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1067,7 +1070,7 @@ class ScalarBuilders:
             %result = scalar.extui %input : i8 to i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.extui", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1079,7 +1082,7 @@ class ScalarBuilders:
             %result = scalar.trunci %input : i32 to i8
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.trunci", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1091,7 +1094,7 @@ class ScalarBuilders:
             %result = scalar.index_cast %input : index to i64
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.index_cast", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1103,7 +1106,7 @@ class ScalarBuilders:
             %result = scalar.bitcast %input : f32 to i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.bitcast", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1115,7 +1118,7 @@ class ScalarBuilders:
             %c42 = scalar.constant 42 : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["value"] = value
         return cast(ValueRef, self._b.build("scalar.constant", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1127,7 +1130,7 @@ class ScalarBuilders:
             %result = scalar.andi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -1140,7 +1143,7 @@ class ScalarBuilders:
             %result = scalar.ori %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -1153,7 +1156,7 @@ class ScalarBuilders:
             %result = scalar.xori %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -1166,7 +1169,7 @@ class ScalarBuilders:
             %result = scalar.shli %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         if overflow is not None:
             _attributes["overflow"] = overflow
@@ -1181,7 +1184,7 @@ class ScalarBuilders:
             %result = scalar.shrsi %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -1194,7 +1197,7 @@ class ScalarBuilders:
             %result = scalar.shrui %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -1207,7 +1210,7 @@ class ScalarBuilders:
             %result = scalar.rotli %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -1220,7 +1223,7 @@ class ScalarBuilders:
             %result = scalar.rotri %lhs, %rhs : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(lhs)
         _operands.append(rhs)
@@ -1233,7 +1236,7 @@ class ScalarBuilders:
             %result = scalar.ctlzi %input : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.ctlzi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1245,7 +1248,7 @@ class ScalarBuilders:
             %result = scalar.cttzi %input : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.cttzi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1257,7 +1260,7 @@ class ScalarBuilders:
             %result = scalar.ctpopi %input : i32
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.ctpopi", _operands, results=result_types, attributes=_attributes, regions=_regions))
@@ -1269,7 +1272,7 @@ class ScalarBuilders:
             %M2 = scalar.assume %M [mul(%M, 16)] : index
         """
         _operands: list[ValueRef | int] = []
-        _attributes: dict[str, Any] = {}
+        _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _operands.extend(values)
         _attributes["predicates"] = predicates

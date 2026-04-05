@@ -103,8 +103,8 @@ typedef struct loom_value_facts_t {
   // to test (single bit check vs. integer comparison).
   uint32_t flags;
 
-  // Reserved for future analysis state (loop stride, monotonicity,
-  // aliasing class, sign-agnostic unsigned range, etc.).
+  // Reserved/padding field. Constructors zero-initialize it so bytewise
+  // equality over the whole struct stays stable.
   uint32_t reserved;
 } loom_value_facts_t;
 

@@ -847,8 +847,17 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       }
 
       case LOOM_FORMAT_KIND_REGION: {
+        if (!vtable->region_descriptors ||
+            element->field_index >= vtable->region_count) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "format REGION field_index %u out of range (op has %u regions)",
+              element->field_index, vtable->region_count);
+        }
         loom_region_t* region = NULL;
-        IREE_RETURN_IF_ERROR(loom_parse_region(parser, &region));
+        IREE_RETURN_IF_ERROR(loom_parse_region(
+            parser, &vtable->region_descriptors[element->field_index],
+            &region));
         IREE_RETURN_IF_ERROR(
             loom_parsed_op_add_region(parsed, &parser->parser_arena, region));
         break;

@@ -377,14 +377,83 @@ static iree_status_t loom_rewriter_add_result_users_to_worklist(
   return iree_ok_status();
 }
 
+static iree_status_t loom_rewriter_validate_attr_write(
+    loom_rewriter_t* rewriter, const loom_op_t* op, uint16_t attr_index,
+    loom_attribute_t value) {
+  if (attr_index >= op->attribute_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "attribute index %u is out of range for op with %u attributes",
+        (unsigned)attr_index, (unsigned)op->attribute_count);
+  }
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(rewriter->module, op);
+  if (!vtable || !vtable->attr_descriptors ||
+      attr_index >= vtable->attribute_count) {
+    if (value.kind == LOOM_ATTR_DICT) {
+      IREE_RETURN_IF_ERROR(
+          loom_module_verify_canonical_attr_dict(rewriter->module, value));
+    }
+    return iree_ok_status();
+  }
+
+  const loom_attr_descriptor_t* descriptor =
+      &vtable->attr_descriptors[attr_index];
+  if ((descriptor->flags & LOOM_ATTR_OPTIONAL) && loom_attr_is_absent(value)) {
+    return iree_ok_status();
+  }
+  if (value.kind != descriptor->attr_kind) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "attribute index %u on op '%.*s' expects kind %u, got %u",
+        (unsigned)attr_index, (int)loom_op_vtable_name(vtable).size,
+        loom_op_vtable_name(vtable).data, (unsigned)descriptor->attr_kind,
+        (unsigned)value.kind);
+  }
+  if (value.kind == LOOM_ATTR_DICT) {
+    IREE_RETURN_IF_ERROR(
+        loom_module_verify_canonical_attr_dict(rewriter->module, value));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_rewriter_set_attr(loom_rewriter_t* rewriter, loom_op_t* op,
                                      uint16_t attr_index,
                                      loom_attribute_t value) {
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_validate_attr_write(rewriter, op, attr_index, value));
   loom_op_attrs(op)[attr_index] = value;
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_result_users_to_worklist(rewriter, op));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
+}
+
+iree_status_t loom_rewriter_replace_attr_dict(
+    loom_rewriter_t* rewriter, loom_op_t* op, uint16_t attr_index,
+    loom_named_attr_update_slice_t updates) {
+  if (attr_index >= op->attribute_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "attribute index %u is out of range for op with %u attributes",
+        (unsigned)attr_index, (unsigned)op->attribute_count);
+  }
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(rewriter->module, op);
+  if (!vtable || !vtable->attr_descriptors ||
+      attr_index >= vtable->attribute_count ||
+      vtable->attr_descriptors[attr_index].attr_kind != LOOM_ATTR_DICT) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "attribute index %u is not a DICT attribute on this op",
+        (unsigned)attr_index);
+  }
+
+  loom_attribute_t replacement = {0};
+  IREE_RETURN_IF_ERROR(loom_module_replace_canonical_attr_dict(
+      rewriter->module, loom_attr_as_dict(loom_op_attrs(op)[attr_index]),
+      updates, &replacement));
+  return loom_rewriter_set_attr(rewriter, op, attr_index, replacement);
 }
 
 iree_status_t loom_rewriter_set_instance_flags(loom_rewriter_t* rewriter,

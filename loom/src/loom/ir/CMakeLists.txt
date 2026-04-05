@@ -42,12 +42,16 @@ loom_cc_library(
     "attribute.h"
     "context.h"
     "ir.h"
+    "location.h"
     "module.h"
+    "scalar_type.h"
     "types.h"
   SRCS
     "attribute.c"
     "context.c"
+    "location.c"
     "module.c"
+    "scalar_type.c"
     "types.c"
   DEPS
     iree::base
@@ -59,6 +63,17 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
+    context_test
+  SRCS
+    "context_test.cc"
+  DEPS
+    ::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     module_test
   SRCS
     "module_test.cc"
@@ -66,6 +81,17 @@ loom_cc_test(
     ::ir
     iree::base::internal::arena
     loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    types_test
+  SRCS
+    "types_test.cc"
+  DEPS
+    ::ir
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -82,6 +108,17 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    scalar_type_test
+  SRCS
+    "scalar_type_test.cc"
+  DEPS
+    ::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

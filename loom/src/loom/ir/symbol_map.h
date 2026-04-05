@@ -32,7 +32,8 @@ extern "C" {
 #endif
 
 // Sentinel value for tombstoned (erased) slots. Must not collide
-// with LOOM_STRING_ID_INVALID (empty) or any valid string ID.
+// with LOOM_STRING_ID_INVALID (empty). Both reserved key values are
+// rejected by insertion APIs and treated as not-found by lookup/erase.
 #define LOOM_SYMBOL_MAP_TOMBSTONE \
   ((loom_string_id_t)(LOOM_STRING_ID_INVALID - 1))
 
@@ -44,7 +45,7 @@ typedef struct loom_symbol_map_entry_t {
 
 typedef struct loom_symbol_map_t {
   loom_symbol_map_entry_t* entries;
-  iree_host_size_t capacity;         // Power of 2. 0 = not yet allocated.
+  iree_host_size_t capacity;         // Power of 2. 0 = unallocated.
   iree_host_size_t count;            // Live entries (excludes tombstones).
   iree_host_size_t tombstone_count;  // Erased entries still occupying slots.
 } loom_symbol_map_t;
@@ -55,7 +56,8 @@ uint16_t loom_symbol_map_find(const loom_symbol_map_t* map,
                               loom_string_id_t name_id);
 
 // Inserts a name_id -> symbol_id mapping. The caller must ensure
-// name_id is not already present (undefined behavior on duplicate).
+// name_id is not already present (undefined behavior on duplicate) and must
+// not pass LOOM_STRING_ID_INVALID or LOOM_SYMBOL_MAP_TOMBSTONE.
 // Arena-allocates on first insert and when capacity growth is needed.
 iree_status_t loom_symbol_map_insert(loom_symbol_map_t* map,
                                      iree_arena_allocator_t* arena,
@@ -65,7 +67,8 @@ iree_status_t loom_symbol_map_insert(loom_symbol_map_t* map,
 // Finds an existing entry or inserts a new one.
 // If name_id is already present, sets *out_symbol_id to the existing
 // symbol_id. If not present, inserts name_id -> new_symbol_id and
-// sets *out_symbol_id to new_symbol_id.
+// sets *out_symbol_id to new_symbol_id. Reserved key values are rejected with
+// INVALID_ARGUMENT.
 iree_status_t loom_symbol_map_find_or_insert(loom_symbol_map_t* map,
                                              iree_arena_allocator_t* arena,
                                              loom_string_id_t name_id,

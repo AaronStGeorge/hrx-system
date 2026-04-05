@@ -343,9 +343,11 @@ extern const loom_op_vtable_t loom_test_decl_vtable;
 LOOM_DEFINE_ISA(loom_test_attrs_isa, LOOM_OP_TEST_ATTRS)
 LOOM_DEFINE_OPERAND(loom_test_attrs_input, 0)
 LOOM_DEFINE_RESULT(loom_test_attrs_result, 0)
+LOOM_DEFINE_ATTR_DICT(loom_test_attrs_dict, 0)
 iree_status_t loom_test_attrs_build(
     loom_builder_t* builder,
     loom_value_id_t input,
+    loom_optional loom_named_attr_slice_t dict,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

@@ -311,10 +311,10 @@ TEST_F(ParserTest, AttrDictEmptyArrayPayloadIsCanonical) {
   IREE_ASSERT_OK(loom_module_verify_canonical_attr_dict(module, dict_attr));
   ASSERT_EQ(dict_attr.kind, LOOM_ATTR_DICT);
   ASSERT_EQ(dict_attr.count, 1u);
-  ASSERT_NE(dict_attr.dict, nullptr);
-  EXPECT_EQ(dict_attr.dict[0].value.kind, LOOM_ATTR_I64_ARRAY);
-  EXPECT_EQ(dict_attr.dict[0].value.count, 0u);
-  EXPECT_EQ(dict_attr.dict[0].value.i64_array, nullptr);
+  ASSERT_NE(dict_attr.dict_entries, nullptr);
+  EXPECT_EQ(dict_attr.dict_entries[0].value.kind, LOOM_ATTR_I64_ARRAY);
+  EXPECT_EQ(dict_attr.dict_entries[0].value.count, 0u);
+  EXPECT_EQ(dict_attr.dict_entries[0].value.i64_array, nullptr);
 
   std::string text = PrintModule(module);
   EXPECT_NE(text.find("test.attrs %c {shape = []} : f32"), std::string::npos)
@@ -685,6 +685,27 @@ TEST_F(ParserTest, LoopWithoutIterArgs) {
         << "IV not found in: " << text;
     EXPECT_EQ(text.find("iter_args"), std::string::npos)
         << "iter_args should be absent in: " << text;
+    EXPECT_EQ(text.find("test.yield"), std::string::npos)
+        << "implicit loop terminator should be elided in: " << text;
+
+    loom_op_t* func_op = GetFirstFunctionOp(module);
+    ASSERT_NE(func_op, nullptr);
+    ASSERT_EQ(func_op->region_count, 1u);
+    loom_block_t* func_entry = GetEntryBlock(loom_op_regions(func_op)[0]);
+    ASSERT_NE(func_entry, nullptr);
+    ASSERT_GE(func_entry->op_count, 1u);
+
+    loom_op_t* loop_op = func_entry->ops[0];
+    ASSERT_NE(loop_op, nullptr);
+    ASSERT_EQ(loop_op->region_count, 1u);
+    loom_block_t* loop_entry = GetEntryBlock(loom_op_regions(loop_op)[0]);
+    ASSERT_NE(loop_entry, nullptr);
+    ASSERT_EQ(loop_entry->op_count, 1u);
+    loom_op_t* yield_op = loop_entry->ops[0];
+    ASSERT_NE(yield_op, nullptr);
+    EXPECT_TRUE(loom_test_yield_isa(yield_op));
+    EXPECT_EQ(yield_op->operand_count, 0u);
+    EXPECT_EQ(yield_op->parent_op, loop_op);
     loom_module_free(module);
   }
 }

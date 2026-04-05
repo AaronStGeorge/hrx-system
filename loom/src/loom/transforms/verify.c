@@ -799,7 +799,7 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
          ++i) {
       const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
       bool optional = (descriptor->flags & LOOM_ATTR_OPTIONAL) != 0;
-      if (optional && attrs[i].raw == 0) continue;
+      if (optional && loom_attr_is_absent(attrs[i])) continue;
       iree_string_view_t attr_name = loom_bstring_view(descriptor->name);
       if (attrs[i].kind != descriptor->attr_kind) {
         loom_diagnostic_param_t params[] = {
@@ -975,6 +975,11 @@ static void loom_verify_emit_pairwise_mismatch(
       break;
   }
 }
+
+static bool loom_verify_region_entry_yield(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, uint8_t region_index,
+    uint16_t* out_yield_count, const loom_value_id_t** out_yield_operands);
 
 static void loom_verify_semantic_constraint(
     loom_verify_state_t* state, const loom_op_t* op,
@@ -1265,15 +1270,12 @@ static void loom_verify_semantic_constraint(
     case LOOM_RELATION_YIELD_COUNT: {
       // args[0] = region, args[1] = result field.
       if (constraint->arg_count < 2) break;
-      uint8_t region_index = LOOM_FIELD_REF_INDEX(constraint->args[0]);
-      if (region_index >= op->region_count) break;
-      loom_region_t* region = loom_op_regions(op)[region_index];
-      if (!region || region->block_count == 0) break;
-      loom_block_t* entry = loom_region_entry_block(region);
-      if (entry->op_count == 0) break;
-
-      const loom_op_t* terminator = loom_block_const_last_op(entry);
-      uint16_t yield_count = terminator->operand_count;
+      uint16_t yield_count = 0;
+      if (!loom_verify_region_entry_yield(
+              state, op, vtable, LOOM_FIELD_REF_INDEX(constraint->args[0]),
+              &yield_count, NULL)) {
+        break;
+      }
 
       uint16_t result_count =
           loom_verify_variadic_count(op, vtable, constraint->args[1]);
@@ -1300,16 +1302,13 @@ static void loom_verify_semantic_constraint(
     case LOOM_RELATION_YIELD_MATCH: {
       // args[0] = region, args[1] = result field.
       if (constraint->arg_count < 2) break;
-      uint8_t region_index = LOOM_FIELD_REF_INDEX(constraint->args[0]);
-      if (region_index >= op->region_count) break;
-      loom_region_t* region = loom_op_regions(op)[region_index];
-      if (!region || region->block_count == 0) break;
-      loom_block_t* entry = loom_region_entry_block(region);
-      if (entry->op_count == 0) break;
-
-      const loom_op_t* terminator = loom_block_const_last_op(entry);
-      const loom_value_id_t* yield_operands =
-          loom_op_const_operands(terminator);
+      uint16_t yield_count = 0;
+      const loom_value_id_t* yield_operands = NULL;
+      if (!loom_verify_region_entry_yield(
+              state, op, vtable, LOOM_FIELD_REF_INDEX(constraint->args[0]),
+              &yield_count, &yield_operands)) {
+        break;
+      }
 
       uint8_t result_ref = constraint->args[1];
       uint8_t result_start = LOOM_FIELD_REF_INDEX(result_ref);
@@ -1319,9 +1318,8 @@ static void loom_verify_semantic_constraint(
                                   ? (uint16_t)(op->result_count - result_start)
                                   : 0;
 
-      uint16_t check_count = terminator->operand_count < result_count
-                                 ? terminator->operand_count
-                                 : result_count;
+      uint16_t check_count =
+          yield_count < result_count ? yield_count : result_count;
       for (uint16_t i = 0; i < check_count; ++i) {
         loom_type_t yield_type =
             loom_verify_value_type(state, yield_operands[i]);
@@ -1613,11 +1611,19 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
        ++i) {
     if (vtable->attr_descriptors[i].attr_kind != LOOM_ATTR_SYMBOL) continue;
     if ((vtable->attr_descriptors[i].flags & LOOM_ATTR_OPTIONAL) &&
-        attrs[i].raw == 0) {
+        loom_attr_is_absent(attrs[i])) {
       continue;
     }
     loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[i]);
     if (!loom_symbol_ref_is_valid(ref)) continue;
+
+    if (ref.module_id != 0) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_u32(ref.module_id),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_symbol_004, params, 1);
+      continue;
+    }
 
     if (ref.symbol_id >= state->module->symbols.count) {
       loom_diagnostic_param_t params[] = {
@@ -1643,6 +1649,52 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
 // Region structure checks
 //===----------------------------------------------------------------------===//
 
+static const loom_op_t* loom_verify_block_last_live_op(
+    const loom_block_t* block) {
+  for (uint16_t reverse_index = block->op_count; reverse_index > 0;
+       --reverse_index) {
+    const loom_op_t* op =
+        loom_block_const_op(block, (uint16_t)(reverse_index - 1));
+    if ((op->flags & LOOM_OP_FLAG_DEAD) == 0) return op;
+  }
+  return NULL;
+}
+
+static bool loom_verify_op_is_terminator(loom_verify_state_t* state,
+                                         const loom_op_t* op) {
+  const loom_op_vtable_t* vtable = loom_verify_lookup_vtable(state, op->kind);
+  return vtable && iree_any_bit_set(vtable->traits, LOOM_TRAIT_TERMINATOR);
+}
+
+static bool loom_verify_region_entry_yield(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, uint8_t region_index,
+    uint16_t* out_yield_count, const loom_value_id_t** out_yield_operands) {
+  *out_yield_count = 0;
+  if (out_yield_operands) {
+    *out_yield_operands = NULL;
+  }
+  if (region_index >= op->region_count ||
+      region_index >= vtable->region_count || !vtable->region_descriptors) {
+    return false;
+  }
+  loom_region_t* region = loom_op_regions(op)[region_index];
+  if (!region || region->block_count == 0) return false;
+
+  const loom_region_descriptor_t* region_descriptor =
+      &vtable->region_descriptors[region_index];
+  const loom_block_t* entry = loom_region_const_entry_block(region);
+  const loom_op_t* terminator = loom_verify_block_last_live_op(entry);
+  if (terminator && loom_verify_op_is_terminator(state, terminator)) {
+    *out_yield_count = terminator->operand_count;
+    if (out_yield_operands) {
+      *out_yield_operands = loom_op_const_operands(terminator);
+    }
+    return true;
+  }
+  return region_descriptor->implicit_terminator != LOOM_OP_KIND_UNKNOWN;
+}
+
 static void loom_verify_region_structure(loom_verify_state_t* state,
                                          const loom_op_t* op,
                                          const loom_op_vtable_t* vtable) {
@@ -1665,14 +1717,32 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
       loom_verify_emit_structured(state, op, &loom_err_structure_006, params,
                                   3);
     }
-    // Check that each non-empty block has a terminator as its last op.
+    const loom_region_descriptor_t* region_descriptor =
+        &vtable->region_descriptors[i];
     for (uint16_t b = 0; b < region->block_count; ++b) {
-      loom_block_t* block = loom_region_block(region, b);
-      if (block->op_count == 0) continue;
-      const loom_op_t* last_op = loom_block_const_last_op(block);
-      const loom_op_vtable_t* last_vtable =
-          loom_verify_lookup_vtable(state, last_op->kind);
-      if (last_vtable && !(last_vtable->traits & LOOM_TRAIT_TERMINATOR)) {
+      const loom_block_t* block = loom_region_const_block(region, b);
+      bool seen_terminator = false;
+      for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
+        const loom_op_t* current_op = loom_block_const_op(block, op_index);
+        if (current_op->flags & LOOM_OP_FLAG_DEAD) continue;
+        if (seen_terminator) {
+          const loom_op_vtable_t* current_vtable =
+              loom_verify_lookup_vtable(state, current_op->kind);
+          iree_string_view_t current_name =
+              current_vtable ? loom_op_vtable_name(current_vtable)
+                             : IREE_SV("<unknown op>");
+          loom_diagnostic_param_t params[] = {
+              loom_param_string(current_name),
+          };
+          loom_verify_emit_structured(state, current_op,
+                                      &loom_err_structure_012, params,
+                                      IREE_ARRAYSIZE(params));
+          continue;
+        }
+        seen_terminator = loom_verify_op_is_terminator(state, current_op);
+      }
+      if (!seen_terminator &&
+          region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN) {
         loom_diagnostic_param_t params[] = {
             loom_param_string(op_name),
             loom_param_u32(i),
