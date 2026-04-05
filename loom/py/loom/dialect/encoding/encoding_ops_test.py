@@ -13,6 +13,7 @@ from loom.dialect.encoding import (
     encoding_ops,
 )
 from loom.dsl import (
+    ATTR_TYPE_ENCODING,
     ENCODING,
     TypeConstraint,
 )
@@ -58,7 +59,7 @@ class TestEncodingDefine:
     def test_has_spec_attr(self) -> None:
         attr = encoding_define.attr("spec")
         assert attr is not None
-        assert attr.attr_type == "any"
+        assert attr.attr_type == ATTR_TYPE_ENCODING
 
     def test_captures_variadic(self) -> None:
         operand = encoding_define.operand("captures")

@@ -307,6 +307,77 @@ TEST_F(CSETest, RewriterSetAttrRejectsMalformedDictAttr) {
   iree_arena_deinitialize(&pass_arena);
 }
 
+TEST_F(CSETest, RewriterSetAttrRejectsNonCanonicalDictAttrOrder) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), f32, &input));
+
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t label_id = LOOM_STRING_ID_INVALID;
+  loom_string_id_t foo_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("axis"), &axis_id));
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("label"), &label_id));
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("foo"), &foo_id));
+
+  loom_named_attr_t unsorted_entries[2] = {
+      {.name_id = label_id, .value = loom_attr_string(foo_id)},
+      {.name_id = axis_id, .value = loom_attr_i64(0)},
+  };
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_rewriter_t rewriter;
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
+  iree_status_t status = loom_rewriter_set_attr(
+      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+      loom_make_canonical_attr_dict(unsorted_entries,
+                                    IREE_ARRAYSIZE(unsorted_entries)));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  loom_rewriter_deinitialize(&rewriter);
+  iree_arena_deinitialize(&pass_arena);
+}
+
+TEST_F(CSETest, RewriterSetAttrRejectsDuplicateDictAttrKeys) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), f32, &input));
+
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("axis"), &axis_id));
+
+  loom_named_attr_t duplicate_entries[2] = {
+      {.name_id = axis_id, .value = loom_attr_i64(0)},
+      {.name_id = axis_id, .value = loom_attr_i64(1)},
+  };
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_rewriter_t rewriter;
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
+  iree_status_t status = loom_rewriter_set_attr(
+      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+      loom_make_canonical_attr_dict(duplicate_entries,
+                                    IREE_ARRAYSIZE(duplicate_entries)));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  loom_rewriter_deinitialize(&rewriter);
+  iree_arena_deinitialize(&pass_arena);
+}
+
 TEST_F(CSETest, EliminatesIdenticalBinaryOps) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 

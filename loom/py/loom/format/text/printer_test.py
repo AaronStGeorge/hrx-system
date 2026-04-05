@@ -7,6 +7,7 @@
 """Tests for the format-driven text printer."""
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
+from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.format.text.parser import Parser
@@ -57,8 +58,9 @@ def _printer() -> Printer:
 
 
 def _module_parser() -> Parser:
-    """Create a parser with test + func ops and builtin types."""
+    """Create a parser with encoding + func + test ops and builtin types."""
     parser = Parser()
+    parser.register_ops(ALL_ENCODING_OPS)
     parser.register_ops(ALL_TEST_OPS)
     parser.register_ops(ALL_FUNC_OPS)
     parser.register_types(ALL_BUILTIN_TYPES)
@@ -72,13 +74,14 @@ def _module_printer(
     indent: bool = True,
     print_regions: bool = True,
 ) -> Printer:
-    """Create a printer with test + func ops and builtin types."""
+    """Create a printer with encoding + func + test ops and builtin types."""
     printer = Printer(
         print_locations=print_locations,
         use_aliases=use_aliases,
         indent=indent,
         print_regions=print_regions,
     )
+    printer.register_ops(ALL_ENCODING_OPS)
     printer.register_ops(ALL_TEST_OPS)
     printer.register_ops(ALL_FUNC_OPS)
     printer.register_types(ALL_BUILTIN_TYPES)
@@ -167,14 +170,14 @@ class TestPrintType:
     def test_encoding_with_alias(self) -> None:
         """Type with encoding prints the alias when available."""
 
-        enc = EncodingInstance(name="q8_0", alias="#enc")
+        enc = EncodingInstance(name="q8_0", alias="enc")
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         assert print_type(t) == "tile<256xi8, #enc>"
 
     def test_encoding_without_alias(self) -> None:
         """Without alias, prints #name<params>."""
 
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32),))
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         assert print_type(t) == "tile<256xi8, #q8_0<block=32>>"
 
@@ -562,6 +565,23 @@ class TestRegionPrinting:
 
     def test_empty_branch_regions_elide_implicit_terminators(self) -> None:
         module, [cond] = _module_with(("cond", I1))
+        then_region = Region(
+            blocks=[Block(ops=[Operation(name="test.implicit_yield")])]
+        )
+        else_region = Region(
+            blocks=[Block(ops=[Operation(name="test.implicit_yield")])]
+        )
+        op = Operation(
+            name="test.branch",
+            operands=[cond],
+            regions=[then_region, else_region],
+        )
+        assert _printer().print_operation(op, module) == (
+            "test.branch %cond {\n} else {\n}"
+        )
+
+    def test_explicit_empty_branch_yields_are_preserved(self) -> None:
+        module, [cond] = _module_with(("cond", I1))
         then_region = Region(blocks=[Block(ops=[Operation(name="test.yield")])])
         else_region = Region(blocks=[Block(ops=[Operation(name="test.yield")])])
         op = Operation(
@@ -570,7 +590,7 @@ class TestRegionPrinting:
             regions=[then_region, else_region],
         )
         assert _printer().print_operation(op, module) == (
-            "test.branch %cond {\n} else {\n}"
+            "test.branch %cond {\n  test.yield\n} else {\n  test.yield\n}"
         )
 
     def test_single_region_with_body(self) -> None:
@@ -888,6 +908,35 @@ class TestPoolTypePrinting:
 
 
 # ============================================================================
+# Encoding aliases
+# ============================================================================
+
+
+class TestPrintEncodingAliases:
+    def test_module_alias_definition_and_define_op_round_trip(self) -> None:
+        source_text = (
+            "#enc = #q8_0<block=32>\n"
+            "func.def @f() -> () {\n"
+            "  %enc = encoding.define #enc : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        expected_text = (
+            "#enc = #q8_0<block=32>\n"
+            "func.def @f() {\n"
+            "  %enc = encoding.define #enc : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        module = _module_parser().parse(source_text)
+
+        assert module.encodings == [
+            EncodingInstance(name="q8_0", alias="enc", params=(("block", 32),))
+        ]
+        assert _module_printer().print_module(module) == expected_text
+
+
+# ============================================================================
 # Printer flags
 # ============================================================================
 
@@ -897,7 +946,7 @@ class TestPrinterFlags:
 
     def test_use_aliases_true_default(self) -> None:
         """Default: encoding alias is used when available."""
-        enc = EncodingInstance(name="q8_0", alias="#enc", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", alias="enc", params=(("block", 32),))
         shaped = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         assert print_type(shaped) == "tile<256xi8, #enc>"
 
@@ -905,7 +954,7 @@ class TestPrinterFlags:
         """With use_aliases=False, full #name<params> form is printed."""
         from loom.format.text.printer import TypePrintContext
 
-        enc = EncodingInstance(name="q8_0", alias="#enc", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", alias="enc", params=(("block", 32),))
         shaped = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         context = TypePrintContext({}, Module(), use_aliases=False)
         assert print_type(shaped, context) == "tile<256xi8, #q8_0<block=32>>"
@@ -914,7 +963,7 @@ class TestPrinterFlags:
         """With use_aliases=False and no params, prints bare #name."""
         from loom.format.text.printer import TypePrintContext
 
-        enc = EncodingInstance(name="dense", alias="#d")
+        enc = EncodingInstance(name="dense", alias="d")
         shaped = ShapedType(TypeKind.TILE, F32, (StaticDim(4),), encoding=enc)
         context = TypePrintContext({}, Module(), use_aliases=False)
         assert print_type(shaped, context) == "tile<4xf32, #dense>"
@@ -922,7 +971,7 @@ class TestPrinterFlags:
     def test_use_aliases_false_in_printer(self) -> None:
         """Printer with use_aliases=False expands aliases in op output."""
         module, [x_id] = _module_with(("x", I8))
-        enc = EncodingInstance(name="q8_0", alias="#enc", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", alias="enc", params=(("block", 32),))
         enc_tile = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         r_id = module.add_value(Value(name="r", type=enc_tile))
         op = Operation(

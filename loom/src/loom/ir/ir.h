@@ -92,6 +92,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/attribute.h"
+#include "loom/ir/encoding.h"
 #include "loom/ir/location.h"
 #include "loom/ir/types.h"
 #include "loom/util/bstring.h"
@@ -107,8 +108,6 @@ typedef struct loom_block_t loom_block_t;
 typedef struct loom_op_t loom_op_t;
 typedef struct loom_region_t loom_region_t;
 typedef struct loom_value_t loom_value_t;
-typedef struct loom_encoding_t loom_encoding_t;
-typedef struct loom_encoding_vtable_t loom_encoding_vtable_t;
 typedef struct loom_op_vtable_t loom_op_vtable_t;
 typedef uint8_t loom_symbol_kind_t;
 typedef struct loom_operand_descriptor_t loom_operand_descriptor_t;
@@ -1176,38 +1175,6 @@ typedef struct loom_type_table_t {
   loom_type_t* entries;
 } loom_type_table_t;
 
-// Encoding descriptor in the module's encoding table.
-//
-// Each unique encoding parameterization in a program gets one entry.
-// The encoding_id field in loom_type_t indexes into this table
-// (1-based, 0 = no encoding).
-//
-// The name and alias are interned string IDs shared across all
-// encoding instances with the same name. Parameters are named
-// attributes (loom_named_attr_t from op_defs.h) — the same
-// tagged-union attribute type used by ops, so encoding params can
-// be integers, strings, booleans, etc.
-//
-// In the textual format, encodings print as #name or #name<k=v, ...>.
-// When alias_id is set, the printer uses the alias (#enc) instead.
-// Aliases are defined at file level: #enc = #q8_0<block=32>.
-struct loom_encoding_t {
-  loom_string_id_t name_id;
-  loom_string_id_t alias_id;  // LOOM_STRING_ID_INVALID for none.
-  uint8_t attribute_count;
-  uint8_t reserved[3];
-  // Arena-allocated array of named attributes. NULL when count is 0.
-  const loom_named_attr_t* attributes;
-};
-
-// Encoding table. Each unique encoding parameterization in a module
-// gets one entry, deduplicated by name + attribute equality.
-typedef struct loom_encoding_table_t {
-  iree_host_size_t count;
-  iree_host_size_t capacity;
-  loom_encoding_t* entries;
-} loom_encoding_table_t;
-
 // Open-addressing hash table for deduplicating strings and types during
 // construction. Arena-allocated, freed when the module is destroyed.
 // Lazy-initialized: capacity 0 means uninitialized, first use allocates.
@@ -1301,16 +1268,6 @@ typedef struct loom_module_t {
   loom_intern_table_t string_intern;
   loom_intern_table_t type_intern;
 } loom_module_t;
-
-//===----------------------------------------------------------------------===//
-// Context
-//===----------------------------------------------------------------------===//
-
-// Encoding vtable list (one per encoding kind).
-typedef struct loom_encoding_vtable_list_t {
-  iree_host_size_t count;
-  const loom_encoding_vtable_t** entries;
-} loom_encoding_vtable_list_t;
 
 //===----------------------------------------------------------------------===//
 // Enumeration macros

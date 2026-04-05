@@ -214,8 +214,10 @@ iree_status_t loom_parser_add_unresolved_placeholder(loom_parser_t* parser,
 //===----------------------------------------------------------------------===//
 
 typedef struct loom_alias_entry_t {
-  iree_string_view_t name;  // e.g., "#q6_k"
-  uint16_t encoding_id;     // 1-based index into module encoding table.
+  // Bare alias name without '#', e.g. "q6_k".
+  iree_string_view_t name;
+  // 1-based index into the module encoding table.
+  uint16_t encoding_id;
 } loom_alias_entry_t;
 
 typedef struct loom_alias_table_t {
@@ -474,10 +476,22 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
                               loom_type_parse_mode_t mode,
                               loom_type_t* out_type);
 
+// Parses a static encoding reference from a HASH_ATTR token.
+//
+// Handles `#alias` lookup through parser->aliases and inline
+// `#family<param = value, ...>` definitions. When `alias_id` is a valid module
+// string ID, the parsed canonical encoding prefers that spelling when it does
+// not already have one. Returns the 1-based module encoding ID in
+// `*out_encoding_id`.
+iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
+                                         loom_string_id_t alias_id,
+                                         uint16_t* out_encoding_id);
+
 // Parses encoding parameters from the token stream. Called after
 // LANGLE has been consumed. Reads key=value pairs separated by
 // commas and consumes the closing RANGLE. Arena-allocates the
-// output array in the module arena.
+// output array in the parser arena; module insertion canonicalizes and
+// copies the final encoding attrs.
 iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
                                          loom_named_attr_t** out_attrs,
                                          uint8_t* out_count);
@@ -491,6 +505,12 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
 iree_status_t loom_parse_attr_value(loom_parser_t* parser,
                                     const loom_attr_descriptor_t* descriptor,
                                     loom_attribute_t* out_attr);
+
+// Parses a generic attribute value with the same grammar used by AttrDict and
+// encoding parameter lists.
+iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
+                                            uint16_t nesting_depth,
+                                            loom_attribute_t* out_attr);
 
 // Parses a bracket-enclosed predicate list: [pred(args), ...].
 iree_status_t loom_parse_predicate_list(loom_parser_t* parser,

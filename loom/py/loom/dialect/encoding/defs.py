@@ -19,7 +19,7 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
-    ATTR_TYPE_ANY,
+    ATTR_TYPE_ENCODING,
     ATTR_TYPE_STRING,
     ENCODING,
     INTEGER,
@@ -50,7 +50,7 @@ encoding_define = Op(
     ],
     results=[Result("result", ENCODING)],
     attrs=[
-        AttrDef("spec", ATTR_TYPE_ANY, doc="Static encoding specification."),
+        AttrDef("spec", ATTR_TYPE_ENCODING, doc="Static encoding specification."),
     ],
     traits=[PURE],
     format=[

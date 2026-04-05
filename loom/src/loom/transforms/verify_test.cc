@@ -1619,7 +1619,7 @@ TEST_F(VerifyTest, YieldCountViolation) {
 
 TEST_F(VerifyTest, YieldCountViolationWithImplicitTerminator) {
   // test.map has one result but the body is empty. The verifier should
-  // interpret that as an implicit zero-operand test.yield and reject the
+  // interpret that as an implicit zero-yield terminator and reject the
   // result/yield count mismatch.
   loom_type_t tile4 = loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
                                           loom_dim_pack_static(4), 0);

@@ -1086,6 +1086,8 @@ static iree_status_t loom_bytecode_write_attr_value(
       IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(writer, 9));
       IREE_RETURN_IF_ERROR(
           loom_bytecode_page_writer_write_uvarint(writer, attr.count));
+      // Dict attrs are stored canonically at IR construction time; emit that
+      // order directly so logically equivalent dicts produce stable bytes.
       for (uint16_t i = 0; i < attr.count; ++i) {
         const loom_named_attr_t* entry = &attr.dict_entries[i];
         uint32_t key_writer_id = 0;
@@ -1096,6 +1098,12 @@ static iree_status_t loom_bytecode_write_attr_value(
         IREE_RETURN_IF_ERROR(loom_bytecode_write_attr_value(
             writer, numbering, value_numbering, entry->value, NULL));
       }
+      break;
+    }
+    case LOOM_ATTR_ENCODING: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(writer, 10));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_page_writer_write_uvarint(writer, attr.encoding_id));
       break;
     }
     default:
@@ -1594,17 +1602,17 @@ static iree_status_t loom_bytecode_write_types_section(
         // Encoding.
         if (loom_type_has_ssa_encoding(type)) {
           IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(
-              page_writer, LOOM_BYTECODE_ENCODING_SSA));
+              page_writer, LOOM_BYTECODE_ENCODING_ATTACHMENT_SSA));
           IREE_RETURN_IF_ERROR(
               loom_bytecode_page_writer_write_uvarint(page_writer, 0));
         } else if (loom_type_has_static_encoding(type)) {
           IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(
-              page_writer, LOOM_BYTECODE_ENCODING_STATIC));
+              page_writer, LOOM_BYTECODE_ENCODING_ATTACHMENT_STATIC));
           IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
               page_writer, type.encoding_id));
         } else {
           IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(
-              page_writer, LOOM_BYTECODE_ENCODING_NONE));
+              page_writer, LOOM_BYTECODE_ENCODING_ATTACHMENT_NONE));
           IREE_RETURN_IF_ERROR(
               loom_bytecode_page_writer_write_uvarint(page_writer, 0));
         }
@@ -1693,49 +1701,49 @@ static iree_status_t loom_bytecode_write_types_section(
   return iree_ok_status();
 }
 
-// Writes the ENCODINGS section: encoding kind registry + instances.
+// Writes the ENCODINGS section: encoding family registry + instances.
 static iree_status_t loom_bytecode_write_encodings_section(
     loom_bytecode_page_writer_t* page_writer,
     loom_bytecode_numbering_t* numbering) {
   const loom_module_t* module = numbering->module;
 
-  // Build the encoding kind registry: unique encoding names.
-  // Small (typically <10 kinds), so linear dedup is fine.
+  // Build the encoding family registry from unique encoding names.
+  // Small (typically <10 families), so linear dedup is fine.
   typedef struct {
     loom_string_id_t name_id;
     uint32_t writer_string_id;
-  } encoding_kind_entry_t;
-  encoding_kind_entry_t kind_entries[256];
-  iree_host_size_t kind_count = 0;
+  } encoding_family_entry_t;
+  encoding_family_entry_t family_entries[256];
+  iree_host_size_t family_count = 0;
 
   for (iree_host_size_t i = 0; i < module->encodings.count; ++i) {
     loom_string_id_t name_id = module->encodings.entries[i].name_id;
     bool found = false;
-    for (iree_host_size_t k = 0; k < kind_count; ++k) {
-      if (kind_entries[k].name_id == name_id) {
+    for (iree_host_size_t k = 0; k < family_count; ++k) {
+      if (family_entries[k].name_id == name_id) {
         found = true;
         break;
       }
     }
     if (!found) {
-      if (kind_count >= 256) {
+      if (family_count >= 256) {
         return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                                "more than 256 unique encoding kinds");
+                                "more than 256 unique encoding families");
       }
       uint32_t writer_string_id = 0;
       IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
           numbering, name_id, &writer_string_id));
-      kind_entries[kind_count++] = (encoding_kind_entry_t){
+      family_entries[family_count++] = (encoding_family_entry_t){
           .name_id = name_id, .writer_string_id = writer_string_id};
     }
   }
 
-  // Encoding kind count + kind name string IDs.
+  // Encoding family count and family name string IDs.
   IREE_RETURN_IF_ERROR(
-      loom_bytecode_page_writer_write_uvarint(page_writer, kind_count));
-  for (iree_host_size_t k = 0; k < kind_count; ++k) {
+      loom_bytecode_page_writer_write_uvarint(page_writer, family_count));
+  for (iree_host_size_t k = 0; k < family_count; ++k) {
     IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
-        page_writer, kind_entries[k].writer_string_id));
+        page_writer, family_entries[k].writer_string_id));
   }
 
   // Encoding instances.
@@ -1744,16 +1752,16 @@ static iree_status_t loom_bytecode_write_encodings_section(
   for (iree_host_size_t i = 0; i < module->encodings.count; ++i) {
     const loom_encoding_t* encoding = &module->encodings.entries[i];
 
-    // Find the kind index for this encoding's name.
-    uint32_t kind_index = 0;
-    for (iree_host_size_t k = 0; k < kind_count; ++k) {
-      if (kind_entries[k].name_id == encoding->name_id) {
-        kind_index = (uint32_t)k;
+    // Find the family index for this encoding's name.
+    uint32_t family_index = 0;
+    for (iree_host_size_t k = 0; k < family_count; ++k) {
+      if (family_entries[k].name_id == encoding->name_id) {
+        family_index = (uint32_t)k;
         break;
       }
     }
     IREE_RETURN_IF_ERROR(
-        loom_bytecode_page_writer_write_uvarint(page_writer, kind_index));
+        loom_bytecode_page_writer_write_uvarint(page_writer, family_index));
 
     // Alias string ID (0 = no alias).
     uint32_t alias_writer_id = 0;

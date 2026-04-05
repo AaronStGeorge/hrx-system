@@ -25,6 +25,10 @@ class ContextTest : public ::testing::Test {
   loom_context_t context_;
 };
 
+static const loom_encoding_vtable_t kQ8_0EncodingVtable = {
+    .name = IREE_SV("q8_0"),
+};
+
 TEST_F(ContextTest, FinalizeBuildsOpNameLookupTable) {
   static const uint8_t kTestOpName[] = {
       8, 4, 't', 'e', 's', 't', '.', 'n', 'o', 'p', '\0',
@@ -89,6 +93,37 @@ TEST_F(ContextTest, RegisterSourceRejectsInvalidSentinelId) {
   iree_status_t status =
       loom_context_register_source(&context_, IREE_SV("overflow"), &source_id);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+}
+
+TEST_F(ContextTest, RegisterEncodingVtableAndLookupByName) {
+  IREE_ASSERT_OK(
+      loom_context_register_encoding_vtable(&context_, &kQ8_0EncodingVtable));
+
+  EXPECT_EQ(loom_context_lookup_encoding_vtable(&context_, IREE_SV("q8_0")),
+            &kQ8_0EncodingVtable);
+  EXPECT_EQ(loom_context_lookup_encoding_vtable(&context_, IREE_SV("q6_k")),
+            nullptr);
+}
+
+TEST_F(ContextTest, RegisterEncodingVtableRejectsDuplicateName) {
+  IREE_ASSERT_OK(
+      loom_context_register_encoding_vtable(&context_, &kQ8_0EncodingVtable));
+
+  static const loom_encoding_vtable_t kDuplicate = {
+      .name = IREE_SV("q8_0"),
+  };
+  iree_status_t status =
+      loom_context_register_encoding_vtable(&context_, &kDuplicate);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
+}
+
+TEST_F(ContextTest, RegisterEncodingVtableRejectsMissingName) {
+  static const loom_encoding_vtable_t kMissingName = {};
+  iree_status_t status =
+      loom_context_register_encoding_vtable(&context_, &kMissingName);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  status = loom_context_register_encoding_vtable(&context_, NULL);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 }  // namespace

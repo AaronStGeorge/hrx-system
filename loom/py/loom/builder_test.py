@@ -16,12 +16,15 @@ from loom.ir import (
     F32,
     I32,
     INDEX,
+    VALUE_DEF_BLOCK_NONE,
+    VALUE_DEF_OP_NONE,
     Block,
     Region,
     ShapedType,
     StaticDim,
     SymbolKind,
     TypeKind,
+    Use,
 )
 
 # ============================================================================
@@ -302,6 +305,18 @@ class TestBuild:
         assert b.module.symbols[0].op.operands == [x.id]
         assert b.module.symbols[0].op.tied_results[0].operand_index == 0
 
+        arg = b.module.values[x.id]
+        assert not arg.is_block_arg
+        assert arg.def_op_index == 0
+        assert arg.def_block_index == VALUE_DEF_BLOCK_NONE
+        assert arg.def_result_index == 0
+        assert arg.uses == []
+
+        result_value = b.module.values[result[0].id]
+        assert result_value.def_op_index == 0
+        assert result_value.def_block_index == VALUE_DEF_BLOCK_NONE
+        assert result_value.def_result_index == 0
+
     def test_func_signature_args_seed_body_entry_block(self) -> None:
         b = _builder()
         x = b.value("x", F32)
@@ -320,11 +335,42 @@ class TestBuild:
         assert b.module.symbols[0].op.operands == []
         assert b.module.symbols[0].op.tied_results[0].operand_index == 0
 
+        arg = b.module.values[x.id]
+        assert arg.is_block_arg
+        assert arg.def_op_index == VALUE_DEF_OP_NONE
+        assert arg.def_block_index == 0
+        assert arg.def_result_index == 0
+
     def test_func_args_on_non_func_like_op_fails(self) -> None:
         b = _builder()
         x = b.value("x", F32)
         with pytest.raises(ValueError, match="does not implement FuncLikeInterface"):
             b.build("test.neg", [x], func_args=[x], results=[F32])
+
+    def test_attached_body_op_records_value_metadata_and_uses(self) -> None:
+        b = _builder()
+        x = b.value("x", F32)
+        body = Region(blocks=[Block()])
+        b.build(
+            "test.func",
+            func_args=[x],
+            results=[x.as_type(F32)],
+            attributes={"callee": "identity"},
+            regions=[body],
+        )
+        b.set_insertion_block(body.blocks[0])
+
+        result = b.build("test.neg", [x], results=[F32], result_names=["neg"])
+        assert isinstance(result, ValueRef)
+
+        arg = b.module.values[x.id]
+        assert arg.uses == [Use(user_op_index=0, operand_index=0, block_index=0)]
+
+        result_value = b.module.values[result.id]
+        assert not result_value.is_block_arg
+        assert result_value.def_op_index == 0
+        assert result_value.def_block_index == 0
+        assert result_value.def_result_index == 0
 
 
 # ============================================================================

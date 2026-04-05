@@ -17,6 +17,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
@@ -97,6 +98,22 @@ static void ExpectU32Param(const CapturedDiagnostic& diagnostic,
   EXPECT_EQ(diagnostic.params[param_index].u32, expected);
 }
 
+static const loom_encoding_vtable_t kDenseEncodingVtable = {
+    .name = IREE_SV("dense"),
+};
+
+static const loom_encoding_vtable_t kQ8_0EncodingVtable = {
+    .name = IREE_SV("q8_0"),
+};
+
+static const loom_encoding_vtable_t kQ6KEncodingVtable = {
+    .name = IREE_SV("q6_k"),
+};
+
+static const loom_encoding_vtable_t kQuantizationEncodingVtable = {
+    .name = IREE_SV("quantization"),
+};
+
 class ParserTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -117,6 +134,21 @@ class ParserTest : public ::testing::Test {
       IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_FUNC,
                                                    vtables, (uint16_t)count));
     }
+    {
+      iree_host_size_t count = 0;
+      const loom_op_vtable_t* const* vtables =
+          loom_encoding_dialect_vtables(&count);
+      IREE_ASSERT_OK(loom_context_register_dialect(
+          &context_, LOOM_DIALECT_ENCODING, vtables, (uint16_t)count));
+    }
+    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
+        &context_, &kDenseEncodingVtable));
+    IREE_ASSERT_OK(
+        loom_context_register_encoding_vtable(&context_, &kQ8_0EncodingVtable));
+    IREE_ASSERT_OK(
+        loom_context_register_encoding_vtable(&context_, &kQ6KEncodingVtable));
+    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
+        &context_, &kQuantizationEncodingVtable));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
@@ -703,9 +735,77 @@ TEST_F(ParserTest, LoopWithoutIterArgs) {
     ASSERT_EQ(loop_entry->op_count, 1u);
     loom_op_t* yield_op = loop_entry->ops[0];
     ASSERT_NE(yield_op, nullptr);
-    EXPECT_TRUE(loom_test_yield_isa(yield_op));
+    EXPECT_TRUE(loom_test_implicit_yield_isa(yield_op));
     EXPECT_EQ(yield_op->operand_count, 0u);
     EXPECT_EQ(yield_op->parent_op, loop_op);
+    loom_module_free(module);
+  }
+}
+
+TEST_F(ParserTest, LoopExplicitImplicitYieldCanonicalized) {
+  loom_module_t* module = ParseOk(
+      "func.def @explicit_implicit_yield(%lo: index, %hi: index, %step: "
+      "index) {\n"
+      "  test.loop %iv = %lo to %hi step %step {\n"
+      "    test.implicit_yield\n"
+      "  }\n"
+      "}\n");
+  if (module) {
+    std::string text = PrintModule(module);
+    EXPECT_EQ(text.find("test.implicit_yield"), std::string::npos)
+        << "explicit implicit terminator should be canonicalized away in: "
+        << text;
+    EXPECT_NE(text.find("test.loop %iv ="), std::string::npos)
+        << "loop should remain printable in: " << text;
+
+    loom_op_t* func_op = GetFirstFunctionOp(module);
+    ASSERT_NE(func_op, nullptr);
+    loom_block_t* func_entry = GetEntryBlock(loom_op_regions(func_op)[0]);
+    ASSERT_NE(func_entry, nullptr);
+    ASSERT_GE(func_entry->op_count, 1u);
+
+    loom_op_t* loop_op = func_entry->ops[0];
+    ASSERT_NE(loop_op, nullptr);
+    loom_block_t* loop_entry = GetEntryBlock(loom_op_regions(loop_op)[0]);
+    ASSERT_NE(loop_entry, nullptr);
+    ASSERT_EQ(loop_entry->op_count, 1u);
+    loom_op_t* yield_op = loop_entry->ops[0];
+    ASSERT_NE(yield_op, nullptr);
+    EXPECT_TRUE(loom_test_implicit_yield_isa(yield_op));
+    EXPECT_EQ(yield_op->operand_count, 0u);
+    loom_module_free(module);
+  }
+}
+
+TEST_F(ParserTest, LoopExplicitEmptyYieldPreserved) {
+  loom_module_t* module = ParseOk(
+      "func.def @explicit_empty_yield(%lo: index, %hi: index, %step: index) {\n"
+      "  test.loop %iv = %lo to %hi step %step {\n"
+      "    test.yield\n"
+      "  }\n"
+      "}\n");
+  if (module) {
+    std::string text = PrintModule(module);
+    EXPECT_NE(text.find("    test.yield\n"), std::string::npos)
+        << "explicit zero-operand test.yield should be preserved in: " << text;
+    EXPECT_EQ(text.find("test.implicit_yield"), std::string::npos)
+        << "implicit terminator op should stay elided in: " << text;
+
+    loom_op_t* func_op = GetFirstFunctionOp(module);
+    ASSERT_NE(func_op, nullptr);
+    loom_block_t* func_entry = GetEntryBlock(loom_op_regions(func_op)[0]);
+    ASSERT_NE(func_entry, nullptr);
+    ASSERT_GE(func_entry->op_count, 1u);
+
+    loom_op_t* loop_op = func_entry->ops[0];
+    ASSERT_NE(loop_op, nullptr);
+    loom_block_t* loop_entry = GetEntryBlock(loom_op_regions(loop_op)[0]);
+    ASSERT_NE(loop_entry, nullptr);
+    ASSERT_EQ(loop_entry->op_count, 1u);
+    loom_op_t* yield_op = loop_entry->ops[0];
+    ASSERT_NE(yield_op, nullptr);
+    EXPECT_TRUE(loom_test_yield_isa(yield_op));
+    EXPECT_EQ(yield_op->operand_count, 0u);
     loom_module_free(module);
   }
 }
@@ -1071,6 +1171,14 @@ TEST_F(ParserTest, UnknownEncodingInType) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "bogus");
 }
 
+TEST_F(ParserTest, UnknownStaticEncodingFamilyInType) {
+  const auto& diagnostics =
+      ParseExpectErrors("%c = test.constant 0 : tile<4xf32, #bogus>\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_008);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "bogus");
+}
+
 TEST_F(ParserTest, EncodingAlias) {
   // Define an encoding alias at module level and reference it in tile types.
   loom_module_t* module = ParseOk(
@@ -1107,6 +1215,79 @@ TEST_F(ParserTest, InlineEncoding) {
     EXPECT_NE(text.find("#dense<block=32>"), std::string::npos);
     loom_module_free(module);
   }
+}
+
+TEST_F(ParserTest, EncodingDefineInlineSpec) {
+  loom_module_t* module =
+      ParseOk("%enc = encoding.define #q8_0<block=32> : encoding\n");
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* body = loom_module_block(module);
+  ASSERT_EQ(body->op_count, 1u);
+  const loom_op_t* op = loom_block_const_op(body, 0);
+  ASSERT_TRUE(loom_encoding_define_isa(op));
+
+  loom_attribute_t spec_attr = loom_op_attrs(op)[0];
+  ASSERT_EQ(spec_attr.kind, LOOM_ATTR_ENCODING);
+  const loom_encoding_t* spec_encoding =
+      loom_module_encoding(module, loom_attr_as_encoding_id(spec_attr));
+  ASSERT_NE(spec_encoding, nullptr);
+  ASSERT_LT(spec_encoding->name_id, module->strings.count);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[spec_encoding->name_id], IREE_SV("q8_0")));
+  ASSERT_EQ(spec_encoding->attribute_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[spec_encoding->attributes[0].name_id],
+      IREE_SV("block")));
+  EXPECT_EQ(spec_encoding->attributes[0].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(spec_encoding->attributes[0].value.i64, 32);
+
+  EXPECT_EQ(PrintModule(module),
+            "%enc = encoding.define #q8_0<block=32> : encoding\n");
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, EncodingDefineAliasSpec) {
+  loom_module_t* module = ParseOk(
+      "#enc = #q8_0<block=32>\n"
+      "%enc = encoding.define #enc : encoding\n");
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* body = loom_module_block(module);
+  ASSERT_EQ(body->op_count, 1u);
+  const loom_op_t* op = loom_block_const_op(body, 0);
+  ASSERT_TRUE(loom_encoding_define_isa(op));
+
+  loom_attribute_t spec_attr = loom_op_attrs(op)[0];
+  ASSERT_EQ(spec_attr.kind, LOOM_ATTR_ENCODING);
+  const loom_encoding_t* spec_encoding =
+      loom_module_encoding(module, loom_attr_as_encoding_id(spec_attr));
+  ASSERT_NE(spec_encoding, nullptr);
+  ASSERT_NE(spec_encoding->alias_id, LOOM_STRING_ID_INVALID);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[spec_encoding->alias_id], IREE_SV("enc")));
+
+  EXPECT_EQ(PrintModule(module),
+            "#enc = #q8_0<block=32>\n"
+            "%enc = encoding.define #enc : encoding\n");
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, EncodingAliasCannotShadowRegisteredFamily) {
+  const auto& diagnostics = ParseExpectErrors("#q8_0 = #dense\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_014);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
+            "alias name shadows a registered encoding family");
+}
+
+TEST_F(ParserTest, DuplicateEncodingAliasDefinitionFails) {
+  const auto& diagnostics = ParseExpectErrors(
+      "#enc = #dense\n"
+      "#enc = #q8_0<block=32>\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_014);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "duplicate encoding alias name");
 }
 
 //===----------------------------------------------------------------------===//

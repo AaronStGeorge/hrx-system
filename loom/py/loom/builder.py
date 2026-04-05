@@ -43,6 +43,7 @@ from typing import Any
 from loom.dsl import FuncLikeInterface, Op, TypeDef
 from loom.fields import FieldLayout
 from loom.ir import (
+    VALUE_DEF_BLOCK_NONE,
     Block,
     Module,
     Operation,
@@ -52,6 +53,7 @@ from loom.ir import (
     Type,
     Value,
     canonicalize_attr_dict,
+    record_operation_value_metadata,
     symbol_from_operation,
 )
 from loom.ir import (
@@ -364,7 +366,16 @@ class IRBuilder:
     def _insert_operation(self, op_decl: Op, operation: Operation) -> None:
         """Insert operation into module symbol state or the current block."""
         if op_decl.has_trait("SymbolDefine"):
-            self._module.add_symbol(symbol_from_operation(operation))
+            symbol_index = self._module.add_symbol(symbol_from_operation(operation))
+            record_operation_value_metadata(
+                self._module,
+                operation,
+                block_index=VALUE_DEF_BLOCK_NONE,
+                op_index=symbol_index,
+                operand_def_count=len(operation.operands)
+                if not operation.regions
+                else 0,
+            )
             return
 
         if self._insertion_block is None:
@@ -373,6 +384,43 @@ class IRBuilder:
                 "block is set."
             )
         self._insertion_block.ops.append(operation)
+        block_index = self._find_block_index(self._insertion_block)
+        if block_index != VALUE_DEF_BLOCK_NONE:
+            record_operation_value_metadata(
+                self._module,
+                operation,
+                block_index=block_index,
+                op_index=len(self._insertion_block.ops) - 1,
+            )
+
+    def _find_block_index(self, target_block: Block) -> int:
+        """Returns target_block's index in an attached region, if any."""
+        for symbol in self._module.symbols:
+            if symbol.op is None:
+                continue
+            block_index = self._find_block_index_in_operation(symbol.op, target_block)
+            if block_index is not None:
+                return block_index
+        return VALUE_DEF_BLOCK_NONE
+
+    def _find_block_index_in_operation(
+        self,
+        operation: Operation,
+        target_block: Block,
+    ) -> int | None:
+        """Returns target_block's index in one of operation's nested regions."""
+        for region in operation.regions:
+            for block_index, block in enumerate(region.blocks):
+                if block is target_block:
+                    return block_index
+                for nested_operation in block.ops:
+                    nested_block_index = self._find_block_index_in_operation(
+                        nested_operation,
+                        target_block,
+                    )
+                    if nested_block_index is not None:
+                        return nested_block_index
+        return None
 
     # --- Generic op building ---
 

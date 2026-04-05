@@ -150,6 +150,8 @@ typedef enum loom_attr_kind_e {
   // DICT values recursively follow the same invariant. Used by ops with
   // AttrDict format elements for extensible metadata.
   LOOM_ATTR_DICT = 9,
+  // Static encoding table index (1-based uint16_t in payload).
+  LOOM_ATTR_ENCODING = 10,
   LOOM_ATTR_COUNT_,
 } loom_attr_kind_t;
 
@@ -176,6 +178,7 @@ typedef struct loom_attribute_t {
     loom_symbol_ref_t symbol;
     int64_t* i64_array;
     loom_type_id_t type_id;
+    uint32_t encoding_id;
     loom_predicate_t* predicate_list;
     const loom_named_attr_t* dict_entries;
     uint64_t raw;
@@ -238,6 +241,14 @@ static inline loom_attribute_t loom_attr_type(loom_type_id_t type_id) {
   loom_attribute_t attr = {0};
   attr.kind = LOOM_ATTR_TYPE;
   attr.type_id = type_id;
+  return attr;
+}
+
+// Constructs a static encoding attribute from a 1-based module encoding ID.
+static inline loom_attribute_t loom_attr_encoding(uint16_t encoding_id) {
+  loom_attribute_t attr = {0};
+  attr.kind = LOOM_ATTR_ENCODING;
+  attr.encoding_id = encoding_id;
   return attr;
 }
 
@@ -391,6 +402,11 @@ static inline loom_symbol_ref_t loom_attr_as_symbol(loom_attribute_t attr) {
 // Returns the type table index of a TYPE attribute.
 static inline loom_type_id_t loom_attr_as_type_id(loom_attribute_t attr) {
   return attr.type_id;
+}
+
+// Returns the 1-based module encoding ID of an ENCODING attribute.
+static inline uint16_t loom_attr_as_encoding_id(loom_attribute_t attr) {
+  return (uint16_t)attr.encoding_id;
 }
 
 // Returns the dictionary entries of a DICT attribute.

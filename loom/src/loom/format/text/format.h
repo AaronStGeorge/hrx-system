@@ -101,6 +101,9 @@
 //   #enc = #q8_0<block=32>
 //   #weights_enc = #q6_k
 //
+// Alias names are file-local, must be unique, and must not shadow a registered
+// encoding family name.
+//
 // ==========================================================================
 // Lexical rules
 // ==========================================================================

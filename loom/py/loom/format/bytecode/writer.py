@@ -78,6 +78,7 @@ ATTR_KIND_SYMBOL = 6
 ATTR_KIND_TYPE = 7
 ATTR_KIND_PREDICATE_LIST = 8
 ATTR_KIND_DICT = 9
+ATTR_KIND_ENCODING = 10
 
 # File magic and version.
 MAGIC = b"LOOM"
@@ -194,18 +195,10 @@ class BytecodeWriter:
             if symbol.op is not None:
                 self._number_func_op(symbol.op)
 
-        # Encodings: intern encoding names, aliases, and param names/values.
+        # Encodings: recursively number child encoding params before parents so
+        # the ENCODINGS section has no forward references.
         for enc in module.encodings:
-            self._ctx.intern_string(enc.name)
-            if enc.alias:
-                self._ctx.intern_string(enc.alias)
-            for param_name, param_value in enc.params:
-                self._ctx.intern_string(param_name)
-                # String param values also need interning.
-                try:
-                    int(param_value)
-                except ValueError:
-                    self._ctx.intern_string(param_value)
+            self._number_encoding_instance(enc)
 
     def _number_func_op(self, op: Operation) -> None:
         """Number all entities in a func-like op (func.def, func.decl, etc.)."""
@@ -282,11 +275,7 @@ class BytecodeWriter:
             case ShapedType(element_type=elem, encoding=enc):
                 self._number_type(elem)
                 if isinstance(enc, EncodingInstance):
-                    self._ctx.intern_string(enc.name)
-                    if enc.alias:
-                        self._ctx.intern_string(enc.alias)
-                    # Ensure encoding is in the module's table.
-                    self._module.add_encoding(enc)
+                    self._number_encoding_instance(enc)
             case FunctionType(arg_types=args, result_types=results):
                 for t in args:
                     self._number_type(t)
@@ -307,6 +296,8 @@ class BytecodeWriter:
         """Intern strings referenced by attribute values."""
         if isinstance(value, str):
             self._ctx.intern_string(value)
+        elif isinstance(value, EncodingInstance):
+            self._number_encoding_instance(value)
         elif isinstance(value, Mapping):
             for k, v in value.items():
                 self._ctx.intern_string(k)
@@ -314,6 +305,16 @@ class BytecodeWriter:
         elif isinstance(value, list | tuple):
             for item in value:
                 self._number_attr_value(item)
+
+    def _number_encoding_instance(self, value: EncodingInstance) -> None:
+        """Intern one static encoding and any nested encoding-valued params."""
+        for param_name, param_value in value.params:
+            self._ctx.intern_string(param_name)
+            self._number_attr_value(param_value)
+        self._ctx.intern_string(value.name)
+        if value.alias:
+            self._ctx.intern_string(value.alias)
+        self._module.add_encoding(value)
 
     # --- Pass 2: Section writers ---
 
@@ -354,36 +355,29 @@ class BytecodeWriter:
         buf = ByteBuffer()
         encodings = self._module.encodings
 
-        # Encoding kind registry: unique encoding names.
-        kind_names: list[str] = []
-        kind_map: dict[str, int] = {}
+        # Encoding family registry from unique encoding names.
+        family_names: list[str] = []
+        family_map: dict[str, int] = {}
         for enc in encodings:
-            if enc.name not in kind_map:
-                kind_map[enc.name] = len(kind_names)
-                kind_names.append(enc.name)
+            if enc.name not in family_map:
+                family_map[enc.name] = len(family_names)
+                family_names.append(enc.name)
 
-        buf.write_varint(len(kind_names))
-        for name in kind_names:
+        buf.write_varint(len(family_names))
+        for name in family_names:
             buf.write_varint(self._ctx.strings[name])
 
         # Encoding instances.
         buf.write_varint(len(encodings))
         for enc in encodings:
-            buf.write_varint(kind_map[enc.name])
+            buf.write_varint(family_map[enc.name])
             alias_id = self._ctx.strings[enc.alias] if enc.alias else 0
             buf.write_varint(alias_id)
             # Structured parameters: same attribute serialization as IR.
             buf.write_varint(len(enc.params))
             for param_name, param_value in enc.params:
                 buf.write_varint(self._ctx.intern_string(param_name))
-                # Try integer first, fall back to string.
-                try:
-                    int_value = int(param_value)
-                    buf.write_u8(ATTR_KIND_I64)
-                    buf.write_signed_varint(int_value)
-                except ValueError:
-                    buf.write_u8(ATTR_KIND_STRING)
-                    buf.write_varint(self._ctx.intern_string(param_value))
+                self._write_attr_value(buf, param_value)
 
         return buf.get_bytes()
 
@@ -409,8 +403,9 @@ class BytecodeWriter:
                 buf.write_u8(kind_byte)
                 buf.write_u8(ir_type.element_type.kind.value)
                 buf.write_u8(ir_type.rank)
-                # Encoding: 0 = none, 1 = static (table index follows),
-                # 2 = dynamic SSA (value_id on the Value, not the type).
+                # Encoding attachment: 0 = none, 1 = static (table index
+                # follows), 2 = dynamic SSA (value_id on the Value, not the
+                # type).
                 if isinstance(ir_type.encoding, DynamicEncoding):
                     buf.write_u8(2)  # dynamic SSA encoding
                     buf.write_varint(0)
@@ -418,17 +413,10 @@ class BytecodeWriter:
                     # Find the encoding in the module's table.
                     enc_index = 0
                     for i, enc in enumerate(self._module.encodings):
-                        if (
-                            enc.name == ir_type.encoding.name
-                            and enc.params == ir_type.encoding.params
-                        ):
+                        if enc == ir_type.encoding:
                             enc_index = i + 1  # 1-based
                             break
-                    buf.write_u8(
-                        ir_type.encoding.encoding_kind
-                        if ir_type.encoding.encoding_kind
-                        else 1
-                    )
+                    buf.write_u8(1)  # static encoding
                     buf.write_varint(enc_index)
                 else:
                     buf.write_u8(0)  # no encoding
@@ -638,6 +626,8 @@ class BytecodeWriter:
 
         # Attributes.
         buf.write_varint(len(op.attributes))
+        # Operation attributes are canonicalized at IR construction time, so
+        # emit the stored order directly.
         for key, value in op.attributes.items():
             buf.write_varint(self._ctx.strings[key])
             self._write_attr_value(buf, value)
@@ -669,9 +659,13 @@ class BytecodeWriter:
         elif isinstance(value, Mapping):
             buf.write_u8(ATTR_KIND_DICT)
             buf.write_varint(len(value))
+            # Nested dict attrs are also canonicalized up front.
             for k, v in value.items():
                 buf.write_varint(self._ctx.intern_string(k))
                 self._write_attr_value(buf, v)
+        elif isinstance(value, EncodingInstance):
+            buf.write_u8(ATTR_KIND_ENCODING)
+            buf.write_varint(self._module.add_encoding(value) + 1)
         elif isinstance(value, list | tuple):
             # Check if all ints → i64_array.
             if all(isinstance(v, int) for v in value):

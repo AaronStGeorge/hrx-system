@@ -15,12 +15,30 @@
 namespace loom {
 namespace {
 
+static const loom_encoding_vtable_t kQ8_0EncodingVtable = {
+    .name = IREE_SV("q8_0"),
+};
+
+static const loom_encoding_vtable_t kQ6KEncodingVtable = {
+    .name = IREE_SV("q6_k"),
+};
+
+static const loom_encoding_vtable_t kDenseEncodingVtable = {
+    .name = IREE_SV("dense"),
+};
+
 class ModuleTest : public ::testing::Test {
  protected:
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    IREE_ASSERT_OK(
+        loom_context_register_encoding_vtable(&context_, &kQ8_0EncodingVtable));
+    IREE_ASSERT_OK(
+        loom_context_register_encoding_vtable(&context_, &kQ6KEncodingVtable));
+    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
+        &context_, &kDenseEncodingVtable));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
   }
 
@@ -1163,6 +1181,97 @@ TEST_F(ModuleTest, AddEncodingDedup) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, AddEncodingDedupStructuralParamsAndBackfillsAlias) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("q8_0"), &name_id));
+  loom_string_id_t shape_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("shape"), &shape_id));
+  loom_string_id_t alias_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("enc"), &alias_id));
+
+  int64_t shape_a[] = {16, 32};
+  int64_t shape_b[] = {16, 32};
+  loom_named_attr_t attrs_a[] = {{
+      .name_id = shape_id,
+      .value = loom_attr_i64_array(shape_a, IREE_ARRAYSIZE(shape_a)),
+  }};
+  loom_named_attr_t attrs_b[] = {{
+      .name_id = shape_id,
+      .value = loom_attr_i64_array(shape_b, IREE_ARRAYSIZE(shape_b)),
+  }};
+
+  loom_encoding_t plain = {
+      .name_id = name_id,
+      .alias_id = LOOM_STRING_ID_INVALID,
+      .attribute_count = 1,
+      .attributes = attrs_a,
+  };
+  loom_encoding_t aliased = {
+      .name_id = name_id,
+      .alias_id = alias_id,
+      .attribute_count = 1,
+      .attributes = attrs_b,
+  };
+
+  uint16_t plain_id = 0;
+  uint16_t aliased_id = 0;
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &plain, &plain_id));
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &aliased, &aliased_id));
+
+  EXPECT_EQ(plain_id, aliased_id);
+  ASSERT_EQ(module->encodings.count, 1u);
+  const loom_encoding_t* encoding = loom_module_encoding(module, plain_id);
+  ASSERT_NE(encoding, nullptr);
+  EXPECT_EQ(encoding->alias_id, alias_id);
+  ASSERT_EQ(encoding->attribute_count, 1u);
+  EXPECT_EQ(encoding->attributes[0].value.count, 2u);
+  ASSERT_NE(encoding->attributes[0].value.i64_array, nullptr);
+  EXPECT_EQ(encoding->attributes[0].value.i64_array[0], 16);
+  EXPECT_EQ(encoding->attributes[0].value.i64_array[1], 32);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, AddEncodingRejectsDuplicateAliasForDifferentEncodings) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t q8_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("q8_0"), &q8_name_id));
+  loom_string_id_t dense_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("dense"), &dense_name_id));
+  loom_string_id_t alias_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("enc"), &alias_id));
+
+  loom_encoding_t q8_encoding = {
+      .name_id = q8_name_id,
+      .alias_id = alias_id,
+  };
+  uint16_t q8_encoding_id = 0;
+  IREE_ASSERT_OK(
+      loom_module_add_encoding(module, &q8_encoding, &q8_encoding_id));
+
+  loom_encoding_t dense_encoding = {
+      .name_id = dense_name_id,
+      .alias_id = alias_id,
+  };
+  uint16_t dense_encoding_id = 0;
+  iree_status_t status =
+      loom_module_add_encoding(module, &dense_encoding, &dense_encoding_id);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  EXPECT_EQ(module->encodings.count, 1u);
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, AddEncodingDifferentParams) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
@@ -1200,6 +1309,47 @@ TEST_F(ModuleTest, AddEncodingDifferentParams) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, AddEncodingRejectsUnknownFamilyWhenRegistryIsPopulated) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t unknown_name_id = 0;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("mystery_q"),
+                                           &unknown_name_id));
+  loom_encoding_t encoding = {
+      .name_id = unknown_name_id,
+      .alias_id = LOOM_STRING_ID_INVALID,
+  };
+  uint16_t encoding_id = 0;
+  iree_status_t status =
+      loom_module_add_encoding(module, &encoding, &encoding_id);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  EXPECT_EQ(module->encodings.count, 0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, EncodingVtableLookupReturnsRegisteredFamily) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("q8_0"), &name_id));
+  loom_encoding_t encoding = {
+      .name_id = name_id,
+      .alias_id = LOOM_STRING_ID_INVALID,
+  };
+  uint16_t encoding_id = 0;
+  IREE_ASSERT_OK(loom_module_add_encoding(module, &encoding, &encoding_id));
+
+  EXPECT_EQ(loom_module_encoding_vtable(module, encoding_id),
+            &kQ8_0EncodingVtable);
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, EncodingLookupOutOfRange) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
@@ -1207,6 +1357,9 @@ TEST_F(ModuleTest, EncodingLookupOutOfRange) {
   EXPECT_EQ(loom_module_encoding(module, 0), nullptr);
   EXPECT_EQ(loom_module_encoding(module, 1), nullptr);
   EXPECT_EQ(loom_module_encoding(module, UINT16_MAX), nullptr);
+  EXPECT_EQ(loom_module_encoding_vtable(module, 0), nullptr);
+  EXPECT_EQ(loom_module_encoding_vtable(module, 1), nullptr);
+  EXPECT_EQ(loom_module_encoding_vtable(module, UINT16_MAX), nullptr);
   loom_module_free(module);
 }
 

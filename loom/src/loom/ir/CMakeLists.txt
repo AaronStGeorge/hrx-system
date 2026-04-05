@@ -41,6 +41,7 @@ loom_cc_library(
   HDRS
     "attribute.h"
     "context.h"
+    "encoding.h"
     "ir.h"
     "location.h"
     "module.h"
@@ -49,6 +50,7 @@ loom_cc_library(
   SRCS
     "attribute.c"
     "context.c"
+    "encoding.c"
     "location.c"
     "module.c"
     "scalar_type.c"
@@ -66,6 +68,17 @@ loom_cc_test(
     context_test
   SRCS
     "context_test.cc"
+  DEPS
+    ::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    encoding_test
+  SRCS
+    "encoding_test.cc"
   DEPS
     ::ir
     iree::testing::gtest

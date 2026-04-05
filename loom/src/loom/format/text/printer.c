@@ -140,6 +140,56 @@ static iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
   return loom_output_stream_write_cstring(stream, "%?");
 }
 
+static iree_status_t loom_print_canonical_encoding(
+    loom_output_stream_t* stream, const loom_module_t* module,
+    const loom_encoding_t* encoding) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(encoding);
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '#'));
+  if (encoding->name_id < module->strings.count) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(
+        stream, module->strings.entries[encoding->name_id]));
+  }
+  if (encoding->attribute_count == 0) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '<'));
+  for (uint8_t i = 0; i < encoding->attribute_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+    }
+    const loom_named_attr_t* param = &encoding->attributes[i];
+    if (param->name_id < module->strings.count) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write(
+          stream, module->strings.entries[param->name_id]));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '='));
+    IREE_RETURN_IF_ERROR(loom_print_attr(stream, &param->value, module, NULL));
+  }
+  return loom_output_stream_write_char(stream, '>');
+}
+
+static iree_status_t loom_print_static_encoding(loom_output_stream_t* stream,
+                                                const loom_module_t* module,
+                                                uint16_t encoding_id) {
+  if (module && encoding_id > 0 && encoding_id <= module->encodings.count) {
+    const loom_encoding_t* encoding =
+        &module->encodings.entries[encoding_id - 1];
+    if (encoding->alias_id != LOOM_STRING_ID_INVALID &&
+        encoding->alias_id < module->strings.count) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '#'));
+      return loom_output_stream_write(
+          stream, module->strings.entries[encoding->alias_id]);
+    }
+    return loom_print_canonical_encoding(stream, module, encoding);
+  }
+
+  return loom_output_stream_write_format(stream, "#encoding_%" PRIu16,
+                                         encoding_id);
+}
+
 static iree_status_t loom_print_dim(loom_output_stream_t* stream,
                                     loom_type_t type,
                                     iree_host_size_t dim_index,
@@ -177,45 +227,9 @@ static iree_status_t loom_print_shaped_interior(loom_output_stream_t* stream,
       // SSA encoding: %name (or %N if unnamed).
       IREE_RETURN_IF_ERROR(loom_print_value_ref(
           stream, module, loom_type_encoding_value_id(type)));
-    } else if (module && type.encoding_id > 0 &&
-               type.encoding_id <= module->encodings.count) {
-      // Static encoding — look up from the module encoding table.
-      const loom_encoding_t* encoding =
-          &module->encodings.entries[type.encoding_id - 1];
-      // Use alias if available, otherwise #name<params>.
-      if (encoding->alias_id != LOOM_STRING_ID_INVALID &&
-          encoding->alias_id < module->strings.count) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write(
-            stream, module->strings.entries[encoding->alias_id]));
-      } else {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '#'));
-        if (encoding->name_id < module->strings.count) {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write(
-              stream, module->strings.entries[encoding->name_id]));
-        }
-        if (encoding->attribute_count > 0) {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '<'));
-          for (uint8_t i = 0; i < encoding->attribute_count; ++i) {
-            if (i > 0) {
-              IREE_RETURN_IF_ERROR(
-                  loom_output_stream_write_cstring(stream, ", "));
-            }
-            const loom_named_attr_t* param = &encoding->attributes[i];
-            if (param->name_id < module->strings.count) {
-              IREE_RETURN_IF_ERROR(loom_output_stream_write(
-                  stream, module->strings.entries[param->name_id]));
-            }
-            IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '='));
-            IREE_RETURN_IF_ERROR(
-                loom_print_attr(stream, &param->value, module, NULL));
-          }
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '>'));
-        }
-      }
     } else {
-      // Encoding ID but no module context or out of range — print raw ID.
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          stream, "#encoding_%" PRIu16, type.encoding_id));
+      IREE_RETURN_IF_ERROR(
+          loom_print_static_encoding(stream, module, type.encoding_id));
     }
   }
   return iree_ok_status();
@@ -344,43 +358,9 @@ static iree_status_t loom_text_print_result_type(loom_type_t type,
         if (loom_type_has_ssa_encoding(type)) {
           IREE_RETURN_IF_ERROR(loom_print_value_ref(
               stream, module, loom_type_encoding_value_id(type)));
-        } else if (module && type.encoding_id > 0 &&
-                   type.encoding_id <= module->encodings.count) {
-          const loom_encoding_t* encoding =
-              &module->encodings.entries[type.encoding_id - 1];
-          if (encoding->alias_id != LOOM_STRING_ID_INVALID &&
-              encoding->alias_id < module->strings.count) {
-            IREE_RETURN_IF_ERROR(loom_output_stream_write(
-                stream, module->strings.entries[encoding->alias_id]));
-          } else {
-            IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '#'));
-            if (encoding->name_id < module->strings.count) {
-              IREE_RETURN_IF_ERROR(loom_output_stream_write(
-                  stream, module->strings.entries[encoding->name_id]));
-            }
-            if (encoding->attribute_count > 0) {
-              IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '<'));
-              for (uint8_t i = 0; i < encoding->attribute_count; ++i) {
-                if (i > 0) {
-                  IREE_RETURN_IF_ERROR(
-                      loom_output_stream_write_cstring(stream, ", "));
-                }
-                const loom_named_attr_t* param = &encoding->attributes[i];
-                if (param->name_id < module->strings.count) {
-                  IREE_RETURN_IF_ERROR(loom_output_stream_write(
-                      stream, module->strings.entries[param->name_id]));
-                }
-                IREE_RETURN_IF_ERROR(
-                    loom_output_stream_write_char(stream, '='));
-                IREE_RETURN_IF_ERROR(
-                    loom_print_attr(stream, &param->value, module, NULL));
-              }
-              IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '>'));
-            }
-          }
         } else {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-              stream, "#encoding_%" PRIu16, type.encoding_id));
+          IREE_RETURN_IF_ERROR(
+              loom_print_static_encoding(stream, module, type.encoding_id));
         }
       }
       return loom_output_stream_write_cstring(stream, ">");
@@ -577,6 +557,9 @@ static iree_status_t loom_print_attr(loom_output_stream_t* stream,
     case LOOM_ATTR_TYPE:
       return loom_output_stream_write_format(stream, "type<%" PRIu32 ">",
                                              attr->type_id);
+    case LOOM_ATTR_ENCODING:
+      return loom_print_static_encoding(stream, module,
+                                        loom_attr_as_encoding_id(*attr));
     case LOOM_ATTR_DICT: {
       if (attr->count > 0 && !attr->dict_entries) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1511,6 +1494,25 @@ static iree_status_t loom_print_module_body(loom_print_context_t* ctx,
   return iree_ok_status();
 }
 
+static iree_status_t loom_print_encoding_aliases(loom_print_context_t* ctx,
+                                                 const loom_module_t* module) {
+  for (uint16_t i = 0; i < module->encodings.count; ++i) {
+    const loom_encoding_t* encoding = &module->encodings.entries[i];
+    if (encoding->alias_id == LOOM_STRING_ID_INVALID ||
+        encoding->alias_id >= module->strings.count) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '#'));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(
+        ctx->stream, module->strings.entries[encoding->alias_id]));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, " = "));
+    IREE_RETURN_IF_ERROR(
+        loom_print_canonical_encoding(ctx->stream, module, encoding));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
+  }
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Public API
 //===----------------------------------------------------------------------===//
@@ -1524,6 +1526,7 @@ iree_status_t loom_text_print_module(const loom_module_t* module,
       .module = module,
       .flags = flags,
   };
+  IREE_RETURN_IF_ERROR(loom_print_encoding_aliases(&ctx, module));
   return loom_print_module_body(&ctx, module->body);
 }
 

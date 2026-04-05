@@ -174,6 +174,7 @@ ATTR_KIND_MAP: dict[str, str] = {
     "i64_array": "LOOM_ATTR_I64_ARRAY",
     "symbol": "LOOM_ATTR_SYMBOL",
     "type": "LOOM_ATTR_TYPE",
+    "encoding": "LOOM_ATTR_ENCODING",
     "predicate_list": "LOOM_ATTR_PREDICATE_LIST",
     "dict": "LOOM_ATTR_DICT",
     "any": "LOOM_ATTR_I64",  # Default to i64 for generic "any" attrs.
@@ -691,6 +692,7 @@ _C_ATTR_TYPE_MAP: dict[str, str] = {
     "symbol": "loom_symbol_ref_t",
     "i64_array": "const int64_t*",
     "type": "uint32_t",
+    "encoding": "uint16_t",
     "dict": "loom_named_attr_slice_t",
     "any": "loom_attribute_t",
 }
@@ -1244,6 +1246,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
                 "enum": f"loom_attr_enum({name})",
                 "symbol": f"loom_attr_symbol({name})",
                 "type": f"loom_attr_type({name})",
+                "encoding": f"loom_attr_encoding({name})",
                 "any": name,
             }
             constructor = constructor_map.get(attr_type, name)
@@ -1474,6 +1477,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 "string": "LOOM_DEFINE_ATTR_STRING",
                 "bool": "LOOM_DEFINE_ATTR_BOOL",
                 "dict": "LOOM_DEFINE_ATTR_DICT",
+                "encoding": "LOOM_DEFINE_ATTR_ENCODING",
                 "enum": "LOOM_DEFINE_ATTR_ENUM",
                 "symbol": "LOOM_DEFINE_ATTR_SYMBOL",
             }

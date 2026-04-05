@@ -369,17 +369,16 @@ def _generate_method(op: Op) -> list[str]:
     method_name = op.short_name
 
     # Build parameter list.
-    param_strs = ["self"]
-    param_strs.append("*")  # Force keyword-only.
+    keyword_param_strs: list[str] = []
     for param in params:
         if param["kind"] == "result_types":
-            param_strs.append(f"{param['name']}: {param['type_hint']}")
+            keyword_param_strs.append(f"{param['name']}: {param['type_hint']}")
         elif param["kind"] == "region":
-            param_strs.append(f"{param['name']}: {param['type_hint']} = None")
+            keyword_param_strs.append(f"{param['name']}: {param['type_hint']} = None")
         elif param.get("optional"):
-            param_strs.append(f"{param['name']}: {param['type_hint']} | None = None")
+            keyword_param_strs.append(f"{param['name']}: {param['type_hint']} | None = None")
         else:
-            param_strs.append(f"{param['name']}: {param['type_hint']}")
+            keyword_param_strs.append(f"{param['name']}: {param['type_hint']}")
 
     # Determine return type.
     result_count = len(op.results)
@@ -396,7 +395,12 @@ def _generate_method(op: Op) -> list[str]:
     has_func_args = any(p["kind"] == "func_args" for p in params)
     # If no ResultTypeList but op has results, add result_types param.
     if not has_result_type_list and result_count > 0:
-        param_strs.append("result_types: list[Type]")
+        keyword_param_strs.append("result_types: list[Type]")
+
+    param_strs = ["self"]
+    if keyword_param_strs:
+        param_strs.append("*")
+        param_strs.extend(keyword_param_strs)
 
     lines: list[str] = []
 

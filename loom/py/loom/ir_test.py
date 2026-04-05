@@ -23,6 +23,8 @@ from loom.ir import (
     LOCATION_UNKNOWN,
     NONE_TYPE,
     SYMBOL_FLAG_PUBLIC,
+    VALUE_DEF_BLOCK_NONE,
+    VALUE_DEF_OP_NONE,
     VALUE_FLAG_BLOCK_ARG,
     VALUE_FLAG_CONSUMED,
     Block,
@@ -61,6 +63,9 @@ from loom.ir import (
     evaluate_predicate,
     evaluate_predicates,
     parse_scalar_type_kind,
+    rebuild_value_metadata,
+    record_block_value_metadata,
+    record_operation_value_metadata,
     replace_canonical_attr_dict,
     scalar_type_name,
 )
@@ -178,12 +183,12 @@ class TestShapedTypes:
         assert repr(t) == "tile<256xi8>"
 
     def test_tile_with_encoding(self) -> None:
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32),))
         t = ShapedType(TypeKind.TILE, F32, (StaticDim(256),), encoding=enc)
         assert t.has_encoding
         assert isinstance(t.encoding, EncodingInstance)
         assert t.encoding.name == "q8_0"
-        assert t.encoding.params == (("block", "32"),)
+        assert t.encoding.params == (("block", 32),)
 
     def test_shaped_type_equality(self) -> None:
         a = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
@@ -436,10 +441,64 @@ class TestValues:
         v = Value(name="t", type=ty, encoding_binding=42)
         assert v.encoding_binding == 42
 
+    def test_definition_defaults_are_explicitly_unattached(self) -> None:
+        v = Value(name="x", type=F32)
+        assert v.def_op_index == VALUE_DEF_OP_NONE
+        assert v.def_block_index == VALUE_DEF_BLOCK_NONE
+        assert v.def_result_index == 0
+
     def test_uses(self) -> None:
         v = Value(name="x", type=F32)
         v.uses.append(Use(user_op_index=0, operand_index=0, block_index=0))
         assert len(v.uses) == 1
+
+    def test_record_block_and_operation_value_metadata(self) -> None:
+        module = Module()
+        arg_id = module.add_value(Value(name="arg", type=F32))
+        result_id = module.add_value(Value(name="r", type=F32))
+        block = Block(
+            arg_ids=[arg_id],
+            ops=[Operation(name="test.neg", operands=[arg_id], results=[result_id])],
+        )
+        record_block_value_metadata(module, block, block_index=2)
+
+        arg = module.values[arg_id]
+        assert arg.is_block_arg
+        assert arg.def_op_index == VALUE_DEF_OP_NONE
+        assert arg.def_block_index == 2
+        assert arg.def_result_index == 0
+        assert arg.uses == [Use(user_op_index=0, operand_index=0, block_index=2)]
+
+        result = module.values[result_id]
+        assert not result.is_block_arg
+        assert result.def_op_index == 0
+        assert result.def_block_index == 2
+        assert result.def_result_index == 0
+
+    def test_record_operation_value_metadata_supports_operand_defs(self) -> None:
+        module = Module()
+        arg_id = module.add_value(Value(name="x", type=F32))
+        result_id = module.add_value(Value(name="r", type=F32))
+        op = Operation(name="test.decl", operands=[arg_id], results=[result_id])
+        record_operation_value_metadata(
+            module,
+            op,
+            block_index=VALUE_DEF_BLOCK_NONE,
+            op_index=5,
+            operand_def_count=1,
+        )
+
+        arg = module.values[arg_id]
+        assert not arg.is_block_arg
+        assert arg.def_op_index == 5
+        assert arg.def_block_index == VALUE_DEF_BLOCK_NONE
+        assert arg.def_result_index == 0
+        assert arg.uses == []
+
+        result = module.values[result_id]
+        assert result.def_op_index == 5
+        assert result.def_block_index == VALUE_DEF_BLOCK_NONE
+        assert result.def_result_index == 0
 
 
 # ============================================================================
@@ -724,12 +783,34 @@ class TestModule:
     def test_add_encoding(self) -> None:
         m = Module()
         enc = EncodingInstance(
-            name="q8_0", encoding_kind=1, alias="#enc", params=(("block", "32"),)
+            name="q8_0",
+            alias="enc",
+            params=(("block", 32),),
         )
         idx = m.add_encoding(enc)
         assert idx == 0
-        assert m.encodings[idx].alias == "#enc"
+        assert m.encodings[idx].alias == "enc"
         assert m.encodings[idx].name == "q8_0"
+
+    def test_add_encoding_deduplicates_alias_independently_of_params(self) -> None:
+        m = Module()
+        plain = EncodingInstance(name="q8_0", params=(("block", 32),))
+        aliased = EncodingInstance(name="q8_0", alias="enc", params=(("block", 32),))
+        plain_idx = m.add_encoding(plain)
+        aliased_idx = m.add_encoding(aliased)
+
+        assert plain_idx == 0
+        assert aliased_idx == 0
+        assert m.encodings[0].alias == "enc"
+        assert m.encodings[0].params == (("block", 32),)
+
+    def test_add_encoding_rejects_duplicate_alias_for_different_encodings(
+        self,
+    ) -> None:
+        m = Module()
+        assert m.add_encoding(EncodingInstance(name="q8_0", alias="enc")) == 0
+        with pytest.raises(ValueError, match="already names a different encoding"):
+            m.add_encoding(EncodingInstance(name="dense", alias="enc"))
 
     def test_add_symbol(self) -> None:
         m = Module()
@@ -737,6 +818,40 @@ class TestModule:
         sym = Symbol(name="foo", kind=SymbolKind.FUNC_DEF, op=func_op)
         sid = m.add_symbol(sym)
         assert m.symbols[sid].name == "foo"
+
+    def test_rebuild_value_metadata(self) -> None:
+        m = Module()
+        arg_id = m.add_value(Value(name="x", type=F32))
+        result_id = m.add_value(Value(name="r", type=F32))
+        neg_op = Operation(name="test.neg", operands=[arg_id], results=[result_id])
+        block = Block(arg_ids=[arg_id], ops=[neg_op])
+        func_op = Operation(
+            name="func.def",
+            attributes={"callee": "f"},
+            regions=[Region(blocks=[block])],
+        )
+        m.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+
+        # Seed stale metadata so the test verifies a real rebuild.
+        m.values[arg_id].flags |= VALUE_FLAG_CONSUMED
+        m.values[arg_id].def_block_index = 99
+        m.values[arg_id].uses.append(
+            Use(user_op_index=42, operand_index=7, block_index=3)
+        )
+        rebuild_value_metadata(m)
+
+        arg = m.values[arg_id]
+        assert arg.is_block_arg
+        assert arg.is_consumed
+        assert arg.def_op_index == VALUE_DEF_OP_NONE
+        assert arg.def_block_index == 0
+        assert arg.def_result_index == 0
+        assert arg.uses == [Use(user_op_index=0, operand_index=0, block_index=0)]
+
+        result = m.values[result_id]
+        assert result.def_op_index == 0
+        assert result.def_block_index == 0
+        assert result.def_result_index == 0
 
     def test_string_interning(self) -> None:
         m = Module()
@@ -758,25 +873,40 @@ class TestModule:
 
 class TestEncodingInstance:
     def test_basic(self) -> None:
-        enc = EncodingInstance(name="q8_0", encoding_kind=1)
+        enc = EncodingInstance(name="q8_0")
         assert enc.name == "q8_0"
-        assert enc.encoding_kind == 1
         assert enc.alias == ""
         assert enc.params == ()
 
     def test_with_params(self) -> None:
         enc = EncodingInstance(
-            name="q8_0", encoding_kind=1, alias="#enc", params=(("block", "32"),)
+            name="q8_0",
+            alias="enc",
+            params=(("block", 32),),
         )
-        assert enc.alias == "#enc"
+        assert enc.alias == "enc"
         assert len(enc.params) == 1
-        assert enc.params[0] == ("block", "32")
+        assert enc.params[0] == ("block", 32)
 
     def test_hashable(self) -> None:
-        a = EncodingInstance(name="q8_0", encoding_kind=1, params=(("block", "32"),))
-        b = EncodingInstance(name="q8_0", encoding_kind=1, params=(("block", "32"),))
+        a = EncodingInstance(name="q8_0", params=(("block", 32),))
+        b = EncodingInstance(name="q8_0", alias="enc", params=(("block", 32),))
         assert a == b
         assert hash(a) == hash(b)
+
+    def test_params_are_sorted_canonically(self) -> None:
+        enc = EncodingInstance(
+            name="q8_0",
+            params=(("group_size", 128), ("block", 32)),
+        )
+        assert enc.params == (("block", 32), ("group_size", 128))
+
+    def test_duplicate_params_rejected(self) -> None:
+        with pytest.raises(ValueError, match="duplicate encoding parameter"):
+            EncodingInstance(
+                name="q8_0",
+                params=(("block", 32), ("block", 64)),
+            )
 
 
 # ============================================================================

@@ -67,6 +67,7 @@ from loom.ir import (
     GROUP_SCOPE_BY_NAME,
     NONE_TYPE,
     PREDICATE_KINDS,
+    VALUE_DEF_BLOCK_NONE,
     Block,
     CanonicalAttrDict,
     DialectType,
@@ -94,6 +95,8 @@ from loom.ir import (
     TypeKind,
     Value,
     binding_element_type,
+    rebuild_value_metadata,
+    record_operation_value_metadata,
     symbol_from_operation,
 )
 from loom.ir import (
@@ -117,6 +120,162 @@ __all__ = [
 # in the call chain. Reset to None/empty between parses.
 _CURRENT_ALIASES: dict[str, EncodingInstance] | None = None
 _CURRENT_KNOWN_ENCODINGS: set[str] | None = None
+
+_ATTR_DICT_MAX_NESTING_DEPTH = 16
+
+
+def _parse_generic_attr_value_from_tokens(
+    tokenizer: Tokenizer,
+    module: Module,
+    filename: str,
+    *,
+    attr_dict_nesting_depth: int = 0,
+) -> Any:
+    """Parse an untyped attr value from the current token stream."""
+    if tokenizer.at(TokenKind.INTEGER):
+        return int(tokenizer.next().text)
+    if tokenizer.at(TokenKind.FLOAT):
+        return float(tokenizer.next().text)
+    if tokenizer.at(TokenKind.STRING):
+        text = tokenizer.next().text
+        return text[1:-1]
+    if tokenizer.at(TokenKind.BARE_IDENT):
+        text = tokenizer.next().text
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+        return text
+    if tokenizer.at(TokenKind.HASH_ATTR):
+        return _parse_static_encoding_from_tokens(
+            tokenizer,
+            module,
+            filename,
+            attr_dict_nesting_depth=attr_dict_nesting_depth,
+            aliases=_CURRENT_ALIASES,
+            known_encodings=_CURRENT_KNOWN_ENCODINGS,
+        )
+    if tokenizer.at(TokenKind.LBRACKET):
+        tokenizer.next()
+        values: list[int] = []
+        if not tokenizer.at(TokenKind.RBRACKET):
+            values.append(int(tokenizer.expect(TokenKind.INTEGER).text))
+            while tokenizer.try_consume(TokenKind.COMMA):
+                values.append(int(tokenizer.expect(TokenKind.INTEGER).text))
+        tokenizer.expect(TokenKind.RBRACKET)
+        return values
+    if tokenizer.at(TokenKind.LBRACE):
+        open_brace_token = tokenizer.next()
+        if attr_dict_nesting_depth >= _ATTR_DICT_MAX_NESTING_DEPTH:
+            raise ParseError(
+                "attribute dict nesting exceeds maximum depth "
+                f"{_ATTR_DICT_MAX_NESTING_DEPTH}",
+                open_brace_token.location,
+                filename,
+            )
+        entries: list[tuple[str, Any]] = []
+        seen_keys: set[str] = set()
+        while not tokenizer.at(TokenKind.RBRACE):
+            key_token = tokenizer.expect(TokenKind.BARE_IDENT)
+            if key_token.text in seen_keys:
+                raise ParseError(
+                    f"duplicate attribute dict key '{key_token.text}'",
+                    key_token.location,
+                    filename,
+                )
+            seen_keys.add(key_token.text)
+            tokenizer.expect(TokenKind.EQUALS)
+            value = _parse_generic_attr_value_from_tokens(
+                tokenizer,
+                module,
+                filename,
+                attr_dict_nesting_depth=attr_dict_nesting_depth + 1,
+            )
+            entries.append((key_token.text, value))
+            tokenizer.try_consume(TokenKind.COMMA)
+        tokenizer.expect(TokenKind.RBRACE)
+        return CanonicalAttrDict(entries)
+
+    token = tokenizer.peek()
+    raise ParseError(
+        f"expected attribute value, got {token.kind.name}",
+        token.location,
+        filename,
+    )
+
+
+def _parse_static_encoding_params_from_tokens(
+    tokenizer: Tokenizer,
+    module: Module,
+    filename: str,
+    *,
+    attr_dict_nesting_depth: int = 0,
+) -> tuple[tuple[str, Any], ...]:
+    """Parse '<name = value, ...>' after a static encoding family name."""
+    tokenizer.expect(TokenKind.LANGLE)
+    entries: list[tuple[str, Any]] = []
+    seen_names: set[str] = set()
+    if not tokenizer.at(TokenKind.RANGLE):
+        while True:
+            name_token = tokenizer.expect(TokenKind.BARE_IDENT)
+            if name_token.text in seen_names:
+                raise ParseError(
+                    f"duplicate encoding parameter '{name_token.text}'",
+                    name_token.location,
+                    filename,
+                )
+            seen_names.add(name_token.text)
+            tokenizer.expect(TokenKind.EQUALS)
+            value = _parse_generic_attr_value_from_tokens(
+                tokenizer,
+                module,
+                filename,
+                attr_dict_nesting_depth=attr_dict_nesting_depth,
+            )
+            entries.append((name_token.text, value))
+            if not tokenizer.try_consume(TokenKind.COMMA):
+                break
+    tokenizer.expect(TokenKind.RANGLE)
+    return tuple(entries)
+
+
+def _parse_static_encoding_from_tokens(
+    tokenizer: Tokenizer,
+    module: Module,
+    filename: str,
+    *,
+    attr_dict_nesting_depth: int = 0,
+    aliases: dict[str, EncodingInstance] | None = None,
+    known_encodings: set[str] | None = None,
+) -> EncodingInstance:
+    """Parse '#alias', '#family', or '#family<name = value, ...>'."""
+    token = tokenizer.expect(TokenKind.HASH_ATTR)
+    if aliases is not None:
+        aliased = aliases.get(token.text)
+        if aliased is not None:
+            module.add_encoding(aliased)
+            return aliased
+
+    params: tuple[tuple[str, Any], ...] = ()
+    if tokenizer.at(TokenKind.LANGLE):
+        params = _parse_static_encoding_params_from_tokens(
+            tokenizer,
+            module,
+            filename,
+            attr_dict_nesting_depth=attr_dict_nesting_depth,
+        )
+
+    if known_encodings is not None and token.text not in known_encodings:
+        raise ParseError(
+            f"unknown encoding '{token.text}'. "
+            f"Known encodings: {sorted(known_encodings)}",
+            token.location,
+            filename,
+        )
+
+    instance = EncodingInstance(name=token.text, params=params)
+    module.add_encoding(instance)
+    return instance
 
 
 # ============================================================================
@@ -312,49 +471,13 @@ def _parse_type_encoding_from_tokens(
         return DynamicEncoding(), value_id
 
     if token.kind == TokenKind.HASH_ATTR:
-        tokenizer.next()
-        # Reconstruct full text with '#' for alias lookup.
-        full_text = f"#{token.text}"
-
-        # Check alias table.
-        if _CURRENT_ALIASES and full_text in _CURRENT_ALIASES:
-            aliased = _CURRENT_ALIASES[full_text]
-            instance = EncodingInstance(
-                name=aliased.name, alias=full_text, params=aliased.params
-            )
-            module.add_encoding(instance)
-            return instance, -1
-
-        # Parse inline encoding: #name or #name<params>.
-        name = token.text
-        params: tuple[tuple[str, str], ...] = ()
-        if tokenizer.try_consume(TokenKind.LANGLE):
-            param_list: list[tuple[str, str]] = []
-            while not tokenizer.at(TokenKind.RANGLE) and not tokenizer.at(
-                TokenKind.EOF
-            ):
-                key_token = tokenizer.expect(TokenKind.BARE_IDENT)
-                tokenizer.expect(TokenKind.EQUALS)
-                value_token = tokenizer.next()
-                param_list.append((key_token.text, value_token.text))
-                tokenizer.try_consume(TokenKind.COMMA)
-            tokenizer.expect(TokenKind.RANGLE)
-            params = tuple(param_list)
-
-        # Validate encoding name if registry is available.
-        if (
-            _CURRENT_KNOWN_ENCODINGS is not None
-            and name not in _CURRENT_KNOWN_ENCODINGS
-        ):
-            raise ParseError(
-                f"unknown encoding '{name}'. "
-                f"Known encodings: {sorted(_CURRENT_KNOWN_ENCODINGS)}",
-                token.location,
-                filename,
-            )
-
-        instance = EncodingInstance(name=name, params=params)
-        module.add_encoding(instance)
+        instance = _parse_static_encoding_from_tokens(
+            tokenizer,
+            module,
+            filename,
+            aliases=_CURRENT_ALIASES,
+            known_encodings=_CURRENT_KNOWN_ENCODINGS,
+        )
         return instance, -1
 
     if token.kind == TokenKind.RESULT_ORDINAL:
@@ -593,21 +716,10 @@ def _parse_type_interior(
 ) -> tuple[Type, dict[int, int]]:
     """Parse the interior of a parameterized type.
 
-    The type_def's format spec drives the parse. For built-in shaped
-    types (tile, tensor), the format contains ShapeOf, ScalarOf,
-    EncodingOf elements. For dialect types (vm.ref), it contains
-    TypeOf elements.
+    The type_def's format spec drives the parse for dialect types
+    such as vm.ref<T>. Built-in shaped types use
+    _parse_shaped_type_from_tokens directly.
     """
-    # For shaped types, we use the character-level sub-parser since
-    # the interior (4x4xf32, [%M]x4xf32, etc.) doesn't tokenize
-    # cleanly with the main tokenizer.
-    has_shape = any(isinstance(p, ShapeParam) for p in type_def.params)
-    if has_shape:
-        return _parse_shaped_interior(
-            type_def, interior, scope, module, type_registry, mode, location, filename
-        )
-
-    # For non-shaped types, tokenize the interior and walk the format.
     interior_tokenizer = Tokenizer(interior, filename)
     parsed_params: list[Type] = []
     parsed_attrs: dict[str, Any] = {}
@@ -781,336 +893,6 @@ def _parse_shaped_type_from_tokens(
     return shaped, dim_bindings
 
 
-# The old character-level sub-parsers below are no longer called from
-# the main type parsing path. They are retained temporarily for
-# reference until the migration is verified complete.
-
-
-def _parse_shaped_interior(
-    type_def: TypeDef,
-    interior: str,
-    scope: NameScope,
-    module: Module,
-    type_registry: dict[str, TypeDef],
-    mode: TypeParseMode,
-    location: SourceLocation,
-    filename: str,
-) -> tuple[ShapedType | PoolType, dict[int, int]]:
-    """Parse the interior of tile<...> or tensor<...>.
-
-    Character-level sub-parser for: 4x4xf32, [%M]x4xf32,
-    256xi8, #q8_0<block=32>, f32 (0-d), etc.
-
-    DEPRECATED: Use _parse_shaped_type_from_tokens instead.
-    """
-    # Pool type: single dim, no element type, no encoding.
-    if type_def.ir_kind == "pool":
-        return _parse_pool_interior(interior, scope, module, mode, location, filename)
-
-    _IR_KIND_TO_TYPE_KIND = {
-        "tile": TypeKind.TILE,
-        "tensor": TypeKind.TENSOR,
-    }
-    type_kind = _IR_KIND_TO_TYPE_KIND.get(type_def.ir_kind)
-    if type_kind is None:
-        raise ParseError(
-            f"TypeDef '{type_def.name}' has ShapeParam but ir_kind "
-            f"'{type_def.ir_kind}' is not a recognized shaped type kind. "
-            f"Use ir_kind='tile' or ir_kind='tensor', or implement "
-            f"DialectType-based shaped type support.",
-            location,
-            filename,
-        )
-
-    # Split shape+element from encoding on first ',' outside nested <>.
-    shape_part, encoding_part = _split_on_comma(interior)
-
-    # Parse shape+element.
-    dims, element_type, dim_bindings = _parse_dims_and_element(
-        shape_part.strip(), scope, module, mode, location, filename
-    )
-
-    # Parse encoding if present.
-    encoding: EncodingInstance | DynamicEncoding | None = None
-    if encoding_part is not None:
-        encoding_text = encoding_part.strip()
-        if encoding_text.startswith("%"):
-            # SSA value reference — dynamic encoding bound at use site.
-            enc_bare_name = encoding_text[1:]  # Strip % sigil.
-            try:
-                enc_value_id = scope.lookup(enc_bare_name)
-            except KeyError:
-                raise ParseError(
-                    f"undefined encoding value '{encoding_text}' in type",
-                    location,
-                    filename,
-                ) from None
-            # Verify the referenced value has EncodingType.
-            if enc_value_id < len(module.values):
-                enc_value = module.values[enc_value_id]
-                if not isinstance(enc_value.type, EncodingType):
-                    raise ParseError(
-                        f"encoding reference '{encoding_text}' has type "
-                        f"'{enc_value.type}', expected encoding",
-                        location,
-                        filename,
-                    )
-            encoding = DynamicEncoding()
-            # Use sentinel key -1 in dim_bindings for encoding binding.
-            dim_bindings[-1] = enc_value_id
-        else:
-            encoding = _parse_encoding_instance(
-                encoding_text,
-                module,
-                location,
-                filename,
-                aliases=_CURRENT_ALIASES,
-                known_encodings=_CURRENT_KNOWN_ENCODINGS,
-            )
-
-    shaped = ShapedType(
-        type_kind=type_kind,
-        element_type=element_type,
-        dims=tuple(dims),
-        encoding=encoding,
-    )
-    return shaped, dim_bindings
-
-
-def _split_on_comma(text: str) -> tuple[str, str | None]:
-    """Split on first ',' not inside nested <>."""
-    depth = 0
-    for i, character in enumerate(text):
-        if character == "<":
-            depth += 1
-        elif character == ">":
-            depth -= 1
-        elif character == "," and depth == 0:
-            return text[:i], text[i + 1 :]
-    return text, None
-
-
-def _parse_dims_and_element(
-    text: str,
-    scope: NameScope,
-    module: Module,
-    mode: TypeParseMode,
-    location: SourceLocation,
-    filename: str,
-) -> tuple[list[StaticDim | DynamicDim], ScalarType, dict[int, int]]:
-    """Parse '4x4xf32' or '[%M]x4xf32' or 'f32' (0-d)."""
-    dim_bindings: dict[int, int] = {}
-    segments = _split_on_x(text)
-
-    if not segments:
-        raise ParseError(f"empty shaped type interior: '{text}'", location, filename)
-
-    # Last segment is the element type.
-    element_text = segments[-1].strip()
-    scalar_kind = _SCALAR_NAMES.get(element_text)
-    if scalar_kind is None:
-        raise ParseError(
-            f"unknown element type '{element_text}' in shaped type", location, filename
-        )
-    element_type = ScalarType(scalar_kind)
-
-    # Preceding segments are dims.
-    dims: list[StaticDim | DynamicDim] = []
-    for i, segment in enumerate(segments[:-1]):
-        segment = segment.strip()
-        if segment.startswith("[") and segment.endswith("]"):
-            inner = segment[1:-1].strip()
-            if inner.startswith("%"):
-                bare_name = inner[1:]  # Strip % sigil for scope lookup.
-                if mode == TypeParseMode.SIGNATURE:
-                    # In signature mode, define a placeholder if not found.
-                    try:
-                        value_id = scope.lookup(bare_name)
-                    except KeyError:
-                        value_id = module.add_value(
-                            Value(name=bare_name, type=PlaceholderType())
-                        )
-                        scope.define_placeholder(bare_name, value_id, location)
-                    dim_bindings[i] = value_id
-                else:
-                    # BODY mode: look up existing value.
-                    try:
-                        value_id = scope.lookup(bare_name)
-                        dim_bindings[i] = value_id
-                    except KeyError:
-                        raise ParseError(
-                            f"undefined dim name '{inner}' in type", location, filename
-                        ) from None
-            else:
-                raise ParseError(f"invalid dynamic dim '{segment}'", location, filename)
-            dims.append(DynamicDim())
-        else:
-            try:
-                size = int(segment)
-            except ValueError:
-                raise ParseError(
-                    f"invalid dimension '{segment}' in shaped type", location, filename
-                ) from None
-            dims.append(StaticDim(size))
-
-    return dims, element_type, dim_bindings
-
-
-def _split_on_x(text: str) -> list[str]:
-    """Split shaped type interior on 'x' boundaries, respecting [...]."""
-    segments: list[str] = []
-    current: list[str] = []
-    bracket_depth = 0
-    for character in text:
-        if character == "[":
-            bracket_depth += 1
-            current.append(character)
-        elif character == "]":
-            bracket_depth -= 1
-            current.append(character)
-        elif character == "x" and bracket_depth == 0:
-            segments.append("".join(current))
-            current = []
-        else:
-            current.append(character)
-    if current:
-        segments.append("".join(current))
-    return segments
-
-
-def _parse_encoding_instance(
-    text: str,
-    module: Module,
-    location: SourceLocation,
-    filename: str,
-    aliases: dict[str, EncodingInstance] | None = None,
-    known_encodings: set[str] | None = None,
-) -> EncodingInstance:
-    """Parse '#name' or '#name<key=val, ...>' encoding reference.
-
-    Returns an EncodingInstance (self-describing, no indices needed).
-    Also adds the instance to the module's encoding table for bytecode
-    serialization.
-    """
-    text = text.strip()
-    if not text.startswith("#"):
-        raise ParseError(
-            f"expected encoding starting with '#', got '{text}'", location, filename
-        )
-
-    # Check alias table first.
-    if aliases and text in aliases:
-        aliased = aliases[text]
-        instance = EncodingInstance(
-            name=aliased.name, alias=text, params=aliased.params
-        )
-        module.add_encoding(instance)
-        return instance
-
-    # Not an alias — parse directly.
-    bare = text[1:]  # strip #
-    name = bare
-    params: tuple[tuple[str, str], ...] = ()
-    angle_pos = bare.find("<")
-    if angle_pos >= 0:
-        name = bare[:angle_pos]
-        params_text = bare[angle_pos + 1 :]
-        if params_text.endswith(">"):
-            params_text = params_text[:-1]
-        params = _parse_encoding_params(params_text, location, filename)
-
-    # Validate encoding name if registry is available.
-    if known_encodings and name not in known_encodings:
-        raise ParseError(
-            f"unknown encoding '{name}'. Known encodings: {sorted(known_encodings)}",
-            location,
-            filename,
-        )
-
-    instance = EncodingInstance(name=name, params=params)
-    module.add_encoding(instance)
-    return instance
-
-
-def _parse_encoding_params(
-    text: str,
-    location: SourceLocation,
-    filename: str,
-) -> tuple[tuple[str, str], ...]:
-    """Parse 'key=val, key=val' parameter list."""
-    if not text.strip():
-        return ()
-    params: list[tuple[str, str]] = []
-    for entry in text.split(","):
-        entry = entry.strip()
-        if "=" not in entry:
-            raise ParseError(
-                f"invalid encoding parameter '{entry}' — expected 'key=value' format",
-                location,
-                filename,
-            )
-        key, value = entry.split("=", 1)
-        params.append((key.strip(), value.strip()))
-    return tuple(params)
-
-
-def _parse_pool_interior(
-    interior: str,
-    scope: NameScope,
-    module: Module,
-    mode: TypeParseMode,
-    location: SourceLocation,
-    filename: str,
-) -> tuple[PoolType, dict[int, int]]:
-    """Parse the interior of pool<...>.
-
-    The interior is a single dimension: a static integer or [%name].
-    No element type, no encoding, no 'x' separator.
-    """
-    dim_bindings: dict[int, int] = {}
-    text = interior.strip()
-    if text.startswith("[") and text.endswith("]"):
-        inner = text[1:-1].strip()
-        if inner.startswith("%"):
-            bare_name = inner[1:]  # Strip % sigil for scope lookup.
-            if mode == TypeParseMode.SIGNATURE:
-                # In signature mode, define a placeholder if not found.
-                try:
-                    value_id = scope.lookup(bare_name)
-                except KeyError:
-                    value_id = module.add_value(
-                        Value(name=bare_name, type=PlaceholderType())
-                    )
-                    scope.define_placeholder(bare_name, value_id, location)
-                dim_bindings[0] = value_id
-            else:
-                # BODY mode: look up existing value.
-                try:
-                    value_id = scope.lookup(bare_name)
-                    dim_bindings[0] = value_id
-                except KeyError:
-                    raise ParseError(
-                        f"undefined dim name '{inner}' in pool type",
-                        location,
-                        filename,
-                    ) from None
-            return PoolType(block_size=DynamicDim()), dim_bindings
-        raise ParseError(
-            f"invalid pool dim '{text}' — expected [%name]",
-            location,
-            filename,
-        )
-    try:
-        size = int(text)
-    except ValueError:
-        raise ParseError(
-            f"invalid pool block size '{text}' — expected integer or [%name]",
-            location,
-            filename,
-        ) from None
-    return PoolType(block_size=StaticDim(size)), dim_bindings
-
-
 # ============================================================================
 # Parser (placeholder — format walk and structure parsing go here)
 # ============================================================================
@@ -1233,32 +1015,41 @@ class Parser:
 
         _CURRENT_ALIASES = None
         _CURRENT_KNOWN_ENCODINGS = None
+        rebuild_value_metadata(self._module)
         return self._module
 
     def _parse_attribute_alias(self) -> None:
         """Parse #alias = #encoding<params> at file level."""
         tok = self._tokenizer
         alias_tok = tok.expect(TokenKind.HASH_ATTR)
-        alias_name = "#" + alias_tok.text  # re-add # for raw-text lookups
         tok.expect(TokenKind.EQUALS)
-
-        # Parse the encoding value: #name or #name<params>
-        enc_tok = tok.expect(TokenKind.HASH_ATTR)
-        enc_name = enc_tok.text
-
-        params: tuple[tuple[str, str], ...] = ()
-        if tok.at(TokenKind.LANGLE):
-            tok.next()
-            interior = tok.scan_to_matching_angle_bracket()
-            params = _parse_encoding_params(interior, enc_tok.location, tok._filename)
-
-        instance = EncodingInstance(
-            name=enc_name,
-            encoding_kind=0,  # Resolved at link time.
-            alias=alias_name,
-            params=params,
+        if alias_tok.text in self._known_encodings:
+            raise ParseError(
+                "invalid encoding alias definition: "
+                "alias name shadows a registered encoding family",
+                alias_tok.location,
+                tok._filename,
+            )
+        if alias_tok.text in self._encoding_aliases:
+            raise ParseError(
+                "invalid encoding alias definition: duplicate encoding alias name",
+                alias_tok.location,
+                tok._filename,
+            )
+        spec = _parse_static_encoding_from_tokens(
+            tok,
+            self._module,
+            tok._filename,
+            aliases=self._encoding_aliases,
+            known_encodings=(self._known_encodings if self._known_encodings else None),
         )
-        self._encoding_aliases[alias_name] = instance
+        instance = EncodingInstance(
+            name=spec.name,
+            alias=alias_tok.text,
+            params=spec.params,
+        )
+        self._encoding_aliases[alias_tok.text] = instance
+        self._module.add_encoding(instance)
 
     def _register_symbol(self, op: Operation) -> None:
         """Register a top-level symbol-defining op in the module's symbol table.
@@ -1331,6 +1122,23 @@ class Parser:
         self._module = module if module is not None else Module()
         self._scope = scope if scope is not None else NameScope()
         op = self._parse_operation()
+        op_decl = self._op_registry.get(op.name)
+        operand_def_count = (
+            len(op.operands)
+            if (
+                op_decl is not None
+                and op_decl.has_trait("SymbolDefine")
+                and not op.regions
+            )
+            else 0
+        )
+        record_operation_value_metadata(
+            self._module,
+            op,
+            block_index=VALUE_DEF_BLOCK_NONE,
+            op_index=0,
+            operand_def_count=operand_def_count,
+        )
         return op
 
     def _parse_operation(self) -> Operation:
@@ -1919,53 +1727,28 @@ class Parser:
                 return sym.text
             case "i64_array":
                 return self._parse_i64_array()
+            case "encoding":
+                return _parse_static_encoding_from_tokens(
+                    tok,
+                    self._module,
+                    tok._filename,
+                    aliases=self._encoding_aliases,
+                    known_encodings=(
+                        self._known_encodings if self._known_encodings else None
+                    ),
+                )
             case "any":
                 return self._parse_any_attr_value()
             case _:
                 return self._parse_any_attr_value()
 
-    def _parse_any_attr_value(self) -> Any:
+    def _parse_any_attr_value(self, attr_dict_nesting_depth: int = 0) -> Any:
         """Parse any attribute value (type-agnostic)."""
-        tok = self._tokenizer
-        if tok.at(TokenKind.INTEGER):
-            return int(tok.next().text)
-        if tok.at(TokenKind.FLOAT):
-            return float(tok.next().text)
-        if tok.at(TokenKind.STRING):
-            text = tok.next().text
-            return text[1:-1]
-        if tok.at(TokenKind.BARE_IDENT):
-            text = tok.next().text
-            if text == "true":
-                return True
-            if text == "false":
-                return False
-            return text
-        if tok.at(TokenKind.LBRACE):
-            # Nested dict: {key = value, ...}
-            tok.next()  # consume '{'
-            entries: list[tuple[str, Any]] = []
-            seen_keys: set[str] = set()
-            while not tok.at(TokenKind.RBRACE):
-                key_tok = tok.expect(TokenKind.BARE_IDENT)
-                key = key_tok.text
-                if key in seen_keys:
-                    raise ParseError(
-                        f"duplicate attribute dict key '{key}'",
-                        key_tok.location,
-                        tok._filename,
-                    )
-                seen_keys.add(key)
-                tok.expect(TokenKind.EQUALS)
-                value = self._parse_any_attr_value()
-                entries.append((key, value))
-                tok.try_consume(TokenKind.COMMA)
-            tok.expect(TokenKind.RBRACE)
-            return CanonicalAttrDict(entries)
-        raise ParseError(
-            f"expected attribute value, got {tok.peek().kind.name}",
-            tok.peek().location,
-            tok._filename,
+        return _parse_generic_attr_value_from_tokens(
+            self._tokenizer,
+            self._module,
+            self._tokenizer._filename,
+            attr_dict_nesting_depth=attr_dict_nesting_depth,
         )
 
     def _parse_i64_array(self) -> list[int]:
@@ -2484,7 +2267,7 @@ class Parser:
                 )
             seen_keys.add(key)
             tok.expect(TokenKind.EQUALS)
-            value = self._parse_any_attr_value()
+            value = self._parse_any_attr_value(attr_dict_nesting_depth=1)
             entries.append((key, value))
             tok.try_consume(TokenKind.COMMA)
         tok.expect(TokenKind.RBRACE)

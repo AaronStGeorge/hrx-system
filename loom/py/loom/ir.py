@@ -6,15 +6,15 @@
 
 """Loom in-memory IR representation.
 
-Structurally compatible with the C IR (loom/src/loom/ir/). Python
-uses dataclasses and lists instead of arenas and packed structs, but
-the concepts, fields, and ID-based references are identical.
+The Python IR mirrors the C IR concepts and serialization tables, but uses
+dataclasses and Python containers instead of arenas and packed structs.
 
-Hierarchy: Context -> Module -> Symbol -> Function -> Block -> Operation -> Value
+Hierarchy: Context -> Module -> Symbol/Region/Block/Operation/Value.
 
-All cross-references use integer IDs (indices into module tables),
-not object references. This ensures compatibility with serialization
-and the C implementation.
+Table-owned entities such as strings, types, locations, and values are
+referenced by integer IDs. Container ownership uses ordinary Python object
+references: symbols own their defining op, ops own regions, and regions own
+blocks.
 """
 
 from __future__ import annotations
@@ -84,6 +84,8 @@ __all__ = [
     "TiedResult",
     # Use-def.
     "Use",
+    "VALUE_DEF_BLOCK_NONE",
+    "VALUE_DEF_OP_NONE",
     "VALUE_FLAG_BLOCK_ARG",
     "VALUE_FLAG_CONSUMED",
     # IR graph.
@@ -105,6 +107,10 @@ __all__ = [
     # Module and context.
     "Module",
     "Context",
+    # Value metadata helpers.
+    "record_block_value_metadata",
+    "record_operation_value_metadata",
+    "rebuild_value_metadata",
 ]
 
 
@@ -606,28 +612,75 @@ class DynamicEncoding:
     """
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class EncodingInstance:
     """A parameterized encoding instance in the module's encoding table.
 
-    Each unique encoding usage in a program gets one entry. The type's
-    encoding_instance field indexes into this table (1-based, 0 = none).
+    Each unique encoding usage in a program gets one canonical module-table
+    entry. `ShapedType.encoding` holds the encoding object directly in Python;
+    bytecode writers assign table indices during numbering.
 
     name: Encoding name ("q8_0", "q6_k", "dense"). Always present.
         This is the name used in textual format: #q8_0, #q6_k.
-    encoding_kind: Index into the context's encoding vtable array.
-        Used for runtime operations (storage_size, encode, decode).
-    alias: Attribute alias for pretty-printing ("#enc"), or empty.
+    alias: Attribute alias for pretty-printing ("enc"), or empty.
         When set, the printer uses the alias instead of the full
         #name<params> form. Defined at file level: #enc = #q8_0<block=32>
-    params: Structured parameters as key-value pairs.
-        Each entry is (name, value): [("block", "32"), ("group_size", "128")].
+        Aliases are display-only and do not participate in equality/hash.
+    params: Canonical named attributes as sorted key-value pairs. Values use
+        the same Python attribute domain as op attrs: ints, floats, bools,
+        strings, EncodingInstance, CanonicalAttrDict, and i64 arrays.
     """
 
     name: str
-    encoding_kind: int = 0
     alias: str = ""
-    params: tuple[tuple[str, str], ...] = ()
+    params: tuple[tuple[str, Any], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError(
+                f"EncodingInstance.name must be a non-empty string, got {self.name!r}"
+            )
+        if self.alias and self.alias.startswith("#"):
+            raise ValueError(
+                "EncodingInstance.alias stores the bare alias name without '#', "
+                f"got {self.alias!r}"
+            )
+
+        canonical_params: list[tuple[str, Any]] = []
+        seen_names: set[str] = set()
+        for param_name, param_value in self.params:
+            if not isinstance(param_name, str) or not param_name:
+                raise ValueError(
+                    "encoding parameter names must be non-empty strings, "
+                    f"got {param_name!r}"
+                )
+            if param_name in seen_names:
+                raise ValueError(f"duplicate encoding parameter {param_name!r}")
+            seen_names.add(param_name)
+            canonical_params.append(
+                (param_name, _canonicalize_encoding_param_value(param_value))
+            )
+        canonical_params.sort(key=lambda entry: entry[0])
+        object.__setattr__(self, "params", tuple(canonical_params))
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, EncodingInstance):
+            return NotImplemented
+        return self.name == other.name and self.params == other.params
+
+    def __hash__(self) -> int:
+        return hash((self.name, self.params))
+
+
+def _canonicalize_encoding_param_value(value: Any) -> Any:
+    """Canonicalize encoding parameter values into hashable attr values."""
+    if isinstance(value, CanonicalAttrDict):
+        return value
+    if isinstance(value, Mapping):
+        return CanonicalAttrDict(value.items())
+    if isinstance(value, list | tuple):
+        return tuple(_canonicalize_encoding_param_value(item) for item in value)
+    return value
 
 
 # ============================================================================
@@ -829,6 +882,14 @@ class CanonicalAttrDict(Mapping[str, Any]):
             return dict(self.items()) == dict(other.items())
         return NotImplemented
 
+    def __hash__(self) -> int:
+        return hash(
+            tuple(
+                (key, _canonicalize_encoding_param_value(value))
+                for key, value in self._items
+            )
+        )
+
 
 def canonicalize_attr_dict(attributes: Mapping[str, Any] | None) -> CanonicalAttrDict:
     """Canonicalize an operation or nested dict attribute."""
@@ -876,7 +937,15 @@ def _canonicalize_attr_value(value: Any) -> Any:
 
 @dataclass(frozen=True, slots=True)
 class Use:
-    """Records a use of a value by an operation."""
+    """An operand use of a value.
+
+    user_op_index: index of the consuming op in its immediate parent block.
+      For module-level symbol ops, this is the symbol index in module.symbols.
+    operand_index: which operand slot is using this value.
+    block_index: block index in the op's immediate parent region.
+      VALUE_DEF_BLOCK_NONE means the user is a module-level symbol op or an op
+      in a detached builder block with no parent region yet.
+    """
 
     user_op_index: int
     operand_index: int
@@ -887,7 +956,17 @@ class Use:
 # Values
 # ============================================================================
 
-# Value flags.
+# Value def-site sentinels and flags.
+#
+# VALUE_DEF_BLOCK_NONE means a value definition or use is not owned by a block
+# in an attached region. Module-level symbol ops and detached builder blocks use
+# this sentinel for block_index.
+VALUE_DEF_BLOCK_NONE = -1
+
+# VALUE_DEF_OP_NONE means a value is not defined by an operation result slot.
+# Block arguments use this sentinel for def_op_index.
+VALUE_DEF_OP_NONE = -1
+
 VALUE_FLAG_BLOCK_ARG = 1 << 0
 VALUE_FLAG_CONSUMED = 1 << 1
 
@@ -908,13 +987,35 @@ class Value:
     encoding_binding: when the value's type has DynamicEncoding, this
     holds the value_id of the encoding-typed SSA value that provides
     the encoding at runtime. -1 means no binding.
+
+    def_op_index/def_block_index/def_result_index locate the definition:
+      - Operation result values:
+          def_op_index = result op index in the defining block, or the symbol
+            index in module.symbols for module-level symbol results
+          def_block_index = defining block index in the immediate parent region,
+            or VALUE_DEF_BLOCK_NONE for module-level symbol results
+          def_result_index = result slot index on the defining op
+      - Block argument values:
+          flags has VALUE_FLAG_BLOCK_ARG
+          def_op_index = VALUE_DEF_OP_NONE
+          def_block_index = owning block index in the immediate parent region
+          def_result_index = block argument index
+      - Bodyless symbol signature arguments stored as op operands:
+          flags does not have VALUE_FLAG_BLOCK_ARG
+          def_op_index = symbol index in module.symbols
+          def_block_index = VALUE_DEF_BLOCK_NONE
+          def_result_index = signature argument index in op.operands
+
+    Freshly allocated values may leave the def-site fields at the *_NONE
+    sentinels until the parser/builder/bytecode reader attaches them to an IR
+    container.
     """
 
     name: str
     type: Type
     flags: int = 0
-    def_op_index: int = -1
-    def_block_index: int = 0
+    def_op_index: int = VALUE_DEF_OP_NONE
+    def_block_index: int = VALUE_DEF_BLOCK_NONE
     def_result_index: int = 0
     dim_bindings: dict[int, int] = field(default_factory=dict)
     encoding_binding: int = -1
@@ -1220,12 +1321,136 @@ class Module:
 
     def add_encoding(self, instance: EncodingInstance) -> int:
         """Add an encoding instance, returning its index. Deduplicates."""
+        for _param_name, param_value in instance.params:
+            self._add_nested_encodings(param_value)
+        if instance.alias:
+            for existing in self.encodings:
+                if existing.alias == instance.alias and existing != instance:
+                    raise ValueError(
+                        f"encoding alias {instance.alias!r} already names a "
+                        "different encoding"
+                    )
         for i, existing in enumerate(self.encodings):
-            if existing.name == instance.name and existing.params == instance.params:
+            if existing == instance:
+                if instance.alias and not existing.alias:
+                    self.encodings[i] = EncodingInstance(
+                        name=existing.name,
+                        alias=instance.alias,
+                        params=existing.params,
+                    )
                 return i
         idx = len(self.encodings)
         self.encodings.append(instance)
         return idx
+
+    def _add_nested_encodings(self, value: Any) -> None:
+        """Register child encoding attrs before their parents."""
+        if isinstance(value, EncodingInstance):
+            self.add_encoding(value)
+            return
+        if isinstance(value, Mapping):
+            for item in value.values():
+                self._add_nested_encodings(item)
+            return
+        if isinstance(value, list | tuple):
+            for item in value:
+                self._add_nested_encodings(item)
+
+
+# ============================================================================
+# Value metadata helpers
+# ============================================================================
+
+
+def record_block_value_metadata(
+    module: Module,
+    block: Block,
+    *,
+    block_index: int,
+) -> None:
+    """Record block-arg definitions and nested-op metadata for one block."""
+    for arg_index, value_id in enumerate(block.arg_ids):
+        value = module.values[value_id]
+        value.flags |= VALUE_FLAG_BLOCK_ARG
+        value.def_op_index = VALUE_DEF_OP_NONE
+        value.def_block_index = block_index
+        value.def_result_index = arg_index
+
+    for op_index, operation in enumerate(block.ops):
+        record_operation_value_metadata(
+            module,
+            operation,
+            block_index=block_index,
+            op_index=op_index,
+        )
+
+
+def record_operation_value_metadata(
+    module: Module,
+    operation: Operation,
+    *,
+    block_index: int,
+    op_index: int,
+    operand_def_count: int = 0,
+) -> None:
+    """Record result definitions, operand uses, and nested-region metadata.
+
+    operand_def_count marks leading operands that are definition slots rather
+    than ordinary uses. Bodyless func-like symbol ops store signature arguments
+    in op.operands, so parser/builder/bytecode reader callers pass
+    operand_def_count=len(op.operands) for those symbols.
+    """
+    for result_index, value_id in enumerate(operation.results):
+        value = module.values[value_id]
+        value.def_op_index = op_index
+        value.def_block_index = block_index
+        value.def_result_index = result_index
+
+    for operand_index, value_id in enumerate(operation.operands):
+        value = module.values[value_id]
+        if operand_index < operand_def_count:
+            value.flags &= ~VALUE_FLAG_BLOCK_ARG
+            value.def_op_index = op_index
+            value.def_block_index = block_index
+            value.def_result_index = operand_index
+            continue
+        value.uses.append(
+            Use(
+                user_op_index=op_index,
+                operand_index=operand_index,
+                block_index=block_index,
+            )
+        )
+
+    for region in operation.regions:
+        for child_block_index, child_block in enumerate(region.blocks):
+            record_block_value_metadata(
+                module,
+                child_block,
+                block_index=child_block_index,
+            )
+
+
+def rebuild_value_metadata(module: Module) -> None:
+    """Rebuild all def/use metadata from module.symbols and nested regions."""
+    for value in module.values:
+        value.flags &= ~VALUE_FLAG_BLOCK_ARG
+        value.def_op_index = VALUE_DEF_OP_NONE
+        value.def_block_index = VALUE_DEF_BLOCK_NONE
+        value.def_result_index = 0
+        value.uses.clear()
+
+    for symbol_index, symbol in enumerate(module.symbols):
+        if symbol.op is None:
+            continue
+        operand_def_count = len(symbol.op.operands) if not symbol.op.regions else 0
+        record_operation_value_metadata(
+            module,
+            symbol.op,
+            block_index=VALUE_DEF_BLOCK_NONE,
+            op_index=symbol_index,
+            operand_def_count=operand_def_count,
+        )
 
 
 # ============================================================================

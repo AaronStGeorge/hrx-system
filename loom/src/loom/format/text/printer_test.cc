@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
@@ -20,6 +21,14 @@
 
 namespace loom {
 namespace {
+
+static const loom_encoding_vtable_t kQ8_0EncodingVtable = {
+    .name = IREE_SV("q8_0"),
+};
+
+static const loom_encoding_vtable_t kDenseEncodingVtable = {
+    .name = IREE_SV("dense"),
+};
 
 // Helper to print a type and return the output as a std::string.
 std::string print_type(loom_type_t type,
@@ -285,6 +294,18 @@ class PrintOpTest : public ::testing::Test {
         loom_func_dialect_vtables(&func_count);
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_FUNC, func_vtables, (uint16_t)func_count));
+
+    iree_host_size_t encoding_count = 0;
+    const loom_op_vtable_t* const* encoding_vtables =
+        loom_encoding_dialect_vtables(&encoding_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_ENCODING, encoding_vtables,
+        (uint16_t)encoding_count));
+
+    IREE_ASSERT_OK(
+        loom_context_register_encoding_vtable(&context_, &kQ8_0EncodingVtable));
+    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
+        &context_, &kDenseEncodingVtable));
 
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
@@ -1846,8 +1867,7 @@ TEST_F(PrintOpTest, TypeWithEncodingAlias) {
   loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
   IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("q8_0"), &name_id));
   loom_string_id_t alias_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_module_intern_string(module_, IREE_SV("#enc"), &alias_id));
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("enc"), &alias_id));
 
   loom_encoding_t encoding = {
       .name_id = name_id,

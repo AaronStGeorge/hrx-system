@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "loom/ir/context.h"
+
 //===----------------------------------------------------------------------===//
 // Hash function
 //===----------------------------------------------------------------------===//
@@ -402,32 +404,93 @@ void loom_module_free(loom_module_t* module) {
 // Encoding table
 //===----------------------------------------------------------------------===//
 
-// Returns true if two encodings have the same name and attributes.
-static bool loom_encoding_equal(const loom_encoding_t* a,
-                                const loom_encoding_t* b) {
-  if (a->name_id != b->name_id) return false;
-  if (a->attribute_count != b->attribute_count) return false;
-  for (uint8_t i = 0; i < a->attribute_count; ++i) {
-    if (a->attributes[i].name_id != b->attributes[i].name_id) return false;
-    if (a->attributes[i].value.kind != b->attributes[i].value.kind) {
-      return false;
-    }
-    if (a->attributes[i].value.raw != b->attributes[i].value.raw) {
-      return false;
-    }
-  }
-  return true;
-}
-
 iree_status_t loom_module_add_encoding(loom_module_t* module,
                                        const loom_encoding_t* encoding,
                                        uint16_t* out_encoding_id) {
-  // Check for an existing duplicate.
+  if (encoding->name_id == LOOM_STRING_ID_INVALID ||
+      encoding->name_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "encoding family string id %u is out of range "
+                            "(module has %" PRIhsz " strings)",
+                            encoding->name_id, module->strings.count);
+  }
+  if (encoding->alias_id != LOOM_STRING_ID_INVALID &&
+      encoding->alias_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "encoding alias string id %u is out of range "
+                            "(module has %" PRIhsz " strings)",
+                            encoding->alias_id, module->strings.count);
+  }
+  if (encoding->attribute_count > 0 && !encoding->attributes) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty encoding parameter list has a NULL entry pointer");
+  }
+
+  iree_string_view_t encoding_name = module->strings.entries[encoding->name_id];
+
+  loom_attribute_t canonical_attr_dict = {0};
+  IREE_RETURN_IF_ERROR(loom_module_make_canonical_attr_dict(
+      module,
+      loom_make_named_attr_slice(encoding->attributes,
+                                 encoding->attribute_count),
+      &canonical_attr_dict));
+  if (canonical_attr_dict.count > UINT8_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "encoding '%.*s' has %u parameters, max %u",
+                            (int)encoding_name.size, encoding_name.data,
+                            (unsigned)canonical_attr_dict.count,
+                            (unsigned)UINT8_MAX);
+  }
+
+  loom_encoding_t canonical_encoding = {
+      .name_id = encoding->name_id,
+      .alias_id = encoding->alias_id,
+      .attribute_count = canonical_attr_dict.count,
+      .attributes = canonical_attr_dict.dict_entries,
+  };
+
+  const loom_encoding_vtable_t* vtable =
+      loom_context_lookup_encoding_vtable(module->context, encoding_name);
+  if (!vtable && module->context->encoding_vtables.count > 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown encoding family '%.*s'",
+                            (int)encoding_name.size, encoding_name.data);
+  }
+  if (vtable && vtable->verify) {
+    IREE_RETURN_IF_ERROR(vtable->verify(module, &canonical_encoding));
+  }
+
+  // Check for an existing duplicate and reject alias collisions against
+  // structurally different encodings. Alias names are file-local shorthand and
+  // must resolve unambiguously when the module is printed back to text.
+  iree_host_size_t existing_index = IREE_HOST_SIZE_MAX;
   for (iree_host_size_t i = 0; i < module->encodings.count; ++i) {
-    if (loom_encoding_equal(&module->encodings.entries[i], encoding)) {
-      *out_encoding_id = (uint16_t)(i + 1);
-      return iree_ok_status();
+    if (loom_encoding_equal(&module->encodings.entries[i],
+                            &canonical_encoding)) {
+      existing_index = i;
+      continue;
     }
+    if (canonical_encoding.alias_id != LOOM_STRING_ID_INVALID &&
+        module->encodings.entries[i].alias_id == canonical_encoding.alias_id) {
+      iree_string_view_t alias_name =
+          module->strings.entries[canonical_encoding.alias_id];
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "encoding alias '%.*s' already names a different encoding",
+          (int)alias_name.size, alias_name.data);
+    }
+  }
+
+  if (existing_index != IREE_HOST_SIZE_MAX) {
+    if (module->encodings.entries[existing_index].alias_id ==
+            LOOM_STRING_ID_INVALID &&
+        canonical_encoding.alias_id != LOOM_STRING_ID_INVALID) {
+      module->encodings.entries[existing_index].alias_id =
+          canonical_encoding.alias_id;
+    }
+    *out_encoding_id = (uint16_t)(existing_index + 1);
+    return iree_ok_status();
   }
 
   // Encoding IDs are 1-based uint16_t. ID 0 means "no encoding" and
@@ -447,25 +510,23 @@ iree_status_t loom_module_add_encoding(loom_module_t* module,
 
   loom_encoding_t* entry = &module->encodings.entries[module->encodings.count];
   memset(entry, 0, sizeof(*entry));
-  entry->name_id = encoding->name_id;
-  entry->alias_id = encoding->alias_id;
-  entry->attribute_count = encoding->attribute_count;
-
-  // Arena-copy the attribute array (names are already interned string
-  // IDs, attribute values are copied by value).
-  if (encoding->attribute_count > 0) {
-    loom_named_attr_t* attributes = NULL;
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        &module->arena, encoding->attribute_count, sizeof(loom_named_attr_t),
-        (void**)&attributes));
-    memcpy(attributes, encoding->attributes,
-           encoding->attribute_count * sizeof(loom_named_attr_t));
-    entry->attributes = attributes;
-  }
+  entry->name_id = canonical_encoding.name_id;
+  entry->alias_id = canonical_encoding.alias_id;
+  entry->attribute_count = canonical_encoding.attribute_count;
+  entry->attributes = canonical_encoding.attributes;
 
   *out_encoding_id = (uint16_t)(module->encodings.count + 1);
   ++module->encodings.count;
   return iree_ok_status();
+}
+
+const loom_encoding_vtable_t* loom_module_encoding_vtable(
+    const loom_module_t* module, uint16_t encoding_id) {
+  if (!module || !module->context) return NULL;
+  const loom_encoding_t* encoding = loom_module_encoding(module, encoding_id);
+  if (!encoding || encoding->name_id >= module->strings.count) return NULL;
+  return loom_context_lookup_encoding_vtable(
+      module->context, module->strings.entries[encoding->name_id]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -786,6 +847,17 @@ static iree_status_t loom_module_canonicalize_attr_dict_value_impl(
       }
       *out_value = value;
       return iree_ok_status();
+    case LOOM_ATTR_ENCODING:
+      if (value.encoding_id == 0 ||
+          value.encoding_id > module->encodings.count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "dict attribute encoding value id %u is out of range "
+            "(module has %" PRIhsz " encodings)",
+            (unsigned)value.encoding_id, module->encodings.count);
+      }
+      *out_value = value;
+      return iree_ok_status();
     case LOOM_ATTR_I64_ARRAY:
       if (value.count == 0) {
         value.i64_array = NULL;
@@ -1055,6 +1127,16 @@ static iree_status_t loom_module_verify_canonical_attr_dict_value_impl(
                                 "dict attribute type value id %u is out of "
                                 "range (module has %" PRIhsz " types)",
                                 value->type_id, module->types.count);
+      }
+      return iree_ok_status();
+    case LOOM_ATTR_ENCODING:
+      if (value->encoding_id == 0 ||
+          value->encoding_id > module->encodings.count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "dict attribute encoding value id %u is out of range "
+            "(module has %" PRIhsz " encodings)",
+            (unsigned)value->encoding_id, module->encodings.count);
       }
       return iree_ok_status();
     case LOOM_ATTR_I64_ARRAY:

@@ -143,10 +143,13 @@ iree_status_t loom_module_verify_canonical_attr_dict(
     const loom_module_t* module, loom_attribute_t attr);
 
 // Adds an encoding instance to the module's encoding table.
-// Deduplicates by name and attribute equality: if an identical
-// encoding already exists, returns its 1-based ID without adding
-// a new entry. The name_id and alias_id must be pre-interned in
-// the module's string table. The attributes array is arena-copied.
+// Deduplicates by family name and parameter equality: if an identical encoding
+// already exists, returns its 1-based ID without adding a new entry. Alias
+// names are display-only, but they must remain unique across structurally
+// distinct encodings so text output can emit unambiguous alias definitions.
+// `name_id` and `alias_id` must be pre-interned in the module's string table.
+// Parameters may point to temporary storage; they are recursively
+// canonicalized into module-owned arena storage.
 iree_status_t loom_module_add_encoding(loom_module_t* module,
                                        const loom_encoding_t* encoding,
                                        uint16_t* out_encoding_id);
@@ -157,6 +160,12 @@ static inline const loom_encoding_t* loom_module_encoding(
   if (encoding_id == 0 || encoding_id > module->encodings.count) return NULL;
   return &module->encodings.entries[encoding_id - 1];
 }
+
+// Returns the registered family vtable for |encoding_id|, or NULL if
+// |encoding_id| is out of range, the module has no context, or the encoding
+// family is not registered in that context.
+const loom_encoding_vtable_t* loom_module_encoding_vtable(
+    const loom_module_t* module, uint16_t encoding_id);
 
 // Interns a type in the module's type table. If a structurally identical
 // type already exists, returns the existing entry (by value). Otherwise,

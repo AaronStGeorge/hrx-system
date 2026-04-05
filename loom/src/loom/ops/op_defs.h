@@ -722,6 +722,13 @@ static inline int64_t loom_func_like_priority(loom_func_like_t func) {
     return loom_attr_as_bool(loom_op_attrs(op)[(index)]); \
   }
 
+// Defines a function that reads a static encoding attribute by index.
+#define LOOM_DEFINE_ATTR_ENCODING(func_name, index)              \
+  enum { func_name##_ATTR_INDEX = (index) };                     \
+  static inline uint16_t func_name(const loom_op_t* op) {        \
+    return loom_attr_as_encoding_id(loom_op_attrs(op)[(index)]); \
+  }
+
 // Defines a function that reads a DICT attribute by index.
 #define LOOM_DEFINE_ATTR_DICT(func_name, index)                          \
   enum { func_name##_ATTR_INDEX = (index) };                             \

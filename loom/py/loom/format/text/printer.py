@@ -144,24 +144,21 @@ class TypePrintContext:
             return None
         return resolve_value_name(self._module, self._encoding_binding)
 
-    def encoding_string(self, encoding_kind: int, encoding_instance: int) -> str | None:
-        """Get the text representation of an encoding.
 
-        Returns the alias if available and use_aliases is set,
-        otherwise #name or #name<params>.
-        Returns None only if the instance index is out of bounds.
-        """
-        if encoding_instance == 0 or encoding_instance > len(self._module.encodings):
-            return None
-        enc = self._module.encodings[encoding_instance - 1]
-        if enc.alias and self._use_aliases:
-            alias: str = enc.alias
-            return alias
-        # No alias — print the full #name<key=value, ...> form.
-        if enc.params:
-            param_strs = [f"{k}={v}" for k, v in enc.params]
-            return f"#{enc.name}<{', '.join(param_strs)}>"
-        return f"#{enc.name}"
+def _format_encoding_instance(
+    encoding: EncodingInstance,
+    *,
+    use_alias: bool,
+) -> str:
+    """Format a static encoding as #alias or #family<name = value, ...>."""
+    if use_alias and encoding.alias:
+        return f"#{encoding.alias}"
+    if not encoding.params:
+        return f"#{encoding.name}"
+    param_strs = [
+        f"{name}={_format_attr_value(value)}" for name, value in encoding.params
+    ]
+    return f"#{encoding.name}<{', '.join(param_strs)}>"
 
 
 def print_type(
@@ -303,13 +300,7 @@ def _print_shaped_type(
                 inner += ", ?"
         elif isinstance(enc, EncodingInstance):
             use_aliases = context._use_aliases if context else True
-            if enc.alias and use_aliases:
-                inner += f", {enc.alias}"
-            elif enc.params:
-                param_strs = [f"{k}={v}" for k, v in enc.params]
-                inner += f", #{enc.name}<{', '.join(param_strs)}>"
-            else:
-                inner += f", #{enc.name}"
+            inner += ", " + _format_encoding_instance(enc, use_alias=use_aliases)
 
     return f"{kind_name}<{inner}>"
 
@@ -447,6 +438,8 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
     if isinstance(value, Mapping):
         parts = [f"{key} = {_format_attr_value(item)}" for key, item in value.items()]
         return "{" + ", ".join(parts) + "}"
+    if isinstance(value, EncodingInstance):
+        return _format_encoding_instance(value, use_alias=True)
     return str(value)
 
 
@@ -592,6 +585,13 @@ class Printer:
     def print_module(self, module: Module) -> str:
         """Print a complete module to canonical text."""
         self._lines = []
+        self._module = module
+        for encoding in module.encodings:
+            if encoding.alias:
+                self._emit(
+                    f"#{encoding.alias} = "
+                    f"{_format_encoding_instance(encoding, use_alias=False)}"
+                )
         for symbol in module.symbols:
             if symbol.op is not None:
                 self._print_top_level_op(symbol.op, module)
@@ -611,7 +611,7 @@ class Printer:
         self._module = module
 
         op_decl = self._registry.get(op.name)
-        if op_decl is None or not op_decl.format:
+        if op_decl is None:
             # Fallback for ops with no registered format.
             self._emit(f"{op.name}()")
             return
@@ -742,7 +742,7 @@ class Printer:
         if print_regions is None:
             print_regions = self._print_regions
         op_decl = self._registry.get(op.name)
-        if op_decl is None or not op_decl.format:
+        if op_decl is None:
             self._emit(self._generic_op_string(op, module))
             return
 

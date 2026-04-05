@@ -28,9 +28,10 @@ enum {
 LOOM_DEFINE_ISA(loom_encoding_define_isa, LOOM_OP_ENCODING_DEFINE)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_encoding_define_captures, 0)
 LOOM_DEFINE_RESULT(loom_encoding_define_result, 0)
+LOOM_DEFINE_ATTR_ENCODING(loom_encoding_define_spec, 0)
 iree_status_t loom_encoding_define_build(
     loom_builder_t* builder,
-    loom_attribute_t spec,
+    uint16_t spec,
     const loom_value_id_t* captures,
     iree_host_size_t captures_count,
     loom_type_t result_type,

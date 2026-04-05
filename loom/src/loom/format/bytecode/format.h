@@ -288,10 +288,11 @@ typedef enum loom_bytecode_section_kind_e {
 //     (TILE/TENSOR:
 //       [element_type: byte]
 //       [rank: byte]
-//       [encoding_kind: byte]     0 = none.
-//                                 1 = static (instance index follows).
-//                                 2 = SSA dynamic (binding on the Value,
-//                                     not the type; instance index is 0).
+//       [encoding_attachment: byte]
+//             0 = none.
+//             1 = static (instance index follows).
+//             2 = SSA dynamic (binding on the Value, not the type;
+//                 instance index is 0).
 //       [encoding_instance: varint] (0 = none, else 1-based instance index)
 //       For each dim (rank times):
 //         [is_dynamic: byte]      (0 = static, 1 = dynamic)
@@ -314,24 +315,30 @@ typedef enum loom_bytecode_section_kind_e {
 // ENCODINGS section
 // ==========================================================================
 //
-// Encoding kind registry and parameterized instances.
+// Encoding family registry and parameterized instances.
 //
-// Kinds are registered by name. The reader looks up each name in the
-// runtime's encoding vtable registry. Unknown kinds are errors.
+// Families are registered by name. The reader looks up each name in the
+// runtime's encoding vtable registry. Unknown families are errors.
 //
-// Instance parameters are opaque byte blobs. The encoding vtable's
-// serialize/deserialize functions handle the blob format. This avoids
-// encoding the parameter schema in the bytecode — adding a new param
-// to an encoding only requires updating the vtable, not the format.
+// Instance parameters are canonical named attributes, using the same
+// attribute payload encoding as IR op attrs and text-format `#family<...>`
+// spellings. The context vtable validates and interprets those attrs at
+// runtime; it does not own a family-private bytecode blob parser.
 //
-//   [encoding_kind_count: varint]
-//   For each encoding kind:
+// Parameter names are encoded in canonical key spelling order, with no
+// duplicates, recursively for any nested DICT attribute values. Readers
+// must reject malformed order/duplicates instead of repairing them; writers
+// emit the in-memory canonical order directly.
+//
+//   [encoding_family_count: varint]
+//   For each encoding family:
 //     [name_id: varint]       (string table index: "q6_k", "q8_0", etc.)
 //
 //   [instance_count: varint]
 //   For each instance:
-//     [kind_index: varint]    (index into the kind list above)
-//     [alias_id: varint]      (string table index for printing, 0 = no alias)
+//     [family_index: varint]  (index into the family list above)
+//     [alias_id: varint]      (string table index of bare alias for printing,
+//                              0 = no alias)
 //     [param_count: varint]   (number of named attribute parameters)
 //     For each parameter:
 //       [name_id: varint]     (string table index: "block", "group_size", etc.)
@@ -480,8 +487,9 @@ typedef enum loom_bytecode_section_kind_e {
 //     [initializer_length: u32]
 //
 //   For EXECUTABLE symbols:
-//     // Compiled device code, target metadata, ABI info.
-//     // Details TBD as we build the backend.
+//     // Compiled device code and target metadata are referenced through
+//     // op attributes and RESOURCES payloads. The symbol table itself carries
+//     // only the common symbol header fields for EXECUTABLE entries today.
 
 // ==========================================================================
 // IR section
@@ -534,6 +542,20 @@ typedef enum loom_bytecode_section_kind_e {
 //         [key_id: varint]
 //         [value_kind: byte]
 //         [value_data: ...]
+//
+// DICT attribute value_data is encoded recursively as:
+//   [entry_count: varint]
+//   For each entry:
+//     [key_id: varint]
+//     [value_kind: byte]
+//     [value_data: ...]
+//
+// Dict entries MUST be stored in canonical key spelling order, with no
+// duplicate keys, recursively for nested dict values. Canonical order is
+// defined by the decoded UTF-8 key string, not by numeric key_id values.
+// Readers should verify this with a one-pass previous-key comparison and
+// reject `current_key <= previous_key`; writers trust canonical IR and emit
+// entries as-is without re-sorting.
 //       [region_count: varint]
 //       For each region:
 //         (recursive: block_count, blocks...)
@@ -635,12 +657,12 @@ typedef enum loom_bytecode_group_scope_e {
   LOOM_BYTECODE_GROUP_SCOPE_SUBGROUP = 1,
 } loom_bytecode_group_scope_t;
 
-// Encoding attachment kind byte in the TYPES section (TILE/TENSOR payload).
-typedef enum loom_bytecode_encoding_kind_e {
-  LOOM_BYTECODE_ENCODING_NONE = 0,
-  LOOM_BYTECODE_ENCODING_STATIC = 1,
-  LOOM_BYTECODE_ENCODING_SSA = 2,
-} loom_bytecode_encoding_kind_t;
+// Encoding attachment discriminator in TILE/TENSOR type payloads.
+typedef enum loom_bytecode_encoding_attachment_e {
+  LOOM_BYTECODE_ENCODING_ATTACHMENT_NONE = 0,
+  LOOM_BYTECODE_ENCODING_ATTACHMENT_STATIC = 1,
+  LOOM_BYTECODE_ENCODING_ATTACHMENT_SSA = 2,
+} loom_bytecode_encoding_attachment_t;
 
 // ==========================================================================
 // Code definitions

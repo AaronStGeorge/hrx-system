@@ -44,6 +44,7 @@ void loom_context_deinitialize(loom_context_t* context) {
                         (void*)context->sources.entries[i].data);
   }
   iree_allocator_free(context->allocator, context->sources.entries);
+  iree_allocator_free(context->allocator, context->encoding_vtables.entries);
   iree_allocator_free(context->allocator, context->op_name_table.entries);
   memset(context, 0, sizeof(*context));
 }
@@ -62,6 +63,29 @@ iree_status_t loom_context_register_dialect(
   }
   context->op_vtables.dialects[dialect_id].op_count = op_count;
   context->op_vtables.dialects[dialect_id].entries = vtables;
+  return iree_ok_status();
+}
+
+iree_status_t loom_context_register_encoding_vtable(
+    loom_context_t* context, const loom_encoding_vtable_t* vtable) {
+  if (!vtable || iree_string_view_is_empty(vtable->name)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "encoding vtable registration requires a non-empty family name");
+  }
+
+  if (loom_context_lookup_encoding_vtable(context, vtable->name)) {
+    return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
+                            "encoding family '%.*s' is already registered",
+                            (int)vtable->name.size, vtable->name.data);
+  }
+
+  IREE_RETURN_IF_ERROR(iree_allocator_grow_array(
+      context->allocator, context->encoding_vtables.count + 1,
+      sizeof(const loom_encoding_vtable_t*),
+      &context->encoding_vtables.capacity,
+      (void**)&context->encoding_vtables.entries));
+  context->encoding_vtables.entries[context->encoding_vtables.count++] = vtable;
   return iree_ok_status();
 }
 
@@ -187,6 +211,17 @@ const loom_op_vtable_t* loom_context_lookup_op_by_name(
       return table->entries[slot].vtable;
     }
     slot = (slot + 1) & mask;
+  }
+  return NULL;
+}
+
+const loom_encoding_vtable_t* loom_context_lookup_encoding_vtable(
+    const loom_context_t* context, iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < context->encoding_vtables.count; ++i) {
+    const loom_encoding_vtable_t* vtable = context->encoding_vtables.entries[i];
+    if (vtable && iree_string_view_equal(vtable->name, name)) {
+      return vtable;
+    }
   }
   return NULL;
 }

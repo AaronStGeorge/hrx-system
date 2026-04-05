@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "loom/format/text/parser_internal.h"
+#include "loom/ir/context.h"
 
 //===----------------------------------------------------------------------===//
 // Encoding parameter parsing
@@ -18,38 +19,36 @@
 iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
                                          loom_named_attr_t** out_attrs,
                                          uint8_t* out_count) {
-  // Pre-allocate for a reasonable number of params. Encoding params
-  // are typically 1-4 entries (block, bits, type, etc.).
-  uint8_t capacity = 8;
+  iree_host_size_t capacity = 8;
   loom_named_attr_t* attrs = NULL;
   IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(&parser->module->arena, capacity,
+      iree_arena_allocate_array(&parser->parser_arena, capacity,
                                 sizeof(loom_named_attr_t), (void**)&attrs));
   uint8_t attr_count = 0;
 
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if (attr_count > 0) {
+      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COMMA, NULL);
+    }
+
+    if (attr_count == UINT8_MAX) {
+      loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
+                                               peek);
+    }
+    if (attr_count >= capacity) {
+      IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+          &parser->parser_arena, attr_count, /*minimum_capacity=*/8,
+          sizeof(loom_named_attr_t), &capacity, (void**)&attrs));
+    }
+
     // Parameter name.
-    loom_token_t name_token;
+    loom_token_t name_token = loom_token_none();
     LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &name_token);
 
     // Separator.
     LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_EQUALS, NULL);
-
-    // Value: integer or string.
-    loom_token_t value_token = loom_tokenizer_peek(&parser->tokenizer);
-    if (value_token.kind != LOOM_TOKEN_INTEGER &&
-        value_token.kind != LOOM_TOKEN_STRING &&
-        value_token.kind != LOOM_TOKEN_BARE_IDENT) {
-      return loom_parser_emit_unexpected_token(
-          parser, value_token, IREE_SV("integer, string, or identifier"));
-    }
-    loom_tokenizer_next(&parser->tokenizer);
-
-    if (attr_count >= capacity) {
-      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
-                                               name_token);
-    }
 
     loom_string_id_t param_name_id = 0;
     IREE_RETURN_IF_ERROR(loom_module_intern_string(
@@ -57,21 +56,13 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
     attrs[attr_count].name_id = param_name_id;
     attrs[attr_count].reserved = 0;
 
-    if (value_token.kind == LOOM_TOKEN_INTEGER) {
-      int64_t int_value = 0;
-      iree_string_view_atoi_int64(value_token.text, &int_value);
-      attrs[attr_count].value = loom_attr_i64(int_value);
-    } else {
-      // String or bare ident — intern as string value.
-      loom_string_id_t value_id = 0;
-      IREE_RETURN_IF_ERROR(loom_module_intern_string(
-          parser->module, value_token.text, &value_id));
-      attrs[attr_count].value = loom_attr_string(value_id);
+    uint32_t errors_before = parser->error_count;
+    IREE_RETURN_IF_ERROR(loom_parse_generic_attr_value(
+        parser, /*nesting_depth=*/0, &attrs[attr_count].value));
+    if (parser->error_count > errors_before) {
+      return iree_ok_status();
     }
     ++attr_count;
-
-    // Optional comma between params.
-    loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA);
   }
 
   // Consume closing '>'.
@@ -80,6 +71,50 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
   *out_attrs = attrs;
   *out_count = attr_count;
   return iree_ok_status();
+}
+
+iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
+                                         loom_string_id_t alias_id,
+                                         uint16_t* out_encoding_id) {
+  loom_token_t token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_HASH_ATTR, &token);
+
+  uint16_t aliased_id = loom_alias_table_lookup(&parser->aliases, token.text);
+  if (aliased_id != 0) {
+    *out_encoding_id = aliased_id;
+    return iree_ok_status();
+  }
+
+  loom_encoding_t encoding = {
+      .name_id = LOOM_STRING_ID_INVALID,
+      .alias_id = alias_id,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(parser->module, token.text, &encoding.name_id));
+
+  if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
+    loom_named_attr_t* attrs = NULL;
+    uint8_t attr_count = 0;
+    uint32_t errors_before = parser->error_count;
+    IREE_RETURN_IF_ERROR(
+        loom_parse_encoding_params(parser, &attrs, &attr_count));
+    if (parser->error_count > errors_before) {
+      return iree_ok_status();
+    }
+    encoding.attribute_count = attr_count;
+    encoding.attributes = attrs;
+  }
+
+  if (parser->context->encoding_vtables.count > 0 &&
+      !loom_context_lookup_encoding_vtable(parser->context, token.text)) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(token.text),
+    };
+    return loom_parser_emit(parser, &loom_err_parse_008, params,
+                            IREE_ARRAYSIZE(params), token);
+  }
+
+  return loom_module_add_encoding(parser->module, &encoding, out_encoding_id);
 }
 
 //===----------------------------------------------------------------------===//
@@ -225,8 +260,8 @@ static iree_status_t loom_parse_dim(loom_parser_t* parser,
 
 // Parses a type encoding after the comma in a shaped type interior.
 // Called after COMMA has been consumed, with in_dim_list already false.
-// Handles SSA encodings (%enc), static encoding aliases (#q8_0), and
-// inline encoding definitions (#name<params>).
+// Handles SSA encodings (`%enc`), static encoding aliases (`#enc`), and
+// canonical family spellings (`#q8_0` or `#q8_0<block=32>`).
 static iree_status_t loom_parse_type_encoding(
     loom_parser_t* parser, loom_type_parse_mode_t mode,
     uint16_t* out_encoding_id, loom_encoding_flags_t* out_encoding_flags) {
@@ -242,34 +277,10 @@ static iree_status_t loom_parse_type_encoding(
   }
 
   if (token.kind == LOOM_TOKEN_HASH_ATTR) {
-    // Static encoding: #alias or #name<params>.
-    loom_tokenizer_next(&parser->tokenizer);
-
-    // Alias table keys use the source spelling with '#'.
-    iree_string_view_t full_text = loom_token_lexeme(token);
-
-    uint16_t alias_id = loom_alias_table_lookup(&parser->aliases, full_text);
-    if (alias_id != 0) {
-      *out_encoding_id = alias_id;
-      return iree_ok_status();
-    }
-
-    // Build a new encoding instance.
-    loom_encoding_t encoding = {0};
-    IREE_RETURN_IF_ERROR(loom_module_intern_string(parser->module, token.text,
-                                                   &encoding.name_id));
-    encoding.alias_id = LOOM_STRING_ID_INVALID;
-
-    if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
-      loom_named_attr_t* attrs = NULL;
-      uint8_t attr_count = 0;
-      IREE_RETURN_IF_ERROR(
-          loom_parse_encoding_params(parser, &attrs, &attr_count));
-      encoding.attribute_count = attr_count;
-      encoding.attributes = attrs;
-    }
-
-    return loom_module_add_encoding(parser->module, &encoding, out_encoding_id);
+    IREE_RETURN_IF_ERROR(loom_parse_static_encoding(
+        parser, LOOM_STRING_ID_INVALID, out_encoding_id));
+    *out_encoding_flags = 0;
+    return iree_ok_status();
   }
 
   if (token.kind == LOOM_TOKEN_RESULT_ORDINAL) {

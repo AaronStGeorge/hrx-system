@@ -27,6 +27,7 @@ from loom.ir import (
     INDEX,
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
+    VALUE_DEF_OP_NONE,
     Block,
     CanonicalAttrDict,
     DialectType,
@@ -47,6 +48,7 @@ from loom.ir import (
     TiedResult,
     Type,
     TypeKind,
+    Use,
     Value,
 )
 
@@ -310,14 +312,14 @@ class TestTypeRoundTrips:
         assert self._roundtrip_type(t) == t
 
     def test_tile_with_encoding(self) -> None:
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32),))
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         loaded = self._roundtrip_type(t)
         assert isinstance(loaded, ShapedType)
         assert loaded.has_encoding
         assert isinstance(loaded.encoding, EncodingInstance)
         assert loaded.encoding.name == "q8_0"
-        assert loaded.encoding.params == (("block", "32"),)
+        assert loaded.encoding.params == (("block", 32),)
 
     def test_tile_encoding_no_params(self) -> None:
         enc = EncodingInstance(name="dense")
@@ -329,12 +331,12 @@ class TestTypeRoundTrips:
         assert loaded.encoding.name == "dense"
 
     def test_tile_encoding_multiple_params(self) -> None:
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"), ("group", "128")))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32), ("group", 128)))
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         loaded = self._roundtrip_type(t)
         assert isinstance(loaded, ShapedType)
         assert isinstance(loaded.encoding, EncodingInstance)
-        assert loaded.encoding.params == (("block", "32"), ("group", "128"))
+        assert loaded.encoding.params == (("block", 32), ("group", 128))
 
     # Group type.
     def test_group_workgroup(self) -> None:
@@ -541,6 +543,39 @@ class TestIRStructure:
         assert len(neg_loaded.operands) == 1
         assert len(neg_loaded.results) == 1
 
+    def test_value_metadata_is_rebuilt_after_read(self) -> None:
+        module = Module(name="test")
+        x = module.add_value(Value(name="x", type=F32))
+        r = module.add_value(Value(name="r", type=F32))
+        neg = Operation(name="test.neg", operands=[x], results=[r])
+        yield_op = Operation(name="test.yield", operands=[r])
+        block = Block(arg_ids=[x], ops=[neg, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(
+            name="func.def",
+            attributes={"callee": "f"},
+            regions=[body],
+        )
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+
+        loaded = _roundtrip(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        entry_block = loaded_op.regions[0].blocks[0]
+
+        arg = loaded.values[entry_block.arg_ids[0]]
+        assert arg.is_block_arg
+        assert arg.def_op_index == VALUE_DEF_OP_NONE
+        assert arg.def_block_index == 0
+        assert arg.def_result_index == 0
+        assert arg.uses == [Use(user_op_index=0, operand_index=0, block_index=0)]
+
+        result = loaded.values[entry_block.ops[0].results[0]]
+        assert result.def_op_index == 0
+        assert result.def_block_index == 0
+        assert result.def_result_index == 0
+        assert result.uses == [Use(user_op_index=1, operand_index=0, block_index=0)]
+
     def test_tied_result(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
@@ -670,7 +705,7 @@ class TestIRStructure:
 
 class TestEncodingRoundTrips:
     def test_single_encoding(self) -> None:
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32),))
         module = Module(name="test")
         module.add_encoding(enc)
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
@@ -678,7 +713,7 @@ class TestEncodingRoundTrips:
         loaded = _roundtrip(module)
         assert len(loaded.encodings) >= 1
         assert loaded.encodings[0].name == "q8_0"
-        assert loaded.encodings[0].params == (("block", "32"),)
+        assert loaded.encodings[0].params == (("block", 32),)
 
     def test_multiple_encodings(self) -> None:
         enc1 = EncodingInstance(name="q8_0")
@@ -1014,6 +1049,12 @@ class TestMalformedDictAttributeWireOrder:
         data = bytes([9, 1, 1, 9, 2, 2, 0, 0, 3, 0, 2])
         with pytest.raises(BytecodeError, match="not in canonical order"):
             self._read_dict_value(["", "meta", "z", "a"], data)
+
+    def test_duplicate_nested_dict_keys_are_rejected(self) -> None:
+        # dict<meta = dict<axis = 0, axis = 1>>
+        data = bytes([9, 1, 1, 9, 2, 2, 0, 0, 2, 0, 2])
+        with pytest.raises(BytecodeError, match="duplicate dict attr key"):
+            self._read_dict_value(["", "meta", "axis"], data)
 
 
 # ============================================================================

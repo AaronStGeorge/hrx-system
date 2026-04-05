@@ -62,6 +62,7 @@ from loom.ir import (
     Type,
     TypeKind,
     Value,
+    rebuild_value_metadata,
 )
 
 __all__ = [
@@ -98,7 +99,7 @@ class BytecodeReader:
         self._types: list[Type] = []
         self._ops: list[str] = []
         self._encodings: list[EncodingInstance] = []
-        self._encoding_kinds: list[str] = []
+        self._encoding_families: list[str] = []
 
     def read(self) -> Module:
         """Read and return the module."""
@@ -137,6 +138,7 @@ class BytecodeReader:
         if isinstance(symbols_data, tuple):
             self._read_symbols_section(symbols_data, ir_data, module)
 
+        rebuild_value_metadata(module)
         return module
 
     # --- Low-level reads ---
@@ -300,49 +302,39 @@ class BytecodeReader:
         _, data = section
         offset = 0
 
-        # Encoding kind registry.
-        kind_count, offset = decode_varint(data, offset)
-        self._encoding_kinds = []
-        for _ in range(kind_count):
+        # Encoding family registry.
+        family_count, offset = decode_varint(data, offset)
+        self._encoding_families = []
+        for _ in range(family_count):
             name_id, offset = decode_varint(data, offset)
-            self._encoding_kinds.append(self._strings[name_id])
+            self._encoding_families.append(self._strings[name_id])
 
         # Encoding instances with structured attribute parameters.
         instance_count, offset = decode_varint(data, offset)
         self._encodings = []
         for _ in range(instance_count):
-            kind_idx, offset = decode_varint(data, offset)
+            family_index, offset = decode_varint(data, offset)
+            if family_index >= len(self._encoding_families):
+                raise BytecodeError(
+                    f"encoding family index {family_index} out of range "
+                    f"(family table has {len(self._encoding_families)} entries)"
+                )
             alias_id, offset = decode_varint(data, offset)
+            if alias_id >= len(self._strings):
+                raise BytecodeError(
+                    f"encoding alias string_id {alias_id} out of range "
+                    f"(string table has {len(self._strings)} entries)"
+                )
             param_count, offset = decode_varint(data, offset)
 
-            name = self._encoding_kinds[kind_idx]
+            name = self._encoding_families[family_index]
             alias = self._strings[alias_id] if alias_id > 0 else ""
-            param_list: list[tuple[str, str]] = []
+            param_list: list[tuple[str, Any]] = []
             for _ in range(param_count):
                 param_name_id, offset = decode_varint(data, offset)
-                value_kind = data[offset]
-                offset += 1
                 param_name = self._strings[param_name_id]
-                if value_kind == 0:  # ATTR_KIND_I64
-                    int_value, offset = decode_signed_varint(data, offset)
-                    param_list.append((param_name, str(int_value)))
-                elif value_kind == 2:  # ATTR_KIND_STRING
-                    string_id, offset = decode_varint(data, offset)
-                    param_list.append((param_name, self._strings[string_id]))
-                elif value_kind == 3:  # ATTR_KIND_BOOL
-                    bool_value = data[offset]
-                    offset += 1
-                    param_list.append((param_name, "true" if bool_value else "false"))
-                elif value_kind == 1:  # ATTR_KIND_F64
-                    import struct as _struct
-
-                    (float_value,) = _struct.unpack_from("<d", data, offset)
-                    offset += 8
-                    param_list.append((param_name, str(float_value)))
-                else:
-                    raise ValueError(
-                        f"unsupported encoding param attr kind {value_kind}"
-                    )
+                param_value, offset = self._read_attr_value(data, offset)
+                param_list.append((param_name, param_value))
 
             self._encodings.append(
                 EncodingInstance(name=name, alias=alias, params=tuple(param_list))
@@ -370,7 +362,7 @@ class BytecodeReader:
                     offset += 1
                     rank = data[offset]
                     offset += 1
-                    enc_kind_byte = data[offset]
+                    encoding_attachment = data[offset]
                     offset += 1
                     enc_instance, offset = decode_varint(data, offset)
 
@@ -385,7 +377,7 @@ class BytecodeReader:
                             dims.append(StaticDim(size))
 
                     encoding: EncodingInstance | DynamicEncoding | None = None
-                    if enc_kind_byte == 2:
+                    if encoding_attachment == 2:
                         # Dynamic SSA encoding.
                         encoding = DynamicEncoding()
                     elif enc_instance > 0 and enc_instance <= len(self._encodings):
@@ -826,6 +818,14 @@ class BytecodeReader:
             case 9:  # DICT
                 count, offset = decode_varint(data, offset)
                 return self._read_attr_dict_entries(data, offset, count)
+            case 10:  # ENCODING
+                encoding_id, offset = decode_varint(data, offset)
+                if encoding_id == 0 or encoding_id > len(self._encodings):
+                    raise BytecodeError(
+                        f"encoding attr id {encoding_id} out of range "
+                        f"(encoding table has {len(self._encodings)} entries)"
+                    )
+                return self._encodings[encoding_id - 1], offset
             case _:
                 raise BytecodeError(f"unknown attr value kind: {kind}")
 

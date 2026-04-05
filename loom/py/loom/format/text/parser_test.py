@@ -12,6 +12,7 @@ import pytest
 
 from loom.assembly import TypeOf
 from loom.builtin_types import ALL_BUILTIN_TYPES
+from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dsl import ANY, TypeDef, TypeParam
@@ -32,6 +33,8 @@ from loom.ir import (
     I32,
     I64,
     INDEX,
+    VALUE_DEF_BLOCK_NONE,
+    VALUE_DEF_OP_NONE,
     CanonicalAttrDict,
     DialectType,
     DynamicDim,
@@ -49,6 +52,7 @@ from loom.ir import (
     StaticDim,
     Type,
     TypeKind,
+    Use,
     Value,
 )
 
@@ -284,7 +288,7 @@ class TestParseEncoding:
         assert result.has_encoding
         assert len(module.encodings) == 1
         assert module.encodings[0].name == "q8_0"
-        assert module.encodings[0].params == (("block", "32"),)
+        assert module.encodings[0].params == (("block", 32),)
 
     def test_encoding_dedup(self) -> None:
         module = Module()
@@ -311,7 +315,7 @@ class TestParseEncoding:
         assert isinstance(result, ShapedType)
         assert result.has_encoding
         enc = module.encodings[0]
-        assert enc.params == (("block", "32"), ("group", "128"))
+        assert enc.params == (("block", 32), ("group", 128))
 
 
 # ============================================================================
@@ -475,19 +479,21 @@ class TestTypeRoundTrip:
 
 
 def _op_parser() -> Parser:
-    """Create a parser with test + func ops and built-in types."""
+    """Create a parser with test + func + encoding ops and built-in types."""
     parser = Parser()
     parser.register_ops(ALL_TEST_OPS)
     parser.register_ops(ALL_FUNC_OPS)
+    parser.register_ops(ALL_ENCODING_OPS)
     parser.register_types(ALL_BUILTIN_TYPES)
     return parser
 
 
 def _op_printer(**kwargs: Any) -> Printer:
-    """Create a printer with test + func ops and built-in types."""
+    """Create a printer with test + func + encoding ops and built-in types."""
     printer = Printer(**kwargs)
     printer.register_ops(ALL_TEST_OPS)
     printer.register_ops(ALL_FUNC_OPS)
+    printer.register_ops(ALL_ENCODING_OPS)
     printer.register_types(ALL_BUILTIN_TYPES)
     return printer
 
@@ -775,6 +781,34 @@ class TestParseModule:
         assert len(op.regions[0].blocks) == 1
         assert len(op.regions[0].blocks[0].ops) == 2
 
+    def test_simple_function_records_value_metadata(self) -> None:
+        module = self._parse_module(
+            "func.def @negate(%input: f32) -> (f32) {\n"
+            "  %r = test.neg %input : f32\n"
+            "  test.yield %r : f32\n"
+            "}\n"
+        )
+        func_op = module.symbols[0].op
+        assert func_op is not None
+        entry_block = func_op.regions[0].blocks[0]
+
+        arg_id = entry_block.arg_ids[0]
+        arg = module.values[arg_id]
+        assert arg.is_block_arg
+        assert arg.def_op_index == VALUE_DEF_OP_NONE
+        assert arg.def_block_index == 0
+        assert arg.def_result_index == 0
+        assert arg.uses == [Use(user_op_index=0, operand_index=0, block_index=0)]
+
+        neg_op = entry_block.ops[0]
+        result_id = neg_op.results[0]
+        result = module.values[result_id]
+        assert not result.is_block_arg
+        assert result.def_op_index == 0
+        assert result.def_block_index == 0
+        assert result.def_result_index == 0
+        assert result.uses == [Use(user_op_index=1, operand_index=0, block_index=0)]
+
     def test_public_declaration(self) -> None:
         module = self._parse_module("func.decl public @exported(%a: i32) -> (i32)\n")
         assert len(module.symbols) == 1
@@ -782,6 +816,25 @@ class TestParseModule:
         assert op is not None
         assert op.attributes.get("visibility") == "public"
         assert not op.regions  # Declarations have no body region.
+
+    def test_declaration_signature_args_are_operand_defs(self) -> None:
+        module = self._parse_module("func.decl @identity(%a: f32) -> (%a as f32)\n")
+        op = module.symbols[0].op
+        assert op is not None
+
+        arg_id = op.operands[0]
+        arg = module.values[arg_id]
+        assert not arg.is_block_arg
+        assert arg.def_op_index == 0
+        assert arg.def_block_index == VALUE_DEF_BLOCK_NONE
+        assert arg.def_result_index == 0
+        assert arg.uses == []
+
+        result_id = op.results[0]
+        result = module.values[result_id]
+        assert result.def_op_index == 0
+        assert result.def_block_index == VALUE_DEF_BLOCK_NONE
+        assert result.def_result_index == 0
 
     def test_multiple_functions(self) -> None:
         module = self._parse_module(
@@ -816,8 +869,9 @@ class TestParseEncodingAlias:
         assert len(module.symbols) == 1
         assert len(module.encodings) >= 1
         enc = module.encodings[0]
+        assert enc.alias == "enc"
         assert enc.name == "q8_0"
-        assert enc.params == (("block", "32"),)
+        assert enc.params == (("block", 32),)
 
     def test_alias_without_params(self) -> None:
         module = self._parse_module(
@@ -827,8 +881,62 @@ class TestParseEncodingAlias:
             "}\n"
         )
         enc = module.encodings[0]
+        assert enc.alias == "w"
         assert enc.name == "q6_k"
         assert enc.params == ()
+
+    def test_encoding_define_inline_spec_attr(self) -> None:
+        module = self._parse_module(
+            "func.def @f() -> () {\n"
+            "  %enc = encoding.define #q8_0<block=32> : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        func_op = module.symbols[0].op
+        assert func_op is not None
+        define_op = func_op.regions[0].blocks[0].ops[0]
+        assert define_op.name == "encoding.define"
+        assert define_op.attributes["spec"] == EncodingInstance(
+            name="q8_0",
+            params=(("block", 32),),
+        )
+        assert module.encodings == [
+            EncodingInstance(name="q8_0", params=(("block", 32),))
+        ]
+
+    def test_encoding_define_alias_spec_attr(self) -> None:
+        module = self._parse_module(
+            "#enc = #q8_0<block=32>\n"
+            "func.def @f() -> () {\n"
+            "  %enc = encoding.define #enc : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        func_op = module.symbols[0].op
+        assert func_op is not None
+        define_op = func_op.regions[0].blocks[0].ops[0]
+        assert define_op.attributes["spec"] == EncodingInstance(
+            name="q8_0",
+            alias="enc",
+            params=(("block", 32),),
+        )
+        assert module.encodings == [
+            EncodingInstance(
+                name="q8_0",
+                alias="enc",
+                params=(("block", 32),),
+            )
+        ]
+
+    def test_alias_cannot_shadow_known_family(self) -> None:
+        parser = _op_parser()
+        parser.register_encodings(["q8_0", "dense"])
+        with pytest.raises(ParseError, match="alias name shadows"):
+            parser.parse("#q8_0 = #dense\n")
+
+    def test_duplicate_alias_definition_fails(self) -> None:
+        with pytest.raises(ParseError, match="duplicate encoding alias name"):
+            self._parse_module("#enc = #dense\n#enc = #q8_0<block=32>\n")
 
 
 class TestEncodingValidation:
@@ -920,6 +1028,25 @@ class TestParseMapOp:
         assert len(body.blocks) == 1
         assert len(body.blocks[0].ops) == 2  # neg + yield
 
+    def test_element_binding_block_arg_records_metadata(self) -> None:
+        tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
+        module, scope = _setup_scope(("x", tile_t))
+        op = _parse_op(
+            "%r = test.map(%e = %x : tile<4xf32>) {\n"
+            "  test.yield %e : f32\n"
+            "} -> (tile<4xf32>)",
+            module=module,
+            scope=scope,
+        )
+        entry_block = op.regions[0].blocks[0]
+        arg_id = entry_block.arg_ids[0]
+        arg = module.values[arg_id]
+        assert arg.is_block_arg
+        assert arg.def_op_index == VALUE_DEF_OP_NONE
+        assert arg.def_block_index == 0
+        assert arg.def_result_index == 0
+        assert arg.uses == [Use(user_op_index=0, operand_index=0, block_index=0)]
+
     def test_binding_name_can_shadow_outer_scope_name(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         module = _op_parser().parse(
@@ -968,11 +1095,51 @@ class TestParseLoopOp:
         assert len(body.blocks) == 1
         assert len(body.blocks[0].arg_ids) == 1
         assert len(body.blocks[0].ops) == 1
-        assert body.blocks[0].ops[0].name == "test.yield"
+        assert body.blocks[0].ops[0].name == "test.implicit_yield"
         assert body.blocks[0].ops[0].operands == []
         assert (
             _op_printer().print_operation(op, module)
             == "test.loop %i = %c0 to %n step %c1 {\n}"
+        )
+
+    def test_explicit_implicit_yield_is_canonicalized(self) -> None:
+        module, scope = _setup_scope(("c0", INDEX), ("n", INDEX), ("c1", INDEX))
+        op = _parse_op(
+            "test.loop %i = %c0 to %n step %c1 {\n  test.implicit_yield\n}",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.loop"
+        assert len(op.regions) == 1
+        body = op.regions[0]
+        assert len(body.blocks) == 1
+        assert len(body.blocks[0].ops) == 1
+        assert body.blocks[0].ops[0].name == "test.implicit_yield"
+        assert body.blocks[0].ops[0].operands == []
+        assert (
+            _op_printer().print_operation(op, module)
+            == "test.loop %i = %c0 to %n step %c1 {\n}"
+        )
+
+    def test_explicit_empty_yield_is_preserved(self) -> None:
+        module, scope = _setup_scope(("c0", INDEX), ("n", INDEX), ("c1", INDEX))
+        op = _parse_op(
+            "test.loop %i = %c0 to %n step %c1 {\n  test.yield\n}",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.loop"
+        assert len(op.regions) == 1
+        body = op.regions[0]
+        assert len(body.blocks) == 1
+        assert len(body.blocks[0].ops) == 1
+        assert body.blocks[0].ops[0].name == "test.yield"
+        assert body.blocks[0].ops[0].operands == []
+        assert (
+            _op_printer().print_operation(op, module)
+            == "test.loop %i = %c0 to %n step %c1 {\n"
+            "  test.yield\n"
+            "}"
         )
 
     def test_with_iter_args(self) -> None:
@@ -1058,8 +1225,8 @@ class TestParseBranchOp:
         assert len(op.regions[1].blocks) == 1
         assert len(op.regions[0].blocks[0].ops) == 1
         assert len(op.regions[1].blocks[0].ops) == 1
-        assert op.regions[0].blocks[0].ops[0].name == "test.yield"
-        assert op.regions[1].blocks[0].ops[0].name == "test.yield"
+        assert op.regions[0].blocks[0].ops[0].name == "test.implicit_yield"
+        assert op.regions[1].blocks[0].ops[0].name == "test.implicit_yield"
         assert op.regions[0].blocks[0].ops[0].operands == []
         assert op.regions[1].blocks[0].ops[0].operands == []
         assert (
@@ -1951,6 +2118,14 @@ class TestLocationCrossFormatRoundTrip:
 class TestNestedDictAttr:
     """Test parsing of nested dict values in attribute dicts."""
 
+    @staticmethod
+    def _nested_dict_text(nested_dict_depth: int) -> str:
+        """Returns a nested dict value with nested_dict_depth dict wrappers."""
+        value = "7"
+        for index in range(nested_dict_depth - 1, -1, -1):
+            value = f"{{k{index} = {value}}}"
+        return value
+
     def test_nested_dict(self) -> None:
         """Parse {outer = {inner = 42}} as nested dict."""
         module, scope = _setup_scope(("x", F32))
@@ -2003,3 +2178,28 @@ class TestNestedDictAttr:
             "  test.yield %r : f32\n"
             "}\n"
         )
+
+    def test_max_nested_dict_depth_is_accepted(self) -> None:
+        # The top-level AttrDict field itself is parser depth 0, so 15 nested
+        # dict values below it gives 16 total dict wrappers and is the deepest
+        # valid shape accepted by the C parser/verifier contract.
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(
+            f"%r = test.attrs %x {{meta = {self._nested_dict_text(15)}}} : f32",
+            module=module,
+            scope=scope,
+        )
+        value = op.attributes["dict"]["meta"]
+        for index in range(14):
+            assert isinstance(value, CanonicalAttrDict)
+            value = value[f"k{index}"]
+        assert value == CanonicalAttrDict([("k14", 7)])
+
+    def test_over_max_nested_dict_depth_is_rejected(self) -> None:
+        module, scope = _setup_scope(("x", F32))
+        with pytest.raises(ParseError, match="maximum depth 16"):
+            _parse_op(
+                f"%r = test.attrs %x {{meta = {self._nested_dict_text(16)}}} : f32",
+                module=module,
+                scope=scope,
+            )

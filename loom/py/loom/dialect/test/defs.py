@@ -329,7 +329,7 @@ test_map = Op(
         YieldCountMatchesResults("body", "result"),
         YieldElementTypesMatchResults("body", "result"),
     ],
-    traits=[PURE, ELEMENTWISE, ImplicitTerminator("test.yield")],
+    traits=[PURE, ELEMENTWISE, ImplicitTerminator("test.implicit_yield")],
     format=[
         BindingList("inputs", kind=BINDING_ELEMENT),
         Region("body"),
@@ -469,7 +469,7 @@ test_loop = Op(
             implicit_args=(("iv", "index"),),
         )
     ],
-    traits=[ImplicitTerminator("test.yield")],
+    traits=[ImplicitTerminator("test.implicit_yield")],
     format=[
         Ref("iv"),
         EQUALS,
@@ -507,7 +507,7 @@ test_branch = Op(
         RegionDef("then_region", doc="Then branch.", single_block=True),
         RegionDef("else_region", doc="Else branch.", single_block=True),
     ],
-    traits=[ImplicitTerminator("test.yield")],
+    traits=[ImplicitTerminator("test.implicit_yield")],
     format=[
         Ref("condition"),
         OptionalGroup(
@@ -521,6 +521,18 @@ test_branch = Op(
     examples=[
         "%result = test.branch %condition -> (f32) {\n  test.yield %true_value : f32\n} else {\n  test.yield %false_value : f32\n}",
     ],
+)
+
+# ============================================================================
+# test.implicit_yield — dedicated implicit region terminator
+# ============================================================================
+
+test_implicit_yield = Op(
+    "test.implicit_yield",
+    group=test_ops,
+    doc="Dedicated zero-field implicit terminator synthesized for elidable test regions.",
+    traits=[TERMINATOR],
+    examples=["test.implicit_yield"],
 )
 
 # ============================================================================
@@ -934,6 +946,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_slice,
     test_loop,
     test_branch,
+    test_implicit_yield,
     test_yield,
     test_func,
     test_decl,

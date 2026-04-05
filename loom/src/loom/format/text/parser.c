@@ -970,6 +970,13 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
     case LOOM_ATTR_I64_ARRAY: {
       return loom_parse_i64_array_attr(parser, out_attr);
     }
+    case LOOM_ATTR_ENCODING: {
+      uint16_t encoding_id = 0;
+      IREE_RETURN_IF_ERROR(loom_parse_static_encoding(
+          parser, LOOM_STRING_ID_INVALID, &encoding_id));
+      *out_attr = loom_attr_encoding(encoding_id);
+      return iree_ok_status();
+    }
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "unsupported attribute kind %d",
@@ -1171,9 +1178,9 @@ static iree_status_t loom_parse_present_attr_dict(loom_parser_t* parser,
                                                   uint16_t nesting_depth,
                                                   loom_attribute_t* out_attr);
 
-static iree_status_t loom_parse_attr_dict_value(loom_parser_t* parser,
-                                                uint16_t nesting_depth,
-                                                loom_attribute_t* out_attr) {
+iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
+                                            uint16_t nesting_depth,
+                                            loom_attribute_t* out_attr) {
   loom_token_t value_token = loom_tokenizer_peek(&parser->tokenizer);
   switch (value_token.kind) {
     case LOOM_TOKEN_INTEGER: {
@@ -1221,9 +1228,21 @@ static iree_status_t loom_parse_attr_dict_value(loom_parser_t* parser,
         *out_attr = loom_attr_bool(false);
         return iree_ok_status();
       }
-      break;
+      loom_tokenizer_next(&parser->tokenizer);
+      loom_string_id_t ident_id = LOOM_STRING_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_module_intern_string(
+          parser->module, value_token.text, &ident_id));
+      *out_attr = loom_attr_string(ident_id);
+      return iree_ok_status();
     case LOOM_TOKEN_LBRACKET:
       return loom_parse_i64_array_attr(parser, out_attr);
+    case LOOM_TOKEN_HASH_ATTR: {
+      uint16_t encoding_id = 0;
+      IREE_RETURN_IF_ERROR(loom_parse_static_encoding(
+          parser, LOOM_STRING_ID_INVALID, &encoding_id));
+      *out_attr = loom_attr_encoding(encoding_id);
+      return iree_ok_status();
+    }
     case LOOM_TOKEN_LBRACE:
       return loom_parse_present_attr_dict(parser, (uint16_t)(nesting_depth + 1),
                                           out_attr);
@@ -1300,7 +1319,7 @@ static iree_status_t loom_parse_present_attr_dict(loom_parser_t* parser,
 
     loom_attribute_t value = {0};
     IREE_RETURN_IF_ERROR(
-        loom_parse_attr_dict_value(parser, nesting_depth, &value));
+        loom_parse_generic_attr_value(parser, nesting_depth, &value));
     if (parser->error_count > errors_before) return iree_ok_status();
 
     stack_entries[count].attr.name_id = key_id;
@@ -1858,43 +1877,47 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
     if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_HASH_ATTR)) {
       loom_token_t alias_token = loom_tokenizer_next(&parser->tokenizer);
       if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
-        // Parse the encoding on the RHS.
-        loom_token_t enc_token = loom_tokenizer_peek(&parser->tokenizer);
-        if (enc_token.kind == LOOM_TOKEN_HASH_ATTR) {
-          loom_tokenizer_next(&parser->tokenizer);
-          // #name or #name<params>. Build encoding.
-          iree_string_view_t enc_name = enc_token.text;
+        uint32_t errors_before = parser->error_count;
 
-          loom_encoding_t encoding = {0};
-          IREE_RETURN_IF_ERROR(loom_module_intern_string(
-              parser->module, enc_name, &encoding.name_id));
+        if (loom_context_lookup_encoding_vtable(parser->context,
+                                                alias_token.text)) {
+          loom_diagnostic_param_t params[] = {
+              loom_param_string(
+                  IREE_SV("alias name shadows a registered encoding family")),
+          };
+          IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_014,
+                                                params, IREE_ARRAYSIZE(params),
+                                                alias_token));
+          loom_parser_sync_to_newline(parser);
+          continue;
+        }
+        if (loom_alias_table_lookup(&parser->aliases, alias_token.text) != 0) {
+          loom_diagnostic_param_t params[] = {
+              loom_param_string(IREE_SV("duplicate encoding alias name")),
+          };
+          IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_014,
+                                                params, IREE_ARRAYSIZE(params),
+                                                alias_token));
+          loom_parser_sync_to_newline(parser);
+          continue;
+        }
 
-          // Intern the source spelling of the alias.
-          loom_string_id_t alias_name_id = 0;
-          iree_string_view_t full_alias = loom_token_lexeme(alias_token);
-          IREE_RETURN_IF_ERROR(loom_module_intern_string(
-              parser->module, full_alias, &alias_name_id));
-          encoding.alias_id = alias_name_id;
+        loom_string_id_t alias_name_id = 0;
+        IREE_RETURN_IF_ERROR(loom_module_intern_string(
+            parser->module, alias_token.text, &alias_name_id));
 
-          // Parse optional params.
-          if (loom_tokenizer_try_consume(&parser->tokenizer,
-                                         LOOM_TOKEN_LANGLE)) {
-            loom_named_attr_t* attrs = NULL;
-            uint8_t attr_count = 0;
-            IREE_RETURN_IF_ERROR(
-                loom_parse_encoding_params(parser, &attrs, &attr_count));
-            encoding.attribute_count = attr_count;
-            encoding.attributes = attrs;
-          }
+        uint16_t encoding_id = 0;
+        IREE_RETURN_IF_ERROR(
+            loom_parse_static_encoding(parser, alias_name_id, &encoding_id));
+        if (parser->error_count > errors_before) {
+          loom_parser_sync_to_newline(parser);
+          continue;
+        }
 
-          uint16_t encoding_id = 0;
-          IREE_RETURN_IF_ERROR(loom_module_add_encoding(
-              parser->module, &encoding, &encoding_id));
-
-          // Register in alias table.
-          IREE_RETURN_IF_ERROR(loom_alias_table_add(&parser->aliases,
-                                                    &parser->parser_arena,
-                                                    full_alias, encoding_id));
+        if (encoding_id != 0) {
+          IREE_RETURN_IF_ERROR(
+              loom_alias_table_add(&parser->aliases, &parser->parser_arena,
+                                   alias_token.text, encoding_id));
         }
         continue;
       }

@@ -68,40 +68,6 @@ typedef struct loom_op_name_table_t {
   uint32_t count;
 } loom_op_name_table_t;
 
-// Vtable for a specific encoding family (q6_k, q8_0, dense, etc.).
-//
-// Module encoding instances store a symbolic name plus canonical parameter
-// attributes. This vtable defines the runtime hooks for interpreting one such
-// family: computing storage size, encoding/decoding bytes, and parsing or
-// printing family-specific parameter payloads.
-typedef struct loom_encoding_vtable_t {
-  // Encoding name for printing ("q6_k", "q8_0", "dense").
-  iree_string_view_t name;
-
-  // Compute storage size in bytes for |element_count| logical elements.
-  iree_host_size_t (*storage_size)(const void* instance_params,
-                                   iree_host_size_t element_count);
-
-  // Decode: encoded bytes to dense elements.
-  iree_status_t (*decode)(const void* instance_params, const void* encoded_data,
-                          void* decoded_data, iree_host_size_t element_count);
-
-  // Encode: dense elements to encoded bytes.
-  iree_status_t (*encode)(const void* instance_params, const void* decoded_data,
-                          void* encoded_data, iree_host_size_t element_count);
-
-  // Print encoding parameters to a string builder.
-  // Example output: "block=32, group_size=128".
-  iree_status_t (*print_params)(const void* instance_params,
-                                iree_string_builder_t* builder);
-
-  // Parse encoding parameters from text, allocating in the arena.
-  // Returns the arena-allocated params blob through |out_instance_params|.
-  iree_status_t (*parse_params)(iree_string_view_t params_text,
-                                iree_arena_allocator_t* arena,
-                                const void** out_instance_params);
-} loom_encoding_vtable_t;
-
 // The global context: vtables, allocator, and source/name registries.
 //
 // Created once at startup, shared across all modules and threads.
@@ -144,6 +110,15 @@ iree_status_t loom_context_register_dialect(
     loom_context_t* context, uint8_t dialect_id,
     const loom_op_vtable_t* const* vtables, uint16_t op_count);
 
+// Registers one encoding family vtable with the context.
+//
+// `vtable->name` must be non-empty and stable for the context lifetime
+// (usually static storage). Family names are unique; duplicate registration
+// returns ALREADY_EXISTS. Runtime callbacks may be NULL if the family only
+// needs parser/verifier visibility for now.
+iree_status_t loom_context_register_encoding_vtable(
+    loom_context_t* context, const loom_encoding_vtable_t* vtable);
+
 // Finalizes the context after dialect registration and encoding-table setup.
 // Builds acceleration structures for fast op name lookup. Must be called
 // before creating modules or parsing.
@@ -160,6 +135,11 @@ const loom_op_vtable_t* loom_context_resolve_op(const loom_context_t* context,
 const loom_op_vtable_t* loom_context_lookup_op_by_name(
     const loom_context_t* context, iree_string_view_t name,
     loom_op_kind_t* out_kind);
+
+// Looks up an encoding family by its bare name (`q8_0`, `dense`, ...).
+// Returns NULL when no matching family has been registered.
+const loom_encoding_vtable_t* loom_context_lookup_encoding_vtable(
+    const loom_context_t* context, iree_string_view_t name);
 
 // Registers a source identifier (filename, system tag, etc.) and
 // returns its ID. The name is interned into context-owned storage.

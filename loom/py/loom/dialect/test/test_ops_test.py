@@ -42,6 +42,7 @@ from loom.dialect.test import (
     test_constant,
     test_convert,
     test_func,
+    test_implicit_yield,
     test_invoke,
     test_loop,
     test_map,
@@ -79,7 +80,12 @@ class TestAllOpsRegistered:
 
     def test_all_have_format(self) -> None:
         for op in ALL_TEST_OPS:
-            assert op.format, f"{op.name} missing format spec"
+            if op.format:
+                continue
+            assert not op.operands
+            assert not op.results
+            assert not op.attrs
+            assert not op.regions
 
     def test_all_have_examples(self) -> None:
         for op in ALL_TEST_OPS:
@@ -305,6 +311,13 @@ class TestSpecificOps:
         assert values_operand is not None
         assert values_operand.variadic
         assert len(test_yield.results) == 0
+
+    def test_implicit_yield(self) -> None:
+        assert test_implicit_yield.is_terminator
+        assert len(test_implicit_yield.operands) == 0
+        assert len(test_implicit_yield.results) == 0
+        assert len(test_implicit_yield.attrs) == 0
+        assert len(test_implicit_yield.regions) == 0
 
     def test_func(self) -> None:
         # Top-level optional groups: visibility, cc.

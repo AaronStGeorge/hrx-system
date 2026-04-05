@@ -56,6 +56,136 @@ class WriterTest : public ::testing::Test {
     return module;
   }
 
+  // Creates a module containing one test.func with a nested test.attrs dict.
+  // If reverse_attr_order is true, the module's string interning and source
+  // dict entry order are intentionally reversed relative to canonical key
+  // spelling order.
+  loom_module_t* CreateAttrsModule(bool reverse_attr_order) {
+    loom_module_t* module = CreateModule("attrs");
+
+    loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+    IREE_CHECK_OK(loom_module_intern_type(module, f32_type, &f32_type));
+
+    loom_builder_t module_builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &module_builder);
+
+    loom_string_id_t func_name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&module_builder, IREE_SV("f"),
+                                             &func_name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, func_name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+    loom_type_t arg_types[1] = {f32_type};
+    loom_type_t result_types[1] = {f32_type};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(&module_builder, /*visibility=*/0,
+                                       /*cc=*/0, callee, arg_types, 1,
+                                       result_types, 1, nullptr, 0, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &func_op));
+    module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    EXPECT_EQ(arg_count, 1);
+    if (arg_count == 0) {
+      return module;
+    }
+
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_builder_t body_builder;
+    loom_builder_initialize(module, &module->arena,
+                            loom_region_entry_block(body), &body_builder);
+
+    loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t meta_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t opt_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t phase_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t link_id = LOOM_STRING_ID_INVALID;
+    if (reverse_attr_order) {
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("meta"), &meta_id));
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("phase"), &phase_id));
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("link"), &link_id));
+      IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("opt"), &opt_id));
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("axis"), &axis_id));
+    } else {
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("axis"), &axis_id));
+      IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("opt"), &opt_id));
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("phase"), &phase_id));
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("link"), &link_id));
+      IREE_CHECK_OK(
+          loom_module_intern_string(module, IREE_SV("meta"), &meta_id));
+    }
+
+    loom_named_attr_t meta_entries[2] = {
+        reverse_attr_order
+            ? loom_named_attr_t{
+                  .name_id = phase_id,
+                  .value = loom_attr_string(link_id),
+              }
+            : loom_named_attr_t{
+                  .name_id = opt_id,
+                  .value = loom_attr_i64(3),
+              },
+        reverse_attr_order
+            ? loom_named_attr_t{
+                  .name_id = opt_id,
+                  .value = loom_attr_i64(3),
+              }
+            : loom_named_attr_t{
+                  .name_id = phase_id,
+                  .value = loom_attr_string(link_id),
+              },
+    };
+    loom_attribute_t meta_attr = {0};
+    IREE_CHECK_OK(loom_module_make_canonical_attr_dict(
+        module,
+        loom_make_named_attr_slice(meta_entries, IREE_ARRAYSIZE(meta_entries)),
+        &meta_attr));
+
+    loom_named_attr_t entries[2] = {
+        reverse_attr_order
+            ? loom_named_attr_t{
+                  .name_id = meta_id,
+                  .value = meta_attr,
+              }
+            : loom_named_attr_t{
+                  .name_id = axis_id,
+                  .value = loom_attr_i64(0),
+              },
+        reverse_attr_order
+            ? loom_named_attr_t{
+                  .name_id = axis_id,
+                  .value = loom_attr_i64(0),
+              }
+            : loom_named_attr_t{
+                  .name_id = meta_id,
+                  .value = meta_attr,
+              },
+    };
+    loom_op_t* attrs_op = nullptr;
+    IREE_CHECK_OK(loom_test_attrs_build(
+        &body_builder, arg_ids[0],
+        loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32_type,
+        LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+    const loom_value_id_t result_ids[1] = {loom_op_results(attrs_op)[0]};
+    loom_op_t* yield_op = nullptr;
+    IREE_CHECK_OK(loom_test_yield_build(&body_builder, result_ids, 1,
+                                        LOOM_LOCATION_UNKNOWN, &yield_op));
+    return module;
+  }
+
   // Writes a module to bytecode and returns the raw bytes.
   std::vector<uint8_t> WriteModule(const loom_module_t* module) {
     iree_io_stream_t* stream = nullptr;
@@ -424,6 +554,16 @@ TEST_F(WriterTest, ModuleWithFunction) {
   EXPECT_GE(op_count, 1u);
 
   loom_module_free(module);
+}
+
+TEST_F(WriterTest, CanonicalAttrDictInputOrderDoesNotAffectBytes) {
+  loom_module_t* module_a = CreateAttrsModule(/*reverse_attr_order=*/false);
+  loom_module_t* module_b = CreateAttrsModule(/*reverse_attr_order=*/true);
+
+  EXPECT_EQ(WriteModule(module_a), WriteModule(module_b));
+
+  loom_module_free(module_a);
+  loom_module_free(module_b);
 }
 
 //===----------------------------------------------------------------------===//

@@ -25,15 +25,18 @@ from loom.ir import (
     I32,
     I64,
     INDEX,
+    LOCATION_UNKNOWN,
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
     Block,
+    CanonicalAttrDict,
     DialectType,
     DynamicDim,
     EncodingInstance,
     FunctionType,
     GroupScope,
     GroupType,
+    LocationTable,
     Module,
     Operation,
     PoolType,
@@ -136,6 +139,57 @@ def _make_func_module(
         Symbol(name=func_name, kind=sym_kind, flags=sym_flags, op=func_op)
     )
     return module
+
+
+def _make_attrs_module(dict_attr: dict[str, object]) -> Module:
+    """Build a func.def containing one test.attrs op with dict_attr."""
+    module = Module()
+    x = module.add_value(Value(name="x", type=F32))
+    r = module.add_value(Value(name="r", type=F32))
+    attrs_op = Operation(
+        name="test.attrs",
+        operands=[x],
+        results=[r],
+        attributes={"dict": dict_attr},
+    )
+    yield_op = Operation(name="test.yield", operands=[r])
+    block = Block(arg_ids=[x], ops=[attrs_op, yield_op])
+    body = Region(blocks=[block])
+    func_result = module.add_value(Value(name="", type=F32))
+    func_op = Operation(
+        name="func.def",
+        results=[func_result],
+        attributes={"callee": "f"},
+        regions=[body],
+    )
+    module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+    return module
+
+
+def _strip_locations(module: Module) -> None:
+    """Drop parser-produced locations so byte comparisons only test IR shape."""
+    module.sources = []
+    module.locations = LocationTable()
+
+    def clear_op(op: Operation) -> None:
+        op.location_id = LOCATION_UNKNOWN
+        for region in op.regions:
+            for block in region.blocks:
+                for child_op in block.ops:
+                    clear_op(child_op)
+
+    for symbol in module.symbols:
+        if symbol.op is not None:
+            clear_op(symbol.op)
+
+
+def _first_attrs_dict(module: Module) -> CanonicalAttrDict:
+    func_op = module.symbols[0].op
+    assert func_op is not None
+    attrs_op = func_op.regions[0].blocks[0].ops[0]
+    dict_attr = attrs_op.attributes["dict"]
+    assert isinstance(dict_attr, CanonicalAttrDict)
+    return dict_attr
 
 
 # ============================================================================
@@ -350,7 +404,7 @@ class TestTypesSection:
         self._roundtrip_type(ShapedType(TypeKind.TENSOR, F32, (StaticDim(1048576),)))
 
     def test_tile_with_encoding(self) -> None:
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32),))
         self._roundtrip_type(
             ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         )
@@ -415,7 +469,7 @@ class TestEncodingsSection:
     def test_single_encoding(self) -> None:
         from loom.format.bytecode.reader import read_module as read
 
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32),))
         module = Module(name="test")
         module.add_encoding(enc)
         enc_type = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
@@ -429,9 +483,9 @@ class TestEncodingsSection:
         loaded = read(data)
         assert len(loaded.encodings) >= 1
         assert loaded.encodings[0].name == "q8_0"
-        assert loaded.encodings[0].params == (("block", "32"),)
+        assert loaded.encodings[0].params == (("block", 32),)
 
-    def test_multiple_encoding_kinds(self) -> None:
+    def test_multiple_encoding_families(self) -> None:
         from loom.format.bytecode.reader import read_module as read
 
         enc1 = EncodingInstance(name="q8_0")
@@ -458,7 +512,7 @@ class TestEncodingsSection:
         """Integer params (block=32) round-trip through structured I64 encoding."""
         from loom.format.bytecode.reader import read_module as read
 
-        enc = EncodingInstance(name="q8_0", params=(("block", "32"),))
+        enc = EncodingInstance(name="q8_0", params=(("block", 32),))
         module = Module(name="test")
         module.add_encoding(enc)
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
@@ -477,7 +531,7 @@ class TestEncodingsSection:
         )
         data = write_module(module)
         loaded = read(data)
-        assert loaded.encodings[0].params == (("block", "32"),)
+        assert loaded.encodings[0].params == (("block", 32),)
 
     def test_encoding_string_param_roundtrip(self) -> None:
         """String params (layout=nchw) round-trip through structured STRING encoding."""
@@ -510,7 +564,7 @@ class TestEncodingsSection:
 
         enc = EncodingInstance(
             name="q4_k",
-            params=(("block", "32"), ("group_size", "128")),
+            params=(("block", 32), ("group_size", 128)),
         )
         module = Module(name="test")
         module.add_encoding(enc)
@@ -530,7 +584,7 @@ class TestEncodingsSection:
         )
         data = write_module(module)
         loaded = read(data)
-        assert loaded.encodings[0].params == (("block", "32"), ("group_size", "128"))
+        assert loaded.encodings[0].params == (("block", 32), ("group_size", 128))
 
     def test_encoding_with_alias_roundtrip(self) -> None:
         """Encoding alias round-trips correctly."""
@@ -539,7 +593,7 @@ class TestEncodingsSection:
         enc = EncodingInstance(
             name="q8_0",
             alias="enc",
-            params=(("block", "32"),),
+            params=(("block", 32),),
         )
         module = Module(name="test")
         module.add_encoding(enc)
@@ -561,7 +615,7 @@ class TestEncodingsSection:
         loaded = read(data)
         assert loaded.encodings[0].alias == "enc"
         assert loaded.encodings[0].name == "q8_0"
-        assert loaded.encodings[0].params == (("block", "32"),)
+        assert loaded.encodings[0].params == (("block", 32),)
 
     def test_encoding_no_params_roundtrip(self) -> None:
         """Encoding with zero params round-trips correctly."""
@@ -916,6 +970,47 @@ class TestCrossFormatRoundTrip:
         assert func_op.attributes.get("callee") == "negate"
         assert func_op.regions
         assert len(func_op.regions[0].blocks[0].ops) == 2
+
+    def test_attr_dict_parser_programmatic_and_readback_converge(self) -> None:
+        from loom.builtin_types import ALL_BUILTIN_TYPES
+        from loom.dialect.func import ALL_FUNC_OPS
+        from loom.dialect.test import ALL_TEST_OPS
+        from loom.format.bytecode.reader import read_module as read
+        from loom.format.text.parser import Parser
+
+        text = (
+            "func.def @f(%x: f32) -> (f32) {\n"
+            '  %r = test.attrs %x {meta = {phase = "link", opt = 3}, axis = 0}'
+            " : f32\n"
+            "  test.yield %r : f32\n"
+            "}\n"
+        )
+
+        parser = Parser()
+        parser.register_ops(list(ALL_FUNC_OPS) + list(ALL_TEST_OPS))
+        parser.register_types(ALL_BUILTIN_TYPES)
+        parsed_module = parser.parse(text)
+        _strip_locations(parsed_module)
+
+        programmatic_module = _make_attrs_module(
+            {"meta": {"phase": "link", "opt": 3}, "axis": 0}
+        )
+
+        parsed_bytes = write_module(parsed_module)
+        programmatic_bytes = write_module(programmatic_module)
+        assert parsed_bytes == programmatic_bytes
+
+        parsed_attrs = _first_attrs_dict(parsed_module)
+        programmatic_attrs = _first_attrs_dict(programmatic_module)
+        loaded_module = read(parsed_bytes)
+        loaded_attrs = _first_attrs_dict(loaded_module)
+
+        assert parsed_attrs == programmatic_attrs == loaded_attrs
+        assert hash(parsed_attrs) == hash(programmatic_attrs) == hash(loaded_attrs)
+        assert list(loaded_attrs.items()) == [
+            ("axis", 0),
+            ("meta", CanonicalAttrDict([("opt", 3), ("phase", "link")])),
+        ]
 
 
 class TestPredicateBytecodeRoundTrip:

@@ -208,6 +208,17 @@ class TestBuilders:
             _regions.append(else_region)
         return cast(list[ValueRef], self._b.build("test.branch", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def implicit_yield(self) -> None:
+        """Dedicated zero-field implicit terminator synthesized for elidable test regions.
+
+        Example::
+            test.implicit_yield
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        self._b.build("test.implicit_yield", _operands, attributes=_attributes, regions=_regions)
+
     def yield_(self, *, values: list[ValueRef]) -> None:
         """Test yield terminator.
 

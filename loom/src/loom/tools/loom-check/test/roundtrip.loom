@@ -149,6 +149,22 @@ func.decl public import("upstream") @relu(%x: f32) -> (f32)
 
 // ====
 
+// Canonical AttrDict printing sorts keys recursively and elides empty optional
+// dict attrs.
+func.def @canonical_attr_dict(%x: f32) -> (f32) {
+  %configured = test.attrs %x {meta = {phase = "link", opt = 3}, axis = 0} : f32
+  %passthrough = test.attrs %configured {} : f32
+  func.return %passthrough : f32
+}
+// ----
+func.def @canonical_attr_dict(%x: f32) -> (f32) {
+  %configured = test.attrs %x {axis = 0, meta = {opt = 3, phase = "link"}} : f32
+  %passthrough = test.attrs %configured : f32
+  func.return %passthrough : f32
+}
+
+// ====
+
 // Multiple function definitions in a single module.
 func.def @first(%a: i32, %b: i32) -> (i32) {
   %r = test.addi %a, %b : i32
