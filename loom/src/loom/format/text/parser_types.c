@@ -283,13 +283,6 @@ static iree_status_t loom_parse_type_encoding(
     return iree_ok_status();
   }
 
-  if (token.kind == LOOM_TOKEN_RESULT_ORDINAL) {
-    // '#' followed by a digit is not a valid encoding reference.
-    loom_tokenizer_next(&parser->tokenizer);
-    return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
-                                             token);
-  }
-
   loom_diagnostic_param_t params[] = {
       loom_param_string(token.text),
   };

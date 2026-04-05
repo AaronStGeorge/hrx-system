@@ -95,19 +95,9 @@ class TestHashAttr:
         assert _texts("#enc") == ["enc"]
         assert _texts("#q6_k") == ["q6_k"]
 
-
-class TestResultOrdinal:
-    def test_simple(self) -> None:
-        assert _texts("#0") == ["0"]
-        assert _kinds("#0") == [TokenKind.RESULT_ORDINAL]
-
-    def test_multi_digit(self) -> None:
-        assert _texts("#12") == ["12"]
-
-    def test_disambiguation_from_hash_attr(self) -> None:
-        tokens = _tokens("#0 #enc")
-        assert tokens[0].kind == TokenKind.RESULT_ORDINAL
-        assert tokens[1].kind == TokenKind.HASH_ATTR
+    def test_error_numeric_name(self) -> None:
+        with pytest.raises(ParseError, match="expected identifier after '#'"):
+            _tokens("#0")
 
 
 class TestBlockLabel:
@@ -633,8 +623,8 @@ class TestEdgeCases:
             _tokens("- x")
 
     def test_hash_error(self) -> None:
-        """'#' not followed by digit or letter is an error."""
-        with pytest.raises(ParseError, match="expected identifier or digit"):
+        """'#' not followed by an identifier is an error."""
+        with pytest.raises(ParseError, match="expected identifier after '#'"):
             _tokens("# ")
 
     def test_unexpected_character(self) -> None:

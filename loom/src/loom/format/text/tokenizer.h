@@ -37,31 +37,30 @@ typedef enum loom_token_kind_e {
   LOOM_TOKEN_SSA_VALUE = 3,
   LOOM_TOKEN_SYMBOL = 4,
   LOOM_TOKEN_HASH_ATTR = 5,
-  LOOM_TOKEN_RESULT_ORDINAL = 6,
-  LOOM_TOKEN_BLOCK_LABEL = 7,
+  LOOM_TOKEN_BLOCK_LABEL = 6,
 
   // Identifiers.
-  LOOM_TOKEN_BARE_IDENT = 8,
-  LOOM_TOKEN_OP_NAME = 9,
+  LOOM_TOKEN_BARE_IDENT = 7,
+  LOOM_TOKEN_OP_NAME = 8,
 
   // Punctuation.
-  LOOM_TOKEN_LPAREN = 10,
-  LOOM_TOKEN_RPAREN = 11,
-  LOOM_TOKEN_LBRACE = 12,
-  LOOM_TOKEN_RBRACE = 13,
-  LOOM_TOKEN_LBRACKET = 14,
-  LOOM_TOKEN_RBRACKET = 15,
-  LOOM_TOKEN_LANGLE = 16,
-  LOOM_TOKEN_RANGLE = 17,
-  LOOM_TOKEN_EQUALS = 18,
-  LOOM_TOKEN_COLON = 19,
-  LOOM_TOKEN_COMMA = 20,
-  LOOM_TOKEN_ARROW = 21,
-  LOOM_TOKEN_DIM_X = 22,  // 'x' dimension separator (only when in_dim_list).
-  LOOM_TOKEN_PIPE = 23,
+  LOOM_TOKEN_LPAREN = 9,
+  LOOM_TOKEN_RPAREN = 10,
+  LOOM_TOKEN_LBRACE = 11,
+  LOOM_TOKEN_RBRACE = 12,
+  LOOM_TOKEN_LBRACKET = 13,
+  LOOM_TOKEN_RBRACKET = 14,
+  LOOM_TOKEN_LANGLE = 15,
+  LOOM_TOKEN_RANGLE = 16,
+  LOOM_TOKEN_EQUALS = 17,
+  LOOM_TOKEN_COLON = 18,
+  LOOM_TOKEN_COMMA = 19,
+  LOOM_TOKEN_ARROW = 20,
+  LOOM_TOKEN_DIM_X = 21,  // 'x' dimension separator (only when in_dim_list).
+  LOOM_TOKEN_PIPE = 22,
 
   // Special.
-  LOOM_TOKEN_EOF = 24,
+  LOOM_TOKEN_EOF = 23,
   LOOM_TOKEN_COUNT_,
 
   // Sentinel for "no token" (uninitialized lookahead).
@@ -96,12 +95,6 @@ static inline loom_token_t loom_token_none(void) {
       .end_column = 0,
   };
   return token;
-}
-
-// Returns the original source spelling of |token|, including any sigil or
-// quotes excluded from |token.text|.
-static inline iree_string_view_t loom_token_lexeme(loom_token_t token) {
-  return token.source_text;
 }
 
 // Lexical scanner state. Stack-allocated; only escaped string payloads allocate

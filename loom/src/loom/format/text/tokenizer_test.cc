@@ -204,16 +204,11 @@ TEST(Tokenizer, HashAttr) {
   EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("#q8_0")));
 }
 
-TEST(Tokenizer, ResultOrdinal) {
+TEST(Tokenizer, HashAttrRejectsNumericName) {
   ScopedTokenizer t("#0 #1");
-  loom_token_t token0 = t.next();
-  EXPECT_EQ(token0.kind, LOOM_TOKEN_RESULT_ORDINAL);
-  EXPECT_TRUE(iree_string_view_equal(token0.text, IREE_SV("0")));
-  EXPECT_TRUE(iree_string_view_equal(token0.source_text, IREE_SV("#0")));
-  loom_token_t token1 = t.next();
-  EXPECT_EQ(token1.kind, LOOM_TOKEN_RESULT_ORDINAL);
-  EXPECT_TRUE(iree_string_view_equal(token1.text, IREE_SV("1")));
-  EXPECT_TRUE(iree_string_view_equal(token1.source_text, IREE_SV("#1")));
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_tokenizer_consume_status(t.get()));
 }
 
 TEST(Tokenizer, BlockLabel) {
@@ -492,15 +487,11 @@ TEST(Tokenizer, PrefixStrippedFromHashAttr) {
   EXPECT_EQ(token.end_column, 5u);
 }
 
-TEST(Tokenizer, PrefixStrippedFromResultOrdinal) {
-  // Token text should be the ordinal without the '#' prefix.
+TEST(Tokenizer, HashAttrNumericNameAtEOFIsInvalid) {
   ScopedTokenizer t("#42");
-  loom_token_t token = t.next();
-  EXPECT_EQ(token.kind, LOOM_TOKEN_RESULT_ORDINAL);
-  EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("42")));
-  EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("#42")));
-  EXPECT_EQ(token.column, 1u);
-  EXPECT_EQ(token.end_column, 4u);
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_tokenizer_consume_status(t.get()));
 }
 
 TEST(Tokenizer, PrefixStrippedFromBlockLabel) {

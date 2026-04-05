@@ -471,9 +471,9 @@ static loom_source_range_t loom_parser_token_origin(iree_string_view_t filename,
     };
   }
 
-  return loom_source_range_from_token(filename, source,
-                                      loom_token_lexeme(token), token.line,
-                                      token.column, token.end_column);
+  return loom_source_range_from_token(filename, source, token.source_text,
+                                      token.line, token.column,
+                                      token.end_column);
 }
 
 static iree_status_t loom_parser_format_token_text(
@@ -541,7 +541,6 @@ static iree_status_t loom_parser_format_token_text(
       prefix = '@';
       break;
     case LOOM_TOKEN_HASH_ATTR:
-    case LOOM_TOKEN_RESULT_ORDINAL:
       prefix = '#';
       break;
     case LOOM_TOKEN_BLOCK_LABEL:
@@ -1101,11 +1100,6 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
         LOOM_PARSE_RESOLVE_VALUE(parser, arg_token, &value_id);
         predicate.arg_tags[predicate.arg_count] = LOOM_PRED_ARG_VALUE;
         predicate.args[predicate.arg_count] = (int64_t)value_id;
-      } else if (arg_token.kind == LOOM_TOKEN_RESULT_ORDINAL) {
-        // Predicate ordinals (#N) are no longer supported.
-        return loom_parser_emit_unexpected_token(
-            parser, arg_token,
-            IREE_SV("a predicate argument (%name or integer)"));
       } else if (arg_token.kind == LOOM_TOKEN_INTEGER) {
         // Constant.
         loom_tokenizer_next(&parser->tokenizer);

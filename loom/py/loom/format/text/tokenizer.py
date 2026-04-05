@@ -11,7 +11,7 @@ its kind, text, and source location (line:col) for error reporting.
 
 This is a single-pass scanner with one character of lookahead. No
 regex. The scanner handles all disambiguation:
-  - '#' digit → RESULT_ORDINAL (rejected at parse time), '#' letter → HASH_ATTR
+  - '#' letter → HASH_ATTR, '#' digit is invalid
   - '-' '>' → ARROW, '-' digit → negative number
   - identifier '.' identifier → OP_NAME, bare identifier → BARE_IDENT
   - 'tile' before '<' → BARE_IDENT (type keyword), 'tile' before '.' → OP_NAME
@@ -67,31 +67,30 @@ class TokenKind(IntEnum):
     SSA_VALUE = 3  # %name, %0, %arg0
     SYMBOL = 4  # @name
     HASH_ATTR = 5  # #q8_0, #enc
-    RESULT_ORDINAL = 6  # #0, #1
-    BLOCK_LABEL = 7  # ^bb0, ^entry
+    BLOCK_LABEL = 6  # ^bb0, ^entry
 
     # Identifiers.
-    BARE_IDENT = 8  # keyword, type name, or other bare identifier
-    OP_NAME = 9  # dotted name: tile.contract, scalar.addi
+    BARE_IDENT = 7  # keyword, type name, or other bare identifier
+    OP_NAME = 8  # dotted name: tile.contract, scalar.addi
 
     # Punctuation.
-    LPAREN = 10
-    RPAREN = 11
-    LBRACE = 12
-    RBRACE = 13
-    LBRACKET = 14
-    RBRACKET = 15
-    LANGLE = 16
-    RANGLE = 17
-    EQUALS = 18
-    COLON = 19
-    COMMA = 20
-    ARROW = 21  # ->
-    DIM_X = 22  # 'x' dimension separator (only when in_dim_list)
-    PIPE = 23  # |
+    LPAREN = 9
+    RPAREN = 10
+    LBRACE = 11
+    RBRACE = 12
+    LBRACKET = 13
+    RBRACKET = 14
+    LANGLE = 15
+    RANGLE = 16
+    EQUALS = 17
+    COLON = 18
+    COMMA = 19
+    ARROW = 20  # ->
+    DIM_X = 21  # 'x' dimension separator (only when in_dim_list)
+    PIPE = 22  # |
 
     # Special.
-    EOF = 24
+    EOF = 23
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,7 +358,7 @@ class Tokenizer:
         if character == "@":
             return self._scan_symbol(location)
 
-        # Hash: #digits (result ordinal) or #name (hash attr).
+        # Hash attr.
         if character == "#":
             return self._scan_hash(location)
 
@@ -463,26 +462,19 @@ class Tokenizer:
         return self._make_token(TokenKind.SYMBOL, text, location)
 
     def _scan_hash(self, location: SourceLocation) -> Token:
-        """Scan #digits (result ordinal) or #name (hash attr).
+        """Scan #name (hash attr).
 
-        Token text is the bare name/digits without the '#' sigil:
-        #42 -> "42", #q8_0 -> "q8_0".
+        Token text is the bare name without the '#' sigil:
+        #q8_0 -> "q8_0".
         """
         self._advance()  # skip #
         name_start = self._position
-        if self._char().isdigit():
-            while self._char().isdigit():
-                self._advance()
-            text = self._source[name_start : self._position]
-            return self._make_token(TokenKind.RESULT_ORDINAL, text, location)
         if _is_ident_start(self._char()):
             while _is_ident_continue_no_dot(self._char()):
                 self._advance()
             text = self._source[name_start : self._position]
             return self._make_token(TokenKind.HASH_ATTR, text, location)
-        raise ParseError(
-            "expected identifier or digit after '#'", location, self._filename
-        )
+        raise ParseError("expected identifier after '#'", location, self._filename)
 
     def _scan_block_label(self, location: SourceLocation) -> Token:
         """Scan ^name.

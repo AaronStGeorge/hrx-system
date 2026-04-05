@@ -118,8 +118,6 @@ iree_string_view_t loom_token_kind_name(loom_token_kind_t kind) {
       return IREE_SV("symbol");
     case LOOM_TOKEN_HASH_ATTR:
       return IREE_SV("hash attr");
-    case LOOM_TOKEN_RESULT_ORDINAL:
-      return IREE_SV("result ordinal");
     case LOOM_TOKEN_BLOCK_LABEL:
       return IREE_SV("block label");
     case LOOM_TOKEN_BARE_IDENT:
@@ -531,11 +529,8 @@ static iree_status_t loom_tokenizer_scan_symbol(loom_tokenizer_t* t,
   return iree_ok_status();
 }
 
-// Scans a '#' prefixed token (hash attr or result ordinal). The returned
-// token text excludes the '#' prefix (e.g., '#q8_0' → 'q8_0', '#0' → '0').
-// Result ordinals (#digit) are still tokenized for targeted error messages
-// but are no longer accepted by the grammar. Rejects bare '#' with no
-// identifier or digit following.
+// Scans a '#' prefixed hash attr. The returned token text excludes the
+// '#' prefix (e.g., '#q8_0' → 'q8_0'). Rejects bare '#' and '#digits'.
 static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
                                               loom_token_t* out_token) {
   uint32_t start_line = t->line;
@@ -547,27 +542,13 @@ static iree_status_t loom_tokenizer_scan_hash(loom_tokenizer_t* t,
   // Token text starts after the '#' prefix.
   iree_host_size_t name_start = t->position;
 
-  char next = loom_tokenizer_char(t);
-  if (loom_is_digit(next)) {
-    // Result ordinal: #0, #1 (no longer valid, tokenized for error messages).
-    while (loom_is_digit(loom_tokenizer_char(t))) {
-      ++t->position;
-      ++t->column;
-    }
-    *out_token = loom_tokenizer_make_token(
-        t, LOOM_TOKEN_RESULT_ORDINAL, source_start, name_start, t->position,
-        start_line, start_column);
-    return iree_ok_status();
-  }
-
   // Hash attr: #q8_0, #enc.
+  if (!loom_is_ident_start(loom_tokenizer_char(t))) {
+    return loom_tokenizer_error(t, IREE_SV("expected identifier after '#'"));
+  }
   while (loom_is_ident_continue_no_dot(loom_tokenizer_char(t))) {
     ++t->position;
     ++t->column;
-  }
-
-  if (t->position == name_start) {
-    return loom_tokenizer_error(t, IREE_SV("expected identifier after '#'"));
   }
 
   *out_token = loom_tokenizer_make_token(t, LOOM_TOKEN_HASH_ATTR, source_start,
@@ -736,7 +717,7 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
     return loom_tokenizer_scan_symbol(t, out_token);
   }
 
-  // Hash attr or result ordinal (ordinals rejected at parse time).
+  // Hash attr.
   if (c == '#') {
     return loom_tokenizer_scan_hash(t, out_token);
   }

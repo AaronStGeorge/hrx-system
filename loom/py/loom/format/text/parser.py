@@ -480,14 +480,6 @@ def _parse_type_encoding_from_tokens(
         )
         return instance, -1
 
-    if token.kind == TokenKind.RESULT_ORDINAL:
-        tokenizer.next()
-        raise ParseError(
-            "encoding ordinals are no longer supported; use %name",
-            token.location,
-            filename,
-        )
-
     raise ParseError(
         f"expected encoding (%name or #name), got {token.kind.name} {token.text!r}",
         token.location,
@@ -2069,13 +2061,6 @@ class Parser:
         if tok.at(TokenKind.SSA_VALUE):
             name_tok = tok.next()
             return PredicateArg(tag="value", value=name_tok.text)
-        if tok.at(TokenKind.RESULT_ORDINAL):
-            ordinal_tok = tok.next()
-            raise ParseError(
-                f"predicate ordinals (#{ordinal_tok.text}) are no longer "
-                f"supported; use %name instead",
-                ordinal_tok.location,
-            )
         if tok.at(TokenKind.INTEGER):
             int_tok = tok.next()
             return PredicateArg(tag="const", value=int(int_tok.text))

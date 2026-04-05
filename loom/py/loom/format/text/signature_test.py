@@ -85,10 +85,9 @@ def test_unresolved_placeholder() -> None:
     assert exc_info.value.location.column == 25
 
 
-def test_result_ordinal_fail() -> None:
-    # #0 ordinals are no longer supported.
+def test_numeric_hash_attr_fail() -> None:
     text = "func.def @f() -> (tile<[#0]xf32>) {\n  func.return\n}"
-    with pytest.raises(ParseError, match=r"expected SSA_VALUE.*got RESULT_ORDINAL"):
+    with pytest.raises(ParseError, match="expected identifier after '#'"):
         _roundtrip(text)
 
 

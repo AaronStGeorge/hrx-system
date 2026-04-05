@@ -268,12 +268,9 @@ static void fuzz_strategy_grammar_aware(fuzz_input_t* input) {
       "@mod",
       "@_init",
 
-      // Hash attrs and result ordinals (ordinals rejected at parse time).
+      // Hash attrs.
       "#q8_0",
       "#enc",
-      "#0",
-      "#1",
-      "#42",
 
       // Block labels.
       "^bb0",
@@ -365,7 +362,7 @@ static void fuzz_strategy_truncation(fuzz_input_t* input) {
       "test.func @main(%a: f32) -> (f32) {\n"
       "  %x = scalar.addf %a, %a : f32\n"
       "  ^bb0:\n"
-      "  test.return %x #0 : f32\n"
+      "  test.return %x : f32\n"
       "}\n"
       "// Comment at end\n"
       "@mod\n"
