@@ -55,6 +55,59 @@ static iree_status_t loom_json_render_param_value(
 // JSON sink implementation
 //===----------------------------------------------------------------------===//
 
+// Returns true if the range carries any location metadata worth serializing.
+// The source buffer contents are intentionally omitted from JSON so a
+// diagnostic does not duplicate the full input file on every line.
+static bool loom_json_source_range_has_metadata(
+    const loom_source_range_t* range) {
+  return range->filename.size > 0 || range->start != 0 || range->end != 0 ||
+         range->start_line != 0 || range->start_column != 0 ||
+         range->end_line != 0 || range->end_column != 0;
+}
+
+// Renders one named source range object when the range has location metadata.
+static iree_status_t loom_json_render_source_range(
+    loom_output_stream_t* stream, const char* field_name,
+    const loom_source_range_t* range) {
+  if (!loom_json_source_range_has_metadata(range)) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(stream, field_name));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":{"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "\"filename\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, range->filename));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"start_line\":%" PRIu32 ",\"start_column\":%" PRIu32
+      ",\"end_line\":%" PRIu32 ",\"end_column\":%" PRIu32
+      ",\"start_byte\":%zu,\"end_byte\":%zu}",
+      range->start_line, range->start_column, range->end_line,
+      range->end_column, (size_t)range->start, (size_t)range->end));
+  return iree_ok_status();
+}
+
+// Renders per-token highlight byte ranges when present.
+static iree_status_t loom_json_render_highlights(
+    loom_output_stream_t* stream,
+    const loom_highlight_range_t* highlight_ranges,
+    iree_host_size_t highlight_count) {
+  if (!highlight_ranges || highlight_count == 0) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"highlights\":["));
+  for (iree_host_size_t highlight_index = 0; highlight_index < highlight_count;
+       ++highlight_index) {
+    if (highlight_index > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, "{\"start_byte\":%zu,\"end_byte\":%zu}",
+        (size_t)highlight_ranges[highlight_index].start,
+        (size_t)highlight_ranges[highlight_index].end));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  return iree_ok_status();
+}
+
 iree_status_t loom_diagnostic_json_sink(void* user_data,
                                         const loom_diagnostic_t* diagnostic) {
   loom_json_sink_options_t* options = (loom_json_sink_options_t*)user_data;
@@ -85,6 +138,14 @@ iree_status_t loom_diagnostic_json_sink(void* user_data,
       loom_output_stream_write_cstring(stream, ",\"emitter\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
       stream, loom_emitter_name(diagnostic->emitter)));
+
+  // Source locations and highlight byte ranges when present.
+  IREE_RETURN_IF_ERROR(
+      loom_json_render_source_range(stream, "origin", &diagnostic->origin));
+  IREE_RETURN_IF_ERROR(loom_json_render_source_range(
+      stream, "source_location", &diagnostic->source_location));
+  IREE_RETURN_IF_ERROR(loom_json_render_highlights(
+      stream, diagnostic->highlights, diagnostic->highlight_count));
 
   // Message: rendered from the error def's template and params, streamed
   // through the JSON-escaping adapter directly to the output. Zero allocs.

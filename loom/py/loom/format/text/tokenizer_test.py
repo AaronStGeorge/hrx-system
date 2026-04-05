@@ -151,14 +151,14 @@ class TestFloat:
 
 class TestString:
     def test_simple(self) -> None:
-        assert _texts('"hello"') == ['"hello"']
+        assert _texts('"hello"') == ["hello"]
         assert _kinds('"hello"') == [TokenKind.STRING]
 
     def test_empty(self) -> None:
-        assert _texts('""') == ['""']
+        assert _texts('""') == [""]
 
     def test_with_spaces(self) -> None:
-        assert _texts('"hello world"') == ['"hello world"']
+        assert _texts('"hello world"') == ["hello world"]
 
     def test_unterminated(self) -> None:
         with pytest.raises(ParseError, match="unterminated string"):
@@ -168,21 +168,66 @@ class TestString:
         tokens = _tokens(r'"has \"quotes\""')
         assert len(tokens) == 1
         assert tokens[0].kind == TokenKind.STRING
-        assert r"\"" in tokens[0].text
+        assert tokens[0].text == 'has "quotes"'
 
     def test_escaped_backslash(self) -> None:
         tokens = _tokens(r'"path\\to\\file"')
         assert len(tokens) == 1
         assert tokens[0].kind == TokenKind.STRING
+        assert tokens[0].text == r"path\to\file"
+
+    def test_json_escapes(self) -> None:
+        tokens = _tokens(r'"\/\b\f\n\r\t"')
+        assert len(tokens) == 1
+        assert tokens[0].text == "/\b\f\n\r\t"
+
+    def test_unicode_escapes(self) -> None:
+        tokens = _tokens(r'"A=\u0041 \u03BB \uD83D\uDD25"')
+        assert len(tokens) == 1
+        assert tokens[0].text == "A=A λ 🔥"
 
     def test_escaped_newline(self) -> None:
         tokens = _tokens(r'"line1\nline2"')
         assert len(tokens) == 1
-        assert r"\n" in tokens[0].text
+        assert tokens[0].text == "line1\nline2"
 
     def test_unterminated_escape(self) -> None:
-        with pytest.raises(ParseError, match="unterminated escape"):
+        with pytest.raises(ParseError, match="unterminated string literal"):
             _tokens('"trailing\\')
+
+    def test_invalid_escape(self) -> None:
+        with pytest.raises(ParseError, match=r"invalid escape sequence '\\x'"):
+            _tokens(r'"\x"')
+
+    def test_truncated_unicode_escape(self) -> None:
+        with pytest.raises(ParseError, match="truncated unicode escape"):
+            _tokens(r'"\u12"')
+
+    def test_invalid_unicode_escape_hex_digit(self) -> None:
+        with pytest.raises(ParseError, match="invalid hex digit 'G'"):
+            _tokens(r'"\u12G4"')
+
+    def test_lone_high_surrogate_escape(self) -> None:
+        with pytest.raises(
+            ParseError, match="high surrogate not followed by low surrogate"
+        ):
+            _tokens(r'"\uD83D"')
+
+    def test_invalid_low_surrogate_escape(self) -> None:
+        with pytest.raises(ParseError, match="invalid low surrogate U\\+0041"):
+            _tokens(r'"\uD83D\u0041"')
+
+    def test_unexpected_low_surrogate_escape(self) -> None:
+        with pytest.raises(ParseError, match="unexpected low surrogate U\\+DD25"):
+            _tokens(r'"\uDD25"')
+
+    def test_raw_control_character(self) -> None:
+        with pytest.raises(ParseError, match="unescaped control character U\\+0001"):
+            _tokens('"\x01"')
+
+    def test_raw_newline(self) -> None:
+        with pytest.raises(ParseError, match="unescaped control character U\\+000A"):
+            _tokens('"line1\nline2"')
 
 
 class TestBareIdent:
@@ -576,6 +621,18 @@ class TestAngleBracketScan:
         # a< starts depth 2, ">>" is inside string (ignored),
         # > closes inner (depth 1), > closes outer (depth 0).
         assert interior == 'a<">>">'
+
+    def test_string_with_escaped_quote(self) -> None:
+        tokenizer = Tokenizer(r'<label="a\"b">')
+        tokenizer.expect(TokenKind.LANGLE)
+        interior = tokenizer.scan_to_matching_angle_bracket()
+        assert interior == r'label="a\"b"'
+
+    def test_string_with_raw_newline_is_invalid(self) -> None:
+        tokenizer = Tokenizer('<"line1\nline2">')
+        tokenizer.expect(TokenKind.LANGLE)
+        with pytest.raises(ParseError, match="unescaped control character U\\+000A"):
+            tokenizer.scan_to_matching_angle_bracket()
 
     def test_unterminated(self) -> None:
         tokenizer = Tokenizer("<no closing")

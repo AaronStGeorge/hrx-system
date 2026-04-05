@@ -6,6 +6,8 @@
 
 """Tests for the format-driven text printer."""
 
+import pytest
+
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
@@ -26,10 +28,13 @@ from loom.ir import (
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
+    FileLocation,
     FunctionType,
+    FusedLocation,
     GroupScope,
     GroupType,
     Module,
+    OpaqueLocation,
     Operation,
     PoolType,
     Region,
@@ -553,6 +558,143 @@ class TestStringEscaping:
         )
         text = _printer().print_operation(op, module)
         assert r"col1\tcol2" in text
+
+    def test_canonical_json_escapes(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        op = Operation(
+            name="test.attrs",
+            operands=[x],
+            results=[r],
+            attributes={
+                "dict": {
+                    "msg": 'quote=" slash=\\ \b \f \n \r \t \x01 λ',
+                }
+            },
+        )
+        text = _printer().print_operation(op, module)
+        assert (
+            text
+            == '%r = test.attrs %x {msg = "quote=\\" slash=\\\\ \\b \\f \\n \\r \\t \\u0001 λ"} : f32'
+        )
+
+    def test_invalid_surrogate_fails_loud(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        op = Operation(
+            name="test.attrs",
+            operands=[x],
+            results=[r],
+            attributes={"dict": {"msg": "\ud800"}},
+        )
+        with pytest.raises(ValueError, match="invalid surrogate codepoint U\\+D800"):
+            _printer().print_operation(op, module)
+
+
+# ============================================================================
+# Location printing
+# ============================================================================
+
+
+class TestLocationPrinting:
+    """Location annotations should print canonical string literals."""
+
+    def test_file_location_escapes_source_name(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        source_id = len(module.sources)
+        module.sources.append('model "main"\\v2\n.loom')
+        location_id = module.add_location(
+            FileLocation(
+                source_id=source_id,
+                start_line=7,
+                start_col=8,
+                end_line=9,
+                end_col=10,
+            )
+        )
+        op = Operation(
+            name="test.neg",
+            operands=[x],
+            results=[r],
+            location_id=location_id,
+        )
+        text = _module_printer(print_locations=True).print_operation(op, module)
+        assert (
+            text
+            == '%r = test.neg %x : f32 loc("model \\"main\\"\\\\v2\\n.loom":7:8 to 9:10)'
+        )
+
+    def test_fused_location_escapes_child_sources(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        first_source_id = len(module.sources)
+        module.sources.append('a "x".loom')
+        second_source_id = len(module.sources)
+        module.sources.append("b\\y.loom")
+        first_child = module.add_location(
+            FileLocation(
+                source_id=first_source_id,
+                start_line=1,
+                start_col=2,
+                end_line=1,
+                end_col=2,
+            )
+        )
+        second_child = module.add_location(
+            FileLocation(
+                source_id=second_source_id,
+                start_line=3,
+                start_col=4,
+                end_line=3,
+                end_col=4,
+            )
+        )
+        fused_id = module.add_location(
+            FusedLocation(children=(first_child, second_child))
+        )
+        op = Operation(
+            name="test.neg",
+            operands=[x],
+            results=[r],
+            location_id=fused_id,
+        )
+        text = _module_printer(print_locations=True).print_operation(op, module)
+        assert (
+            text
+            == '%r = test.neg %x : f32 loc(fused<"a \\"x\\".loom":1:2, "b\\\\y.loom":3:4>)'
+        )
+
+    def test_opaque_location_escapes_tag_and_data(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        source_id = len(module.sources)
+        module.sources.append('torch "aten"')
+        location_id = module.add_location(
+            OpaqueLocation(source_id=source_id, data=b"node\\id\n\x01")
+        )
+        op = Operation(
+            name="test.neg",
+            operands=[x],
+            results=[r],
+            location_id=location_id,
+        )
+        text = _module_printer(print_locations=True).print_operation(op, module)
+        assert (
+            text
+            == '%r = test.neg %x : f32 loc(opaque<"torch \\"aten\\"", "node\\\\id\\n\\u0001">)'
+        )
+
+    def test_opaque_location_invalid_utf8_fails_loud(self) -> None:
+        module, [x, r] = _module_with(("x", F32), ("r", F32))
+        source_id = len(module.sources)
+        module.sources.append("torch")
+        location_id = module.add_location(
+            OpaqueLocation(source_id=source_id, data=b"\xff")
+        )
+        op = Operation(
+            name="test.neg",
+            operands=[x],
+            results=[r],
+            location_id=location_id,
+        )
+        with pytest.raises(ValueError, match="opaque location data is not valid UTF-8"):
+            _module_printer(print_locations=True).print_operation(op, module)
 
 
 # ============================================================================

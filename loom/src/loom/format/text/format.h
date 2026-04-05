@@ -53,6 +53,9 @@
 //   lists: -> (type) or -> (%op as type, type). Ops with exactly one
 //   non-variadic result may use bare syntax: -> type. The choice is
 //   per-op (ResultType vs ResultTypeList in the format spec).
+// - String literals: parsers accept JSON-compatible escape spellings,
+//   but the printer emits one canonical form. The original escape syntax
+//   is not semantic state.
 //
 // Example of canonical output (single line per op, regions indented):
 //
@@ -137,10 +140,26 @@
 //                  Examples: 3.14, 1.0e-5, -0.5
 //
 //   String:        '"' string-char* '"'
-//                  string-char ::= [^"\\] | '\\' escape-char
-//                  escape-char ::= '"' | '\\' | 'n' | 't'
+//                  string-char ::= unescaped-char | escape-sequence
+//                  unescaped-char ::= any valid UTF-8 codepoint except '"',
+//                                     '\\', and U+0000..U+001F
+//                  escape-sequence ::=
+//                    '\\"' | '\\\\' | '\\/' | '\\b' | '\\f' | '\\n' |
+//                    '\\r' | '\\t' | '\\u' HEXDIGIT HEXDIGIT HEXDIGIT
+//                    HEXDIGIT
+//                  Unicode escapes follow JSON rules. Supplementary-plane
+//                  codepoints use a UTF-16 surrogate pair:
+//                    '\\uD83D\\uDD25' => 🔥
+//                  Lone surrogates and malformed hex digits are parse errors.
+//                  In-memory string payloads are decoded UTF-8 without quotes
+//                  or escape syntax; source spans preserve the exact quoted
+//                  source spelling for diagnostics.
+//                  Canonical printing emits decoded UTF-8 directly except
+//                  for '"', '\\', '\b', '\f', '\n', '\r', '\t', and other
+//                  control bytes U+0000..U+001F, which are escaped as
+//                  '\\u00XX'. '/' is printed unescaped.
 //                  Examples: "hello", "model.loom", "has \"quotes\"",
-//                            "line1\\nline2"
+//                            "line1\\nline2", "\\u03BB", "\\uD83D\\uDD25"
 //
 //   Type keyword:  'f16' | 'f32' | 'f64' | 'bf16' | 'f8E4M3' | 'f8E5M2'
 //                  | 'i' digit+ | 'index'

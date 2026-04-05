@@ -190,6 +190,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
+    loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main

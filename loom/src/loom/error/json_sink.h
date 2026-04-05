@@ -15,6 +15,13 @@
 // Output example:
 //
 //   {"severity":"error","domain":"TYPE","code":1,"emitter":"verifier",
+//    "origin":{"filename":"model.loom","start_line":42,"start_column":15,
+//              "end_line":42,"end_column":17,"start_byte":128,
+//              "end_byte":130},
+//    "source_location":{"filename":"model.loom","start_line":42,
+//                       "start_column":15,"end_line":42,"end_column":17,
+//                       "start_byte":128,"end_byte":130},
+//    "highlights":[{"start_byte":128,"end_byte":130}],
 //    "message":"'rhs' type f32 does not match 'lhs' type i32",
 //    "fix_hint":"Ensure 'rhs' and 'lhs' have the same type",
 //    "params":{"field_a":"lhs","type_a":"i32","field_b":"rhs","type_b":"f32"}}

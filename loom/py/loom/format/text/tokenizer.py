@@ -148,6 +148,28 @@ def _is_ident_continue_no_dot(character: str) -> bool:
     return character.isalnum() or character == "_" or character == "$"
 
 
+_JSON_ESCAPE_CHARS: dict[str, str] = {
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+}
+
+
+def _is_unicode_high_surrogate(codepoint: int) -> bool:
+    """Returns true for UTF-16 high surrogate code units."""
+    return 0xD800 <= codepoint <= 0xDBFF
+
+
+def _is_unicode_low_surrogate(codepoint: int) -> bool:
+    """Returns true for UTF-16 low surrogate code units."""
+    return 0xDC00 <= codepoint <= 0xDFFF
+
+
 # ============================================================================
 # Tokenizer
 # ============================================================================
@@ -253,20 +275,23 @@ class Tokenizer:
         """
         start = self._position
         depth = 1
-        in_string = False
         while self._position < len(self._source) and depth > 0:
             character = self._source[self._position]
             if character == '"':
-                in_string = not in_string
-            elif not in_string:
-                if character == "<":
-                    depth += 1
-                elif character == ">":
-                    depth -= 1
-                    if depth == 0:
-                        interior = self._source[start : self._position]
-                        self._advance()  # consume the closing '>'
-                        return interior
+                string_location = SourceLocation(
+                    self._line, self._column, self._position
+                )
+                self._advance()
+                self._scan_string_content(string_location, decode=False)
+                continue
+            if character == "<":
+                depth += 1
+            elif character == ">":
+                depth -= 1
+                if depth == 0:
+                    interior = self._source[start : self._position]
+                    self._advance()  # consume the closing '>'
+                    return interior
             if character == "\n":
                 self._line += 1
                 self._column = 0  # advance() will increment to 1
@@ -493,38 +518,129 @@ class Tokenizer:
     def _scan_string(self, location: SourceLocation) -> Token:
         """Scan "..." string literal with escape sequences.
 
-        Supported escapes: \\\\ (backslash), \\\" (quote), \\n (newline),
-        \\t (tab). The token text includes the outer quotes and the
-        raw escape sequences (not decoded). Decoding happens when the
-        parser extracts the string value.
+        Token text is the decoded payload without surrounding quotes, matching
+        the C tokenizer contract and keeping parser callsites escape-agnostic.
         """
-        start = self._position
         self._advance()  # skip opening "
+        text = self._scan_string_content(location, decode=True)
+        assert text is not None
+        return self._make_token(TokenKind.STRING, text, location)
+
+    def _scan_string_content(
+        self,
+        location: SourceLocation,
+        *,
+        decode: bool,
+    ) -> str | None:
+        """Scan a string body after the opening quote has been consumed."""
+        decoded_chunks: list[str] | None = [] if decode else None
         while self._position < len(self._source):
             character = self._char()
             if character == "\\":
-                # Escape sequence — skip the backslash and the next char.
-                self._advance()
-                if self._position >= len(self._source):
-                    raise ParseError(
-                        "unterminated escape sequence in string literal",
-                        location,
-                        self._filename,
-                    )
-                self._advance()
+                decoded = self._scan_string_escape()
+                if decoded_chunks is not None:
+                    decoded_chunks.append(decoded)
                 continue
             if character == '"':
-                self._advance()  # skip closing "
-                text = self._source[start : self._position]
-                return self._make_token(TokenKind.STRING, text, location)
-            if character == "\n":
+                self._advance()
+                return "".join(decoded_chunks) if decoded_chunks is not None else None
+            if ord(character) < 0x20:
                 raise ParseError(
-                    "unterminated string literal", location, self._filename
+                    f"unescaped control character U+{ord(character):04X} "
+                    f"in string literal",
+                    SourceLocation(self._line, self._column, self._position),
+                    self._filename,
                 )
+            if decoded_chunks is not None:
+                decoded_chunks.append(character)
             self._advance()
         raise ParseError(
             "unterminated string literal at end of input", location, self._filename
         )
+
+    def _scan_string_escape(self) -> str:
+        """Scan one JSON-compatible escape and return its decoded payload."""
+        assert self._char() == "\\"
+        self._advance()
+        if self._position >= len(self._source):
+            raise ParseError(
+                "unterminated string literal",
+                SourceLocation(self._line, self._column, self._position),
+                self._filename,
+            )
+
+        escaped = self._char()
+        if escaped in _JSON_ESCAPE_CHARS:
+            self._advance()
+            return _JSON_ESCAPE_CHARS[escaped]
+        if escaped != "u":
+            raise ParseError(
+                f"invalid escape sequence '\\{escaped}' in string literal",
+                SourceLocation(self._line, self._column, self._position),
+                self._filename,
+            )
+
+        self._advance()
+        codepoint_location = SourceLocation(self._line, self._column, self._position)
+        codepoint = self._scan_unicode_escape_codepoint()
+        if _is_unicode_high_surrogate(codepoint):
+            if self._char() != "\\" or self._peek_char() != "u":
+                raise ParseError(
+                    "high surrogate not followed by low surrogate",
+                    SourceLocation(self._line, self._column, self._position),
+                    self._filename,
+                )
+            self._advance()
+            self._advance()
+            low_location = SourceLocation(self._line, self._column, self._position)
+            low = self._scan_unicode_escape_codepoint()
+            if not _is_unicode_low_surrogate(low):
+                raise ParseError(
+                    f"invalid low surrogate U+{low:04X}",
+                    low_location,
+                    self._filename,
+                )
+            codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00)
+        elif _is_unicode_low_surrogate(codepoint):
+            raise ParseError(
+                f"unexpected low surrogate U+{codepoint:04X}",
+                codepoint_location,
+                self._filename,
+            )
+        return chr(codepoint)
+
+    def _scan_unicode_escape_codepoint(self) -> int:
+        """Scan 4 hex digits after '\\u' and return the decoded code unit."""
+        value = 0
+        for _ in range(4):
+            if self._position >= len(self._source):
+                raise ParseError(
+                    "truncated unicode escape in string literal",
+                    SourceLocation(self._line, self._column, self._position),
+                    self._filename,
+                )
+            character = self._char()
+            if character == '"':
+                raise ParseError(
+                    "truncated unicode escape in string literal",
+                    SourceLocation(self._line, self._column, self._position),
+                    self._filename,
+                )
+            if "0" <= character <= "9":
+                digit = ord(character) - ord("0")
+            elif "a" <= character <= "f":
+                digit = ord(character) - ord("a") + 10
+            elif "A" <= character <= "F":
+                digit = ord(character) - ord("A") + 10
+            else:
+                raise ParseError(
+                    f"invalid hex digit '{character}' in unicode escape",
+                    SourceLocation(self._line, self._column, self._position),
+                    self._filename,
+                )
+            value = (value << 4) | digit
+            self._advance()
+        return value
 
     def _scan_number(self, location: SourceLocation) -> Token:
         """Scan integer or float literal."""

@@ -137,8 +137,7 @@ def _parse_generic_attr_value_from_tokens(
     if tokenizer.at(TokenKind.FLOAT):
         return float(tokenizer.next().text)
     if tokenizer.at(TokenKind.STRING):
-        text = tokenizer.next().text
-        return text[1:-1]
+        return tokenizer.next().text
     if tokenizer.at(TokenKind.BARE_IDENT):
         text = tokenizer.next().text
         if text == "true":
@@ -1322,8 +1321,7 @@ class Parser:
         by the caller.
         """
         tok = self._tokenizer
-        source_text = tok.expect(TokenKind.STRING).text
-        source_name = source_text[1:-1]  # Strip quotes.
+        source_name = tok.expect(TokenKind.STRING).text
         source_id = self._find_or_add_source(source_name)
 
         tok.expect(TokenKind.COLON)
@@ -1369,8 +1367,7 @@ class Parser:
     def _parse_fused_child(self) -> int:
         """Parse one fused location child: "source":line:col."""
         tok = self._tokenizer
-        source_text = tok.expect(TokenKind.STRING).text
-        source_name = source_text[1:-1]
+        source_name = tok.expect(TokenKind.STRING).text
         source_id = self._find_or_add_source(source_name)
 
         tok.expect(TokenKind.COLON)
@@ -1398,14 +1395,12 @@ class Parser:
         tok.expect(TokenKind.BARE_IDENT, "opaque")
         tok.expect(TokenKind.LANGLE)
 
-        tag_text = tok.expect(TokenKind.STRING).text
-        tag = tag_text[1:-1]
+        tag = tok.expect(TokenKind.STRING).text
         source_id = self._find_or_add_source(tag)
 
         tok.expect(TokenKind.COMMA)
 
-        data_text = tok.expect(TokenKind.STRING).text
-        data = data_text[1:-1].encode("utf-8")
+        data = tok.expect(TokenKind.STRING).text.encode("utf-8")
 
         tok.expect(TokenKind.RANGLE)
         return self._module.add_location(OpaqueLocation(source_id=source_id, data=data))
@@ -1691,8 +1686,7 @@ class Parser:
                     return float(tok.next().text)
                 return float(tok.expect(TokenKind.INTEGER).text)
             case "string":
-                text = tok.expect(TokenKind.STRING).text
-                return text[1:-1]  # Strip quotes.
+                return tok.expect(TokenKind.STRING).text
             case "bool":
                 ident = tok.expect(TokenKind.BARE_IDENT)
                 if ident.text == "true":

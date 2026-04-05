@@ -22,6 +22,20 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    diagnostic_matchers
+  HDRS
+    "diagnostic_matchers.h"
+  DEPS
+    iree::base
+    loom::src::loom::error::diagnostic
+    loom::src::loom::error::error_defs
+    iree::testing::gtest
+  TESTONLY
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     diff_test

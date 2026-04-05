@@ -715,6 +715,40 @@ void loom_parsed_op_initialize(loom_parsed_op_t* parsed) {
   parsed->tied_result_capacity = LOOM_PARSED_OP_INLINE_TIED;
 }
 
+void loom_parsed_op_reset(loom_parsed_op_t* parsed) {
+  parsed->operand_count = 0;
+  parsed->result_count = 0;
+  parsed->tied_result_count = 0;
+  parsed->attribute_count = 0;
+  parsed->region_count = 0;
+  parsed->instance_flags = 0;
+}
+
+iree_status_t loom_parser_acquire_parsed_op(loom_parser_t* parser,
+                                            loom_parsed_op_t** out_parsed) {
+  loom_parsed_op_t* parsed = parser->parsed_op_free_list;
+  if (parsed) {
+    parser->parsed_op_free_list = parsed->next_free;
+    parsed->next_free = NULL;
+    loom_parsed_op_reset(parsed);
+    *out_parsed = parsed;
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&parser->parser_arena,
+                                           sizeof(*parsed), (void**)&parsed));
+  loom_parsed_op_initialize(parsed);
+  *out_parsed = parsed;
+  return iree_ok_status();
+}
+
+void loom_parser_release_parsed_op(loom_parser_t* parser,
+                                   loom_parsed_op_t* parsed) {
+  if (!parsed) return;
+  parsed->next_free = parser->parsed_op_free_list;
+  parser->parsed_op_free_list = parsed;
+}
+
 iree_status_t loom_parsed_op_add_operand(loom_parsed_op_t* parsed,
                                          iree_arena_allocator_t* arena,
                                          loom_value_id_t value_id) {
@@ -764,6 +798,10 @@ iree_status_t loom_parsed_op_set_attribute(loom_parsed_op_t* parsed,
     memset(&parsed->attributes[parsed->attribute_count], 0,
            (capacity - parsed->attribute_count) * sizeof(loom_attribute_t));
     parsed->attribute_capacity = (uint8_t)capacity;
+  }
+  if (field_index > parsed->attribute_count) {
+    memset(&parsed->attributes[parsed->attribute_count], 0,
+           (field_index - parsed->attribute_count) * sizeof(loom_attribute_t));
   }
   parsed->attributes[field_index] = attr;
   if (field_index >= parsed->attribute_count) {
@@ -1543,10 +1581,9 @@ static iree_status_t loom_finalize_op(
 // Op parsing
 //===----------------------------------------------------------------------===//
 
-static iree_status_t loom_parse_op(loom_parser_t* parser) {
+static iree_status_t loom_parse_op_into(loom_parser_t* parser,
+                                        loom_parsed_op_t* parsed) {
   uint32_t errors_before = parser->error_count;
-  loom_parsed_op_t parsed;
-  loom_parsed_op_initialize(&parsed);
 
   // Capture the start position of the op for source location tracking.
   // This is the first token — either a result name or the op name.
@@ -1557,7 +1594,7 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
   if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_SSA_VALUE)) {
     // Collect result names until we see '='.
     for (;;) {
-      if (parsed.result_count > 0) {
+      if (parsed->result_count > 0) {
         if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
           break;
         }
@@ -1577,7 +1614,7 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
         parser->module->values.entries[value_id].name_id = name_id;
       }
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
-          &parsed, &parser->parser_arena, value_id, name_token));
+          parsed, &parser->parser_arena, value_id, name_token));
     }
     // Expect '='.
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
@@ -1604,15 +1641,15 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
 
   bool is_symbol_definition =
       iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE);
-  if (is_symbol_definition && parsed.result_count > 0) {
+  if (is_symbol_definition && parsed->result_count > 0) {
     return loom_parser_emit_result_count_mismatch(parser, vtable, op_name_token,
                                                   /*expected_count=*/0,
-                                                  parsed.result_count);
+                                                  parsed->result_count);
   }
 
   // Walk the format elements.
   IREE_RETURN_IF_ERROR(
-      loom_parser_walk_format(parser, vtable, op_name_token, &parsed));
+      loom_parser_walk_format(parser, vtable, op_name_token, parsed));
 
   if (parser->error_count > errors_before) {
     loom_parser_definition_scope_discard(parser);
@@ -1626,7 +1663,7 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
       parser->pending_block_args.count > 0) {
     for (uint16_t i = 0; i < parser->pending_block_args.count; ++i) {
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
-          &parsed, &parser->parser_arena,
+          parsed, &parser->parser_arena,
           parser->pending_block_args.entries[i].value_id));
     }
     loom_parser_pending_block_args_clear(&parser->pending_block_args);
@@ -1638,10 +1675,10 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
       (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS) != 0;
   if (!is_symbol_definition && !has_variadic_results &&
       parser->error_count == errors_before &&
-      parsed.result_count != vtable->fixed_result_count) {
+      parsed->result_count != vtable->fixed_result_count) {
     IREE_RETURN_IF_ERROR(loom_parser_emit_result_count_mismatch(
         parser, vtable, op_name_token, vtable->fixed_result_count,
-        parsed.result_count));
+        parsed->result_count));
   }
 
   // Create a source location spanning the full op text.
@@ -1658,7 +1695,16 @@ static iree_status_t loom_parse_op(loom_parser_t* parser) {
 
   // Finalize the op.
   loom_op_t* op = NULL;
-  return loom_finalize_op(parser, kind, vtable, &parsed, location, &op);
+  return loom_finalize_op(parser, kind, vtable, parsed, location, &op);
+}
+
+static iree_status_t loom_parse_op(loom_parser_t* parser) {
+  loom_parsed_op_t* parsed = NULL;
+  IREE_RETURN_IF_ERROR(loom_parser_acquire_parsed_op(parser, &parsed));
+  iree_status_t status = loom_parse_op_into(parser, parsed);
+  loom_parser_result_scope_reset(&parser->result_scope);
+  loom_parser_release_parsed_op(parser, parsed);
+  return status;
 }
 
 //===----------------------------------------------------------------------===//

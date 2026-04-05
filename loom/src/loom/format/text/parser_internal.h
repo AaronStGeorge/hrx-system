@@ -25,6 +25,8 @@ extern "C" {
 #endif
 
 typedef struct loom_parser_t loom_parser_t;
+typedef struct loom_parsed_op_t loom_parsed_op_t;
+typedef struct loom_parser_encoding_params_t loom_parser_encoding_params_t;
 typedef struct loom_parser_scope_t loom_parser_scope_t;
 
 // Pending block argument prepared by FUNC_ARGS, BINDING_LIST, or an implicit
@@ -267,6 +269,16 @@ typedef struct loom_parser_t {
   // use a retained spill hash table sized to the current op.
   loom_parser_result_scope_t result_scope;
 
+  // Parser-owned reusable op scratch frames. One active frame is leased per
+  // recursive loom_parse_op call, so child-region parsing cannot clobber the
+  // parent op's accumulator. Released frames retain their spill buffers.
+  loom_parsed_op_t* parsed_op_free_list;
+
+  // Parser-owned reusable encoding-parameter scratch frames. Inline encoding
+  // specs can nest recursively in attribute values, so each active
+  // loom_parse_static_encoding call leases its own frame.
+  loom_parser_encoding_params_t* encoding_params_free_list;
+
   loom_alias_table_t aliases;
   loom_symbol_map_t symbol_lookup;
   loom_diagnostic_sink_t diagnostic_sink;
@@ -394,11 +406,16 @@ void loom_parser_sync_to_brace(loom_parser_t* parser);
 #define LOOM_PARSED_OP_INLINE_REGIONS 4
 #define LOOM_PARSED_OP_INLINE_TIED 4
 
-// Accumulates parsed fields during format walk. Pointers start aimed
-// at the inline arrays and redirect to arena overflow on growth.
-// Fields are ordered by alignment: pointers, then counts, then inline
-// storage, to eliminate padding.
-typedef struct loom_parsed_op_t {
+// Accumulates parsed fields during format walk. Pointers start aimed at the
+// inline arrays and redirect to parser_arena spill storage on growth. Parser-
+// owned frames retain those spill pointers/capacities across logical resets so
+// repeated large sibling ops reuse high-water buffers.
+//
+// Fields are ordered by alignment: pointers, then counts, then inline storage,
+// to eliminate padding.
+struct loom_parsed_op_t {
+  loom_parsed_op_t* next_free;
+
   loom_value_id_t* operand_ids;
   loom_value_id_t* result_ids;
   loom_token_t* result_name_tokens;
@@ -425,10 +442,24 @@ typedef struct loom_parsed_op_t {
   loom_attribute_t inline_attributes[LOOM_PARSED_OP_INLINE_ATTRS];
   loom_region_t* inline_regions[LOOM_PARSED_OP_INLINE_REGIONS];
   loom_tied_result_t inline_tied_results[LOOM_PARSED_OP_INLINE_TIED];
-} loom_parsed_op_t;
+};
 
-// Resets a parsed op accumulator, pointing all arrays at inline storage.
+// Initializes a fresh parser-owned parsed-op scratch frame.
 void loom_parsed_op_initialize(loom_parsed_op_t* parsed);
+
+// Clears a parsed-op scratch frame for reuse while retaining spill
+// pointers/capacities.
+void loom_parsed_op_reset(loom_parsed_op_t* parsed);
+
+// Acquires one parser-owned parsed-op scratch frame for the current
+// loom_parse_op invocation.
+iree_status_t loom_parser_acquire_parsed_op(loom_parser_t* parser,
+                                            loom_parsed_op_t** out_parsed);
+
+// Releases a parsed-op scratch frame back to parser->parsed_op_free_list while
+// retaining spill pointers/capacities for later reuse.
+void loom_parser_release_parsed_op(loom_parser_t* parser,
+                                   loom_parsed_op_t* parsed);
 
 // Appends an operand value ID. Spills to arena on overflow.
 iree_status_t loom_parsed_op_add_operand(loom_parsed_op_t* parsed,
@@ -487,14 +518,18 @@ iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
                                          loom_string_id_t alias_id,
                                          uint16_t* out_encoding_id);
 
-// Parses encoding parameters from the token stream. Called after
-// LANGLE has been consumed. Reads key=value pairs separated by
-// commas and consumes the closing RANGLE. Arena-allocates the
-// output array in the parser arena; module insertion canonicalizes and
-// copies the final encoding attrs.
-iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
-                                         loom_named_attr_t** out_attrs,
-                                         uint8_t* out_count);
+// Reusable parser-owned accumulator for one active inline encoding parameter
+// list. Nested static encoding parses lease independent frames from
+// parser->encoding_params_free_list.
+#define LOOM_PARSER_ENCODING_PARAMS_INLINE_ATTRS 8
+struct loom_parser_encoding_params_t {
+  loom_parser_encoding_params_t* next_free;
+  loom_named_attr_t* attrs;
+  iree_host_size_t capacity;
+  uint8_t count;
+
+  loom_named_attr_t inline_attrs[LOOM_PARSER_ENCODING_PARAMS_INLINE_ATTRS];
+};
 
 //===----------------------------------------------------------------------===//
 // Value parsing helpers

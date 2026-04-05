@@ -71,8 +71,9 @@ typedef enum loom_token_kind_e {
 //
 // |text| is the payload the parser should intern or resolve. For prefixed
 // tokens (%, @, #, ^), this excludes the prefix. For string literals, this
-// excludes the surrounding quotes and decodes the supported escape set
-// (\" \\ \n \t). |source_text| is the exact byte slice from the input file,
+// excludes the surrounding quotes and decodes JSON-compatible escapes
+// (\" \\ \/ \b \f \n \r \t \uXXXX plus surrogate pairs). |source_text| is
+// the exact byte slice from the input file,
 // including sigils/quotes, for diagnostics and source ranges.
 typedef struct loom_token_t {
   iree_string_view_t text;

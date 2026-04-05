@@ -61,6 +61,21 @@ static inline bool loom_is_hex_digit(char c) {
   return loom_is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
+static inline int32_t loom_hex_digit_value(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+static inline bool loom_is_unicode_high_surrogate(uint32_t codepoint) {
+  return codepoint >= 0xD800u && codepoint <= 0xDBFFu;
+}
+
+static inline bool loom_is_unicode_low_surrogate(uint32_t codepoint) {
+  return codepoint >= 0xDC00u && codepoint <= 0xDFFFu;
+}
+
 static iree_string_view_t loom_tokenizer_eof_text(
     const loom_tokenizer_t* tokenizer) {
   if (iree_string_view_is_empty(tokenizer->source)) return tokenizer->source;
@@ -253,6 +268,133 @@ static loom_token_t loom_tokenizer_make_verbatim_token(
                                    t->position, start_line, start_column);
 }
 
+static iree_status_t loom_tokenizer_consume_hex4(loom_tokenizer_t* t,
+                                                 uint32_t* out_codepoint) {
+  uint32_t codepoint = 0;
+  for (int i = 0; i < 4; ++i) {
+    if (t->position >= t->source.size) {
+      return loom_tokenizer_error(
+          t, IREE_SV("truncated unicode escape in string literal"));
+    }
+    char digit = t->source.data[t->position];
+    if (digit == '"') {
+      return loom_tokenizer_error(
+          t, IREE_SV("truncated unicode escape in string literal"));
+    }
+    int32_t value = loom_hex_digit_value(digit);
+    if (value < 0) {
+      return loom_tokenizer_errorf(
+          t, "invalid hex digit '%c' in unicode escape", digit);
+    }
+    codepoint = (codepoint << 4) | (uint32_t)value;
+    ++t->position;
+    ++t->column;
+  }
+  *out_codepoint = codepoint;
+  return iree_ok_status();
+}
+
+// Consumes one JSON-compatible string escape at the current backslash and
+// returns its decoded UTF-8 bytes. This is used by both the string validator
+// and the string decoder so the accepted escape grammar cannot drift.
+static iree_status_t loom_tokenizer_consume_string_escape(
+    loom_tokenizer_t* t, char* out_bytes, iree_host_size_t* out_length) {
+  IREE_ASSERT_ARGUMENT(out_bytes);
+  IREE_ASSERT_ARGUMENT(out_length);
+  IREE_ASSERT(loom_tokenizer_char(t) == '\\');
+
+  ++t->position;
+  ++t->column;
+  if (t->position >= t->source.size) {
+    return loom_tokenizer_error(t, IREE_SV("unterminated string literal"));
+  }
+
+  char escaped = t->source.data[t->position];
+  ++t->position;
+  ++t->column;
+
+  switch (escaped) {
+    case '"':
+      out_bytes[0] = '"';
+      *out_length = 1;
+      return iree_ok_status();
+    case '\\':
+      out_bytes[0] = '\\';
+      *out_length = 1;
+      return iree_ok_status();
+    case '/':
+      out_bytes[0] = '/';
+      *out_length = 1;
+      return iree_ok_status();
+    case 'b':
+      out_bytes[0] = '\b';
+      *out_length = 1;
+      return iree_ok_status();
+    case 'f':
+      out_bytes[0] = '\f';
+      *out_length = 1;
+      return iree_ok_status();
+    case 'n':
+      out_bytes[0] = '\n';
+      *out_length = 1;
+      return iree_ok_status();
+    case 'r':
+      out_bytes[0] = '\r';
+      *out_length = 1;
+      return iree_ok_status();
+    case 't':
+      out_bytes[0] = '\t';
+      *out_length = 1;
+      return iree_ok_status();
+    case 'u': {
+      uint32_t codepoint = 0;
+      iree_host_size_t codepoint_position = t->position;
+      uint32_t codepoint_column = t->column;
+      IREE_RETURN_IF_ERROR(loom_tokenizer_consume_hex4(t, &codepoint));
+      if (loom_is_unicode_high_surrogate(codepoint)) {
+        if (t->position + 2 > t->source.size ||
+            t->source.data[t->position] != '\\' ||
+            t->source.data[t->position + 1] != 'u') {
+          return loom_tokenizer_error(
+              t, IREE_SV("high surrogate not followed by low surrogate"));
+        }
+        t->position += 2;
+        t->column += 2;
+        iree_host_size_t low_surrogate_position = t->position;
+        uint32_t low_surrogate_column = t->column;
+        uint32_t low_surrogate = 0;
+        IREE_RETURN_IF_ERROR(loom_tokenizer_consume_hex4(t, &low_surrogate));
+        if (!loom_is_unicode_low_surrogate(low_surrogate)) {
+          t->position = low_surrogate_position;
+          t->column = low_surrogate_column;
+          return loom_tokenizer_errorf(t, "invalid low surrogate U+%04" PRIX32,
+                                       low_surrogate);
+        }
+        codepoint = 0x10000u + ((codepoint - 0xD800u) << 10) +
+                    (low_surrogate - 0xDC00u);
+      } else if (loom_is_unicode_low_surrogate(codepoint)) {
+        t->position = codepoint_position;
+        t->column = codepoint_column;
+        return loom_tokenizer_errorf(t, "unexpected low surrogate U+%04" PRIX32,
+                                     codepoint);
+      }
+
+      int length = iree_unicode_utf8_encode(codepoint, out_bytes);
+      if (length == 0) {
+        t->position = codepoint_position;
+        t->column = codepoint_column;
+        return loom_tokenizer_errorf(
+            t, "invalid unicode codepoint U+%04" PRIX32, codepoint);
+      }
+      *out_length = (iree_host_size_t)length;
+      return iree_ok_status();
+    }
+    default:
+      return loom_tokenizer_errorf(
+          t, "invalid escape sequence '\\%c' in string literal", escaped);
+  }
+}
+
 static iree_status_t loom_tokenizer_decode_string_text(
     loom_tokenizer_t* t, iree_host_size_t content_start,
     iree_host_size_t content_end, iree_string_view_t* out_text) {
@@ -268,31 +410,24 @@ static iree_status_t loom_tokenizer_decode_string_text(
   }
 
   iree_host_size_t decoded_size = 0;
-  for (iree_host_size_t i = content_start; i < content_end; ++i) {
-    char c = t->source.data[i];
+  loom_tokenizer_t decoder = *t;
+  decoder.position = content_start;
+  decoder.column = 1;
+  while (decoder.position < content_end) {
+    char c = decoder.source.data[decoder.position];
     if (c != '\\') {
       decoded_text[decoded_size++] = c;
+      ++decoder.position;
+      ++decoder.column;
       continue;
     }
 
-    ++i;
-    switch (t->source.data[i]) {
-      case '"':
-        decoded_text[decoded_size++] = '"';
-        break;
-      case '\\':
-        decoded_text[decoded_size++] = '\\';
-        break;
-      case 'n':
-        decoded_text[decoded_size++] = '\n';
-        break;
-      case 't':
-        decoded_text[decoded_size++] = '\t';
-        break;
-      default:
-        IREE_ASSERT_UNREACHABLE("validated by scan pass");
-        break;
-    }
+    char escape_bytes[IREE_UNICODE_UTF8_MAX_BYTE_LENGTH] = {0};
+    iree_host_size_t escape_length = 0;
+    IREE_RETURN_IF_ERROR(loom_tokenizer_consume_string_escape(
+        &decoder, escape_bytes, &escape_length));
+    memcpy(decoded_text + decoded_size, escape_bytes, escape_length);
+    decoded_size += escape_length;
   }
 
   *out_text = iree_make_string_view(decoded_text, decoded_size);
@@ -319,17 +454,10 @@ static iree_status_t loom_tokenizer_scan_string_content(
     }
     if (c == '\\') {
       has_escapes = true;
-      ++t->position;
-      ++t->column;
-      if (t->position >= t->source.size) break;
-      char escaped = t->source.data[t->position];
-      if (escaped != '"' && escaped != '\\' && escaped != 'n' &&
-          escaped != 't') {
-        return loom_tokenizer_error(
-            t, IREE_SV("invalid escape sequence in string literal"));
-      }
-      ++t->position;
-      ++t->column;
+      char escape_bytes[IREE_UNICODE_UTF8_MAX_BYTE_LENGTH] = {0};
+      iree_host_size_t escape_length = 0;
+      IREE_RETURN_IF_ERROR(loom_tokenizer_consume_string_escape(
+          t, escape_bytes, &escape_length));
       continue;
     }
     if ((uint8_t)c >= 0x80) {
@@ -340,12 +468,12 @@ static iree_status_t loom_tokenizer_scan_string_content(
       }
       continue;
     }
-    if (c == '\n') {
-      ++t->line;
-      t->column = 1;
-    } else {
-      ++t->column;
+    if ((uint8_t)c < 0x20) {
+      return loom_tokenizer_errorf(
+          t, "unescaped control character U+%04X in string literal",
+          (unsigned)c);
     }
+    ++t->column;
     ++t->position;
   }
   return loom_tokenizer_error(t, IREE_SV("unterminated string literal"));

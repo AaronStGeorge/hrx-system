@@ -13,34 +13,65 @@
 // Encoding parameter parsing
 //===----------------------------------------------------------------------===//
 
+static void loom_parser_encoding_params_initialize(
+    loom_parser_encoding_params_t* params) {
+  memset(params, 0, sizeof(*params));
+  params->attrs = params->inline_attrs;
+  params->capacity = LOOM_PARSER_ENCODING_PARAMS_INLINE_ATTRS;
+}
+
+static void loom_parser_encoding_params_reset(
+    loom_parser_encoding_params_t* params) {
+  params->count = 0;
+}
+
+static iree_status_t loom_parser_acquire_encoding_params(
+    loom_parser_t* parser, loom_parser_encoding_params_t** out_params) {
+  loom_parser_encoding_params_t* params = parser->encoding_params_free_list;
+  if (params) {
+    parser->encoding_params_free_list = params->next_free;
+    params->next_free = NULL;
+    loom_parser_encoding_params_reset(params);
+    *out_params = params;
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&parser->parser_arena,
+                                           sizeof(*params), (void**)&params));
+  loom_parser_encoding_params_initialize(params);
+  *out_params = params;
+  return iree_ok_status();
+}
+
+static void loom_parser_release_encoding_params(
+    loom_parser_t* parser, loom_parser_encoding_params_t* params) {
+  if (!params) return;
+  params->next_free = parser->encoding_params_free_list;
+  parser->encoding_params_free_list = params;
+}
+
 // Parses encoding parameters from the token stream. Called after LANGLE
 // has been consumed. Consumes tokens through the closing RANGLE
 // (inclusive). Grammar: key=value [, key=value]* >.
-iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
-                                         loom_named_attr_t** out_attrs,
-                                         uint8_t* out_count) {
-  iree_host_size_t capacity = 8;
-  loom_named_attr_t* attrs = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(&parser->parser_arena, capacity,
-                                sizeof(loom_named_attr_t), (void**)&attrs));
-  uint8_t attr_count = 0;
-
+static iree_status_t loom_parse_encoding_params(
+    loom_parser_t* parser, loom_parser_encoding_params_t* params) {
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-    if (attr_count > 0) {
+    if (params->count > 0) {
       LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COMMA, NULL);
     }
 
-    if (attr_count == UINT8_MAX) {
+    if (params->count == UINT8_MAX) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
                                                peek);
     }
-    if (attr_count >= capacity) {
+    if (params->count >= params->capacity) {
       IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-          &parser->parser_arena, attr_count, /*minimum_capacity=*/8,
-          sizeof(loom_named_attr_t), &capacity, (void**)&attrs));
+          &parser->parser_arena, params->count,
+          /*minimum_capacity=*/LOOM_PARSER_ENCODING_PARAMS_INLINE_ATTRS,
+          sizeof(loom_named_attr_t), &params->capacity,
+          (void**)&params->attrs));
     }
 
     // Parameter name.
@@ -53,23 +84,20 @@ iree_status_t loom_parse_encoding_params(loom_parser_t* parser,
     loom_string_id_t param_name_id = 0;
     IREE_RETURN_IF_ERROR(loom_module_intern_string(
         parser->module, name_token.text, &param_name_id));
-    attrs[attr_count].name_id = param_name_id;
-    attrs[attr_count].reserved = 0;
+    params->attrs[params->count].name_id = param_name_id;
+    params->attrs[params->count].reserved = 0;
 
     uint32_t errors_before = parser->error_count;
     IREE_RETURN_IF_ERROR(loom_parse_generic_attr_value(
-        parser, /*nesting_depth=*/0, &attrs[attr_count].value));
+        parser, /*nesting_depth=*/0, &params->attrs[params->count].value));
     if (parser->error_count > errors_before) {
       return iree_ok_status();
     }
-    ++attr_count;
+    ++params->count;
   }
 
   // Consume closing '>'.
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
-
-  *out_attrs = attrs;
-  *out_count = attr_count;
   return iree_ok_status();
 }
 
@@ -92,17 +120,23 @@ iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(parser->module, token.text, &encoding.name_id));
 
+  loom_parser_encoding_params_t* params_scratch = NULL;
   if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
-    loom_named_attr_t* attrs = NULL;
-    uint8_t attr_count = 0;
-    uint32_t errors_before = parser->error_count;
     IREE_RETURN_IF_ERROR(
-        loom_parse_encoding_params(parser, &attrs, &attr_count));
+        loom_parser_acquire_encoding_params(parser, &params_scratch));
+
+    uint32_t errors_before = parser->error_count;
+    iree_status_t status = loom_parse_encoding_params(parser, params_scratch);
     if (parser->error_count > errors_before) {
+      loom_parser_release_encoding_params(parser, params_scratch);
       return iree_ok_status();
     }
-    encoding.attribute_count = attr_count;
-    encoding.attributes = attrs;
+    if (!iree_status_is_ok(status)) {
+      loom_parser_release_encoding_params(parser, params_scratch);
+      return status;
+    }
+    encoding.attribute_count = params_scratch->count;
+    encoding.attributes = params_scratch->attrs;
   }
 
   if (parser->context->encoding_vtables.count > 0 &&
@@ -110,11 +144,15 @@ iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
     loom_diagnostic_param_t params[] = {
         loom_param_string(token.text),
     };
+    loom_parser_release_encoding_params(parser, params_scratch);
     return loom_parser_emit(parser, &loom_err_parse_008, params,
                             IREE_ARRAYSIZE(params), token);
   }
 
-  return loom_module_add_encoding(parser->module, &encoding, out_encoding_id);
+  iree_status_t status =
+      loom_module_add_encoding(parser->module, &encoding, out_encoding_id);
+  loom_parser_release_encoding_params(parser, params_scratch);
+  return status;
 }
 
 //===----------------------------------------------------------------------===//

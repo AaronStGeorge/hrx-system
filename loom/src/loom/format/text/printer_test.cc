@@ -975,6 +975,54 @@ TEST_F(PrintOpTest, AttrsOpWithDictEntries) {
       << "Expected attr dict in output, got: " << output;
 }
 
+TEST_F(PrintOpTest, AttrsOpStringAttrsUseCanonicalEscapes) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+
+  loom_string_id_t label_id = intern("label");
+  loom_string_id_t value_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(
+      module_, IREE_SV("has \"quotes\" and \\slashes\\\n\t\b\f\r and \xCE\xBB"),
+      &value_id));
+
+  loom_named_attr_t entries[1] = {
+      {.name_id = label_id, .value = loom_attr_string(value_id)},
+  };
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &op));
+
+  std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
+  EXPECT_NE(output.find("{label = \"has \\\"quotes\\\" and \\\\slashes\\\\"
+                        "\\n\\t\\b\\f\\r and \xCE\xBB\"}"),
+            std::string::npos)
+      << "Expected canonical string escapes, got: " << output;
+}
+
+TEST_F(PrintOpTest, AttrsOpStringAttrsRejectInvalidUtf8) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+
+  loom_string_id_t label_id = intern("label");
+  loom_string_id_t invalid_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("\xFF"), &invalid_id));
+
+  loom_named_attr_t entries[1] = {
+      {.name_id = label_id, .value = loom_attr_string(invalid_id)},
+  };
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &op));
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        print_op_status(op, LOOM_TEXT_PRINT_DEFAULT));
+}
+
 TEST_F(PrintOpTest, AttrsOpWithNestedDictEntries) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_value_id_t input = def(f32);
@@ -1990,6 +2038,28 @@ TEST_F(PrintOpTest, LocationFile) {
       << "Expected file location, got: " << output;
 }
 
+TEST_F(PrintOpTest, LocationFileUsesCanonicalStringEscapes) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(loom_context_register_source(
+      &context_, IREE_SV("model \"main\"\\v2\n.loom"), &source_id));
+
+  loom_location_entry_t file_loc =
+      loom_location_file_range(source_id, 7, 8, 9, 10);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, file_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+  std::string output =
+      print_op(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_NE(output.find("loc(\"model \\\"main\\\"\\\\v2\\n.loom\":7:8 to "
+                        "9:10)"),
+            std::string::npos)
+      << "Expected escaped file location, got: " << output;
+}
+
 TEST_F(PrintOpTest, LocationOpaque) {
   // Register a source tag with the context.
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
@@ -2014,6 +2084,53 @@ TEST_F(PrintOpTest, LocationOpaque) {
   EXPECT_NE(output.find("loc(opaque<\"torch\", \"node_id=42\">)"),
             std::string::npos)
       << "Expected opaque location, got: " << output;
+}
+
+TEST_F(PrintOpTest, LocationOpaqueUsesCanonicalStringEscapes) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(loom_context_register_source(
+      &context_, IREE_SV("torch \"aten\""), &source_id));
+
+  loom_location_entry_t opaque_loc = {.kind = LOOM_LOCATION_OPAQUE};
+  opaque_loc.opaque.source_id = source_id;
+  const char* data = "node\\id\n\x01";
+  opaque_loc.opaque.data = (const uint8_t*)data;
+  opaque_loc.opaque.data_length = (uint32_t)strlen(data);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, opaque_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+  std::string output =
+      print_op(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_NE(output.find("loc(opaque<\"torch \\\"aten\\\"\", "
+                        "\"node\\\\id\\n\\u0001\">)"),
+            std::string::npos)
+      << "Expected escaped opaque location, got: " << output;
+}
+
+TEST_F(PrintOpTest, LocationOpaqueRejectsInvalidUtf8Data) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_context_register_source(&context_, IREE_SV("torch"), &source_id));
+
+  loom_location_entry_t opaque_loc = {.kind = LOOM_LOCATION_OPAQUE};
+  opaque_loc.opaque.source_id = source_id;
+  const uint8_t data[] = {0xFF};
+  opaque_loc.opaque.data = data;
+  opaque_loc.opaque.data_length = IREE_ARRAYSIZE(data);
+  loom_location_id_t loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, opaque_loc, &loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, loc_id, &op));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
 }
 
 //===----------------------------------------------------------------------===//

@@ -6,6 +6,8 @@
 
 #include "loom/format/text/tokenizer.h"
 
+#include <string>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -37,6 +39,24 @@ class ScopedTokenizer {
   iree_arena_allocator_t scratch_arena_;
   loom_tokenizer_t t_;
 };
+
+static std::string ConsumeStatusString(loom_tokenizer_t* tokenizer) {
+  // Tokenizer failures are still surfaced as infrastructure-style
+  // iree_status_t messages, not loom_diagnostic_t records. These tests assert
+  // selected status text intentionally as tokenizer API coverage.
+  iree_status_t status = loom_tokenizer_consume_status(tokenizer);
+  std::string message;
+  iree_status_format_to(
+      status,
+      +[](iree_string_view_t chunk, void* user_data) -> bool {
+        auto* out_message = static_cast<std::string*>(user_data);
+        out_message->append(chunk.data, chunk.size);
+        return true;
+      },
+      &message);
+  iree_status_ignore(status);
+  return message;
+}
 
 //===----------------------------------------------------------------------===//
 // Punctuation
@@ -158,6 +178,31 @@ TEST(Tokenizer, StringWithNewlineAndTabEscapes) {
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("row\n\tcol")));
   EXPECT_TRUE(
       iree_string_view_equal(token.source_text, IREE_SV("\"row\\n\\tcol\"")));
+}
+
+TEST(Tokenizer, StringWithJsonEscapes) {
+  ScopedTokenizer t("\"slash:\\/ backspace:\\b formfeed:\\f return:\\r\"");
+  loom_token_t token = t.next();
+  EXPECT_EQ(token.kind, LOOM_TOKEN_STRING);
+  EXPECT_TRUE(iree_string_view_equal(
+      token.text, IREE_SV("slash:/ backspace:\b formfeed:\f return:\r")));
+  EXPECT_TRUE(iree_string_view_equal(
+      token.source_text,
+      IREE_SV("\"slash:\\/ backspace:\\b formfeed:\\f return:\\r\"")));
+  IREE_EXPECT_OK(loom_tokenizer_consume_status(t.get()));
+}
+
+TEST(Tokenizer, StringWithUnicodeEscapes) {
+  ScopedTokenizer t("\"A=\\u0041 lambda=\\u03BB fire=\\uD83D\\uDD25\"");
+  loom_token_t token = t.next();
+  EXPECT_EQ(token.kind, LOOM_TOKEN_STRING);
+  EXPECT_TRUE(iree_string_view_equal(
+      token.text, IREE_SV("A=A lambda=\xCE\xBB fire=\xF0\x9F\x94\xA5")));
+  EXPECT_TRUE(iree_string_view_equal(
+      token.source_text,
+      IREE_SV("\"A=\\u0041 lambda=\\u03BB fire=\\uD83D\\uDD25\"")));
+  EXPECT_NE(token.text.data, token.source_text.data + 1);
+  IREE_EXPECT_OK(loom_tokenizer_consume_status(t.get()));
 }
 
 TEST(Tokenizer, EmptyString) {
@@ -411,6 +456,65 @@ TEST(Tokenizer, InvalidStringEscapeError) {
                         loom_tokenizer_consume_status(t.get()));
 }
 
+TEST(Tokenizer, InvalidStringEscapeMessage) {
+  ScopedTokenizer t("\"\\x\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(ConsumeStatusString(t.get()),
+              ::testing::HasSubstr("invalid escape sequence '\\x'"));
+}
+
+TEST(Tokenizer, TruncatedUnicodeEscapeError) {
+  ScopedTokenizer t("\"\\u12\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(ConsumeStatusString(t.get()),
+              ::testing::HasSubstr("truncated unicode escape"));
+}
+
+TEST(Tokenizer, InvalidUnicodeEscapeHexDigitError) {
+  ScopedTokenizer t("\"\\u12G4\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(ConsumeStatusString(t.get()),
+              ::testing::HasSubstr("invalid hex digit 'G'"));
+}
+
+TEST(Tokenizer, LoneHighSurrogateEscapeError) {
+  ScopedTokenizer t("\"\\uD83D\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(
+      ConsumeStatusString(t.get()),
+      ::testing::HasSubstr("high surrogate not followed by low surrogate"));
+}
+
+TEST(Tokenizer, InvalidLowSurrogateEscapeError) {
+  ScopedTokenizer t("\"\\uD83D\\u0041\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(ConsumeStatusString(t.get()),
+              ::testing::HasSubstr("invalid low surrogate U+0041"));
+}
+
+TEST(Tokenizer, UnexpectedLowSurrogateEscapeError) {
+  ScopedTokenizer t("\"\\uDD25\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(ConsumeStatusString(t.get()),
+              ::testing::HasSubstr("unexpected low surrogate U+DD25"));
+}
+
+TEST(Tokenizer, RawControlCharacterInStringError) {
+  ScopedTokenizer t("\"\x01\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(ConsumeStatusString(t.get()),
+              ::testing::HasSubstr(
+                  "unescaped control character U+0001 in string literal"));
+}
+
+TEST(Tokenizer, RawNewlineInStringError) {
+  ScopedTokenizer t("\"line1\nline2\"");
+  EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
+  EXPECT_THAT(ConsumeStatusString(t.get()),
+              ::testing::HasSubstr(
+                  "unescaped control character U+000A in string literal"));
+}
+
 TEST(Tokenizer, BarePercentError) {
   ScopedTokenizer t("% ");
   EXPECT_EQ(t.peek().kind, LOOM_TOKEN_EOF);
@@ -552,17 +656,24 @@ TEST(Tokenizer, AngleInteriorEscapeAtEOF) {
 }
 
 TEST(Tokenizer, AngleInteriorStringWithNewline) {
-  // String inside angle brackets containing a newline.
-  ScopedTokenizer t("<\"line1\nline2\">");
+  // JSON string escapes inside angle brackets are validated by the same
+  // scanner as top-level string tokens.
+  ScopedTokenizer t("<\"line1\\nline2\">");
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_LANGLE);
   iree_string_view_t interior;
   IREE_ASSERT_OK(loom_tokenizer_scan_angle_interior(t.get(), &interior));
-  // After scanning, the tokenizer should have tracked the newline.
-  // Next token should report correct line.
+  EXPECT_TRUE(iree_string_view_equal(interior, IREE_SV("\"line1\\nline2\"")));
   loom_token_t eof = t.next();
   EXPECT_EQ(eof.kind, LOOM_TOKEN_EOF);
-  // We started on line 1, the newline inside the string moves to line 2.
-  EXPECT_EQ(eof.line, 2u);
+  EXPECT_EQ(eof.line, 1u);
+}
+
+TEST(Tokenizer, AngleInteriorStringWithRawNewlineIsInvalid) {
+  ScopedTokenizer t("<\"line1\nline2\">");
+  EXPECT_EQ(t.next().kind, LOOM_TOKEN_LANGLE);
+  iree_string_view_t interior;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_tokenizer_scan_angle_interior(t.get(), &interior));
 }
 
 //===----------------------------------------------------------------------===//

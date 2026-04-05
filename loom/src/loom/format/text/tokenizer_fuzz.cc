@@ -29,6 +29,7 @@
 #include <cstring>
 
 #include "iree/base/internal/arena.h"
+#include "iree/base/internal/unicode.h"
 #include "loom/format/text/tokenizer.h"
 
 //===----------------------------------------------------------------------===//
@@ -120,6 +121,9 @@ static void fuzz_assert_token_slice_valid(const loom_tokenizer_t* tokenizer,
       __builtin_trap();
     }
     if (token->text.size > token->source_text.size - 2) {
+      __builtin_trap();
+    }
+    if (!iree_unicode_utf8_validate(token->text)) {
       __builtin_trap();
     }
     return;
@@ -252,6 +256,13 @@ static void fuzz_strategy_grammar_aware(fuzz_input_t* input) {
       "\"a\\\"b\"",
       "\"\\\\\"",
       "\"\\n\"",
+      "\"\\r\\t\\b\\f\\/\"",
+      "\"\\u0041\"",
+      "\"\\u03BB\"",
+      "\"\\uD83D\\uDD25\"",
+      "\"\\uD83D\"",
+      "\"\\uDD25\"",
+      "\"\\u12G4\"",
       "\"line1\nline2\"",
 
       // SSA values.
@@ -369,6 +380,8 @@ static void fuzz_strategy_truncation(fuzz_input_t* input) {
       "#q8_0 #enc\n"
       "\"escaped \\\"quotes\\\" here\"\n"
       "\"unterminated\\\n"
+      "\"unicode \\u0041 \\u03BB \\uD83D\\uDD25\"\n"
+      "\"bad unicode \\uD83D \\uDD25 \\u12G4\"\n"
       "0xFF 0x 0x0\n"
       "1.0e-5 1.0E 1.0e\n"
       "-42 ->  -\n"

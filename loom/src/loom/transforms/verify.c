@@ -1329,9 +1329,11 @@ static void loom_verify_semantic_constraint(
                                              constraint->property)) {
           const loom_error_def_t* error =
               constraint->error ? constraint->error : &loom_err_type_009;
+          loom_type_t expected_type =
+              loom_type_scalar(loom_type_element_type(result_type));
           loom_diagnostic_param_t params[] = {
               loom_param_type(yield_type),
-              loom_param_type(result_type),
+              loom_param_type(expected_type),
           };
           loom_verify_emit_structured(
               state, op, error, params,

@@ -21,6 +21,18 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "diagnostic_matchers",
+    testonly = True,
+    hdrs = ["diagnostic_matchers.h"],
+    deps = [
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:error_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
 loom_cc_test(
     name = "diff_test",
     srcs = ["diff_test.cc"],

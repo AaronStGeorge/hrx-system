@@ -19,6 +19,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/test/ops.h"
+#include "loom/testing/diagnostic_matchers.h"
 #include "loom/util/stream.h"
 
 namespace loom {
@@ -66,6 +67,14 @@ static iree_status_t CollectDiagnostic(void* user_data,
   return iree_ok_status();
 }
 
+using ::loom::testing::CapturedDiagnostic;
+using ::loom::testing::DiagnosticCapture;
+using ::loom::testing::ExpectI64Param;
+using ::loom::testing::ExpectTypeParam;
+using ::loom::testing::ExpectU32Param;
+using ::loom::testing::FindDiagnostic;
+using ::loom::testing::GetStringParam;
+
 // Registers test dialect vtables on the context.
 static void RegisterTestDialect(loom_context_t* context) {
   iree_host_size_t count = 0;
@@ -103,9 +112,7 @@ class VerifyTest : public ::testing::Test {
 
   // Creates a value in the module's value table.
   loom_value_id_t DefineValue(loom_scalar_type_t scalar_type) {
-    loom_type_t type = {0};
-    type.header = loom_type_make_header(LOOM_TYPE_SCALAR, scalar_type, 0,
-                                        LOOM_TYPE_FLAG_INLINE_DIMS);
+    loom_type_t type = loom_type_scalar(scalar_type);
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
     IREE_EXPECT_OK(loom_builder_define_value(&builder_, type, &value_id));
     return value_id;
@@ -156,6 +163,11 @@ class VerifyTest : public ::testing::Test {
     loom_verify_result_t result = {};
     IREE_EXPECT_OK(loom_verify_module(module_, &options_, &result));
     return result;
+  }
+
+  loom_verify_result_t VerifyStructured(DiagnosticCapture* capture) {
+    options_.sink = capture->sink();
+    return Verify();
   }
 
   // Runs verification with the caret formatter and returns the output.
@@ -277,18 +289,15 @@ TEST_F(VerifyTest, WrongOperandCountDetected) {
   loom_op_results(op)[0] = result_val;
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found_count_error = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("has 1 operands, expected 2") != std::string::npos) {
-      found_count_error = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_count_error)
-      << "Expected operand count error, got: "
-      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_structure_001);
+  ASSERT_NE(entry, nullptr) << "Expected STRUCTURE/001 operand-count error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "test.addi");
+  ExpectU32Param(*entry, 1, 1);
+  ExpectU32Param(*entry, 2, 2);
 }
 
 TEST_F(VerifyTest, OpAfterTerminatorDetected) {
@@ -300,19 +309,14 @@ TEST_F(VerifyTest, OpAfterTerminatorDetected) {
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0), i32_type,
                                           LOOM_LOCATION_UNKNOWN, &constant_op));
 
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("'test.constant' appears after a block terminator") !=
-        std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected op-after-terminator error, got: "
-                     << (collector_.errors.empty() ? "(no errors)"
-                                                   : collector_.errors[0]);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_structure_012);
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/012 op-after-terminator error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "test.constant");
 }
 
 //===----------------------------------------------------------------------===//
@@ -335,16 +339,15 @@ TEST_F(VerifyTest, TypeConstraintViolationDetected) {
   loom_op_results(op)[0] = result_val;
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found_type_error = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("expected integer") != std::string::npos) {
-      found_type_error = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_type_error) << "Expected type constraint error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_003);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/003 operand constraint error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectTypeParam(*entry, 1, f32_type);
+  EXPECT_EQ(GetStringParam(*entry, 2), "integer");
 }
 
 //===----------------------------------------------------------------------===//
@@ -385,16 +388,16 @@ TEST_F(VerifyTest, SameTypeConstraintViolation) {
   loom_op_results(op)[0] = result_val;
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found_same_type = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("does not match") != std::string::npos) {
-      found_same_type = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_same_type) << "Expected type mismatch error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_001);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/001 SameType diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectTypeParam(*entry, 1, i32_type);
+  EXPECT_EQ(GetStringParam(*entry, 2), "result 0");
+  ExpectTypeParam(*entry, 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
 }
 
 //===----------------------------------------------------------------------===//
@@ -419,18 +422,12 @@ TEST_F(VerifyTest, UndefinedOperandDetected) {
 
   // The verifier should catch the undefined operands.
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found_undefined = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("undefined value") != std::string::npos) {
-      found_undefined = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_undefined)
-      << "Expected undefined value error, got: "
-      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_dominance_001);
+  ASSERT_NE(entry, nullptr) << "Expected DOMINANCE/001 undefined-value error";
 }
 
 //===----------------------------------------------------------------------===//
@@ -471,52 +468,6 @@ TEST_F(VerifyTest, ConstantHasNoConstraints) {
 // Structured diagnostic output (print-op fallback)
 //===----------------------------------------------------------------------===//
 
-// Collects the full loom_diagnostic_t for structured field inspection.
-struct StructuredDiagnosticCollector {
-  struct Entry {
-    loom_diagnostic_severity_t severity;
-    std::string rendered_message;
-    const loom_error_def_t* error;
-    loom_emitter_t emitter;
-    iree_host_size_t param_count;
-    bool has_source_range;
-    std::string source_text;
-    std::string filename;
-  };
-  std::vector<Entry> entries;
-};
-
-static iree_status_t CollectStructured(void* user_data,
-                                       const loom_diagnostic_t* diagnostic) {
-  auto* collector = static_cast<StructuredDiagnosticCollector*>(user_data);
-  StructuredDiagnosticCollector::Entry entry;
-  entry.severity = diagnostic->severity;
-  entry.error = diagnostic->error;
-  entry.emitter = diagnostic->emitter;
-  entry.param_count = diagnostic->param_count;
-  entry.has_source_range = diagnostic->origin.source.size > 0;
-  if (entry.has_source_range) {
-    entry.source_text = std::string(diagnostic->origin.source.data,
-                                    diagnostic->origin.source.size);
-    entry.filename = std::string(diagnostic->origin.filename.data,
-                                 diagnostic->origin.filename.size);
-  }
-  // Render message from error def + params for test assertions.
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&builder, &stream);
-  loom_type_formatter_t type_formatter = {loom_type_format_minimal, NULL};
-  loom_diagnostic_render_message(diagnostic->error, diagnostic->params,
-                                 diagnostic->param_count, type_formatter,
-                                 &stream);
-  entry.rendered_message = std::string(iree_string_builder_buffer(&builder),
-                                       iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-  collector->entries.push_back(std::move(entry));
-  return iree_ok_status();
-}
-
 TEST_F(VerifyTest, StructuredDiagnosticHasErrorDef) {
   // Build an addi with wrong operand count to trigger a structured error.
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
@@ -532,23 +483,21 @@ TEST_F(VerifyTest, StructuredDiagnosticHasErrorDef) {
   loom_op_results(op)[0] = result_val;
 
   // Use the structured collector instead of the default one.
-  StructuredDiagnosticCollector structured;
-  options_.sink.fn = CollectStructured;
-  options_.sink.user_data = &structured;
+  DiagnosticCapture structured;
 
   TerminateFunc();
-  auto result = Verify();
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  ASSERT_GT(structured.entries.size(), 0u);
+  ASSERT_GT(structured.diagnostics.size(), 0u);
 
   // The first error should be a structured STRUCTURE_001 diagnostic.
-  const auto& entry = structured.entries[0];
+  const auto& entry = structured.diagnostics[0];
   EXPECT_EQ(entry.severity, LOOM_DIAGNOSTIC_ERROR);
   EXPECT_EQ(entry.emitter, LOOM_EMITTER_VERIFIER);
   ASSERT_NE(entry.error, nullptr);
   EXPECT_EQ(entry.error->domain, LOOM_ERROR_DOMAIN_STRUCTURE);
   EXPECT_EQ(entry.error->code, 1);
-  EXPECT_GT(entry.param_count, 0);
+  EXPECT_GT(entry.params.size(), 0);
 }
 
 TEST_F(VerifyTest, PrintOpFallbackProvidesSourceRange) {
@@ -569,17 +518,15 @@ TEST_F(VerifyTest, PrintOpFallbackProvidesSourceRange) {
 
   // No source resolver configured → the verifier must fall back to
   // printing the op for the source range.
-  StructuredDiagnosticCollector structured;
-  options_.sink.fn = CollectStructured;
-  options_.sink.user_data = &structured;
+  DiagnosticCapture structured;
 
   TerminateFunc();
-  auto result = Verify();
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
 
   // Find the SameType error (there may also be type constraint errors).
   bool found_with_source = false;
-  for (const auto& entry : structured.entries) {
+  for (const auto& entry : structured.diagnostics) {
     if (entry.has_source_range) {
       found_with_source = true;
       // The source text should be the printed op (contains "test.addi").
@@ -653,12 +600,27 @@ TEST_F(VerifyTest, GoldenJsonNoSource) {
       output,
       "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":4,"
       "\"emitter\":\"verifier\","
+      "\"origin\":{\"filename\":\"<verifier>\",\"start_line\":1,"
+      "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
+      "\"start_byte\":0,\"end_byte\":28},"
+      "\"source_location\":{\"filename\":\"<verifier>\","
+      "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
+      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28},"
+      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2}],"
       "\"message\":\"result 'result 0' has type f32, expected integer\","
       "\"fix_hint\":\"'result 0' must satisfy type constraint 'integer'\","
       "\"params\":{\"result_name\":\"result 0\","
       "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"}}\n"
       "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":1,"
       "\"emitter\":\"verifier\","
+      "\"origin\":{\"filename\":\"<verifier>\",\"start_line\":1,"
+      "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
+      "\"start_byte\":0,\"end_byte\":28},"
+      "\"source_location\":{\"filename\":\"<verifier>\","
+      "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
+      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28},"
+      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2},"
+      "{\"start_byte\":15,\"end_byte\":17}],"
       "\"message\":\"'operand 0' type i32 does not match"
       " 'result 0' type f32\","
       "\"fix_hint\":\"Ensure 'operand 0' and 'result 0'"
@@ -775,18 +737,30 @@ TEST_F(VerifyTest, GoldenJsonWithSource) {
                    iree_string_builder_size(&output));
   iree_string_builder_deinitialize(&output);
 
-  // JSON output is the same regardless of source availability — the
-  // source range is diagnostic-formatter metadata, not in the JSON.
+  // The JSON sink now serializes the resolved source range, so verifier
+  // diagnostics preserve the original file location for IDE consumers.
   EXPECT_EQ(
       text,
       "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":4,"
       "\"emitter\":\"verifier\","
+      "\"origin\":{\"filename\":\"model.loom\",\"start_line\":42,"
+      "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
+      "\"start_byte\":2,\"end_byte\":46},"
+      "\"source_location\":{\"filename\":\"model.loom\","
+      "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
+      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46},"
       "\"message\":\"result 'result 0' has type f32, expected integer\","
       "\"fix_hint\":\"'result 0' must satisfy type constraint 'integer'\","
       "\"params\":{\"result_name\":\"result 0\","
       "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"}}\n"
       "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":1,"
       "\"emitter\":\"verifier\","
+      "\"origin\":{\"filename\":\"model.loom\",\"start_line\":42,"
+      "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
+      "\"start_byte\":2,\"end_byte\":46},"
+      "\"source_location\":{\"filename\":\"model.loom\","
+      "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
+      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46},"
       "\"message\":\"'operand 0' type i32 does not match"
       " 'result 0' type f32\","
       "\"fix_hint\":\"Ensure 'operand 0' and 'result 0'"
@@ -809,30 +783,21 @@ TEST_F(VerifyTest, StructuredDominanceError) {
   loom_op_operands(op)[1] = rhs;
   loom_op_results(op)[0] = result_val;
 
-  StructuredDiagnosticCollector structured;
-  options_.sink.fn = CollectStructured;
-  options_.sink.user_data = &structured;
+  DiagnosticCapture structured;
 
   TerminateFunc();
-  auto result = Verify();
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
 
   // Find a DOMINANCE error.
-  bool found_dominance = false;
-  for (const auto& entry : structured.entries) {
-    if (entry.error && entry.error->domain == LOOM_ERROR_DOMAIN_DOMINANCE) {
-      found_dominance = true;
-      EXPECT_EQ(entry.error->code, 1);  // DOMINANCE_001: undefined value.
-      EXPECT_NE(entry.rendered_message.find("undefined value"),
-                std::string::npos)
-          << "message: " << entry.rendered_message;
-      // Should have the printed op as source even for dominance errors.
-      EXPECT_TRUE(entry.has_source_range)
-          << "Dominance error should have print-op fallback source";
-      break;
-    }
-  }
-  EXPECT_TRUE(found_dominance) << "Expected a DOMINANCE domain error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_dominance_001);
+  ASSERT_NE(entry, nullptr) << "Expected a DOMINANCE/001 undefined-value error";
+  EXPECT_TRUE(entry->has_source_range)
+      << "Dominance error should have print-op fallback source";
+  EXPECT_EQ(entry->filename, "<verifier>");
+  EXPECT_NE(entry->source_text.find("test.addi"), std::string::npos)
+      << "Printed op source: " << entry->source_text;
 }
 
 //===----------------------------------------------------------------------===//
@@ -856,19 +821,15 @@ TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
       IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found_duplicate_result = false;
-  for (const auto& message : collector_.errors) {
-    if (message.find("result 0 of 'test.invoke' is tied more than once") !=
-        std::string::npos) {
-      found_duplicate_result = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_duplicate_result)
-      << "Expected duplicate tied result error, got: "
-      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_dominance_006);
+  ASSERT_NE(entry, nullptr)
+      << "Expected DOMINANCE/006 duplicate tied-result error";
+  ExpectU32Param(*entry, 0, 0);
+  EXPECT_EQ(GetStringParam(*entry, 1), "test.invoke");
 }
 
 TEST_F(VerifyTest, DuplicateTiedOperandIndexDetected) {
@@ -888,20 +849,15 @@ TEST_F(VerifyTest, DuplicateTiedOperandIndexDetected) {
       IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found_duplicate_operand = false;
-  for (const auto& message : collector_.errors) {
-    if (message.find(
-            "operand 0 of 'test.invoke' is tied by more than one result") !=
-        std::string::npos) {
-      found_duplicate_operand = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_duplicate_operand)
-      << "Expected duplicate tied operand error, got: "
-      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_dominance_007);
+  ASSERT_NE(entry, nullptr)
+      << "Expected DOMINANCE/007 duplicate tied-operand error";
+  ExpectU32Param(*entry, 0, 0);
+  EXPECT_EQ(GetStringParam(*entry, 1), "test.invoke");
 }
 
 TEST_F(VerifyTest, AmbiguousRepeatedOperandValueDetected) {
@@ -922,20 +878,15 @@ TEST_F(VerifyTest, AmbiguousRepeatedOperandValueDetected) {
       LOOM_LOCATION_UNKNOWN, &op));
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found_ambiguous_value = false;
-  for (const auto& message : collector_.errors) {
-    if (message.find("operand 1 of 'test.invoke' ties value") !=
-            std::string::npos &&
-        message.find("multiple operand slots") != std::string::npos) {
-      found_ambiguous_value = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_ambiguous_value)
-      << "Expected ambiguous tied operand-value error, got: "
-      << (collector_.errors.empty() ? "(no errors)" : collector_.errors[0]);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_dominance_008);
+  ASSERT_NE(entry, nullptr)
+      << "Expected DOMINANCE/008 ambiguous tied operand-value error";
+  ExpectU32Param(*entry, 0, 1);
+  EXPECT_EQ(GetStringParam(*entry, 1), "test.invoke");
 }
 
 TEST_F(VerifyTest, FuncDefTiedResultUsesEntryBlockArgsWithoutConsumingThem) {
@@ -1010,12 +961,13 @@ TEST_F(VerifyTest, RejectsNonLocalSymbolRef) {
                                       nullptr, 0, nullptr, 0,
                                       LOOM_LOCATION_UNKNOWN, &decl_op));
 
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  ASSERT_FALSE(collector_.errors.empty());
-  EXPECT_THAT(collector_.errors[0],
-              ::testing::HasSubstr(
-                  "symbol references in in-memory IR must use module_id 0"));
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_symbol_004);
+  ASSERT_NE(entry, nullptr) << "Expected SYMBOL/004 non-local symbol ref error";
+  ExpectU32Param(*entry, 0, 1);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1071,17 +1023,14 @@ TEST_F(VerifyTest, SsaEncodingOutOfRange) {
                                          LOOM_LOCATION_UNKNOWN, &op));
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("encoding value") != std::string::npos &&
-        msg.find("9999") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected encoding out-of-range error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_encoding_003);
+  ASSERT_NE(entry, nullptr) << "Expected ENCODING/003 out-of-range error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "result 0");
+  ExpectU32Param(*entry, 1, 9999);
 }
 
 TEST_F(VerifyTest, SsaEncodingNotDefined) {
@@ -1111,16 +1060,13 @@ TEST_F(VerifyTest, SsaEncodingNotDefined) {
   loom_module_set_value_type(module_, args[0], tile_type);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("not defined") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected encoding not-defined error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_encoding_004);
+  ASSERT_NE(entry, nullptr) << "Expected ENCODING/004 not-defined error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
 }
 
 TEST_F(VerifyTest, SsaEncodingWrongType) {
@@ -1144,16 +1090,14 @@ TEST_F(VerifyTest, SsaEncodingWrongType) {
   loom_module_set_value_type(module_, args[1], tile_type);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("expected 'encoding'") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected encoding wrong-type error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_encoding_005);
+  ASSERT_NE(entry, nullptr) << "Expected ENCODING/005 wrong-type error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "block arg 1");
+  ExpectTypeParam(*entry, 2, i32_type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1197,16 +1141,17 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchInVariadic) {
   loom_op_results(op)[0] = result_val;
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("does not match") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected type mismatch within variadic inputs";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_001);
+  ASSERT_NE(entry, nullptr)
+      << "Expected TYPE/001 mismatch within variadic inputs";
+  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0[0]");
+  ExpectTypeParam(*entry, 1, i32_type);
+  EXPECT_EQ(GetStringParam(*entry, 2), "operand 0[1]");
+  ExpectTypeParam(*entry, 3, f32_type);
 }
 
 TEST_F(VerifyTest, VariadicSameTypeMismatchAgainstResult) {
@@ -1225,16 +1170,17 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchAgainstResult) {
   loom_op_results(op)[0] = DefineValue(LOOM_SCALAR_TYPE_F32);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("does not match") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected type mismatch between variadic and result";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_001);
+  ASSERT_NE(entry, nullptr)
+      << "Expected TYPE/001 mismatch between variadic input and result";
+  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectTypeParam(*entry, 1, i32_type);
+  EXPECT_EQ(GetStringParam(*entry, 2), "result 0");
+  ExpectTypeParam(*entry, 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
 }
 
 TEST_F(VerifyTest, VariadicSameTypeSingleInput) {
@@ -1439,16 +1385,15 @@ TEST_F(VerifyTest, AllSameViolationDifferentShapes) {
                                      LOOM_LOCATION_UNKNOWN, &op));
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("shapes do not match") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected AllSame shape mismatch error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_shape_003);
+  ASSERT_NE(entry, nullptr) << "Expected SHAPE/003 AllSame diagnostic";
+  ExpectTypeParam(*entry, 0, tile4);
+  ExpectU32Param(*entry, 1, 1);
+  ExpectTypeParam(*entry, 2, tile8);
 }
 
 TEST_F(VerifyTest, AllSamePassesIdenticalShapes) {
@@ -1512,17 +1457,15 @@ TEST_F(VerifyTest, RegionArgCountViolation) {
   loom_builder_restore(&builder_, saved);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("block arguments") != std::string::npos &&
-        msg.find("expected") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected region arg count mismatch error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_structure_007);
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/007 region-arg-count diagnostic";
+  ExpectU32Param(*entry, 0, 3);
+  ExpectU32Param(*entry, 1, 2);
 }
 
 // --- REGION_ARG_MATCH (relation 5): block arg types must match element types
@@ -1561,16 +1504,15 @@ TEST_F(VerifyTest, RegionArgMatchViolation) {
   loom_builder_restore(&builder_, saved);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("expected element type") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected region arg type mismatch error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_008);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/008 region-arg-match diagnostic";
+  ExpectU32Param(*entry, 0, 0);
+  ExpectTypeParam(*entry, 1, i32_type);
+  ExpectTypeParam(*entry, 2, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
 }
 
 // --- YIELD_COUNT (relation 6): yield operands count must match results ---
@@ -1604,17 +1546,14 @@ TEST_F(VerifyTest, YieldCountViolation) {
   loom_builder_restore(&builder_, saved);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("yield has") != std::string::npos &&
-        msg.find("expected") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected yield count mismatch error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_structure_008);
+  ASSERT_NE(entry, nullptr) << "Expected STRUCTURE/008 yield-count diagnostic";
+  ExpectU32Param(*entry, 0, 2);
+  ExpectU32Param(*entry, 1, 1);
 }
 
 TEST_F(VerifyTest, YieldCountViolationWithImplicitTerminator) {
@@ -1637,18 +1576,15 @@ TEST_F(VerifyTest, YieldCountViolationWithImplicitTerminator) {
   ASSERT_EQ(loom_region_entry_block(body)->op_count, 0u);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("yield has 0 operands, expected 1") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected implicit-yield count mismatch error, got: "
-                     << (collector_.errors.empty() ? "(no errors)"
-                                                   : collector_.errors[0]);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_structure_008);
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/008 implicit-yield-count diagnostic";
+  ExpectU32Param(*entry, 0, 0);
+  ExpectU32Param(*entry, 1, 1);
 }
 
 // --- YIELD_MATCH (relation 7): yield types must match result types ---
@@ -1679,16 +1615,51 @@ TEST_F(VerifyTest, YieldMatchViolation) {
   loom_builder_restore(&builder_, saved);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("yielded value has type") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected yield type mismatch error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_009);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/009 yield-match diagnostic";
+  ExpectTypeParam(*entry, 0, i32_type);
+  ExpectTypeParam(*entry, 1, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
+}
+
+TEST_F(VerifyTest, YieldMatchViolationReportsResultElementTypeParam) {
+  loom_type_t tile4 = loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                                          loom_dim_pack_static(4), 0);
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_type_t arg_types[] = {tile4};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, 1, args);
+
+  loom_op_t* op = nullptr;
+  loom_value_id_t inputs[] = {args[0]};
+  IREE_ASSERT_OK(loom_test_map_build(&builder_, inputs, 1, tile4, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &op));
+
+  loom_region_t* body = loom_test_map_body(op);
+  loom_builder_ip_t saved = loom_builder_enter_region(&builder_, op, body);
+  loom_value_id_t yield_val = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_value(&builder_, i32_type, &yield_val));
+  loom_op_t* yield_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, &yield_val, 1,
+                                       LOOM_LOCATION_UNKNOWN, &yield_op));
+  loom_builder_restore(&builder_, saved);
+
+  DiagnosticCapture structured;
+
+  TerminateFunc();
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_009);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/009 yield-match diagnostic";
+  ExpectTypeParam(*entry, 0, i32_type);
+  ExpectTypeParam(*entry, 1, f32_type);
 }
 
 // --- COUNT_MATCHES_RANK (relation 2): offset count must match source rank ---
@@ -1715,17 +1686,16 @@ TEST_F(VerifyTest, CountMatchesRankViolation) {
                                        LOOM_LOCATION_UNKNOWN, &op));
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("offset count") != std::string::npos &&
-        msg.find("does not match rank") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected offset count vs rank error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_subrange_001);
+  ASSERT_NE(entry, nullptr)
+      << "Expected SUBRANGE/001 count-matches-rank diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectU32Param(*entry, 1, 1);
+  ExpectI64Param(*entry, 2, 2);
 }
 
 TEST_F(VerifyTest, CountMatchesRankPasses) {
@@ -1777,16 +1747,15 @@ TEST_F(VerifyTest, AttrInRangeRankViolation) {
   loom_op_attrs(op)[0] = loom_attr_i64(5);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("out of bounds") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected dim index out of bounds error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_subrange_002);
+  ASSERT_NE(entry, nullptr)
+      << "Expected SUBRANGE/002 dim-index-out-of-bounds diagnostic";
+  ExpectI64Param(*entry, 0, 5);
+  ExpectI64Param(*entry, 1, 1);
 }
 
 TEST_F(VerifyTest, AttrInRangeRankNegativeIndex) {
@@ -1811,16 +1780,15 @@ TEST_F(VerifyTest, AttrInRangeRankNegativeIndex) {
   loom_op_attrs(op)[0] = loom_attr_i64(-1);
 
   TerminateFunc();
-  auto result = Verify();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  bool found = false;
-  for (const auto& msg : collector_.errors) {
-    if (msg.find("out of bounds") != std::string::npos) {
-      found = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found) << "Expected negative dim index out of bounds error";
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_subrange_002);
+  ASSERT_NE(entry, nullptr)
+      << "Expected SUBRANGE/002 negative dim-index diagnostic";
+  ExpectI64Param(*entry, 0, -1);
+  ExpectI64Param(*entry, 1, 2);
 }
 
 TEST_F(VerifyTest, AttrInRangeRankPasses) {

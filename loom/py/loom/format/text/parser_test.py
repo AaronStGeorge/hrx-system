@@ -648,6 +648,16 @@ class TestParseAttrDictOp:
         assert d["enabled"] is True
         assert d["debug"] is False
 
+    def test_string_value_escapes_are_decoded(self) -> None:
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(
+            r'%r = test.attrs %x {msg = "quote=\" slash=\\ \b \f \n \r \t \u0001 \u03BB \uD83D\uDD25"} : f32',
+            module=module,
+            scope=scope,
+        )
+        d = op.attributes["dict"]
+        assert d["msg"] == 'quote=" slash=\\ \b \f \n \r \t \x01 λ 🔥'
+
     def test_round_trip(self) -> None:
         """Parse → print → parse produces the same dict entries."""
         import loom.dialect.test.defs as td
@@ -1856,6 +1866,20 @@ class TestLocationParsing:
         # Source name should be registered in the module.
         assert module.sources[loc.source_id] == "model.loom"
 
+    def test_file_location_escapes_are_decoded(self) -> None:
+        """Parse escaped source names in FILE locations."""
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(
+            r'%r = test.neg %x : f32 loc("model \"main\"\\v2\n.loom":42:3 to 42:58)',
+            module=module,
+            scope=scope,
+        )
+        from loom.ir import FileLocation
+
+        loc = module.locations.get(op.location_id)
+        assert isinstance(loc, FileLocation)
+        assert module.sources[loc.source_id] == 'model "main"\\v2\n.loom'
+
     def test_fused_location(self) -> None:
         """Parse a FUSED location annotation."""
         from loom.ir import FileLocation, FusedLocation
@@ -1895,6 +1919,21 @@ class TestLocationParsing:
         assert isinstance(loc, OpaqueLocation)
         assert module.sources[loc.source_id] == "torch"
         assert loc.data == b"node_id=42"
+
+    def test_opaque_location_escapes_are_decoded(self) -> None:
+        """Parse escaped tag and payload bytes in OPAQUE locations."""
+        from loom.ir import OpaqueLocation
+
+        module, scope = _setup_scope(("x", F32))
+        op = _parse_op(
+            r'%r = test.neg %x : f32 loc(opaque<"torch \"aten\"", "node\\id\n\u0001\u03BB">)',
+            module=module,
+            scope=scope,
+        )
+        loc = module.locations.get(op.location_id)
+        assert isinstance(loc, OpaqueLocation)
+        assert module.sources[loc.source_id] == 'torch "aten"'
+        assert loc.data == b"node\\id\n\x01\xce\xbb"
 
     def test_no_location(self) -> None:
         """Ops without explicit location use implicit source position."""
@@ -1953,6 +1992,15 @@ class TestLocationRoundTrip:
             "func.def @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(opaque<"torch", "node_id=42">)\n'
             '  test.yield %neg0 : f32 loc("model.loom":2:3 to 2:28)\n'
+            "}\n"
+        )
+
+    def test_escaped_location_roundtrip_is_canonical(self) -> None:
+        """Escaped source/tag/data strings print in one canonical form."""
+        self._roundtrip_with_locations(
+            "func.def @negate(%input: f32) -> (f32) {\n"
+            '  %neg0 = test.neg %input : f32 loc(opaque<"torch \\"aten\\"", "node\\\\id\\n\\u0001">)\n'
+            '  test.yield %neg0 : f32 loc("model \\"main\\"\\\\v2\\n.loom":2:3 to 2:28)\n'
             "}\n"
         )
 

@@ -49,6 +49,7 @@ loom_cc_test(
         "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/test",
+        "//loom/src/loom/testing:diagnostic_matchers",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -66,6 +67,7 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:unicode",
     ],
 )
 
@@ -115,5 +117,6 @@ loom_cc_fuzz(
         ":tokenizer",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:unicode",
     ],
 )

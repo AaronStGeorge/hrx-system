@@ -2,6 +2,34 @@
 
 // ====
 
+// Top-level parser/printer smoke: standalone ops and a variadic terminator.
+%a = test.constant 1 : i32
+%b = test.constant 2 : i32
+%c = test.addi %a, %b : i32
+%d = test.addi %c, %a : i32
+
+// ====
+
+// Top-level conversion op.
+%input = test.constant 42 : i32
+%converted = test.convert %input : i32 -> f32
+
+// ====
+
+// Top-level comparison op.
+%lhs = test.constant 1 : i32
+%rhs = test.constant 2 : i32
+%equal = test.cmp eq, %lhs, %rhs : i32
+
+// ====
+
+// Top-level variadic yield with heterogeneous operand types.
+%fa = test.constant 1 : f32
+%ib = test.constant 2 : i32
+test.yield %fa, %ib : f32, i32
+
+// ====
+
 // Constants with various scalar types.
 func.def @constants() -> (i32, i64, index) {
   %c0 = test.constant 42 : i32

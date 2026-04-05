@@ -49,6 +49,7 @@ loom_cc_test(
     loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
+    loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
@@ -64,6 +65,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    iree::base::internal::unicode
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::util::stream
@@ -123,6 +125,7 @@ loom_cc_fuzz(
     ::tokenizer
     iree::base
     iree::base::internal::arena
+    iree::base::internal::unicode
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

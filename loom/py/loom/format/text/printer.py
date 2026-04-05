@@ -410,6 +410,35 @@ def resolve_value_name(module: Module, value_id: int) -> str:
 # ============================================================================
 
 
+def _format_string_literal(value: str) -> str:
+    """Format a decoded string payload as one canonical JSON string literal."""
+    escaped_chunks: list[str] = ['"']
+    for character in value:
+        codepoint = ord(character)
+        if character == '"':
+            escaped_chunks.append('\\"')
+        elif character == "\\":
+            escaped_chunks.append("\\\\")
+        elif character == "\b":
+            escaped_chunks.append("\\b")
+        elif character == "\f":
+            escaped_chunks.append("\\f")
+        elif character == "\n":
+            escaped_chunks.append("\\n")
+        elif character == "\r":
+            escaped_chunks.append("\\r")
+        elif character == "\t":
+            escaped_chunks.append("\\t")
+        elif codepoint < 0x20:
+            escaped_chunks.append(f"\\u{codepoint:04X}")
+        elif 0xD800 <= codepoint <= 0xDFFF:
+            raise ValueError(f"invalid surrogate codepoint U+{codepoint:04X}")
+        else:
+            escaped_chunks.append(character)
+    escaped_chunks.append('"')
+    return "".join(escaped_chunks)
+
+
 def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
     """Format an attribute value for text output.
 
@@ -425,13 +454,7 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
     if isinstance(value, float):
         return _format_float(value)
     if isinstance(value, str):
-        escaped = (
-            value.replace("\\", "\\\\")
-            .replace('"', '\\"')
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
-        )
-        return f'"{escaped}"'
+        return _format_string_literal(value)
     if isinstance(value, list | tuple):
         parts = [_format_attr_value(v) for v in value]
         return "[" + ", ".join(parts) + "]"
@@ -803,7 +826,8 @@ class Printer:
                 else "?"
             )
             return (
-                f'loc("{source}":{loc.start_line}:{loc.start_col}'
+                f"loc({_format_string_literal(source)}:"
+                f"{loc.start_line}:{loc.start_col}"
                 f" to {loc.end_line}:{loc.end_col})"
             )
         if isinstance(loc, FusedLocation):
@@ -816,7 +840,10 @@ class Printer:
                         if child.source_id < len(module.sources)
                         else "?"
                     )
-                    parts.append(f'"{source}":{child.start_line}:{child.start_col}')
+                    parts.append(
+                        f"{_format_string_literal(source)}:"
+                        f"{child.start_line}:{child.start_col}"
+                    )
             return f"loc(fused<{', '.join(parts)}>)"
         if isinstance(loc, OpaqueLocation):
             tag = (
@@ -824,8 +851,14 @@ class Printer:
                 if loc.source_id < len(module.sources)
                 else "?"
             )
-            data_str = loc.data.decode("utf-8", errors="replace")
-            return f'loc(opaque<"{tag}", "{data_str}">)'
+            try:
+                data = loc.data.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError("opaque location data is not valid UTF-8") from exc
+            return (
+                f"loc(opaque<{_format_string_literal(tag)}, "
+                f"{_format_string_literal(data)}>)"
+            )
         return ""
 
     def _walk_format_inline(

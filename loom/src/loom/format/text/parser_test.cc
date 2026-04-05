@@ -14,6 +14,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/error/diagnostic.h"
 #include "loom/error/error_defs.h"
+#include "loom/format/text/parser_internal.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -21,82 +22,18 @@
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
+#include "loom/testing/diagnostic_matchers.h"
 #include "loom/util/stream.h"
 
 namespace loom {
 namespace {
 
-//===----------------------------------------------------------------------===//
-// Test infrastructure
-//===----------------------------------------------------------------------===//
-
-// A single captured diagnostic with deep-copied structured data.
-// Error def pointers point into .rodata and are stable for == comparison.
-// String param values are copied into |string_storage| since the diagnostic's
-// param array is stack-local to the emitting function.
-struct CapturedDiagnostic {
-  const loom_error_def_t* error;
-  loom_diagnostic_severity_t severity;
-  loom_emitter_t emitter;
-  uint32_t origin_line;
-  uint32_t origin_column;
-  uint32_t origin_end_column;
-  std::vector<loom_diagnostic_param_t> params;
-  std::vector<std::string> string_storage;
-};
-
-struct DiagnosticCapture {
-  std::vector<CapturedDiagnostic> diagnostics;
-};
-
-static iree_status_t CaptureDiagnostic(void* user_data,
-                                       const loom_diagnostic_t* diagnostic) {
-  auto* capture = static_cast<DiagnosticCapture*>(user_data);
-  CapturedDiagnostic entry;
-  entry.error = diagnostic->error;
-  entry.severity = diagnostic->severity;
-  entry.emitter = diagnostic->emitter;
-  entry.origin_line = diagnostic->origin.start_line;
-  entry.origin_column = diagnostic->origin.start_column;
-  entry.origin_end_column = diagnostic->origin.end_column;
-  entry.params.reserve(diagnostic->param_count);
-  entry.string_storage.reserve(diagnostic->param_count);
-  for (iree_host_size_t i = 0; i < diagnostic->param_count; ++i) {
-    loom_diagnostic_param_t param = diagnostic->params[i];
-    if (param.kind == LOOM_PARAM_STRING) {
-      entry.string_storage.emplace_back(param.string.data, param.string.size);
-      param.string = iree_make_string_view(entry.string_storage.back().data(),
-                                           entry.string_storage.back().size());
-    }
-    entry.params.push_back(param);
-  }
-  capture->diagnostics.push_back(std::move(entry));
-  return iree_ok_status();
-}
-
-// Assertion helpers.
-static void ExpectError(const CapturedDiagnostic& diagnostic,
-                        const loom_error_def_t* expected_error) {
-  EXPECT_EQ(diagnostic.error, expected_error);
-  EXPECT_EQ(diagnostic.severity, LOOM_DIAGNOSTIC_ERROR);
-  EXPECT_EQ(diagnostic.emitter, LOOM_EMITTER_PARSER);
-}
-
-static std::string GetStringParam(const CapturedDiagnostic& diagnostic,
-                                  size_t param_index) {
-  EXPECT_LT(param_index, diagnostic.params.size());
-  if (param_index >= diagnostic.params.size()) return "";
-  EXPECT_EQ(diagnostic.params[param_index].kind, LOOM_PARAM_STRING);
-  return std::string(diagnostic.params[param_index].string.data,
-                     diagnostic.params[param_index].string.size);
-}
-
-static void ExpectU32Param(const CapturedDiagnostic& diagnostic,
-                           size_t param_index, uint32_t expected) {
-  ASSERT_LT(param_index, diagnostic.params.size());
-  EXPECT_EQ(diagnostic.params[param_index].kind, LOOM_PARAM_U32);
-  EXPECT_EQ(diagnostic.params[param_index].u32, expected);
-}
+using ::loom::testing::CapturedDiagnostic;
+using ::loom::testing::DiagnosticCapture;
+using ::loom::testing::ExpectError;
+using ::loom::testing::ExpectU32Param;
+using ::loom::testing::FindDiagnostic;
+using ::loom::testing::GetStringParam;
 
 static const loom_encoding_vtable_t kDenseEncodingVtable = {
     .name = IREE_SV("dense"),
@@ -160,11 +97,10 @@ class ParserTest : public ::testing::Test {
   // Parses source text and captures diagnostics. On success, caller owns
   // |*out_module| (must free with loom_module_free).
   iree_status_t Parse(const char* source, loom_module_t** out_module) {
-    capture_ = {};
+    capture_.Reset();
     loom_text_parse_options_t options;
     memset(&options, 0, sizeof(options));
-    options.diagnostic_sink.fn = CaptureDiagnostic;
-    options.diagnostic_sink.user_data = &capture_;
+    options.diagnostic_sink = capture_.sink();
     options.max_errors = 100;
     return loom_text_parse(iree_make_cstring_view(source),
                            iree_make_cstring_view("test.loom"), &context_,
@@ -253,6 +189,94 @@ static loom_op_t* GetFirstFunctionOp(const loom_module_t* module) {
 static loom_block_t* GetEntryBlock(loom_region_t* region) {
   if (!region || region->block_count == 0) return nullptr;
   return loom_region_entry_block(region);
+}
+
+//===----------------------------------------------------------------------===//
+// Parser-owned scratch
+//===----------------------------------------------------------------------===//
+
+TEST_F(ParserTest, ParsedOpScratchFrameReusesOperandSpillStorage) {
+  loom_parser_t parser = {};
+  iree_arena_initialize(&block_pool_, &parser.parser_arena);
+
+  loom_parsed_op_t* first = nullptr;
+  IREE_ASSERT_OK(loom_parser_acquire_parsed_op(&parser, &first));
+  ASSERT_NE(first, nullptr);
+
+  for (uint16_t i = 0; i < LOOM_PARSED_OP_INLINE_OPERANDS + 4; ++i) {
+    IREE_ASSERT_OK(loom_parsed_op_add_operand(first, &parser.parser_arena, i));
+  }
+  ASSERT_GT(first->operand_capacity, LOOM_PARSED_OP_INLINE_OPERANDS);
+  loom_value_id_t* spill_operand_ids = first->operand_ids;
+  uint16_t spill_operand_capacity = first->operand_capacity;
+  EXPECT_NE(spill_operand_ids, first->inline_operand_ids);
+
+  loom_parser_release_parsed_op(&parser, first);
+
+  loom_parsed_op_t* second = nullptr;
+  IREE_ASSERT_OK(loom_parser_acquire_parsed_op(&parser, &second));
+  EXPECT_EQ(second, first);
+  EXPECT_EQ(second->operand_ids, spill_operand_ids);
+  EXPECT_EQ(second->operand_count, 0u);
+  EXPECT_EQ(second->operand_capacity, spill_operand_capacity);
+
+  loom_parser_release_parsed_op(&parser, second);
+  iree_host_size_t spill_allocation_size =
+      parser.parser_arena.total_allocation_size;
+
+  for (int iteration = 0; iteration < 128; ++iteration) {
+    loom_parsed_op_t* scratch = nullptr;
+    IREE_ASSERT_OK(loom_parser_acquire_parsed_op(&parser, &scratch));
+    ASSERT_EQ(scratch, first);
+    for (uint16_t i = 0; i < LOOM_PARSED_OP_INLINE_OPERANDS + 4; ++i) {
+      IREE_ASSERT_OK(
+          loom_parsed_op_add_operand(scratch, &parser.parser_arena, i));
+    }
+    EXPECT_EQ(scratch->operand_ids, spill_operand_ids);
+    EXPECT_EQ(scratch->operand_capacity, spill_operand_capacity);
+    loom_parser_release_parsed_op(&parser, scratch);
+  }
+  EXPECT_EQ(parser.parser_arena.total_allocation_size, spill_allocation_size);
+
+  iree_arena_deinitialize(&parser.parser_arena);
+}
+
+TEST_F(ParserTest, ParsedOpScratchFramesStayDepthSafeWhileParentIsActive) {
+  loom_parser_t parser = {};
+  iree_arena_initialize(&block_pool_, &parser.parser_arena);
+
+  loom_parsed_op_t* parent = nullptr;
+  IREE_ASSERT_OK(loom_parser_acquire_parsed_op(&parser, &parent));
+  ASSERT_NE(parent, nullptr);
+  for (uint16_t i = 0; i < LOOM_PARSED_OP_INLINE_OPERANDS + 4; ++i) {
+    IREE_ASSERT_OK(loom_parsed_op_add_operand(parent, &parser.parser_arena, i));
+  }
+
+  loom_value_id_t* parent_operand_ids = parent->operand_ids;
+  uint16_t parent_operand_capacity = parent->operand_capacity;
+  uint16_t parent_operand_count = parent->operand_count;
+
+  loom_parsed_op_t* child = nullptr;
+  IREE_ASSERT_OK(loom_parser_acquire_parsed_op(&parser, &child));
+  ASSERT_NE(child, nullptr);
+  EXPECT_NE(child, parent);
+  EXPECT_EQ(child->operand_count, 0u);
+
+  for (uint16_t i = 0; i < LOOM_PARSED_OP_INLINE_OPERANDS + 8; ++i) {
+    IREE_ASSERT_OK(loom_parsed_op_add_operand(child, &parser.parser_arena,
+                                              (loom_value_id_t)(100 + i)));
+  }
+
+  EXPECT_EQ(parent->operand_ids, parent_operand_ids);
+  EXPECT_EQ(parent->operand_capacity, parent_operand_capacity);
+  EXPECT_EQ(parent->operand_count, parent_operand_count);
+  for (uint16_t i = 0; i < parent_operand_count; ++i) {
+    EXPECT_EQ(parent->operand_ids[i], i);
+  }
+
+  loom_parser_release_parsed_op(&parser, child);
+  loom_parser_release_parsed_op(&parser, parent);
+  iree_arena_deinitialize(&parser.parser_arena);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1273,6 +1297,47 @@ TEST_F(ParserTest, EncodingDefineAliasSpec) {
   loom_module_free(module);
 }
 
+TEST_F(ParserTest, EncodingDefineNestedInlineSpec) {
+  loom_module_t* module = ParseOk(
+      "%enc = encoding.define "
+      "#quantization<spec=#q8_0<block=32>> : encoding\n");
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* body = loom_module_block(module);
+  ASSERT_EQ(body->op_count, 1u);
+  const loom_op_t* op = loom_block_const_op(body, 0);
+  ASSERT_TRUE(loom_encoding_define_isa(op));
+
+  loom_attribute_t spec_attr = loom_op_attrs(op)[0];
+  ASSERT_EQ(spec_attr.kind, LOOM_ATTR_ENCODING);
+  const loom_encoding_t* outer_encoding =
+      loom_module_encoding(module, loom_attr_as_encoding_id(spec_attr));
+  ASSERT_NE(outer_encoding, nullptr);
+  ASSERT_EQ(outer_encoding->attribute_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[outer_encoding->attributes[0].name_id],
+      IREE_SV("spec")));
+
+  loom_attribute_t nested_spec = outer_encoding->attributes[0].value;
+  ASSERT_EQ(nested_spec.kind, LOOM_ATTR_ENCODING);
+  const loom_encoding_t* nested_encoding =
+      loom_module_encoding(module, loom_attr_as_encoding_id(nested_spec));
+  ASSERT_NE(nested_encoding, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[nested_encoding->name_id], IREE_SV("q8_0")));
+  ASSERT_EQ(nested_encoding->attribute_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[nested_encoding->attributes[0].name_id],
+      IREE_SV("block")));
+  EXPECT_EQ(nested_encoding->attributes[0].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(nested_encoding->attributes[0].value.i64, 32);
+
+  EXPECT_EQ(PrintModule(module),
+            "%enc = encoding.define "
+            "#quantization<spec=#q8_0<block=32>> : encoding\n");
+  loom_module_free(module);
+}
+
 TEST_F(ParserTest, EncodingAliasCannotShadowRegisteredFamily) {
   const auto& diagnostics = ParseExpectErrors("#q8_0 = #dense\n");
   ASSERT_GE(diagnostics.size(), 1u);
@@ -1386,13 +1451,7 @@ TEST_F(ParserTest, RecoverySkipsToNextOp) {
       "%c = test.constant 42 : i32\n");
   // At minimum, we get the ERR_PARSE_006 for the unknown op.
   ASSERT_GE(diagnostics.size(), 1u);
-  bool found_unknown_op = false;
-  for (const auto& d : diagnostics) {
-    if (d.error == &loom_err_parse_006) {
-      found_unknown_op = true;
-    }
-  }
-  EXPECT_TRUE(found_unknown_op);
+  EXPECT_NE(FindDiagnostic(capture_, &loom_err_parse_006), nullptr);
 }
 
 TEST_F(ParserTest, MaxErrorsLimit) {
@@ -1403,11 +1462,10 @@ TEST_F(ParserTest, MaxErrorsLimit) {
               " : i32\n";
   }
 
-  capture_ = {};
+  capture_.Reset();
   loom_text_parse_options_t options;
   memset(&options, 0, sizeof(options));
-  options.diagnostic_sink.fn = CaptureDiagnostic;
-  options.diagnostic_sink.user_data = &capture_;
+  options.diagnostic_sink = capture_.sink();
   options.max_errors = 5;
 
   loom_module_t* module = nullptr;
@@ -1420,57 +1478,11 @@ TEST_F(ParserTest, MaxErrorsLimit) {
   ASSERT_GE(capture_.diagnostics.size(), 2u);
 
   // Find ERR_PARSE_012 (too many errors) somewhere in the diagnostics.
-  bool found_too_many = false;
-  for (const auto& d : capture_.diagnostics) {
-    if (d.error == &loom_err_parse_012) {
-      found_too_many = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(found_too_many) << "Expected ERR_PARSE_012 (too many errors)";
+  EXPECT_NE(FindDiagnostic(capture_, &loom_err_parse_012), nullptr)
+      << "Expected ERR_PARSE_012 (too many errors)";
 
   // Total error count should not exceed max_errors + 1 (the "too many" itself).
   EXPECT_LE(capture_.diagnostics.size(), 6u + 1u);
-}
-
-//===----------------------------------------------------------------------===//
-// Round-trip fidelity
-//===----------------------------------------------------------------------===//
-
-TEST_F(ParserTest, RoundTripBinaryOps) {
-  RoundTrip(
-      "%a = test.constant 1 : i32\n"
-      "%b = test.constant 2 : i32\n"
-      "%c = test.addi %a, %b : i32\n"
-      "%d = test.addi %c, %a : i32\n");
-}
-
-TEST_F(ParserTest, RoundTripFuncDef) {
-  RoundTrip(
-      "func.def @negate(%input : f32) -> (f32) {\n"
-      "  %r = test.neg %input : f32\n"
-      "  func.return %r : f32\n"
-      "}\n");
-}
-
-TEST_F(ParserTest, RoundTripConvert) {
-  RoundTrip(
-      "%c = test.constant 42 : i32\n"
-      "%r = test.convert %c : i32 -> f32\n");
-}
-
-TEST_F(ParserTest, RoundTripComparison) {
-  RoundTrip(
-      "%a = test.constant 1 : i32\n"
-      "%b = test.constant 2 : i32\n"
-      "%r = test.cmp eq, %a, %b : i32\n");
-}
-
-TEST_F(ParserTest, RoundTripVariadicYield) {
-  RoundTrip(
-      "%a = test.constant 1 : f32\n"
-      "%b = test.constant 2 : i32\n"
-      "test.yield %a, %b : f32, i32\n");
 }
 
 //===----------------------------------------------------------------------===//

@@ -179,6 +179,60 @@ TEST(JsonSink, EscapesSpecialCharacters) {
 }
 
 //===----------------------------------------------------------------------===//
+// Source locations and highlights
+//===----------------------------------------------------------------------===//
+
+TEST(JsonSink, SerializesSourceRangesAndHighlights) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("x")),
+  };
+  const char source[] = "%x = test.constant 0 : i32";
+  loom_highlight_range_t highlights[] = {
+      {0, 2},
+      {5, 18},
+  };
+
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = &loom_err_parse_001;
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.emitter = LOOM_EMITTER_VERIFIER;
+  diagnostic.origin.filename = IREE_SV("<verifier>");
+  diagnostic.origin.source = iree_make_cstring_view(source);
+  diagnostic.origin.start = 0;
+  diagnostic.origin.end = 26;
+  diagnostic.origin.start_line = 1;
+  diagnostic.origin.start_column = 1;
+  diagnostic.origin.end_line = 1;
+  diagnostic.origin.end_column = 27;
+  diagnostic.source_location.filename = IREE_SV("model.loom");
+  diagnostic.source_location.source = iree_make_cstring_view(source);
+  diagnostic.source_location.start = 64;
+  diagnostic.source_location.end = 90;
+  diagnostic.source_location.start_line = 7;
+  diagnostic.source_location.start_column = 3;
+  diagnostic.source_location.end_line = 7;
+  diagnostic.source_location.end_column = 29;
+  diagnostic.highlights = highlights;
+  diagnostic.highlight_count = IREE_ARRAYSIZE(highlights);
+
+  std::string json = EmitJson(&diagnostic);
+  EXPECT_NE(
+      json.find("\"origin\":{\"filename\":\"<verifier>\",\"start_line\":1,"
+                "\"start_column\":1,\"end_line\":1,\"end_column\":27,"
+                "\"start_byte\":0,\"end_byte\":26}"),
+      std::string::npos);
+  EXPECT_NE(json.find("\"source_location\":{\"filename\":\"model.loom\","
+                      "\"start_line\":7,\"start_column\":3,\"end_line\":7,"
+                      "\"end_column\":29,\"start_byte\":64,\"end_byte\":90}"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"highlights\":[{\"start_byte\":0,\"end_byte\":2},"
+                      "{\"start_byte\":5,\"end_byte\":18}]"),
+            std::string::npos);
+}
+
+//===----------------------------------------------------------------------===//
 // Multiple diagnostics (JSONL)
 //===----------------------------------------------------------------------===//
 

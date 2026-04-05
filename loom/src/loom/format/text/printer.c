@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "iree/base/internal/unicode.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
@@ -105,6 +106,65 @@ static iree_status_t loom_print_attr(loom_output_stream_t* stream,
                                      const loom_attribute_t* attr,
                                      const loom_module_t* module,
                                      const loom_attr_descriptor_t* descriptor);
+
+// Emits a canonical JSON-compatible string literal. Stored strings are expected
+// to contain decoded UTF-8 payload bytes; this helper validates that invariant
+// before writing so malformed IR never serializes as malformed text.
+static iree_status_t loom_print_string_literal(loom_output_stream_t* stream,
+                                               iree_string_view_t text) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
+  iree_host_size_t position = 0;
+  while (position < text.size) {
+    iree_host_size_t codepoint_start = position;
+    uint32_t codepoint = iree_unicode_utf8_decode(text, &position);
+    if (codepoint == IREE_UNICODE_REPLACEMENT_CHAR) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "invalid UTF-8 string literal");
+    }
+    switch (codepoint) {
+      case '"': {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\\""));
+        break;
+      }
+      case '\\': {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\\\"));
+        break;
+      }
+      case '\b': {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\b"));
+        break;
+      }
+      case '\f': {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\f"));
+        break;
+      }
+      case '\n': {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\n"));
+        break;
+      }
+      case '\r': {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\r"));
+        break;
+      }
+      case '\t': {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\t"));
+        break;
+      }
+      default: {
+        if (codepoint < 0x20) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+              stream, "\\u%04" PRIX32, codepoint));
+        } else {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write(
+              stream, iree_make_string_view(text.data + codepoint_start,
+                                            position - codepoint_start)));
+        }
+        break;
+      }
+    }
+  }
+  return loom_output_stream_write_char(stream, '"');
+}
 
 //===----------------------------------------------------------------------===//
 // Type printing — writes directly to stream
@@ -397,10 +457,10 @@ static iree_status_t loom_print_location(loom_output_stream_t* stream,
           entry->file.source_id < module->context->sources.count) {
         source = module->context->sources.entries[entry->file.source_id];
       }
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " loc(\""));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, source));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " loc("));
+      IREE_RETURN_IF_ERROR(loom_print_string_literal(stream, source));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          stream, "\":%u:%u to %u:%u)", entry->file.start_line,
+          stream, ":%u:%u to %u:%u)", entry->file.start_line,
           entry->file.start_col, entry->file.end_line, entry->file.end_col));
       return iree_ok_status();
     }
@@ -422,11 +482,9 @@ static iree_status_t loom_print_location(loom_output_stream_t* stream,
                 child->file.source_id < module->context->sources.count) {
               source = module->context->sources.entries[child->file.source_id];
             }
-            IREE_RETURN_IF_ERROR(
-                loom_output_stream_write_cstring(stream, "\""));
-            IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, source));
+            IREE_RETURN_IF_ERROR(loom_print_string_literal(stream, source));
             IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-                stream, "\":%u:%u", child->file.start_line,
+                stream, ":%u:%u", child->file.start_line,
                 child->file.start_col));
           }
         }
@@ -440,16 +498,20 @@ static iree_status_t loom_print_location(loom_output_stream_t* stream,
           entry->opaque.source_id < module->context->sources.count) {
         tag = module->context->sources.entries[entry->opaque.source_id];
       }
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(stream, " loc(opaque<\""));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, tag));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\", \""));
-      if (entry->opaque.data_length > 0) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write(
-            stream, iree_make_string_view((const char*)entry->opaque.data,
-                                          entry->opaque.data_length)));
+      if (entry->opaque.data_length > 0 && !entry->opaque.data) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "opaque location has data_length %u but NULL data",
+            entry->opaque.data_length);
       }
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\">)"));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, " loc(opaque<"));
+      IREE_RETURN_IF_ERROR(loom_print_string_literal(stream, tag));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_print_string_literal(
+          stream, iree_make_string_view((const char*)entry->opaque.data,
+                                        entry->opaque.data_length)));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ">)"));
       return iree_ok_status();
     }
     default:
@@ -494,24 +556,7 @@ static iree_status_t loom_print_attr(loom_output_stream_t* stream,
       if (module && id < module->strings.count) {
         attr_string = module->strings.entries[id];
       }
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
-      for (iree_host_size_t i = 0; i < attr_string.size; ++i) {
-        char c = attr_string.data[i];
-        if (c == '"') {
-          IREE_RETURN_IF_ERROR(
-              loom_output_stream_write_cstring(stream, "\\\""));
-        } else if (c == '\\') {
-          IREE_RETURN_IF_ERROR(
-              loom_output_stream_write_cstring(stream, "\\\\"));
-        } else if (c == '\n') {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\n"));
-        } else if (c == '\t') {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\\t"));
-        } else {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, c));
-        }
-      }
-      return loom_output_stream_write_char(stream, '"');
+      return loom_print_string_literal(stream, attr_string);
     }
     case LOOM_ATTR_BOOL:
       return loom_output_stream_write_cstring(stream,
