@@ -40,12 +40,126 @@ static iree_host_size_t loom_find_line_end(iree_string_view_t source,
 // Formatting
 //===----------------------------------------------------------------------===//
 
+static bool loom_source_range_has_text(const loom_source_range_t* range) {
+  return range->source.size > 0 && range->start < range->source.size;
+}
+
+static iree_status_t loom_diagnostic_format_source_block(
+    const loom_source_range_t* range, const loom_highlight_range_t* highlights,
+    iree_host_size_t highlight_count, loom_output_stream_t* stream) {
+  if (!loom_source_range_has_text(range)) return iree_ok_status();
+
+  // Extract the source line containing the diagnostic start.
+  iree_host_size_t line_start =
+      loom_find_line_start(range->source, range->start);
+  iree_host_size_t line_end = loom_find_line_end(range->source, range->start);
+  iree_string_view_t source_line = iree_make_string_view(
+      range->source.data + line_start, line_end - line_start);
+
+  // Compute the width of the line number for alignment.
+  int line_number_width = iree_snprintf(NULL, 0, "%" PRIu32, range->start_line);
+
+  // Source line with line number.
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " "));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_format(stream, "%" PRIu32, range->start_line));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " | "));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, source_line));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
+
+  // Caret/underline line. Padding: " " + spaces(line_number_width) + " | ".
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " "));
+  for (int i = 0; i < line_number_width; ++i) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " | "));
+
+  if (highlight_count > 0 && highlights) {
+    // Multi-caret: draw carets at each highlighted range, spaces elsewhere.
+    // Walk the source line byte-by-byte, checking if any highlight covers this
+    // position.
+    for (iree_host_size_t i = 0; i < source_line.size; ++i) {
+      iree_host_size_t source_offset = line_start + i;
+      bool highlighted = false;
+      for (iree_host_size_t h = 0; h < highlight_count; ++h) {
+        if (source_offset >= highlights[h].start &&
+            source_offset < highlights[h].end) {
+          highlighted = true;
+          break;
+        }
+      }
+      if (highlighted) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '^'));
+      } else {
+        char c = (source_line.data[i] == '\t') ? '\t' : ' ';
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, c));
+      }
+    }
+  } else {
+    // Single range: spaces to reach the start column, then carets.
+    iree_host_size_t column_offset = range->start - line_start;
+    for (iree_host_size_t i = 0; i < column_offset; ++i) {
+      char c =
+          (i < source_line.size && source_line.data[i] == '\t') ? '\t' : ' ';
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, c));
+    }
+    iree_host_size_t underline_length = 1;
+    if (range->end > range->start) {
+      underline_length = range->end - range->start;
+      if (range->start + underline_length > line_end) {
+        underline_length = line_end - range->start;
+      }
+    }
+    if (underline_length == 0) underline_length = 1;
+    for (iree_host_size_t i = 0; i < underline_length; ++i) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '^'));
+    }
+  }
+  return loom_output_stream_write_cstring(stream, "\n");
+}
+
+static iree_status_t loom_diagnostic_format_related_locations(
+    const loom_diagnostic_t* diagnostic, loom_output_stream_t* stream) {
+  if (!diagnostic->related_locations ||
+      diagnostic->related_location_count == 0) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t note_count =
+      iree_min(diagnostic->related_location_count,
+               (iree_host_size_t)LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS);
+  for (iree_host_size_t i = 0; i < note_count; ++i) {
+    const loom_diagnostic_related_location_t* related =
+        &diagnostic->related_locations[i];
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "  = note"));
+    if (!iree_string_view_is_empty(related->label)) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, related->label));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ']'));
+    }
+    if (loom_source_range_has_text(&related->source_location) &&
+        related->source_location.filename.size > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream, ": %.*s:%" PRIu32 ":%" PRIu32,
+          (int)related->source_location.filename.size,
+          related->source_location.filename.data,
+          related->source_location.start_line,
+          related->source_location.start_column));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
+    IREE_RETURN_IF_ERROR(loom_diagnostic_format_source_block(
+        &related->source_location, related->highlights,
+        related->highlight_count, stream));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
                                      loom_output_stream_t* stream) {
   const loom_source_range_t* range = &diagnostic->origin;
   const char* severity_string =
       loom_diagnostic_severity_name(diagnostic->severity);
-  bool has_source = range->source.size > 0 && range->start < range->source.size;
+  bool has_source = loom_source_range_has_text(range);
   loom_type_formatter_t type_formatter = {loom_type_format_minimal, NULL};
 
   // Clang-style first line:
@@ -85,85 +199,17 @@ iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
           type_formatter, stream));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
     }
-    return iree_ok_status();
+    return loom_diagnostic_format_related_locations(diagnostic, stream);
   }
 
-  // Extract the source line containing the diagnostic start.
-  iree_host_size_t line_start =
-      loom_find_line_start(range->source, range->start);
-  iree_host_size_t line_end = loom_find_line_end(range->source, range->start);
-  iree_string_view_t source_line = iree_make_string_view(
-      range->source.data + line_start, line_end - line_start);
-
-  // Compute the width of the line number for alignment.
-  char line_number_buffer[16];
-  int line_number_width =
-      snprintf(line_number_buffer, sizeof(line_number_buffer), "%" PRIu32,
-               range->start_line);
-
-  // Source line with line number. Decomposed into separate writes because
-  // the source line is already a string_view — no reason to format it.
-  //   42 |   %r = test.addi %x, %y : i32
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " "));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, line_number_buffer));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " | "));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, source_line));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
-
-  // Caret/underline line. Padding: " " + spaces(line_number_width) + " | ".
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " "));
-  for (int i = 0; i < line_number_width; ++i) {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
-  }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " | "));
-
-  if (diagnostic->highlight_count > 0 && diagnostic->highlights) {
-    // Multi-caret: draw carets at each highlighted range, spaces elsewhere.
-    // Walk the source line column by column, checking if any highlight
-    // covers this position.
-    for (iree_host_size_t i = 0; i < source_line.size; ++i) {
-      iree_host_size_t source_offset = line_start + i;
-      bool highlighted = false;
-      for (iree_host_size_t h = 0; h < diagnostic->highlight_count; ++h) {
-        if (source_offset >= diagnostic->highlights[h].start &&
-            source_offset < diagnostic->highlights[h].end) {
-          highlighted = true;
-          break;
-        }
-      }
-      if (highlighted) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '^'));
-      } else {
-        // Preserve tabs for alignment.
-        char c = (source_line.data[i] == '\t') ? '\t' : ' ';
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, c));
-      }
-    }
-  } else {
-    // Single range: spaces to reach the start column, then carets.
-    iree_host_size_t column_offset = range->start - line_start;
-    for (iree_host_size_t i = 0; i < column_offset; ++i) {
-      char c =
-          (i < source_line.size && source_line.data[i] == '\t') ? '\t' : ' ';
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, c));
-    }
-    iree_host_size_t underline_length = 1;
-    if (range->end > range->start) {
-      underline_length = range->end - range->start;
-      if (range->start + underline_length > line_end) {
-        underline_length = line_end - range->start;
-      }
-    }
-    if (underline_length == 0) underline_length = 1;
-    for (iree_host_size_t i = 0; i < underline_length; ++i) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '^'));
-    }
-  }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
+  IREE_RETURN_IF_ERROR(loom_diagnostic_format_source_block(
+      range, diagnostic->highlights, diagnostic->highlight_count, stream));
 
   // Fix hint line (when structured diagnostic has one).
   if (diagnostic->error && diagnostic->error->fix_hint_template) {
+    // Compute the width of the primary line number for alignment.
+    int line_number_width =
+        iree_snprintf(NULL, 0, "%" PRIu32, range->start_line);
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " "));
     for (int i = 0; i < line_number_width; ++i) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
@@ -175,7 +221,7 @@ iree_status_t loom_diagnostic_format(const loom_diagnostic_t* diagnostic,
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
   }
 
-  return iree_ok_status();
+  return loom_diagnostic_format_related_locations(diagnostic, stream);
 }
 
 //===----------------------------------------------------------------------===//

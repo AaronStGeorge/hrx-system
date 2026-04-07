@@ -17,10 +17,9 @@
 //   U+2028 (LINE SEPARATOR)      → \u2028
 //   U+2029 (PARAGRAPH SEPARATOR) → \u2029
 //
-// All other UTF-8 (CJK, emoji, etc.) passes through unchanged. The
-// tokenizer validates UTF-8 at the input gate, so the escaper does not
-// need to do full decoding — it only checks the E2 80 A8/A9 byte
-// pattern for the two problematic separators.
+// All other valid UTF-8 (CJK, emoji, etc.) passes through unchanged. Malformed
+// UTF-8 bytes are escaped as \ufffd so user-source excerpts from lexer
+// diagnostics still produce valid JSON.
 //
 // Usage:
 //

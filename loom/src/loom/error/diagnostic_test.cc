@@ -190,6 +190,83 @@ TEST(Diagnostic, NoSource) {
   EXPECT_EQ(output.find(" | "), std::string::npos);
 }
 
+TEST(Diagnostic, RelatedLocationsFormatAsNotes) {
+  const char* source_text =
+      "%next = test.invoke @callee(%arg) : (f32) -> (%arg as f32)\n"
+      "test.use %arg : f32\n";
+  iree_string_view_t source = iree_make_cstring_view(source_text);
+
+  const char* consume_text = strstr(source_text, "%next = test.invoke");
+  ASSERT_NE(consume_text, nullptr);
+  iree_host_size_t consume_start =
+      (iree_host_size_t)(consume_text - source_text);
+  iree_host_size_t consume_length = strcspn(consume_text, "\n");
+  loom_diagnostic_related_location_t related_locations[] = {{
+      .label = IREE_SV("consumed here"),
+      .source_location =
+          {
+              .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
+              .filename = IREE_SV("test.loom"),
+              .source = source,
+              .start = consume_start,
+              .end = consume_start + consume_length,
+              .start_line = 1,
+              .start_column = 1,
+              .end_line = 1,
+              .end_column = 1 + (uint32_t)consume_length,
+          },
+  }};
+
+  const char* use_text = strstr(source_text, "test.use %arg : f32");
+  ASSERT_NE(use_text, nullptr);
+  iree_host_size_t use_start = (iree_host_size_t)(use_text - source_text);
+  iree_host_size_t use_length = strcspn(use_text, "\n");
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("arg")),
+      loom_param_string(IREE_SV("test.invoke")),
+  };
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = &loom_err_dominance_002;
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.origin = {
+      .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
+      .filename = IREE_SV("test.loom"),
+      .source = source,
+      .start = use_start,
+      .end = use_start + use_length,
+      .start_line = 2,
+      .start_column = 1,
+      .end_line = 2,
+      .end_column = 1 + (uint32_t)use_length,
+  };
+  diagnostic.related_locations = related_locations;
+  diagnostic.related_location_count = IREE_ARRAYSIZE(related_locations);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(loom_diagnostic_format(&diagnostic, &stream));
+  std::string output(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_NE(output.find("test.loom:2:1: error [DOMINANCE/002]"),
+            std::string::npos)
+      << "output: " << output;
+  EXPECT_NE(output.find("use of consumed value 'arg' (consumed by tied "
+                        "result of 'test.invoke')"),
+            std::string::npos)
+      << "output: " << output;
+  EXPECT_NE(output.find("  = note[consumed here]: test.loom:1:1"),
+            std::string::npos)
+      << "output: " << output;
+  EXPECT_NE(output.find("%next = test.invoke @callee(%arg)"), std::string::npos)
+      << "output: " << output;
+}
+
 //===----------------------------------------------------------------------===//
 // Structured diagnostic formatting
 //===----------------------------------------------------------------------===//
@@ -310,6 +387,7 @@ TEST(Diagnostic, SourceRangeFromToken) {
       iree_make_string_view(source.data + 20, 2);  // "%y"
   loom_source_range_t range = loom_source_range_from_token(
       IREE_SV("test.loom"), source, token_text, 1, 21, 23);
+  EXPECT_EQ(range.provenance, LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
   EXPECT_EQ(range.start, 20u);
   EXPECT_EQ(range.end, 22u);
   EXPECT_EQ(range.start_line, 1u);

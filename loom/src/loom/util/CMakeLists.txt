@@ -41,6 +41,7 @@ loom_cc_library(
   DEPS
     ::stream
     iree::base
+    iree::base::internal::unicode
   PUBLIC
 )
 

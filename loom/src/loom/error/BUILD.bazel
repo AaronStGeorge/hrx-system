@@ -54,6 +54,7 @@ loom_cc_library(
         "error_defs.inc",
     ],
     deps = [
+        ":emitter",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
     ],

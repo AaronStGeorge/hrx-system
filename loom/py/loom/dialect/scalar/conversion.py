@@ -157,6 +157,7 @@ scalar_constant = Op(
     attrs=[AttrDef("value", "any", doc="The constant value.")],
     traits=[PURE, CONSTANT_LIKE],
     fold="loom_scalar_constant_fold",
+    verify="loom_scalar_constant_verify",
     format=[Attr("value"), COLON, TypeOf("result")],
     examples=[
         "%c42 = scalar.constant 42 : i32",

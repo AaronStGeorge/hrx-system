@@ -75,8 +75,8 @@ class CallGraphTest : public ::testing::Test {
     IREE_CHECK_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
     loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
     loom_op_t* func_op = NULL;
-    IREE_CHECK_OK(loom_test_func_build(&module_builder_, 0, 0, callee, NULL, 0,
-                                       NULL, 0, NULL, 0, NULL, 0,
+    IREE_CHECK_OK(loom_test_func_build(&module_builder_, 0, 0, 0, callee, NULL,
+                                       0, NULL, 0, NULL, 0, NULL, 0,
                                        LOOM_LOCATION_UNKNOWN, &func_op));
     loom_func_like_t func_like = loom_func_like_cast(module_, func_op);
     loom_region_t* body = loom_func_like_body(func_like);
@@ -93,7 +93,7 @@ class CallGraphTest : public ::testing::Test {
     loom_symbol_ref_t callee_ref = {.module_id = 0,
                                     .symbol_id = callee_symbol_id};
     loom_op_t* call_op = NULL;
-    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, callee_ref, NULL, 0,
+    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, callee_ref, NULL, 0,
                                        NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
                                        &call_op));
   }

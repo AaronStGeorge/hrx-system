@@ -6,6 +6,7 @@
 
 #include "loom/transforms/verify.h"
 
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/error/json_sink.h"
 #include "loom/error/renderer.h"
+#include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/test/ops.h"
@@ -69,7 +71,11 @@ static iree_status_t CollectDiagnostic(void* user_data,
 
 using ::loom::testing::CapturedDiagnostic;
 using ::loom::testing::DiagnosticCapture;
+using ::loom::testing::ExpectFieldRefParam;
+using ::loom::testing::ExpectHighlightFieldRef;
 using ::loom::testing::ExpectI64Param;
+using ::loom::testing::ExpectNoFieldRefParam;
+using ::loom::testing::ExpectRelatedHighlightFieldRef;
 using ::loom::testing::ExpectTypeParam;
 using ::loom::testing::ExpectU32Param;
 using ::loom::testing::FindDiagnostic;
@@ -133,8 +139,8 @@ class VerifyTest : public ::testing::Test {
     loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
     loom_op_t* func_op = nullptr;
     IREE_ASSERT_OK(loom_test_func_build(
-        &builder_, 0, 0, callee, arg_types, arg_count, nullptr, 0, nullptr, 0,
-        nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+        &builder_, 0, 0, 0, callee, arg_types, arg_count, nullptr, 0, nullptr,
+        0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
     loom_region_t* body = loom_test_func_body(func_op);
     loom_builder_set_block(&builder_, loom_region_entry_block(body));
     for (iree_host_size_t i = 0; i < arg_count; ++i) {
@@ -168,6 +174,77 @@ class VerifyTest : public ::testing::Test {
   loom_verify_result_t VerifyStructured(DiagnosticCapture* capture) {
     options_.sink = capture->sink();
     return Verify();
+  }
+
+  loom_module_t* ParseSourceModule(const char* source, const char* filename) {
+    DiagnosticCapture parse_capture;
+    loom_text_parse_options_t parse_options = {};
+    parse_options.diagnostic_sink = parse_capture.sink();
+    parse_options.max_errors = 20;
+    loom_module_t* parsed_module = nullptr;
+    IREE_EXPECT_OK(loom_text_parse(
+        iree_make_cstring_view(source), iree_make_cstring_view(filename),
+        &context_, &block_pool_, &parse_options, &parsed_module));
+    if (!parse_capture.diagnostics.empty()) {
+      ADD_FAILURE() << "Expected parser success, got "
+                    << parse_capture.diagnostics.size() << " diagnostics";
+      if (parsed_module) loom_module_free(parsed_module);
+      return nullptr;
+    }
+    EXPECT_NE(parsed_module, nullptr);
+    return parsed_module;
+  }
+
+  loom_source_id_t FindContextSourceId(const char* filename) const {
+    iree_string_view_t source_name = iree_make_cstring_view(filename);
+    for (iree_host_size_t i = 0; i < context_.sources.count; ++i) {
+      if (iree_string_view_equal(context_.sources.entries[i], source_name)) {
+        return (loom_source_id_t)i;
+      }
+    }
+    ADD_FAILURE() << "Expected context source table to contain " << filename;
+    return LOOM_SOURCE_ID_INVALID;
+  }
+
+  loom_location_id_t AddFileLocation(const char* filename, uint16_t start_line,
+                                     uint16_t start_col, uint16_t end_line,
+                                     uint16_t end_col) {
+    loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+    IREE_EXPECT_OK(loom_context_register_source(
+        &context_, iree_make_cstring_view(filename), &source_id));
+    EXPECT_NE(source_id, LOOM_SOURCE_ID_INVALID);
+    loom_location_id_t location_id = LOOM_LOCATION_UNKNOWN;
+    IREE_EXPECT_OK(loom_module_add_location(
+        module_,
+        loom_location_file_range(source_id, start_line, start_col, end_line,
+                                 end_col),
+        &location_id));
+    EXPECT_NE(location_id, LOOM_LOCATION_UNKNOWN);
+    return location_id;
+  }
+
+  loom_verify_result_t VerifyParsedSourceModuleStructured(
+      loom_module_t* parsed_module, const char* source, const char* filename,
+      DiagnosticCapture* capture) {
+    loom_source_entry_t source_entries[] = {{
+        .source_id = FindContextSourceId(filename),
+        .source = iree_make_cstring_view(source),
+        .filename = iree_make_cstring_view(filename),
+    }};
+    EXPECT_NE(source_entries[0].source_id, LOOM_SOURCE_ID_INVALID);
+    loom_source_table_resolver_t resolver_data = {
+        .entries = source_entries,
+        .count = IREE_ARRAYSIZE(source_entries),
+    };
+
+    loom_verify_options_t options = {};
+    options.sink = capture->sink();
+    options.max_errors = 20;
+    options.source_resolver = {loom_source_table_resolve, &resolver_data};
+
+    loom_verify_result_t result = {};
+    IREE_EXPECT_OK(loom_verify_module(parsed_module, &options, &result));
+    return result;
   }
 
   // Runs verification with the caret formatter and returns the output.
@@ -319,6 +396,57 @@ TEST_F(VerifyTest, OpAfterTerminatorDetected) {
   EXPECT_EQ(GetStringParam(*entry, 0), "test.constant");
 }
 
+TEST_F(VerifyTest, OpAfterTerminatorReportsTerminatorLocation) {
+  static const char kSource[] =
+      "test.func @main() {\n"
+      "  test.yield\n"
+      "  %result = test.constant 0 : i32\n"
+      "}\n";
+  const char* filename = "op_after_terminator.loom";
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("main"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &builder_, 0, 0, 0,
+      (loom_symbol_ref_t){.module_id = 0, .symbol_id = symbol_id}, nullptr, 0,
+      nullptr, 0, nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_builder_set_block(&builder_,
+                         loom_region_entry_block(loom_test_func_body(func_op)));
+
+  loom_op_t* yield_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder_, nullptr, 0,
+                                       AddFileLocation(filename, 2, 3, 2, 13),
+                                       &yield_op));
+
+  loom_op_t* constant_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(
+      &builder_, loom_attr_i64(0), loom_type_scalar(LOOM_SCALAR_TYPE_I32),
+      AddFileLocation(filename, 3, 3, 3, 34), &constant_op));
+
+  DiagnosticCapture structured;
+  loom_verify_result_t result = VerifyParsedSourceModuleStructured(
+      module_, kSource, filename, &structured);
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* structure_error =
+      FindDiagnostic(structured, &loom_err_structure_012);
+  ASSERT_NE(structure_error, nullptr)
+      << "Expected STRUCTURE/012 op-after-terminator diagnostic";
+  EXPECT_EQ(GetStringParam(*structure_error, 0), "test.constant");
+  ASSERT_EQ(structure_error->related_locations.size(), 1u);
+  const auto& terminator_note = structure_error->related_locations[0];
+  EXPECT_EQ(terminator_note.label, "terminator here");
+  EXPECT_TRUE(terminator_note.has_source_range);
+  EXPECT_EQ(terminator_note.source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(terminator_note.source_location.start_line, 2u);
+  EXPECT_EQ(terminator_note.source_location.start_column, 3u);
+}
+
 //===----------------------------------------------------------------------===//
 // Type constraint checks
 //===----------------------------------------------------------------------===//
@@ -346,8 +474,11 @@ TEST_F(VerifyTest, TypeConstraintViolationDetected) {
       FindDiagnostic(structured, &loom_err_type_003);
   ASSERT_NE(entry, nullptr) << "Expected TYPE/003 operand constraint error";
   EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, f32_type);
+  ExpectNoFieldRefParam(*entry, 1);
   EXPECT_EQ(GetStringParam(*entry, 2), "integer");
+  ExpectNoFieldRefParam(*entry, 2);
 }
 
 //===----------------------------------------------------------------------===//
@@ -395,9 +526,14 @@ TEST_F(VerifyTest, SameTypeConstraintViolation) {
       FindDiagnostic(structured, &loom_err_type_001);
   ASSERT_NE(entry, nullptr) << "Expected TYPE/001 SameType diagnostic";
   EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, i32_type);
   EXPECT_EQ(GetStringParam(*entry, 2), "result 0");
+  ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectTypeParam(*entry, 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
+  ASSERT_EQ(entry->highlights.size(), 2u);
+  ExpectHighlightFieldRef(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0, 2);
+  ExpectHighlightFieldRef(*entry, 1, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0, 0);
 }
 
 //===----------------------------------------------------------------------===//
@@ -428,6 +564,7 @@ TEST_F(VerifyTest, UndefinedOperandDetected) {
   const CapturedDiagnostic* entry =
       FindDiagnostic(structured, &loom_err_dominance_001);
   ASSERT_NE(entry, nullptr) << "Expected DOMINANCE/001 undefined-value error";
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
 }
 
 //===----------------------------------------------------------------------===//
@@ -532,13 +669,278 @@ TEST_F(VerifyTest, PrintOpFallbackProvidesSourceRange) {
       // The source text should be the printed op (contains "test.addi").
       EXPECT_NE(entry.source_text.find("test.addi"), std::string::npos)
           << "Printed op source: " << entry.source_text;
+      EXPECT_EQ(entry.origin.provenance,
+                LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK);
+      EXPECT_EQ(entry.source_location.provenance,
+                LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK);
       // The filename should be the verifier pseudo-filename.
       EXPECT_EQ(entry.filename, "<verifier>");
+      if (!entry.highlights.empty()) {
+        ExpectHighlightFieldRef(entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0, 0);
+      }
       break;
     }
   }
   EXPECT_TRUE(found_with_source)
       << "Expected at least one diagnostic with a print-op source range";
+}
+
+TEST_F(VerifyTest, ParsedSourceResolverHighlightsExactResultAndOperandTokens) {
+  static const char kSource[] =
+      "%lhs = test.constant 1 : i32\n"
+      "%rhs = test.constant 2 : i32\n"
+      "%sum = test.addi %lhs, %rhs : f32\n";
+  loom_module_t* parsed_module =
+      ParseSourceModule(kSource, "parsed_verify_test.loom");
+  ASSERT_NE(parsed_module, nullptr);
+
+  loom_source_entry_t source_entries[] = {
+      {
+          .source_id = FindContextSourceId("parsed_verify_test.loom"),
+          .source = iree_make_cstring_view(kSource),
+          .filename = IREE_SV("parsed_verify_test.loom"),
+      },
+  };
+  ASSERT_NE(source_entries[0].source_id, LOOM_SOURCE_ID_INVALID);
+  loom_source_table_resolver_t resolver_data = {
+      .entries = source_entries,
+      .count = IREE_ARRAYSIZE(source_entries),
+  };
+
+  DiagnosticCapture structured;
+  loom_verify_options_t options = {};
+  options.sink = structured.sink();
+  options.max_errors = 20;
+  options.source_resolver = {loom_source_table_resolve, &resolver_data};
+
+  loom_verify_result_t result = {};
+  IREE_EXPECT_OK(loom_verify_module(parsed_module, &options, &result));
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* type_error =
+      FindDiagnostic(structured, &loom_err_type_001);
+  ASSERT_NE(type_error, nullptr) << "Expected TYPE/001 SameType diagnostic";
+  EXPECT_EQ(type_error->origin.provenance, LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(type_error->source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(type_error->filename, "parsed_verify_test.loom");
+  EXPECT_EQ(type_error->origin_line, 3u);
+  EXPECT_EQ(type_error->origin_column, 1u);
+  EXPECT_EQ(type_error->source_text, kSource);
+  ASSERT_EQ(type_error->highlights.size(), 2u);
+  ExpectHighlightFieldRef(*type_error, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0, 2);
+  EXPECT_EQ(type_error->source_text.substr(type_error->highlights[0].start,
+                                           type_error->highlights[0].end -
+                                               type_error->highlights[0].start),
+            "%sum");
+  ExpectHighlightFieldRef(*type_error, 1, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0, 0);
+  EXPECT_EQ(type_error->source_text.substr(type_error->highlights[1].start,
+                                           type_error->highlights[1].end -
+                                               type_error->highlights[1].start),
+            "%lhs");
+
+  const CapturedDiagnostic* result_error =
+      FindDiagnostic(structured, &loom_err_type_004);
+  ASSERT_NE(result_error, nullptr)
+      << "Expected TYPE/004 result constraint diagnostic";
+  ASSERT_EQ(result_error->highlights.size(), 1u);
+  ExpectHighlightFieldRef(*result_error, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0, 0);
+  EXPECT_EQ(
+      result_error->source_text.substr(
+          result_error->highlights[0].start,
+          result_error->highlights[0].end - result_error->highlights[0].start),
+      "%sum");
+
+  loom_module_free(parsed_module);
+}
+
+TEST_F(VerifyTest, ParsedUseAfterConsumeReportsRelatedConsumeLocation) {
+  static const char kSource[] =
+      "test.decl @callee(%arg: f32) -> (%arg as f32)\n"
+      "test.func @main(%arg: f32) -> (f32) {\n"
+      "  %next = test.invoke @callee(%arg) : (f32) -> (%arg as f32)\n"
+      "  test.use %arg : f32\n"
+      "  test.yield %next : f32\n"
+      "}\n";
+  loom_module_t* parsed_module =
+      ParseSourceModule(kSource, "parsed_use_after_consume.loom");
+  ASSERT_NE(parsed_module, nullptr);
+
+  loom_source_entry_t source_entries[] = {{
+      .source_id = FindContextSourceId("parsed_use_after_consume.loom"),
+      .source = iree_make_cstring_view(kSource),
+      .filename = IREE_SV("parsed_use_after_consume.loom"),
+  }};
+  ASSERT_NE(source_entries[0].source_id, LOOM_SOURCE_ID_INVALID);
+  loom_source_table_resolver_t resolver_data = {
+      .entries = source_entries,
+      .count = IREE_ARRAYSIZE(source_entries),
+  };
+
+  DiagnosticCapture structured;
+  loom_verify_options_t options = {};
+  options.sink = structured.sink();
+  options.max_errors = 20;
+  options.source_resolver = {loom_source_table_resolve, &resolver_data};
+
+  loom_verify_result_t result = {};
+  IREE_EXPECT_OK(loom_verify_module(parsed_module, &options, &result));
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* dominance_error =
+      FindDiagnostic(structured, &loom_err_dominance_002);
+  ASSERT_NE(dominance_error, nullptr)
+      << "Expected DOMINANCE/002 consumed-value diagnostic";
+  EXPECT_EQ(GetStringParam(*dominance_error, 0), "arg");
+  ExpectFieldRefParam(*dominance_error, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
+  EXPECT_EQ(GetStringParam(*dominance_error, 1), "test.invoke");
+  EXPECT_EQ(dominance_error->origin.provenance,
+            LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(dominance_error->origin_line, 4u);
+  EXPECT_EQ(dominance_error->origin_column, 3u);
+  ASSERT_EQ(dominance_error->highlights.size(), 1u);
+  ExpectHighlightFieldRef(*dominance_error, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0,
+                          0);
+  EXPECT_EQ(dominance_error->source_text.substr(
+                dominance_error->highlights[0].start,
+                dominance_error->highlights[0].end -
+                    dominance_error->highlights[0].start),
+            "%arg");
+
+  ASSERT_EQ(dominance_error->related_locations.size(), 1u);
+  const auto& consume_note = dominance_error->related_locations[0];
+  EXPECT_EQ(consume_note.label, "consumed here");
+  EXPECT_TRUE(consume_note.has_source_range);
+  EXPECT_EQ(consume_note.source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(std::string(consume_note.source_location.filename.data,
+                        consume_note.source_location.filename.size),
+            "parsed_use_after_consume.loom");
+  EXPECT_EQ(consume_note.source_location.start_line, 3u);
+  EXPECT_EQ(consume_note.source_location.start_column, 3u);
+  EXPECT_NE(std::string(consume_note.source_location.source.data +
+                            consume_note.source_location.start,
+                        consume_note.source_location.end -
+                            consume_note.source_location.start)
+                .find("test.invoke @callee(%arg)"),
+            std::string::npos);
+
+  loom_module_free(parsed_module);
+}
+
+TEST_F(VerifyTest, ParsedInvokeOperandCountMismatchReportsCalleeLocation) {
+  static const char kSource[] =
+      "test.decl @callee(%arg: f32) -> (%arg as f32)\n"
+      "test.func @main(%arg: f32, %extra: f32) -> (f32) {\n"
+      "  %result = test.invoke @callee(%arg, %extra) : (f32, f32) -> (%arg as "
+      "f32)\n"
+      "  test.yield %result : f32\n"
+      "}\n";
+  loom_module_t* parsed_module =
+      ParseSourceModule(kSource, "parsed_invoke_operand_count.loom");
+  ASSERT_NE(parsed_module, nullptr);
+
+  DiagnosticCapture structured;
+  loom_verify_result_t result = VerifyParsedSourceModuleStructured(
+      parsed_module, kSource, "parsed_invoke_operand_count.loom", &structured);
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* invoke_error =
+      FindDiagnostic(structured, &loom_err_structure_001);
+  ASSERT_NE(invoke_error, nullptr)
+      << "Expected STRUCTURE/001 invoke operand-count diagnostic";
+  EXPECT_EQ(GetStringParam(*invoke_error, 0), "test.invoke");
+  ExpectU32Param(*invoke_error, 1, 2);
+  ExpectU32Param(*invoke_error, 2, 1);
+  ASSERT_EQ(invoke_error->related_locations.size(), 1u);
+  const auto& definition_note = invoke_error->related_locations[0];
+  EXPECT_EQ(definition_note.label, "defined here");
+  EXPECT_TRUE(definition_note.has_source_range);
+  EXPECT_EQ(definition_note.source_location.start_line, 1u);
+  EXPECT_EQ(definition_note.source_location.start_column, 1u);
+
+  loom_module_free(parsed_module);
+}
+
+TEST_F(VerifyTest, ParsedInvokeOperandTypeMismatchReportsCalleeLocation) {
+  static const char kSource[] =
+      "test.decl @callee(%arg: f32) -> (f32)\n"
+      "test.func @main(%arg: i32) -> (f32) {\n"
+      "  %result = test.invoke @callee(%arg) : (i32) -> (f32)\n"
+      "  test.yield %result : f32\n"
+      "}\n";
+  loom_module_t* parsed_module =
+      ParseSourceModule(kSource, "parsed_invoke_operand_type.loom");
+  ASSERT_NE(parsed_module, nullptr);
+
+  DiagnosticCapture structured;
+  loom_verify_result_t result = VerifyParsedSourceModuleStructured(
+      parsed_module, kSource, "parsed_invoke_operand_type.loom", &structured);
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* invoke_error =
+      FindDiagnostic(structured, &loom_err_type_001);
+  ASSERT_NE(invoke_error, nullptr)
+      << "Expected TYPE/001 invoke operand-type diagnostic";
+  EXPECT_EQ(GetStringParam(*invoke_error, 0), "operand 0");
+  ExpectFieldRefParam(*invoke_error, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
+  ExpectTypeParam(*invoke_error, 1, loom_type_scalar(LOOM_SCALAR_TYPE_I32));
+  EXPECT_EQ(GetStringParam(*invoke_error, 2), "callee argument 0");
+  ExpectNoFieldRefParam(*invoke_error, 2);
+  ExpectTypeParam(*invoke_error, 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
+  EXPECT_EQ(invoke_error->origin.provenance,
+            LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(invoke_error->origin_line, 3u);
+  EXPECT_EQ(invoke_error->origin_column, 3u);
+  ASSERT_EQ(invoke_error->highlights.size(), 1u);
+  ExpectHighlightFieldRef(*invoke_error, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0,
+                          0);
+  EXPECT_EQ(
+      invoke_error->source_text.substr(
+          invoke_error->highlights[0].start,
+          invoke_error->highlights[0].end - invoke_error->highlights[0].start),
+      "%arg");
+  ASSERT_EQ(invoke_error->related_locations.size(), 1u);
+  const auto& definition_note = invoke_error->related_locations[0];
+  EXPECT_EQ(definition_note.label, "defined here");
+  EXPECT_TRUE(definition_note.has_source_range);
+  EXPECT_EQ(definition_note.source_location.start_line, 1u);
+  EXPECT_EQ(definition_note.source_location.start_column, 1u);
+
+  loom_module_free(parsed_module);
+}
+
+TEST_F(VerifyTest, ParsedInvokeResultCountMismatchReportsCalleeLocation) {
+  static const char kSource[] =
+      "test.decl @callee(%arg: f32) -> (%arg as f32, f32)\n"
+      "test.func @main(%arg: f32) -> (f32) {\n"
+      "  %result = test.invoke @callee(%arg) : (f32) -> (%arg as f32)\n"
+      "  test.yield %result : f32\n"
+      "}\n";
+  loom_module_t* parsed_module =
+      ParseSourceModule(kSource, "parsed_invoke_result_count.loom");
+  ASSERT_NE(parsed_module, nullptr);
+
+  DiagnosticCapture structured;
+  loom_verify_result_t result = VerifyParsedSourceModuleStructured(
+      parsed_module, kSource, "parsed_invoke_result_count.loom", &structured);
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* invoke_error =
+      FindDiagnostic(structured, &loom_err_structure_002);
+  ASSERT_NE(invoke_error, nullptr)
+      << "Expected STRUCTURE/002 invoke result-count diagnostic";
+  EXPECT_EQ(GetStringParam(*invoke_error, 0), "test.invoke");
+  ExpectU32Param(*invoke_error, 1, 1);
+  ExpectU32Param(*invoke_error, 2, 2);
+  ASSERT_EQ(invoke_error->related_locations.size(), 1u);
+  const auto& definition_note = invoke_error->related_locations[0];
+  EXPECT_EQ(definition_note.label, "defined here");
+  EXPECT_TRUE(definition_note.has_source_range);
+  EXPECT_EQ(definition_note.source_location.start_line, 1u);
+  EXPECT_EQ(definition_note.source_location.start_column, 1u);
+
+  loom_module_free(parsed_module);
 }
 
 //===----------------------------------------------------------------------===//
@@ -598,35 +1000,66 @@ TEST_F(VerifyTest, GoldenJsonNoSource) {
   std::string output = VerifyAndFormatJson();
   EXPECT_EQ(
       output,
-      "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":4,"
+      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_004\","
+      "\"domain\":\"TYPE\",\"code\":4,"
+      "\"summary\":\"Result type constraint violated.\","
       "\"emitter\":\"verifier\","
-      "\"origin\":{\"filename\":\"<verifier>\",\"start_line\":1,"
+      "\"origin\":{\"provenance\":\"printed_ir_fallback\","
+      "\"filename\":\"<verifier>\",\"start_line\":1,"
       "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
-      "\"start_byte\":0,\"end_byte\":28},"
-      "\"source_location\":{\"filename\":\"<verifier>\","
+      "\"start_byte\":0,\"end_byte\":28,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+      "\"source_location\":{\"provenance\":\"printed_ir_fallback\","
+      "\"filename\":\"<verifier>\","
       "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
-      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28},"
-      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2}],"
+      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2,"
+      "\"field\":{\"kind\":\"result\",\"index\":0,\"occurrence\":0},"
+      "\"param\":\"result_name\"}],"
       "\"message\":\"result 'result 0' has type f32, expected integer\","
       "\"fix_hint\":\"'result 0' must satisfy type constraint 'integer'\","
       "\"params\":{\"result_name\":\"result 0\","
-      "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"}}\n"
-      "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":1,"
+      "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"},"
+      "\"param_fields\":{\"result_name\":{\"kind\":\"result\","
+      "\"index\":0,\"occurrence\":0}}}\n"
+      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_001\","
+      "\"domain\":\"TYPE\",\"code\":1,"
+      "\"summary\":\"SameType constraint violated.\","
       "\"emitter\":\"verifier\","
-      "\"origin\":{\"filename\":\"<verifier>\",\"start_line\":1,"
+      "\"origin\":{\"provenance\":\"printed_ir_fallback\","
+      "\"filename\":\"<verifier>\",\"start_line\":1,"
       "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
-      "\"start_byte\":0,\"end_byte\":28},"
-      "\"source_location\":{\"filename\":\"<verifier>\","
+      "\"start_byte\":0,\"end_byte\":28,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+      "\"source_location\":{\"provenance\":\"printed_ir_fallback\","
+      "\"filename\":\"<verifier>\","
       "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
-      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28},"
-      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2},"
-      "{\"start_byte\":15,\"end_byte\":17}],"
+      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2,"
+      "\"field\":{\"kind\":\"result\",\"index\":0,\"occurrence\":0},"
+      "\"param\":\"field_b\"},"
+      "{\"start_byte\":15,\"end_byte\":17,"
+      "\"field\":{\"kind\":\"operand\",\"index\":0,\"occurrence\":0},"
+      "\"param\":\"field_a\"}],"
       "\"message\":\"'operand 0' type i32 does not match"
       " 'result 0' type f32\","
       "\"fix_hint\":\"Ensure 'operand 0' and 'result 0'"
       " have the same type\","
       "\"params\":{\"field_a\":\"operand 0\",\"type_a\":\"i32\","
-      "\"field_b\":\"result 0\",\"type_b\":\"f32\"}}\n");
+      "\"field_b\":\"result 0\",\"type_b\":\"f32\"},"
+      "\"param_fields\":{\"field_a\":{\"kind\":\"operand\","
+      "\"index\":0,\"occurrence\":0},\"field_b\":{\"kind\":\"result\","
+      "\"index\":0,\"occurrence\":0}}}\n");
 }
 
 // Scenario: source resolver provides original source text.
@@ -638,6 +1071,7 @@ static bool FakeSourceResolver(void* user_data, const loom_module_t* module,
   static const char source[] = "  %result = test.addi %input_a, %input_b : i32";
   (void)module;
   if (location == LOOM_LOCATION_UNKNOWN) return false;
+  out_range->provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE;
   out_range->filename = IREE_SV("model.loom");
   out_range->source = iree_make_cstring_view(source);
   out_range->start = 2;
@@ -741,32 +1175,57 @@ TEST_F(VerifyTest, GoldenJsonWithSource) {
   // diagnostics preserve the original file location for IDE consumers.
   EXPECT_EQ(
       text,
-      "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":4,"
+      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_004\","
+      "\"domain\":\"TYPE\",\"code\":4,"
+      "\"summary\":\"Result type constraint violated.\","
       "\"emitter\":\"verifier\","
-      "\"origin\":{\"filename\":\"model.loom\",\"start_line\":42,"
+      "\"origin\":{\"provenance\":\"exact_source\","
+      "\"filename\":\"model.loom\",\"start_line\":42,"
       "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
-      "\"start_byte\":2,\"end_byte\":46},"
-      "\"source_location\":{\"filename\":\"model.loom\","
+      "\"start_byte\":2,\"end_byte\":46,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
+      "\"source_location\":{\"provenance\":\"exact_source\","
+      "\"filename\":\"model.loom\","
       "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
-      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46},"
+      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
       "\"message\":\"result 'result 0' has type f32, expected integer\","
       "\"fix_hint\":\"'result 0' must satisfy type constraint 'integer'\","
       "\"params\":{\"result_name\":\"result 0\","
-      "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"}}\n"
-      "{\"severity\":\"error\",\"domain\":\"TYPE\",\"code\":1,"
+      "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"},"
+      "\"param_fields\":{\"result_name\":{\"kind\":\"result\","
+      "\"index\":0,\"occurrence\":0}}}\n"
+      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_001\","
+      "\"domain\":\"TYPE\",\"code\":1,"
+      "\"summary\":\"SameType constraint violated.\","
       "\"emitter\":\"verifier\","
-      "\"origin\":{\"filename\":\"model.loom\",\"start_line\":42,"
+      "\"origin\":{\"provenance\":\"exact_source\","
+      "\"filename\":\"model.loom\",\"start_line\":42,"
       "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
-      "\"start_byte\":2,\"end_byte\":46},"
-      "\"source_location\":{\"filename\":\"model.loom\","
+      "\"start_byte\":2,\"end_byte\":46,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
+      "\"source_location\":{\"provenance\":\"exact_source\","
+      "\"filename\":\"model.loom\","
       "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
-      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46},"
+      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46,"
+      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
       "\"message\":\"'operand 0' type i32 does not match"
       " 'result 0' type f32\","
       "\"fix_hint\":\"Ensure 'operand 0' and 'result 0'"
       " have the same type\","
       "\"params\":{\"field_a\":\"operand 0\",\"type_a\":\"i32\","
-      "\"field_b\":\"result 0\",\"type_b\":\"f32\"}}\n");
+      "\"field_b\":\"result 0\",\"type_b\":\"f32\"},"
+      "\"param_fields\":{\"field_a\":{\"kind\":\"operand\","
+      "\"index\":0,\"occurrence\":0},\"field_b\":{\"kind\":\"result\","
+      "\"index\":0,\"occurrence\":0}}}\n");
 }
 
 TEST_F(VerifyTest, StructuredDominanceError) {
@@ -795,6 +1254,10 @@ TEST_F(VerifyTest, StructuredDominanceError) {
   ASSERT_NE(entry, nullptr) << "Expected a DOMINANCE/001 undefined-value error";
   EXPECT_TRUE(entry->has_source_range)
       << "Dominance error should have print-op fallback source";
+  EXPECT_EQ(entry->origin.provenance,
+            LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK);
+  EXPECT_EQ(entry->source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK);
   EXPECT_EQ(entry->filename, "<verifier>");
   EXPECT_NE(entry->source_text.find("test.addi"), std::string::npos)
       << "Printed op source: " << entry->source_text;
@@ -805,10 +1268,38 @@ TEST_F(VerifyTest, StructuredDominanceError) {
 //===----------------------------------------------------------------------===//
 
 TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
+  static const char kSource[] =
+      "%first, %second = test.invoke @callee(%arg0, %arg1) : (f32, f32) -> "
+      "(%arg0 as f32, %arg1 as f32)";
+  const char* filename = "duplicate_tied_result.loom";
+
   loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_type_t arg_types[] = {f32_type, f32_type};
   loom_value_id_t args[2];
   EnterTestFunc(arg_types, 2, args);
+
+  loom_location_id_t location =
+      AddFileLocation(filename, 1, 1, 1, (uint16_t)sizeof(kSource));
+  loom_location_field_span_t field_spans[] = {
+      {
+          .kind = LOOM_LOCATION_FIELD_RESULT,
+          .index = 0,
+          .start_line = 1,
+          .start_col = 1,
+          .end_line = 1,
+          .end_col = 7,
+      },
+      {
+          .kind = LOOM_LOCATION_FIELD_RESULT,
+          .index = 0,
+          .start_line = 1,
+          .start_col = 9,
+          .end_line = 1,
+          .end_col = 16,
+      },
+  };
+  IREE_ASSERT_OK(loom_module_attach_location_field_spans(
+      module_, location, field_spans, IREE_ARRAYSIZE(field_spans)));
 
   loom_type_t result_types[] = {f32_type, f32_type};
   loom_tied_result_t tied_results[] = {
@@ -818,7 +1309,18 @@ TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
   loom_op_t* op = nullptr;
   IREE_ASSERT_OK(loom_test_invoke_build(
       &builder_, DefineTestCallee(), args, 2, result_types, 2, tied_results,
-      IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
+      IREE_ARRAYSIZE(tied_results), location, &op));
+
+  loom_source_entry_t source_entries[] = {{
+      .source_id = FindContextSourceId(filename),
+      .source = iree_make_cstring_view(kSource),
+      .filename = IREE_SV("duplicate_tied_result.loom"),
+  }};
+  loom_source_table_resolver_t resolver_data = {
+      .entries = source_entries,
+      .count = IREE_ARRAYSIZE(source_entries),
+  };
+  options_.source_resolver = {loom_source_table_resolve, &resolver_data};
 
   TerminateFunc();
   DiagnosticCapture structured;
@@ -829,7 +1331,31 @@ TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
   ASSERT_NE(entry, nullptr)
       << "Expected DOMINANCE/006 duplicate tied-result error";
   ExpectU32Param(*entry, 0, 0);
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0,
+                      /*expected_occurrence=*/1);
   EXPECT_EQ(GetStringParam(*entry, 1), "test.invoke");
+  EXPECT_EQ(entry->origin.provenance, LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  ASSERT_EQ(entry->highlights.size(), 1u);
+  ExpectHighlightFieldRef(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0,
+                          /*expected_param_index=*/0,
+                          /*expected_occurrence=*/1);
+  EXPECT_EQ(entry->source_text.substr(
+                entry->highlights[0].start,
+                entry->highlights[0].end - entry->highlights[0].start),
+            "%second");
+
+  ASSERT_EQ(entry->related_locations.size(), 1u);
+  const auto& first_claim_note = entry->related_locations[0];
+  EXPECT_EQ(first_claim_note.label, "previously tied here");
+  EXPECT_TRUE(first_claim_note.has_source_range);
+  ASSERT_EQ(first_claim_note.highlights.size(), 1u);
+  ExpectRelatedHighlightFieldRef(*entry, 0, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0,
+                                 /*expected_occurrence=*/0);
+  EXPECT_EQ(std::string(first_claim_note.source_location.source.data +
+                            first_claim_note.highlights[0].start,
+                        first_claim_note.highlights[0].end -
+                            first_claim_note.highlights[0].start),
+            "%first");
 }
 
 TEST_F(VerifyTest, DuplicateTiedOperandIndexDetected) {
@@ -857,7 +1383,62 @@ TEST_F(VerifyTest, DuplicateTiedOperandIndexDetected) {
   ASSERT_NE(entry, nullptr)
       << "Expected DOMINANCE/007 duplicate tied-operand error";
   ExpectU32Param(*entry, 0, 0);
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0,
+                      /*expected_occurrence=*/2);
   EXPECT_EQ(GetStringParam(*entry, 1), "test.invoke");
+}
+
+TEST_F(VerifyTest, ParsedDuplicateTiedOperandIndexReportsPreviousTiedLocation) {
+  static const char kSource[] =
+      "test.decl @callee(%arg: f32) -> (f32, f32)\n"
+      "test.func @main(%arg: f32) -> (f32, f32) {\n"
+      "  %first, %second = test.invoke @callee(%arg) : (f32) -> "
+      "(%arg as f32, %arg as f32)\n"
+      "  test.yield %first, %second : f32, f32\n"
+      "}\n";
+  loom_module_t* parsed_module =
+      ParseSourceModule(kSource, "parsed_duplicate_tied_operand.loom");
+  ASSERT_NE(parsed_module, nullptr);
+
+  DiagnosticCapture structured;
+  loom_verify_result_t result = VerifyParsedSourceModuleStructured(
+      parsed_module, kSource, "parsed_duplicate_tied_operand.loom",
+      &structured);
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_dominance_007);
+  ASSERT_NE(entry, nullptr)
+      << "Expected DOMINANCE/007 duplicate tied-operand error";
+  ExpectU32Param(*entry, 0, 0);
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0,
+                      /*expected_occurrence=*/2);
+  EXPECT_EQ(GetStringParam(*entry, 1), "test.invoke");
+  EXPECT_EQ(entry->origin.provenance, LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  ASSERT_EQ(entry->highlights.size(), 1u);
+  ExpectHighlightFieldRef(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0,
+                          /*expected_param_index=*/0,
+                          /*expected_occurrence=*/2);
+  EXPECT_EQ(entry->source_text.substr(
+                entry->highlights[0].start,
+                entry->highlights[0].end - entry->highlights[0].start),
+            "%arg");
+
+  ASSERT_EQ(entry->related_locations.size(), 1u);
+  const auto& first_claim_note = entry->related_locations[0];
+  EXPECT_EQ(first_claim_note.label, "previously tied here");
+  EXPECT_TRUE(first_claim_note.has_source_range);
+  ASSERT_EQ(first_claim_note.highlights.size(), 1u);
+  ExpectRelatedHighlightFieldRef(*entry, 0, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0,
+                                 /*expected_occurrence=*/1);
+  EXPECT_LT(first_claim_note.highlights[0].start, entry->highlights[0].start);
+  EXPECT_EQ(std::string(first_claim_note.source_location.source.data +
+                            first_claim_note.highlights[0].start,
+                        first_claim_note.highlights[0].end -
+                            first_claim_note.highlights[0].start),
+            "%arg");
+
+  loom_module_free(parsed_module);
 }
 
 TEST_F(VerifyTest, AmbiguousRepeatedOperandValueDetected) {
@@ -886,7 +1467,9 @@ TEST_F(VerifyTest, AmbiguousRepeatedOperandValueDetected) {
   ASSERT_NE(entry, nullptr)
       << "Expected DOMINANCE/008 ambiguous tied operand-value error";
   ExpectU32Param(*entry, 0, 1);
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 1);
   EXPECT_EQ(GetStringParam(*entry, 1), "test.invoke");
+  ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_OPERAND, 1);
 }
 
 TEST_F(VerifyTest, FuncDefTiedResultUsesEntryBlockArgsWithoutConsumingThem) {
@@ -902,7 +1485,7 @@ TEST_F(VerifyTest, FuncDefTiedResultUsesEntryBlockArgsWithoutConsumingThem) {
       {.result_index = 0, .operand_index = 0, .has_type_change = false},
   };
   loom_op_t* func_op = nullptr;
-  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, callee, &f32_type, 1,
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, callee, &f32_type, 1,
                                       &f32_type, 1, tied_results,
                                       IREE_ARRAYSIZE(tied_results), nullptr, 0,
                                       LOOM_LOCATION_UNKNOWN, &func_op));
@@ -937,7 +1520,7 @@ TEST_F(VerifyTest, FuncDeclTiedResultUsesSignatureOperandsWithoutDominance) {
   };
   loom_op_t* func_op = nullptr;
   IREE_ASSERT_OK(loom_test_decl_build(
-      &builder_, 0, 0, callee, &f32_type, 1, &f32_type, 1, tied_results,
+      &builder_, 0, 0, 0, callee, &f32_type, 1, &f32_type, 1, tied_results,
       IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &func_op));
 
   EXPECT_EQ(func_op->operand_count, 1u);
@@ -957,7 +1540,7 @@ TEST_F(VerifyTest, RejectsNonLocalSymbolRef) {
   loom_symbol_ref_t callee = {.module_id = 1, .symbol_id = symbol_id};
 
   loom_op_t* decl_op = nullptr;
-  IREE_ASSERT_OK(loom_test_decl_build(&builder_, 0, 0, callee, nullptr, 0,
+  IREE_ASSERT_OK(loom_test_decl_build(&builder_, 0, 0, 0, callee, nullptr, 0,
                                       nullptr, 0, nullptr, 0,
                                       LOOM_LOCATION_UNKNOWN, &decl_op));
 
@@ -968,6 +1551,7 @@ TEST_F(VerifyTest, RejectsNonLocalSymbolRef) {
       FindDiagnostic(structured, &loom_err_symbol_004);
   ASSERT_NE(entry, nullptr) << "Expected SYMBOL/004 non-local symbol ref error";
   ExpectU32Param(*entry, 0, 1);
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, 0);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1030,6 +1614,7 @@ TEST_F(VerifyTest, SsaEncodingOutOfRange) {
       FindDiagnostic(structured, &loom_err_encoding_003);
   ASSERT_NE(entry, nullptr) << "Expected ENCODING/003 out-of-range error";
   EXPECT_EQ(GetStringParam(*entry, 0), "result 0");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectU32Param(*entry, 1, 9999);
 }
 
@@ -1066,7 +1651,12 @@ TEST_F(VerifyTest, SsaEncodingNotDefined) {
   const CapturedDiagnostic* entry =
       FindDiagnostic(structured, &loom_err_encoding_004);
   ASSERT_NE(entry, nullptr) << "Expected ENCODING/004 not-defined error";
+  EXPECT_EQ(entry->origin.provenance,
+            LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
+  EXPECT_EQ(entry->source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
   EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
+  ExpectNoFieldRefParam(*entry, 0);
 }
 
 TEST_F(VerifyTest, SsaEncodingWrongType) {
@@ -1096,7 +1686,12 @@ TEST_F(VerifyTest, SsaEncodingWrongType) {
   const CapturedDiagnostic* entry =
       FindDiagnostic(structured, &loom_err_encoding_005);
   ASSERT_NE(entry, nullptr) << "Expected ENCODING/005 wrong-type error";
+  EXPECT_EQ(entry->origin.provenance,
+            LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
+  EXPECT_EQ(entry->source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
   EXPECT_EQ(GetStringParam(*entry, 0), "block arg 1");
+  ExpectNoFieldRefParam(*entry, 0);
   ExpectTypeParam(*entry, 2, i32_type);
 }
 
@@ -1149,9 +1744,57 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchInVariadic) {
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch within variadic inputs";
   EXPECT_EQ(GetStringParam(*entry, 0), "operand 0[0]");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, i32_type);
   EXPECT_EQ(GetStringParam(*entry, 2), "operand 0[1]");
+  ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_OPERAND, 1);
   ExpectTypeParam(*entry, 3, f32_type);
+}
+
+TEST_F(VerifyTest, VariadicSameTypeMismatchHighlightsWideOperandIndex) {
+  constexpr uint16_t kInputCount = 65;
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  std::vector<loom_type_t> arg_types(kInputCount, i32_type);
+  arg_types.back() = f32_type;
+  std::vector<loom_value_id_t> args(kInputCount);
+  EnterTestFunc(arg_types.data(), arg_types.size(), args.data());
+
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_builder_allocate_op(&builder_, LOOM_OP_TEST_REDUCE,
+                                          kInputCount, 1, 0, 0, 0,
+                                          LOOM_LOCATION_UNKNOWN, &op));
+  for (uint16_t i = 0; i < kInputCount; ++i) {
+    loom_op_operands(op)[i] = args[i];
+  }
+  loom_op_results(op)[0] = DefineValue(LOOM_SCALAR_TYPE_I32);
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_001);
+  ASSERT_NE(entry, nullptr)
+      << "Expected TYPE/001 mismatch for the 65th variadic operand";
+  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0[0]");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
+  EXPECT_EQ(GetStringParam(*entry, 2), "operand 0[64]");
+  ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_OPERAND, 64);
+  ASSERT_EQ(entry->highlights.size(), 2u);
+  ExpectHighlightFieldRef(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0, 0);
+  ExpectHighlightFieldRef(*entry, 1, LOOM_DIAGNOSTIC_FIELD_OPERAND, 64, 2);
+  EXPECT_LT(entry->highlights[1].start, entry->highlights[1].end);
+
+  std::string output = VerifyAndFormatJson();
+  static const std::regex kWideOperandHighlightRegex(
+      "\"start_byte\":[0-9]+,\"end_byte\":[0-9]+,"
+      "\"field\":\\{\"kind\":\"operand\",\"index\":64,"
+      "\"occurrence\":0\\},"
+      "\"param\":\"field_b\"");
+  EXPECT_TRUE(std::regex_search(output, kWideOperandHighlightRegex))
+      << "Expected JSON highlight for operand index 64, got: " << output;
 }
 
 TEST_F(VerifyTest, VariadicSameTypeMismatchAgainstResult) {
@@ -1178,8 +1821,10 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchAgainstResult) {
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch between variadic input and result";
   EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, i32_type);
   EXPECT_EQ(GetStringParam(*entry, 2), "result 0");
+  ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectTypeParam(*entry, 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
 }
 
@@ -1694,6 +2339,7 @@ TEST_F(VerifyTest, CountMatchesRankViolation) {
   ASSERT_NE(entry, nullptr)
       << "Expected SUBRANGE/001 count-matches-rank diagnostic";
   EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectU32Param(*entry, 1, 1);
   ExpectI64Param(*entry, 2, 2);
 }

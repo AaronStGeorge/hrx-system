@@ -48,6 +48,25 @@ class PassManagerTest : public ::testing::Test {
   loom_module_t* module_ = nullptr;
 };
 
+static void BuildTestFunction(loom_module_t* module, iree_string_view_t name) {
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_intern_string(&builder, name, &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t arg_types[] = {f32};
+  loom_type_t result_types[] = {f32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_test_func_build(&builder, 0, 0, 0, callee, arg_types, 1,
+                                      result_types, 1, NULL, 0, NULL, 0,
+                                      LOOM_LOCATION_UNKNOWN, &func_op));
+  IREE_ASSERT_NE(func_op, nullptr);
+}
+
 //===----------------------------------------------------------------------===//
 // Module pass
 //===----------------------------------------------------------------------===//
@@ -107,25 +126,7 @@ static const loom_pass_info_t kTestFunctionPassInfo = {
 };
 
 TEST_F(PassManagerTest, RunsFunctionPass) {
-  // Build a test.func op on the module body block. The builder finalizer
-  // wires defining_op on the symbol so the pass manager can find and invoke
-  // the function pass on it.
-  loom_builder_t builder;
-  loom_builder_initialize(module_, &module_->arena, loom_module_block(module_),
-                          &builder);
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_builder_intern_string(&builder, IREE_SV("test_fn"), &name_id));
-  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
-  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
-  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-  loom_type_t arg_types[] = {f32};
-  loom_type_t result_types[] = {f32};
-  loom_op_t* func_op = NULL;
-  IREE_ASSERT_OK(loom_test_func_build(&builder, 0, 0, callee, arg_types, 1,
-                                      result_types, 1, NULL, 0, NULL, 0,
-                                      LOOM_LOCATION_UNKNOWN, &func_op));
+  BuildTestFunction(module_, IREE_SV("test_fn"));
 
   loom_pass_manager_t manager;
   IREE_ASSERT_OK(loom_pass_manager_initialize(
@@ -173,6 +174,91 @@ TEST_F(PassManagerTest, ArenaPerPass) {
   // After the pass completes, the arena is deinitialized — we can't
   // check its state, but we verified it worked during execution.
   EXPECT_NE(captured_arena, nullptr);
+
+  loom_pass_manager_deinitialize(&manager);
+}
+
+//===----------------------------------------------------------------------===//
+// Function-pass arena lifetime
+//===----------------------------------------------------------------------===//
+
+typedef struct function_arena_test_state_t {
+  iree_arena_allocator_t* instance_arena;
+  int run_count;
+} function_arena_test_state_t;
+
+static int function_arena_destroyed_run_count = 0;
+
+static iree_status_t function_arena_test_create(loom_pass_t* pass,
+                                                iree_string_view_t options) {
+  (void)options;
+  IREE_ASSERT_NE(pass->instance_arena, nullptr);
+  IREE_ASSERT_EQ(pass->arena, pass->instance_arena);
+  function_arena_test_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena, sizeof(*state),
+                                           (void**)&state));
+  state->instance_arena = pass->instance_arena;
+  state->run_count = 0;
+  pass->state = state;
+  return iree_ok_status();
+}
+
+static iree_status_t function_arena_test_run(loom_pass_t* pass,
+                                             loom_module_t* module,
+                                             loom_func_like_t function) {
+  IREE_ASSERT_NE(module, nullptr);
+  IREE_ASSERT_TRUE(loom_func_like_isa(function));
+  IREE_ASSERT_NE(loom_func_like_body(function), nullptr);
+  IREE_ASSERT_NE(pass->state, nullptr);
+  IREE_ASSERT_NE(pass->instance_arena, nullptr);
+  IREE_ASSERT_NE(pass->arena, nullptr);
+  IREE_ASSERT_NE(pass->arena, pass->instance_arena);
+  EXPECT_EQ(pass->arena->total_allocation_size, 0u);
+  EXPECT_EQ(pass->arena->used_allocation_size, 0u);
+
+  void* scratch = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->arena, 1024, &scratch));
+  IREE_ASSERT_NE(scratch, nullptr);
+
+  function_arena_test_state_t* state =
+      (function_arena_test_state_t*)pass->state;
+  IREE_ASSERT_EQ(state->instance_arena, pass->instance_arena);
+  ++state->run_count;
+  return iree_ok_status();
+}
+
+static void function_arena_test_destroy(loom_pass_t* pass) {
+  IREE_ASSERT_EQ(pass->arena, pass->instance_arena);
+  IREE_ASSERT_NE(pass->state, nullptr);
+  function_arena_test_state_t* state =
+      (function_arena_test_state_t*)pass->state;
+  IREE_ASSERT_EQ(state->instance_arena, pass->instance_arena);
+  function_arena_destroyed_run_count = state->run_count;
+}
+
+static const loom_pass_info_t kFunctionArenaTestPassInfo = {
+    .name = IREE_SVL("test-function-arena-pass"),
+    .description = IREE_SVL("A test function pass that checks arena reset."),
+    .kind = LOOM_PASS_FUNCTION,
+};
+
+TEST_F(PassManagerTest, FunctionPassArenaResetsBetweenFunctions) {
+  BuildTestFunction(module_, IREE_SV("test_fn_0"));
+  BuildTestFunction(module_, IREE_SV("test_fn_1"));
+  BuildTestFunction(module_, IREE_SV("test_fn_2"));
+
+  loom_pass_manager_t manager;
+  IREE_ASSERT_OK(loom_pass_manager_initialize(
+      &block_pool_, 0, iree_allocator_system(), &manager));
+
+  IREE_ASSERT_OK(loom_pass_manager_add_function_pass(
+      &manager, &kFunctionArenaTestPassInfo, function_arena_test_run,
+      function_arena_test_create, function_arena_test_destroy,
+      iree_string_view_empty()));
+
+  function_arena_destroyed_run_count = 0;
+  IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
+  EXPECT_EQ(function_arena_destroyed_run_count, 3);
 
   loom_pass_manager_deinitialize(&manager);
 }

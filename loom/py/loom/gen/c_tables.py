@@ -164,6 +164,11 @@ FIELD_CATEGORY_MAP: dict[int, int] = {
     FieldKind.REGION: 3,  # LOOM_FIELD_REGION
 }
 
+# LOOM_FIELD_REF stores a 6-bit index in the generated constraint-table
+# encoding. Printer callbacks use a wider representation, but constraint args
+# still need a hard generator-side guard against silent truncation.
+LOOM_FIELD_REF_MAX_INDEX = 63
+
 # Maps Python attr_type strings to C attr kind enum names.
 ATTR_KIND_MAP: dict[str, str] = {
     "i64": "LOOM_ATTR_I64",
@@ -177,7 +182,7 @@ ATTR_KIND_MAP: dict[str, str] = {
     "encoding": "LOOM_ATTR_ENCODING",
     "predicate_list": "LOOM_ATTR_PREDICATE_LIST",
     "dict": "LOOM_ATTR_DICT",
-    "any": "LOOM_ATTR_I64",  # Default to i64 for generic "any" attrs.
+    "any": "LOOM_ATTR_ANY",
 }
 
 COPYRIGHT = """\
@@ -272,6 +277,19 @@ def _symbol_kind(op: Op) -> str:
     if _find_func_like(op) is not None:
         return "LOOM_SYMBOL_FUNC_DEF"
     raise ValueError(f"op '{op.name}' has SymbolDefine trait but no symbol_kind mapping — add it to _SYMBOL_KIND_MAP in c_tables.py")
+
+
+def _constraint_arg_ref(
+    op: Op,
+    constraint_name: str,
+    arg_name: str,
+    category: int,
+    field_index: int,
+) -> str:
+    """Returns the LOOM_FIELD_REF(...) initializer for one constraint arg."""
+    if field_index > LOOM_FIELD_REF_MAX_INDEX:
+        raise ValueError(f"Op '{op.name}' constraint {constraint_name}: field '{arg_name}' index {field_index} exceeds LOOM_FIELD_REF 6-bit max {LOOM_FIELD_REF_MAX_INDEX}")
+    return f"LOOM_FIELD_REF({category}, {field_index})"
 
 
 def _resolve_attr_index(op: Op, attr_name: str | None) -> int:
@@ -706,6 +724,19 @@ _IMPLICIT_ARG_TYPE_MAP: dict[str, str] = {
     "f64": "LOOM_SCALAR_TYPE_F64",
 }
 
+_BUILD_FLAG_OPTIONAL_ATTR_TYPES = frozenset(
+    {
+        "i64",
+        "f64",
+        "string",
+        "bool",
+        "enum",
+        "symbol",
+        "type",
+        "encoding",
+    }
+)
+
 
 def _flatten_format(
     elements: tuple[FormatElement, ...],
@@ -995,12 +1026,51 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
     return params
 
 
-def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout) -> list[str]:
+def _optional_param_uses_build_flag(param: dict[str, object]) -> bool:
+    """Returns true if an optional builder param needs an explicit presence bit."""
+    if not param.get("optional"):
+        return False
+    if param["kind"] != "attr":
+        return False
+    return param.get("attr_type") in _BUILD_FLAG_OPTIONAL_ATTR_TYPES
+
+
+def _build_flag_params(params: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Returns optional builder parameters controlled by build_flags."""
+    return [param for param in params if _optional_param_uses_build_flag(param)]
+
+
+def _build_flags_type_name(prefix: str) -> str:
+    return f"{prefix}_build_flags_t"
+
+
+def _build_flag_bit_name(prefix: str, param: dict[str, object]) -> str:
+    return f"{prefix.upper()}_BUILD_FLAG_HAS_{str(param['name']).upper()}"
+
+
+def _generate_build_flags_declaration(prefix: str, params: list[dict[str, object]]) -> list[str]:
+    flag_params = _build_flag_params(params)
+    if not flag_params:
+        return []
+    if len(flag_params) > 32:
+        raise ValueError(f"{prefix}_build has {len(flag_params)} optional fields, which exceeds the 32-bit build flag capacity")
+
+    lines = [f"enum {prefix}_build_flag_bits_e {{"]
+    for index, param in enumerate(flag_params):
+        lines.append(f"  {_build_flag_bit_name(prefix, param)} = 1u << {index},")
+    lines.append("};")
+    lines.append(f"typedef uint32_t {_build_flags_type_name(prefix)};")
+    return lines
+
+
+def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, prefix: str) -> list[str]:
     """Builds the C parameter string list from extracted params.
 
     Adds loom_optional annotations for optional attrs and regions.
     """
     c_params = ["loom_builder_t* builder"]
+    if _build_flag_params(params):
+        c_params.append(f"{_build_flags_type_name(prefix)} build_flags")
     for param in params:
         opt = "loom_optional " if param.get("optional") else ""
         consume = "loom_may_consume " if param.get("may_consume") else ""
@@ -1055,7 +1125,7 @@ def _generate_builder_declaration(op: Op, prefix: str) -> list[str]:
     params = _extract_c_params(op)
     layout = compute_layout(op)
     lines: list[str] = []
-    c_params = _build_c_param_list(params, layout)
+    c_params = _build_c_param_list(params, layout, prefix)
 
     # Format as multi-line declaration.
     lines.append(f"iree_status_t {prefix}_build(")
@@ -1091,7 +1161,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             variadic_operand_param = param["name"]
             break
 
-    c_params = _build_c_param_list(params, layout)
+    c_params = _build_c_param_list(params, layout, prefix)
 
     lines.append(f"iree_status_t {prefix}_build(")
     for i, p in enumerate(c_params):
@@ -1250,15 +1320,14 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
                 "any": name,
             }
             constructor = constructor_map.get(attr_type, name)
-            # Optional attrs must stay zero-initialized when absent so
-            # the OptionalGroup anchor check (raw != 0) works correctly.
-            # Guard the assignment with a validity check.
-            optional_guard = {
-                "string": f"{name} != LOOM_STRING_ID_INVALID",
-                "symbol": f"loom_symbol_ref_is_valid({name})",
-            }
+            optional_flag = _build_flag_bit_name(prefix, param) if _optional_param_uses_build_flag(param) else ""
             if attr_type == "i64_array":
-                lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){name}, (uint16_t){name}_count);")
+                if is_optional:
+                    lines.append(f"  if ({name}_count > 0) {{")
+                    lines.append(f"    loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){name}, (uint16_t){name}_count);")
+                    lines.append("  }")
+                else:
+                    lines.append(f"  loom_op_attrs(*out_op)[{idx}] = loom_attr_i64_array((int64_t*){name}, (uint16_t){name}_count);")
             elif attr_type == "dict":
                 if is_optional:
                     lines.append(f"  if ({name}.count > 0) {{")
@@ -1272,9 +1341,8 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
                     lines.append("      loom_module_make_canonical_attr_dict(")
                     lines.append(f"          builder->module, {name},")
                     lines.append(f"          &loom_op_attrs(*out_op)[{idx}]));")
-            elif is_optional and attr_type in optional_guard:
-                guard = optional_guard[attr_type]
-                lines.append(f"  if ({guard}) {{")
+            elif optional_flag:
+                lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
                 lines.append(f"    loom_op_attrs(*out_op)[{idx}] = {constructor};")
                 lines.append("  }")
             else:
@@ -1480,6 +1548,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 "encoding": "LOOM_DEFINE_ATTR_ENCODING",
                 "enum": "LOOM_DEFINE_ATTR_ENUM",
                 "symbol": "LOOM_DEFINE_ATTR_SYMBOL",
+                "any": "LOOM_DEFINE_ATTR_ANY",
             }
             macro = macro_map.get(attr_def.attr_type)
             if macro:
@@ -1490,6 +1559,10 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             lines.append(f"LOOM_DEFINE_REGION({prefix}_{region_def.name}, {desc.index})")
 
         # Builder declaration.
+        build_params = _extract_c_params(op)
+        build_flags_declaration = _generate_build_flags_declaration(prefix, build_params)
+        if build_flags_declaration:
+            lines.extend(build_flags_declaration)
         pattern = _detect_builder_pattern(op)
         if pattern == "BINARY":
             lines.append(f"iree_status_t {prefix}_build(")
@@ -1784,7 +1857,15 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 if field is None:
                     raise ValueError(f"Op '{op.name}' constraint {constraint.name}: unknown field '{arg_name}'")
                 category = FIELD_CATEGORY_MAP[field.kind]
-                arg_refs.append(f"LOOM_FIELD_REF({category}, {field.index})")
+                arg_refs.append(
+                    _constraint_arg_ref(
+                        op,
+                        constraint.name,
+                        arg_name,
+                        category,
+                        field.index,
+                    )
+                )
             # Pad to 4 args.
             while len(arg_refs) < 4:
                 arg_refs.append("0")

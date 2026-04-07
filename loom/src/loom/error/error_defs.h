@@ -12,9 +12,10 @@
 // on this — it depends on none of them.
 //
 // Error definitions are .rodata tables generated from the Python error
-// DSL (loom/py/loom/errors.py). Each error has a stable (domain, code)
-// identity, typed parameter schema, message template, and optional fix
-// hint. The tables are checked in so the C build never requires Python.
+// DSL (loom/py/loom/error/*.py). Each error has a stable symbolic ID,
+// (domain, code) identity, typed parameter schema, message template, and
+// optional fix hint. The tables are checked in so the C build never requires
+// Python.
 //
 // Materialized diagnostics, lightweight emitters, and verifier hooks all
 // build on these definitions. A build that excludes the text format still
@@ -25,6 +26,7 @@
 #define LOOM_ERROR_ERROR_DEFS_H_
 
 #include "iree/base/api.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/types.h"
 
 #ifdef __cplusplus
@@ -115,6 +117,7 @@ typedef struct loom_error_param_def_t {
 // the param_defs array. The rendering function expands placeholders by
 // substituting the corresponding runtime parameter value.
 typedef struct loom_error_def_t {
+  const char* error_id;  // Stable symbolic ID, e.g. "ERR_TYPE_001".
   loom_error_domain_t domain;
   loom_diagnostic_severity_t severity;
   uint16_t code;
@@ -130,6 +133,7 @@ typedef struct loom_error_def_t {
 // during rendering.
 typedef struct loom_diagnostic_param_t {
   loom_param_kind_t kind;
+  loom_diagnostic_field_ref_t field_ref;
   union {
     iree_string_view_t string;
     int64_t i64;
@@ -180,6 +184,15 @@ static inline loom_diagnostic_param_t loom_param_type(loom_type_t value) {
   memset(&param, 0, sizeof(param));
   param.kind = LOOM_PARAM_TYPE;
   param.type = value;
+  return param;
+}
+
+// Attaches a structured field ref sidecar to an existing diagnostic parameter.
+// The parameter's rendered value remains unchanged; sinks can consume the
+// sidecar for highlighting and machine-oriented JSON metadata.
+static inline loom_diagnostic_param_t loom_param_with_field_ref(
+    loom_diagnostic_param_t param, loom_diagnostic_field_ref_t field_ref) {
+  param.field_ref = field_ref;
   return param;
 }
 

@@ -124,10 +124,10 @@ typedef struct loom_rewriter_t loom_rewriter_t;
 
 // loom_value_id_t and loom_string_id_t are defined in types.h.
 
-// Packed reference to an op field: 2-bit category (operand, result,
-// attr, region) in the top bits, 6-bit index in the bottom bits.
-// Used by the constraint system, printer field callbacks, and
-// diagnostic highlighting.
+// Packed reference to an op field in semantic-constraint tables: 2-bit
+// category (operand, result, attr, region) in the top bits, 6-bit index in the
+// bottom bits. Printer callbacks use loom_print_field_ref_t instead so wide
+// variadic fields can preserve full indices in diagnostic highlights.
 typedef uint8_t loom_field_ref_t;
 
 //===----------------------------------------------------------------------===//

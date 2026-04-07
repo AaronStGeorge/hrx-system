@@ -6,6 +6,8 @@
 
 #include "loom/util/json.h"
 
+#include "iree/base/internal/unicode.h"
+
 //===----------------------------------------------------------------------===//
 // JSON-escaping stream adapter
 //===----------------------------------------------------------------------===//
@@ -24,15 +26,45 @@ static inline iree_status_t loom_json_flush_run(loom_output_stream_t* inner,
 
 // Write callback that JSON-escapes all incoming text per RFC 8259.
 //
-// Walks the input byte by byte, accumulating literal runs and flushing
-// escape sequences. Multi-byte UTF-8 passes through unchanged except
-// for U+2028 and U+2029 which are escaped for JavaScript/HTML safety.
+// Walks the input byte by byte, accumulating literal runs and flushing escape
+// sequences. Valid multi-byte UTF-8 passes through unchanged except for U+2028
+// and U+2029, which are escaped for JavaScript/HTML safety. Malformed UTF-8
+// bytes are escaped as U+FFFD replacement characters.
 static iree_status_t loom_json_escape_write(void* user_data,
                                             iree_string_view_t text) {
   loom_output_stream_t* inner = ((loom_json_escape_stream_t*)user_data)->inner;
   const char* run_start = text.data;
   const char* end = text.data + text.size;
   for (const char* cursor = text.data; cursor < end; ++cursor) {
+    unsigned char byte = (unsigned char)*cursor;
+    if (byte >= 0x80) {
+      iree_host_size_t sequence_length =
+          iree_unicode_utf8_sequence_length(byte);
+      iree_host_size_t remaining = (iree_host_size_t)(end - cursor);
+      if (sequence_length > remaining ||
+          !iree_unicode_utf8_is_valid_sequence((const uint8_t*)cursor,
+                                               sequence_length)) {
+        IREE_RETURN_IF_ERROR(loom_json_flush_run(inner, run_start, cursor));
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(inner, "\\ufffd"));
+        run_start = cursor + 1;
+        continue;
+      }
+      if (sequence_length == 3 && byte == 0xE2 &&
+          (unsigned char)cursor[1] == 0x80 &&
+          ((unsigned char)cursor[2] == 0xA8 ||
+           (unsigned char)cursor[2] == 0xA9)) {
+        IREE_RETURN_IF_ERROR(loom_json_flush_run(inner, run_start, cursor));
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+            inner, ((unsigned char)cursor[2] == 0xA8) ? "\\u2028" : "\\u2029"));
+        cursor += 2;
+        run_start = cursor + 1;
+      } else {
+        cursor += (iree_host_size_t)(sequence_length - 1);
+      }
+      continue;
+    }
+
     const char* escape = NULL;
     switch (*cursor) {
       case '"':
@@ -63,22 +95,8 @@ static iree_status_t loom_json_escape_write(void* user_data,
           IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
               inner, "\\u%04x", (unsigned)(unsigned char)*cursor));
           run_start = cursor + 1;
-        } else if ((unsigned char)*cursor == 0xE2 && cursor + 2 < end &&
-                   (unsigned char)cursor[1] == 0x80 &&
-                   ((unsigned char)cursor[2] == 0xA8 ||
-                    (unsigned char)cursor[2] == 0xA9)) {
-          // U+2028 LINE SEPARATOR (E2 80 A8) or
-          // U+2029 PARAGRAPH SEPARATOR (E2 80 A9).
-          // These are valid JSON per RFC 8259 but break JavaScript string
-          // literals and HTML <script> blocks. Escape them for safety.
-          IREE_RETURN_IF_ERROR(loom_json_flush_run(inner, run_start, cursor));
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-              inner,
-              ((unsigned char)cursor[2] == 0xA8) ? "\\u2028" : "\\u2029"));
-          cursor += 2;  // Skip the two continuation bytes.
-          run_start = cursor + 1;
         }
-        // All other bytes (printable ASCII, multi-byte UTF-8) pass through.
+        // Printable ASCII bytes pass through unchanged.
         continue;
     }
     // Flush the literal run before this escaped character.

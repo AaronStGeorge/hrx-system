@@ -285,7 +285,7 @@ TEST_F(ModuleTest, InternStringStress) {
   // Intern 1000 unique strings and verify dedup.
   char buffer[32];
   for (int i = 0; i < 1000; ++i) {
-    int length = snprintf(buffer, sizeof(buffer), "string_%d", i);
+    int length = iree_snprintf(buffer, sizeof(buffer), "string_%d", i);
     loom_string_id_t id = LOOM_STRING_ID_INVALID;
     IREE_ASSERT_OK(loom_module_intern_string(
         module, iree_make_string_view(buffer, length), &id));
@@ -874,6 +874,45 @@ TEST_F(ModuleTest, InternFunctionTypeDedupsStructurallyAndOwnsPayload) {
   EXPECT_TRUE(
       loom_type_equal(loom_type_func_result_types(interned_a)[0], result_type));
 
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, InternFunctionTypeDirectAndPackedFormsDedup) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_type_t arg_types[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_I32),
+      loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+  };
+  loom_type_t result_types[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_F32),
+  };
+
+  loom_type_t direct_interned = {0};
+  IREE_ASSERT_OK(loom_module_intern_function_type(
+      module, arg_types, IREE_ARRAYSIZE(arg_types), result_types,
+      IREE_ARRAYSIZE(result_types), &direct_interned));
+  iree_host_size_t allocation_size = module->arena.total_allocation_size;
+
+  loom_type_t packed_source = {0};
+  IREE_ASSERT_OK(loom_type_function_build(
+      arg_types, IREE_ARRAYSIZE(arg_types), result_types,
+      IREE_ARRAYSIZE(result_types), iree_allocator_system(), &packed_source));
+
+  loom_type_t packed_interned = {0};
+  IREE_ASSERT_OK(
+      loom_module_intern_type(module, packed_source, &packed_interned));
+
+  EXPECT_EQ(module->types.count, 1u);
+  EXPECT_TRUE(loom_type_equal(direct_interned, packed_interned));
+  EXPECT_EQ(loom_type_func_data(direct_interned),
+            loom_type_func_data(packed_interned));
+  EXPECT_EQ(module->arena.total_allocation_size, allocation_size);
+
+  iree_allocator_free(iree_allocator_system(),
+                      (void*)loom_type_func_data(packed_source));
   loom_module_free(module);
 }
 

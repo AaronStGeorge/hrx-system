@@ -101,6 +101,8 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::base::internal::unicode
+    loom::src::loom::error::diagnostic
+    loom::src::loom::error::error_defs
   PUBLIC
 )
 
@@ -112,6 +114,7 @@ loom_cc_test(
   DEPS
     ::tokenizer
     iree::base::internal::arena
+    loom::src::loom::error::error_defs
     iree::testing::gtest
     iree::testing::gtest_main
 )

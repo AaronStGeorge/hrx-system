@@ -25,35 +25,45 @@ enum {
   LOOM_OP_GLOBAL_COUNT_ = 4,
 };
 
-// LOOM_OP_GLOBAL_CONSTANT: Immutable global value. May have an inline initial value, a resource reference, or be initialized by an initializer function. After initialization, never written. Named type variables in the type annotation express structural constraints. Predicates constrain dynamic dimensions and are propagated to every load site as value facts.
-// global.constant @pi : f32
+// LOOM_OP_GLOBAL_CONSTANT: Immutable global value with an optional inline scalar initializer. Declaration-local dim/encoding names in the type annotation express structural constraints. Predicates constrain dynamic dimensions and are propagated to every load site as value facts. Non-scalar or computed initialization is modeled by global.store in initializer functions; resource-backed rodata should become a dedicated global-defining op instead of overloading inline attrs.
+// global.constant @pi : f32 = 3.14159265358979
 LOOM_DEFINE_ISA(loom_global_constant_isa, LOOM_OP_GLOBAL_CONSTANT)
 LOOM_DEFINE_RESULT(loom_global_constant_type, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_global_constant_callee, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_global_constant_symbol, 0)
+LOOM_DEFINE_ATTR_ANY(loom_global_constant_initializer, 2)
 iree_status_t loom_global_constant_build(
     loom_builder_t* builder,
-    loom_symbol_ref_t callee,
+    loom_symbol_ref_t symbol,
     loom_type_t result_type,
     loom_optional const loom_predicate_t* predicates,
     iree_host_size_t predicates_count,
+    loom_optional loom_attribute_t initializer,
     loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_global_constant_vtable;
+iree_status_t loom_global_constant_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_GLOBAL_VARIABLE: Mutable global value. Can be stored from any function at any time. Named type variables and predicates work the same as global.constant.
+// LOOM_OP_GLOBAL_VARIABLE: Mutable global value with an optional inline scalar default initializer. Can be stored from any function at any time. Declaration-local dim/encoding names and predicates work the same as global.constant.
 // global.variable @kv_cache : tile<[%s]x[%d]xf32> where [mul(%s, 64)]
 LOOM_DEFINE_ISA(loom_global_variable_isa, LOOM_OP_GLOBAL_VARIABLE)
 LOOM_DEFINE_RESULT(loom_global_variable_type, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_global_variable_callee, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_global_variable_symbol, 0)
+LOOM_DEFINE_ATTR_ANY(loom_global_variable_initializer, 2)
 iree_status_t loom_global_variable_build(
     loom_builder_t* builder,
-    loom_symbol_ref_t callee,
+    loom_symbol_ref_t symbol,
     loom_type_t result_type,
     loom_optional const loom_predicate_t* predicates,
     iree_host_size_t predicates_count,
+    loom_optional loom_attribute_t initializer,
     loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_global_variable_vtable;
+iree_status_t loom_global_variable_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_GLOBAL_LOAD: Load a value from a global. Dynamic dims and encodings in the type annotation reference co-results by name. Predicates on the global definition are propagated as value facts.
 // %tile, %m, %k = global.load @weights : tile<[%m]x[%k]xf32>

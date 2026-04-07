@@ -14,7 +14,9 @@
 //
 //   File:    Source range from a .loom file. Stores file:start:end so tooling
 //            can extract exact text spans for diagnostics, diffs, and
-//            agent-driven code modification.
+//            agent-driven code modification. Parser-created file locations may
+//            also carry per-field token spans for source-backed verifier
+//            highlights.
 //   Fused:   Derived from multiple source locations when a pass creates an op
 //            from several inputs (inlining, fusion, rewrites).
 //   Opaque:  External system identifier for JIT (torch node ID, JAX trace
@@ -85,6 +87,29 @@ enum loom_location_flag_bits_e {
 };
 typedef uint8_t loom_location_flags_t;
 
+// Field categories for parser-captured source spans attached to file
+// locations. These mirror the printer/verifier field namespaces without
+// making the IR layer depend on printer- or diagnostics-specific headers.
+typedef enum loom_location_field_kind_e {
+  LOOM_LOCATION_FIELD_OPERAND = 0,
+  LOOM_LOCATION_FIELD_RESULT = 1,
+  LOOM_LOCATION_FIELD_ATTRIBUTE = 2,
+  LOOM_LOCATION_FIELD_REGION = 3,
+} loom_location_field_kind_t;
+
+// Source span for one concrete op field inside a file location.
+typedef struct loom_location_field_span_t {
+  loom_location_field_kind_t kind;
+  uint16_t index;
+  uint16_t start_line;
+  uint16_t start_col;
+  uint16_t end_line;
+  uint16_t end_col;
+} loom_location_field_span_t;
+
+static_assert(sizeof(loom_location_field_span_t) == 16,
+              "loom_location_field_span_t must be 16 bytes");
+
 // A source location entry. 24 bytes. Tagged union.
 //
 // The kind field determines which union variant is active. File locations (the
@@ -101,10 +126,12 @@ typedef struct loom_location_entry_t {
     // LOOM_LOCATION_FILE: source range.
     struct {
       loom_source_id_t source_id;
+      uint16_t field_span_count;
       uint16_t start_line;
       uint16_t start_col;
       uint16_t end_line;
       uint16_t end_col;
+      const loom_location_field_span_t* field_spans;
     } file;
 
     // LOOM_LOCATION_FUSED: multiple source locations.
@@ -122,8 +149,8 @@ typedef struct loom_location_entry_t {
   };
 } loom_location_entry_t;
 
-static_assert(sizeof(loom_location_entry_t) == 24,
-              "loom_location_entry_t must be 24 bytes");
+static_assert(sizeof(loom_location_entry_t) == 32,
+              "loom_location_entry_t must be 32 bytes");
 
 // Location table stored on the module.
 //

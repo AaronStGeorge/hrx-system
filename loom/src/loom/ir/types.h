@@ -25,8 +25,11 @@
 //   tile<[%M]x4xf32>        First dim dynamic, named %M.
 //   tensor<[%M]x[%K]xf32>   Both dims dynamic.
 //
-// Every dynamic dim has a name. In function signatures, named dims
-// implicitly define index-typed SSA values in the function body.
+// Dynamic dims are printed with SSA value names. At use sites, those names
+// resolve to ordinary index-typed SSA values in the current lexical scope. In
+// declaration wrappers such as function/global signatures, names that appear
+// first inside a type may be parsed as declaration-local placeholders, but
+// function body visibility still comes from explicit binders or op results.
 //
 // Types may carry an encoding that describes the physical data layout
 // (quantization, packing, etc.):

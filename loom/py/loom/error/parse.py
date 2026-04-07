@@ -256,6 +256,46 @@ ERR_PARSE_022 = ErrorDef(
     ),
 )
 
+# ERR_PARSE_023: Invalid escape sequence in a string literal.
+ERR_PARSE_023 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=23,
+    severity=Severity.ERROR,
+    summary="Invalid string literal escape.",
+    message="invalid string literal escape: {detail}",
+    params=(ErrorParam("detail", ParamKind.STRING),),
+)
+
+# ERR_PARSE_024: Expected an identifier after a sigil prefix.
+ERR_PARSE_024 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=24,
+    severity=Severity.ERROR,
+    summary="Missing identifier after a sigil prefix.",
+    message="expected identifier after '{sigil}'",
+    params=(ErrorParam("sigil", ParamKind.STRING),),
+)
+
+# ERR_PARSE_025: Unexpected character in source text.
+ERR_PARSE_025 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=25,
+    severity=Severity.ERROR,
+    summary="Unexpected source character.",
+    message="unexpected character",
+    params=(),
+)
+
+# ERR_PARSE_026: Unterminated angle bracket.
+ERR_PARSE_026 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=26,
+    severity=Severity.ERROR,
+    summary="Unterminated angle bracket.",
+    message="unterminated angle bracket",
+    params=(),
+)
+
 ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_001,
     ERR_PARSE_002,
@@ -279,4 +319,8 @@ ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_020,
     ERR_PARSE_021,
     ERR_PARSE_022,
+    ERR_PARSE_023,
+    ERR_PARSE_024,
+    ERR_PARSE_025,
+    ERR_PARSE_026,
 )

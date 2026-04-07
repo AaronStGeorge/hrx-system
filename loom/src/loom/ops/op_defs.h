@@ -179,7 +179,7 @@ enum loom_result_type_list_flag_bits_e {
 enum loom_anchor_category_e {
   // Variadic operand: present if operand_count > fixed_operand_count.
   LOOM_ANCHOR_OPERAND = 0,
-  // Optional attribute: present if attribute value is non-zero.
+  // Optional attribute: present if the attribute is not LOOM_ATTR_ABSENT.
   LOOM_ANCHOR_ATTR = 1,
   // Region: present if region pointer is non-null.
   LOOM_ANCHOR_REGION = 2,
@@ -734,6 +734,13 @@ static inline int64_t loom_func_like_priority(loom_func_like_t func) {
   enum { func_name##_ATTR_INDEX = (index) };                             \
   static inline loom_named_attr_slice_t func_name(const loom_op_t* op) { \
     return loom_attr_as_dict(loom_op_attrs(op)[(index)]);                \
+  }
+
+// Defines a function that reads a generic attribute payload by index.
+#define LOOM_DEFINE_ATTR_ANY(func_name, index)                    \
+  enum { func_name##_ATTR_INDEX = (index) };                      \
+  static inline loom_attribute_t func_name(const loom_op_t* op) { \
+    return loom_op_attrs(op)[(index)];                            \
   }
 
 // Defines a function that reads the per-instance flags byte.

@@ -33,10 +33,36 @@
 extern "C" {
 #endif
 
+// Identifies which bytes back a diagnostic source range.
+typedef enum loom_source_provenance_t {
+  // The range's source bytes come from the original user-authored input text.
+  LOOM_SOURCE_PROVENANCE_EXACT_SOURCE = 0,
+  // The range's source bytes come from a canonical printed IR fallback.
+  LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK = 1,
+  // The range points at a logical location whose original source bytes are not
+  // available in this process.
+  LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE = 2,
+} loom_source_provenance_t;
+
+static inline const char* loom_source_provenance_name(
+    loom_source_provenance_t provenance) {
+  switch (provenance) {
+    case LOOM_SOURCE_PROVENANCE_EXACT_SOURCE:
+      return "exact_source";
+    case LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK:
+      return "printed_ir_fallback";
+    case LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE:
+      return "unavailable_source";
+    default:
+      return "exact_source";
+  }
+}
+
 // A source range identifying a span of text in a source buffer.
 // Both offsets are byte positions into |source|. The range is
 // [start, end) — end is one past the last byte.
 typedef struct loom_source_range_t {
+  loom_source_provenance_t provenance;
   iree_string_view_t filename;
   iree_string_view_t source;
   iree_host_size_t start;
@@ -55,6 +81,7 @@ static inline loom_source_range_t loom_source_range_from_token(
   iree_host_size_t start =
       (iree_host_size_t)(token_source_text.data - source.data);
   return (loom_source_range_t){
+      .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
       .filename = filename,
       .source = source,
       .start = start,
@@ -73,10 +100,31 @@ static inline loom_source_range_t loom_source_range_from_token(
 typedef struct loom_highlight_range_t {
   iree_host_size_t start;  // Byte offset into source.
   iree_host_size_t end;    // One past last byte.
+  // Optional structured field ref for the highlighted token.
+  loom_diagnostic_field_ref_t field_ref;
+  // Index into diagnostic->params for the parameter this highlight came from.
+  // Only meaningful when field_ref is set and less than param_count.
+  iree_host_size_t param_index;
 } loom_highlight_range_t;
 
 // A single diagnostic: severity + location + structured error.
 //
+// Maximum number of labeled related locations an emitter should attach to one
+// diagnostic. This keeps stack-owned note buffers bounded at emission sites.
+#define LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS 4
+
+// A labeled secondary source location that gives context for the primary
+// diagnostic site, such as the op that consumed a tied operand or the
+// declaration that introduced a symbol. As with `loom_diagnostic_t`, the
+// payload is only valid for the duration of the sink callback and sinks must
+// copy any data they retain.
+typedef struct loom_diagnostic_related_location_t {
+  iree_string_view_t label;
+  loom_source_range_t source_location;
+  const loom_highlight_range_t* highlights;
+  iree_host_size_t highlight_count;
+} loom_diagnostic_related_location_t;
+
 // Every diagnostic carries a structured error definition and typed
 // parameters. Sinks render the message from the error_def's template
 // and the runtime params — the diagnostic itself carries no pre-rendered
@@ -109,6 +157,12 @@ typedef struct loom_diagnostic_t {
   // be within the same source line as origin.
   const loom_highlight_range_t* highlights;
   iree_host_size_t highlight_count;
+
+  // Optional labeled related locations that provide secondary context. The
+  // text formatter prints each entry as a follow-on note, and the JSON sink
+  // serializes them as a machine-readable array.
+  const loom_diagnostic_related_location_t* related_locations;
+  iree_host_size_t related_location_count;
 } loom_diagnostic_t;
 
 // Callback invoked for each diagnostic. The diagnostic is valid only

@@ -9,7 +9,7 @@
 // A pipeline is a flat sequence of passes. Each pass is either a module
 // pass (runs once on the whole module) or a function pass (runs once per
 // function-like symbol with a body). The pass manager iterates the
-// pipeline, creating a fresh arena per pass invocation from a shared
+// pipeline, creating fresh arenas per pass invocation from a shared
 // block pool.
 //
 // Pipeline strings for loom-opt:
@@ -17,11 +17,15 @@
 //   --pass-pipeline='inline,canonicalize{max-iterations=20},cse'
 //
 // Pass lifecycle:
-//   1. Arena created from shared block pool.
+//   1. Instance arena created from shared block pool.
 //   2. Pass create() called (if non-NULL) with option string.
-//   3. Pass run() called once (module pass) or per-function.
+//   3. Pass run() called once (module pass) or per-function. Module pass
+//      callbacks use the instance arena directly as pass->arena. Function pass
+//      callbacks use a separate scratch arena that is reset before each
+//      function invocation, while pass->instance_arena remains stable for
+//      create()/destroy() state.
 //   4. Pass destroy() called (if non-NULL).
-//   5. Arena deinitialized (all scratch memory freed).
+//   5. All pass arenas are deinitialized.
 //
 // Reproducers: when a pass fails and DUMP_REPRODUCER is set, the pass
 // manager writes the pre-pass IR and the remaining pipeline to a temp
@@ -89,23 +93,29 @@ typedef iree_status_t (*loom_pass_create_fn_t)(loom_pass_t* pass,
 typedef void (*loom_pass_destroy_fn_t)(loom_pass_t* pass);
 
 // A pass instance. Created by the pass manager for each pipeline entry,
-// destroyed after execution. The arena provides scratch memory that is
-// freed automatically when the pass completes.
+// destroyed after execution. |instance_arena| and |arena| are both
+// pass-manager-owned and freed automatically according to the lifecycle above.
 struct loom_pass_t {
   const loom_pass_info_t* info;
   union {
     loom_module_pass_fn_t module_run;
     loom_function_pass_fn_t function_run;
   };
-  // Per-invocation scratch arena. All transient allocations (hash tables,
-  // worklists, temporary IR) go here. Freed in one shot after the pass.
+  // Stable per-entry arena for statistics and create()/destroy() state. Module
+  // pass callbacks use this arena directly as |arena|; function pass callbacks
+  // still see this arena here even though |arena| points at a resettable
+  // per-function scratch arena.
+  iree_arena_allocator_t* instance_arena;
+  // Scratch arena for the current run callback. For module passes this aliases
+  // |instance_arena|. For function passes this arena is reset before each
+  // function invocation so transient per-function worklists/DFS stacks don't
+  // accumulate across sibling functions.
   iree_arena_allocator_t* arena;
-  // Per-invocation statistics counters. Allocated from the arena, indexed
-  // by the statistic_defs order in pass_info. Accumulated by the pass
-  // manager after each invocation.
+  // Per-entry statistics counters. Allocated from |instance_arena| and indexed
+  // by the statistic_defs order in pass_info.
   int64_t* statistics;
   // Per-instance state from create(). The pass owns this memory (typically
-  // allocated from the arena).
+  // allocated from |instance_arena|).
   void* state;
 };
 
@@ -171,8 +181,10 @@ iree_status_t loom_pass_manager_add_function_pass(
     loom_function_pass_fn_t run, loom_pass_create_fn_t create,
     loom_pass_destroy_fn_t destroy, iree_string_view_t options);
 
-// Runs the full pipeline on a module. Each pass gets a fresh arena.
-// Returns the first error encountered, with reproducer info if enabled.
+// Runs the full pipeline on a module. Each pipeline entry gets a fresh
+// instance arena, and function passes additionally get a resettable
+// per-function scratch arena. Returns the first error encountered, with
+// reproducer info if enabled.
 iree_status_t loom_pass_manager_run(loom_pass_manager_t* manager,
                                     loom_module_t* module);
 

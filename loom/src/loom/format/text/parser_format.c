@@ -12,6 +12,15 @@
 // Format element parsers
 //===----------------------------------------------------------------------===//
 
+static iree_status_t loom_parse_format_add_field_span(
+    loom_parser_t* parser, loom_parsed_op_t* parsed,
+    loom_location_field_kind_t kind, uint16_t index, loom_token_t start_token) {
+  return loom_parsed_op_add_field_span(parsed, &parser->parser_arena, kind,
+                                       index, start_token,
+                                       parser->tokenizer.consumed_end_line,
+                                       parser->tokenizer.consumed_end_column);
+}
+
 // Builds the parser-owned result overlay so result type annotations can
 // reference co-results by name. The overlay is reset by the caller once the
 // current RESULT_TYPE* element has been parsed.
@@ -175,6 +184,9 @@ static iree_status_t loom_parse_format_lhs_result_type_list(
         };
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_tied_result(
             parsed, &parser->parser_arena, tied));
+        IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+            parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+            operand_index, ssa_token, ssa_token.line, ssa_token.end_column));
 
         IREE_RETURN_IF_ERROR(loom_parse_format_assign_lhs_result_type(
             parser, vtable, op_name_token, parsed, result_index, type));
@@ -271,6 +283,9 @@ static iree_status_t loom_parse_format_symbol_result_type_list(
         };
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_tied_result(
             parsed, &parser->parser_arena, tied));
+        IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+            parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+            operand_index, ssa_token, ssa_token.line, ssa_token.end_column));
         IREE_RETURN_IF_ERROR(loom_parse_format_append_symbol_result(
             parser, parsed, type, loom_token_none()));
       } else {
@@ -306,6 +321,7 @@ static iree_status_t loom_parse_format_symbol_result_type_list(
 static iree_status_t loom_parse_format_index_list(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
+  loom_token_t list_start_token = loom_tokenizer_peek(&parser->tokenizer);
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LBRACKET)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'['"));
@@ -332,8 +348,12 @@ static iree_status_t loom_parse_format_index_list(
       loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
       LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
       static_values[value_count] = INT64_MIN;  // Sentinel.
+      uint16_t operand_index = parsed->operand_count;
       IREE_RETURN_IF_ERROR(
           loom_parsed_op_add_operand(parsed, &parser->parser_arena, value_id));
+      IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+          parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+          operand_index, token, token.line, token.end_column));
     } else {
       // Static index.
       loom_token_t token = loom_token_none();
@@ -363,8 +383,11 @@ static iree_status_t loom_parse_format_index_list(
                                                  (void**)&arena_values));
   memcpy(arena_values, static_values, value_count * sizeof(int64_t));
   loom_attribute_t attr = loom_attr_i64_array(arena_values, value_count);
-  return loom_parsed_op_set_attribute(parsed, &parser->parser_arena,
-                                      element->data, attr);
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+      parsed, &parser->parser_arena, element->data, attr));
+  return loom_parse_format_add_field_span(parser, parsed,
+                                          LOOM_LOCATION_FIELD_ATTRIBUTE,
+                                          element->data, list_start_token);
 }
 
 // Parses a binding list: (%block_arg = %operand : type, ...).
@@ -414,8 +437,12 @@ static iree_status_t loom_parse_format_binding_list(
     IREE_RETURN_IF_ERROR(loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
 
     // Add the operand.
+    uint16_t operand_index = parsed->operand_count;
     IREE_RETURN_IF_ERROR(
         loom_parsed_op_add_operand(parsed, &parser->parser_arena, operand_id));
+    IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+        parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+        operand_index, op_token, op_token.line, op_token.end_column));
 
     // Derive the block arg type from the binding kind.
     // ELEMENT bindings: block arg gets the element type of the
@@ -657,6 +684,7 @@ static iree_status_t loom_parse_format_flags(loom_parser_t* parser,
 static iree_status_t loom_parse_format_op_ref(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
+  loom_token_t op_ref_start_token = loom_tokenizer_peek(&parser->tokenizer);
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'<'"));
@@ -671,8 +699,11 @@ static iree_status_t loom_parse_format_op_ref(
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(parser->module, name_token.text, &name_id));
   loom_attribute_t attr = loom_attr_string(name_id);
-  return loom_parsed_op_set_attribute(parsed, &parser->parser_arena,
-                                      element->field_index, attr);
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+      parsed, &parser->parser_arena, element->field_index, attr));
+  return loom_parse_format_add_field_span(
+      parser, parsed, LOOM_LOCATION_FIELD_ATTRIBUTE, element->field_index,
+      op_ref_start_token);
 }
 
 //===----------------------------------------------------------------------===//
@@ -712,8 +743,12 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
         LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &token);
         loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
         LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
+        uint16_t operand_index = parsed->operand_count;
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
             parsed, &parser->parser_arena, value_id));
+        IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+            parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+            operand_index, token, token.line, token.end_column));
         break;
       }
 
@@ -733,20 +768,28 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
           loom_token_t token = loom_tokenizer_next(&parser->tokenizer);
           loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
           LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
+          uint16_t operand_index = parsed->operand_count;
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
               parsed, &parser->parser_arena, value_id));
+          IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+              parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+              operand_index, token, token.line, token.end_column));
           first = false;
         }
         break;
       }
 
       case LOOM_FORMAT_KIND_ATTR_VALUE: {
+        loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
         const loom_attr_descriptor_t* descriptor =
             &vtable->attr_descriptors[element->field_index];
         loom_attribute_t attr = {0};
         IREE_RETURN_IF_ERROR(loom_parse_attr_value(parser, descriptor, &attr));
         IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
             parsed, &parser->parser_arena, element->field_index, attr));
+        IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+            parser, parsed, LOOM_LOCATION_FIELD_ATTRIBUTE, element->field_index,
+            start_token));
         break;
       }
 
@@ -770,6 +813,9 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
         loom_attribute_t attr = loom_attr_symbol(ref);
         IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
             parsed, &parser->parser_arena, element->field_index, attr));
+        IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+            parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_ATTRIBUTE,
+            element->field_index, token, token.line, token.end_column));
         break;
       }
 
@@ -847,6 +893,7 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       }
 
       case LOOM_FORMAT_KIND_REGION: {
+        loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
         if (!vtable->region_descriptors ||
             element->field_index >= vtable->region_count) {
           return iree_make_status(
@@ -860,6 +907,9 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
             &region));
         IREE_RETURN_IF_ERROR(
             loom_parsed_op_add_region(parsed, &parser->parser_arena, region));
+        IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+            parser, parsed, LOOM_LOCATION_FIELD_REGION, element->field_index,
+            start_token));
         break;
       }
 
@@ -881,10 +931,14 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       }
 
       case LOOM_FORMAT_KIND_PREDICATE_LIST: {
+        loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
         loom_attribute_t attr = {0};
         IREE_RETURN_IF_ERROR(loom_parse_predicate_list(parser, &attr));
         IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
             parsed, &parser->parser_arena, element->field_index, attr));
+        IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+            parser, parsed, LOOM_LOCATION_FIELD_ATTRIBUTE, element->field_index,
+            start_token));
         break;
       }
 
@@ -911,16 +965,27 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       }
 
       case LOOM_FORMAT_KIND_ATTR_DICT: {
+        loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
         loom_attribute_t attr = {0};
         IREE_RETURN_IF_ERROR(loom_parse_attr_dict(parser, &attr));
         IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
             parsed, &parser->parser_arena, element->field_index, attr));
+        if (!loom_attr_is_absent(attr)) {
+          IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+              parser, parsed, LOOM_LOCATION_FIELD_ATTRIBUTE,
+              element->field_index, start_token));
+        }
         break;
       }
 
       case LOOM_FORMAT_KIND_SCOPE: {
+        loom_parser_definition_scope_flags_t definition_scope_flags = 0;
+        if (vtable->symbol_kind == LOOM_SYMBOL_GLOBAL) {
+          definition_scope_flags |=
+              LOOM_PARSER_DEFINITION_SCOPE_FLAG_RESOLVE_PLACEHOLDERS_FROM_USE;
+        }
         IREE_RETURN_IF_ERROR(loom_parser_definition_scope_push(
-            parser, (uint16_t)(i + element->data)));
+            parser, (uint16_t)(i + element->data), definition_scope_flags));
         break;
       }
     }

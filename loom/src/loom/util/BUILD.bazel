@@ -37,6 +37,7 @@ loom_cc_library(
     deps = [
         ":stream",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:unicode",
     ],
 )
 

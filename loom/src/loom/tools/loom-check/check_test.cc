@@ -1009,7 +1009,7 @@ TEST_F(CheckParseTest, ManyCasesExercisesArenaBulkAllocation) {
   for (int i = 1; i <= 65; ++i) {
     iree_string_builder_append_cstring(&builder, "// ====\n");
     char body[64];
-    snprintf(body, sizeof(body), "func.def @case_%d() {}\n", i);
+    iree_snprintf(body, sizeof(body), "func.def @case_%d() {}\n", i);
     iree_string_builder_append_cstring(&builder, body);
   }
   iree_string_view_t source = iree_string_builder_view(&builder);

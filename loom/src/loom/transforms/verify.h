@@ -77,10 +77,12 @@
 // and the emitter tag LOOM_EMITTER_VERIFIER. Sinks render the
 // human-readable message from the error definition and params.
 //
-// Source ranges for caret underlining come from the op's location
-// resolved through an optional source resolver callback. When no
-// resolver is provided (or the location is unknown), diagnostics
-// still carry the message and error identity — just without carets.
+// Source ranges for caret underlining come from the op's location resolved
+// through an optional source resolver callback. When no resolver is provided
+// (or the location is unknown), the verifier falls back to canonical printed
+// IR when an op is available and tags the range provenance accordingly. If no
+// op location can be reconstructed, the diagnostic still carries its
+// structured identity and explicit `unavailable_source` provenance.
 //
 // Diagnostics are emitted through a callback sink (same pattern as
 // the parser). The verifier continues after errors to report as many

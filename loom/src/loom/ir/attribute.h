@@ -126,32 +126,38 @@ static inline loom_named_attr_slice_t loom_make_named_attr_slice(
 // Attribute value kind tag. Determines which union member of
 // loom_attribute_t is active.
 typedef enum loom_attr_kind_e {
+  // All-zero optional-absent sentinel. This is not a concrete payload value in
+  // required attributes or DICT entries.
+  LOOM_ATTR_ABSENT = 0,
   // 64-bit signed integer.
-  LOOM_ATTR_I64 = 0,
+  LOOM_ATTR_I64 = 1,
   // 64-bit IEEE 754 double.
-  LOOM_ATTR_F64 = 1,
+  LOOM_ATTR_F64 = 2,
   // Interned string reference (loom_string_id_t).
-  LOOM_ATTR_STRING = 2,
+  LOOM_ATTR_STRING = 3,
   // Boolean (payload raw field is 0 or 1).
-  LOOM_ATTR_BOOL = 3,
+  LOOM_ATTR_BOOL = 4,
   // Enum case index (payload raw field is the case ordinal).
-  LOOM_ATTR_ENUM = 4,
+  LOOM_ATTR_ENUM = 5,
   // Arena-allocated int64_t array (count in header, pointer in payload).
-  LOOM_ATTR_I64_ARRAY = 5,
+  LOOM_ATTR_I64_ARRAY = 6,
   // Symbol reference (module_id + symbol_id packed in payload).
-  LOOM_ATTR_SYMBOL = 6,
+  LOOM_ATTR_SYMBOL = 7,
   // Type table index (uint32_t in payload).
-  LOOM_ATTR_TYPE = 7,
+  LOOM_ATTR_TYPE = 8,
   // Arena-allocated predicate list (count in header, pointer in payload).
-  LOOM_ATTR_PREDICATE_LIST = 8,
+  LOOM_ATTR_PREDICATE_LIST = 9,
   // Arena-allocated dictionary of named attributes (count in header,
   // pointer to loom_named_attr_t array in payload). Non-empty dict entries
   // are canonicalized by key spelling, contain no duplicate keys, and nested
   // DICT values recursively follow the same invariant. Used by ops with
   // AttrDict format elements for extensible metadata.
-  LOOM_ATTR_DICT = 9,
+  LOOM_ATTR_DICT = 10,
   // Static encoding table index (1-based uint16_t in payload).
-  LOOM_ATTR_ENCODING = 10,
+  LOOM_ATTR_ENCODING = 11,
+  // Descriptor wildcard for format/parser/verification metadata. This is not a
+  // concrete payload kind in loom_attribute_t values.
+  LOOM_ATTR_ANY = 12,
   LOOM_ATTR_COUNT_,
 } loom_attr_kind_t;
 
@@ -188,66 +194,73 @@ typedef struct loom_attribute_t {
 static_assert(sizeof(loom_attribute_t) == 16,
               "loom_attribute_t must be exactly 16 bytes");
 
+// Constructs the all-zero optional-absent sentinel.
+static inline loom_attribute_t loom_attr_absent(void) {
+  loom_attribute_t attr = {0};
+  return attr;
+}
+
+// Initializes a present attribute shell.
+static inline loom_attribute_t loom_attr_make_present(
+    loom_attr_kind_t attr_kind) {
+  loom_attribute_t attr = {
+      .kind = (uint8_t)attr_kind,
+  };
+  return attr;
+}
+
 // Constructs an integer attribute.
 static inline loom_attribute_t loom_attr_i64(int64_t value) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_I64;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_I64);
   attr.i64 = value;
   return attr;
 }
 
 // Constructs a floating-point attribute.
 static inline loom_attribute_t loom_attr_f64(double value) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_F64;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_F64);
   attr.f64 = value;
   return attr;
 }
 
 // Constructs a string attribute from an interned string ID.
 static inline loom_attribute_t loom_attr_string(loom_string_id_t string_id) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_STRING;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_STRING);
   attr.string_id = string_id;
   return attr;
 }
 
 // Constructs a boolean attribute.
 static inline loom_attribute_t loom_attr_bool(bool value) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_BOOL;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_BOOL);
   attr.raw = value ? 1 : 0;
   return attr;
 }
 
 // Constructs an enum attribute from a case index.
 static inline loom_attribute_t loom_attr_enum(uint8_t case_index) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_ENUM;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_ENUM);
   attr.raw = case_index;
   return attr;
 }
 
 // Constructs a symbol reference attribute.
 static inline loom_attribute_t loom_attr_symbol(loom_symbol_ref_t ref) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_SYMBOL;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_SYMBOL);
   attr.symbol = ref;
   return attr;
 }
 
 // Constructs a type reference attribute from a type table index.
 static inline loom_attribute_t loom_attr_type(loom_type_id_t type_id) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_TYPE;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_TYPE);
   attr.type_id = type_id;
   return attr;
 }
 
 // Constructs a static encoding attribute from a 1-based module encoding ID.
 static inline loom_attribute_t loom_attr_encoding(uint16_t encoding_id) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_ENCODING;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_ENCODING);
   attr.encoding_id = encoding_id;
   return attr;
 }
@@ -256,8 +269,7 @@ static inline loom_attribute_t loom_attr_encoding(uint16_t encoding_id) {
 // arena-allocated and outlive the attribute.
 static inline loom_attribute_t loom_attr_i64_array(int64_t* values,
                                                    uint16_t count) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_I64_ARRAY;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_I64_ARRAY);
   attr.count = count;
   attr.i64_array = values;
   return attr;
@@ -267,8 +279,7 @@ static inline loom_attribute_t loom_attr_i64_array(int64_t* values,
 // arena-allocated and outlive the attribute.
 static inline loom_attribute_t loom_attr_predicate_list(
     loom_predicate_t* predicates, uint16_t count) {
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_PREDICATE_LIST;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_PREDICATE_LIST);
   attr.count = count;
   attr.predicate_list = predicates;
   return attr;
@@ -283,18 +294,23 @@ static inline loom_attribute_t loom_attr_predicate_list(
 static inline loom_attribute_t loom_make_canonical_attr_dict(
     const loom_named_attr_t* entries, iree_host_size_t count) {
   IREE_ASSERT(count <= UINT16_MAX);
-  loom_attribute_t attr = {0};
-  attr.kind = LOOM_ATTR_DICT;
+  loom_attribute_t attr = loom_attr_make_present(LOOM_ATTR_DICT);
   attr.count = (uint16_t)count;
   attr.dict_entries = count > 0 ? entries : NULL;
   return attr;
 }
 
-// Returns true if |attr| is the all-zero optional-absent sentinel.
+// Returns true if |attr| is the optional-absent sentinel.
 static inline bool loom_attr_is_absent(loom_attribute_t attr) {
-  return attr.kind == LOOM_ATTR_I64 && attr.reserved_0 == 0 &&
-         attr.count == 0 && attr.reserved_1 == 0 && attr.raw == 0;
+  return attr.kind == LOOM_ATTR_ABSENT;
 }
+
+// Returns true if |attr| is a valid literal payload for a value whose scalar
+// element type is |scalar_type|. If non-null, |out_expected_kind| receives the
+// primary expected attribute kind for diagnostics.
+bool loom_attr_matches_scalar_type(loom_attribute_t attr,
+                                   loom_scalar_type_t scalar_type,
+                                   loom_attr_kind_t* out_expected_kind);
 
 // A named attribute: interned name paired with a typed value.
 // Used for encoding parameters (block=32, layout="nchw"),

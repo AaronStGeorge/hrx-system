@@ -4,8 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <stdio.h>
-
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
@@ -143,7 +141,13 @@ static iree_status_t loom_global_emit(iree_diagnostic_emitter_t emitter,
                                       const loom_error_def_t* error,
                                       const loom_diagnostic_param_t* params,
                                       iree_host_size_t param_count) {
-  return iree_diagnostic_emit(emitter, op, error, params, param_count);
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = error,
+      .params = params,
+      .param_count = param_count,
+  };
+  return iree_diagnostic_emit(emitter, &emission);
 }
 
 static iree_status_t loom_global_verify_result_type(
@@ -160,8 +164,8 @@ static iree_status_t loom_global_verify_result_type(
   }
 
   char result_name_buffer[32];
-  snprintf(result_name_buffer, sizeof(result_name_buffer), "result %u",
-           result_index);
+  iree_snprintf(result_name_buffer, sizeof(result_name_buffer), "result %u",
+                result_index);
   loom_diagnostic_param_t params[] = {
       loom_param_string(iree_make_cstring_view(result_name_buffer)),
       loom_param_type(type),
@@ -229,28 +233,112 @@ static iree_status_t loom_global_verify_load_results(
 static iree_status_t loom_global_emit_kind_mismatch(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter, loom_symbol_ref_t ref,
-    loom_symbol_kind_t actual_kind) {
+    const loom_symbol_t* symbol) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_global_symbol_name(module, ref)),
-      loom_param_string(loom_global_symbol_kind_name(actual_kind)),
+      loom_param_string(loom_global_symbol_kind_name(symbol->kind)),
       loom_param_string(IREE_SV("global")),
   };
-  return loom_global_emit(emitter, op, &loom_err_symbol_003, params,
-                          IREE_ARRAYSIZE(params));
+  loom_diagnostic_related_op_t related_ops[] = {{
+      .label = IREE_SV("defined here"),
+      .op = symbol->defining_op,
+  }};
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = &loom_err_symbol_003,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .related_ops = related_ops,
+      .related_op_count = IREE_ARRAYSIZE(related_ops),
+  };
+  return iree_diagnostic_emit(emitter, &emission);
 }
 
 static iree_status_t loom_global_emit_type_mismatch(
-    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
-    iree_string_view_t field_name, loom_type_t use_type,
-    loom_type_t global_type) {
+    const loom_op_t* op, const loom_op_t* definition_op,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t field_name,
+    loom_type_t use_type, loom_type_t global_type) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(field_name),
       loom_param_type(use_type),
       loom_param_string(IREE_SV("referenced global")),
       loom_param_type(global_type),
   };
-  return loom_global_emit(emitter, op, &loom_err_type_001, params,
+  loom_diagnostic_related_op_t related_ops[] = {{
+      .label = IREE_SV("defined here"),
+      .op = definition_op,
+  }};
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = &loom_err_type_001,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .related_ops = related_ops,
+      .related_op_count = IREE_ARRAYSIZE(related_ops),
+  };
+  return iree_diagnostic_emit(emitter, &emission);
+}
+
+static iree_status_t loom_global_emit_initializer_kind_mismatch(
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
+    loom_attr_kind_t actual_kind, loom_attr_kind_t expected_kind) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("initializer")),
+      loom_param_u32(actual_kind),
+      loom_param_u32(expected_kind),
+  };
+  return loom_global_emit(emitter, op, &loom_err_type_005, params,
                           IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_global_emit_initializer_type_mismatch(
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
+    loom_type_t global_type) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("global type")),
+      loom_param_type(global_type),
+      loom_param_string(IREE_SV("scalar")),
+  };
+  return loom_global_emit(emitter, op, &loom_err_type_004, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_global_verify_initializer(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_value_id_t global_value_id,
+    loom_attribute_t initializer) {
+  if (loom_attr_is_absent(initializer)) {
+    return iree_ok_status();
+  }
+
+  loom_type_t global_type = loom_module_value_type(module, global_value_id);
+  if (!loom_type_is_scalar(global_type)) {
+    return loom_global_emit_initializer_type_mismatch(op, emitter, global_type);
+  }
+
+  loom_attr_kind_t expected_kind = LOOM_ATTR_ANY;
+  if (!loom_attr_matches_scalar_type(
+          initializer, loom_type_element_type(global_type), &expected_kind)) {
+    return loom_global_emit_initializer_kind_mismatch(
+        op, emitter, (loom_attr_kind_t)initializer.kind, expected_kind);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_global_constant_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  return loom_global_verify_initializer(module, op, emitter,
+                                        loom_global_constant_type(op),
+                                        loom_global_constant_initializer(op));
+}
+
+iree_status_t loom_global_variable_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  return loom_global_verify_initializer(module, op, emitter,
+                                        loom_global_variable_type(op),
+                                        loom_global_variable_initializer(op));
 }
 
 iree_status_t loom_global_load_verify(const loom_module_t* module,
@@ -267,8 +355,7 @@ iree_status_t loom_global_load_verify(const loom_module_t* module,
     return iree_ok_status();
   }
   if (symbol->kind != LOOM_SYMBOL_GLOBAL) {
-    return loom_global_emit_kind_mismatch(module, op, emitter, ref,
-                                          symbol->kind);
+    return loom_global_emit_kind_mismatch(module, op, emitter, ref, symbol);
   }
 
   IREE_RETURN_IF_ERROR(loom_global_verify_load_results(module, op, emitter));
@@ -279,7 +366,8 @@ iree_status_t loom_global_load_verify(const loom_module_t* module,
   loom_type_t loaded_type = loom_module_value_type(module, results.values[0]);
   if (!loom_global_types_match(global_type, loaded_type)) {
     IREE_RETURN_IF_ERROR(loom_global_emit_type_mismatch(
-        op, emitter, IREE_SV("loaded value"), loaded_type, global_type));
+        op, symbol->defining_op, emitter, IREE_SV("loaded value"), loaded_type,
+        global_type));
   }
   return iree_ok_status();
 }
@@ -298,8 +386,7 @@ iree_status_t loom_global_store_verify(const loom_module_t* module,
     return iree_ok_status();
   }
   if (symbol->kind != LOOM_SYMBOL_GLOBAL) {
-    return loom_global_emit_kind_mismatch(module, op, emitter, ref,
-                                          symbol->kind);
+    return loom_global_emit_kind_mismatch(module, op, emitter, ref, symbol);
   }
 
   loom_type_t global_type = loom_global_symbol_type(module, symbol);
@@ -307,7 +394,8 @@ iree_status_t loom_global_store_verify(const loom_module_t* module,
       loom_module_value_type(module, loom_global_store_value(op));
   if (!loom_global_types_match(global_type, stored_type)) {
     IREE_RETURN_IF_ERROR(loom_global_emit_type_mismatch(
-        op, emitter, IREE_SV("stored value"), stored_type, global_type));
+        op, symbol->defining_op, emitter, IREE_SV("stored value"), stored_type,
+        global_type));
   }
   return iree_ok_status();
 }

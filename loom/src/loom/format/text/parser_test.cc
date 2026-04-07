@@ -144,15 +144,22 @@ class ParserTest : public ::testing::Test {
     IREE_EXPECT_OK(Parse(source, &module));
     EXPECT_EQ(module, nullptr);
     EXPECT_GT(capture_.diagnostics.size(), 0u);
+    for (const CapturedDiagnostic& diagnostic : capture_.diagnostics) {
+      EXPECT_EQ(diagnostic.origin.provenance,
+                LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+      EXPECT_EQ(diagnostic.source_location.provenance,
+                LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+    }
     return capture_.diagnostics;
   }
 
   // Prints a module to canonical text.
-  std::string PrintModule(const loom_module_t* module) {
+  std::string PrintModule(
+      const loom_module_t* module,
+      loom_text_print_flags_t flags = LOOM_TEXT_PRINT_DEFAULT) {
     iree_string_builder_t builder;
     iree_string_builder_initialize(iree_allocator_system(), &builder);
-    IREE_EXPECT_OK(loom_text_print_module_to_builder(module, &builder,
-                                                     LOOM_TEXT_PRINT_DEFAULT));
+    IREE_EXPECT_OK(loom_text_print_module_to_builder(module, &builder, flags));
     std::string result(iree_string_builder_buffer(&builder),
                        iree_string_builder_size(&builder));
     iree_string_builder_deinitialize(&builder);
@@ -161,15 +168,16 @@ class ParserTest : public ::testing::Test {
 
   // Parses, prints, parses again, prints again — asserts the two printed
   // strings are identical. Returns the printed text.
-  std::string RoundTrip(const char* source) {
+  std::string RoundTrip(const char* source, loom_text_print_flags_t flags =
+                                                LOOM_TEXT_PRINT_DEFAULT) {
     loom_module_t* module1 = ParseOk(source);
     if (!module1) return "";
-    std::string text1 = PrintModule(module1);
+    std::string text1 = PrintModule(module1, flags);
     loom_module_free(module1);
 
     loom_module_t* module2 = ParseOk(text1.c_str());
     if (!module2) return "";
-    std::string text2 = PrintModule(module2);
+    std::string text2 = PrintModule(module2, flags);
     loom_module_free(module2);
 
     EXPECT_EQ(text1, text2) << "Round-trip mismatch";
@@ -189,6 +197,54 @@ static loom_op_t* GetFirstFunctionOp(const loom_module_t* module) {
 static loom_block_t* GetEntryBlock(loom_region_t* region) {
   if (!region || region->block_count == 0) return nullptr;
   return loom_region_entry_block(region);
+}
+
+static void AppendRepeatedScalarTypeList(std::string* text,
+                                         iree_host_size_t count) {
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    if (i > 0) text->append(", ");
+    text->append("i32");
+  }
+}
+
+static std::string BuildWideFunctionType(iree_host_size_t arg_count,
+                                         iree_host_size_t result_count) {
+  std::string text;
+  text.reserve((arg_count + result_count) * 5 + 16);
+  text.push_back('(');
+  AppendRepeatedScalarTypeList(&text, arg_count);
+  text.append(") -> (");
+  AppendRepeatedScalarTypeList(&text, result_count);
+  text.push_back(')');
+  return text;
+}
+
+static std::string BuildWideFuncDefSource(iree_host_size_t arg_count,
+                                          iree_host_size_t result_count) {
+  std::string text;
+  text.reserve((arg_count + result_count) * 16 + 128);
+  text.append("func.def @wide(");
+  for (iree_host_size_t i = 0; i < arg_count; ++i) {
+    if (i > 0) text.append(", ");
+    text.append("%arg");
+    text.append(std::to_string(i));
+    text.append(" : i32");
+  }
+  text.append(") -> (");
+  AppendRepeatedScalarTypeList(&text, result_count);
+  text.append(") {\n  func.return");
+  if (result_count > 0) text.push_back(' ');
+  for (iree_host_size_t i = 0; i < result_count; ++i) {
+    if (i > 0) text.append(", ");
+    text.append("%arg");
+    text.append(std::to_string(i));
+  }
+  if (result_count > 0) {
+    text.append(" : ");
+    AppendRepeatedScalarTypeList(&text, result_count);
+  }
+  text.append("\n}\n");
+  return text;
 }
 
 //===----------------------------------------------------------------------===//
@@ -279,6 +335,185 @@ TEST_F(ParserTest, ParsedOpScratchFramesStayDepthSafeWhileParentIsActive) {
   iree_arena_deinitialize(&parser.parser_arena);
 }
 
+TEST_F(ParserTest, ScopeFramesReuseHashStorageAcrossSiblingScopes) {
+  loom_parser_scope_t root_scope = {};
+  loom_parser_t parser = {
+      .scope = &root_scope,
+  };
+  iree_arena_initialize(&block_pool_, &parser.parser_arena);
+
+  IREE_ASSERT_OK(loom_parser_scope_push(&parser, &root_scope, &parser.scope));
+  loom_parser_scope_t* scope = parser.scope;
+  ASSERT_NE(scope, nullptr);
+
+  for (iree_host_size_t i = 0; i < 64; ++i) {
+    bool duplicate = true;
+    IREE_ASSERT_OK(loom_parser_scope_define(
+        scope, &parser.parser_arena, (loom_string_id_t)(i + 1),
+        (loom_value_id_t)(100 + i), &duplicate));
+    EXPECT_FALSE(duplicate);
+  }
+
+  ASSERT_NE(scope->entries, nullptr);
+  loom_parser_scope_entry_t* entries = scope->entries;
+  iree_host_size_t capacity = scope->capacity;
+
+  loom_parser_scope_pop(&parser);
+  EXPECT_EQ(parser.scope, &root_scope);
+  EXPECT_EQ(parser.scope_free_list, scope);
+
+  iree_host_size_t parser_allocation_size =
+      parser.parser_arena.total_allocation_size;
+  for (int iteration = 0; iteration < 32; ++iteration) {
+    IREE_ASSERT_OK(loom_parser_scope_push(&parser, &root_scope, &parser.scope));
+    EXPECT_EQ(parser.scope, scope);
+    EXPECT_EQ(parser.scope->entries, entries);
+    EXPECT_EQ(parser.scope->capacity, capacity);
+    EXPECT_EQ(parser.scope->count, 0u);
+    EXPECT_EQ(loom_parser_scope_lookup_local(parser.scope, (loom_string_id_t)1),
+              LOOM_VALUE_ID_INVALID);
+
+    bool duplicate = true;
+    IREE_ASSERT_OK(loom_parser_scope_define(parser.scope, &parser.parser_arena,
+                                            (loom_string_id_t)1,
+                                            (loom_value_id_t)7, &duplicate));
+    EXPECT_FALSE(duplicate);
+    EXPECT_EQ(loom_parser_scope_lookup_local(parser.scope, (loom_string_id_t)1),
+              (loom_value_id_t)7);
+
+    loom_parser_scope_pop(&parser);
+    EXPECT_EQ(parser.scope, &root_scope);
+    EXPECT_EQ(parser.scope_free_list, scope);
+    EXPECT_EQ(parser.parser_arena.total_allocation_size,
+              parser_allocation_size);
+  }
+
+  iree_arena_deinitialize(&parser.parser_arena);
+}
+
+TEST_F(ParserTest, ScopeFramesPreserveParentLookupAndRejectLocalDuplicates) {
+  loom_parser_scope_t root_scope = {};
+  loom_parser_t parser = {
+      .scope = &root_scope,
+  };
+  iree_arena_initialize(&block_pool_, &parser.parser_arena);
+
+  bool duplicate = true;
+  IREE_ASSERT_OK(loom_parser_scope_define(&root_scope, &parser.parser_arena,
+                                          (loom_string_id_t)1,
+                                          (loom_value_id_t)10, &duplicate));
+  EXPECT_FALSE(duplicate);
+
+  IREE_ASSERT_OK(loom_parser_scope_push(&parser, &root_scope, &parser.scope));
+  loom_parser_scope_t* first_child = parser.scope;
+  ASSERT_NE(first_child, nullptr);
+
+  IREE_ASSERT_OK(loom_parser_scope_define(parser.scope, &parser.parser_arena,
+                                          (loom_string_id_t)2,
+                                          (loom_value_id_t)20, &duplicate));
+  EXPECT_FALSE(duplicate);
+  IREE_ASSERT_OK(loom_parser_scope_define(parser.scope, &parser.parser_arena,
+                                          (loom_string_id_t)2,
+                                          (loom_value_id_t)21, &duplicate));
+  EXPECT_TRUE(duplicate);
+  IREE_ASSERT_OK(loom_parser_scope_define(parser.scope, &parser.parser_arena,
+                                          (loom_string_id_t)1,
+                                          (loom_value_id_t)11, &duplicate));
+  EXPECT_FALSE(duplicate);
+
+  EXPECT_EQ(loom_parser_scope_lookup(parser.scope, (loom_string_id_t)1),
+            (loom_value_id_t)11);
+  EXPECT_EQ(loom_parser_scope_lookup(parser.scope, (loom_string_id_t)2),
+            (loom_value_id_t)20);
+
+  IREE_ASSERT_OK(loom_parser_scope_push(&parser, parser.scope, &parser.scope));
+  EXPECT_EQ(loom_parser_scope_lookup(parser.scope, (loom_string_id_t)1),
+            (loom_value_id_t)11);
+  EXPECT_EQ(loom_parser_scope_lookup(parser.scope, (loom_string_id_t)2),
+            (loom_value_id_t)20);
+
+  loom_parser_scope_pop(&parser);
+  EXPECT_EQ(parser.scope, first_child);
+  loom_parser_scope_pop(&parser);
+  EXPECT_EQ(parser.scope, &root_scope);
+
+  IREE_ASSERT_OK(loom_parser_scope_push(&parser, &root_scope, &parser.scope));
+  EXPECT_EQ(parser.scope, first_child);
+  EXPECT_EQ(loom_parser_scope_lookup_local(parser.scope, (loom_string_id_t)1),
+            LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(loom_parser_scope_lookup_local(parser.scope, (loom_string_id_t)2),
+            LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(loom_parser_scope_lookup(parser.scope, (loom_string_id_t)1),
+            (loom_value_id_t)10);
+  loom_parser_scope_pop(&parser);
+
+  iree_arena_deinitialize(&parser.parser_arena);
+}
+
+TEST_F(ParserTest, FunctionTypeScratchAndModulePayloadAreReusedOnInternHits) {
+  static constexpr iree_host_size_t kTypeCount = 1000;
+  std::string function_type = BuildWideFunctionType(kTypeCount, kTypeCount);
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV(""), &block_pool_,
+                                      /*hints=*/nullptr,
+                                      iree_allocator_system(), &module));
+  loom_parser_scope_t root_scope = {};
+  loom_parser_t parser = {
+      .module = module,
+      .context = &context_,
+      .scope = &root_scope,
+      .definition_scope =
+          {
+              .pop_at = UINT16_MAX,
+          },
+  };
+  iree_arena_initialize(&block_pool_, &parser.parser_arena);
+
+  loom_tokenizer_initialize(
+      iree_make_string_view(function_type.data(), function_type.size()),
+      IREE_SV("test.loom"), &parser.parser_arena, &parser.tokenizer);
+
+  loom_type_t interned_type = {};
+  IREE_ASSERT_OK(
+      loom_parse_type(&parser, LOOM_TYPE_PARSE_BODY, &interned_type));
+  EXPECT_EQ(parser.error_count, 0u);
+  EXPECT_TRUE(loom_tokenizer_at(&parser.tokenizer, LOOM_TOKEN_EOF));
+  ASSERT_EQ(loom_type_kind(interned_type), LOOM_TYPE_FUNCTION);
+  const loom_func_type_data_t* interned_data =
+      loom_type_func_data(interned_type);
+  ASSERT_NE(interned_data, nullptr);
+  EXPECT_EQ(interned_data->arg_count, kTypeCount);
+  EXPECT_EQ(interned_data->result_count, kTypeCount);
+  ASSERT_NE(parser.type_list_free_list, nullptr);
+  EXPECT_GE(parser.type_list_free_list->capacity, kTypeCount * 2);
+  loom_tokenizer_deinitialize(&parser.tokenizer);
+
+  iree_host_size_t parser_allocation_size =
+      parser.parser_arena.total_allocation_size;
+  iree_host_size_t module_allocation_size = module->arena.total_allocation_size;
+
+  for (int iteration = 0; iteration < 32; ++iteration) {
+    loom_tokenizer_initialize(
+        iree_make_string_view(function_type.data(), function_type.size()),
+        IREE_SV("test.loom"), &parser.parser_arena, &parser.tokenizer);
+
+    loom_type_t type = {};
+    IREE_ASSERT_OK(loom_parse_type(&parser, LOOM_TYPE_PARSE_BODY, &type));
+    EXPECT_EQ(parser.error_count, 0u);
+    EXPECT_TRUE(loom_tokenizer_at(&parser.tokenizer, LOOM_TOKEN_EOF));
+    EXPECT_EQ(loom_type_func_data(type), interned_data);
+
+    loom_tokenizer_deinitialize(&parser.tokenizer);
+    EXPECT_EQ(parser.parser_arena.total_allocation_size,
+              parser_allocation_size);
+    EXPECT_EQ(module->arena.total_allocation_size, module_allocation_size);
+  }
+
+  iree_arena_deinitialize(&parser.parser_arena);
+  loom_module_free(module);
+}
+
 //===----------------------------------------------------------------------===//
 // Valid parse — no diagnostics
 //===----------------------------------------------------------------------===//
@@ -314,6 +549,89 @@ TEST_F(ParserTest, ConstantNegative) {
 TEST_F(ParserTest, ConstantZero) {
   std::string text = RoundTrip("%c = test.constant 0 : index\n");
   EXPECT_NE(text.find("test.constant 0 : index"), std::string::npos);
+}
+
+TEST_F(ParserTest, FunctionTypeConstantSupportsThousandArgsAndResults) {
+  static constexpr iree_host_size_t kTypeCount = 1000;
+  std::string function_type = BuildWideFunctionType(kTypeCount, kTypeCount);
+  std::string source;
+  source.reserve(function_type.size() * 2 + 64);
+  source.append("%fn0 = test.constant 0 : ");
+  source.append(function_type);
+  source.push_back('\n');
+  source.append("%fn1 = test.constant 0 : ");
+  source.append(function_type);
+  source.push_back('\n');
+
+  loom_module_t* module = ParseOk(source.c_str());
+  ASSERT_NE(module, nullptr);
+
+  loom_block_t* block = loom_module_block(module);
+  ASSERT_NE(block, nullptr);
+  ASSERT_EQ(block->op_count, 2u);
+
+  loom_type_t first_type = loom_module_value_type(
+      module, loom_test_constant_result(loom_block_op(block, 0)));
+  loom_type_t second_type = loom_module_value_type(
+      module, loom_test_constant_result(loom_block_op(block, 1)));
+  ASSERT_EQ(loom_type_kind(first_type), LOOM_TYPE_FUNCTION);
+  ASSERT_EQ(loom_type_kind(second_type), LOOM_TYPE_FUNCTION);
+
+  const loom_func_type_data_t* first_data = loom_type_func_data(first_type);
+  const loom_func_type_data_t* second_data = loom_type_func_data(second_type);
+  ASSERT_NE(first_data, nullptr);
+  ASSERT_NE(second_data, nullptr);
+  EXPECT_EQ(first_data, second_data)
+      << "identical parsed function types should dedupe in the module interner";
+  EXPECT_EQ(first_data->arg_count, kTypeCount);
+  EXPECT_EQ(first_data->result_count, kTypeCount);
+  for (iree_host_size_t i = 0; i < kTypeCount * 2; ++i) {
+    EXPECT_EQ(loom_type_kind(first_data->types[i]), LOOM_TYPE_SCALAR);
+    EXPECT_EQ(loom_type_element_type(first_data->types[i]),
+              LOOM_SCALAR_TYPE_I32);
+  }
+
+  std::string printed = PrintModule(module);
+  EXPECT_NE(printed.find("%fn0 = test.constant 0 : " + function_type),
+            std::string::npos);
+  EXPECT_NE(printed.find("%fn1 = test.constant 0 : " + function_type),
+            std::string::npos);
+
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, FuncDefSupportsThousandArgsAndResults) {
+  static constexpr iree_host_size_t kTypeCount = 1000;
+  std::string source = BuildWideFuncDefSource(kTypeCount, kTypeCount);
+
+  loom_module_t* module = ParseOk(source.c_str());
+  ASSERT_NE(module, nullptr);
+
+  loom_op_t* func_op = GetFirstFunctionOp(module);
+  ASSERT_NE(func_op, nullptr);
+  ASSERT_TRUE(loom_func_def_isa(func_op));
+  EXPECT_EQ(func_op->result_count, kTypeCount);
+
+  loom_region_t* body_region = loom_func_def_body(func_op);
+  ASSERT_NE(body_region, nullptr);
+  loom_block_t* entry_block = GetEntryBlock(body_region);
+  ASSERT_NE(entry_block, nullptr);
+  EXPECT_EQ(entry_block->arg_count, kTypeCount);
+  ASSERT_EQ(entry_block->op_count, 1u);
+
+  loom_op_t* return_op = loom_block_op(entry_block, 0);
+  ASSERT_TRUE(loom_func_return_isa(return_op));
+  EXPECT_EQ(return_op->operand_count, kTypeCount);
+  for (iree_host_size_t i = 0; i < kTypeCount; ++i) {
+    EXPECT_EQ(loom_module_value_type(module, entry_block->arg_ids[i]).header,
+              loom_type_scalar(LOOM_SCALAR_TYPE_I32).header);
+    EXPECT_EQ(
+        loom_module_value_type(module, loom_op_results(func_op)[i]).header,
+        loom_type_scalar(LOOM_SCALAR_TYPE_I32).header);
+    EXPECT_EQ(loom_op_operands(return_op)[i], entry_block->arg_ids[i]);
+  }
+
+  loom_module_free(module);
 }
 
 TEST_F(ParserTest, AttrDictStringEscapesRoundTripDecodedPayload) {
@@ -378,7 +696,7 @@ TEST_F(ParserTest, AttrDictEmptyArrayPayloadIsCanonical) {
   loom_module_free(module);
 }
 
-TEST_F(ParserTest, EmptyPredicateListPayloadIsCanonical) {
+TEST_F(ParserTest, EmptyPredicateListPayloadRoundTripsExplicitly) {
   loom_module_t* module = ParseOk(
       "%x = test.constant 0 : index\n"
       "%y = test.assume %x [] : index\n");
@@ -398,11 +716,8 @@ TEST_F(ParserTest, EmptyPredicateListPayloadIsCanonical) {
   EXPECT_EQ(predicates.predicate_list, nullptr);
 
   std::string text = PrintModule(module);
-  EXPECT_NE(text.find("test.assume %x : index"), std::string::npos)
-      << "empty optional predicate lists should elide to canonical text: "
-      << text;
-  EXPECT_EQ(text.find("test.assume %x [] : index"), std::string::npos)
-      << "printer should not preserve empty predicate-list source spelling: "
+  EXPECT_NE(text.find("test.assume %x [] : index"), std::string::npos)
+      << "explicit empty predicate lists should round-trip canonically: "
       << text;
   loom_module_free(module);
 }
@@ -906,6 +1221,64 @@ TEST_F(ParserTest, UnexpectedStringTokenEscapesDecodedPayload) {
   EXPECT_EQ(diagnostics[0].origin_end_column, 19u);
 }
 
+TEST_F(ParserTest, UnterminatedStringReportsTokenizerDiagnostic) {
+  const auto& diagnostics = ParseExpectErrors("\"unterminated");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_005);
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 2u);
+}
+
+TEST_F(ParserTest, InvalidStringEscapeRecoversToNextSiblingOp) {
+  const auto& diagnostics = ParseExpectErrors(
+      "\"\\x\"\n"
+      "%r = bogus.nonexistent %x : i32\n");
+  ASSERT_GE(diagnostics.size(), 2u);
+  ExpectError(diagnostics[0], &loom_err_parse_023);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "unknown escape sequence");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 2u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 4u);
+
+  const CapturedDiagnostic* unknown_op =
+      FindDiagnostic(capture_, &loom_err_parse_006);
+  ASSERT_NE(unknown_op, nullptr);
+  EXPECT_EQ(GetStringParam(*unknown_op, 0), "bogus.nonexistent");
+  EXPECT_EQ(unknown_op->origin_line, 2u);
+  EXPECT_EQ(unknown_op->origin_column, 6u);
+}
+
+TEST_F(ParserTest, BareHashReportsTokenizerDiagnostic) {
+  const auto& diagnostics = ParseExpectErrors("#\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_024);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "#");
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 2u);
+}
+
+TEST_F(ParserTest, UnexpectedCharacterReportsTokenizerDiagnostic) {
+  const auto& diagnostics = ParseExpectErrors("~\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_025);
+  EXPECT_EQ(diagnostics[0].params.size(), 0u);
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 2u);
+}
+
+TEST_F(ParserTest, InvalidUtf8ReportsTokenizerDiagnostic) {
+  const auto& diagnostics = ParseExpectErrors("\x80\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_019);
+  ExpectU32Param(diagnostics[0], 0, 0u);
+  EXPECT_EQ(diagnostics[0].origin_line, 1u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 2u);
+}
+
 TEST_F(ParserTest, UnexpectedBlockLabelTokenRendersSigilAndSpan) {
   const auto& diagnostics = ParseExpectErrors("^bb\n");
   ASSERT_GE(diagnostics.size(), 1u);
@@ -1132,6 +1505,15 @@ TEST_F(ParserTest, DuplicateAttrDictKey) {
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 32u);
   EXPECT_EQ(diagnostics[0].origin_end_column, 37u);
+  ASSERT_EQ(diagnostics[0].related_locations.size(), 1u);
+  const auto& previous_key_note = diagnostics[0].related_locations[0];
+  EXPECT_EQ(previous_key_note.label, "previously defined here");
+  EXPECT_TRUE(previous_key_note.has_source_range);
+  EXPECT_EQ(previous_key_note.source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(previous_key_note.source_location.start_line, 2u);
+  EXPECT_EQ(previous_key_note.source_location.start_column, 21u);
+  EXPECT_EQ(previous_key_note.source_location.end_column, 26u);
 }
 
 TEST_F(ParserTest, DuplicateNestedAttrDictKey) {
@@ -1144,6 +1526,15 @@ TEST_F(ParserTest, DuplicateNestedAttrDictKey) {
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 41u);
   EXPECT_EQ(diagnostics[0].origin_end_column, 45u);
+  ASSERT_EQ(diagnostics[0].related_locations.size(), 1u);
+  const auto& previous_key_note = diagnostics[0].related_locations[0];
+  EXPECT_EQ(previous_key_note.label, "previously defined here");
+  EXPECT_TRUE(previous_key_note.has_source_range);
+  EXPECT_EQ(previous_key_note.source_location.provenance,
+            LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
+  EXPECT_EQ(previous_key_note.source_location.start_line, 2u);
+  EXPECT_EQ(previous_key_note.source_location.start_column, 31u);
+  EXPECT_EQ(previous_key_note.source_location.end_column, 35u);
 }
 
 TEST_F(ParserTest, AttrDictTooDeep) {
@@ -1356,6 +1747,162 @@ TEST_F(ParserTest, DuplicateEncodingAliasDefinitionFails) {
 }
 
 //===----------------------------------------------------------------------===//
+// Location annotations
+//===----------------------------------------------------------------------===//
+
+TEST_F(ParserTest, TrailingFileLocationOverridesParserSourceFallback) {
+  loom_module_t* module = ParseOk(
+      "%c = test.constant 42 : i32 "
+      "loc(\"model \\\"main\\\"\\\\v2\\n.loom\":42:3 to 42:58)\n");
+  ASSERT_NE(module, nullptr);
+  ASSERT_EQ(context_.sources.count, 2u);
+
+  const loom_block_t* body = loom_module_block(module);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(body->op_count, 1u);
+  const loom_op_t* op = loom_block_const_op(body, 0);
+  ASSERT_NE(op, nullptr);
+  ASSERT_NE(op->location, LOOM_LOCATION_UNKNOWN);
+  ASSERT_LT(op->location, module->locations.count);
+
+  const loom_location_entry_t& location =
+      module->locations.entries[op->location];
+  ASSERT_EQ(location.kind, LOOM_LOCATION_FILE);
+  ASSERT_LT(location.file.source_id, context_.sources.count);
+  EXPECT_TRUE(iree_string_view_equal(context_.sources.entries[0],
+                                     IREE_SV("test.loom")));
+  EXPECT_TRUE(
+      iree_string_view_equal(context_.sources.entries[location.file.source_id],
+                             IREE_SV("model \"main\"\\v2\n.loom")));
+  EXPECT_EQ(location.file.start_line, 42u);
+  EXPECT_EQ(location.file.start_col, 3u);
+  EXPECT_EQ(location.file.end_line, 42u);
+  EXPECT_EQ(location.file.end_col, 58u);
+
+  EXPECT_EQ(
+      PrintModule(module, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS),
+      "%c = test.constant 42 : i32 "
+      "loc(\"model \\\"main\\\"\\\\v2\\n.loom\":42:3 to 42:58)\n");
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, TrailingLocationsReuseSourceIds) {
+  loom_module_t* module = ParseOk(
+      "%c0 = test.constant 1 : i32 loc(\"model.loom\":7:8)\n"
+      "%c1 = test.constant 2 : i32 loc(\"model.loom\":9:10)\n");
+  ASSERT_NE(module, nullptr);
+  ASSERT_EQ(context_.sources.count, 2u);
+
+  const loom_block_t* body = loom_module_block(module);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(body->op_count, 2u);
+  const loom_op_t* first_op = loom_block_const_op(body, 0);
+  const loom_op_t* second_op = loom_block_const_op(body, 1);
+  ASSERT_LT(first_op->location, module->locations.count);
+  ASSERT_LT(second_op->location, module->locations.count);
+
+  const loom_location_entry_t& first_location =
+      module->locations.entries[first_op->location];
+  const loom_location_entry_t& second_location =
+      module->locations.entries[second_op->location];
+  ASSERT_EQ(first_location.kind, LOOM_LOCATION_FILE);
+  ASSERT_EQ(second_location.kind, LOOM_LOCATION_FILE);
+  EXPECT_EQ(first_location.file.source_id, second_location.file.source_id);
+  EXPECT_TRUE(iree_string_view_equal(
+      context_.sources.entries[first_location.file.source_id],
+      IREE_SV("model.loom")));
+
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, TrailingFusedAndOpaqueLocationsRoundTrip) {
+  std::string text = RoundTrip(
+      "%c = test.constant 42 : i32 "
+      "loc(fused<\"jax.py\":7:8, "
+      "fused<\"recipe.loom\":1:2 to 3:4, "
+      "opaque<\"torch\", \"node\\n42\">>>)\n",
+      LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_EQ(text,
+            "%c = test.constant 42 : i32 "
+            "loc(fused<\"jax.py\":7:8, "
+            "fused<\"recipe.loom\":1:2 to 3:4, "
+            "opaque<\"torch\", \"node\\n42\">>>)\n");
+}
+
+TEST_F(ParserTest, FallbackParserLocationPrintedWhenNoExplicitLoc) {
+  loom_module_t* module = ParseOk("%c = test.constant 42 : i32\n");
+  ASSERT_NE(module, nullptr);
+
+  const loom_block_t* body = loom_module_block(module);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(body->op_count, 1u);
+  const loom_op_t* op = loom_block_const_op(body, 0);
+  ASSERT_NE(op, nullptr);
+  ASSERT_NE(op->location, LOOM_LOCATION_UNKNOWN);
+  ASSERT_LT(op->location, module->locations.count);
+
+  const loom_location_entry_t& location =
+      module->locations.entries[op->location];
+  ASSERT_EQ(location.kind, LOOM_LOCATION_FILE);
+  EXPECT_TRUE(iree_string_view_equal(
+      context_.sources.entries[location.file.source_id], IREE_SV("test.loom")));
+  EXPECT_EQ(location.file.start_line, 1u);
+  EXPECT_EQ(location.file.start_col, 1u);
+
+  EXPECT_NE(
+      PrintModule(module, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS)
+          .find("loc(\"test.loom\":1:1 to "),
+      std::string::npos);
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, TrailingLocationRejectsUnknownBodyKeyword) {
+  const auto& diagnostics =
+      ParseExpectErrors("%c = test.constant 42 : i32 loc(mystery<\"x\">)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_011);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
+            "expected a file location string, 'fused', or 'opaque'");
+}
+
+TEST_F(ParserTest, TrailingLocationRejectsOutOfRangeCoordinates) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 42 : i32 loc(\"model.loom\":65536:1)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_011);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
+            "line/column must be an integer in [0, 65535]");
+}
+
+TEST_F(ParserTest, TrailingLocationRejectsMissingRangeEndColumn) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 42 : i32 loc(\"model.loom\":1:2 to 3)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), ")");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1), "':'");
+}
+
+TEST_F(ParserTest, TrailingLocationRejectsRangeEndLineName) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 42 : i32 loc(\"model.loom\":1:2 to end:4)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "end");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1), "integer");
+}
+
+TEST_F(ParserTest, TrailingFusedLocationRejectsMissingRangeEndColumn) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%c = test.constant 42 : i32 "
+      "loc(fused<\"model.loom\":1:2 to 3>)\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), ">");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1), "':'");
+}
+
+//===----------------------------------------------------------------------===//
 // Error location
 //===----------------------------------------------------------------------===//
 
@@ -1482,6 +2029,30 @@ TEST_F(ParserTest, MaxErrorsLimit) {
       << "Expected ERR_PARSE_012 (too many errors)";
 
   // Total error count should not exceed max_errors + 1 (the "too many" itself).
+  EXPECT_LE(capture_.diagnostics.size(), 6u + 1u);
+}
+
+TEST_F(ParserTest, TokenizerDiagnosticsRespectMaxErrorsLimit) {
+  std::string source;
+  for (int i = 0; i < 25; ++i) {
+    source += "#\n";
+  }
+
+  capture_.Reset();
+  loom_text_parse_options_t options;
+  memset(&options, 0, sizeof(options));
+  options.diagnostic_sink = capture_.sink();
+  options.max_errors = 5;
+
+  loom_module_t* module = nullptr;
+  IREE_EXPECT_OK(loom_text_parse(iree_make_cstring_view(source.c_str()),
+                                 iree_make_cstring_view("test.loom"), &context_,
+                                 &block_pool_, &options, &module));
+  EXPECT_EQ(module, nullptr);
+
+  ASSERT_GE(capture_.diagnostics.size(), 2u);
+  ExpectError(capture_.diagnostics[0], &loom_err_parse_024);
+  EXPECT_NE(FindDiagnostic(capture_, &loom_err_parse_012), nullptr);
   EXPECT_LE(capture_.diagnostics.size(), 6u + 1u);
 }
 

@@ -84,6 +84,22 @@ static void loom_print_did_write(loom_print_context_t* ctx) {
   ctx->last_char = ' ';
 }
 
+static iree_host_size_t loom_print_next_token_start_offset(
+    const loom_print_context_t* ctx, bool glue, char first_char) {
+  bool suppress_space = glue || ctx->glue_next || !ctx->has_previous_token ||
+                        loom_is_backward_glue(first_char) ||
+                        loom_is_forward_glue(ctx->last_char);
+  return ctx->stream->offset + (suppress_space ? 0 : 1);
+}
+
+static void loom_print_report_field(loom_print_context_t* ctx,
+                                    loom_print_field_ref_t field_ref,
+                                    iree_host_size_t start,
+                                    iree_host_size_t end) {
+  if (!ctx->field_callback.fn) return;
+  ctx->field_callback.fn(ctx->field_callback.user_data, field_ref, start, end);
+}
+
 // Writes indentation spaces directly to the stream.
 static const char SPACES[] = "                                ";
 static iree_status_t loom_print_indent(loom_print_context_t* ctx) {
@@ -434,13 +450,20 @@ static iree_status_t loom_text_print_result_type(loom_type_t type,
 // Location printing — writes directly to stream
 //===----------------------------------------------------------------------===//
 
-// Prints a location annotation for an op. Emits nothing for
-// LOOM_LOCATION_UNKNOWN (0). For all other locations, emits a
-// trailing loc(...) annotation.
-static iree_status_t loom_print_location(loom_output_stream_t* stream,
-                                         const loom_module_t* module,
-                                         loom_location_id_t location_id) {
-  if (location_id == LOOM_LOCATION_UNKNOWN) return iree_ok_status();
+static iree_status_t loom_print_location_source(
+    const loom_module_t* module, loom_source_id_t source_id,
+    iree_string_view_t* out_source) {
+  if (!module->context || source_id >= module->context->sources.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "location source_id %u out of range", source_id);
+  }
+  *out_source = module->context->sources.entries[source_id];
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_location_body(loom_output_stream_t* stream,
+                                              const loom_module_t* module,
+                                              loom_location_id_t location_id) {
   if (location_id >= module->locations.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "location_id %u out of range (module has %" PRIhsz
@@ -452,72 +475,69 @@ static iree_status_t loom_print_location(loom_output_stream_t* stream,
     case LOOM_LOCATION_NONE:
       return iree_ok_status();
     case LOOM_LOCATION_FILE: {
-      iree_string_view_t source = IREE_SV("?");
-      if (module->context &&
-          entry->file.source_id < module->context->sources.count) {
-        source = module->context->sources.entries[entry->file.source_id];
-      }
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " loc("));
+      iree_string_view_t source = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(
+          loom_print_location_source(module, entry->file.source_id, &source));
       IREE_RETURN_IF_ERROR(loom_print_string_literal(stream, source));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          stream, ":%u:%u to %u:%u)", entry->file.start_line,
-          entry->file.start_col, entry->file.end_line, entry->file.end_col));
+          stream, ":%u:%u", entry->file.start_line, entry->file.start_col));
+      if (entry->file.end_line != entry->file.start_line ||
+          entry->file.end_col != entry->file.start_col) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            stream, " to %u:%u", entry->file.end_line, entry->file.end_col));
+      }
       return iree_ok_status();
     }
     case LOOM_LOCATION_FUSED: {
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(stream, " loc(fused<"));
+      if (entry->fused.count > 0 && !entry->fused.children) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "fused location has count %u but NULL children",
+                                entry->fused.count);
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "fused<"));
       for (uint32_t i = 0; i < entry->fused.count; ++i) {
         if (i > 0) {
           IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
         }
-        // Recursively print each child location (without the leading " loc(").
-        loom_location_id_t child_id = entry->fused.children[i];
-        if (child_id < module->locations.count) {
-          const loom_location_entry_t* child =
-              &module->locations.entries[child_id];
-          if (child->kind == LOOM_LOCATION_FILE) {
-            iree_string_view_t source = IREE_SV("?");
-            if (module->context &&
-                child->file.source_id < module->context->sources.count) {
-              source = module->context->sources.entries[child->file.source_id];
-            }
-            IREE_RETURN_IF_ERROR(loom_print_string_literal(stream, source));
-            IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-                stream, ":%u:%u", child->file.start_line,
-                child->file.start_col));
-          }
-        }
+        IREE_RETURN_IF_ERROR(
+            loom_print_location_body(stream, module, entry->fused.children[i]));
       }
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ">)"));
-      return iree_ok_status();
+      return loom_output_stream_write_char(stream, '>');
     }
     case LOOM_LOCATION_OPAQUE: {
-      iree_string_view_t tag = IREE_SV("?");
-      if (module->context &&
-          entry->opaque.source_id < module->context->sources.count) {
-        tag = module->context->sources.entries[entry->opaque.source_id];
-      }
+      iree_string_view_t tag = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(
+          loom_print_location_source(module, entry->opaque.source_id, &tag));
       if (entry->opaque.data_length > 0 && !entry->opaque.data) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,
             "opaque location has data_length %u but NULL data",
             entry->opaque.data_length);
       }
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(stream, " loc(opaque<"));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "opaque<"));
       IREE_RETURN_IF_ERROR(loom_print_string_literal(stream, tag));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
       IREE_RETURN_IF_ERROR(loom_print_string_literal(
           stream, iree_make_string_view((const char*)entry->opaque.data,
                                         entry->opaque.data_length)));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ">)"));
-      return iree_ok_status();
+      return loom_output_stream_write_char(stream, '>');
     }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown location kind %d", (int)entry->kind);
   }
+}
+
+// Prints a location annotation for an op. Emits nothing for
+// LOOM_LOCATION_UNKNOWN (0). For all other locations, emits a
+// trailing loc(...) annotation.
+static iree_status_t loom_print_location(loom_output_stream_t* stream,
+                                         const loom_module_t* module,
+                                         loom_location_id_t location_id) {
+  if (location_id == LOOM_LOCATION_UNKNOWN) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " loc("));
+  IREE_RETURN_IF_ERROR(loom_print_location_body(stream, module, location_id));
+  return loom_output_stream_write_char(stream, ')');
 }
 
 //===----------------------------------------------------------------------===//
@@ -699,6 +719,11 @@ static iree_status_t loom_print_predicate_arg(loom_print_context_t* ctx,
 static iree_status_t loom_print_predicate_list(
     loom_print_context_t* ctx, const loom_predicate_t* predicates,
     uint16_t count) {
+  if (count > 0 && !predicates) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "predicate list has count %u but NULL predicates",
+                            count);
+  }
   IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "[", false));
   for (uint16_t i = 0; i < count; ++i) {
     if (i > 0) {
@@ -731,6 +756,34 @@ static iree_status_t loom_print_predicate_list(
   return iree_ok_status();
 }
 
+static bool loom_print_optional_attr_present(const loom_op_vtable_t* vtable,
+                                             const loom_op_t* op,
+                                             uint16_t attr_index) {
+  if (attr_index >= op->attribute_count) return false;
+  loom_attribute_t attr = loom_op_attrs(op)[attr_index];
+  if (loom_attr_is_absent(attr)) return false;
+  if (!vtable->attr_descriptors || attr_index >= vtable->attribute_count ||
+      !iree_any_bit_set(vtable->attr_descriptors[attr_index].flags,
+                        LOOM_ATTR_OPTIONAL)) {
+    return true;
+  }
+  switch ((loom_attr_kind_t)attr.kind) {
+    case LOOM_ATTR_DICT:
+    case LOOM_ATTR_I64_ARRAY:
+    case LOOM_ATTR_PREDICATE_LIST:
+      return attr.count > 0;
+    default:
+      return true;
+  }
+}
+
+static bool loom_print_attr_is_optional(const loom_op_vtable_t* vtable,
+                                        uint16_t attr_index) {
+  return vtable->attr_descriptors && attr_index < vtable->attribute_count &&
+         iree_any_bit_set(vtable->attr_descriptors[attr_index].flags,
+                          LOOM_ATTR_OPTIONAL);
+}
+
 //===----------------------------------------------------------------------===//
 // Format element walk — writes directly to stream via print context
 //===----------------------------------------------------------------------===//
@@ -757,17 +810,28 @@ static iree_status_t loom_print_value_name(loom_print_context_t* ctx,
 // the token length to get the true token start.
 static iree_status_t loom_print_value_name_with_field(
     loom_print_context_t* ctx, loom_value_id_t value_id,
-    loom_field_ref_t field_ref) {
+    loom_print_field_ref_t field_ref) {
   char buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
   iree_string_view_t name =
       loom_resolve_value_name(ctx->module, value_id, buffer, sizeof(buffer));
   IREE_RETURN_IF_ERROR(loom_print_emit(ctx, name, false));
-  if (ctx->field_callback.fn) {
-    iree_host_size_t end = ctx->stream->offset;
-    iree_host_size_t start = end - name.size;
-    ctx->field_callback.fn(ctx->field_callback.user_data, field_ref, start,
-                           end);
-  }
+  iree_host_size_t end = ctx->stream->offset;
+  iree_host_size_t start = end - name.size;
+  loom_print_report_field(ctx, field_ref, start, end);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_attr_with_field(
+    loom_print_context_t* ctx, const loom_attribute_t* attr,
+    const loom_attr_descriptor_t* descriptor,
+    loom_print_field_ref_t field_ref) {
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  iree_host_size_t start = ctx->stream->offset;
+  IREE_RETURN_IF_ERROR(
+      loom_print_attr(ctx->stream, attr, ctx->module, descriptor));
+  iree_host_size_t end = ctx->stream->offset;
+  loom_print_did_write(ctx);
+  loom_print_report_field(ctx, field_ref, start, end);
   return iree_ok_status();
 }
 
@@ -882,7 +946,8 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         }
         IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
             ctx, value_id,
-            LOOM_FIELD_REF(LOOM_FIELD_OPERAND, element->field_index)));
+            loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND,
+                                 element->field_index)));
         break;
       }
       case LOOM_FORMAT_KIND_OPERAND_REFS: {
@@ -893,7 +958,8 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
             IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
           }
           IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
-              ctx, operands[j], LOOM_FIELD_REF(LOOM_FIELD_OPERAND, j)));
+              ctx, operands[j],
+              loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, j)));
         }
         break;
       }
@@ -905,16 +971,14 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               "attributes)",
               element->field_index, op->attribute_count);
         }
-        IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
         const loom_attr_descriptor_t* descriptor =
             (vtable->attr_descriptors &&
              element->field_index < vtable->attribute_count)
                 ? &vtable->attr_descriptors[element->field_index]
                 : NULL;
-        IREE_RETURN_IF_ERROR(loom_print_attr(
-            ctx->stream, &loom_op_attrs(op)[element->field_index], ctx->module,
-            descriptor));
-        loom_print_did_write(ctx);
+        IREE_RETURN_IF_ERROR(loom_print_attr_with_field(
+            ctx, &loom_op_attrs(op)[element->field_index], descriptor,
+            loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index)));
         break;
       }
       case LOOM_FORMAT_KIND_SYMBOL_REF: {
@@ -925,11 +989,9 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               "attributes)",
               element->field_index, op->attribute_count);
         }
-        IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-        IREE_RETURN_IF_ERROR(loom_print_attr(
-            ctx->stream, &loom_op_attrs(op)[element->field_index], ctx->module,
-            NULL));
-        loom_print_did_write(ctx);
+        IREE_RETURN_IF_ERROR(loom_print_attr_with_field(
+            ctx, &loom_op_attrs(op)[element->field_index], NULL,
+            loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index)));
         break;
       }
       case LOOM_FORMAT_KIND_OPERAND_TYPE: {
@@ -1071,6 +1133,7 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         const loom_region_descriptor_t* region_descriptor =
             &vtable->region_descriptors[element->field_index];
         IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+        iree_host_size_t region_start = ctx->stream->offset;
         if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
           // Declaration mode: print empty braces placeholder.
           IREE_RETURN_IF_ERROR(
@@ -1091,6 +1154,10 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         ctx->has_previous_token = true;
         ctx->last_char = '}';
         ctx->glue_next = false;
+        loom_print_report_field(
+            ctx,
+            loom_print_field_ref(LOOM_PRINT_FIELD_REGION, element->field_index),
+            region_start, ctx->stream->offset);
         break;
       }
       case LOOM_FORMAT_KIND_INDEX_LIST: {
@@ -1120,8 +1187,9 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
                   "%u operands)",
                   operand_index, op->operand_count);
             }
-            IREE_RETURN_IF_ERROR(
-                loom_print_value_name(ctx, operands[operand_index]));
+            IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
+                ctx, operands[operand_index],
+                loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index)));
           } else {
             IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
             IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
@@ -1168,7 +1236,10 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
           }
           IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "=", false));
           // Operand name.
-          IREE_RETURN_IF_ERROR(loom_print_value_name(ctx, operands[start + j]));
+          IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
+              ctx, operands[start + j],
+              loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND,
+                                   (uint16_t)(start + j))));
           IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", false));
           // Operand type.
           IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
@@ -1188,7 +1259,15 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
           if (j > 0) {
             IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
           }
-          IREE_RETURN_IF_ERROR(loom_print_value_name(ctx, arg_ids[j]));
+          bool args_as_operands =
+              vtable->func_like && vtable->func_like->args_as_operands;
+          if (args_as_operands) {
+            IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
+                ctx, arg_ids[j],
+                loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, j)));
+          } else {
+            IREE_RETURN_IF_ERROR(loom_print_value_name(ctx, arg_ids[j]));
+          }
           IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", true));
           IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
           IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, arg_ids[j]));
@@ -1200,6 +1279,8 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
       case LOOM_FORMAT_KIND_ATTR_DICT: {
         // AttrDict reads a LOOM_ATTR_DICT attribute at field_index and
         // emits its entries as {key = value, key = value, ...}.
+        bool optional =
+            loom_print_attr_is_optional(vtable, element->field_index);
         if (element->field_index >= op->attribute_count) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
@@ -1208,12 +1289,22 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               element->field_index, op->attribute_count);
         }
         loom_attribute_t dict_attr = loom_op_attrs(op)[element->field_index];
-        if (dict_attr.kind == LOOM_ATTR_DICT && dict_attr.count > 0) {
-          IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-          IREE_RETURN_IF_ERROR(
-              loom_print_attr(ctx->stream, &dict_attr, ctx->module, NULL));
-          loom_print_did_write(ctx);
+        if (loom_attr_is_absent(dict_attr)) {
+          if (optional) break;
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "format ATTR_DICT field_index %u is absent",
+                                  element->field_index);
         }
+        if (dict_attr.kind != LOOM_ATTR_DICT) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "format ATTR_DICT field_index %u expected DICT attr but found %d",
+              element->field_index, (int)dict_attr.kind);
+        }
+        if (optional && dict_attr.count == 0) break;
+        IREE_RETURN_IF_ERROR(loom_print_attr_with_field(
+            ctx, &dict_attr, NULL,
+            loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index)));
         break;
       }
       case LOOM_FORMAT_KIND_PREDICATE_LIST: {
@@ -1225,9 +1316,21 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               element->field_index, op->attribute_count);
         }
         loom_attribute_t attr = loom_op_attrs(op)[element->field_index];
-        if (attr.kind == LOOM_ATTR_PREDICATE_LIST && attr.predicate_list) {
+        if (attr.kind == LOOM_ATTR_PREDICATE_LIST) {
+          if (attr.count > 0 && !attr.predicate_list) {
+            return iree_make_status(
+                IREE_STATUS_INVALID_ARGUMENT,
+                "PREDICATE_LIST attr has count %u but NULL predicates",
+                attr.count);
+          }
+          iree_host_size_t predicate_start =
+              loom_print_next_token_start_offset(ctx, false, '[');
           IREE_RETURN_IF_ERROR(
               loom_print_predicate_list(ctx, attr.predicate_list, attr.count));
+          loom_print_report_field(
+              ctx,
+              loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index),
+              predicate_start, ctx->stream->offset);
         }
         break;
       }
@@ -1274,10 +1377,15 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
             attr.string_id < ctx->module->strings.count) {
           iree_string_view_t op_name =
               ctx->module->strings.entries[attr.string_id];
+          iree_host_size_t op_ref_start = ctx->stream->offset;
           IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "<", true));
           IREE_RETURN_IF_ERROR(loom_print_emit(ctx, op_name, true));
           IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ">", true));
           loom_print_did_write(ctx);
+          loom_print_report_field(
+              ctx,
+              loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index),
+              op_ref_start, ctx->stream->offset);
         }
         break;
       }
@@ -1293,8 +1401,8 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
             present = op->operand_count > vtable->fixed_operand_count;
             break;
           case LOOM_ANCHOR_ATTR:
-            present = element->field_index < op->attribute_count &&
-                      loom_op_attrs(op)[element->field_index].raw != 0;
+            present = loom_print_optional_attr_present(vtable, op,
+                                                       element->field_index);
             break;
           case LOOM_ANCHOR_REGION: {
             if (element->field_index < op->region_count) {
@@ -1355,7 +1463,7 @@ static iree_status_t loom_print_op(loom_print_context_t* ctx,
       if (j > 0) status = loom_print_emit_cstr(ctx, ",", false);
       if (iree_status_is_ok(status)) {
         status = loom_print_value_name_with_field(
-            ctx, results[j], LOOM_FIELD_REF(LOOM_FIELD_RESULT, j));
+            ctx, results[j], loom_print_field_ref(LOOM_PRINT_FIELD_RESULT, j));
       }
     }
     if (iree_status_is_ok(status)) {

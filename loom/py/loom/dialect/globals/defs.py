@@ -16,9 +16,10 @@ Body ops (inside function/template bodies):
   global.load      — Load value + dynamic dims/encoding from global.
   global.store     — Store value + dynamic dims/encoding to global.
 
-Globals are always module-private. Cross-module global references
-would require a global.def/global.decl split (like func.def/func.decl)
-with import semantics — future work.
+Global definitions are module-private today. If we need externally stored
+read-only blobs or target artifacts, model those as additional global-defining
+ops (for example `global.rodata`) instead of introducing a separate executable
+symbol object before the target pipeline proves one is necessary.
 
 Design document: .notes/loom/globals.md
 """
@@ -26,6 +27,8 @@ Design document: .notes/loom/globals.md
 from loom.assembly import (
     COLON,
     COMMA,
+    EQUALS,
+    Attr,
     OptionalGroup,
     PredicateList,
     Ref,
@@ -64,24 +67,26 @@ global_constant = Op(
     "global.constant",
     group=global_ops,
     doc=(
-        "Immutable global value. May have an inline initial value, a resource "
-        "reference, or be initialized by an initializer function. After "
-        "initialization, never written. Named type variables in the type "
-        "annotation express structural constraints. Predicates constrain "
-        "dynamic dimensions and are propagated to every load site as value "
-        "facts."
+        "Immutable global value with an optional inline scalar initializer. "
+        "Declaration-local dim/encoding names in the type annotation express "
+        "structural constraints. Predicates constrain dynamic dimensions and "
+        "are propagated to every load site as value facts. Non-scalar or "
+        "computed initialization is modeled by global.store in initializer "
+        "functions; resource-backed rodata should become a dedicated "
+        "global-defining op instead of overloading inline attrs."
     ),
     traits=[SYMBOL_DEFINE],
     attrs=[
-        AttrDef("callee", "symbol"),
+        AttrDef("symbol", "symbol"),
         AttrDef("predicates", "predicate_list", optional=True),
+        AttrDef("initializer", "any", optional=True),
     ],
     # Single result carries the global's type. SYMBOL_DEFINE suppresses
     # the %name = prefix, so no SSA value is printed — just the type
     # after the colon.
     results=[Result("type", ANY)],
     format=[
-        SymbolRef("callee"),
+        SymbolRef("symbol"),
         COLON,
         Scope(
             [
@@ -92,11 +97,15 @@ global_constant = Op(
                 ),
             ]
         ),
+        OptionalGroup(
+            [EQUALS, Attr("initializer")],
+            anchor="initializer",
+        ),
     ],
+    verify="loom_global_constant_verify",
     examples=[
-        "global.constant @pi : f32",
+        "global.constant @pi : f32 = 3.14159265358979",
         "global.constant @weights : tile<[%m]x[%k]xf32> where [mul(%m, 16)]",
-        "global.constant @derived : tile<16x32xf32>",
     ],
 )
 
@@ -107,15 +116,21 @@ global_constant = Op(
 global_variable = Op(
     "global.variable",
     group=global_ops,
-    doc=("Mutable global value. Can be stored from any function at any time. Named type variables and predicates work the same as global.constant."),
+    doc=(
+        "Mutable global value with an optional inline scalar default "
+        "initializer. Can be stored from any function at any time. "
+        "Declaration-local dim/encoding names and predicates work the same as "
+        "global.constant."
+    ),
     traits=[SYMBOL_DEFINE],
     attrs=[
-        AttrDef("callee", "symbol"),
+        AttrDef("symbol", "symbol"),
         AttrDef("predicates", "predicate_list", optional=True),
+        AttrDef("initializer", "any", optional=True),
     ],
     results=[Result("type", ANY)],
     format=[
-        SymbolRef("callee"),
+        SymbolRef("symbol"),
         COLON,
         Scope(
             [
@@ -126,10 +141,15 @@ global_variable = Op(
                 ),
             ]
         ),
+        OptionalGroup(
+            [EQUALS, Attr("initializer")],
+            anchor="initializer",
+        ),
     ],
+    verify="loom_global_variable_verify",
     examples=[
         "global.variable @kv_cache : tile<[%s]x[%d]xf32> where [mul(%s, 64)]",
-        "global.variable @step_count : index",
+        "global.variable @step_count : index = 0",
     ],
 )
 

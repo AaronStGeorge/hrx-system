@@ -180,6 +180,7 @@ test_constant = Op(
     attrs=[AttrDef("value", "any", doc="The constant value.")],
     traits=[PURE, CONSTANT_LIKE],
     fold="loom_test_constant_fold",
+    verify="loom_test_constant_verify",
     format=[Attr("value"), COLON, TypeOf("result")],
     examples=[
         "%c42 = test.constant 42 : i32",
@@ -386,7 +387,7 @@ test_update = Op(
 test_invoke = Op(
     "test.invoke",
     group=test_ops,
-    doc="Test variadic call-like op with tied results.",
+    doc="Test variadic call-like op with tied results. The verifier checks that the invoke signature matches the referenced function declaration or definition.",
     operands=[
         Operand("operands", ANY, variadic=True),
     ],
@@ -395,6 +396,7 @@ test_invoke = Op(
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    verify="loom_test_invoke_verify",
     format=[
         SymbolRef("callee"),
         GLUE,

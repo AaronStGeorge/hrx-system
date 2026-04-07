@@ -16,6 +16,19 @@
 
 namespace loom::testing {
 
+struct CapturedRelatedLocation {
+  std::string label;
+  loom_source_range_t source_location = {};
+  bool has_source_range = false;
+  std::vector<loom_highlight_range_t> highlights;
+
+ private:
+  friend struct DiagnosticCapture;
+
+  std::string source_location_filename_storage;
+  std::string source_location_source_storage;
+};
+
 // A deep-copied diagnostic payload for exact test assertions.
 //
 // Error def pointers reference stable .rodata definitions, so pointer equality
@@ -35,6 +48,7 @@ struct CapturedDiagnostic {
   std::string source_text;
 
   std::vector<loom_highlight_range_t> highlights;
+  std::vector<CapturedRelatedLocation> related_locations;
   std::vector<loom_diagnostic_param_t> params;
 
  private:
@@ -102,8 +116,45 @@ struct DiagnosticCapture {
     entry.source_text = entry.origin_source_storage;
 
     entry.highlights.reserve(diagnostic->highlight_count);
-    for (iree_host_size_t i = 0; i < diagnostic->highlight_count; ++i) {
-      entry.highlights.push_back(diagnostic->highlights[i]);
+    if (diagnostic->highlight_count > 0) {
+      EXPECT_NE(diagnostic->highlights, nullptr);
+    }
+    if (diagnostic->highlights) {
+      for (iree_host_size_t i = 0; i < diagnostic->highlight_count; ++i) {
+        entry.highlights.push_back(diagnostic->highlights[i]);
+      }
+    }
+
+    entry.related_locations.reserve(diagnostic->related_location_count);
+    if (diagnostic->related_location_count > 0) {
+      EXPECT_NE(diagnostic->related_locations, nullptr);
+    }
+    if (diagnostic->related_locations) {
+      for (iree_host_size_t i = 0; i < diagnostic->related_location_count;
+           ++i) {
+        const loom_diagnostic_related_location_t* related =
+            &diagnostic->related_locations[i];
+        CapturedRelatedLocation copied_related;
+        copied_related.label = CopyStringView(related->label);
+        CopySourceRange(related->source_location,
+                        &copied_related.source_location_filename_storage,
+                        &copied_related.source_location_source_storage,
+                        &copied_related.source_location);
+        copied_related.has_source_range =
+            copied_related.source_location.source.size > 0;
+        copied_related.highlights.reserve(related->highlight_count);
+        if (related->highlight_count > 0) {
+          EXPECT_NE(related->highlights, nullptr);
+        }
+        if (related->highlights) {
+          for (iree_host_size_t highlight_index = 0;
+               highlight_index < related->highlight_count; ++highlight_index) {
+            copied_related.highlights.push_back(
+                related->highlights[highlight_index]);
+          }
+        }
+        entry.related_locations.push_back(std::move(copied_related));
+      }
     }
 
     entry.params.reserve(diagnostic->param_count);
@@ -175,6 +226,60 @@ inline void ExpectTypeParam(const CapturedDiagnostic& diagnostic,
   ASSERT_LT(param_index, diagnostic.params.size());
   EXPECT_EQ(diagnostic.params[param_index].kind, LOOM_PARAM_TYPE);
   EXPECT_TRUE(loom_type_equal(diagnostic.params[param_index].type, expected));
+}
+
+inline void ExpectFieldRefParam(const CapturedDiagnostic& diagnostic,
+                                iree_host_size_t param_index,
+                                loom_diagnostic_field_kind_t expected_kind,
+                                uint16_t expected_index,
+                                uint16_t expected_occurrence = 0) {
+  ASSERT_LT(param_index, diagnostic.params.size());
+  EXPECT_EQ(diagnostic.params[param_index].field_ref.kind, expected_kind);
+  EXPECT_EQ(diagnostic.params[param_index].field_ref.index, expected_index);
+  EXPECT_EQ(diagnostic.params[param_index].field_ref.occurrence,
+            expected_occurrence);
+}
+
+inline void ExpectNoFieldRefParam(const CapturedDiagnostic& diagnostic,
+                                  iree_host_size_t param_index) {
+  ASSERT_LT(param_index, diagnostic.params.size());
+  EXPECT_EQ(diagnostic.params[param_index].field_ref.kind,
+            LOOM_DIAGNOSTIC_FIELD_NONE);
+  EXPECT_EQ(diagnostic.params[param_index].field_ref.index, 0u);
+  EXPECT_EQ(diagnostic.params[param_index].field_ref.occurrence, 0u);
+}
+
+inline void ExpectHighlightFieldRef(const CapturedDiagnostic& diagnostic,
+                                    iree_host_size_t highlight_index,
+                                    loom_diagnostic_field_kind_t expected_kind,
+                                    uint16_t expected_index,
+                                    iree_host_size_t expected_param_index,
+                                    uint16_t expected_occurrence = 0) {
+  ASSERT_LT(highlight_index, diagnostic.highlights.size());
+  EXPECT_EQ(diagnostic.highlights[highlight_index].field_ref.kind,
+            expected_kind);
+  EXPECT_EQ(diagnostic.highlights[highlight_index].field_ref.index,
+            expected_index);
+  EXPECT_EQ(diagnostic.highlights[highlight_index].field_ref.occurrence,
+            expected_occurrence);
+  EXPECT_EQ(diagnostic.highlights[highlight_index].param_index,
+            expected_param_index);
+}
+
+inline void ExpectRelatedHighlightFieldRef(
+    const CapturedDiagnostic& diagnostic, iree_host_size_t related_index,
+    iree_host_size_t highlight_index,
+    loom_diagnostic_field_kind_t expected_kind, uint16_t expected_index,
+    uint16_t expected_occurrence = 0) {
+  ASSERT_LT(related_index, diagnostic.related_locations.size());
+  const CapturedRelatedLocation& related =
+      diagnostic.related_locations[related_index];
+  ASSERT_LT(highlight_index, related.highlights.size());
+  EXPECT_EQ(related.highlights[highlight_index].field_ref.kind, expected_kind);
+  EXPECT_EQ(related.highlights[highlight_index].field_ref.index,
+            expected_index);
+  EXPECT_EQ(related.highlights[highlight_index].field_ref.occurrence,
+            expected_occurrence);
 }
 
 }  // namespace loom::testing

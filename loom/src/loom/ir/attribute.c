@@ -8,6 +8,28 @@
 
 #include <string.h>
 
+bool loom_attr_matches_scalar_type(loom_attribute_t attr,
+                                   loom_scalar_type_t scalar_type,
+                                   loom_attr_kind_t* out_expected_kind) {
+  loom_attr_kind_t expected_kind = LOOM_ATTR_ANY;
+  bool matches = false;
+  if (scalar_type == LOOM_SCALAR_TYPE_I1) {
+    expected_kind = LOOM_ATTR_BOOL;
+    matches = attr.kind == LOOM_ATTR_BOOL ||
+              (attr.kind == LOOM_ATTR_I64 && (attr.i64 == 0 || attr.i64 == 1));
+  } else if (scalar_type == LOOM_SCALAR_TYPE_INDEX ||
+             scalar_type == LOOM_SCALAR_TYPE_OFFSET ||
+             loom_scalar_type_is_integer(scalar_type)) {
+    expected_kind = LOOM_ATTR_I64;
+    matches = attr.kind == LOOM_ATTR_I64;
+  } else if (loom_scalar_type_is_float(scalar_type)) {
+    expected_kind = LOOM_ATTR_F64;
+    matches = attr.kind == LOOM_ATTR_F64;
+  }
+  if (out_expected_kind) *out_expected_kind = expected_kind;
+  return matches;
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute equality and hashing
 //===----------------------------------------------------------------------===//

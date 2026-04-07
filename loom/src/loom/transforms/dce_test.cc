@@ -51,8 +51,8 @@ class DCETest : public ::testing::Test {
     IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
     loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
     loom_op_t* func_op = NULL;
-    IREE_ASSERT_OK(loom_test_func_build(&module_builder, 0, 0, callee, NULL, 0,
-                                        NULL, 0, NULL, 0, NULL, 0,
+    IREE_ASSERT_OK(loom_test_func_build(&module_builder, 0, 0, 0, callee, NULL,
+                                        0, NULL, 0, NULL, 0, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &func_op));
     func_like_ = loom_func_like_cast(module_, func_op);
     body_ = loom_func_like_body(func_like_);

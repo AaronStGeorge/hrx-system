@@ -468,17 +468,9 @@ static iree_status_t loom_test_gen_hook_scalar_constant(
   (void)user_data;
   loom_type_t type =
       loom_test_gen_type_palette_pick(context->gen, context->palette);
-  loom_scalar_type_t scalar = loom_type_element_type(type);
 
-  loom_attribute_t value = {0};
-  if (loom_scalar_type_is_float(scalar)) {
-    double fval =
-        (double)((int32_t)loom_test_gen_next_range(context->gen, 200) - 100) *
-        0.1;
-    value.f64 = fval;
-  } else {
-    value.i64 = (int64_t)loom_test_gen_next_range(context->gen, 200) - 100;
-  }
+  loom_attribute_t value = loom_test_gen_constant_attr(
+      type, (int64_t)loom_test_gen_next_range(context->gen, 200) - 100);
 
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_scalar_constant_build(context->builder, value, type,

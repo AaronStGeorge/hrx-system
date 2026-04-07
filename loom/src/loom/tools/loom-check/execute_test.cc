@@ -186,6 +186,7 @@ TEST_F(ExecuteTest, VerifyCleanIR) {
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: verify\n"
                    "func.def @f() {\n"
+                   "  func.return\n"
                    "}\n",
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS);

@@ -176,12 +176,38 @@ const loom_encoding_vtable_t* loom_module_encoding_vtable(
 iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
                                       loom_type_t* out_interned_type);
 
+// Interns a function type directly from argument and result type arrays. If a
+// structurally identical function type already exists, returns the canonical
+// module-owned entry without cloning. Otherwise, recursively clones the
+// signature payload into the module arena and appends a new interned type.
+//
+// |arg_types| and |result_types| may point to temporary parser scratch as long
+// as they remain valid for the duration of this call.
+iree_status_t loom_module_intern_function_type(loom_module_t* module,
+                                               const loom_type_t* arg_types,
+                                               uint16_t arg_count,
+                                               const loom_type_t* result_types,
+                                               uint16_t result_count,
+                                               loom_type_t* out_interned_type);
+
 // Adds a location entry to the module's location table and returns
 // its ID. The entry is arena-allocated. Entry 0 is always
 // LOOM_LOCATION_NONE (reserved automatically on first call).
 iree_status_t loom_module_add_location(loom_module_t* module,
                                        loom_location_entry_t entry,
                                        loom_location_id_t* out_location_id);
+
+// Attaches parser-captured field spans to a file location entry.
+//
+// |location_id| must reference an existing LOOM_LOCATION_FILE entry owned by
+// |module|. |field_spans| are copied into module-owned arena storage, so the
+// caller may pass parser scratch storage. Returns INVALID_ARGUMENT if the
+// location is not a file range, the location ID is out of range, or spans were
+// already attached to that location.
+iree_status_t loom_module_attach_location_field_spans(
+    loom_module_t* module, loom_location_id_t location_id,
+    const loom_location_field_span_t* field_spans,
+    iree_host_size_t field_span_count);
 
 // Looks up a symbol by name. Returns the symbol index (0-based) or
 // LOOM_SYMBOL_ID_INVALID if not found. O(n) linear scan — suitable

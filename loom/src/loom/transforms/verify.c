@@ -7,7 +7,6 @@
 #include "loom/transforms/verify.h"
 
 #include <stdarg.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,15 +29,24 @@
 //
 // `result_index_bits` and `operand_index_bits` track whether a result or
 // operand index has already appeared in the current op's tied-result list.
+// The occurrence arrays track which repeated source spelling of a result or
+// operand field corresponds to each tied-result entry so duplicate-entry
+// diagnostics can highlight both the current claim and the first claim.
 // `operand_value_ids` is a reusable sorted scratch copy of the current op's
 // valid operand value IDs, used to detect repeated operand values that would
 // make name-based tied-result syntax ambiguous.
 typedef struct loom_verify_tied_table_t {
   uint64_t* result_index_bits;
   iree_host_size_t result_index_word_capacity;
+  uint16_t* result_field_occurrences;
+  uint16_t* first_result_field_occurrences;
+  iree_host_size_t result_field_occurrence_capacity;
 
   uint64_t* operand_index_bits;
   iree_host_size_t operand_index_word_capacity;
+  uint16_t* operand_field_occurrences;
+  uint16_t* first_operand_field_occurrences;
+  iree_host_size_t operand_field_occurrence_capacity;
 
   loom_value_id_t* operand_value_ids;
   iree_host_size_t operand_value_count;
@@ -71,6 +79,10 @@ typedef struct loom_verify_state_t {
   // by a tied result. Any subsequent use of a consumed value is an
   // error.
   uint64_t* consumed_bits;
+
+  // Op that first consumed each value_id via a tied result. This is NULL for
+  // values that have not been consumed or when the consuming op is unknown.
+  const loom_op_t** consuming_ops;
 
   // Reusable per-op scratch for tied-result uniqueness checks.
   loom_verify_tied_table_t tied_table;
@@ -146,10 +158,20 @@ static int loom_compare_value_ids(const void* lhs, const void* rhs) {
 // Prepares the reusable tied-result scratch tables for an op with
 // |result_count| results and |operand_count| operands. Grows the
 // scratch storage from the verifier arena on demand, then clears only the
-// active index-bitset words needed by the current op.
+// active index-bitset words needed by the current op. Operand occurrences are
+// counted per logical operand field, not across all operands. For a body op:
+//   test.invoke @callee(%arg) ... -> (%arg as f32, %arg as f32)
+// operand 0 has occurrence 0 in the ordinary operand list and occurrences 1/2
+// in the tied-result clauses, so duplicate-tie tracking starts at 1. Signature
+// ties use the function signature arg domain and the tied-result clause is the
+// first operand-field spelling we target here, so they start at 0. If a future
+// format emits tied-result clauses before ordinary operand spellings, or emits
+// extra same-field spellings first, teach parser field spans about that role
+// instead of layering more source-order heuristics into the verifier.
 static iree_status_t loom_verify_tied_table_reset(
     loom_verify_tied_table_t* tied_table, iree_arena_allocator_t* arena,
-    iree_host_size_t result_count, iree_host_size_t operand_count) {
+    iree_host_size_t result_count, iree_host_size_t operand_count,
+    uint16_t operand_occurrence_base) {
   iree_host_size_t result_word_count = loom_bitset_word_count(result_count);
   if (result_word_count > tied_table->result_index_word_capacity) {
     IREE_RETURN_IF_ERROR(
@@ -160,6 +182,24 @@ static iree_status_t loom_verify_tied_table_reset(
   if (result_word_count > 0) {
     memset(tied_table->result_index_bits, 0,
            result_word_count * sizeof(tied_table->result_index_bits[0]));
+  }
+  if (result_count > tied_table->result_field_occurrence_capacity) {
+    iree_host_size_t result_occurrence_capacity =
+        tied_table->result_field_occurrence_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, 0, result_count, sizeof(uint16_t), &result_occurrence_capacity,
+        (void**)&tied_table->result_field_occurrences));
+    iree_host_size_t first_occurrence_capacity =
+        tied_table->result_field_occurrence_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, 0, result_count, sizeof(uint16_t), &first_occurrence_capacity,
+        (void**)&tied_table->first_result_field_occurrences));
+    IREE_ASSERT(first_occurrence_capacity == result_occurrence_capacity);
+    tied_table->result_field_occurrence_capacity = result_occurrence_capacity;
+  }
+  if (result_count > 0) {
+    memset(tied_table->result_field_occurrences, 0,
+           result_count * sizeof(tied_table->result_field_occurrences[0]));
   }
 
   iree_host_size_t operand_word_count = loom_bitset_word_count(operand_count);
@@ -173,6 +213,23 @@ static iree_status_t loom_verify_tied_table_reset(
     memset(tied_table->operand_index_bits, 0,
            operand_word_count * sizeof(tied_table->operand_index_bits[0]));
   }
+  if (operand_count > tied_table->operand_field_occurrence_capacity) {
+    iree_host_size_t operand_occurrence_capacity =
+        tied_table->operand_field_occurrence_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, 0, operand_count, sizeof(uint16_t), &operand_occurrence_capacity,
+        (void**)&tied_table->operand_field_occurrences));
+    iree_host_size_t first_occurrence_capacity =
+        tied_table->operand_field_occurrence_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, 0, operand_count, sizeof(uint16_t), &first_occurrence_capacity,
+        (void**)&tied_table->first_operand_field_occurrences));
+    IREE_ASSERT(first_occurrence_capacity == operand_occurrence_capacity);
+    tied_table->operand_field_occurrence_capacity = operand_occurrence_capacity;
+  }
+  for (iree_host_size_t i = 0; i < operand_count; ++i) {
+    tied_table->operand_field_occurrences[i] = operand_occurrence_base;
+  }
 
   if (operand_count > tied_table->operand_value_capacity) {
     IREE_RETURN_IF_ERROR(
@@ -183,6 +240,46 @@ static iree_status_t loom_verify_tied_table_reset(
   tied_table->operand_value_count = 0;
 
   return iree_ok_status();
+}
+
+// Records one tied-result claim for |result_index| and returns the field
+// occurrence sidecar for the current claim. If this result index was claimed
+// previously, |out_first_occurrence| receives the first claimant occurrence and
+// the function returns true.
+static bool loom_verify_tied_table_claim_result(
+    loom_verify_tied_table_t* tied_table, uint16_t result_index,
+    uint16_t* out_current_occurrence, uint16_t* out_first_occurrence) {
+  *out_current_occurrence =
+      tied_table->result_field_occurrences[result_index]++;
+  if (loom_bitset_test(tied_table->result_index_bits, result_index)) {
+    *out_first_occurrence =
+        tied_table->first_result_field_occurrences[result_index];
+    return true;
+  }
+  loom_bitset_set(tied_table->result_index_bits, result_index);
+  tied_table->first_result_field_occurrences[result_index] =
+      *out_current_occurrence;
+  return false;
+}
+
+// Records one tied-result claim for |operand_index| and returns the field
+// occurrence sidecar for the current claim. If this operand index was claimed
+// previously, |out_first_occurrence| receives the first claimant occurrence and
+// the function returns true.
+static bool loom_verify_tied_table_claim_operand(
+    loom_verify_tied_table_t* tied_table, uint16_t operand_index,
+    uint16_t* out_current_occurrence, uint16_t* out_first_occurrence) {
+  *out_current_occurrence =
+      tied_table->operand_field_occurrences[operand_index]++;
+  if (loom_bitset_test(tied_table->operand_index_bits, operand_index)) {
+    *out_first_occurrence =
+        tied_table->first_operand_field_occurrences[operand_index];
+    return true;
+  }
+  loom_bitset_set(tied_table->operand_index_bits, operand_index);
+  tied_table->first_operand_field_occurrences[operand_index] =
+      *out_current_occurrence;
+  return false;
 }
 
 // Returns true if |value_id| appears in more than one operand slot in the
@@ -287,8 +384,13 @@ static iree_status_t loom_verify_define_value(loom_verify_state_t* state,
 }
 
 static void loom_verify_consume_value(loom_verify_state_t* state,
-                                      loom_value_id_t value_id) {
+                                      loom_value_id_t value_id,
+                                      const loom_op_t* consuming_op) {
   if (value_id == LOOM_VALUE_ID_INVALID) return;
+  if (value_id >= state->module->values.count) return;
+  if (!loom_bitset_test(state->consumed_bits, value_id)) {
+    state->consuming_ops[value_id] = consuming_op;
+  }
   loom_bitset_set(state->consumed_bits, value_id);
 }
 
@@ -337,151 +439,455 @@ static bool loom_verify_at_error_limit(const loom_verify_state_t* state) {
          state->result->error_count >= state->max_errors;
 }
 
+// Computes the byte offset into |source| for a 1-based (line, column)
+// pair. Scans for newlines to find the target line, then walks UTF-8
+// codepoints to reach the target column. Columns are counted as
+// codepoints (matching the tokenizer's convention). Returns the byte
+// offset, clamped to source.size if the position is past end.
+static iree_host_size_t loom_source_byte_offset(iree_string_view_t source,
+                                                uint32_t line,
+                                                uint32_t column) {
+  if (line == 0) return 0;
+  // Scan newlines to find the byte offset of the start of |line|.
+  uint32_t current_line = 1;
+  iree_host_size_t offset = 0;
+  while (current_line < line && offset < source.size) {
+    if (source.data[offset] == '\n') {
+      ++current_line;
+    }
+    ++offset;
+  }
+  if (current_line < line) return source.size;
+  // Walk UTF-8 codepoints to reach the target column (1-based).
+  // Column 1 means "start of line" = offset stays where it is.
+  iree_host_size_t line_start = offset;
+  uint32_t current_column = 1;
+  while (current_column < column && offset < source.size &&
+         source.data[offset] != '\n') {
+    iree_unicode_utf8_decode(source, &offset);
+    ++current_column;
+  }
+  (void)line_start;
+  return offset > source.size ? source.size : offset;
+}
+
+// Resolves a location ID to a source range via the configured resolver.
+static bool loom_verify_resolve_location_id(const loom_verify_state_t* state,
+                                            loom_location_id_t location,
+                                            loom_source_range_t* out_range) {
+  if (!loom_source_resolve(state->source_resolver, state->module, location,
+                           out_range)) {
+    return false;
+  }
+  if (out_range->provenance == LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE &&
+      out_range->source.size > 0) {
+    out_range->provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE;
+  }
+  return true;
+}
+
 // Resolves an op's location to a source range via the configured resolver.
 static bool loom_verify_resolve_location(const loom_verify_state_t* state,
                                          const loom_op_t* op,
                                          loom_source_range_t* out_range) {
   if (!op) return false;
-  return loom_source_resolve(state->source_resolver, state->module,
-                             op->location, out_range);
+  return loom_verify_resolve_location_id(state, op->location, out_range);
 }
 
 // Maximum per-token highlight ranges per diagnostic.
 #define LOOM_VERIFY_MAX_HIGHLIGHTS 8
 
-// Callback state for collecting field highlights during printing.
-// The verifier populates |wanted_refs| with the field refs it wants
-// highlighted, then passes this as user_data to the printer's field
-// callback. The callback records byte ranges for matches.
+// A field highlight target derived from structured diagnostic param metadata.
+// |printer_field_ref| is the callback ref emitted by the text printer;
+// |diagnostic_field_ref| is the sink-facing ref stored on the output highlight;
+// |param_index| links the highlight back to the originating diagnostic param.
+typedef struct loom_verify_highlight_target_t {
+  loom_print_field_ref_t printer_field_ref;
+  loom_diagnostic_field_ref_t diagnostic_field_ref;
+  iree_host_size_t param_index;
+} loom_verify_highlight_target_t;
+
+// Callback state for collecting field highlights during printing. The verifier
+// populates |wanted_targets| from structured param field refs, then passes this
+// as user_data to the printer's field callback. The callback records byte
+// ranges and preserves the field/param sidecars for matches.
 typedef struct loom_highlight_collector_t {
-  const loom_field_ref_t* wanted_refs;
+  const loom_verify_highlight_target_t* wanted_targets;
   iree_host_size_t wanted_count;
+  uint16_t target_occurrences[LOOM_VERIFY_MAX_HIGHLIGHTS];
   loom_highlight_range_t* highlights;
   iree_host_size_t highlight_count;
 } loom_highlight_collector_t;
 
+// Finds the first target whose field kind/index match |field_ref| and whose
+// requested occurrence matches the number of equal field refs seen so far for
+// that target. |target_occurrences| is updated for every equal field ref so
+// repeated spans can be selected deterministically.
+static const loom_verify_highlight_target_t* loom_verify_match_highlight_target(
+    const loom_verify_highlight_target_t* wanted_targets,
+    iree_host_size_t wanted_count, loom_print_field_ref_t field_ref,
+    uint16_t* target_occurrences) {
+  const loom_verify_highlight_target_t* matching_target = NULL;
+  for (iree_host_size_t i = 0; i < wanted_count; ++i) {
+    if (!loom_print_field_ref_equal(wanted_targets[i].printer_field_ref,
+                                    field_ref)) {
+      continue;
+    }
+    uint16_t occurrence = target_occurrences[i]++;
+    if (!matching_target &&
+        wanted_targets[i].diagnostic_field_ref.occurrence == occurrence) {
+      matching_target = &wanted_targets[i];
+    }
+  }
+  return matching_target;
+}
+
 static void loom_highlight_field_callback(void* user_data,
-                                          loom_field_ref_t field_ref,
+                                          loom_print_field_ref_t field_ref,
                                           iree_host_size_t start,
                                           iree_host_size_t end) {
   loom_highlight_collector_t* collector =
       (loom_highlight_collector_t*)user_data;
   if (collector->highlight_count >= LOOM_VERIFY_MAX_HIGHLIGHTS) return;
-  for (iree_host_size_t i = 0; i < collector->wanted_count; ++i) {
-    if (collector->wanted_refs[i] == field_ref) {
-      collector->highlights[collector->highlight_count].start = start;
-      collector->highlights[collector->highlight_count].end = end;
-      ++collector->highlight_count;
-      return;
-    }
-  }
+  const loom_verify_highlight_target_t* target =
+      loom_verify_match_highlight_target(collector->wanted_targets,
+                                         collector->wanted_count, field_ref,
+                                         collector->target_occurrences);
+  if (!target) return;
+  collector->highlights[collector->highlight_count].start = start;
+  collector->highlights[collector->highlight_count].end = end;
+  collector->highlights[collector->highlight_count].field_ref =
+      target->diagnostic_field_ref;
+  collector->highlights[collector->highlight_count].param_index =
+      target->param_index;
+  ++collector->highlight_count;
 }
 
-// Derives field refs from STRING params whose values are "operand N",
-// "result N", or "attribute N". These are field references that the
-// verifier built from known field indices — safe to parse because we
-// constructed them ourselves in a known format.
-static iree_host_size_t loom_derive_field_refs(
+// Converts a diagnostic field ref sidecar to the printer callback ref used by
+// loom_text_print_operation_with_field_callback. Returns false when
+// the diagnostic ref does not identify an op field that the printer can label.
+static bool loom_verify_print_field_ref(
+    loom_diagnostic_field_ref_t diagnostic_field_ref,
+    loom_print_field_ref_t* out_field_ref) {
+  loom_print_field_kind_t kind = LOOM_PRINT_FIELD_OPERAND;
+  switch (diagnostic_field_ref.kind) {
+    case LOOM_DIAGNOSTIC_FIELD_OPERAND:
+      kind = LOOM_PRINT_FIELD_OPERAND;
+      break;
+    case LOOM_DIAGNOSTIC_FIELD_RESULT:
+      kind = LOOM_PRINT_FIELD_RESULT;
+      break;
+    case LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE:
+      kind = LOOM_PRINT_FIELD_ATTR;
+      break;
+    case LOOM_DIAGNOSTIC_FIELD_REGION:
+      kind = LOOM_PRINT_FIELD_REGION;
+      break;
+    case LOOM_DIAGNOSTIC_FIELD_NONE:
+    default:
+      return false;
+  }
+  *out_field_ref = loom_print_field_ref(kind, diagnostic_field_ref.index);
+  return true;
+}
+
+// Collects field highlight targets directly from structured diagnostic params.
+static iree_host_size_t loom_collect_highlight_targets(
     const loom_diagnostic_param_t* params, iree_host_size_t param_count,
-    loom_field_ref_t* out_refs) {
+    loom_verify_highlight_target_t* out_targets) {
   iree_host_size_t count = 0;
   for (iree_host_size_t i = 0;
        i < param_count && count < LOOM_VERIFY_MAX_HIGHLIGHTS; ++i) {
-    if (params[i].kind != LOOM_PARAM_STRING) continue;
-    iree_string_view_t value = params[i].string;
-    uint8_t category = 0;
-    const char* number_start = NULL;
-    if (iree_string_view_starts_with(value, IREE_SV("operand "))) {
-      category = LOOM_FIELD_OPERAND;
-      number_start = value.data + 8;
-    } else if (iree_string_view_starts_with(value, IREE_SV("result "))) {
-      category = LOOM_FIELD_RESULT;
-      number_start = value.data + 7;
-    } else if (iree_string_view_starts_with(value, IREE_SV("attribute "))) {
-      category = LOOM_FIELD_ATTR;
-      number_start = value.data + 10;
-    } else {
+    if (!loom_diagnostic_field_ref_is_set(params[i].field_ref)) continue;
+    loom_print_field_ref_t printer_field_ref = {0};
+    if (!loom_verify_print_field_ref(params[i].field_ref, &printer_field_ref)) {
       continue;
     }
-    uint16_t index = 0;
-    while (number_start < value.data + value.size && *number_start >= '0' &&
-           *number_start <= '9') {
-      index = index * 10 + (uint16_t)(*number_start - '0');
-      ++number_start;
-    }
-    out_refs[count++] = LOOM_FIELD_REF(category, index);
+    out_targets[count++] = (loom_verify_highlight_target_t){
+        .printer_field_ref = printer_field_ref,
+        .diagnostic_field_ref = params[i].field_ref,
+        .param_index = i,
+    };
   }
   return count;
 }
 
-// Emits a structured diagnostic with typed error def and params.
+static bool loom_verify_print_field_ref_from_location_field(
+    const loom_location_field_span_t* field_span,
+    loom_print_field_ref_t* out_field_ref) {
+  loom_print_field_kind_t kind = LOOM_PRINT_FIELD_OPERAND;
+  switch (field_span->kind) {
+    case LOOM_LOCATION_FIELD_OPERAND:
+      kind = LOOM_PRINT_FIELD_OPERAND;
+      break;
+    case LOOM_LOCATION_FIELD_RESULT:
+      kind = LOOM_PRINT_FIELD_RESULT;
+      break;
+    case LOOM_LOCATION_FIELD_ATTRIBUTE:
+      kind = LOOM_PRINT_FIELD_ATTR;
+      break;
+    case LOOM_LOCATION_FIELD_REGION:
+      kind = LOOM_PRINT_FIELD_REGION;
+      break;
+    default:
+      return false;
+  }
+  *out_field_ref = loom_print_field_ref(kind, field_span->index);
+  return true;
+}
+
+// Collects parser-sidecar highlights from the op's file location after
+// resolving the whole-op source range to original source text.
+static iree_host_size_t loom_collect_source_backed_highlights(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_source_range_t* source_location,
+    const loom_verify_highlight_target_t* wanted_targets,
+    iree_host_size_t wanted_count, loom_highlight_range_t* out_highlights,
+    iree_host_size_t max_highlight_count) {
+  if (!op || wanted_count == 0 || source_location->source.size == 0 ||
+      op->location == LOOM_LOCATION_UNKNOWN ||
+      (iree_host_size_t)op->location >= module->locations.count) {
+    return 0;
+  }
+
+  const loom_location_entry_t* location =
+      &module->locations.entries[op->location];
+  if (location->kind != LOOM_LOCATION_FILE ||
+      location->file.field_span_count == 0 || !location->file.field_spans) {
+    return 0;
+  }
+
+  uint16_t target_occurrences[LOOM_VERIFY_MAX_HIGHLIGHTS] = {0};
+  iree_host_size_t highlight_count = 0;
+  for (uint16_t span_index = 0; span_index < location->file.field_span_count &&
+                                highlight_count < max_highlight_count;
+       ++span_index) {
+    loom_print_field_ref_t span_field_ref = {0};
+    if (!loom_verify_print_field_ref_from_location_field(
+            &location->file.field_spans[span_index], &span_field_ref)) {
+      continue;
+    }
+
+    const loom_verify_highlight_target_t* target =
+        loom_verify_match_highlight_target(wanted_targets, wanted_count,
+                                           span_field_ref, target_occurrences);
+    if (!target) continue;
+
+    const loom_location_field_span_t* field_span =
+        &location->file.field_spans[span_index];
+    iree_host_size_t start_offset = loom_source_byte_offset(
+        source_location->source, field_span->start_line, field_span->start_col);
+    iree_host_size_t end_offset = loom_source_byte_offset(
+        source_location->source, field_span->end_line, field_span->end_col);
+    if (start_offset >= end_offset || start_offset < source_location->start ||
+        end_offset > source_location->end) {
+      continue;
+    }
+
+    out_highlights[highlight_count++] = (loom_highlight_range_t){
+        .start = start_offset,
+        .end = end_offset,
+        .field_ref = target->diagnostic_field_ref,
+        .param_index = target->param_index,
+    };
+  }
+
+  return highlight_count;
+}
+
+// Converts a packed verifier constraint field ref into the diagnostic-local
+// sidecar representation. |element_offset| lets callers point at a specific
+// element inside a variadic field while preserving the human-facing name shape.
+static loom_diagnostic_field_ref_t loom_verify_diagnostic_field_ref(
+    uint8_t field_ref, uint16_t element_offset) {
+  uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
+  switch (LOOM_FIELD_REF_CATEGORY(field_ref)) {
+    case LOOM_FIELD_OPERAND:
+      return loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                       (uint16_t)(index + element_offset));
+    case LOOM_FIELD_RESULT:
+      return loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT,
+                                       (uint16_t)(index + element_offset));
+    case LOOM_FIELD_ATTR:
+      return loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                       (uint16_t)(index + element_offset));
+    case LOOM_FIELD_REGION:
+      return loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_REGION,
+                                       (uint16_t)(index + element_offset));
+    default:
+      return loom_diagnostic_field_ref_none();
+  }
+}
+
+// Returns a string param annotated with the corresponding structured field ref.
+static loom_diagnostic_param_t loom_verify_param_string_for_diagnostic_field(
+    iree_string_view_t value, loom_diagnostic_field_kind_t field_kind,
+    uint16_t field_index) {
+  return loom_param_with_field_ref(
+      loom_param_string(value),
+      loom_diagnostic_field_ref(field_kind, field_index));
+}
+
+// Returns a string param annotated with a packed verifier field ref.
+static loom_diagnostic_param_t loom_verify_param_string_for_field(
+    iree_string_view_t value, uint8_t field_ref) {
+  return loom_param_with_field_ref(
+      loom_param_string(value), loom_verify_diagnostic_field_ref(field_ref, 0));
+}
+
+// Returns an indexed field-name string param annotated with the concrete
+// element ref inside a variadic field.
+static loom_diagnostic_param_t loom_verify_param_string_for_indexed_field(
+    iree_string_view_t value, uint8_t field_ref, uint16_t element_offset) {
+  return loom_param_with_field_ref(
+      loom_param_string(value),
+      loom_verify_diagnostic_field_ref(field_ref, element_offset));
+}
+
+// Resolves labeled related ops through the source resolver.
+// Returns the number of note entries written to |out_related_locations|.
+static iree_host_size_t loom_verify_collect_related_locations(
+    const loom_verify_state_t* state,
+    const loom_diagnostic_related_op_t* related_ops,
+    iree_host_size_t related_op_count,
+    loom_diagnostic_related_location_t* out_related_locations,
+    loom_highlight_range_t* out_related_highlights) {
+  if (!related_ops || related_op_count == 0) {
+    return 0;
+  }
+
+  iree_host_size_t related_location_count = 0;
+  for (iree_host_size_t i = 0;
+       i < related_op_count &&
+       related_location_count < LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS;
+       ++i) {
+    if (!related_ops[i].op) continue;
+    loom_source_range_t source_location = {
+        .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
+    };
+    if (!loom_verify_resolve_location(state, related_ops[i].op,
+                                      &source_location)) {
+      continue;
+    }
+    loom_diagnostic_related_location_t* related_location =
+        &out_related_locations[related_location_count];
+    *related_location = (loom_diagnostic_related_location_t){
+        .label = related_ops[i].label,
+        .source_location = source_location,
+    };
+    if (loom_diagnostic_field_ref_is_set(related_ops[i].field_ref)) {
+      loom_print_field_ref_t printer_field_ref = {0};
+      if (loom_verify_print_field_ref(related_ops[i].field_ref,
+                                      &printer_field_ref)) {
+        const loom_verify_highlight_target_t highlight_target = {
+            .printer_field_ref = printer_field_ref,
+            .diagnostic_field_ref = related_ops[i].field_ref,
+            .param_index = 0,
+        };
+        related_location->highlight_count =
+            loom_collect_source_backed_highlights(
+                state->module, related_ops[i].op,
+                &related_location->source_location, &highlight_target,
+                /*wanted_count=*/1,
+                &out_related_highlights[related_location_count],
+                /*max_highlight_count=*/1);
+        if (related_location->highlight_count > 0) {
+          related_location->highlights =
+              &out_related_highlights[related_location_count];
+        }
+      }
+    }
+    ++related_location_count;
+  }
+  return related_location_count;
+}
+
+// Emits one structured diagnostic request through the configured sink.
 //
 // Source resolution strategy:
 //   1. Try the configured source resolver (original source text).
 //   2. If that fails, print the op to text and use the printed
 //      representation as the diagnostic source.
 //
-// Per-token highlighting is derived automatically from the params:
-// STRING params whose values match "operand N" / "result N" /
-// "attribute N" are mapped to field refs and passed to the printer's
-// field callback, which records their byte ranges for caret output.
-static void loom_verify_emit_structured(loom_verify_state_t* state,
-                                        const loom_op_t* op,
-                                        const loom_error_def_t* error,
-                                        const loom_diagnostic_param_t* params,
-                                        iree_host_size_t param_count) {
+// Per-token highlighting is derived automatically from structured field refs
+// attached to diagnostic params. Those refs are passed to the printer's field
+// callback, which records byte ranges and preserves the originating param index
+// for caret output and machine JSON.
+static void loom_verify_emit_diagnostic(
+    loom_verify_state_t* state, const loom_diagnostic_emission_t* emission) {
   if (!iree_status_is_ok(state->diagnostic_status)) return;
 
-  if (error->severity == LOOM_DIAGNOSTIC_ERROR) {
+  if (emission->error->severity == LOOM_DIAGNOSTIC_ERROR) {
     ++state->result->error_count;
-  } else if (error->severity == LOOM_DIAGNOSTIC_WARNING) {
+  } else if (emission->error->severity == LOOM_DIAGNOSTIC_WARNING) {
     ++state->result->warning_count;
   }
 
   if (!state->sink.fn) return;
 
   loom_diagnostic_t diagnostic = {0};
-  diagnostic.severity = error->severity;
-  diagnostic.error = error;
-  diagnostic.params = params;
-  diagnostic.param_count = param_count;
+  diagnostic.severity = emission->error->severity;
+  diagnostic.error = emission->error;
+  diagnostic.params = emission->params;
+  diagnostic.param_count = emission->param_count;
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
+  diagnostic.origin.provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE;
+  diagnostic.source_location.provenance =
+      LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE;
 
-  // Derive field refs from the params for per-token highlighting.
-  loom_field_ref_t highlight_refs[LOOM_VERIFY_MAX_HIGHLIGHTS];
-  iree_host_size_t highlight_ref_count =
-      loom_derive_field_refs(params, param_count, highlight_refs);
+  loom_diagnostic_related_location_t
+      related_locations[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
+  loom_highlight_range_t
+      related_highlights[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
+  diagnostic.related_location_count = loom_verify_collect_related_locations(
+      state, emission->related_ops, emission->related_op_count,
+      related_locations, related_highlights);
+  if (diagnostic.related_location_count > 0) {
+    diagnostic.related_locations = related_locations;
+  }
+
+  // Collect structured field refs from params for per-token highlighting.
+  loom_verify_highlight_target_t highlight_targets[LOOM_VERIFY_MAX_HIGHLIGHTS];
+  iree_host_size_t highlight_target_count = loom_collect_highlight_targets(
+      emission->params, emission->param_count, highlight_targets);
+  loom_highlight_range_t highlights[LOOM_VERIFY_MAX_HIGHLIGHTS];
 
   // Try the source resolver first (original source text).
-  bool resolved =
-      loom_verify_resolve_location(state, op, &diagnostic.source_location);
+  bool resolved = loom_verify_resolve_location(state, emission->op,
+                                               &diagnostic.source_location);
   if (resolved) {
     diagnostic.origin = diagnostic.source_location;
+    diagnostic.highlight_count = loom_collect_source_backed_highlights(
+        state->module, emission->op, &diagnostic.source_location,
+        highlight_targets, highlight_target_count, highlights,
+        IREE_ARRAYSIZE(highlights));
+    if (diagnostic.highlight_count > 0) {
+      diagnostic.highlights = highlights;
+    }
   }
 
   // Fallback: print the op and use the printed text as the source.
   // The printer's field callback records byte ranges for the derived
   // field refs, giving per-token caret underlines.
   iree_string_builder_t op_text_builder;
-  loom_highlight_range_t highlights[LOOM_VERIFY_MAX_HIGHLIGHTS];
   loom_highlight_collector_t collector = {0};
   bool printed_op = false;
-  if (!resolved && op) {
+  if (!resolved && emission->op) {
     iree_string_builder_initialize(state->module->context->allocator,
                                    &op_text_builder);
 
-    collector.wanted_refs = highlight_refs;
-    collector.wanted_count = highlight_ref_count;
+    collector.wanted_targets = highlight_targets;
+    collector.wanted_count = highlight_target_count;
     collector.highlights = highlights;
     collector.highlight_count = 0;
 
     loom_print_field_callback_t field_callback = {
-        .fn = highlight_ref_count > 0 ? loom_highlight_field_callback : NULL,
+        .fn = highlight_target_count > 0 ? loom_highlight_field_callback : NULL,
         .user_data = &collector,
     };
     iree_status_t print_status = loom_text_print_operation_with_field_callback(
-        state->module, op, &op_text_builder, LOOM_TEXT_PRINT_USE_ALIASES,
-        field_callback);
+        state->module, emission->op, &op_text_builder,
+        LOOM_TEXT_PRINT_USE_ALIASES, field_callback);
     if (!iree_status_is_ok(print_status)) {
       // Printing failed (OOM, etc.). Use a static fallback so the
       // diagnostic still has something to display with carets.
@@ -489,6 +895,7 @@ static void loom_verify_emit_structured(loom_verify_state_t* state,
       iree_string_builder_deinitialize(&op_text_builder);
       static const char kFallback[] = "<failed to print op>";
       loom_source_range_t fallback_range = {
+          .provenance = LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK,
           .filename = IREE_SV("<verifier>"),
           .source = iree_make_string_view(kFallback, sizeof(kFallback) - 1),
           .start = 0,
@@ -503,6 +910,7 @@ static void loom_verify_emit_structured(loom_verify_state_t* state,
     } else if (iree_string_builder_size(&op_text_builder) > 0) {
       iree_host_size_t text_length = iree_string_builder_size(&op_text_builder);
       loom_source_range_t op_range = {0};
+      op_range.provenance = LOOM_SOURCE_PROVENANCE_PRINTED_IR_FALLBACK;
       op_range.filename = IREE_SV("<verifier>");
       op_range.source = iree_make_string_view(
           iree_string_builder_buffer(&op_text_builder), text_length);
@@ -534,11 +942,24 @@ static void loom_verify_emit_structured(loom_verify_state_t* state,
   loom_verify_record_diagnostic_status(state, emit_status);
 }
 
+static void loom_verify_emit_structured(loom_verify_state_t* state,
+                                        const loom_op_t* op,
+                                        const loom_error_def_t* error,
+                                        const loom_diagnostic_param_t* params,
+                                        iree_host_size_t param_count) {
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = error,
+      .params = params,
+      .param_count = param_count,
+  };
+  loom_verify_emit_diagnostic(state, &emission);
+}
+
 static iree_status_t loom_verify_diagnostic_emitter_fn(
-    void* user_data, const loom_op_t* op, const loom_error_def_t* error,
-    const loom_diagnostic_param_t* params, iree_host_size_t param_count) {
+    void* user_data, const loom_diagnostic_emission_t* emission) {
   loom_verify_state_t* state = (loom_verify_state_t*)user_data;
-  loom_verify_emit_structured(state, op, error, params, param_count);
+  loom_verify_emit_diagnostic(state, emission);
   return loom_verify_pending_diagnostic_status(state);
 }
 
@@ -653,7 +1074,7 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
           loom_param_u32(vtable->fixed_operand_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_structure_001, params,
-                                  3);
+                                  IREE_ARRAYSIZE(params));
     }
   } else {
     if (op->operand_count != vtable->fixed_operand_count) {
@@ -663,7 +1084,7 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
           loom_param_u32(vtable->fixed_operand_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_structure_001, params,
-                                  3);
+                                  IREE_ARRAYSIZE(params));
     }
   }
 
@@ -678,7 +1099,7 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
           loom_param_u32(vtable->fixed_result_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_structure_002, params,
-                                  3);
+                                  IREE_ARRAYSIZE(params));
     }
   } else {
     if (op->result_count != vtable->fixed_result_count) {
@@ -688,7 +1109,7 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
           loom_param_u32(vtable->fixed_result_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_structure_002, params,
-                                  3);
+                                  IREE_ARRAYSIZE(params));
     }
   }
 
@@ -699,7 +1120,8 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
         loom_param_u32(op->attribute_count),
         loom_param_u32(vtable->attribute_count),
     };
-    loom_verify_emit_structured(state, op, &loom_err_structure_003, params, 3);
+    loom_verify_emit_structured(state, op, &loom_err_structure_003, params,
+                                IREE_ARRAYSIZE(params));
   }
 
   // Check region count.
@@ -709,13 +1131,22 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
         loom_param_u32(op->region_count),
         loom_param_u32(vtable->region_count),
     };
-    loom_verify_emit_structured(state, op, &loom_err_structure_004, params, 3);
+    loom_verify_emit_structured(state, op, &loom_err_structure_004, params,
+                                IREE_ARRAYSIZE(params));
   }
 }
 
 //===----------------------------------------------------------------------===//
 // Type constraint checks
 //===----------------------------------------------------------------------===//
+
+static bool loom_verify_attr_kind_matches_descriptor(
+    loom_attribute_t attr, const loom_attr_descriptor_t* descriptor) {
+  if (descriptor->attr_kind == LOOM_ATTR_ANY) {
+    return attr.kind > LOOM_ATTR_ABSENT && attr.kind < LOOM_ATTR_ANY;
+  }
+  return attr.kind == descriptor->attr_kind;
+}
 
 static void loom_verify_type_constraints(loom_verify_state_t* state,
                                          const loom_op_t* op,
@@ -744,15 +1175,18 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
         if (!loom_type_satisfies_constraint(type, constraint)) {
           // Build operand name like "operand 0".
           char operand_name_buffer[32];
-          snprintf(operand_name_buffer, sizeof(operand_name_buffer),
-                   "operand %u", j);
+          iree_snprintf(operand_name_buffer, sizeof(operand_name_buffer),
+                        "operand %u", j);
           loom_diagnostic_param_t params[] = {
-              loom_param_string(iree_make_cstring_view(operand_name_buffer)),
+              loom_verify_param_string_for_diagnostic_field(
+                  iree_make_cstring_view(operand_name_buffer),
+                  LOOM_DIAGNOSTIC_FIELD_OPERAND, j),
               loom_param_type(type),
               loom_param_string(iree_make_cstring_view(
                   loom_type_constraint_name(constraint))),
           };
-          loom_verify_emit_structured(state, op, &loom_err_type_003, params, 3);
+          loom_verify_emit_structured(state, op, &loom_err_type_003, params,
+                                      IREE_ARRAYSIZE(params));
         }
       }
     }
@@ -778,15 +1212,18 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
         loom_type_t type = loom_verify_value_type(state, value_id);
         if (!loom_type_satisfies_constraint(type, constraint)) {
           char result_name_buffer[32];
-          snprintf(result_name_buffer, sizeof(result_name_buffer), "result %u",
-                   j);
+          iree_snprintf(result_name_buffer, sizeof(result_name_buffer),
+                        "result %u", j);
           loom_diagnostic_param_t params[] = {
-              loom_param_string(iree_make_cstring_view(result_name_buffer)),
+              loom_verify_param_string_for_diagnostic_field(
+                  iree_make_cstring_view(result_name_buffer),
+                  LOOM_DIAGNOSTIC_FIELD_RESULT, j),
               loom_param_type(type),
               loom_param_string(iree_make_cstring_view(
                   loom_type_constraint_name(constraint))),
           };
-          loom_verify_emit_structured(state, op, &loom_err_type_004, params, 3);
+          loom_verify_emit_structured(state, op, &loom_err_type_004, params,
+                                      IREE_ARRAYSIZE(params));
         }
       }
     }
@@ -801,24 +1238,27 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
       bool optional = (descriptor->flags & LOOM_ATTR_OPTIONAL) != 0;
       if (optional && loom_attr_is_absent(attrs[i])) continue;
       iree_string_view_t attr_name = loom_bstring_view(descriptor->name);
-      if (attrs[i].kind != descriptor->attr_kind) {
+      if (!loom_verify_attr_kind_matches_descriptor(attrs[i], descriptor)) {
         loom_diagnostic_param_t params[] = {
-            loom_param_string(attr_name),
+            loom_verify_param_string_for_diagnostic_field(
+                attr_name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i),
             loom_param_u32(attrs[i].kind),
             loom_param_u32(descriptor->attr_kind),
         };
-        loom_verify_emit_structured(state, op, &loom_err_type_005, params, 3);
+        loom_verify_emit_structured(state, op, &loom_err_type_005, params,
+                                    IREE_ARRAYSIZE(params));
       }
       if (attrs[i].kind == LOOM_ATTR_ENUM && descriptor->enum_case_count > 0) {
         uint8_t case_index = (uint8_t)attrs[i].raw;
         if (case_index >= descriptor->enum_case_count) {
           loom_diagnostic_param_t params[] = {
-              loom_param_string(attr_name),
+              loom_verify_param_string_for_diagnostic_field(
+                  attr_name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i),
               loom_param_u32(case_index),
               loom_param_u32(descriptor->enum_case_count),
           };
           loom_verify_emit_structured(state, op, &loom_err_structure_010,
-                                      params, 3);
+                                      params, IREE_ARRAYSIZE(params));
         }
       }
     }
@@ -829,9 +1269,8 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
 // Semantic constraint interpreter
 //===----------------------------------------------------------------------===//
 
-// Resolves a field reference to a name for diagnostic params.
-// Returns the field name from the vtable format elements if available,
-// otherwise a positional name like "operand 0" or "result 1".
+// Resolves a field reference to a positional name for diagnostic params, such
+// as "operand 0" or "result 1".
 static iree_string_view_t loom_verify_field_name(const loom_op_t* op,
                                                  const loom_op_vtable_t* vtable,
                                                  uint8_t field_ref,
@@ -843,7 +1282,7 @@ static iree_string_view_t loom_verify_field_name(const loom_op_t* op,
       (category == LOOM_FIELD_OPERAND)
           ? "operand"
           : ((category == LOOM_FIELD_RESULT) ? "result" : "field");
-  snprintf(buffer, buffer_size, "%s %u", prefix, index);
+  iree_snprintf(buffer, buffer_size, "%s %u", prefix, index);
   return iree_make_cstring_view(buffer);
 }
 
@@ -858,7 +1297,7 @@ static iree_string_view_t loom_verify_indexed_field_name(
       (category == LOOM_FIELD_OPERAND)
           ? "operand"
           : ((category == LOOM_FIELD_RESULT) ? "result" : "field");
-  snprintf(buffer, buffer_size, "%s %u[%u]", prefix, index, element_index);
+  iree_snprintf(buffer, buffer_size, "%s %u[%u]", prefix, index, element_index);
   return iree_make_cstring_view(buffer);
 }
 
@@ -924,9 +1363,9 @@ static void loom_verify_emit_pairwise_mismatch(
   switch ((enum loom_constraint_property_e)constraint->property) {
     case LOOM_PROPERTY_TYPE: {
       loom_diagnostic_param_t params[] = {
-          loom_param_string(name_a),
+          loom_verify_param_string_for_field(name_a, ref_a),
           loom_param_type(type_a),
-          loom_param_string(name_b),
+          loom_verify_param_string_for_field(name_b, ref_b),
           loom_param_type(type_b),
       };
       loom_verify_emit_structured(
@@ -938,9 +1377,9 @@ static void loom_verify_emit_pairwise_mismatch(
       loom_type_t element_a = loom_type_scalar(loom_type_element_type(type_a));
       loom_type_t element_b = loom_type_scalar(loom_type_element_type(type_b));
       loom_diagnostic_param_t params[] = {
-          loom_param_string(name_a),
+          loom_verify_param_string_for_field(name_a, ref_a),
           loom_param_type(element_a),
-          loom_param_string(name_b),
+          loom_verify_param_string_for_field(name_b, ref_b),
           loom_param_type(element_b),
       };
       loom_verify_emit_structured(
@@ -951,8 +1390,8 @@ static void loom_verify_emit_pairwise_mismatch(
     case LOOM_PROPERTY_ENCODING:
     case LOOM_PROPERTY_SHAPE: {
       loom_diagnostic_param_t params[] = {
-          loom_param_string(name_a),
-          loom_param_string(name_b),
+          loom_verify_param_string_for_field(name_a, ref_a),
+          loom_verify_param_string_for_field(name_b, ref_b),
       };
       loom_verify_emit_structured(
           state, op, error, params,
@@ -961,9 +1400,9 @@ static void loom_verify_emit_pairwise_mismatch(
     }
     case LOOM_PROPERTY_RANK: {
       loom_diagnostic_param_t params[] = {
-          loom_param_string(name_a),
+          loom_verify_param_string_for_field(name_a, ref_a),
           loom_param_i64(loom_type_rank(type_a)),
-          loom_param_string(name_b),
+          loom_verify_param_string_for_field(name_b, ref_b),
           loom_param_i64(loom_type_rank(type_b)),
       };
       loom_verify_emit_structured(
@@ -1026,9 +1465,11 @@ static void loom_verify_semantic_constraint(
                     ? constraint->error
                     : loom_pairwise_eq_default_error(constraint->property);
             loom_diagnostic_param_t params[] = {
-                loom_param_string(name_a),
+                loom_verify_param_string_for_indexed_field(name_a, first_ref,
+                                                           0),
                 loom_param_type(first_type),
-                loom_param_string(name_b),
+                loom_verify_param_string_for_indexed_field(
+                    name_b, first_ref, (uint16_t)(vi - start_index)),
                 loom_param_type(other_type),
             };
             loom_verify_emit_structured(
@@ -1092,9 +1533,13 @@ static void loom_verify_semantic_constraint(
                       ? constraint->error
                       : loom_pairwise_eq_default_error(constraint->property);
               loom_diagnostic_param_t params[] = {
-                  loom_param_string(name_a),
+                  first_is_variadic
+                      ? loom_verify_param_string_for_indexed_field(name_a,
+                                                                   first_ref, 0)
+                      : loom_verify_param_string_for_field(name_a, first_ref),
                   loom_param_type(first_type),
-                  loom_param_string(name_b),
+                  loom_verify_param_string_for_indexed_field(
+                      name_b, arg_ref, (uint16_t)(vi - start_index)),
                   loom_param_type(other_type),
               };
               loom_verify_emit_structured(
@@ -1163,7 +1608,8 @@ static void loom_verify_semantic_constraint(
         const loom_error_def_t* error =
             constraint->error ? constraint->error : &loom_err_subrange_001;
         loom_diagnostic_param_t params[] = {
-            loom_param_string(operand_name),
+            loom_verify_param_string_for_field(operand_name,
+                                               constraint->args[0]),
             loom_param_u32(variadic_count),
             loom_param_i64(rank),
         };
@@ -1368,7 +1814,6 @@ static void loom_verify_operand_dominance(loom_verify_state_t* state,
       iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE)) {
     return;
   }
-  iree_string_view_t op_name = loom_op_vtable_name(vtable);
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     loom_value_id_t value_id = operands[i];
@@ -1379,25 +1824,47 @@ static void loom_verify_operand_dominance(loom_verify_state_t* state,
           loom_param_u32((uint32_t)state->module->values.count),
       };
       loom_verify_emit_structured(state, op, &loom_err_dominance_003, params,
-                                  2);
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
     if (!loom_bitset_test(state->defined_bits, value_id)) {
       iree_string_view_t value_name = loom_verify_value_name(state, value_id);
+      loom_diagnostic_field_ref_t operand_ref =
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(value_name),
+          loom_param_with_field_ref(loom_param_string(value_name), operand_ref),
       };
       loom_verify_emit_structured(state, op, &loom_err_dominance_001, params,
-                                  1);
+                                  IREE_ARRAYSIZE(params));
     }
     if (loom_bitset_test(state->consumed_bits, value_id)) {
+      const loom_op_t* consuming_op = state->consuming_ops[value_id];
+      const loom_op_vtable_t* consuming_vtable =
+          consuming_op ? loom_verify_lookup_vtable(state, consuming_op->kind)
+                       : NULL;
+      iree_string_view_t consuming_op_name =
+          consuming_vtable ? loom_op_vtable_name(consuming_vtable)
+                           : IREE_SV("<unknown op>");
       iree_string_view_t value_name = loom_verify_value_name(state, value_id);
+      loom_diagnostic_field_ref_t operand_ref =
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i);
       loom_diagnostic_param_t params[] = {
-          loom_param_string(value_name),
-          loom_param_string(op_name),
+          loom_param_with_field_ref(loom_param_string(value_name), operand_ref),
+          loom_param_string(consuming_op_name),
       };
-      loom_verify_emit_structured(state, op, &loom_err_dominance_002, params,
-                                  2);
+      loom_diagnostic_related_op_t related_ops[] = {{
+          .label = IREE_SV("consumed here"),
+          .op = consuming_op,
+      }};
+      loom_diagnostic_emission_t emission = {
+          .op = op,
+          .error = &loom_err_dominance_002,
+          .params = params,
+          .param_count = IREE_ARRAYSIZE(params),
+          .related_ops = related_ops,
+          .related_op_count = IREE_ARRAYSIZE(related_ops),
+      };
+      loom_verify_emit_diagnostic(state, &emission);
     }
   }
 }
@@ -1413,26 +1880,31 @@ static void loom_verify_operand_dominance(loom_verify_state_t* state,
 // and pass bugs that create types with dangling encoding references.
 static void loom_verify_encoding_ref(loom_verify_state_t* state,
                                      const loom_op_t* op, loom_type_t type,
-                                     const char* field_name) {
+                                     const char* field_name,
+                                     loom_diagnostic_field_ref_t field_ref) {
   if (!loom_type_has_ssa_encoding(type)) return;
   uint16_t encoding_value_id = loom_type_encoding_value_id(type);
   if (encoding_value_id >= state->module->values.count) {
     loom_diagnostic_param_t params[] = {
-        loom_param_string(iree_make_cstring_view(field_name)),
+        loom_param_with_field_ref(
+            loom_param_string(iree_make_cstring_view(field_name)), field_ref),
         loom_param_u32(encoding_value_id),
         loom_param_u32((uint32_t)state->module->values.count),
     };
-    loom_verify_emit_structured(state, op, &loom_err_encoding_003, params, 3);
+    loom_verify_emit_structured(state, op, &loom_err_encoding_003, params,
+                                IREE_ARRAYSIZE(params));
     return;
   }
   if (!loom_bitset_test(state->defined_bits, encoding_value_id)) {
     iree_string_view_t value_name =
         loom_verify_value_name(state, encoding_value_id);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(iree_make_cstring_view(field_name)),
+        loom_param_with_field_ref(
+            loom_param_string(iree_make_cstring_view(field_name)), field_ref),
         loom_param_string(value_name),
     };
-    loom_verify_emit_structured(state, op, &loom_err_encoding_004, params, 2);
+    loom_verify_emit_structured(state, op, &loom_err_encoding_004, params,
+                                IREE_ARRAYSIZE(params));
     return;
   }
   loom_type_t encoding_type =
@@ -1441,11 +1913,13 @@ static void loom_verify_encoding_ref(loom_verify_state_t* state,
     iree_string_view_t value_name =
         loom_verify_value_name(state, encoding_value_id);
     loom_diagnostic_param_t params[] = {
-        loom_param_string(iree_make_cstring_view(field_name)),
+        loom_param_with_field_ref(
+            loom_param_string(iree_make_cstring_view(field_name)), field_ref),
         loom_param_string(value_name),
         loom_param_type(encoding_type),
     };
-    loom_verify_emit_structured(state, op, &loom_err_encoding_005, params, 3);
+    loom_verify_emit_structured(state, op, &loom_err_encoding_005, params,
+                                IREE_ARRAYSIZE(params));
   }
 }
 
@@ -1458,16 +1932,20 @@ static void loom_verify_encoding_refs(loom_verify_state_t* state,
     if (operands[i] == LOOM_VALUE_ID_INVALID) continue;
     if (operands[i] >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, operands[i]);
-    snprintf(name_buffer, sizeof(name_buffer), "operand %u", i);
-    loom_verify_encoding_ref(state, op, type, name_buffer);
+    iree_snprintf(name_buffer, sizeof(name_buffer), "operand %u", i);
+    loom_verify_encoding_ref(
+        state, op, type, name_buffer,
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i));
   }
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] == LOOM_VALUE_ID_INVALID) continue;
     if (results[i] >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, results[i]);
-    snprintf(name_buffer, sizeof(name_buffer), "result %u", i);
-    loom_verify_encoding_ref(state, op, type, name_buffer);
+    iree_snprintf(name_buffer, sizeof(name_buffer), "result %u", i);
+    loom_verify_encoding_ref(
+        state, op, type, name_buffer,
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, i));
   }
 }
 
@@ -1483,14 +1961,75 @@ static void loom_verify_block_arg_encoding_refs(loom_verify_state_t* state,
     if (arg_id == LOOM_VALUE_ID_INVALID) continue;
     if (arg_id >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, arg_id);
-    snprintf(name_buffer, sizeof(name_buffer), "block arg %u", a);
-    loom_verify_encoding_ref(state, NULL, type, name_buffer);
+    iree_snprintf(name_buffer, sizeof(name_buffer), "block arg %u", a);
+    loom_verify_encoding_ref(state, NULL, type, name_buffer,
+                             loom_diagnostic_field_ref_none());
   }
 }
 
 //===----------------------------------------------------------------------===//
 // Tied result validation
 //===----------------------------------------------------------------------===//
+
+static void loom_verify_emit_duplicate_tied_result(loom_verify_state_t* state,
+                                                   const loom_op_t* op,
+                                                   iree_string_view_t op_name,
+                                                   uint16_t result_index,
+                                                   uint16_t current_occurrence,
+                                                   uint16_t first_occurrence) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_with_field_ref(
+          loom_param_u32(result_index),
+          loom_diagnostic_field_ref_with_occurrence(
+              LOOM_DIAGNOSTIC_FIELD_RESULT, result_index, current_occurrence)),
+      loom_param_string(op_name),
+  };
+  loom_diagnostic_related_op_t related_ops[] = {{
+      .label = IREE_SV("previously tied here"),
+      .op = op,
+      .field_ref = loom_diagnostic_field_ref_with_occurrence(
+          LOOM_DIAGNOSTIC_FIELD_RESULT, result_index, first_occurrence),
+  }};
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = &loom_err_dominance_006,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .related_ops = related_ops,
+      .related_op_count = IREE_ARRAYSIZE(related_ops),
+  };
+  loom_verify_emit_diagnostic(state, &emission);
+}
+
+static void loom_verify_emit_duplicate_tied_operand(loom_verify_state_t* state,
+                                                    const loom_op_t* op,
+                                                    iree_string_view_t op_name,
+                                                    uint16_t operand_index,
+                                                    uint16_t current_occurrence,
+                                                    uint16_t first_occurrence) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_with_field_ref(loom_param_u32(operand_index),
+                                loom_diagnostic_field_ref_with_occurrence(
+                                    LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                    operand_index, current_occurrence)),
+      loom_param_string(op_name),
+  };
+  loom_diagnostic_related_op_t related_ops[] = {{
+      .label = IREE_SV("previously tied here"),
+      .op = op,
+      .field_ref = loom_diagnostic_field_ref_with_occurrence(
+          LOOM_DIAGNOSTIC_FIELD_OPERAND, operand_index, first_occurrence),
+  }};
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = &loom_err_dominance_007,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .related_ops = related_ops,
+      .related_op_count = IREE_ARRAYSIZE(related_ops),
+  };
+  loom_verify_emit_diagnostic(state, &emission);
+}
 
 static iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
                                               const loom_op_t* op,
@@ -1509,7 +2048,8 @@ static iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
   }
 
   IREE_RETURN_IF_ERROR(loom_verify_tied_table_reset(
-      &state->tied_table, &state->arena, op->result_count, tied_operand_count));
+      &state->tied_table, &state->arena, op->result_count, tied_operand_count,
+      has_signature_ties ? 0 : 1));
 
   iree_string_view_t op_name = loom_op_vtable_name(vtable);
   const loom_tied_result_t* tied = loom_op_tied_results(op);
@@ -1534,66 +2074,76 @@ static iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
   for (uint16_t i = 0; i < op->tied_result_count; ++i) {
     if (tied[i].result_index >= op->result_count) {
       loom_diagnostic_param_t params[] = {
-          loom_param_u32(tied[i].result_index),
+          loom_param_with_field_ref(
+              loom_param_u32(tied[i].result_index),
+              loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT,
+                                        tied[i].result_index)),
           loom_param_string(op_name),
           loom_param_u32(op->result_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_dominance_004, params,
-                                  3);
-    } else if (loom_bitset_test(state->tied_table.result_index_bits,
-                                tied[i].result_index)) {
-      loom_diagnostic_param_t params[] = {
-          loom_param_u32(tied[i].result_index),
-          loom_param_string(op_name),
-      };
-      loom_verify_emit_structured(state, op, &loom_err_dominance_006, params,
-                                  2);
+                                  IREE_ARRAYSIZE(params));
     } else {
-      loom_bitset_set(state->tied_table.result_index_bits,
-                      tied[i].result_index);
+      uint16_t current_occurrence = 0;
+      uint16_t first_occurrence = 0;
+      if (loom_verify_tied_table_claim_result(
+              &state->tied_table, tied[i].result_index, &current_occurrence,
+              &first_occurrence)) {
+        loom_verify_emit_duplicate_tied_result(
+            state, op, op_name, tied[i].result_index, current_occurrence,
+            first_occurrence);
+      }
     }
     if (tied[i].operand_index >= tied_operand_count || !tied_operands) {
       loom_diagnostic_param_t params[] = {
-          loom_param_u32(tied[i].operand_index),
+          loom_param_with_field_ref(
+              loom_param_u32(tied[i].operand_index),
+              loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                        tied[i].operand_index)),
           loom_param_string(op_name),
           loom_param_u32(tied_operand_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_dominance_005, params,
-                                  3);
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
-    if (loom_bitset_test(state->tied_table.operand_index_bits,
-                         tied[i].operand_index)) {
-      loom_diagnostic_param_t params[] = {
-          loom_param_u32(tied[i].operand_index),
-          loom_param_string(op_name),
-      };
-      loom_verify_emit_structured(state, op, &loom_err_dominance_007, params,
-                                  2);
-    } else {
-      loom_bitset_set(state->tied_table.operand_index_bits,
-                      tied[i].operand_index);
+    uint16_t current_operand_occurrence = 0;
+    uint16_t first_operand_occurrence = 0;
+    if (loom_verify_tied_table_claim_operand(
+            &state->tied_table, tied[i].operand_index,
+            &current_operand_occurrence, &first_operand_occurrence)) {
+      loom_verify_emit_duplicate_tied_operand(
+          state, op, op_name, tied[i].operand_index, current_operand_occurrence,
+          first_operand_occurrence);
     }
 
     loom_value_id_t consumed_id = tied_operands[tied[i].operand_index];
+    // DOMINANCE/008 stays single-site for now because the duplicate-value check
+    // runs over a sorted operand-value multiset, which intentionally discards
+    // the source slot of the earlier equal-value operand.
     if (consumed_id != LOOM_VALUE_ID_INVALID &&
         consumed_id < state->module->values.count &&
         loom_verify_tied_table_has_duplicate_operand_value(&state->tied_table,
                                                            consumed_id)) {
+      loom_diagnostic_field_ref_t operand_ref = loom_diagnostic_field_ref(
+          LOOM_DIAGNOSTIC_FIELD_OPERAND, tied[i].operand_index);
       loom_diagnostic_param_t params[] = {
-          loom_param_u32(tied[i].operand_index),
+          loom_param_with_field_ref(loom_param_u32(tied[i].operand_index),
+                                    operand_ref),
           loom_param_string(op_name),
-          loom_param_string(loom_verify_value_name(state, consumed_id)),
+          loom_param_with_field_ref(
+              loom_param_string(loom_verify_value_name(state, consumed_id)),
+              operand_ref),
       };
       loom_verify_emit_structured(state, op, &loom_err_dominance_008, params,
-                                  3);
+                                  IREE_ARRAYSIZE(params));
     }
 
     // Ties on regular body ops consume the operand's storage. Func-like symbol
     // signatures are caller-side ownership contracts, so their entry args are
     // validated as tie targets but not marked consumed at function entry.
     if (!has_signature_ties) {
-      loom_verify_consume_value(state, consumed_id);
+      loom_verify_consume_value(state, consumed_id, op);
     }
   }
 
@@ -1621,18 +2171,24 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
 
     if (ref.module_id != 0) {
       loom_diagnostic_param_t params[] = {
-          loom_param_u32(ref.module_id),
+          loom_param_with_field_ref(
+              loom_param_u32(ref.module_id),
+              loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i)),
       };
-      loom_verify_emit_structured(state, op, &loom_err_symbol_004, params, 1);
+      loom_verify_emit_structured(state, op, &loom_err_symbol_004, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
 
     if (ref.symbol_id >= state->module->symbols.count) {
       loom_diagnostic_param_t params[] = {
-          loom_param_u32(ref.symbol_id),
+          loom_param_with_field_ref(
+              loom_param_u32(ref.symbol_id),
+              loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i)),
           loom_param_u32((uint32_t)state->module->symbols.count),
       };
-      loom_verify_emit_structured(state, op, &loom_err_symbol_001, params, 2);
+      loom_verify_emit_structured(state, op, &loom_err_symbol_001, params,
+                                  IREE_ARRAYSIZE(params));
       continue;
     }
 
@@ -1640,9 +2196,12 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
         &state->module->symbols.entries[ref.symbol_id];
     if (symbol->kind == LOOM_SYMBOL_NONE || symbol->defining_op == NULL) {
       loom_diagnostic_param_t params[] = {
-          loom_param_string(loom_verify_symbol_name(state, ref)),
+          loom_verify_param_string_for_diagnostic_field(
+              loom_verify_symbol_name(state, ref),
+              LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i),
       };
-      loom_verify_emit_structured(state, op, &loom_err_symbol_002, params, 1);
+      loom_verify_emit_structured(state, op, &loom_err_symbol_002, params,
+                                  IREE_ARRAYSIZE(params));
     }
   }
 }
@@ -1717,17 +2276,17 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
           loom_param_u32(region->block_count),
       };
       loom_verify_emit_structured(state, op, &loom_err_structure_006, params,
-                                  3);
+                                  IREE_ARRAYSIZE(params));
     }
     const loom_region_descriptor_t* region_descriptor =
         &vtable->region_descriptors[i];
     for (uint16_t b = 0; b < region->block_count; ++b) {
       const loom_block_t* block = loom_region_const_block(region, b);
-      bool seen_terminator = false;
+      const loom_op_t* terminator_op = NULL;
       for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
         const loom_op_t* current_op = loom_block_const_op(block, op_index);
         if (current_op->flags & LOOM_OP_FLAG_DEAD) continue;
-        if (seen_terminator) {
+        if (terminator_op) {
           const loom_op_vtable_t* current_vtable =
               loom_verify_lookup_vtable(state, current_op->kind);
           iree_string_view_t current_name =
@@ -1736,21 +2295,33 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
           loom_diagnostic_param_t params[] = {
               loom_param_string(current_name),
           };
-          loom_verify_emit_structured(state, current_op,
-                                      &loom_err_structure_012, params,
-                                      IREE_ARRAYSIZE(params));
+          loom_diagnostic_related_op_t related_ops[] = {{
+              .label = IREE_SV("terminator here"),
+              .op = terminator_op,
+          }};
+          loom_diagnostic_emission_t emission = {
+              .op = current_op,
+              .error = &loom_err_structure_012,
+              .params = params,
+              .param_count = IREE_ARRAYSIZE(params),
+              .related_ops = related_ops,
+              .related_op_count = IREE_ARRAYSIZE(related_ops),
+          };
+          loom_verify_emit_diagnostic(state, &emission);
           continue;
         }
-        seen_terminator = loom_verify_op_is_terminator(state, current_op);
+        if (loom_verify_op_is_terminator(state, current_op)) {
+          terminator_op = current_op;
+        }
       }
-      if (!seen_terminator &&
+      if (!terminator_op &&
           region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN) {
         loom_diagnostic_param_t params[] = {
             loom_param_string(op_name),
             loom_param_u32(i),
         };
         loom_verify_emit_structured(state, op, &loom_err_structure_005, params,
-                                    2);
+                                    IREE_ARRAYSIZE(params));
       }
     }
   }
@@ -1800,12 +2371,13 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   if (!vtable) {
     // Unknown op kind — emit structured diagnostic.
     char kind_buffer[16];
-    snprintf(kind_buffer, sizeof(kind_buffer), "0x%04x", op->kind);
+    iree_snprintf(kind_buffer, sizeof(kind_buffer), "0x%04x", op->kind);
     loom_diagnostic_param_t params[] = {
         loom_param_u32(op->kind),
         loom_param_string(iree_make_cstring_view(kind_buffer)),
     };
-    loom_verify_emit_structured(state, op, &loom_err_structure_009, params, 2);
+    loom_verify_emit_structured(state, op, &loom_err_structure_009, params,
+                                IREE_ARRAYSIZE(params));
     IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
     // Still define results so downstream dominance checks don't cascade.
     for (uint16_t i = 0; i < op->result_count; ++i) {
@@ -1900,38 +2472,6 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
 // Source resolver: table-based implementation
 //===----------------------------------------------------------------------===//
 
-// Computes the byte offset into |source| for a 1-based (line, column)
-// pair. Scans for newlines to find the target line, then walks UTF-8
-// codepoints to reach the target column. Columns are counted as
-// codepoints (matching the tokenizer's convention). Returns the byte
-// offset, clamped to source.size if the position is past end.
-static iree_host_size_t loom_source_byte_offset(iree_string_view_t source,
-                                                uint32_t line,
-                                                uint32_t column) {
-  if (line == 0) return 0;
-  // Scan newlines to find the byte offset of the start of |line|.
-  uint32_t current_line = 1;
-  iree_host_size_t offset = 0;
-  while (current_line < line && offset < source.size) {
-    if (source.data[offset] == '\n') {
-      ++current_line;
-    }
-    ++offset;
-  }
-  if (current_line < line) return source.size;
-  // Walk UTF-8 codepoints to reach the target column (1-based).
-  // Column 1 means "start of line" = offset stays where it is.
-  iree_host_size_t line_start = offset;
-  uint32_t current_column = 1;
-  while (current_column < column && offset < source.size &&
-         source.data[offset] != '\n') {
-    iree_unicode_utf8_decode(source, &offset);
-    ++current_column;
-  }
-  (void)line_start;
-  return offset > source.size ? source.size : offset;
-}
-
 bool loom_source_table_resolve(void* user_data, const loom_module_t* module,
                                loom_location_id_t location,
                                loom_source_range_t* out_range) {
@@ -1962,6 +2502,7 @@ bool loom_source_table_resolve(void* user_data, const loom_module_t* module,
       source_entry->source, entry->file.end_line, entry->file.end_col);
 
   *out_range = (loom_source_range_t){
+      .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
       .filename = source_entry->filename,
       .source = source_entry->source,
       .start = start_offset,
@@ -2013,6 +2554,16 @@ static iree_status_t loom_verify_state_initialize(
     status = iree_arena_allocate_array(
         &state->arena, state->defined_bits_length, sizeof(uint64_t),
         (void**)&state->consumed_bits);
+  }
+  if (iree_status_is_ok(status)) {
+    iree_host_size_t consuming_op_count = value_count > 0 ? value_count : 1;
+    status = iree_arena_allocate_array(&state->arena, consuming_op_count,
+                                       sizeof(state->consuming_ops[0]),
+                                       (void**)&state->consuming_ops);
+    if (iree_status_is_ok(status)) {
+      memset(state->consuming_ops, 0,
+             consuming_op_count * sizeof(state->consuming_ops[0]));
+    }
   }
   if (iree_status_is_ok(status)) {
     memset(state->defined_bits, 0,

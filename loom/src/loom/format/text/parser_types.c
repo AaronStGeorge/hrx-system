@@ -156,6 +156,82 @@ iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
 }
 
 //===----------------------------------------------------------------------===//
+// Composite type list parsing
+//===----------------------------------------------------------------------===//
+
+// Allocates a fresh parser-owned FAM type list with at least
+// |minimum_capacity| elements.
+static iree_status_t loom_parser_allocate_type_list(
+    loom_parser_t* parser, iree_host_size_t minimum_capacity,
+    loom_parser_type_list_t** out_list) {
+  iree_host_size_t capacity = LOOM_PARSER_TYPE_LIST_MIN_CAPACITY;
+  if (capacity < minimum_capacity) capacity = minimum_capacity;
+
+  iree_host_size_t alloc_size = 0;
+  IREE_RETURN_IF_ERROR(
+      IREE_STRUCT_LAYOUT(sizeof(loom_parser_type_list_t), &alloc_size,
+                         IREE_STRUCT_FIELD_FAM(capacity, loom_type_t)));
+
+  loom_parser_type_list_t* list = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(&parser->parser_arena, alloc_size, (void**)&list));
+  list->next_free = NULL;
+  list->count = 0;
+  list->capacity = capacity;
+  *out_list = list;
+  return iree_ok_status();
+}
+
+// Leases one parser-owned type-list frame for an active composite type parse.
+// Reused frames keep their previous FAM capacity and only reset count.
+static iree_status_t loom_parser_acquire_type_list(
+    loom_parser_t* parser, loom_parser_type_list_t** out_list) {
+  loom_parser_type_list_t* list = parser->type_list_free_list;
+  if (list) {
+    parser->type_list_free_list = list->next_free;
+    list->next_free = NULL;
+    list->count = 0;
+    *out_list = list;
+    return iree_ok_status();
+  }
+  return loom_parser_allocate_type_list(
+      parser, LOOM_PARSER_TYPE_LIST_MIN_CAPACITY, out_list);
+}
+
+// Returns a type-list frame to parser->type_list_free_list while preserving
+// its retained FAM capacity for later sibling parses.
+static void loom_parser_release_type_list(loom_parser_t* parser,
+                                          loom_parser_type_list_t* list) {
+  if (!list) return;
+  list->next_free = parser->type_list_free_list;
+  parser->type_list_free_list = list;
+}
+
+// Appends one type to a leased type-list frame, growing to a larger retained
+// FAM allocation if this parse exceeds the current high-water capacity.
+static iree_status_t loom_parser_type_list_append(
+    loom_parser_t* parser, loom_parser_type_list_t** inout_list,
+    loom_type_t type) {
+  loom_parser_type_list_t* list = *inout_list;
+  if (list->count >= list->capacity) {
+    iree_host_size_t new_capacity = list->capacity * 2;
+    if (new_capacity < list->count + 1) new_capacity = list->count + 1;
+
+    loom_parser_type_list_t* new_list = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_parser_allocate_type_list(parser, new_capacity, &new_list));
+    new_list->count = list->count;
+    memcpy(new_list->types, list->types, list->count * sizeof(loom_type_t));
+    loom_parser_release_type_list(parser, list);
+    *inout_list = new_list;
+    list = new_list;
+  }
+
+  list->types[list->count++] = type;
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
 // Type reference resolution
 //===----------------------------------------------------------------------===//
 
@@ -168,10 +244,9 @@ iree_status_t loom_parse_static_encoding(loom_parser_t* parser,
 // In definition context (ARG mode), creates a new NONE-typed placeholder value
 // and defines it in scope. The surrounding Scope(...) format element controls
 // that mode for signatures/globals, so BODY-mode tied result annotations still
-// reject unknown names even inside a signature scope. Type parsing still
-// infers the placeholder's value type from each use (index for dims, encoding
-// for SSA encodings), but scope-exit resolution is tracked separately so an
-// inferred use without a matching declaration still diagnoses precisely.
+// reject unknown names even inside a signature scope. Whether an inferred use
+// resolves that placeholder immediately or waits for a later explicit
+// `%name: type` binder is a property of the active declaration scope.
 //
 // In body context (BODY mode), emits PARSE/001 for undefined names.
 static iree_status_t loom_resolve_type_reference(
@@ -212,49 +287,78 @@ static iree_status_t loom_resolve_type_reference(
     if ((parser)->error_count > _resolve_errors) return iree_ok_status();      \
   } while (0)
 
-// Assigns types to NONE-typed values referenced by a parsed type's
-// dim bindings and encoding binding. Dim binding values get index
-// type, encoding binding values get encoding type. Values that
-// already have a type are left untouched (they were defined elsewhere
-// and their types are authoritative).
-static bool loom_type_binding_is_unresolved_placeholder(
-    const loom_parser_t* parser, loom_value_id_t value_id) {
-  if (!loom_parser_in_definition_scope(parser)) return false;
+// Returns the unresolved-placeholder record for a declaration-local binding
+// value, or NULL if `value_id` was not created by ARG-mode parsing in the
+// active Scope(...).
+static loom_parser_unresolved_placeholder_t*
+loom_type_binding_lookup_placeholder(loom_parser_t* parser,
+                                     loom_value_id_t value_id) {
+  if (!loom_parser_in_definition_scope(parser)) return NULL;
   for (iree_host_size_t i = parser->definition_scope.placeholder_start;
        i < parser->unresolved_placeholders.count; ++i) {
-    if (parser->unresolved_placeholders.entries[i].value_id == value_id) {
-      return true;
+    loom_parser_unresolved_placeholder_t* placeholder =
+        &parser->unresolved_placeholders.entries[i];
+    if (placeholder->value_id == value_id) {
+      return placeholder;
     }
   }
-  return false;
+  return NULL;
 }
 
-static void loom_assign_type_binding_types(loom_parser_t* parser,
-                                           loom_type_t type) {
+// Assigns `binding_type` to one dim/encoding binding value when that value is
+// still NONE-typed. Declaration-local placeholders follow the active
+// Scope(...) policy: globals resolve by first inferred use, while func-like
+// signatures wait for a later explicit binder.
+static iree_status_t loom_assign_type_binding_value_type(
+    loom_parser_t* parser, loom_value_id_t value_id, loom_type_t binding_type) {
+  loom_parser_unresolved_placeholder_t* placeholder =
+      loom_type_binding_lookup_placeholder(parser, value_id);
+  loom_value_t* value = &parser->module->values.entries[value_id];
+
+  if (placeholder) {
+    if (!placeholder->resolved &&
+        !iree_any_bit_set(
+            parser->definition_scope.flags,
+            LOOM_PARSER_DEFINITION_SCOPE_FLAG_RESOLVE_PLACEHOLDERS_FROM_USE)) {
+      return iree_ok_status();
+    }
+    if (loom_type_kind(value->type) != LOOM_TYPE_NONE &&
+        !loom_type_equal(value->type, binding_type)) {
+      return loom_parser_emit_duplicate_value_name(parser,
+                                                   placeholder->name_token);
+    }
+    value->type = binding_type;
+    placeholder->resolved = true;
+    return iree_ok_status();
+  }
+
+  if (loom_type_kind(value->type) == LOOM_TYPE_NONE) {
+    value->type = binding_type;
+  }
+  return iree_ok_status();
+}
+
+// Assigns types to binding values referenced by a parsed type. Dim binding
+// values get index type, and SSA encoding bindings get encoding type.
+static iree_status_t loom_assign_type_binding_types(loom_parser_t* parser,
+                                                    loom_type_t type) {
   // Dim bindings.
   uint8_t rank = loom_type_rank(type);
   for (uint8_t i = 0; i < rank; ++i) {
     if (loom_type_dim_is_dynamic_at(type, i)) {
       loom_value_id_t value_id = loom_type_dim_value_id_at(type, i);
-      if (loom_type_binding_is_unresolved_placeholder(parser, value_id)) {
-        continue;
-      }
-      loom_value_t* value = &parser->module->values.entries[value_id];
-      if (loom_type_kind(value->type) == LOOM_TYPE_NONE) {
-        value->type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
-      }
+      IREE_RETURN_IF_ERROR(loom_assign_type_binding_value_type(
+          parser, value_id, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX)));
     }
   }
 
   // Encoding binding (SSA encoding).
   if (loom_type_has_ssa_encoding(type)) {
     loom_value_id_t enc_id = loom_type_encoding_value_id(type);
-    if (loom_type_binding_is_unresolved_placeholder(parser, enc_id)) return;
-    loom_value_t* value = &parser->module->values.entries[enc_id];
-    if (loom_type_kind(value->type) == LOOM_TYPE_NONE) {
-      value->type = loom_type_encoding();
-    }
+    IREE_RETURN_IF_ERROR(loom_assign_type_binding_value_type(
+        parser, enc_id, loom_type_encoding()));
   }
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -380,8 +484,7 @@ static iree_status_t loom_intern_shaped_type(
   }
 
   IREE_RETURN_IF_ERROR(loom_module_intern_type(parser->module, type, out_type));
-  loom_assign_type_binding_types(parser, *out_type);
-  return iree_ok_status();
+  return loom_assign_type_binding_types(parser, *out_type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -479,8 +582,7 @@ static iree_status_t loom_parse_pool_type(loom_parser_t* parser,
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
 
   *out_type = loom_type_pool(dim);
-  loom_assign_type_binding_types(parser, *out_type);
-  return iree_ok_status();
+  return loom_assign_type_binding_types(parser, *out_type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -517,6 +619,38 @@ static iree_status_t loom_parse_group_type(loom_parser_t* parser,
 // Dialect type parsing
 //===----------------------------------------------------------------------===//
 
+// Parses the comma-separated parameter list in a parameterized dialect type.
+// Called after '<' has been consumed and consumes through the closing '>'.
+static iree_status_t loom_parse_dialect_type_params(
+    loom_parser_t* parser, loom_type_parse_mode_t mode,
+    loom_parser_type_list_t** inout_param_types) {
+  uint32_t errors_before = parser->error_count;
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if ((*inout_param_types)->count > 0) {
+      if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+        break;
+      }
+    }
+    if ((*inout_param_types)->count == UINT16_MAX) {
+      loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
+                                               peek);
+    }
+
+    loom_type_t param_type = {0};
+    IREE_RETURN_IF_ERROR(loom_parse_type(parser, mode, &param_type));
+    if (parser->error_count > errors_before) return iree_ok_status();
+    IREE_RETURN_IF_ERROR(
+        loom_parser_type_list_append(parser, inout_param_types, param_type));
+  }
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
+  }
+  return iree_ok_status();
+}
+
 // Parses a dialect type (e.g., hal.buffer, vm.ref<i32>) from the
 // token stream. Called after the OP_NAME token has been consumed.
 static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
@@ -534,38 +668,26 @@ static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
 
   // Parameterized: name<type, type, ...>.
   loom_tokenizer_next(&parser->tokenizer);  // consume '<'
-  loom_type_t param_types[8];
-  uint16_t param_count = 0;
-  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE) &&
-         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-    if (param_count > 0) {
-      if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
-        break;
-      }
-    }
-    if (param_count >= 8) {
-      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
-                                               name_token);
-    }
-    IREE_RETURN_IF_ERROR(
-        loom_parse_type(parser, mode, &param_types[param_count]));
-    ++param_count;
+  uint32_t errors_before = parser->error_count;
+  loom_parser_type_list_t* param_types = NULL;
+  IREE_RETURN_IF_ERROR(loom_parser_acquire_type_list(parser, &param_types));
+  iree_status_t status =
+      loom_parse_dialect_type_params(parser, mode, &param_types);
+  if (parser->error_count > errors_before || !iree_status_is_ok(status)) {
+    loom_parser_release_type_list(parser, param_types);
+    return status;
   }
-  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
-    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
-  }
-  if (param_count > 0) {
-    loom_type_t* arena_params = NULL;
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(&parser->parser_arena, param_count,
-                                  sizeof(loom_type_t), (void**)&arena_params));
-    memcpy(arena_params, param_types, param_count * sizeof(loom_type_t));
-    *out_type = loom_type_dialect(name_id, param_count, arena_params);
+
+  if (param_types->count > 0) {
+    loom_type_t type = loom_type_dialect(name_id, (uint16_t)param_types->count,
+                                         param_types->types);
+    status = loom_module_intern_type(parser->module, type, out_type);
   } else {
-    *out_type = loom_type_dialect_opaque(name_id);
+    loom_type_t type = loom_type_dialect_opaque(name_id);
+    status = loom_module_intern_type(parser->module, type, out_type);
   }
-  return iree_ok_status();
+  loom_parser_release_type_list(parser, param_types);
+  return status;
 }
 
 //===----------------------------------------------------------------------===//
@@ -577,41 +699,46 @@ static iree_status_t loom_parse_dialect_type(loom_parser_t* parser,
 // consumed the opening '('. This function consumes through ')'.
 static iree_status_t loom_parse_type_list(loom_parser_t* parser,
                                           loom_type_parse_mode_t mode,
-                                          loom_type_t* types, uint16_t capacity,
+                                          loom_parser_type_list_t** inout_types,
                                           uint16_t* out_count) {
-  uint16_t count = 0;
+  iree_host_size_t start_count = (*inout_types)->count;
+  uint32_t errors_before = parser->error_count;
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-    if (count > 0) {
+    if ((*inout_types)->count > start_count) {
       if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
         break;
       }
     }
-    if (count >= capacity) {
+    if ((*inout_types)->count - start_count == UINT16_MAX) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
                                                peek);
     }
-    IREE_RETURN_IF_ERROR(loom_parse_type(parser, mode, &types[count]));
-    ++count;
+    loom_type_t type = {0};
+    IREE_RETURN_IF_ERROR(loom_parse_type(parser, mode, &type));
+    if (parser->error_count > errors_before) return iree_ok_status();
+    IREE_RETURN_IF_ERROR(
+        loom_parser_type_list_append(parser, inout_types, type));
   }
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("')'"));
   }
-  *out_count = count;
+  *out_count = (uint16_t)((*inout_types)->count - start_count);
   return iree_ok_status();
 }
 
-// Parses a function type: (arg_types) -> (result_types). Called after
-// the opening LPAREN has been consumed.
-static iree_status_t loom_parse_function_type(loom_parser_t* parser,
-                                              loom_type_parse_mode_t mode,
-                                              loom_type_t* out_type) {
-  loom_type_t arg_types[16];
+// Parses a function type into |*inout_types| and interns the resulting
+// signature. Called after the opening LPAREN has been consumed.
+static iree_status_t loom_parse_function_type_impl(
+    loom_parser_t* parser, loom_type_parse_mode_t mode,
+    loom_parser_type_list_t** inout_types, loom_type_t* out_type) {
+  uint32_t errors_before = parser->error_count;
   uint16_t arg_count = 0;
-  IREE_RETURN_IF_ERROR(loom_parse_type_list(
-      parser, mode, arg_types, IREE_ARRAYSIZE(arg_types), &arg_count));
+  IREE_RETURN_IF_ERROR(
+      loom_parse_type_list(parser, mode, inout_types, &arg_count));
+  if (parser->error_count > errors_before) return iree_ok_status();
 
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_ARROW)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
@@ -622,14 +749,28 @@ static iree_status_t loom_parse_function_type(loom_parser_t* parser,
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'('"));
   }
 
-  loom_type_t result_types[16];
   uint16_t result_count = 0;
-  IREE_RETURN_IF_ERROR(loom_parse_type_list(
-      parser, mode, result_types, IREE_ARRAYSIZE(result_types), &result_count));
+  IREE_RETURN_IF_ERROR(
+      loom_parse_type_list(parser, mode, inout_types, &result_count));
+  if (parser->error_count > errors_before) return iree_ok_status();
 
-  return loom_type_function_build(
-      arg_types, arg_count, result_types, result_count,
-      iree_arena_allocator(&parser->parser_arena), out_type);
+  loom_type_t* arg_types = (*inout_types)->types;
+  loom_type_t* result_types = arg_types + arg_count;
+  return loom_module_intern_function_type(parser->module, arg_types, arg_count,
+                                          result_types, result_count, out_type);
+}
+
+// Parses a function type: (arg_types) -> (result_types). Called after the
+// opening LPAREN has been consumed.
+static iree_status_t loom_parse_function_type(loom_parser_t* parser,
+                                              loom_type_parse_mode_t mode,
+                                              loom_type_t* out_type) {
+  loom_parser_type_list_t* types = NULL;
+  IREE_RETURN_IF_ERROR(loom_parser_acquire_type_list(parser, &types));
+  iree_status_t status =
+      loom_parse_function_type_impl(parser, mode, &types, out_type);
+  loom_parser_release_type_list(parser, types);
+  return status;
 }
 
 //===----------------------------------------------------------------------===//

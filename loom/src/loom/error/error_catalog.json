@@ -1592,6 +1592,62 @@
     "fix_hint_template": "Define the SSA name in the same Scope(...) signature, for example as a function argument or named symbol result"
   },
   {
+    "error_id": "ERR_PARSE_023",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 23,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid string literal escape.",
+    "message_template": "invalid string literal escape: {detail}",
+    "params": [
+      {
+        "name": "detail",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_024",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 24,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Missing identifier after a sigil prefix.",
+    "message_template": "expected identifier after '{sigil}'",
+    "params": [
+      {
+        "name": "sigil",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_PARSE_025",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 25,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unexpected source character.",
+    "message_template": "unexpected character",
+    "params": []
+  },
+  {
+    "error_id": "ERR_PARSE_026",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 26,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unterminated angle bracket.",
+    "message_template": "unterminated angle bracket",
+    "params": []
+  },
+  {
     "error_id": "ERR_BYTECODE_001",
     "domain": 8,
     "domain_name": "BYTECODE",

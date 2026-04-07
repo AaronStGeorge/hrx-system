@@ -8,6 +8,9 @@
 
 #include <string.h>
 
+#include <string>
+#include <vector>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -46,6 +49,36 @@ std::string print_type(loom_type_t type,
   iree_status_ignore(status);
   iree_string_builder_deinitialize(&builder);
   return result;
+}
+
+struct CapturedPrintField {
+  loom_print_field_ref_t field_ref;
+  iree_host_size_t start;
+  iree_host_size_t end;
+};
+
+static void CapturePrintFieldCallback(void* user_data,
+                                      loom_print_field_ref_t field_ref,
+                                      iree_host_size_t start,
+                                      iree_host_size_t end) {
+  auto* fields = static_cast<std::vector<CapturedPrintField>*>(user_data);
+  fields->push_back(CapturedPrintField{
+      .field_ref = field_ref,
+      .start = start,
+      .end = end,
+  });
+}
+
+static const CapturedPrintField* FindCapturedPrintField(
+    const std::vector<CapturedPrintField>& fields,
+    loom_print_field_kind_t field_kind, uint16_t field_index) {
+  for (const CapturedPrintField& field : fields) {
+    if (field.field_ref.kind == field_kind &&
+        field.field_ref.index == field_index) {
+      return &field;
+    }
+  }
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -326,6 +359,26 @@ class PrintOpTest : public ::testing::Test {
     iree_string_builder_initialize(iree_allocator_system(), &builder);
     iree_status_t status =
         loom_text_print_operation_to_builder(module_, op, &builder, flags);
+    std::string result;
+    if (iree_status_is_ok(status)) {
+      result = std::string(iree_string_builder_buffer(&builder),
+                           iree_string_builder_size(&builder));
+    }
+    iree_status_ignore(status);
+    iree_string_builder_deinitialize(&builder);
+    return result;
+  }
+
+  std::string PrintOpWithFields(loom_op_t* op, loom_text_print_flags_t flags,
+                                std::vector<CapturedPrintField>* fields) {
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    loom_print_field_callback_t callback = {
+        .fn = CapturePrintFieldCallback,
+        .user_data = fields,
+    };
+    iree_status_t status = loom_text_print_operation_with_field_callback(
+        module_, op, &builder, flags, callback);
     std::string result;
     if (iree_status_is_ok(status)) {
       result = std::string(iree_string_builder_buffer(&builder),
@@ -743,11 +796,11 @@ TEST_F(PrintOpTest, FuncDeclaration) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   // No arg_types (NULL, 0). Body region is auto-created (empty).
-  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, callee, NULL, 0,
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, callee, NULL, 0,
                                       result_types, 1, NULL, 0, NULL, 0,
                                       LOOM_LOCATION_UNKNOWN, &op));
   // SYMBOL_DEFINE trait: no LHS results. Optional visibility/cc absent
-  // (0 = absent for optional enums). Body always present.
+  // because no build flags were set. Body always present.
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "test.func @identity() -> (f32) {\n"
             "}\n");
@@ -761,7 +814,7 @@ TEST_F(PrintOpTest, FuncWithBody) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   // Builder auto-creates body region with block args from arg_types.
-  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, callee, arg_types, 1,
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, callee, arg_types, 1,
                                       result_types, 1, NULL, 0, NULL, 0,
                                       LOOM_LOCATION_UNKNOWN, &op));
   // Body present, one arg. FuncArgs prints (%block_arg: f32).
@@ -778,9 +831,10 @@ TEST_F(PrintOpTest, FuncWithVisibility) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   // Visibility present (enum value 1 = "public"), cc absent.
-  IREE_ASSERT_OK(loom_test_func_build(&builder_, 1, 0, callee, arg_types, 1,
-                                      result_types, 1, NULL, 0, NULL, 0,
-                                      LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(
+      loom_test_func_build(&builder_, LOOM_TEST_FUNC_BUILD_FLAG_HAS_VISIBILITY,
+                           1, 0, callee, arg_types, 1, result_types, 1, NULL, 0,
+                           NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "test.func public @main(%0: f32) -> (f32) {\n"
             "}\n");
@@ -797,7 +851,7 @@ TEST_F(PrintOpTest, FuncCallOp) {
 
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_call_build(&builder_, 0, callee, &input, 1,
+  IREE_ASSERT_OK(loom_func_call_build(&builder_, 0, 0, callee, &input, 1,
                                       result_types, 1, NULL, 0,
                                       LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
@@ -811,7 +865,7 @@ TEST_F(PrintOpTest, FuncApplyOp) {
 
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_apply_build(&builder_, 0, callee, &input, 1,
+  IREE_ASSERT_OK(loom_func_apply_build(&builder_, 0, 0, callee, &input, 1,
                                        result_types, 1, NULL, 0,
                                        LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
@@ -842,9 +896,10 @@ TEST_F(PrintOpTest, FuncDefOp) {
   loom_type_t arg_types[] = {f32};
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_def_build(&builder_, 1, 0, 0, callee, arg_types, 1,
-                                     result_types, 1, NULL, 0, NULL, 0,
-                                     LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(
+      loom_func_def_build(&builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY, 1,
+                          0, 0, callee, arg_types, 1, result_types, 1, NULL, 0,
+                          NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "func.def public @entry(%0: f32) -> (f32) {\n"
             "}\n");
@@ -861,7 +916,7 @@ TEST_F(PrintOpTest, FuncDefTiedResultPrintsEntryArgName) {
   };
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_test_func_build(
-      &builder_, 0, 0, callee, arg_types, 1, result_types, 1, tied_results,
+      &builder_, 0, 0, 0, callee, arg_types, 1, result_types, 1, tied_results,
       IREE_ARRAYSIZE(tied_results), NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "test.func @identity(%0: f32) -> (%0 as f32) {\n"
@@ -879,7 +934,7 @@ TEST_F(PrintOpTest, FuncDeclTiedResultPrintsArgOperandName) {
   };
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_test_decl_build(
-      &builder_, 0, 0, callee, arg_types, 1, result_types, 1, tied_results,
+      &builder_, 0, 0, 0, callee, arg_types, 1, result_types, 1, tied_results,
       IREE_ARRAYSIZE(tied_results), LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "test.decl @identity(%0: f32) -> (%0 as f32)\n");
@@ -900,8 +955,8 @@ TEST_F(PrintOpTest, FuncTemplateOpRef) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_func_template_build(
-      &builder_, 0, 0, 0, /*priority=*/0, callee, arg_types, 1, result_types, 1,
-      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
+      &builder_, 0, 0, 0, 0, /*priority=*/0, callee, arg_types, 1, result_types,
+      1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
 
   // Set the implements attribute to the interned op name string.
   loom_op_attrs(op)[0] = loom_attr_string(implements_id);
@@ -922,8 +977,9 @@ TEST_F(PrintOpTest, FuncTemplateWithPriority) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_func_template_build(
-      &builder_, 0, 0, 0, /*priority=*/10, callee, arg_types, 1, result_types,
-      1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
+      &builder_, LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PRIORITY, 0, 0, 0,
+      /*priority=*/10, callee, arg_types, 1, result_types, 1, NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &op));
   loom_op_attrs(op)[0] = loom_attr_string(implements_id);
 
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
@@ -943,7 +999,21 @@ TEST_F(PrintOpTest, AttrsOpEmptyDict) {
   IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
                                        loom_make_named_attr_slice(NULL, 0), f32,
                                        LOOM_LOCATION_UNKNOWN, &op));
-  // Dict attribute is empty (count=0), so ATTR_DICT prints nothing.
+  // The optional dict builder leaves an empty slice absent.
+  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
+            "%1 = test.attrs %0 : f32\n");
+}
+
+TEST_F(PrintOpTest, AttrsOpExplicitEmptyDictCanonicalizesToAbsent) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &op));
+  loom_op_attrs(op)[0] = loom_make_canonical_attr_dict(NULL, 0);
+
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "%1 = test.attrs %0 : f32\n");
 }
@@ -1083,6 +1153,21 @@ TEST_F(PrintOpTest,
 
   loom_op_attrs(op)[0] =
       loom_make_canonical_attr_dict(/*entries=*/NULL, /*count=*/1);
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        print_op_status(op, LOOM_TEXT_PRINT_DEFAULT));
+}
+
+TEST_F(PrintOpTest, AttrsOpWithWrongDictAttrKindReturnsInvalidArgument) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &op));
+
+  loom_op_attrs(op)[0] = loom_attr_i64(1);
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         print_op_status(op, LOOM_TEXT_PRINT_DEFAULT));
@@ -1258,6 +1343,95 @@ TEST_F(PrintOpTest, StreamOffsetTracking) {
 }
 
 //===----------------------------------------------------------------------===//
+// Field callbacks
+//===----------------------------------------------------------------------===//
+
+TEST_F(PrintOpTest, FieldCallbackPreservesWideVariadicOperandIndex) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  std::vector<loom_value_id_t> inputs;
+  inputs.reserve(65);
+  for (uint16_t i = 0; i < 65; ++i) {
+    inputs.push_back(def(i32));
+  }
+
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_reduce_build(&builder_, inputs.data(), inputs.size(),
+                                        i32, LOOM_LOCATION_UNKNOWN, &op));
+
+  std::vector<CapturedPrintField> fields;
+  std::string output = PrintOpWithFields(op, LOOM_TEXT_PRINT_DEFAULT, &fields);
+
+  const CapturedPrintField* result_field =
+      FindCapturedPrintField(fields, LOOM_PRINT_FIELD_RESULT, 0);
+  ASSERT_NE(result_field, nullptr);
+  EXPECT_EQ(output.substr(result_field->start,
+                          result_field->end - result_field->start),
+            "%65");
+
+  const CapturedPrintField* operand_field =
+      FindCapturedPrintField(fields, LOOM_PRINT_FIELD_OPERAND, 64);
+  ASSERT_NE(operand_field, nullptr);
+  EXPECT_EQ(output.substr(operand_field->start,
+                          operand_field->end - operand_field->start),
+            "%64");
+}
+
+TEST_F(PrintOpTest, FieldCallbackReportsAttrAndRegionSpans) {
+  loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t condition = def(i1);
+  loom_value_id_t input = def(f32);
+
+  loom_string_id_t axis_id = intern("axis");
+  loom_string_id_t label_id = intern("label");
+  loom_string_id_t foo_id = intern("foo");
+  loom_named_attr_t entries[2] = {
+      {.name_id = axis_id, .value = loom_attr_i64(0)},
+      {.name_id = label_id, .value = loom_attr_string(foo_id)},
+  };
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  std::vector<CapturedPrintField> attr_fields;
+  std::string attrs_output =
+      PrintOpWithFields(attrs_op, LOOM_TEXT_PRINT_DEFAULT, &attr_fields);
+
+  const CapturedPrintField* attr_field =
+      FindCapturedPrintField(attr_fields, LOOM_PRINT_FIELD_ATTR, 0);
+  ASSERT_NE(attr_field, nullptr);
+  EXPECT_EQ(attrs_output.substr(attr_field->start,
+                                attr_field->end - attr_field->start),
+            "{axis = 0, label = \"foo\"}");
+
+  loom_type_t result_types[] = {f32};
+  loom_op_t* branch_op = NULL;
+  IREE_ASSERT_OK(loom_test_branch_build(&builder_, condition, result_types, 1,
+                                        NULL, 0, LOOM_LOCATION_UNKNOWN,
+                                        &branch_op));
+
+  std::vector<CapturedPrintField> region_fields;
+  std::string branch_output =
+      PrintOpWithFields(branch_op, LOOM_TEXT_PRINT_DEFAULT, &region_fields);
+
+  const CapturedPrintField* then_field =
+      FindCapturedPrintField(region_fields, LOOM_PRINT_FIELD_REGION, 0);
+  ASSERT_NE(then_field, nullptr);
+  EXPECT_EQ(branch_output.substr(then_field->start,
+                                 then_field->end - then_field->start),
+            "{\n}");
+
+  const CapturedPrintField* else_field =
+      FindCapturedPrintField(region_fields, LOOM_PRINT_FIELD_REGION, 1);
+  ASSERT_NE(else_field, nullptr);
+  EXPECT_EQ(branch_output.substr(else_field->start,
+                                 else_field->end - else_field->start),
+            "{\n}");
+}
+
+//===----------------------------------------------------------------------===//
 // Null stream (offset-only computation)
 //===----------------------------------------------------------------------===//
 
@@ -1340,7 +1514,7 @@ TEST_F(PrintOpTest, NestedLoopInFunc) {
   loom_type_t arg_types[] = {f32};
   loom_type_t result_types[] = {f32};
   loom_op_t* func_op = NULL;
-  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, callee, arg_types, 1,
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, callee, arg_types, 1,
                                       result_types, 1, NULL, 0, NULL, 0,
                                       LOOM_LOCATION_UNKNOWN, &func_op));
   // func block arg = %4, func result = %5
@@ -1815,12 +1989,8 @@ TEST_F(PrintPredicateTest, RangeThreeArgs) {
 }
 
 TEST_F(PrintPredicateTest, EmptyPredicateList) {
-  // An empty predicate list: no attribute data to print.
-  // The PREDICATE_LIST case checks for NULL predicate_list and skips.
   loom_op_t* op = build_pred_op(NULL, 0);
-  // With NULL predicate_list, the case is a no-op. The op prints just
-  // its name with no predicate bracket.
-  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT), "test.predtest\n");
+  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT), "test.predtest []\n");
 }
 
 TEST_F(PrintPredicateTest, AllPredicateKinds) {
@@ -2133,6 +2303,98 @@ TEST_F(PrintOpTest, LocationOpaqueRejectsInvalidUtf8Data) {
       print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
 }
 
+TEST_F(PrintOpTest, LocationFusedPrintsNestedLocationBodies) {
+  loom_source_id_t jax_source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("jax.py"),
+                                              &jax_source_id));
+  loom_location_id_t jax_loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(
+      module_,
+      loom_location_file_range(jax_source_id, /*start_line=*/7,
+                               /*start_col=*/8, /*end_line=*/7,
+                               /*end_col=*/8),
+      &jax_loc_id));
+
+  loom_source_id_t recipe_source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("recipe.loom"),
+                                              &recipe_source_id));
+  loom_location_id_t recipe_loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(
+      module_,
+      loom_location_file_range(recipe_source_id, /*start_line=*/1,
+                               /*start_col=*/2, /*end_line=*/3,
+                               /*end_col=*/4),
+      &recipe_loc_id));
+
+  loom_source_id_t torch_source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("torch"),
+                                              &torch_source_id));
+  loom_location_entry_t opaque_loc = {.kind = LOOM_LOCATION_OPAQUE};
+  opaque_loc.opaque.source_id = torch_source_id;
+  const char* data = "node\n42";
+  opaque_loc.opaque.data = (const uint8_t*)data;
+  opaque_loc.opaque.data_length = (uint32_t)strlen(data);
+  loom_location_id_t opaque_loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, opaque_loc, &opaque_loc_id));
+
+  loom_location_id_t* nested_children = NULL;
+  IREE_ASSERT_OK(iree_arena_allocate_array(
+      &module_->arena, 2, sizeof(*nested_children), (void**)&nested_children));
+  nested_children[0] = recipe_loc_id;
+  nested_children[1] = opaque_loc_id;
+  loom_location_entry_t nested_fused_loc = {.kind = LOOM_LOCATION_FUSED};
+  nested_fused_loc.fused.count = 2;
+  nested_fused_loc.fused.children = nested_children;
+  loom_location_id_t nested_fused_loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, nested_fused_loc,
+                                          &nested_fused_loc_id));
+
+  loom_location_id_t* root_children = NULL;
+  IREE_ASSERT_OK(iree_arena_allocate_array(
+      &module_->arena, 2, sizeof(*root_children), (void**)&root_children));
+  root_children[0] = jax_loc_id;
+  root_children[1] = nested_fused_loc_id;
+  loom_location_entry_t fused_loc = {.kind = LOOM_LOCATION_FUSED};
+  fused_loc.fused.count = 2;
+  fused_loc.fused.children = root_children;
+  loom_location_id_t fused_loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, fused_loc, &fused_loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, fused_loc_id, &op));
+
+  std::string output =
+      print_op(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_NE(output.find("loc(fused<\"jax.py\":7:8, "
+                        "fused<\"recipe.loom\":1:2 to 3:4, "
+                        "opaque<\"torch\", \"node\\n42\">>>)"),
+            std::string::npos)
+      << "Expected nested fused location, got: " << output;
+}
+
+TEST_F(PrintOpTest, LocationFusedRejectsOutOfRangeChildId) {
+  loom_location_id_t* children = NULL;
+  IREE_ASSERT_OK(iree_arena_allocate_array(
+      &module_->arena, 1, sizeof(*children), (void**)&children));
+  children[0] = 42;
+  loom_location_entry_t fused_loc = {.kind = LOOM_LOCATION_FUSED};
+  fused_loc.fused.count = 1;
+  fused_loc.fused.children = children;
+  loom_location_id_t fused_loc_id = LOOM_LOCATION_UNKNOWN;
+  IREE_ASSERT_OK(loom_module_add_location(module_, fused_loc, &fused_loc_id));
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t input = def(f32);
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_neg_build(&builder_, input, f32, fused_loc_id, &op));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      print_op_status(op, LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS));
+}
+
 //===----------------------------------------------------------------------===//
 // Bounds-check regression tests
 //===----------------------------------------------------------------------===//
@@ -2182,9 +2444,9 @@ TEST_F(PrintOpTest, BoundsCheckOptionalAttrMalformed) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_test_func_build(&builder_, 1, 0, callee, &f32, 1,
-                                      result_types, 1, NULL, 0, NULL, 0,
-                                      LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_test_func_build(
+      &builder_, LOOM_TEST_FUNC_BUILD_FLAG_HAS_VISIBILITY, 1, 0, callee, &f32,
+      1, result_types, 1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
   // Verify the op was built with attributes.
   ASSERT_GT(op->attribute_count, 0);
   // Corrupt: pretend the op has no attributes.

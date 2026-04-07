@@ -28,6 +28,7 @@ typedef struct loom_parser_t loom_parser_t;
 typedef struct loom_parsed_op_t loom_parsed_op_t;
 typedef struct loom_parser_encoding_params_t loom_parser_encoding_params_t;
 typedef struct loom_parser_scope_t loom_parser_scope_t;
+typedef struct loom_parser_type_list_t loom_parser_type_list_t;
 
 // Pending block argument prepared by FUNC_ARGS, BINDING_LIST, or an implicit
 // region operand such as a loop IV.
@@ -66,13 +67,27 @@ typedef struct loom_parser_unresolved_placeholders_t {
   iree_host_size_t capacity;
 } loom_parser_unresolved_placeholders_t;
 
+enum loom_parser_definition_scope_flag_bits_e {
+  // ARG-mode placeholders in this Scope(...) are declarations as soon as type
+  // parsing infers an index/encoding binding type from first use. Global
+  // definitions need this because `%dim`/`%enc` names appear only inside the
+  // result type and optional predicates, not as later `%name: type` binders.
+  LOOM_PARSER_DEFINITION_SCOPE_FLAG_RESOLVE_PLACEHOLDERS_FROM_USE = 1u << 0,
+};
+typedef uint8_t loom_parser_definition_scope_flags_t;
+
 // Tracks the one active Scope(...) declaration scope in an op format. Nested
 // Scope(...) is intentionally unsupported by the DSL, so the C parser only
-// needs one saved parent scope and one pop index.
+// needs one placeholder pop index and one format-element pop point.
+//
+// This metadata intentionally sits next to, not inside, the lexical scope
+// chain: `parser->scope` owns name visibility, while `definition_scope` owns
+// the lifetime and resolution policy for ARG-mode placeholders created by type
+// parsing in the current declaration wrapper.
 typedef struct loom_parser_definition_scope_t {
-  loom_parser_scope_t* parent_scope;
   iree_host_size_t placeholder_start;
   uint16_t pop_at;  // UINT16_MAX when no Scope(...) is active.
+  loom_parser_definition_scope_flags_t flags;
 } loom_parser_definition_scope_t;
 
 //===----------------------------------------------------------------------===//
@@ -89,6 +104,8 @@ typedef struct loom_parser_scope_entry_t {
 // A name scope for SSA value resolution. Inner scopes see outer
 // names via parent chain; outer scopes cannot see inner names.
 typedef struct loom_parser_scope_t {
+  // Parser-owned scopes returned to parser->scope_free_list after pop.
+  struct loom_parser_scope_t* next_free;
   struct loom_parser_scope_t* parent;
   loom_parser_scope_entry_t* entries;
   iree_host_size_t capacity;  // Power of 2. 0 = not yet allocated.
@@ -114,10 +131,17 @@ loom_value_id_t loom_parser_scope_lookup(const loom_parser_scope_t* scope,
 loom_value_id_t loom_parser_scope_lookup_local(const loom_parser_scope_t* scope,
                                                loom_string_id_t name_id);
 
-// Allocates a new child scope from the parser arena.
-iree_status_t loom_parser_scope_push(iree_arena_allocator_t* arena,
+// Pushes a parser-owned child scope with |parent| as its lexical parent. Reused
+// child scopes retain their hash-table allocation and are reset to empty
+// sentinels on acquire. The root module scope is stack-owned and is not managed
+// by this helper.
+iree_status_t loom_parser_scope_push(loom_parser_t* parser,
                                      loom_parser_scope_t* parent,
                                      loom_parser_scope_t** out_scope);
+
+// Pops |parser->scope| to its parent and returns the released child frame to
+// parser->scope_free_list with its retained hash-table storage intact.
+void loom_parser_scope_pop(loom_parser_t* parser);
 
 //===----------------------------------------------------------------------===//
 // Result scope
@@ -190,10 +214,13 @@ iree_status_t loom_parser_resolve_value(loom_parser_t* parser,
                                         loom_value_id_t* out_value_id);
 
 // Enters a one-level declaration scope that should pop after format element
-// |pop_at|. Returns a non-OK status if the op format attempts nested
-// Scope(...), which is rejected by the Python DSL and unsupported in C.
-iree_status_t loom_parser_definition_scope_push(loom_parser_t* parser,
-                                                uint16_t pop_at);
+// `pop_at`. `flags` controls how ARG-mode placeholders created in this
+// declaration wrapper become resolved. Returns a non-OK status if the op format
+// attempts nested Scope(...), which is rejected by the Python DSL and
+// unsupported in C.
+iree_status_t loom_parser_definition_scope_push(
+    loom_parser_t* parser, uint16_t pop_at,
+    loom_parser_definition_scope_flags_t flags);
 
 // Pops the active declaration scope when |format_index| reaches pop_at and
 // emits an unresolved-placeholder diagnostic for any Scope-local placeholder
@@ -263,6 +290,10 @@ typedef struct loom_parser_t {
   loom_builder_t builder;
   loom_parser_scope_t* scope;
 
+  // Parser-owned reusable child lexical scope frames. The root module scope is
+  // stack-owned in loom_text_parse and is not part of this free list.
+  loom_parser_scope_t* scope_free_list;
+
   // Reusable result-name overlay while parsing result type annotations. This is
   // intentionally separate from the lexical scope representation: the hot path
   // for 0-16 result names is a tiny inline linear scan, while larger outliers
@@ -279,6 +310,11 @@ typedef struct loom_parser_t {
   // loom_parse_static_encoding call leases its own frame.
   loom_parser_encoding_params_t* encoding_params_free_list;
 
+  // Parser-owned reusable type-list scratch frames for first-class function
+  // signatures and dialect type parameters. Nested composite type parses lease
+  // independent frames, and released frames retain their FAM capacity.
+  loom_parser_type_list_t* type_list_free_list;
+
   loom_alias_table_t aliases;
   loom_symbol_map_t symbol_lookup;
   loom_diagnostic_sink_t diagnostic_sink;
@@ -287,6 +323,15 @@ typedef struct loom_parser_t {
   iree_string_view_t filename;
   iree_string_view_t source;
   loom_source_id_t source_id;
+
+  // One-entry lookaside for repeated loc("same_file":...) annotations. Most
+  // explicit locations in a generated .loom file reference one source, so this
+  // avoids rescanning the context source table on every op while keeping cache
+  // invalidation trivial.
+  struct {
+    iree_string_view_t source_name;
+    loom_source_id_t source_id;
+  } cached_location;
 
   // Pending block arguments from FUNC_ARGS, BINDING_LIST, or implicit region
   // operands such as loop IVs. The next REGION format element consumes them to
@@ -322,6 +367,16 @@ iree_status_t loom_parser_emit(loom_parser_t* parser,
                                const loom_diagnostic_param_t* params,
                                iree_host_size_t param_count,
                                loom_token_t token);
+
+// Emits a structured diagnostic from |token| with one labeled related location
+// anchored at |related_token|.
+iree_status_t loom_parser_emit_related(loom_parser_t* parser,
+                                       const loom_error_def_t* error,
+                                       const loom_diagnostic_param_t* params,
+                                       iree_host_size_t param_count,
+                                       loom_token_t token,
+                                       iree_string_view_t related_label,
+                                       loom_token_t related_token);
 
 // Emits ERR_PARSE_003 with |actual_token| rendered from |token.kind| and
 // |token.text|, not by slicing the source spelling back out of the file.
@@ -405,6 +460,7 @@ void loom_parser_sync_to_brace(loom_parser_t* parser);
 #define LOOM_PARSED_OP_INLINE_ATTRS 8
 #define LOOM_PARSED_OP_INLINE_REGIONS 4
 #define LOOM_PARSED_OP_INLINE_TIED 4
+#define LOOM_PARSED_OP_INLINE_FIELD_SPANS 16
 
 // Accumulates parsed fields during format walk. Pointers start aimed at the
 // inline arrays and redirect to parser_arena spill storage on growth. Parser-
@@ -422,6 +478,7 @@ struct loom_parsed_op_t {
   loom_attribute_t* attributes;
   loom_region_t** regions;
   loom_tied_result_t* tied_results;
+  loom_location_field_span_t* field_spans;
 
   uint16_t operand_count;
   uint16_t operand_capacity;
@@ -429,6 +486,8 @@ struct loom_parsed_op_t {
   uint16_t result_capacity;
   uint16_t tied_result_count;
   uint16_t tied_result_capacity;
+  uint16_t field_span_count;
+  uint16_t field_span_capacity;
   uint8_t attribute_count;
   uint8_t attribute_capacity;
   uint8_t region_count;
@@ -442,6 +501,8 @@ struct loom_parsed_op_t {
   loom_attribute_t inline_attributes[LOOM_PARSED_OP_INLINE_ATTRS];
   loom_region_t* inline_regions[LOOM_PARSED_OP_INLINE_REGIONS];
   loom_tied_result_t inline_tied_results[LOOM_PARSED_OP_INLINE_TIED];
+  loom_location_field_span_t
+      inline_field_spans[LOOM_PARSED_OP_INLINE_FIELD_SPANS];
 };
 
 // Initializes a fresh parser-owned parsed-op scratch frame.
@@ -491,6 +552,15 @@ iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
                                              iree_arena_allocator_t* arena,
                                              loom_tied_result_t tied);
 
+// Appends one source field span to the parsed-op sidecar. |start_token| is the
+// token where the field's source spelling began; |end_line|/|end_column| come
+// from the tokenizer's consumed-end cursor after the field parser finished.
+// No-op for parser-synthesized fields with LOOM_TOKEN_NONE.
+iree_status_t loom_parsed_op_add_field_span(
+    loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
+    loom_location_field_kind_t kind, uint16_t index, loom_token_t start_token,
+    uint32_t end_line, uint32_t end_column);
+
 // Appends a block arg to the parser's pending block arg list. These entries are
 // consumed by the next REGION format element to seed the entry block.
 // Arena-allocated with growth.
@@ -506,6 +576,17 @@ iree_status_t loom_parser_add_pending_block_arg(loom_parser_t* parser,
 iree_status_t loom_parse_type(loom_parser_t* parser,
                               loom_type_parse_mode_t mode,
                               loom_type_t* out_type);
+
+// Reusable parser-owned FAM scratch list for one active composite type parse.
+// Released frames retain their element capacity so repeated wide sibling
+// signatures only allocate when a new high-water mark is reached.
+#define LOOM_PARSER_TYPE_LIST_MIN_CAPACITY 8
+struct loom_parser_type_list_t {
+  loom_parser_type_list_t* next_free;
+  iree_host_size_t count;
+  iree_host_size_t capacity;
+  loom_type_t types[];
+};
 
 // Parses a static encoding reference from a HASH_ATTR token.
 //

@@ -75,13 +75,45 @@ iree_status_t loom_text_print_operation_to_builder(
 // Field emission callback
 //===----------------------------------------------------------------------===//
 
+// Identifies the category of an op field emitted by the text printer.
+typedef enum loom_print_field_kind_e {
+  LOOM_PRINT_FIELD_OPERAND = 0,
+  LOOM_PRINT_FIELD_RESULT = 1,
+  LOOM_PRINT_FIELD_ATTR = 2,
+  LOOM_PRINT_FIELD_REGION = 3,
+} loom_print_field_kind_t;
+
+// Identifies a concrete op field emitted by the text printer.
+//
+// This callback-local representation intentionally carries a full 16-bit field
+// index instead of reusing loom_field_ref_t's packed 6-bit constraint-table
+// encoding. Wide variadic operands/results still need precise byte spans in
+// fallback diagnostics.
+typedef struct loom_print_field_ref_t {
+  loom_print_field_kind_t kind;
+  uint16_t index;
+} loom_print_field_ref_t;
+
+static inline loom_print_field_ref_t loom_print_field_ref(
+    loom_print_field_kind_t kind, uint16_t index) {
+  return (loom_print_field_ref_t){
+      .kind = kind,
+      .index = index,
+  };
+}
+
+static inline bool loom_print_field_ref_equal(loom_print_field_ref_t lhs,
+                                              loom_print_field_ref_t rhs) {
+  return lhs.kind == rhs.kind && lhs.index == rhs.index;
+}
+
 // Called by the printer for each field it emits in the output.
-// Fires for operand %names, result %names, attribute values — every
-// semantically meaningful token that corresponds to an op field.
-// |field_ref| identifies the field via LOOM_FIELD_REF(category, index).
-// |start| and |end| are byte offsets in the output stream.
+// Fires for operand %names, result %names, attribute values, and region bodies
+// — every semantically meaningful token span that corresponds to an op field.
+// |field_ref| identifies the field category and index. |start| and |end| are
+// byte offsets in the output stream.
 typedef void (*loom_print_field_fn_t)(void* user_data,
-                                      loom_field_ref_t field_ref,
+                                      loom_print_field_ref_t field_ref,
                                       iree_host_size_t start,
                                       iree_host_size_t end);
 

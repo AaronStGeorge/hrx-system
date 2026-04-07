@@ -80,7 +80,7 @@ class WriterTest : public ::testing::Test {
     loom_type_t arg_types[1] = {f32_type};
     loom_type_t result_types[1] = {f32_type};
     loom_op_t* func_op = nullptr;
-    IREE_CHECK_OK(loom_test_func_build(&module_builder, /*visibility=*/0,
+    IREE_CHECK_OK(loom_test_func_build(&module_builder, 0, /*visibility=*/0,
                                        /*cc=*/0, callee, arg_types, 1,
                                        result_types, 1, nullptr, 0, nullptr, 0,
                                        LOOM_LOCATION_UNKNOWN, &func_op));
@@ -491,7 +491,7 @@ TEST_F(WriterTest, ModuleWithFunction) {
   loom_type_t arg_types[2] = {i32_type, i32_type};
   loom_type_t result_types[1] = {i32_type};
   loom_op_t* func_op = nullptr;
-  IREE_ASSERT_OK(loom_test_func_build(&module_builder, /*visibility=*/0,
+  IREE_ASSERT_OK(loom_test_func_build(&module_builder, 0, /*visibility=*/0,
                                       /*cc=*/0, callee, arg_types, 2,
                                       result_types, 1, nullptr, 0, nullptr, 0,
                                       LOOM_LOCATION_UNKNOWN, &func_op));

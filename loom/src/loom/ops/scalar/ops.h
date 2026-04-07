@@ -1470,6 +1470,7 @@ void loom_scalar_bitcast_fold(
 // %c42 = scalar.constant 42 : i32
 LOOM_DEFINE_ISA(loom_scalar_constant_isa, LOOM_OP_SCALAR_CONSTANT)
 LOOM_DEFINE_RESULT(loom_scalar_constant_result, 0)
+LOOM_DEFINE_ATTR_ANY(loom_scalar_constant_value, 0)
 iree_status_t loom_scalar_constant_build(
     loom_builder_t* builder,
     loom_attribute_t value,
@@ -1481,6 +1482,9 @@ void loom_scalar_constant_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+iree_status_t loom_scalar_constant_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_SCALAR_ANDI: Bitwise AND.
 // %result = scalar.andi %lhs, %rhs : i32

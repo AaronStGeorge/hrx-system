@@ -93,6 +93,8 @@ loom_cc_library(
     srcs = ["tokenizer.c"],
     hdrs = ["tokenizer.h"],
     deps = [
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:error_defs",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/internal:unicode",
@@ -104,6 +106,7 @@ loom_cc_test(
     srcs = ["tokenizer_test.cc"],
     deps = [
         ":tokenizer",
+        "//loom/src/loom/error:error_defs",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

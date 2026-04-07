@@ -187,6 +187,7 @@ loom_cc_test(
     loom::src::loom::error::error_defs
     loom::src::loom::error::json_sink
     loom::src::loom::error::renderer
+    loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test

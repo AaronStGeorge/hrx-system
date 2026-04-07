@@ -59,6 +59,7 @@ loom_cc_library(
   SRCS
     "error_tables.c"
   DEPS
+    ::emitter
     iree::base
     loom::src::loom::ir
   PUBLIC

@@ -20,7 +20,9 @@ loom_cc_library(
     "canonicalize.c"
     "fold.c"
     "tables.c"
+    "verify.c"
   DEPS
+    loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ir::facts

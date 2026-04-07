@@ -135,7 +135,7 @@ class TestBuilders:
         return cast(ValueRef, self._b.build("test.update", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def invoke(self, *, callee: str, operands: list[ValueRef], results: list[Type | TiedResultSpec]) -> list[ValueRef]:
-        """Test variadic call-like op with tied results.
+        """Test variadic call-like op with tied results. The verifier checks that the invoke signature matches the referenced function declaration or definition.
 
         Example::
             %output, %count = test.invoke @callee(%weights, %input) : (tile<4xf32>, index) -> (%weights as tile<4xf32>, index)

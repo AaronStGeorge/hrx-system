@@ -109,3 +109,21 @@ func.def @type_substring(%a: f32, %b: f32) -> (f32) {
 // Non-symbol-defining op at module level is rejected by the verifier.
 // ERROR@+1: STRUCTURE/011 "test.constant"
 %c = test.constant 42 : i32
+
+// ====
+
+// test.constant result element type and payload kind must agree.
+func.def @test_constant_float_payload_kind() {
+  // ERROR@+1: TYPE/005 "value"
+  %c = test.constant 1 : tile<4xf32>
+  func.return
+}
+
+// ====
+
+// test.constant only supports scalar and shaped element-bearing results.
+func.def @test_constant_result_type_kind() {
+  // ERROR@+1: TYPE/004 "scalar/tile/tensor"
+  %c = test.constant 0 : encoding
+  func.return
+}

@@ -17,7 +17,7 @@ namespace {
 
 // Helper: escape a string through the JSON escape adapter and return
 // the raw escaped content (no surrounding quotes).
-std::string EscapeRaw(const char* input) {
+std::string EscapeRaw(iree_string_view_t input) {
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_output_stream_t stream;
@@ -27,8 +27,7 @@ std::string EscapeRaw(const char* input) {
   loom_output_stream_t escape_stream;
   loom_json_escape_stream_init(&stream, &escape_data, &escape_stream);
 
-  iree_status_t status = loom_output_stream_write(
-      &escape_stream, iree_make_string_view(input, strlen(input)));
+  iree_status_t status = loom_output_stream_write(&escape_stream, input);
   std::string result;
   if (iree_status_is_ok(status)) {
     iree_string_view_t view = iree_string_builder_view(&builder);
@@ -36,6 +35,10 @@ std::string EscapeRaw(const char* input) {
   }
   iree_string_builder_deinitialize(&builder);
   return result;
+}
+
+std::string EscapeRaw(const char* input) {
+  return EscapeRaw(iree_make_cstring_view(input));
 }
 
 // Helper: escape through the quoted convenience function.
@@ -186,6 +189,15 @@ TEST(JsonEscape, E2NotFollowedBy80) {
 TEST(JsonEscape, E280ButNotA8OrA9) {
   // E2 80 94 = U+2014 (EM DASH) — should NOT be escaped.
   EXPECT_EQ(EscapeRaw("\xe2\x80\x94"), "\xe2\x80\x94");
+}
+
+TEST(JsonEscape, InvalidUtf8BytesBecomeReplacementEscapes) {
+  std::string input =
+      "a\x80"
+      "\xe2\x80"
+      "b";
+  EXPECT_EQ(EscapeRaw(iree_make_string_view(input.data(), input.size())),
+            "a\\ufffd\\ufffd\\ufffdb");
 }
 
 //===----------------------------------------------------------------------===//

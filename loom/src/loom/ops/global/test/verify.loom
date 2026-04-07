@@ -59,8 +59,26 @@ func.def @load_square_ok() {
 // Storing a rectangular value to a square global is invalid.
 global.variable @square_store : tile<[%n]x[%n]xf32>
 
-func.def @store_square_mismatch(%value: tile<[%m]x[%k]xf32>) {
+func.def @store_square_mismatch(%m: index, %k: index, %value: tile<[%m]x[%k]xf32>) {
   // ERROR@+1: TYPE/001 "stored value"
   global.store %value, @square_store : tile<[%m]x[%k]xf32>
   func.return
 }
+
+// ====
+
+// Inline initializers are scalar-only in this format.
+// ERROR@+1: TYPE/004 "scalar"
+global.constant @weights_with_initializer : tile<4xf32> = [1, 2, 3, 4]
+
+// ====
+
+// Float globals require float literal initializers.
+// ERROR@+1: TYPE/005 "initializer"
+global.constant @pi_bad_initializer : f32 = 1
+
+// ====
+
+// i1 integer initializers must be 0 or 1.
+// ERROR@+1: TYPE/005 "initializer"
+global.variable @bad_flag : i1 = 2

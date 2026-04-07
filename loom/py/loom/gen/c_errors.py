@@ -161,6 +161,7 @@ def generate_error_tables_c(errors: list[ErrorDef]) -> str:
                 lines.append(f'    {{"{name_escaped}", {PARAM_KIND_MAP[param.kind]}}},')
             lines.append("};")
         lines.append(f"const loom_error_def_t {symbol} = {{")
+        lines.append(f'    .error_id = "{_escape_c_string(error.error_id)}",')
         lines.append(f"    .domain = {DOMAIN_MAP[error.domain]},")
         lines.append(f"    .severity = {SEVERITY_MAP[error.severity]},")
         lines.append(f"    .code = {error.code},")

@@ -124,6 +124,7 @@ extern const loom_op_vtable_t loom_test_cast_vtable;
 // %c42 = test.constant 42 : i32
 LOOM_DEFINE_ISA(loom_test_constant_isa, LOOM_OP_TEST_CONSTANT)
 LOOM_DEFINE_RESULT(loom_test_constant_result, 0)
+LOOM_DEFINE_ATTR_ANY(loom_test_constant_value, 0)
 iree_status_t loom_test_constant_build(
     loom_builder_t* builder,
     loom_attribute_t value,
@@ -135,6 +136,9 @@ void loom_test_constant_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+iree_status_t loom_test_constant_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_TEST_USE: Side-effecting sink that observes values without producing results. Not DCE-able. Use in tests to keep values alive for inspection.
 // test.use %a : i32
@@ -199,7 +203,7 @@ iree_status_t loom_test_update_build(
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_update_vtable;
 
-// LOOM_OP_TEST_INVOKE: Test variadic call-like op with tied results.
+// LOOM_OP_TEST_INVOKE: Test variadic call-like op with tied results. The verifier checks that the invoke signature matches the referenced function declaration or definition.
 // %output, %count = test.invoke @callee(%weights, %input) : (tile<4xf32>, index) -> (%weights as tile<4xf32>, index)
 LOOM_DEFINE_ISA(loom_test_invoke_isa, LOOM_OP_TEST_INVOKE)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_test_invoke_operands, 0)
@@ -217,6 +221,9 @@ iree_status_t loom_test_invoke_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_invoke_vtable;
+iree_status_t loom_test_invoke_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_TEST_SLICE: Test index list with mixed static/dynamic offsets.
 // %subtile = test.slice %source[0, %offset] : tile<64x64xf16> -> (tile<16x16xf16>)
@@ -309,8 +316,14 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_test_func_callee, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_test_func_visibility, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_test_func_cc, 2)
 LOOM_DEFINE_REGION(loom_test_func_body, 0)
+enum loom_test_func_build_flag_bits_e {
+  LOOM_TEST_FUNC_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
+  LOOM_TEST_FUNC_BUILD_FLAG_HAS_CC = 1u << 1,
+};
+typedef uint32_t loom_test_func_build_flags_t;
 iree_status_t loom_test_func_build(
     loom_builder_t* builder,
+    loom_test_func_build_flags_t build_flags,
     loom_optional uint8_t visibility,
     loom_optional uint8_t cc,
     loom_symbol_ref_t callee,
@@ -333,8 +346,14 @@ LOOM_DEFINE_VARIADIC_RESULTS(loom_test_decl_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_test_decl_callee, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_test_decl_visibility, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_test_decl_cc, 2)
+enum loom_test_decl_build_flag_bits_e {
+  LOOM_TEST_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
+  LOOM_TEST_DECL_BUILD_FLAG_HAS_CC = 1u << 1,
+};
+typedef uint32_t loom_test_decl_build_flags_t;
 iree_status_t loom_test_decl_build(
     loom_builder_t* builder,
+    loom_test_decl_build_flags_t build_flags,
     loom_optional uint8_t visibility,
     loom_optional uint8_t cc,
     loom_symbol_ref_t callee,

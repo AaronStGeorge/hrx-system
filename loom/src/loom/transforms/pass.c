@@ -79,26 +79,57 @@ iree_status_t loom_pass_manager_add_function_pass(
   return iree_ok_status();
 }
 
+// Runs a function pass once per bodyful function-like symbol. The pass's
+// callback scratch arena is reset before each function so one-shot region
+// stacks and worklists are bounded by the largest single function.
+static iree_status_t loom_pass_manager_run_function_entry(
+    loom_pass_manager_t* manager, loom_pipeline_entry_t* entry,
+    loom_pass_t* pass, loom_module_t* module) {
+  iree_arena_allocator_t function_arena;
+  iree_arena_initialize(manager->block_pool, &function_arena);
+
+  pass->function_run = entry->function_run;
+  pass->arena = &function_arena;
+
+  iree_status_t status = iree_ok_status();
+  for (iree_host_size_t i = 0;
+       i < module->symbols.count && iree_status_is_ok(status); ++i) {
+    loom_symbol_t* symbol = &module->symbols.entries[i];
+    if (!loom_symbol_kind_is_function_like(symbol->kind)) continue;
+    loom_func_like_t function =
+        loom_func_like_cast(module, symbol->defining_op);
+    if (!loom_func_like_body(function)) continue;
+
+    iree_arena_reset(&function_arena);
+    status = entry->function_run(pass, module, function);
+  }
+
+  pass->arena = pass->instance_arena;
+  iree_arena_deinitialize(&function_arena);
+  return status;
+}
+
 // Runs a single pass on the module (or on each function for function passes).
 static iree_status_t loom_pass_manager_run_entry(loom_pass_manager_t* manager,
                                                  loom_pipeline_entry_t* entry,
                                                  loom_module_t* module) {
-  // Create a fresh arena for this pass invocation.
-  iree_arena_allocator_t pass_arena;
-  iree_arena_initialize(manager->block_pool, &pass_arena);
+  // Create a stable arena for this pipeline entry's pass instance.
+  iree_arena_allocator_t instance_arena;
+  iree_arena_initialize(manager->block_pool, &instance_arena);
 
   // Build the pass instance.
   loom_pass_t pass = {
       .info = entry->info,
-      .arena = &pass_arena,
+      .instance_arena = &instance_arena,
+      .arena = &instance_arena,
   };
 
-  // Allocate statistics counters from the pass arena.
+  // Allocate statistics counters from the stable instance arena.
   iree_status_t status = iree_ok_status();
   if (iree_status_is_ok(status) && entry->info->statistic_count > 0) {
     iree_host_size_t statistics_size =
         (iree_host_size_t)entry->info->statistic_count * sizeof(int64_t);
-    status = iree_arena_allocate(&pass_arena, statistics_size,
+    status = iree_arena_allocate(&instance_arena, statistics_size,
                                  (void**)&pass.statistics);
     if (iree_status_is_ok(status)) {
       memset(pass.statistics, 0, statistics_size);
@@ -118,17 +149,8 @@ static iree_status_t loom_pass_manager_run_entry(loom_pass_manager_t* manager,
       pass.module_run = entry->module_run;
       status = entry->module_run(&pass, module);
     } else {
-      pass.function_run = entry->function_run;
-      // Iterate all symbols, run on each function-like op with a body.
-      for (iree_host_size_t i = 0;
-           i < module->symbols.count && iree_status_is_ok(status); ++i) {
-        loom_symbol_t* symbol = &module->symbols.entries[i];
-        if (!loom_symbol_kind_is_function_like(symbol->kind)) continue;
-        loom_func_like_t function =
-            loom_func_like_cast(module, symbol->defining_op);
-        if (!loom_func_like_body(function)) continue;
-        status = entry->function_run(&pass, module, function);
-      }
+      status =
+          loom_pass_manager_run_function_entry(manager, entry, &pass, module);
     }
   }
 
@@ -136,7 +158,7 @@ static iree_status_t loom_pass_manager_run_entry(loom_pass_manager_t* manager,
   if (created && entry->destroy) {
     entry->destroy(&pass);
   }
-  iree_arena_deinitialize(&pass_arena);
+  iree_arena_deinitialize(&instance_arena);
   return status;
 }
 

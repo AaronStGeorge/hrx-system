@@ -3,7 +3,7 @@
 // ====
 
 // Scalar constant.
-global.constant @pi : f32
+global.constant @pi : f32 = 3.14159265358979
 
 // ====
 
@@ -23,7 +23,12 @@ global.variable @square : tile<[%n]x[%n]xf32>
 // ====
 
 // Scalar variable.
-global.variable @step_count : index
+global.variable @step_count : index = 0
+
+// ====
+
+// Boolean variable with an explicit false default.
+global.variable @enabled : i1 = false
 
 // ====
 
@@ -129,7 +134,7 @@ func.def @load_static_dims_encoding() {
 // Store to global with static encoding.
 global.variable @q_state : tile<[%n]xi8, #q8_0<block=32>>
 
-func.def @store_encoded(%tile: tile<[%n]xi8, #q8_0<block=32>>) {
+func.def @store_encoded(%n: index, %tile: tile<[%n]xi8, #q8_0<block=32>>) {
   global.store %tile, @q_state : tile<[%n]xi8, #q8_0<block=32>>
   func.return
 }
@@ -140,7 +145,7 @@ func.def @store_encoded(%tile: tile<[%n]xi8, #q8_0<block=32>>) {
 global.constant @table : tile<16x32xf32>
 
 func.def initializer @init_table() {
-  %t = test.constant 0 : tile<16x32xf32>
+  %t = test.constant 0.0 : tile<16x32xf32>
   global.store %t, @table : tile<16x32xf32>
   func.return
 }

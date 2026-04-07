@@ -8,8 +8,9 @@
 //
 // The tokenizer operates on an iree_string_view_t source buffer (no NUL
 // termination required). Most token payloads are zero-copy slices into that
-// buffer. Escaped string literals are decoded into caller-provided scratch
-// arena storage, while unescaped strings stay zero-copy. The tokenizer is
+// buffer. Escaped string literals are decoded into a tokenizer-owned scratch
+// buffer that grows to a high-water capacity in |scratch_arena| and is reused
+// across scans, while unescaped strings stay zero-copy. The tokenizer is
 // stack-allocated and supports one-token lookahead via peek/next.
 //
 // Character access is bounds-checked: position < source.size. EOF is
@@ -19,6 +20,7 @@
 #define LOOM_FORMAT_TEXT_TOKENIZER_H_
 
 #include "iree/base/api.h"
+#include "loom/error/diagnostic.h"
 
 typedef struct iree_arena_allocator_t iree_arena_allocator_t;
 
@@ -61,6 +63,7 @@ typedef enum loom_token_kind_e {
 
   // Special.
   LOOM_TOKEN_EOF = 23,
+  LOOM_TOKEN_ERROR = 24,
   LOOM_TOKEN_COUNT_,
 
   // Sentinel for "no token" (uninitialized lookahead).
@@ -72,9 +75,11 @@ typedef enum loom_token_kind_e {
 // |text| is the payload the parser should intern or resolve. For prefixed
 // tokens (%, @, #, ^), this excludes the prefix. For string literals, this
 // excludes the surrounding quotes and decodes JSON-compatible escapes
-// (\" \\ \/ \b \f \n \r \t \uXXXX plus surrogate pairs). |source_text| is
-// the exact byte slice from the input file,
-// including sigils/quotes, for diagnostics and source ranges.
+// (\" \\ \/ \b \f \n \r \t \uXXXX plus surrogate pairs). Unescaped string
+// token payloads alias the tokenizer source buffer; escaped string token
+// payloads alias tokenizer-owned decode scratch and remain valid only until the
+// next scan overwrites that scratch. |source_text| is the exact byte slice from
+// the input file, including sigils/quotes, for diagnostics and source ranges.
 typedef struct loom_token_t {
   iree_string_view_t text;
   iree_string_view_t source_text;
@@ -83,6 +88,24 @@ typedef struct loom_token_t {
   uint32_t end_column;  // Column past the last character of this token.
   loom_token_kind_t kind;
 } loom_token_t;
+
+#define LOOM_TOKENIZER_MAX_ERROR_PARAMS 2
+
+// Structured lexical error payload for the current LOOM_TOKEN_ERROR lookahead.
+//
+// |error| points at a stable loom_err_parse_* definition in .rodata. Any string
+// parameters must point at either static storage or the tokenizer's source
+// buffer; they remain valid until the next successful scan clears this payload.
+typedef struct loom_tokenizer_error_t {
+  const loom_error_def_t* error;
+  loom_diagnostic_param_t params[LOOM_TOKENIZER_MAX_ERROR_PARAMS];
+  iree_host_size_t param_count;
+  iree_host_size_t source_start;
+  iree_host_size_t source_end;
+  uint32_t line;
+  uint32_t column;
+  uint32_t end_column;
+} loom_tokenizer_error_t;
 
 // Returns a sentinel token for parser-synthesized values that have no
 // user-authored source token.
@@ -99,18 +122,22 @@ static inline loom_token_t loom_token_none(void) {
 }
 
 // Lexical scanner state. Stack-allocated; only escaped string payloads allocate
-// from |scratch_arena|. If a scan error occurs (e.g., unterminated string), it
-// is stored in |status| and all subsequent peek/next calls return EOF. The
-// caller must check loom_tokenizer_consume_status after parsing to retrieve any
-// deferred scan error.
+// from |scratch_arena|. Malformed user input produces a LOOM_TOKEN_ERROR token
+// plus a structured payload in |error| so the parser can emit diagnostics and
+// recover at sibling-op boundaries. |status| is reserved for infrastructure
+// failures such as allocation errors; once set, all subsequent peek/next calls
+// return EOF and the caller must consume the status.
 typedef struct loom_tokenizer_t {
   iree_string_view_t source;
   iree_host_size_t position;
   uint32_t line;
   uint32_t column;
   loom_token_t peeked;
+  loom_tokenizer_error_t error;
   iree_string_view_t filename;
   iree_arena_allocator_t* scratch_arena;
+  char* decoded_string_data;
+  iree_host_size_t decoded_string_capacity;
   iree_status_t status;
 
   // Position of the most recently consumed token's end. Updated on
@@ -134,12 +161,12 @@ void loom_tokenizer_initialize(iree_string_view_t source,
                                iree_arena_allocator_t* scratch_arena,
                                loom_tokenizer_t* out_tokenizer);
 
-// Deinitializes the tokenizer, freeing any unconsumed error status.
+// Deinitializes the tokenizer, freeing any unconsumed infrastructure status.
 void loom_tokenizer_deinitialize(loom_tokenizer_t* tokenizer);
 
-// Returns and transfers ownership of any deferred scan error.
-// Returns iree_ok_status() if no error occurred. The caller owns the
-// returned status and must free it.
+// Returns and transfers ownership of any deferred infrastructure failure.
+// Malformed user input is not surfaced here; it appears as LOOM_TOKEN_ERROR
+// tokens plus |tokenizer->error| metadata.
 iree_status_t loom_tokenizer_consume_status(loom_tokenizer_t* tokenizer);
 
 // Returns the next token without consuming it. Repeated calls return
@@ -176,7 +203,9 @@ bool loom_tokenizer_try_consume_keyword(loom_tokenizer_t* tokenizer,
 iree_status_t loom_tokenizer_scan_angle_interior(
     loom_tokenizer_t* tokenizer, iree_string_view_t* out_interior);
 
-// Returns a formatted error status with filename:line:col context.
+// Returns a formatted infrastructure error status with filename:line:col
+// context. Malformed user input should populate |tokenizer->error| and return
+// LOOM_TOKEN_ERROR instead of using this status side channel.
 iree_status_t loom_tokenizer_error(const loom_tokenizer_t* tokenizer,
                                    iree_string_view_t message);
 

@@ -182,6 +182,11 @@ void loom_test_gen_type_palette_default(
 loom_type_t loom_test_gen_type_palette_pick(
     loom_test_gen_t* gen, const loom_test_gen_type_palette_t* palette);
 
+// Constructs a present constant attribute compatible with |type|'s element
+// scalar. Integer-like scalars use I64 attributes, boolean i1 uses BOOL, and
+// float-like scalars use F64.
+loom_attribute_t loom_test_gen_constant_attr(loom_type_t type, int64_t value);
+
 // Selects a scalar type from |palette| that satisfies |constraint|.
 // Uses weighted random choice among matching entries only. Returns
 // true and writes the type to |out_type| on success, false if no

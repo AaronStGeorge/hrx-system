@@ -1,0 +1,28 @@
+// RUN: verify
+
+// ====
+
+// Integer constants require integer literal payloads.
+func.def @integer_constant_value_kind() -> (i32) {
+  // ERROR@+1: TYPE/005 "value"
+  %c = scalar.constant 1.0 : i32
+  func.return %c : i32
+}
+
+// ====
+
+// Floating-point constants require floating-point literal payloads.
+func.def @float_constant_value_kind() -> (f32) {
+  // ERROR@+1: TYPE/005 "value"
+  %c = scalar.constant 1 : f32
+  func.return %c : f32
+}
+
+// ====
+
+// Boolean integer literals must be 0 or 1.
+func.def @boolean_constant_value_range() -> (i1) {
+  // ERROR@+1: TYPE/005 "value"
+  %c = scalar.constant 2 : i1
+  func.return %c : i1
+}

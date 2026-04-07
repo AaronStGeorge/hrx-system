@@ -24,7 +24,7 @@
 // ====
 
 // Top-level variadic yield with heterogeneous operand types.
-%fa = test.constant 1 : f32
+%fa = test.constant 1.0 : f32
 %ib = test.constant 2 : i32
 test.yield %fa, %ib : f32, i32
 
@@ -96,10 +96,10 @@ func.def @map_negate(%tile: f32) -> (f32) {
 // Branch op with then/else regions.
 func.def @branch(%cond: i1) -> (f32) {
   %r = test.branch %cond -> (f32) {
-    %a = test.constant 1 : f32
+    %a = test.constant 1.0 : f32
     test.yield %a : f32
   } else {
-    %b = test.constant 2 : f32
+    %b = test.constant 2.0 : f32
     test.yield %b : f32
   }
   func.return %r : f32
@@ -177,8 +177,8 @@ func.decl public import("upstream") @relu(%x: f32) -> (f32)
 
 // ====
 
-// Canonical AttrDict printing sorts keys recursively and elides empty optional
-// dict attrs.
+// Canonical AttrDict printing sorts keys recursively and canonicalizes empty
+// optional dict attrs to absence.
 func.def @canonical_attr_dict(%x: f32) -> (f32) {
   %configured = test.attrs %x {meta = {phase = "link", opt = 3}, axis = 0} : f32
   %passthrough = test.attrs %configured {} : f32

@@ -24,8 +24,8 @@ static iree_status_t loom_test_gen_hook_test_constant(
   (void)user_data;
   loom_type_t type =
       loom_test_gen_type_palette_pick(context->gen, context->palette);
-  loom_attribute_t value = {0};
-  value.i64 = (int64_t)loom_test_gen_next_range(context->gen, 200) - 100;
+  loom_attribute_t value = loom_test_gen_constant_attr(
+      type, (int64_t)loom_test_gen_next_range(context->gen, 200) - 100);
 
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(loom_test_constant_build(context->builder, value, type,
@@ -248,7 +248,7 @@ static iree_status_t loom_test_gen_region_map(
   loom_value_id_t yield_val =
       loom_test_gen_values_pick_any(context->gen, &body_values);
   if (yield_val == LOOM_VALUE_ID_INVALID) {
-    loom_attribute_t const_val = {0};
+    loom_attribute_t const_val = loom_test_gen_constant_attr(type, 0);
     loom_op_t* const_op = NULL;
     IREE_RETURN_IF_ERROR(loom_test_constant_build(
         context->builder, const_val, type, LOOM_LOCATION_UNKNOWN, &const_op));
@@ -284,8 +284,8 @@ static iree_status_t loom_test_gen_region_loop(
   if (lower == LOOM_VALUE_ID_INVALID || upper == LOOM_VALUE_ID_INVALID ||
       step == LOOM_VALUE_ID_INVALID) {
     for (int k = 0; k < 3; ++k) {
-      loom_attribute_t const_val = {0};
-      const_val.i64 = (k == 2) ? 1 : (int64_t)k * 10;
+      loom_attribute_t const_val = loom_test_gen_constant_attr(
+          index_type, (k == 2) ? 1 : (int64_t)k * 10);
       loom_op_t* const_op = NULL;
       IREE_RETURN_IF_ERROR(
           loom_test_constant_build(context->builder, const_val, index_type,
@@ -311,7 +311,8 @@ static iree_status_t loom_test_gen_region_loop(
     if (iter_args[j] == LOOM_VALUE_ID_INVALID) {
       loom_type_t type =
           loom_test_gen_type_palette_pick(context->gen, context->palette);
-      loom_attribute_t const_val = {0};
+      loom_attribute_t const_val =
+          loom_test_gen_constant_attr(type, (int64_t)j);
       loom_op_t* const_op = NULL;
       IREE_RETURN_IF_ERROR(loom_test_constant_build(
           context->builder, const_val, type, LOOM_LOCATION_UNKNOWN, &const_op));
@@ -354,7 +355,8 @@ static iree_status_t loom_test_gen_region_loop(
       yield_vals[j] = loom_test_gen_values_pick_any(context->gen, &body_values);
     }
     if (yield_vals[j] == LOOM_VALUE_ID_INVALID) {
-      loom_attribute_t const_val = {0};
+      loom_attribute_t const_val =
+          loom_test_gen_constant_attr(result_types[j], (int64_t)j);
       loom_op_t* const_op = NULL;
       IREE_RETURN_IF_ERROR(
           loom_test_constant_build(context->builder, const_val, result_types[j],
@@ -406,7 +408,8 @@ static iree_status_t loom_test_gen_branch_region(
       yields[j] = loom_test_gen_values_pick_any(context->gen, &region_values);
     }
     if (yields[j] == LOOM_VALUE_ID_INVALID) {
-      loom_attribute_t const_val = {0};
+      loom_attribute_t const_val =
+          loom_test_gen_constant_attr(result_types[j], (int64_t)j);
       loom_op_t* const_op = NULL;
       IREE_RETURN_IF_ERROR(
           loom_test_constant_build(context->builder, const_val, result_types[j],
@@ -429,8 +432,8 @@ static iree_status_t loom_test_gen_region_branch(
       context->gen, context->values, LOOM_SCALAR_TYPE_I1);
   if (condition == LOOM_VALUE_ID_INVALID) {
     loom_type_t i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
-    loom_attribute_t const_val = {0};
-    const_val.i64 = loom_test_gen_next_bool(context->gen) ? 1 : 0;
+    loom_attribute_t const_val = loom_test_gen_constant_attr(
+        i1_type, loom_test_gen_next_bool(context->gen) ? 1 : 0);
     loom_op_t* const_op = NULL;
     IREE_RETURN_IF_ERROR(
         loom_test_constant_build(context->builder, const_val, i1_type,
@@ -505,8 +508,7 @@ static iree_status_t loom_test_gen_region_isolated(
   // Seed isolated region with constants so body gen has values.
   for (uint16_t j = 0; j < context->palette->count; ++j) {
     loom_type_t type = loom_type_scalar(context->palette->types[j]);
-    loom_attribute_t const_val = {0};
-    const_val.i64 = (int64_t)j;
+    loom_attribute_t const_val = loom_test_gen_constant_attr(type, (int64_t)j);
     loom_op_t* const_op = NULL;
     IREE_RETURN_IF_ERROR(loom_test_constant_build(
         context->builder, const_val, type, LOOM_LOCATION_UNKNOWN, &const_op));
@@ -527,7 +529,8 @@ static iree_status_t loom_test_gen_region_isolated(
       yield_vals[j] = loom_test_gen_values_pick_any(context->gen, &body_values);
     }
     if (yield_vals[j] == LOOM_VALUE_ID_INVALID) {
-      loom_attribute_t const_val = {0};
+      loom_attribute_t const_val =
+          loom_test_gen_constant_attr(result_types[j], (int64_t)j);
       loom_op_t* const_op = NULL;
       IREE_RETURN_IF_ERROR(
           loom_test_constant_build(context->builder, const_val, result_types[j],

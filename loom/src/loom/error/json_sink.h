@@ -8,23 +8,52 @@
 //
 // Emits one JSON object per diagnostic (JSONL format — one object per line)
 // to a caller-provided loom_output_stream_t. Every diagnostic is
-// structured: all error identity fields, typed parameters, rendered message,
-// and fix hints are included. The message is rendered from the error def's
-// template.
+// structured: all error identity fields, source ranges, labeled related
+// locations, typed parameters, rendered message, and fix hints are included.
+// The message is rendered from the error def's template.
 //
 // Output example:
 //
-//   {"severity":"error","domain":"TYPE","code":1,"emitter":"verifier",
-//    "origin":{"filename":"model.loom","start_line":42,"start_column":15,
+//   {"severity":"error","error_id":"ERR_TYPE_001","domain":"TYPE","code":1,
+//    "summary":"SameType constraint violated.","emitter":"verifier",
+//    "origin":{"provenance":"exact_source","filename":"model.loom",
+//              "start_line":42,"start_column":15,
 //              "end_line":42,"end_column":17,"start_byte":128,
-//              "end_byte":130},
-//    "source_location":{"filename":"model.loom","start_line":42,
-//                       "start_column":15,"end_line":42,"end_column":17,
-//                       "start_byte":128,"end_byte":130},
-//    "highlights":[{"start_byte":128,"end_byte":130}],
+//              "end_byte":130,
+//              "excerpt":{"start_byte":120,"end_byte":140,
+//                         "truncated_prefix":false,
+//                         "truncated_suffix":false,
+//                         "text":"  %x = test.addi ..."}},
+//    "source_location":{"provenance":"exact_source","filename":"model.loom",
+//                       "start_line":42,"start_column":15,"end_line":42,
+//                       "end_column":17,"start_byte":128,"end_byte":130,
+//                       "excerpt":{"start_byte":120,"end_byte":140,
+//                                  "truncated_prefix":false,
+//                                  "truncated_suffix":false,
+//                                  "text":"  %x = test.addi ..."}},
+//    "highlights":[{"start_byte":128,"end_byte":130,
+//                   "field":{"kind":"operand","index":1,"occurrence":0},
+//                   "param":"field_b"}],
+//    "related_locations":[
+//      {"label":"consumed here",
+//       "source_location":{"provenance":"exact_source",
+//                          "filename":"model.loom",
+//                          "start_line":41,"start_column":3,
+//                          "end_line":41,"end_column":31,
+//                          "start_byte":96,"end_byte":124,
+//                          "excerpt":{"start_byte":96,"end_byte":124,
+//                                     "truncated_prefix":false,
+//                                     "truncated_suffix":false,
+//                                     "text":"  %y = test.invoke @f(%rhs)"}},
+//       "highlights":[{"start_byte":115,"end_byte":119,
+//                      "field":{"kind":"operand","index":0,
+//                               "occurrence":1}}]}],
 //    "message":"'rhs' type f32 does not match 'lhs' type i32",
 //    "fix_hint":"Ensure 'rhs' and 'lhs' have the same type",
-//    "params":{"field_a":"lhs","type_a":"i32","field_b":"rhs","type_b":"f32"}}
+//    "params":{"field_a":"lhs","type_a":"i32","field_b":"rhs","type_b":"f32"},
+//    "param_fields":{"field_a":{"kind":"operand","index":0,"occurrence":0},
+//                    "field_b":{"kind":"operand","index":1,
+//                               "occurrence":0}}}
 //
 // Usage:
 //

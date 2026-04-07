@@ -544,7 +544,7 @@ TEST_F(BuilderTest, FuncBuilder) {
   loom_type_t arg_types[] = {f32, i32};
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, name, arg_types, 2,
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, name, arg_types, 2,
                                       result_types, 1, NULL, 0, NULL, 0,
                                       LOOM_LOCATION_UNKNOWN, &op));
   ASSERT_NE(op, nullptr);

@@ -31,6 +31,19 @@ static void loom_parser_scope_initialize_entries(
   }
 }
 
+// Resets a parser-owned scope frame for reuse under a new lexical parent while
+// preserving the retained hash-table allocation.
+static void loom_parser_scope_reset(loom_parser_scope_t* scope,
+                                    loom_parser_scope_t* parent) {
+  bool had_entries = scope->count > 0;
+  scope->next_free = NULL;
+  scope->parent = parent;
+  scope->count = 0;
+  if (had_entries && scope->capacity > 0) {
+    loom_parser_scope_initialize_entries(scope->entries, scope->capacity);
+  }
+}
+
 // Ensures the scope's hash table is allocated and has room for at
 // least one more entry. Called lazily before the first define().
 static iree_status_t loom_parser_scope_ensure_capacity(
@@ -113,16 +126,32 @@ loom_value_id_t loom_parser_scope_lookup(const loom_parser_scope_t* scope,
   return LOOM_VALUE_ID_INVALID;
 }
 
-iree_status_t loom_parser_scope_push(iree_arena_allocator_t* arena,
+iree_status_t loom_parser_scope_push(loom_parser_t* parser,
                                      loom_parser_scope_t* parent,
                                      loom_parser_scope_t** out_scope) {
-  loom_parser_scope_t* scope = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate(arena, sizeof(loom_parser_scope_t), (void**)&scope));
+  loom_parser_scope_t* scope = parser->scope_free_list;
+  if (scope) {
+    parser->scope_free_list = scope->next_free;
+    loom_parser_scope_reset(scope, parent);
+    *out_scope = scope;
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      &parser->parser_arena, sizeof(loom_parser_scope_t), (void**)&scope));
   memset(scope, 0, sizeof(*scope));
   scope->parent = parent;
   *out_scope = scope;
   return iree_ok_status();
+}
+
+void loom_parser_scope_pop(loom_parser_t* parser) {
+  loom_parser_scope_t* scope = parser->scope;
+  IREE_ASSERT_ARGUMENT(scope);
+  parser->scope = scope->parent;
+  scope->parent = NULL;
+  scope->next_free = parser->scope_free_list;
+  parser->scope_free_list = scope;
 }
 
 //===----------------------------------------------------------------------===//
@@ -164,32 +193,32 @@ loom_parser_lookup_unresolved_placeholder(loom_parser_t* parser,
   return NULL;
 }
 
-iree_status_t loom_parser_definition_scope_push(loom_parser_t* parser,
-                                                uint16_t pop_at) {
+iree_status_t loom_parser_definition_scope_push(
+    loom_parser_t* parser, uint16_t pop_at,
+    loom_parser_definition_scope_flags_t flags) {
   if (loom_parser_in_definition_scope(parser)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "nested Scope(...) format elements are not supported");
   }
-  loom_parser_scope_t* parent_scope = parser->scope;
-  IREE_RETURN_IF_ERROR(loom_parser_scope_push(&parser->parser_arena,
-                                              parent_scope, &parser->scope));
-  parser->definition_scope.parent_scope = parent_scope;
+  IREE_RETURN_IF_ERROR(
+      loom_parser_scope_push(parser, parser->scope, &parser->scope));
   parser->definition_scope.placeholder_start =
       parser->unresolved_placeholders.count;
   parser->definition_scope.pop_at = pop_at;
+  parser->definition_scope.flags = flags;
   return iree_ok_status();
 }
 
 void loom_parser_definition_scope_discard(loom_parser_t* parser) {
   if (!loom_parser_in_definition_scope(parser)) return;
-  parser->scope = parser->definition_scope.parent_scope;
+  loom_parser_scope_pop(parser);
   parser->unresolved_placeholders.count =
       parser->definition_scope.placeholder_start;
   parser->definition_scope = (loom_parser_definition_scope_t){
-      .parent_scope = NULL,
       .placeholder_start = 0,
       .pop_at = UINT16_MAX,
+      .flags = 0,
   };
 }
 
@@ -460,6 +489,7 @@ static loom_source_range_t loom_parser_token_origin(iree_string_view_t filename,
                                                     loom_token_t token) {
   if (token.kind == LOOM_TOKEN_NONE || token.kind == LOOM_TOKEN_EOF) {
     return (loom_source_range_t){
+        .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
         .filename = filename,
         .source = source,
         .start = source.size,
@@ -563,11 +593,12 @@ static iree_status_t loom_parser_format_token_text(
   return iree_ok_status();
 }
 
-iree_status_t loom_parser_emit(loom_parser_t* parser,
-                               const loom_error_def_t* error,
-                               const loom_diagnostic_param_t* params,
-                               iree_host_size_t param_count,
-                               loom_token_t token) {
+static iree_status_t loom_parser_emit_diagnostic(
+    loom_parser_t* parser, const loom_error_def_t* error,
+    const loom_diagnostic_param_t* params, iree_host_size_t param_count,
+    loom_token_t token,
+    const loom_diagnostic_related_location_t* related_locations,
+    iree_host_size_t related_location_count) {
   if (error->severity == LOOM_DIAGNOSTIC_ERROR) {
     ++parser->error_count;
   }
@@ -584,6 +615,8 @@ iree_status_t loom_parser_emit(loom_parser_t* parser,
       // user-facing location. Parsed loc() metadata can diverge from origin in
       // later verifier/reader diagnostics.
       .source_location = origin,
+      .related_locations = related_locations,
+      .related_location_count = related_location_count,
   };
   IREE_RETURN_IF_ERROR(
       loom_diagnostic_emit(&parser->diagnostic_sink, &diagnostic));
@@ -610,9 +643,45 @@ iree_status_t loom_parser_emit(loom_parser_t* parser,
   return iree_ok_status();
 }
 
+iree_status_t loom_parser_emit(loom_parser_t* parser,
+                               const loom_error_def_t* error,
+                               const loom_diagnostic_param_t* params,
+                               iree_host_size_t param_count,
+                               loom_token_t token) {
+  return loom_parser_emit_diagnostic(parser, error, params, param_count, token,
+                                     NULL, 0);
+}
+
+iree_status_t loom_parser_emit_related(loom_parser_t* parser,
+                                       const loom_error_def_t* error,
+                                       const loom_diagnostic_param_t* params,
+                                       iree_host_size_t param_count,
+                                       loom_token_t token,
+                                       iree_string_view_t related_label,
+                                       loom_token_t related_token) {
+  loom_diagnostic_related_location_t related_location = {
+      .label = related_label,
+      .source_location = loom_parser_token_origin(
+          parser->filename, parser->source, related_token),
+  };
+  return loom_parser_emit_diagnostic(parser, error, params, param_count, token,
+                                     &related_location, 1);
+}
+
+static iree_status_t loom_parser_emit_tokenizer_error(loom_parser_t* parser,
+                                                      loom_token_t token) {
+  IREE_ASSERT_ARGUMENT(parser->tokenizer.error.error);
+  return loom_parser_emit(parser, parser->tokenizer.error.error,
+                          parser->tokenizer.error.params,
+                          parser->tokenizer.error.param_count, token);
+}
+
 iree_status_t loom_parser_emit_unexpected_token(loom_parser_t* parser,
                                                 loom_token_t token,
                                                 iree_string_view_t expected) {
+  if (token.kind == LOOM_TOKEN_ERROR) {
+    return loom_parser_emit_tokenizer_error(parser, token);
+  }
   iree_string_view_t actual_text = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(
       loom_parser_format_token_text(parser, token, &actual_text));
@@ -627,6 +696,9 @@ iree_status_t loom_parser_emit_unexpected_token(loom_parser_t* parser,
 iree_status_t loom_parser_emit_token_text_error(loom_parser_t* parser,
                                                 const loom_error_def_t* error,
                                                 loom_token_t token) {
+  if (token.kind == LOOM_TOKEN_ERROR) {
+    return loom_parser_emit_tokenizer_error(parser, token);
+  }
   iree_string_view_t token_text = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(
       loom_parser_format_token_text(parser, token, &token_text));
@@ -638,14 +710,18 @@ iree_status_t loom_parser_emit_token_text_error(loom_parser_t* parser,
 
 iree_status_t loom_parser_expect(loom_parser_t* parser, loom_token_kind_t kind,
                                  loom_token_t* out_token) {
-  // Propagate pending scan errors — these are real infrastructure failures.
+  // Propagate pending tokenizer infrastructure failures. Malformed user input
+  // arrives as LOOM_TOKEN_ERROR and is emitted through the parser sink below.
   if (!iree_status_is_ok(parser->tokenizer.status)) {
     return loom_tokenizer_consume_status(&parser->tokenizer);
   }
   loom_token_t token = loom_tokenizer_next(&parser->tokenizer);
-  // A scan inside next() may have produced an error.
+  // A scan inside next() may have produced an infrastructure failure.
   if (!iree_status_is_ok(parser->tokenizer.status)) {
     return loom_tokenizer_consume_status(&parser->tokenizer);
+  }
+  if (token.kind == LOOM_TOKEN_ERROR) {
+    return loom_parser_emit_tokenizer_error(parser, token);
   }
   if (token.kind != kind) {
     return loom_parser_emit_unexpected_token(parser, token,
@@ -660,6 +736,239 @@ bool loom_parser_at_error_limit(const loom_parser_t* parser) {
 }
 
 //===----------------------------------------------------------------------===//
+// Location parsing
+//===----------------------------------------------------------------------===//
+
+enum {
+  LOOM_PARSER_LOCATION_MAX_NESTING_DEPTH = 16,
+};
+
+static iree_status_t loom_parser_emit_location_error(loom_parser_t* parser,
+                                                     iree_string_view_t detail,
+                                                     loom_token_t token) {
+  if (token.kind == LOOM_TOKEN_ERROR) {
+    return loom_parser_emit_tokenizer_error(parser, token);
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(detail),
+  };
+  return loom_parser_emit(parser, &loom_err_parse_011, params,
+                          IREE_ARRAYSIZE(params), token);
+}
+
+static iree_status_t loom_parser_resolve_location_source(
+    loom_parser_t* parser, iree_string_view_t source_name,
+    loom_source_id_t* out_source_id) {
+  if (parser->cached_location.source_id != LOOM_SOURCE_ID_INVALID &&
+      iree_string_view_equal(parser->cached_location.source_name,
+                             source_name)) {
+    *out_source_id = parser->cached_location.source_id;
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_context_register_source(
+      parser->context, source_name, out_source_id));
+  parser->cached_location.source_name = source_name;
+  parser->cached_location.source_id = *out_source_id;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_location_u16(loom_parser_t* parser,
+                                             uint16_t* out_value) {
+  loom_token_t token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_INTEGER, &token);
+
+  int64_t value = 0;
+  if (!iree_string_view_atoi_int64(token.text, &value) || value < 0 ||
+      value > UINT16_MAX) {
+    return loom_parser_emit_location_error(
+        parser, IREE_SV("line/column must be an integer in [0, 65535]"), token);
+  }
+
+  *out_value = (uint16_t)value;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_location_coordinate_pair(loom_parser_t* parser,
+                                                         uint16_t* out_line,
+                                                         uint16_t* out_column) {
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+  IREE_RETURN_IF_ERROR(loom_parse_location_u16(parser, out_line));
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+  return loom_parse_location_u16(parser, out_column);
+}
+
+static iree_status_t loom_parse_location_body(loom_parser_t* parser,
+                                              uint16_t nesting_depth,
+                                              loom_location_id_t* out_location);
+
+static iree_status_t loom_parse_file_location_body(
+    loom_parser_t* parser, loom_location_id_t* out_location) {
+  loom_token_t source_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &source_token);
+
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_parser_resolve_location_source(
+      parser, source_token.text, &source_id));
+
+  uint16_t start_line = 0;
+  uint16_t start_column = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_parse_location_coordinate_pair(parser, &start_line, &start_column));
+
+  uint16_t end_line = start_line;
+  uint16_t end_column = start_column;
+  if (loom_tokenizer_try_consume_keyword(&parser->tokenizer, IREE_SV("to"))) {
+    IREE_RETURN_IF_ERROR(loom_parse_location_u16(parser, &end_line));
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+    IREE_RETURN_IF_ERROR(loom_parse_location_u16(parser, &end_column));
+  }
+
+  loom_location_entry_t entry = loom_location_file_range(
+      source_id, start_line, start_column, end_line, end_column);
+  return loom_module_add_location(parser->module, entry, out_location);
+}
+
+static iree_status_t loom_parse_fused_location_body(
+    loom_parser_t* parser, uint16_t nesting_depth,
+    loom_location_id_t* out_location) {
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, NULL);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LANGLE, NULL);
+
+  uint32_t errors_before = parser->error_count;
+  loom_location_id_t* child_locations = NULL;
+  iree_host_size_t child_count = 0;
+  iree_host_size_t child_capacity = 0;
+  if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
+    for (;;) {
+      if (child_count >= child_capacity) {
+        IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+            &parser->parser_arena, child_count, /*minimum_capacity=*/8,
+            sizeof(*child_locations), &child_capacity,
+            (void**)&child_locations));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_parse_location_body(parser, (uint16_t)(nesting_depth + 1),
+                                   &child_locations[child_count]));
+      if (parser->error_count > errors_before) return iree_ok_status();
+      ++child_count;
+      if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+        break;
+      }
+    }
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
+
+  if (child_count > UINT32_MAX) {
+    loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_location_error(
+        parser, IREE_SV("fused location has too many children"), token);
+  }
+
+  loom_location_id_t* module_children = NULL;
+  if (child_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        &parser->module->arena, child_count, sizeof(*module_children),
+        (void**)&module_children));
+    memcpy(module_children, child_locations,
+           child_count * sizeof(*module_children));
+  }
+
+  loom_location_entry_t entry = {
+      .kind = LOOM_LOCATION_FUSED,
+  };
+  entry.fused.count = (uint32_t)child_count;
+  entry.fused.children = module_children;
+  return loom_module_add_location(parser->module, entry, out_location);
+}
+
+static iree_status_t loom_parse_opaque_location_body(
+    loom_parser_t* parser, loom_location_id_t* out_location) {
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, NULL);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LANGLE, NULL);
+
+  loom_token_t source_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &source_token);
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_parser_resolve_location_source(
+      parser, source_token.text, &source_id));
+
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COMMA, NULL);
+
+  loom_token_t data_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_STRING, &data_token);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
+
+  if (data_token.text.size > UINT32_MAX) {
+    return loom_parser_emit_location_error(
+        parser, IREE_SV("opaque location data is too large"), data_token);
+  }
+
+  uint8_t* module_data = NULL;
+  if (!iree_string_view_is_empty(data_token.text)) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate(
+        &parser->module->arena, data_token.text.size, (void**)&module_data));
+    memcpy(module_data, data_token.text.data, data_token.text.size);
+  }
+
+  loom_location_entry_t entry = {
+      .kind = LOOM_LOCATION_OPAQUE,
+  };
+  entry.opaque.source_id = source_id;
+  entry.opaque.data_length = (uint32_t)data_token.text.size;
+  entry.opaque.data = module_data;
+  return loom_module_add_location(parser->module, entry, out_location);
+}
+
+static iree_status_t loom_parse_location_body(
+    loom_parser_t* parser, uint16_t nesting_depth,
+    loom_location_id_t* out_location) {
+  if (nesting_depth >= LOOM_PARSER_LOCATION_MAX_NESTING_DEPTH) {
+    loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_location_error(
+        parser, IREE_SV("location nesting exceeds the maximum supported depth"),
+        token);
+  }
+
+  loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+  if (token.kind == LOOM_TOKEN_STRING) {
+    return loom_parse_file_location_body(parser, out_location);
+  }
+  if (token.kind == LOOM_TOKEN_BARE_IDENT &&
+      iree_string_view_equal(token.text, IREE_SV("fused"))) {
+    return loom_parse_fused_location_body(parser, nesting_depth, out_location);
+  }
+  if (token.kind == LOOM_TOKEN_BARE_IDENT &&
+      iree_string_view_equal(token.text, IREE_SV("opaque"))) {
+    return loom_parse_opaque_location_body(parser, out_location);
+  }
+  return loom_parser_emit_location_error(
+      parser, IREE_SV("expected a file location string, 'fused', or 'opaque'"),
+      token);
+}
+
+static iree_status_t loom_parse_optional_op_location(
+    loom_parser_t* parser, loom_location_id_t fallback_location,
+    loom_location_id_t* out_location) {
+  *out_location = fallback_location;
+  if (!loom_tokenizer_at_keyword(&parser->tokenizer, IREE_SV("loc"))) {
+    return iree_ok_status();
+  }
+
+  uint32_t errors_before = parser->error_count;
+  if (!loom_tokenizer_try_consume_keyword(&parser->tokenizer, IREE_SV("loc"))) {
+    loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, token, IREE_SV("'loc'"));
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LPAREN, NULL);
+  IREE_RETURN_IF_ERROR(
+      loom_parse_location_body(parser, /*nesting_depth=*/0, out_location));
+  if (parser->error_count > errors_before) return iree_ok_status();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RPAREN, NULL);
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
 // Error recovery
 //===----------------------------------------------------------------------===//
 
@@ -667,8 +976,9 @@ void loom_parser_sync_to_newline(loom_parser_t* parser) {
   // The tokenizer doesn't expose "at start of line" directly, but
   // we can advance until we find an op-starting token or EOF.
   // A simple heuristic: advance until we see a token at column 1 or
-  // whose kind is SSA_VALUE (result name), OP_NAME, BLOCK_LABEL,
-  // RBRACE (end of region), or EOF.
+  // whose kind is SSA_VALUE (result name), OP_NAME, LOOM_TOKEN_ERROR
+  // (lexical error at the next sibling op), BLOCK_LABEL, RBRACE (end of
+  // region), or EOF.
   for (;;) {
     loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
     if (token.kind == LOOM_TOKEN_EOF) break;
@@ -678,6 +988,7 @@ void loom_parser_sync_to_newline(loom_parser_t* parser) {
     // position <= the next line start means we've synced.
     if (token.kind == LOOM_TOKEN_SSA_VALUE && token.column <= 2) break;
     if (token.kind == LOOM_TOKEN_OP_NAME && token.column <= 2) break;
+    if (token.kind == LOOM_TOKEN_ERROR && token.column <= 2) break;
     if (token.kind == LOOM_TOKEN_BLOCK_LABEL) break;
     loom_tokenizer_next(&parser->tokenizer);
   }
@@ -713,12 +1024,15 @@ void loom_parsed_op_initialize(loom_parsed_op_t* parsed) {
   parsed->region_capacity = LOOM_PARSED_OP_INLINE_REGIONS;
   parsed->tied_results = parsed->inline_tied_results;
   parsed->tied_result_capacity = LOOM_PARSED_OP_INLINE_TIED;
+  parsed->field_spans = parsed->inline_field_spans;
+  parsed->field_span_capacity = LOOM_PARSED_OP_INLINE_FIELD_SPANS;
 }
 
 void loom_parsed_op_reset(loom_parsed_op_t* parsed) {
   parsed->operand_count = 0;
   parsed->result_count = 0;
   parsed->tied_result_count = 0;
+  parsed->field_span_count = 0;
   parsed->attribute_count = 0;
   parsed->region_count = 0;
   parsed->instance_flags = 0;
@@ -767,6 +1081,9 @@ iree_status_t loom_parsed_op_add_result(loom_parsed_op_t* parsed,
                                         iree_arena_allocator_t* arena,
                                         loom_value_id_t value_id,
                                         loom_token_t name_token) {
+  IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+      parsed, arena, LOOM_LOCATION_FIELD_RESULT, parsed->result_count,
+      name_token, name_token.line, name_token.end_column));
   if (parsed->result_count >= parsed->result_capacity) {
     iree_host_size_t capacity = parsed->result_capacity;
     IREE_RETURN_IF_ERROR(iree_arena_grow_array(
@@ -835,6 +1152,33 @@ iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
     parsed->tied_result_capacity = (uint16_t)capacity;
   }
   parsed->tied_results[parsed->tied_result_count++] = tied;
+  return iree_ok_status();
+}
+
+iree_status_t loom_parsed_op_add_field_span(
+    loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
+    loom_location_field_kind_t kind, uint16_t index, loom_token_t start_token,
+    uint32_t end_line, uint32_t end_column) {
+  if (start_token.kind == LOOM_TOKEN_NONE ||
+      start_token.kind == LOOM_TOKEN_EOF) {
+    return iree_ok_status();
+  }
+  if (parsed->field_span_count >= parsed->field_span_capacity) {
+    iree_host_size_t capacity = parsed->field_span_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, parsed->field_span_count, 0, sizeof(loom_location_field_span_t),
+        &capacity, (void**)&parsed->field_spans));
+    parsed->field_span_capacity = (uint16_t)capacity;
+  }
+  parsed->field_spans[parsed->field_span_count++] =
+      (loom_location_field_span_t){
+          .kind = kind,
+          .index = index,
+          .start_line = (uint16_t)start_token.line,
+          .start_col = (uint16_t)start_token.column,
+          .end_line = (uint16_t)end_line,
+          .end_col = (uint16_t)end_column,
+      };
   return iree_ok_status();
 }
 
@@ -1014,6 +1358,9 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
       *out_attr = loom_attr_encoding(encoding_id);
       return iree_ok_status();
     }
+    case LOOM_ATTR_ANY:
+      return loom_parse_generic_attr_value(parser, /*nesting_depth=*/0,
+                                           out_attr);
     default:
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "unsupported attribute kind %d",
@@ -1193,12 +1540,14 @@ typedef struct loom_parsed_attr_dict_entry_t {
 } loom_parsed_attr_dict_entry_t;
 
 static iree_status_t loom_parser_emit_duplicate_attr_dict_key(
-    loom_parser_t* parser, loom_token_t key_token) {
+    loom_parser_t* parser, loom_token_t key_token,
+    loom_token_t previous_key_token) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(key_token.text),
   };
-  return loom_parser_emit(parser, &loom_err_parse_020, params,
-                          IREE_ARRAYSIZE(params), key_token);
+  return loom_parser_emit_related(
+      parser, &loom_err_parse_020, params, IREE_ARRAYSIZE(params), key_token,
+      IREE_SV("previously defined here"), previous_key_token);
 }
 
 static iree_string_view_t loom_parsed_attr_dict_entry_name(
@@ -1343,7 +1692,8 @@ static iree_status_t loom_parse_present_attr_dict(loom_parser_t* parser,
         loom_module_intern_string(parser->module, key_token.text, &key_id));
     for (uint16_t i = 0; i < count; ++i) {
       if (stack_entries[i].attr.name_id == key_id) {
-        return loom_parser_emit_duplicate_attr_dict_key(parser, key_token);
+        return loom_parser_emit_duplicate_attr_dict_key(
+            parser, key_token, stack_entries[i].key_token);
       }
     }
 
@@ -1662,9 +2012,15 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
   if (parser->error_count == errors_before &&
       parser->pending_block_args.count > 0) {
     for (uint16_t i = 0; i < parser->pending_block_args.count; ++i) {
+      uint16_t operand_index = parsed->operand_count;
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
           parsed, &parser->parser_arena,
           parser->pending_block_args.entries[i].value_id));
+      loom_token_t name_token =
+          parser->pending_block_args.entries[i].name_token;
+      IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+          parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+          operand_index, name_token, name_token.line, name_token.end_column));
     }
     loom_parser_pending_block_args_clear(&parser->pending_block_args);
   } else if (parser->error_count > 0) {
@@ -1681,8 +2037,9 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
         parsed->result_count));
   }
 
-  // Create a source location spanning the full op text.
-  loom_location_id_t location = LOOM_LOCATION_UNKNOWN;
+  // Build the implicit parser-source fallback first, then let an explicit
+  // trailing loc(...) annotation override it when present.
+  loom_location_id_t fallback_location = LOOM_LOCATION_UNKNOWN;
   if (parser->source_id != LOOM_SOURCE_ID_INVALID) {
     loom_location_entry_t entry = loom_location_file_range(
         parser->source_id, (uint16_t)start_token.line,
@@ -1690,7 +2047,20 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
         (uint16_t)parser->tokenizer.consumed_end_line,
         (uint16_t)parser->tokenizer.consumed_end_column);
     IREE_RETURN_IF_ERROR(
-        loom_module_add_location(parser->module, entry, &location));
+        loom_module_add_location(parser->module, entry, &fallback_location));
+  }
+  loom_location_id_t location = fallback_location;
+  IREE_RETURN_IF_ERROR(
+      loom_parse_optional_op_location(parser, location, &location));
+  if (parser->error_count > errors_before) {
+    return iree_ok_status();
+  }
+  if (location == fallback_location &&
+      fallback_location != LOOM_LOCATION_UNKNOWN &&
+      parsed->field_span_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_module_attach_location_field_spans(
+        parser->module, fallback_location, parsed->field_spans,
+        parsed->field_span_count));
   }
 
   // Finalize the op.
@@ -1876,8 +2246,8 @@ iree_status_t loom_parse_region(
   // block, so signature/result names from the parent op's Scope(...) do not
   // leak into the body.
   loom_parser_scope_t* outer_scope = parser->scope;
-  IREE_RETURN_IF_ERROR(loom_parser_scope_push(&parser->parser_arena,
-                                              outer_scope, &parser->scope));
+  IREE_RETURN_IF_ERROR(
+      loom_parser_scope_push(parser, outer_scope, &parser->scope));
 
   // Allocate the region with a single entry block initially.
   loom_region_t* region = NULL;
@@ -1896,7 +2266,7 @@ iree_status_t loom_parse_region(
   loom_parser_pending_block_args_clear(&parser->pending_block_args);
 
   // Restore scope and insertion point.
-  parser->scope = outer_scope;
+  loom_parser_scope_pop(parser);
   loom_builder_restore(&parser->builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
   if (parser->error_count > errors_before) return iree_ok_status();
@@ -2011,6 +2381,11 @@ iree_status_t loom_text_parse(iree_string_view_t source,
       .filename = filename,
       .source = source,
       .source_id = source_id,
+      .cached_location =
+          {
+              .source_name = filename,
+              .source_id = source_id,
+          },
       .diagnostic_sink =
           options ? options->diagnostic_sink : (loom_diagnostic_sink_t){0},
       .max_errors = options ? options->max_errors : 0,

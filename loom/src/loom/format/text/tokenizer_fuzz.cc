@@ -115,6 +115,14 @@ static void fuzz_assert_token_slice_valid(const loom_tokenizer_t* tokenizer,
     __builtin_trap();
   }
 
+  if (token->kind == LOOM_TOKEN_ERROR) {
+    if (token->text.data != token->source_text.data ||
+        token->text.size != token->source_text.size) {
+      __builtin_trap();
+    }
+    return;
+  }
+
   if (token->kind == LOOM_TOKEN_STRING) {
     if (token->source_text.size < 2 || token->source_text.data[0] != '"' ||
         token->source_text.data[token->source_text.size - 1] != '"') {
@@ -184,7 +192,7 @@ static void fuzz_strategy_raw_tokenize(const uint8_t* data, size_t size) {
     if (token.kind == LOOM_TOKEN_EOF) break;
   }
 
-  // Consume any deferred scan error to prevent leaks.
+  // Consume any deferred infrastructure status to prevent leaks.
   iree_status_t status = loom_tokenizer_consume_status(&tokenizer.tokenizer);
   iree_status_ignore(status);
   fuzz_tokenizer_deinitialize(&tokenizer);
@@ -499,7 +507,8 @@ static void fuzz_strategy_angle_nesting(fuzz_input_t* input) {
     iree_string_view_t interior;
     iree_status_t status =
         loom_tokenizer_scan_angle_interior(&tokenizer.tokenizer, &interior);
-    if (iree_status_is_ok(status)) {
+    if (iree_status_is_ok(status) &&
+        tokenizer.tokenizer.peeked.kind != LOOM_TOKEN_ERROR) {
       // Interior must be within the source buffer.
       if (interior.data < source_buffer ||
           interior.data + interior.size > source_buffer + source_length) {
@@ -579,7 +588,7 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
         loom_token_t before = loom_tokenizer_peek(&tokenizer.tokenizer);
         uint8_t kind_byte = fuzz_consume_u8(input);
         loom_token_kind_t kind =
-            static_cast<loom_token_kind_t>(kind_byte % (LOOM_TOKEN_EOF + 1));
+            static_cast<loom_token_kind_t>(kind_byte % (LOOM_TOKEN_ERROR + 1));
         bool consumed = loom_tokenizer_try_consume(&tokenizer.tokenizer, kind);
         if (!consumed) {
           // Should not have advanced.
@@ -592,7 +601,7 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
         // try_consume — should return false on mismatch without corrupting.
         uint8_t kind_byte = fuzz_consume_u8(input);
         loom_token_kind_t kind =
-            static_cast<loom_token_kind_t>(kind_byte % (LOOM_TOKEN_EOF + 1));
+            static_cast<loom_token_kind_t>(kind_byte % (LOOM_TOKEN_ERROR + 1));
         loom_tokenizer_try_consume(&tokenizer.tokenizer, kind);
         break;
       }
@@ -630,7 +639,8 @@ static void fuzz_strategy_api_interleave(const uint8_t* data, size_t size,
         break;
       }
       case 9: {
-        // consume_status — retrieve and discard any pending error.
+        // consume_status — retrieve and discard any pending infrastructure
+        // failure.
         iree_status_ignore(loom_tokenizer_consume_status(&tokenizer.tokenizer));
         break;
       }
