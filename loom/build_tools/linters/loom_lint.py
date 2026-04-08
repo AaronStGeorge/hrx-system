@@ -41,16 +41,26 @@ def _run(description: str, cmd: list[str], **kwargs: object) -> bool:
 
 
 def main() -> int:
-    env = {**os.environ, "PYTHONPATH": RUNTIME_PY}
     ok = True
 
-    # All tools run from runtime/py/ so relative paths in ruff.toml
-    # and mypy.ini resolve correctly.
     cwd = RUNTIME_PY
 
     print("loom-lint: generators")
-    ok &= _run("python builders", [sys.executable, "-m", "loom.gen.builders"], env=env)
-    ok &= _run("c tables", [sys.executable, "-m", "loom.gen.c_tables"], env=env)
+    ok &= _run(
+        "python builders",
+        [sys.executable, "loom/py/loom/gen/run.py", "builders"],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
+        "c tables",
+        [sys.executable, "loom/py/loom/gen/run.py", "c_tables"],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
+        "textmate",
+        [sys.executable, "loom/py/loom/gen/run.py", "textmate"],
+        cwd=REPO_ROOT,
+    )
 
     print("loom-lint: ruff")
     ok &= _run("format", ["ruff", "format", "loom/"], cwd=cwd)

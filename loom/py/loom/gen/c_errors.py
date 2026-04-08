@@ -17,15 +17,15 @@ The generated files are checked into the repository. The C build never
 requires Python.
 
 Usage:
-    cd runtime/py && PYTHONPATH=. python3 -m loom.gen.c_errors
+    python3 loom/py/loom/gen/run.py c_errors
 """
 
 from __future__ import annotations
 
 import json
-import os
 
 from loom.errors import Emitter, ErrorDef, ErrorDomain, ParamKind, Severity
+from loom.gen import bootstrap as _bootstrap
 
 # Maps Python ParamKind to C enum name.
 PARAM_KIND_MAP: dict[ParamKind, str] = {
@@ -251,10 +251,8 @@ def main() -> None:
 
     errors = list(ALL_ERRORS)
 
-    # Output root: loom/py/loom/gen/ -> loom/src/loom/error/
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    output_directory = os.path.normpath(os.path.join(script_directory, "..", "..", "..", "src", "loom", "error"))
-    os.makedirs(output_directory, exist_ok=True)
+    output_directory = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "error"
+    output_directory.mkdir(parents=True, exist_ok=True)
 
     outputs = {
         "error_defs.inc": generate_error_defs_inc(errors),
@@ -263,8 +261,8 @@ def main() -> None:
     }
 
     for filename, content in outputs.items():
-        path = os.path.join(output_directory, filename)
-        with open(path, "w") as f:
+        path = output_directory / filename
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
     print(f"Generated {len(errors)} error definitions:")
