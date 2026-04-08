@@ -50,7 +50,8 @@ void loom_test_constant_fold(const loom_module_t* module, const loom_op_t* op,
 //
 // Each reads one property from operand_facts[0] and returns an exact
 // value. The rewriter's try_fold sees the exact output and materializes
-// a scalar.constant, making the analysis state observable in .loom tests.
+// a scalar.constant, making the analysis state observable in .loom-test
+// fixtures.
 
 void loom_test_fact_range_lo_fold(const loom_module_t* module,
                                   const loom_op_t* op,

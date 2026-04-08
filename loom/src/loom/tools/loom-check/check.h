@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Parser for .loom test files.
+// Parser for loom-check .loom-test files.
 //
-// A .loom test file contains one or more test cases, each optionally
+// A .loom-test file contains one or more test cases, each optionally
 // separated by a case separator. Each case has directives controlling
 // what operation to perform, an input section, and optionally an
 // expected output section.
@@ -195,7 +195,7 @@ typedef struct loom_check_file_t {
 // Parsing API
 //===----------------------------------------------------------------------===//
 
-// Parses a .loom test file into cases. All string views point into
+// Parses a .loom-test file into cases. All string views point into
 // |source| — the caller must keep source alive while using the file.
 //
 // All internal allocations are bump-allocated from |arena|. The

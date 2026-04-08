@@ -213,7 +213,7 @@ test_use = Op(
 # exposes it as a result. During canonicalization with facts enabled,
 # the fold function returns exact facts, which the rewriter materializes
 # as scalar.constant ops. This makes internal analysis state observable
-# in .loom test files.
+# in .loom-test files.
 
 test_fact_range_lo = Op(
     "test.fact_range_lo",

@@ -46,7 +46,7 @@ class ExecuteTest : public ::testing::Test {
     }
     loom_check_result_initialize(iree_allocator_system(), out_result);
     iree_status_t status = loom_check_execute_case(
-        &file.cases[0], iree_make_cstring_view("test.loom"), &context_,
+        &file.cases[0], iree_make_cstring_view("test.loom-test"), &context_,
         &block_pool_, iree_allocator_system(), out_result);
     iree_arena_deinitialize(&arena);
     if (!iree_status_is_ok(status)) {

@@ -14,7 +14,7 @@ iree_executable_test(
   NAME
     "pass"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/pass.loom"
+    "${CMAKE_CURRENT_SOURCE_DIR}/pass.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -25,7 +25,7 @@ iree_executable_test(
   NAME
     "roundtrip"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom"
+    "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -36,7 +36,7 @@ iree_executable_test(
   NAME
     "verify"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom"
+    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

@@ -15,7 +15,7 @@ package(
 loom_check_test_suite(
     name = "test",
     srcs = [
-        "roundtrip.loom",
-        "verify.loom",
+        "roundtrip.loom-test",
+        "verify.loom-test",
     ],
 )

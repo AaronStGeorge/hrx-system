@@ -14,5 +14,5 @@ package(
 
 loom_check_test_suite(
     name = "test",
-    srcs = ["verify.loom"],
+    srcs = ["verify.loom-test"],
 )

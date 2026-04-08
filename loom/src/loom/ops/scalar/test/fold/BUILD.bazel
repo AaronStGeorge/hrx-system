@@ -15,9 +15,9 @@ package(
 loom_check_test_suite(
     name = "fold",
     srcs = [
-        "arithmetici.loom",
-        "bitwisei.loom",
-        "comparisoni.loom",
-        "conversioni.loom",
+        "arithmetici.loom-test",
+        "bitwisei.loom-test",
+        "comparisoni.loom-test",
+        "conversioni.loom-test",
     ],
 )

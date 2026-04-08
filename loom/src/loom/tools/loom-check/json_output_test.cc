@@ -85,10 +85,10 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
       MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
   };
 
-  std::string json =
-      WriteJson(iree_make_cstring_view("test.loom"), file, results, 1, 0, 0);
+  std::string json = WriteJson(iree_make_cstring_view("test.loom-test"), file,
+                               results, 1, 0, 0);
 
-  EXPECT_NE(json.find("\"file\": \"test.loom\""), std::string::npos);
+  EXPECT_NE(json.find("\"file\": \"test.loom-test\""), std::string::npos);
   EXPECT_NE(json.find("\"default_mode\": \"roundtrip\""), std::string::npos);
   EXPECT_NE(json.find("\"index\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"mode\": \"roundtrip\""), std::string::npos);
@@ -114,8 +114,8 @@ TEST_F(JsonOutputTest, SingleFailingCase) {
       MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "mismatch on line 2\n"),
   };
 
-  std::string json =
-      WriteJson(iree_make_cstring_view("fail.loom"), file, results, 0, 1, 0);
+  std::string json = WriteJson(iree_make_cstring_view("fail.loom-test"), file,
+                               results, 0, 1, 0);
 
   EXPECT_NE(json.find("\"final_outcome\": \"fail\""), std::string::npos);
   EXPECT_NE(json.find("\"total\": 1"), std::string::npos);
@@ -141,8 +141,8 @@ TEST_F(JsonOutputTest, XfailCase) {
       MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_PASS),
   };
 
-  std::string json =
-      WriteJson(iree_make_cstring_view("xfail.loom"), file, results, 1, 0, 0);
+  std::string json = WriteJson(iree_make_cstring_view("xfail.loom-test"), file,
+                               results, 1, 0, 0);
 
   EXPECT_NE(json.find("\"xfail\": true"), std::string::npos);
   EXPECT_NE(json.find("\"xfail_reason\": \"known bug\""), std::string::npos);
@@ -162,8 +162,8 @@ TEST_F(JsonOutputTest, VerifyMode) {
       MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
   };
 
-  std::string json =
-      WriteJson(iree_make_cstring_view("verify.loom"), file, results, 1, 0, 0);
+  std::string json = WriteJson(iree_make_cstring_view("verify.loom-test"), file,
+                               results, 1, 0, 0);
 
   EXPECT_NE(json.find("\"default_mode\": \"verify\""), std::string::npos);
   EXPECT_NE(json.find("\"mode\": \"verify\""), std::string::npos);
@@ -189,8 +189,8 @@ TEST_F(JsonOutputTest, MultipleCases) {
       MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "diff output\n"),
   };
 
-  std::string json =
-      WriteJson(iree_make_cstring_view("multi.loom"), file, results, 1, 1, 0);
+  std::string json = WriteJson(iree_make_cstring_view("multi.loom-test"), file,
+                               results, 1, 1, 0);
 
   EXPECT_NE(json.find("\"index\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"index\": 2"), std::string::npos);
@@ -214,8 +214,8 @@ TEST_F(JsonOutputTest, EscapedStrings) {
                  "line 1: \"expected\" vs \"actual\"\nline 2: tab\there\n"),
   };
 
-  std::string json =
-      WriteJson(iree_make_cstring_view("escape.loom"), file, results, 0, 1, 0);
+  std::string json = WriteJson(iree_make_cstring_view("escape.loom-test"), file,
+                               results, 0, 1, 0);
 
   // Quotes and newlines should be escaped in the JSON.
   EXPECT_NE(json.find("\\\"expected\\\""), std::string::npos);
@@ -236,10 +236,11 @@ TEST_F(JsonOutputTest, FilenameWithSpecialCharacters) {
   };
 
   // Path with backslash (Windows-style) should be escaped.
-  std::string json = WriteJson(iree_make_cstring_view("C:\\tests\\test.loom"),
-                               file, results, 1, 0, 0);
+  std::string json =
+      WriteJson(iree_make_cstring_view("C:\\tests\\test.loom-test"), file,
+                results, 1, 0, 0);
 
-  EXPECT_NE(json.find("C:\\\\tests\\\\test.loom"), std::string::npos);
+  EXPECT_NE(json.find("C:\\\\tests\\\\test.loom-test"), std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
 }
@@ -249,7 +250,7 @@ TEST_F(JsonOutputTest, EmptyCaseArray) {
   loom_check_file_t file = {0};
   file.default_mode = LOOM_CHECK_MODE_ROUNDTRIP;
 
-  std::string json = WriteJson(iree_make_cstring_view("empty.loom"), file,
+  std::string json = WriteJson(iree_make_cstring_view("empty.loom-test"), file,
                                /*results=*/nullptr, 0, 0, 0);
 
   EXPECT_NE(json.find("\"cases\": [\n  ]"), std::string::npos);

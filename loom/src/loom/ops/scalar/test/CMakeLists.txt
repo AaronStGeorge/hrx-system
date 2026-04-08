@@ -14,7 +14,7 @@ iree_executable_test(
   NAME
     "verify"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom"
+    "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

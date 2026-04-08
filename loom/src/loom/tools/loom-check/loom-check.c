@@ -4,17 +4,17 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// loom-check: test runner for .loom IR files.
+// loom-check: test runner for .loom-test check files.
 //
-// Parses test files containing directives, input/expected sections, and
+// Parses check files containing directives, input/expected sections, and
 // diagnostic annotations. Executes each test case according to its mode
 // (roundtrip, verify, pass, format) and reports pass/fail results.
 //
 // Usage:
-//   loom-check test.loom              # Run all cases in file.
+//   loom-check test.loom-test         # Run all cases in file.
 //   echo "func.def @f() {}" | loom-check  # Read from stdin.
-//   loom-check --update test.loom     # Rewrite expected sections.
-//   loom-check --verbose test.loom    # Print each case as it runs.
+//   loom-check --update test.loom-test    # Rewrite expected sections.
+//   loom-check --verbose test.loom-test   # Print each case as it runs.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -298,15 +298,16 @@ static iree_status_t loom_check_read_and_process(
 int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-check",
-      "Test runner for .loom IR files.\n"
+      "Test runner for .loom-test check files.\n"
       "\n"
-      "Parses test files into cases, executes each case according to its\n"
+      "Parses .loom-test files into cases, executes each case according to "
+      "its\n"
       "mode directive, and reports pass/fail results with diffs or\n"
-      "diagnostic details on failure.\n"
+      "diagnostic details on failure. Use .loom for ordinary Loom IR files.\n"
       "\n"
       "Usage:\n"
       "  loom-check [flags] [file...]\n"
-      "  cat test.loom | loom-check\n"
+      "  cat test.loom-test | loom-check\n"
       "\n"
       "Modes (set via // RUN: directive, default is roundtrip):\n"
       "  roundtrip   Parse, print, compare against expected output.\n"
@@ -315,7 +316,7 @@ int main(int argc, char** argv) {
       "  format <f>  Parse, convert to format <f>, convert back, compare.\n"
       "\n"
       "File format:\n"
-      "  A test file contains one or more cases separated by // ====.\n"
+      "  A .loom-test file contains one or more cases separated by // ====.\n"
       "  Each case has directives at the top, then input IR, and\n"
       "  optionally a // ---- separator followed by expected output.\n"
       "  When // ---- is absent, the expected output equals the input\n"

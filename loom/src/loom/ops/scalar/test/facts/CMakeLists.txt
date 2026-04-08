@@ -14,7 +14,7 @@ iree_executable_test(
   NAME
     "arithmetici"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici.loom"
+    "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
@@ -25,7 +25,7 @@ iree_executable_test(
   NAME
     "bitwisei"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei.loom"
+    "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
