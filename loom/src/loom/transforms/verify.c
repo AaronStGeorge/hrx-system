@@ -1420,377 +1420,479 @@ static bool loom_verify_region_entry_yield(
     const loom_op_vtable_t* vtable, uint8_t region_index,
     uint16_t* out_yield_count, const loom_value_id_t** out_yield_operands);
 
+// Resolves a variadic value field reference to its value array and
+// element count. Returns NULL with |*out_count| = 0 if the field is
+// not a value-bearing variadic (e.g., it points at an attr or region,
+// or its start index is past the op's operand/result range).
+static const loom_value_id_t* loom_verify_resolve_variadic_field(
+    const loom_op_t* op, uint8_t field_ref, uint16_t* out_count) {
+  uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
+  uint8_t start_index = LOOM_FIELD_REF_INDEX(field_ref);
+  if (category == LOOM_FIELD_OPERAND && start_index <= op->operand_count) {
+    *out_count = (uint16_t)(op->operand_count - start_index);
+    return loom_op_const_operands(op) + start_index;
+  }
+  if (category == LOOM_FIELD_RESULT && start_index <= op->result_count) {
+    *out_count = (uint16_t)(op->result_count - start_index);
+    return loom_op_const_results(op) + start_index;
+  }
+  *out_count = 0;
+  return NULL;
+}
+
+// Emits a pairwise property mismatch where one side is either a scalar
+// field reference or an indexed element of a variadic field, and the
+// other side is always an indexed element of a variadic field.
+// Centralizes the four-param diagnostic format used by PAIRWISE_EQ
+// and VARIADIC_MATCH for type/element-type/encoding/shape/rank
+// comparisons. The caller passes the error explicitly because some
+// callers (e.g., VARIADIC_MATCH) store a different default error on
+// the constraint than the type-mismatch path needs.
+static void loom_verify_emit_indexed_pairwise_mismatch(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_error_def_t* error,
+    uint8_t ref_a, bool a_is_indexed, uint16_t a_element_index,
+    loom_type_t type_a, uint8_t ref_b, uint16_t b_element_index,
+    loom_type_t type_b) {
+  char name_a_buffer[32];
+  char name_b_buffer[32];
+  iree_string_view_t name_a =
+      a_is_indexed
+          ? loom_verify_indexed_field_name(op, vtable, ref_a, a_element_index,
+                                           name_a_buffer, sizeof(name_a_buffer))
+          : loom_verify_field_name(op, vtable, ref_a, name_a_buffer,
+                                   sizeof(name_a_buffer));
+  iree_string_view_t name_b = loom_verify_indexed_field_name(
+      op, vtable, ref_b, b_element_index, name_b_buffer, sizeof(name_b_buffer));
+  loom_diagnostic_param_t params[] = {
+      a_is_indexed ? loom_verify_param_string_for_indexed_field(name_a, ref_a,
+                                                                a_element_index)
+                   : loom_verify_param_string_for_field(name_a, ref_a),
+      loom_param_type(type_a),
+      loom_verify_param_string_for_indexed_field(name_b, ref_b,
+                                                 b_element_index),
+      loom_param_type(type_b),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 4 ? error->param_count : 4);
+}
+
+//===----------------------------------------------------------------------===//
+// Constraint relation handlers
+//===----------------------------------------------------------------------===//
+//
+// One handler per loom_constraint_relation_e value. All handlers share
+// the same signature so they can be dispatched through the table at
+// the bottom of this section. Handlers must validate their own
+// constraint args (arg_count, field categories) and silently return on
+// malformed inputs — structural verification runs first, so any
+// malformed op has already been diagnosed by the time semantic
+// constraints are evaluated.
+//
+// To add a new relation:
+//   1. Add the LOOM_RELATION_* enum value in op_defs.h with a doc
+//      comment describing the check.
+//   2. Add the name string in loom_constraint_relation_name (op_defs.c).
+//   3. Add a handler here following the same pattern.
+//   4. Add the handler to kVerifyRelationFns below.
+//   5. Add the corresponding Constraint constructor in dsl.py and the
+//      mapping in c_tables.py CONSTRAINT_MAP.
+
+// PAIRWISE_EQ: every element of every listed field has the same
+// property as the first element of the first field. Variadic fields
+// are walked elementwise. Args: 1+ value fields. Stops on the first
+// mismatch to avoid cascading errors.
+static void loom_verify_relation_pairwise_eq(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  loom_value_id_t first_id =
+      loom_verify_resolve_value_field(op, constraint->args[0]);
+  if (first_id == LOOM_VALUE_ID_INVALID) return;
+  loom_type_t first_type = loom_verify_value_type(state, first_id);
+  uint8_t first_ref = constraint->args[0];
+  bool first_is_variadic =
+      loom_verify_is_variadic_field(vtable, constraint->args[0]);
+
+  // PAIRWISE_EQ stores the type-mismatch error directly on the
+  // constraint (Python's SameType, SameElementType, etc.), so honor it
+  // when present and fall back to the property's default otherwise.
+  const loom_error_def_t* type_error =
+      constraint->error ? constraint->error
+                        : loom_pairwise_eq_default_error(constraint->property);
+
+  // Check remaining elements within the first arg's variadic range.
+  if (first_is_variadic) {
+    uint16_t count = 0;
+    const loom_value_id_t* values =
+        loom_verify_resolve_variadic_field(op, first_ref, &count);
+    for (uint16_t i = 1; i < count; ++i) {
+      loom_type_t other_type = loom_verify_value_type(state, values[i]);
+      if (loom_constraint_property_equals(first_type, other_type,
+                                          constraint->property)) {
+        continue;
+      }
+      loom_verify_emit_indexed_pairwise_mismatch(
+          state, op, vtable, type_error, first_ref, /*a_is_indexed=*/true, 0,
+          first_type, first_ref, i, other_type);
+      return;
+    }
+  }
+
+  // Check subsequent constraint args against the reference type.
+  for (uint8_t i = 1; i < constraint->arg_count; ++i) {
+    uint8_t arg_ref = constraint->args[i];
+    if (!loom_verify_is_variadic_field(vtable, arg_ref)) {
+      loom_value_id_t other_id = loom_verify_resolve_value_field(op, arg_ref);
+      loom_type_t other_type = loom_verify_value_type(state, other_id);
+      if (loom_constraint_property_equals(first_type, other_type,
+                                          constraint->property)) {
+        continue;
+      }
+      loom_verify_emit_pairwise_mismatch(state, op, vtable, constraint,
+                                         first_type, other_type, first_ref,
+                                         arg_ref);
+      return;
+    }
+    uint16_t count = 0;
+    const loom_value_id_t* values =
+        loom_verify_resolve_variadic_field(op, arg_ref, &count);
+    for (uint16_t j = 0; j < count; ++j) {
+      loom_type_t other_type = loom_verify_value_type(state, values[j]);
+      if (loom_constraint_property_equals(first_type, other_type,
+                                          constraint->property)) {
+        continue;
+      }
+      loom_verify_emit_indexed_pairwise_mismatch(
+          state, op, vtable, type_error, first_ref,
+          /*a_is_indexed=*/first_is_variadic, 0, first_type, arg_ref, j,
+          other_type);
+      return;
+    }
+  }
+}
+
+// ALL_SAME: every element of a single variadic value field shares the
+// same property as the first element. Args: 1 variadic value field.
+// Stops on the first mismatch.
+static void loom_verify_relation_all_same(loom_verify_state_t* state,
+                                          const loom_op_t* op,
+                                          const loom_op_vtable_t* vtable,
+                                          const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 1) return;
+  uint16_t count = 0;
+  const loom_value_id_t* values =
+      loom_verify_resolve_variadic_field(op, constraint->args[0], &count);
+  if (count <= 1) return;
+  loom_type_t first_type = loom_verify_value_type(state, values[0]);
+  for (uint16_t i = 1; i < count; ++i) {
+    loom_type_t other_type = loom_verify_value_type(state, values[i]);
+    if (loom_constraint_property_equals(first_type, other_type,
+                                        constraint->property)) {
+      continue;
+    }
+    const loom_error_def_t* error =
+        constraint->error ? constraint->error : &loom_err_shape_003;
+    loom_diagnostic_param_t params[] = {
+        loom_param_type(first_type),
+        loom_param_u32(i),
+        loom_param_type(other_type),
+    };
+    loom_verify_emit_structured(
+        state, op, error, params,
+        error->param_count < 3 ? error->param_count : 3);
+    return;
+  }
+}
+
+// COUNT_MATCHES_RANK: a variadic value field's element count equals
+// the rank of a shaped value field. Args: (shaped value field,
+// variadic value field).
+static void loom_verify_relation_count_matches_rank(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  loom_type_t shaped_type = loom_verify_value_type(
+      state, loom_verify_resolve_value_field(op, constraint->args[0]));
+  uint16_t variadic_count =
+      loom_verify_variadic_count(op, vtable, constraint->args[1]);
+  uint8_t rank = loom_type_rank(shaped_type);
+  if (variadic_count == rank) return;
+  char name_buffer[32];
+  iree_string_view_t operand_name = loom_verify_field_name(
+      op, vtable, constraint->args[0], name_buffer, sizeof(name_buffer));
+  const loom_error_def_t* error =
+      constraint->error ? constraint->error : &loom_err_subrange_001;
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(operand_name, constraint->args[0]),
+      loom_param_u32(variadic_count),
+      loom_param_i64(rank),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 3 ? error->param_count : 3);
+}
+
+// ATTR_IN_RANGE_RANK: an i64 attribute's value falls within
+// [0, rank) of a shaped value field. Args: (shaped value field,
+// i64 attr field).
+static void loom_verify_relation_attr_in_range_rank(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  loom_type_t shaped_type = loom_verify_value_type(
+      state, loom_verify_resolve_value_field(op, constraint->args[0]));
+  uint8_t attr_index = LOOM_FIELD_REF_INDEX(constraint->args[1]);
+  if (attr_index >= op->attribute_count) return;
+  int64_t dim_index = loom_attr_as_i64(loom_op_attrs(op)[attr_index]);
+  uint8_t rank = loom_type_rank(shaped_type);
+  if (dim_index >= 0 && dim_index < rank) return;
+  const loom_error_def_t* error =
+      constraint->error ? constraint->error : &loom_err_subrange_002;
+  loom_diagnostic_param_t params[] = {
+      loom_param_i64(dim_index),
+      loom_param_i64(rank),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 2 ? error->param_count : 2);
+}
+
+// REGION_ARG_COUNT: a region's entry block argument count matches
+// the element count of a variadic value field. Args: (region field,
+// variadic value field).
+static void loom_verify_relation_region_arg_count(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint8_t region_index = LOOM_FIELD_REF_INDEX(constraint->args[0]);
+  if (region_index >= op->region_count) return;
+  loom_region_t* region = loom_op_regions(op)[region_index];
+  if (!region || region->block_count == 0) return;
+  uint16_t block_arg_count = loom_region_entry_arg_count(region);
+  uint16_t input_count =
+      loom_verify_variadic_count(op, vtable, constraint->args[1]);
+  if (block_arg_count == input_count) return;
+  const loom_error_def_t* error =
+      constraint->error ? constraint->error : &loom_err_structure_007;
+  loom_diagnostic_param_t params[] = {
+      loom_param_u32(block_arg_count),
+      loom_param_u32(input_count),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 2 ? error->param_count : 2);
+}
+
+// REGION_ARG_MATCH: each region entry block argument's property
+// matches the corresponding element of a variadic value field at the
+// same position. Args: (region field, variadic operand field).
+static void loom_verify_relation_region_arg_match(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint8_t region_index = LOOM_FIELD_REF_INDEX(constraint->args[0]);
+  if (region_index >= op->region_count) return;
+  loom_region_t* region = loom_op_regions(op)[region_index];
+  if (!region || region->block_count == 0) return;
+  loom_block_t* entry = loom_region_entry_block(region);
+  // Block args are sourced from operand-side fields only — region
+  // entry args mirror an op's input values, never its result values.
+  if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) != LOOM_FIELD_OPERAND) {
+    return;
+  }
+  uint16_t input_count = 0;
+  const loom_value_id_t* input_values =
+      loom_verify_resolve_variadic_field(op, constraint->args[1], &input_count);
+  if (!input_values) return;
+  uint16_t check_count =
+      entry->arg_count < input_count ? entry->arg_count : input_count;
+  for (uint16_t i = 0; i < check_count; ++i) {
+    loom_type_t block_arg_type =
+        loom_verify_value_type(state, loom_block_arg_id(entry, i));
+    loom_type_t input_type = loom_verify_value_type(state, input_values[i]);
+    if (loom_constraint_property_equals(block_arg_type, input_type,
+                                        constraint->property)) {
+      continue;
+    }
+    const loom_error_def_t* error =
+        constraint->error ? constraint->error : &loom_err_type_008;
+    loom_type_t expected_type =
+        loom_type_scalar(loom_type_element_type(input_type));
+    loom_diagnostic_param_t params[] = {
+        loom_param_u32(i),
+        loom_param_type(block_arg_type),
+        loom_param_type(expected_type),
+    };
+    loom_verify_emit_structured(
+        state, op, error, params,
+        error->param_count < 3 ? error->param_count : 3);
+  }
+}
+
+// YIELD_COUNT: a region's terminator (yield) operand count matches
+// the element count of a variadic value field. Args: (region field,
+// variadic value field).
+static void loom_verify_relation_yield_count(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint16_t yield_count = 0;
+  if (!loom_verify_region_entry_yield(state, op, vtable,
+                                      LOOM_FIELD_REF_INDEX(constraint->args[0]),
+                                      &yield_count, NULL)) {
+    return;
+  }
+  uint16_t result_count =
+      loom_verify_variadic_count(op, vtable, constraint->args[1]);
+  // A non-variadic result counts as a single element for the purposes
+  // of yield-count comparisons (the field still names a value).
+  if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) == LOOM_FIELD_RESULT &&
+      LOOM_FIELD_REF_INDEX(constraint->args[1]) < vtable->fixed_result_count) {
+    result_count = 1;
+  }
+  if (yield_count == result_count) return;
+  const loom_error_def_t* error =
+      constraint->error ? constraint->error : &loom_err_structure_008;
+  loom_diagnostic_param_t params[] = {
+      loom_param_u32(yield_count),
+      loom_param_u32(result_count),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 2 ? error->param_count : 2);
+}
+
+// YIELD_MATCH: each region terminator (yield) operand's property
+// matches the corresponding element of a variadic result field at the
+// same position. Args: (region field, variadic result field).
+static void loom_verify_relation_yield_match(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  // Yields forward into result values — only result-side fields are
+  // valid as the second arg.
+  if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) != LOOM_FIELD_RESULT) {
+    return;
+  }
+  uint16_t yield_count = 0;
+  const loom_value_id_t* yield_operands = NULL;
+  if (!loom_verify_region_entry_yield(state, op, vtable,
+                                      LOOM_FIELD_REF_INDEX(constraint->args[0]),
+                                      &yield_count, &yield_operands)) {
+    return;
+  }
+  uint16_t result_count = 0;
+  const loom_value_id_t* result_values = loom_verify_resolve_variadic_field(
+      op, constraint->args[1], &result_count);
+  if (!result_values) return;
+  uint16_t check_count =
+      yield_count < result_count ? yield_count : result_count;
+  for (uint16_t i = 0; i < check_count; ++i) {
+    loom_type_t yield_type = loom_verify_value_type(state, yield_operands[i]);
+    loom_type_t result_type = loom_verify_value_type(state, result_values[i]);
+    if (loom_constraint_property_equals(yield_type, result_type,
+                                        constraint->property)) {
+      continue;
+    }
+    const loom_error_def_t* error =
+        constraint->error ? constraint->error : &loom_err_type_009;
+    loom_type_t expected_type =
+        loom_type_scalar(loom_type_element_type(result_type));
+    loom_diagnostic_param_t params[] = {
+        loom_param_type(yield_type),
+        loom_param_type(expected_type),
+    };
+    loom_verify_emit_structured(
+        state, op, error, params,
+        error->param_count < 2 ? error->param_count : 2);
+  }
+}
+
+// VARIADIC_MATCH: two variadic value fields agree position-by-position
+// on count and per-element property. Args: (variadic value field,
+// variadic value field). Stops at the count check on a mismatch to
+// avoid cascading per-position errors that obscure the root cause.
+static void loom_verify_relation_variadic_match(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint8_t ref_a = constraint->args[0];
+  uint8_t ref_b = constraint->args[1];
+  uint16_t count_a = 0;
+  uint16_t count_b = 0;
+  const loom_value_id_t* values_a =
+      loom_verify_resolve_variadic_field(op, ref_a, &count_a);
+  const loom_value_id_t* values_b =
+      loom_verify_resolve_variadic_field(op, ref_b, &count_b);
+  if (!values_a || !values_b) return;
+
+  if (count_a != count_b) {
+    char name_a_buffer[32];
+    char name_b_buffer[32];
+    iree_string_view_t name_a = loom_verify_field_name(
+        op, vtable, ref_a, name_a_buffer, sizeof(name_a_buffer));
+    iree_string_view_t name_b = loom_verify_field_name(
+        op, vtable, ref_b, name_b_buffer, sizeof(name_b_buffer));
+    const loom_error_def_t* error =
+        constraint->error ? constraint->error : &loom_err_structure_013;
+    loom_diagnostic_param_t params[] = {
+        loom_verify_param_string_for_field(name_a, ref_a),
+        loom_param_u32(count_a),
+        loom_verify_param_string_for_field(name_b, ref_b),
+        loom_param_u32(count_b),
+    };
+    loom_verify_emit_structured(
+        state, op, error, params,
+        error->param_count < 4 ? error->param_count : 4);
+    return;
+  }
+
+  // Per-position type mismatches use the property's default type
+  // error, NOT constraint->error: VARIADIC_MATCH stores the count
+  // error (ERR_STRUCTURE_013) on the constraint, which is the wrong
+  // shape (STRING/U32/STRING/U32) for type-mismatch params.
+  const loom_error_def_t* type_error =
+      loom_pairwise_eq_default_error(constraint->property);
+  for (uint16_t i = 0; i < count_a; ++i) {
+    loom_type_t type_a = loom_verify_value_type(state, values_a[i]);
+    loom_type_t type_b = loom_verify_value_type(state, values_b[i]);
+    if (loom_constraint_property_equals(type_a, type_b, constraint->property)) {
+      continue;
+    }
+    loom_verify_emit_indexed_pairwise_mismatch(state, op, vtable, type_error,
+                                               ref_a, /*a_is_indexed=*/true, i,
+                                               type_a, ref_b, i, type_b);
+  }
+}
+
+// Dispatch table for semantic constraint relations. Indexed by the
+// loom_constraint_relation_t enum value. Adding a relation requires
+// (a) updating the enum in op_defs.h, (b) adding a handler above, and
+// (c) appending the handler here. The static_assert below ensures
+// every enum value has a handler.
+typedef void (*loom_verify_relation_fn_t)(loom_verify_state_t* state,
+                                          const loom_op_t* op,
+                                          const loom_op_vtable_t* vtable,
+                                          const loom_constraint_t* constraint);
+
+static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
+    [LOOM_RELATION_PAIRWISE_EQ] = loom_verify_relation_pairwise_eq,
+    [LOOM_RELATION_ALL_SAME] = loom_verify_relation_all_same,
+    [LOOM_RELATION_COUNT_MATCHES_RANK] =
+        loom_verify_relation_count_matches_rank,
+    [LOOM_RELATION_ATTR_IN_RANGE_RANK] =
+        loom_verify_relation_attr_in_range_rank,
+    [LOOM_RELATION_REGION_ARG_COUNT] = loom_verify_relation_region_arg_count,
+    [LOOM_RELATION_REGION_ARG_MATCH] = loom_verify_relation_region_arg_match,
+    [LOOM_RELATION_YIELD_COUNT] = loom_verify_relation_yield_count,
+    [LOOM_RELATION_YIELD_MATCH] = loom_verify_relation_yield_match,
+    [LOOM_RELATION_VARIADIC_MATCH] = loom_verify_relation_variadic_match,
+};
+static_assert(IREE_ARRAYSIZE(kVerifyRelationFns) == LOOM_RELATION_COUNT_,
+              "verify relation dispatch table out of sync with enum");
+
 static void loom_verify_semantic_constraint(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
-  switch ((enum loom_constraint_relation_e)constraint->relation) {
-    case LOOM_RELATION_PAIRWISE_EQ: {
-      if (constraint->arg_count < 2) break;
-      // Collect the reference type from the first element of the first
-      // arg. For variadic args, the first element is at the field's
-      // start index.
-      loom_value_id_t first_id =
-          loom_verify_resolve_value_field(op, constraint->args[0]);
-      if (first_id == LOOM_VALUE_ID_INVALID) break;
-      loom_type_t first_type = loom_verify_value_type(state, first_id);
-      uint8_t first_ref = constraint->args[0];
-      // Track whether the first value itself was from a variadic. If
-      // so, we also need to check the remaining elements of arg 0.
-      bool first_is_variadic =
-          loom_verify_is_variadic_field(vtable, constraint->args[0]);
-      bool found_mismatch = false;
-      // Check remaining elements of the first arg's variadic range.
-      if (first_is_variadic) {
-        uint8_t category = LOOM_FIELD_REF_CATEGORY(first_ref);
-        uint8_t start_index = LOOM_FIELD_REF_INDEX(first_ref);
-        uint16_t count = (category == LOOM_FIELD_OPERAND) ? op->operand_count
-                                                          : op->result_count;
-        const loom_value_id_t* values = (category == LOOM_FIELD_OPERAND)
-                                            ? loom_op_const_operands(op)
-                                            : loom_op_const_results(op);
-        for (uint16_t vi = start_index + 1; vi < count; ++vi) {
-          loom_type_t other_type = loom_verify_value_type(state, values[vi]);
-          if (!loom_constraint_property_equals(first_type, other_type,
-                                               constraint->property)) {
-            // Emit with indexed field names for both sides.
-            char name_a_buffer[32];
-            char name_b_buffer[32];
-            iree_string_view_t name_a = loom_verify_indexed_field_name(
-                op, vtable, first_ref, 0, name_a_buffer, sizeof(name_a_buffer));
-            iree_string_view_t name_b = loom_verify_indexed_field_name(
-                op, vtable, first_ref, (uint16_t)(vi - start_index),
-                name_b_buffer, sizeof(name_b_buffer));
-            const loom_error_def_t* error =
-                constraint->error
-                    ? constraint->error
-                    : loom_pairwise_eq_default_error(constraint->property);
-            loom_diagnostic_param_t params[] = {
-                loom_verify_param_string_for_indexed_field(name_a, first_ref,
-                                                           0),
-                loom_param_type(first_type),
-                loom_verify_param_string_for_indexed_field(
-                    name_b, first_ref, (uint16_t)(vi - start_index)),
-                loom_param_type(other_type),
-            };
-            loom_verify_emit_structured(
-                state, op, error, params,
-                error->param_count < 4 ? error->param_count : 4);
-            found_mismatch = true;
-            break;
-          }
-        }
-      }
-      if (found_mismatch) break;
-      // Check subsequent constraint args against the first type.
-      for (uint8_t i = 1; i < constraint->arg_count; ++i) {
-        uint8_t arg_ref = constraint->args[i];
-        bool is_variadic = loom_verify_is_variadic_field(vtable, arg_ref);
-        if (!is_variadic) {
-          // Scalar field: single comparison.
-          loom_value_id_t other_id =
-              loom_verify_resolve_value_field(op, arg_ref);
-          loom_type_t other_type = loom_verify_value_type(state, other_id);
-          if (!loom_constraint_property_equals(first_type, other_type,
-                                               constraint->property)) {
-            loom_verify_emit_pairwise_mismatch(state, op, vtable, constraint,
-                                               first_type, other_type,
-                                               first_ref, arg_ref);
-            found_mismatch = true;
-            break;
-          }
-        } else {
-          // Variadic field: check each element.
-          uint8_t category = LOOM_FIELD_REF_CATEGORY(arg_ref);
-          uint8_t start_index = LOOM_FIELD_REF_INDEX(arg_ref);
-          uint16_t count = (category == LOOM_FIELD_OPERAND) ? op->operand_count
-                                                            : op->result_count;
-          const loom_value_id_t* values = (category == LOOM_FIELD_OPERAND)
-                                              ? loom_op_const_operands(op)
-                                              : loom_op_const_results(op);
-          for (uint16_t vi = start_index; vi < count; ++vi) {
-            loom_type_t other_type = loom_verify_value_type(state, values[vi]);
-            if (!loom_constraint_property_equals(first_type, other_type,
-                                                 constraint->property)) {
-              // Emit with the first arg's name and the indexed variadic
-              // element's name.
-              char name_a_buffer[32];
-              char name_b_buffer[32];
-              iree_string_view_t name_a;
-              if (first_is_variadic) {
-                name_a = loom_verify_indexed_field_name(op, vtable, first_ref,
-                                                        0, name_a_buffer,
-                                                        sizeof(name_a_buffer));
-              } else {
-                name_a =
-                    loom_verify_field_name(op, vtable, first_ref, name_a_buffer,
-                                           sizeof(name_a_buffer));
-              }
-              iree_string_view_t name_b = loom_verify_indexed_field_name(
-                  op, vtable, arg_ref, (uint16_t)(vi - start_index),
-                  name_b_buffer, sizeof(name_b_buffer));
-              const loom_error_def_t* error =
-                  constraint->error
-                      ? constraint->error
-                      : loom_pairwise_eq_default_error(constraint->property);
-              loom_diagnostic_param_t params[] = {
-                  first_is_variadic
-                      ? loom_verify_param_string_for_indexed_field(name_a,
-                                                                   first_ref, 0)
-                      : loom_verify_param_string_for_field(name_a, first_ref),
-                  loom_param_type(first_type),
-                  loom_verify_param_string_for_indexed_field(
-                      name_b, arg_ref, (uint16_t)(vi - start_index)),
-                  loom_param_type(other_type),
-              };
-              loom_verify_emit_structured(
-                  state, op, error, params,
-                  error->param_count < 4 ? error->param_count : 4);
-              found_mismatch = true;
-              break;
-            }
-          }
-          if (found_mismatch) break;
-        }
-      }
-      break;
-    }
-
-    case LOOM_RELATION_ALL_SAME: {
-      if (constraint->arg_count < 1) break;
-      uint8_t field_ref = constraint->args[0];
-      uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
-      uint8_t start_index = LOOM_FIELD_REF_INDEX(field_ref);
-      uint16_t count = 0;
-      const loom_value_id_t* values = NULL;
-      if (category == LOOM_FIELD_OPERAND && start_index <= op->operand_count) {
-        values = loom_op_const_operands(op) + start_index;
-        count = (uint16_t)(op->operand_count - start_index);
-      } else if (category == LOOM_FIELD_RESULT &&
-                 start_index <= op->result_count) {
-        values = loom_op_const_results(op) + start_index;
-        count = (uint16_t)(op->result_count - start_index);
-      }
-      if (count > 1) {
-        loom_type_t first_type = loom_verify_value_type(state, values[0]);
-        for (uint16_t i = 1; i < count; ++i) {
-          loom_type_t other_type = loom_verify_value_type(state, values[i]);
-          if (!loom_constraint_property_equals(first_type, other_type,
-                                               constraint->property)) {
-            const loom_error_def_t* error =
-                constraint->error ? constraint->error : &loom_err_shape_003;
-            loom_diagnostic_param_t params[] = {
-                loom_param_type(first_type),
-                loom_param_u32(i),
-                loom_param_type(other_type),
-            };
-            loom_verify_emit_structured(
-                state, op, error, params,
-                error->param_count < 3 ? error->param_count : 3);
-            break;
-          }
-        }
-      }
-      break;
-    }
-
-    case LOOM_RELATION_COUNT_MATCHES_RANK: {
-      // args[0] = shaped value, args[1] = variadic value field.
-      if (constraint->arg_count < 2) break;
-      loom_type_t shaped_type = loom_verify_value_type(
-          state, loom_verify_resolve_value_field(op, constraint->args[0]));
-      uint16_t variadic_count =
-          loom_verify_variadic_count(op, vtable, constraint->args[1]);
-      uint8_t rank = loom_type_rank(shaped_type);
-      if (variadic_count != rank) {
-        char name_buffer[32];
-        iree_string_view_t operand_name = loom_verify_field_name(
-            op, vtable, constraint->args[0], name_buffer, sizeof(name_buffer));
-        const loom_error_def_t* error =
-            constraint->error ? constraint->error : &loom_err_subrange_001;
-        loom_diagnostic_param_t params[] = {
-            loom_verify_param_string_for_field(operand_name,
-                                               constraint->args[0]),
-            loom_param_u32(variadic_count),
-            loom_param_i64(rank),
-        };
-        loom_verify_emit_structured(
-            state, op, error, params,
-            error->param_count < 3 ? error->param_count : 3);
-      }
-      break;
-    }
-
-    case LOOM_RELATION_ATTR_IN_RANGE_RANK: {
-      // args[0] = shaped value field, args[1] = attr field (i64 index).
-      if (constraint->arg_count < 2) break;
-      loom_type_t shaped_type = loom_verify_value_type(
-          state, loom_verify_resolve_value_field(op, constraint->args[0]));
-      uint8_t attr_index = LOOM_FIELD_REF_INDEX(constraint->args[1]);
-      if (attr_index < op->attribute_count) {
-        int64_t dim_index = loom_attr_as_i64(loom_op_attrs(op)[attr_index]);
-        uint8_t rank = loom_type_rank(shaped_type);
-        if (dim_index < 0 || dim_index >= rank) {
-          const loom_error_def_t* error =
-              constraint->error ? constraint->error : &loom_err_subrange_002;
-          loom_diagnostic_param_t params[] = {
-              loom_param_i64(dim_index),
-              loom_param_i64(rank),
-          };
-          loom_verify_emit_structured(
-              state, op, error, params,
-              error->param_count < 2 ? error->param_count : 2);
-        }
-      }
-      break;
-    }
-
-    case LOOM_RELATION_REGION_ARG_COUNT: {
-      // args[0] = region, args[1] = value field (count source).
-      if (constraint->arg_count < 2) break;
-      uint8_t region_index = LOOM_FIELD_REF_INDEX(constraint->args[0]);
-      if (region_index >= op->region_count) break;
-      loom_region_t* region = loom_op_regions(op)[region_index];
-      if (!region || region->block_count == 0) break;
-      uint16_t block_arg_count = loom_region_entry_arg_count(region);
-      uint16_t input_count =
-          loom_verify_variadic_count(op, vtable, constraint->args[1]);
-      if (block_arg_count != input_count) {
-        const loom_error_def_t* error =
-            constraint->error ? constraint->error : &loom_err_structure_007;
-        loom_diagnostic_param_t params[] = {
-            loom_param_u32(block_arg_count),
-            loom_param_u32(input_count),
-        };
-        loom_verify_emit_structured(
-            state, op, error, params,
-            error->param_count < 2 ? error->param_count : 2);
-      }
-      break;
-    }
-
-    case LOOM_RELATION_REGION_ARG_MATCH: {
-      // args[0] = region, args[1] = value field (type source).
-      if (constraint->arg_count < 2) break;
-      uint8_t region_index = LOOM_FIELD_REF_INDEX(constraint->args[0]);
-      if (region_index >= op->region_count) break;
-      loom_region_t* region = loom_op_regions(op)[region_index];
-      if (!region || region->block_count == 0) break;
-      loom_block_t* entry = loom_region_entry_block(region);
-
-      uint8_t input_ref = constraint->args[1];
-      uint8_t input_category = LOOM_FIELD_REF_CATEGORY(input_ref);
-      uint8_t input_start = LOOM_FIELD_REF_INDEX(input_ref);
-      const loom_value_id_t* input_values = NULL;
-      uint16_t input_count = 0;
-      if (input_category == LOOM_FIELD_OPERAND &&
-          input_start <= op->operand_count) {
-        input_values = loom_op_const_operands(op) + input_start;
-        input_count = (uint16_t)(op->operand_count - input_start);
-      }
-
-      uint16_t check_count =
-          entry->arg_count < input_count ? entry->arg_count : input_count;
-      for (uint16_t i = 0; i < check_count; ++i) {
-        loom_type_t block_arg_type =
-            loom_verify_value_type(state, loom_block_arg_id(entry, i));
-        loom_type_t input_type = loom_verify_value_type(state, input_values[i]);
-        if (!loom_constraint_property_equals(block_arg_type, input_type,
-                                             constraint->property)) {
-          const loom_error_def_t* error =
-              constraint->error ? constraint->error : &loom_err_type_008;
-          loom_type_t expected_type =
-              loom_type_scalar(loom_type_element_type(input_type));
-          loom_diagnostic_param_t params[] = {
-              loom_param_u32(i),
-              loom_param_type(block_arg_type),
-              loom_param_type(expected_type),
-          };
-          loom_verify_emit_structured(
-              state, op, error, params,
-              error->param_count < 3 ? error->param_count : 3);
-        }
-      }
-      break;
-    }
-
-    case LOOM_RELATION_YIELD_COUNT: {
-      // args[0] = region, args[1] = result field.
-      if (constraint->arg_count < 2) break;
-      uint16_t yield_count = 0;
-      if (!loom_verify_region_entry_yield(
-              state, op, vtable, LOOM_FIELD_REF_INDEX(constraint->args[0]),
-              &yield_count, NULL)) {
-        break;
-      }
-
-      uint16_t result_count =
-          loom_verify_variadic_count(op, vtable, constraint->args[1]);
-      if (LOOM_FIELD_REF_CATEGORY(constraint->args[1]) == LOOM_FIELD_RESULT &&
-          LOOM_FIELD_REF_INDEX(constraint->args[1]) <
-              vtable->fixed_result_count) {
-        result_count = 1;
-      }
-
-      if (yield_count != result_count) {
-        const loom_error_def_t* error =
-            constraint->error ? constraint->error : &loom_err_structure_008;
-        loom_diagnostic_param_t params[] = {
-            loom_param_u32(yield_count),
-            loom_param_u32(result_count),
-        };
-        loom_verify_emit_structured(
-            state, op, error, params,
-            error->param_count < 2 ? error->param_count : 2);
-      }
-      break;
-    }
-
-    case LOOM_RELATION_YIELD_MATCH: {
-      // args[0] = region, args[1] = result field.
-      if (constraint->arg_count < 2) break;
-      uint16_t yield_count = 0;
-      const loom_value_id_t* yield_operands = NULL;
-      if (!loom_verify_region_entry_yield(
-              state, op, vtable, LOOM_FIELD_REF_INDEX(constraint->args[0]),
-              &yield_count, &yield_operands)) {
-        break;
-      }
-
-      uint8_t result_ref = constraint->args[1];
-      uint8_t result_start = LOOM_FIELD_REF_INDEX(result_ref);
-      const loom_value_id_t* result_values =
-          loom_op_const_results(op) + result_start;
-      uint16_t result_count = (result_start < op->result_count)
-                                  ? (uint16_t)(op->result_count - result_start)
-                                  : 0;
-
-      uint16_t check_count =
-          yield_count < result_count ? yield_count : result_count;
-      for (uint16_t i = 0; i < check_count; ++i) {
-        loom_type_t yield_type =
-            loom_verify_value_type(state, yield_operands[i]);
-        loom_type_t result_type =
-            loom_verify_value_type(state, result_values[i]);
-        if (!loom_constraint_property_equals(yield_type, result_type,
-                                             constraint->property)) {
-          const loom_error_def_t* error =
-              constraint->error ? constraint->error : &loom_err_type_009;
-          loom_type_t expected_type =
-              loom_type_scalar(loom_type_element_type(result_type));
-          loom_diagnostic_param_t params[] = {
-              loom_param_type(yield_type),
-              loom_param_type(expected_type),
-          };
-          loom_verify_emit_structured(
-              state, op, error, params,
-              error->param_count < 2 ? error->param_count : 2);
-        }
-      }
-      break;
-    }
-    default:
-      break;
-  }
+  if (constraint->relation >= LOOM_RELATION_COUNT_) return;
+  kVerifyRelationFns[constraint->relation](state, op, vtable, constraint);
 }
 
 static void loom_verify_semantic_constraints(loom_verify_state_t* state,

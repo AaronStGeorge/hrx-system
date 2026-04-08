@@ -540,10 +540,16 @@ static iree_status_t loom_parse_format_optional_group(
 
   switch (anchor_category) {
     case LOOM_ANCHOR_OPERAND: {
-      // Check if the first inner element is a keyword (e.g., "iter_args"
-      // before a binding list). In that case, probe for that specific
-      // keyword rather than an SSA value — the operands come after the
-      // keyword, not before it.
+      // The probe token depends on the first inner element of the
+      // optional group:
+      //   KEYWORD       — peek for that specific keyword text/kind
+      //                   (e.g., "iter_args" or "where" before the
+      //                   list it introduces).
+      //   BINDING_LIST  — peek for '(' since the binding list opens
+      //                   with a paren when the introducing keyword
+      //                   has been dropped.
+      //   anything else — fall back to peeking for an SSA value (the
+      //                   common case for variadic operand groups).
       const loom_format_element_t* first_inner =
           (element_index + 1 < vtable->format_element_count)
               ? &vtable->format_elements[element_index + 1]
@@ -559,6 +565,9 @@ static iree_status_t loom_parse_format_optional_group(
         } else {
           present = (peek.kind == expected_kind);
         }
+      } else if (first_inner &&
+                 first_inner->kind == LOOM_FORMAT_KIND_BINDING_LIST) {
+        present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LPAREN);
       } else {
         present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_SSA_VALUE);
       }

@@ -15,6 +15,7 @@
 #include "loom/ops/global/ops.h"
 #include "loom/ops/pool/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/testing/diff.h"
 #include "loom/transforms/canonicalize.h"
@@ -57,6 +58,8 @@ iree_status_t loom_check_context_initialize(loom_context_t* context) {
                                                    loom_pool_dialect_vtables));
   IREE_RETURN_IF_ERROR(loom_check_register_dialect(
       context, LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables));
+  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_SCF,
+                                                   loom_scf_dialect_vtables));
   return loom_context_finalize(context);
 }
 

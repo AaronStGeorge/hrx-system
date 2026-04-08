@@ -44,6 +44,7 @@ loom_cc_library(
     loom::src::loom::ops::global
     loom::src::loom::ops::pool
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
     loom::src::loom::ops::test
   PUBLIC
 )
@@ -60,6 +61,22 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    interface_test
+  SRCS
+    "interface_test.cc"
+  DEPS
+    ::op_defs
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

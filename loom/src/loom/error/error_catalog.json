@@ -913,6 +913,39 @@
     "fix_hint_template": "Move '{op_name}' before the block terminator or remove the unreachable op"
   },
   {
+    "error_id": "ERR_STRUCTURE_013",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 13,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Variadic field count mismatch.",
+    "message_template": "'{field_a}' has {actual_count} values but '{field_b}' has {expected_count}",
+    "params": [
+      {
+        "name": "field_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "field_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Ensure '{field_a}' and '{field_b}' have the same number of values"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",

@@ -24,7 +24,8 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 from loom.assembly import (
     Attr,
@@ -57,7 +58,9 @@ from loom.dsl import (
     EffectKind,
     EnumDef,
     FuncLikeInterface,
+    LoopLikeInterface,
     Op,
+    RegionBranchInterface,
     RegionDef,
     TiedResult,
     TypeConstraint,
@@ -154,6 +157,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_YIELD_MATCH",
         "LOOM_PROPERTY_ELEMENT_TYPE",
     ),
+    "IterArgsMatchResults": (
+        "LOOM_RELATION_VARIADIC_MATCH",
+        "LOOM_PROPERTY_TYPE",
+    ),
 }
 
 # Maps FieldKind to C field category value.
@@ -230,10 +237,18 @@ def _guard_name(dialect_name: str) -> str:
     return f"LOOM_OPS_{dialect_name.upper()}_OPS_H_"
 
 
-def _find_func_like(op: Op) -> FuncLikeInterface | None:
-    """Returns the FuncLikeInterface from op.interfaces, or None."""
+_T = TypeVar("_T")
+
+
+def _find_interface(op: Op, iface_class: type[_T]) -> _T | None:
+    """Returns the interface instance from op.interfaces matching |iface_class|, or None.
+
+    Generic over the interface class so callers retain type information
+    on the result. Used by both the per-op interface helpers below and
+    the table-driven interface vtable emitter (see _INTERFACES).
+    """
     for iface in op.interfaces:
-        if isinstance(iface, FuncLikeInterface):
+        if isinstance(iface, iface_class):
             return iface
     return None
 
@@ -245,7 +260,7 @@ def _func_args_are_operands(op: Op) -> bool:
     their signature args live as op operands. Bodyful funcs keep signature args
     as body entry block args and must not duplicate them as operands.
     """
-    func_like_iface = _find_func_like(op)
+    func_like_iface = _find_interface(op, FuncLikeInterface)
     return bool(func_like_iface and func_like_iface.args_as_operands)
 
 
@@ -274,7 +289,7 @@ def _symbol_kind(op: Op) -> str:
     if kind is not None:
         return kind
     # Test dialect and other func-like symbol-defining ops default to DEF.
-    if _find_func_like(op) is not None:
+    if _find_interface(op, FuncLikeInterface) is not None:
         return "LOOM_SYMBOL_FUNC_DEF"
     raise ValueError(f"op '{op.name}' has SymbolDefine trait but no symbol_kind mapping — add it to _SYMBOL_KIND_MAP in c_tables.py")
 
@@ -292,11 +307,13 @@ def _constraint_arg_ref(
     return f"LOOM_FIELD_REF({category}, {field_index})"
 
 
-def _resolve_attr_index(op: Op, attr_name: str | None) -> int:
+def _resolve_attr_index(op: Op, attr_name: str | None, interface_name: str = "interface") -> int:
     """Resolves an attr name to its non-flags attr index.
 
     Returns 0xFF (LOOM_ATTR_INDEX_NONE) if attr_name is None.
     Raises ValueError if the attr name is not found on the op.
+    |interface_name| is used in error messages to identify which
+    interface declaration is referencing this attr.
     """
     if attr_name is None:
         return 0xFF
@@ -307,21 +324,248 @@ def _resolve_attr_index(op: Op, attr_name: str | None) -> int:
         if attr_def.name == attr_name:
             return index
         index += 1
-    raise ValueError(f"FuncLikeInterface on {op.name!r}: attr {attr_name!r} not found. Available: {[a.name for a in op.attrs if a.attr_type != ATTR_TYPE_FLAGS]}")
+    raise ValueError(f"{interface_name} on {op.name!r}: attr {attr_name!r} not found. Available: {[a.name for a in op.attrs if a.attr_type != ATTR_TYPE_FLAGS]}")
 
 
-def _resolve_region_index(op: Op, region_name: str | None) -> int:
+def _resolve_region_index(op: Op, region_name: str | None, interface_name: str = "interface") -> int:
     """Resolves a region name to its region index.
 
     Returns 0xFF (LOOM_REGION_INDEX_NONE) if region_name is None.
     Raises ValueError if the region name is not found on the op.
+    |interface_name| is used in error messages.
     """
     if region_name is None:
         return 0xFF
     for i, region_def in enumerate(op.regions):
         if region_def.name == region_name:
             return i
-    raise ValueError(f"FuncLikeInterface on {op.name!r}: region {region_name!r} not found. Available: {[r.name for r in op.regions]}")
+    raise ValueError(f"{interface_name} on {op.name!r}: region {region_name!r} not found. Available: {[r.name for r in op.regions]}")
+
+
+def _resolve_operand_index(op: Op, operand_name: str | None, interface_name: str = "interface") -> int:
+    """Resolves an operand name to its index in the op's operand list.
+
+    Returns 0xFF (LOOM_OPERAND_INDEX_NONE) if operand_name is None.
+    Raises ValueError if the operand name is not found on the op.
+    |interface_name| is used in error messages.
+
+    The returned index is the position in op.operands. This includes
+    fixed operands and the variadic operand (which always comes last
+    when present). For interfaces that need the offset of a variadic
+    operand specifically, the returned index is exactly that offset.
+    """
+    if operand_name is None:
+        return 0xFF
+    for i, operand in enumerate(op.operands):
+        if operand.name == operand_name:
+            return i
+    raise ValueError(f"{interface_name} on {op.name!r}: operand {operand_name!r} not found. Available: {[o.name for o in op.operands]}")
+
+
+def _resolve_block_arg_index(
+    op: Op,
+    region_name: str,
+    arg_name: str | None,
+    interface_name: str = "interface",
+) -> int:
+    """Resolves a block argument name to its index in the entry block.
+
+    The lookup considers a region's implicit block arguments first
+    (declared via implicit_args=(("name", "type"),) on RegionDef),
+    then any block args derived from BindingList format elements
+    (which the format pipeline appends after implicit args).
+
+    Returns 0xFF (LOOM_BLOCK_ARG_INDEX_NONE) if arg_name is None.
+    Raises ValueError if the region or arg name is not found.
+    """
+    if arg_name is None:
+        return 0xFF
+    region_def: RegionDef | None = None
+    for r in op.regions:
+        if r.name == region_name:
+            region_def = r
+            break
+    if region_def is None:
+        raise ValueError(f"{interface_name} on {op.name!r}: region {region_name!r} not found. Available: {[r.name for r in op.regions]}")
+    # Implicit block args come first.
+    for i, (name, _type) in enumerate(region_def.implicit_args):
+        if name == arg_name:
+            return i
+    raise ValueError(f"{interface_name} on {op.name!r}: block arg {arg_name!r} not found in region {region_name!r}. Available implicit_args: {[name for name, _ in region_def.implicit_args]}")
+
+
+# ============================================================================
+# Interface vtable emission (table-driven)
+# ============================================================================
+#
+# Interfaces declared in the Python DSL (FuncLikeInterface, etc.) are
+# emitted as per-op .rodata vtable structs on the C side. Each interface
+# also has a pointer slot on cache line 3 of loom_op_vtable_t.
+#
+# Adding a new interface is four steps:
+#   1. Declare the Python NamedTuple in dsl.py.
+#   2. Add the C struct, fat reference, cast function, and inline
+#      accessors to ir.h / op_defs.{h,c}.
+#   3. Add a pointer slot on cache line 3 of loom_op_vtable_t in ir.h.
+#   4. Add an InterfaceSpec entry to _INTERFACES below.
+#
+# The generator code is entirely table-driven off _INTERFACES — adding
+# an interface does not require any changes to the emission loops.
+
+
+@dataclass(frozen=True, slots=True)
+class InterfaceFieldSpec:
+    """Describes one field in an interface's C vtable struct.
+
+    py_field: Attribute name on the Python NamedTuple (e.g., "body",
+        "callee", "iv"). The generator reads this via getattr.
+    c_field: Field name in the C struct (e.g., "body_region_index",
+        "callee_attr_index"). Emitted as the designated initializer key.
+    kind: How to resolve the Python value to a C integer index or
+        literal. One of:
+          "attr"       — resolve to an op attribute index
+          "region"     — resolve to an op region index
+          "operand"    — resolve to an op operand index
+          "block_arg"  — resolve to a block argument index within a
+                         region (requires region_field)
+          "bool"       — render as a C boolean literal (true/false)
+    region_field: For kind="block_arg", the name of the interface field
+        that names the region the block arg belongs to. Unused for
+        other kinds.
+    """
+
+    py_field: str
+    c_field: str
+    kind: str
+    region_field: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class InterfaceSpec:
+    """Generator metadata for one interface type.
+
+    python_class: The Python NamedTuple class declared in dsl.py
+        (e.g., FuncLikeInterface).
+    name: Human-readable interface name used in error messages
+        (e.g., "FuncLikeInterface").
+    c_struct: Name of the C vtable struct type (e.g.,
+        "loom_func_like_vtable_t").
+    vtable_field: Field name on loom_op_vtable_t AND the per-op .rodata
+        constant suffix (e.g., "func_like" → vtable->func_like and
+        loom_<op>_func_like). These share a name by convention so the
+        generator only needs one identifier per interface.
+    fields: Ordered tuple of InterfaceFieldSpec for every field on the
+        C struct. Order matches the desired .rodata emission order
+        (cosmetic; designated initializers don't require any specific
+        order).
+    """
+
+    python_class: type
+    name: str
+    c_struct: str
+    vtable_field: str
+    fields: tuple[InterfaceFieldSpec, ...]
+
+
+# Registry of all interfaces known to the generator. Adding a new
+# interface is a single entry here (plus the C-side struct/cast code).
+_INTERFACES: tuple[InterfaceSpec, ...] = (
+    InterfaceSpec(
+        python_class=FuncLikeInterface,
+        name="FuncLikeInterface",
+        c_struct="loom_func_like_vtable_t",
+        vtable_field="func_like",
+        fields=(
+            InterfaceFieldSpec("callee", "callee_attr_index", "attr"),
+            InterfaceFieldSpec("visibility", "visibility_attr_index", "attr"),
+            InterfaceFieldSpec("cc", "cc_attr_index", "attr"),
+            InterfaceFieldSpec("purity", "purity_attr_index", "attr"),
+            InterfaceFieldSpec("predicates", "predicates_attr_index", "attr"),
+            InterfaceFieldSpec("body", "body_region_index", "region"),
+            InterfaceFieldSpec("implements", "implements_attr_index", "attr"),
+            InterfaceFieldSpec("priority", "priority_attr_index", "attr"),
+            InterfaceFieldSpec("args_as_operands", "args_as_operands", "bool"),
+        ),
+    ),
+    InterfaceSpec(
+        python_class=LoopLikeInterface,
+        name="LoopLikeInterface",
+        c_struct="loom_loop_like_vtable_t",
+        vtable_field="loop_like",
+        fields=(
+            InterfaceFieldSpec("body", "body_region_index", "region"),
+            InterfaceFieldSpec("condition_region", "condition_region_index", "region"),
+            InterfaceFieldSpec("iv", "iv_block_arg_index", "block_arg", region_field="body"),
+            InterfaceFieldSpec("iter_args", "iter_args_operand_offset", "operand"),
+        ),
+    ),
+    InterfaceSpec(
+        python_class=RegionBranchInterface,
+        name="RegionBranchInterface",
+        c_struct="loom_region_branch_vtable_t",
+        vtable_field="region_branch",
+        fields=(InterfaceFieldSpec("selector", "selector_operand_index", "operand"),),
+    ),
+)
+
+
+def _resolve_interface_field(
+    op: Op,
+    iface: Any,
+    field_spec: InterfaceFieldSpec,
+    interface_name: str,
+) -> str:
+    """Resolves one interface field to its emitted C initializer value.
+
+    Dispatches on field_spec.kind to the right name-to-index resolver,
+    then formats the result as a string ready to follow an `= ` in a
+    designated initializer.
+    """
+    py_value = getattr(iface, field_spec.py_field)
+    if field_spec.kind == "attr":
+        return str(_resolve_attr_index(op, py_value, interface_name))
+    if field_spec.kind == "region":
+        return str(_resolve_region_index(op, py_value, interface_name))
+    if field_spec.kind == "operand":
+        return str(_resolve_operand_index(op, py_value, interface_name))
+    if field_spec.kind == "block_arg":
+        if not field_spec.region_field:
+            raise ValueError(f"{interface_name} field {field_spec.py_field!r}: kind='block_arg' requires region_field to name the region this block arg belongs to")
+        region_value = getattr(iface, field_spec.region_field)
+        return str(_resolve_block_arg_index(op, region_value, py_value, interface_name))
+    if field_spec.kind == "bool":
+        return "true" if py_value else "false"
+    raise ValueError(f"{interface_name} field {field_spec.py_field!r}: unknown kind {field_spec.kind!r}")
+
+
+def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> None:
+    """Appends the .rodata struct declaration for |op|'s |spec| interface.
+
+    No-op if |op| does not implement |spec|. When emitted, the
+    resulting C initializer is pointed to from the main op vtable's
+    cache line 3 slot named by spec.vtable_field.
+    """
+    iface = _find_interface(op, spec.python_class)
+    if iface is None:
+        return
+    prefix = _c_prefix(op)
+    lines.append(f"static const {spec.c_struct} {prefix}_{spec.vtable_field} = {{")
+    for field_spec in spec.fields:
+        value_str = _resolve_interface_field(op, iface, field_spec, spec.name)
+        lines.append(f"    .{field_spec.c_field} = {value_str},")
+    lines.append("};")
+    lines.append("")
+
+
+def _interface_vtable_ptr(op: Op, spec: InterfaceSpec) -> str:
+    """Returns the C expression for the interface pointer on the main vtable.
+
+    Evaluates to `&<op>_<vtable_field>` when the op implements the
+    interface, or `NULL` otherwise.
+    """
+    if _find_interface(op, spec.python_class) is None:
+        return "NULL"
+    return f"&{_c_prefix(op)}_{spec.vtable_field}"
 
 
 def _collect_shared_enums(
@@ -1878,34 +2122,12 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         lines.append("};")
     lines.append("")
 
-    # FuncLike interface vtables. Emitted before the op vtables they
-    # are referenced from.
-    for op in ops:
-        func_like_iface = _find_func_like(op)
-        if func_like_iface is None:
-            continue
-        prefix = _c_prefix(op)
-        callee_index = _resolve_attr_index(op, func_like_iface.callee)
-        visibility_index = _resolve_attr_index(op, func_like_iface.visibility)
-        cc_index = _resolve_attr_index(op, func_like_iface.cc)
-        purity_index = _resolve_attr_index(op, func_like_iface.purity)
-        predicates_index = _resolve_attr_index(op, func_like_iface.predicates)
-        body_index = _resolve_region_index(op, func_like_iface.body)
-        implements_index = _resolve_attr_index(op, func_like_iface.implements)
-        priority_index = _resolve_attr_index(op, func_like_iface.priority)
-        args_as_operands_str = "true" if func_like_iface.args_as_operands else "false"
-        lines.append(f"static const loom_func_like_vtable_t {prefix}_func_like = {{")
-        lines.append(f"    .callee_attr_index = {callee_index},")
-        lines.append(f"    .visibility_attr_index = {visibility_index},")
-        lines.append(f"    .cc_attr_index = {cc_index},")
-        lines.append(f"    .purity_attr_index = {purity_index},")
-        lines.append(f"    .predicates_attr_index = {predicates_index},")
-        lines.append(f"    .body_region_index = {body_index},")
-        lines.append(f"    .implements_attr_index = {implements_index},")
-        lines.append(f"    .priority_attr_index = {priority_index},")
-        lines.append(f"    .args_as_operands = {args_as_operands_str},")
-        lines.append("};")
-        lines.append("")
+    # Interface vtables. Emitted before the op vtables they are
+    # referenced from. Table-driven off _INTERFACES — adding a new
+    # interface requires no changes to this loop.
+    for spec in _INTERFACES:
+        for op in ops:
+            _emit_interface_vtable(op, spec, lines)
 
     # Vtables.
     for op in ops:
@@ -1938,7 +2160,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         fold_fn = op.fold or "NULL"
         verify_fn = op.verify or "NULL"
         eff_traits = op.effective_traits or "NULL"
-        func_like_ptr = f"&{prefix}_func_like" if _find_func_like(op) is not None else "NULL"
+        interface_ptrs = {spec.vtable_field: _interface_vtable_ptr(op, spec) for spec in _INTERFACES}
         attr_desc_ptr = f"{prefix}_attr_desc" if non_flags else "NULL"
         operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or _func_args_are_operands(op) else "NULL"
         result_desc_ptr = f"{prefix}_result_desc" if op.results else "NULL"
@@ -1960,7 +2182,6 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         lines.append(f"    .canonicalize = {canon},")
         lines.append(f"    .fold = {fold_fn},")
         lines.append(f"    .effective_traits = {eff_traits},")
-        lines.append(f"    .func_like = {func_like_ptr},")
         lines.append(f"    .attr_descriptors = {attr_desc_ptr},")
         lines.append(f"    .operand_descriptors = {operand_desc_ptr},")
 
@@ -1983,6 +2204,9 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             lines.append("    .instance_flags_case_names = NULL,")
             lines.append(f"    .format_element_count = {len(elements)},")
             lines.append("    .instance_flags_case_count = 0,")
+
+        # Cache line 3: interface pointers.
+        lines.extend(f"    .{spec.vtable_field} = {interface_ptrs[spec.vtable_field]}," for spec in _INTERFACES)
 
         lines.append("};")
         lines.append("")
@@ -2459,6 +2683,7 @@ def main() -> None:
     from loom.dialect.hal import ALL_HAL_TYPES
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
+    from loom.dialect.scf import ALL_SCF_OPS, scf_ops
     from loom.dialect.test import ALL_TEST_OPS, test_ops
 
     dialects = [
@@ -2468,6 +2693,7 @@ def main() -> None:
         (encoding_ops, list(ALL_ENCODING_OPS)),
         (pool_ops, list(ALL_POOL_OPS)),
         (global_ops, list(ALL_GLOBAL_OPS)),
+        (scf_ops, list(ALL_SCF_OPS)),
     ]
 
     # Output root is relative to the script location:

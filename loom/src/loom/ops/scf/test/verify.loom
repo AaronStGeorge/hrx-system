@@ -1,0 +1,55 @@
+// RUN: verify
+
+// ====
+
+// scf.for with fewer iter_args than results: count check fires and
+// emits a single STRUCTURE/013, then short-circuits per-position
+// type checks so no cascading TYPE/001s appear. The diagnostic must
+// mention both field names so the user can locate the mismatch.
+func.def @for_iter_args_too_few(%lo: index, %hi: index, %step: index, %init: f32) -> (f32, f32) {
+  // ERROR@+1: STRUCTURE/013 "operand 3" "result 0"
+  %a, %b = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32, f32) {
+    scf.yield %acc, %acc : f32, f32
+  }
+  func.return %a, %b : f32, f32
+}
+
+// ====
+
+// scf.for with more iter_args than results: count check fires the
+// other direction.
+func.def @for_iter_args_too_many(%lo: index, %hi: index, %step: index, %a: f32, %b: f32) -> (f32) {
+  // ERROR@+1: STRUCTURE/013 "operand 3" "result 0"
+  %r = scf.for %iv = [%lo to %hi step %step](%fa = %a : f32, %fb = %b : f32) -> (f32) {
+    scf.yield %fa : f32
+  }
+  func.return %r : f32
+}
+
+// ====
+
+// scf.for with one iter_arg whose type does not match the result.
+// Count matches (1 == 1) so the per-position type check fires and
+// emits TYPE/001 referencing both indexed field positions.
+func.def @for_iter_args_type_mismatch(%lo: index, %hi: index, %step: index, %init: f32) -> (i32) {
+  %c = scalar.constant 0 : i32
+  // ERROR@+1: TYPE/001 "operand 3[0]" "result 0[0]"
+  %r = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (i32) {
+    scf.yield %c : i32
+  }
+  func.return %r : i32
+}
+
+// ====
+
+// scf.for with two iter_args where the first matches but the second
+// has a wrong type. The diagnostic points at the offending position
+// on both sides — element index [1] within both variadic fields.
+func.def @for_iter_args_second_type_mismatch(%lo: index, %hi: index, %step: index, %a: f32, %b: f32) -> (f32, i32) {
+  %c = scalar.constant 0 : i32
+  // ERROR@+1: TYPE/001 "operand 3[1]" "result 0[1]"
+  %x, %y = scf.for %iv = [%lo to %hi step %step](%fa = %a : f32, %fb = %b : f32) -> (f32, i32) {
+    scf.yield %fa, %c : f32, i32
+  }
+  func.return %x, %y : f32, i32
+}

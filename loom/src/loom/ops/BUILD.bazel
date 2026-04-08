@@ -42,6 +42,7 @@ loom_cc_library(
         "//loom/src/loom/ops/global",
         "//loom/src/loom/ops/pool",
         "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/test",
         "//runtime/src/iree/base",
     ],
@@ -55,6 +56,21 @@ loom_cc_library(
         ":op_defs",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "interface_test",
+    srcs = ["interface_test.cc"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

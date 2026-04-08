@@ -1781,6 +1781,7 @@ static const loom_attr_descriptor_t kPredTestAttrDesc[] = {
     {kPredTestPredicatesBname, LOOM_ATTR_PREDICATE_LIST, 0, 0, NULL},
 };
 static const loom_op_vtable_t kPredTestVtable = {
+    // Cache line 1: hot path.
     .traits = LOOM_TRAIT_PURE,
     .fixed_operand_count = 0,
     .fixed_result_count = 0,
@@ -1792,9 +1793,9 @@ static const loom_op_vtable_t kPredTestVtable = {
     .canonicalize = NULL,
     .fold = NULL,
     .effective_traits = NULL,
-    .func_like = NULL,
     .attr_descriptors = kPredTestAttrDesc,
     .operand_descriptors = NULL,
+    // Cache line 2: verify + parse/print + diagnostics.
     .result_descriptors = NULL,
     .region_descriptors = NULL,
     .constraints = NULL,
@@ -1804,6 +1805,8 @@ static const loom_op_vtable_t kPredTestVtable = {
     .instance_flags_case_names = NULL,
     .format_element_count = 1,
     .instance_flags_case_count = 0,
+    // Cache line 3: interface pointers.
+    .func_like = NULL,
 };
 
 // Test fixture that registers both the test dialect and the synthetic

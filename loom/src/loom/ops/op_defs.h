@@ -300,24 +300,78 @@ enum loom_field_category_e {
 // Constraint kinds for the table-driven constraint interpreter.
 // Constraint relation: how values are compared.
 enum loom_constraint_relation_e {
+  // Every element of every listed field has the same property as the
+  // first element of the first field. Despite the name, this is "all
+  // elements equal the reference", not strict pairwise comparison.
+  // Variadic fields are walked elementwise. Args: 1+ value fields.
+  // Used by SameType, SameElementType, SameShape, SameEncoding,
+  // RanksMatch.
   LOOM_RELATION_PAIRWISE_EQ = 0,
+
+  // All elements of a single variadic value field share the same
+  // property. Args: 1 variadic value field. Used by AllShapesMatch.
   LOOM_RELATION_ALL_SAME = 1,
+
+  // The element count of a variadic value field equals the rank of a
+  // shaped value field. Args: (shaped value field, variadic value
+  // field). Used by OffsetCountMatchesRank.
   LOOM_RELATION_COUNT_MATCHES_RANK = 2,
+
+  // An i64 attribute's value falls within [0, rank) of a shaped value
+  // field. Args: (shaped value field, i64 attr field). Used by
+  // DimIndexInBounds.
   LOOM_RELATION_ATTR_IN_RANGE_RANK = 3,
+
+  // A region's entry block argument count matches the element count
+  // of a variadic value field. Args: (region field, variadic value
+  // field). Used by BlockArgCount.
   LOOM_RELATION_REGION_ARG_COUNT = 4,
+
+  // Each region entry block argument's property matches the
+  // corresponding element of a variadic value field at the same
+  // position. Args: (region field, variadic value field). Used by
+  // BlockArgsMatchElementTypes.
   LOOM_RELATION_REGION_ARG_MATCH = 5,
+
+  // A region's terminator (yield) operand count matches the element
+  // count of a variadic value field. Args: (region field, variadic
+  // value field). Used by YieldCountMatchesResults.
   LOOM_RELATION_YIELD_COUNT = 6,
+
+  // Each region terminator (yield) operand's property matches the
+  // corresponding element of a variadic value field at the same
+  // position. Args: (region field, variadic value field). Used by
+  // YieldTypesMatchResults and YieldElementTypesMatchResults.
   LOOM_RELATION_YIELD_MATCH = 7,
+
+  // Two variadic value fields agree position-by-position. The two
+  // fields must have the same element count, and the property at
+  // each position must be equal. Diagnoses a count mismatch with one
+  // error and per-position property mismatches with one error each.
+  // Args: (variadic value field, variadic value field). Used by
+  // IterArgsMatchResults.
+  LOOM_RELATION_VARIADIC_MATCH = 8,
+
   LOOM_RELATION_COUNT_,
 };
 typedef uint8_t loom_constraint_relation_t;
 
 // Constraint property: which aspect of a type to compare.
 enum loom_constraint_property_e {
+  // Full type equality, including shape, element type, and encoding.
   LOOM_PROPERTY_TYPE = 0,
+  // Element type only — ignores shape and encoding. For shaped types
+  // this lets a constraint compare a tile<...x f32> against a scalar
+  // f32 successfully.
   LOOM_PROPERTY_ELEMENT_TYPE = 1,
+  // Encoding only — ignores shape and element type. Used to check
+  // that two tiles share an encoding regardless of element type.
   LOOM_PROPERTY_ENCODING = 2,
+  // Shape only — ignores element type and encoding. Two tiles with
+  // identical dimensions but different element types match.
   LOOM_PROPERTY_SHAPE = 3,
+  // Rank only — ignores dimension sizes, element type, and encoding.
+  // Two shaped types with the same number of dimensions match.
   LOOM_PROPERTY_RANK = 4,
   LOOM_PROPERTY_COUNT_,
 };
@@ -609,6 +663,97 @@ static inline int64_t loom_func_like_priority(loom_func_like_t func) {
   if (func.vtable->priority_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
   return loom_attr_as_i64(
       loom_op_attrs(func.op)[func.vtable->priority_attr_index]);
+}
+
+//===----------------------------------------------------------------------===//
+// LoopLike interface
+//===----------------------------------------------------------------------===//
+
+// Returns true if |loop| refers to a valid loop-like op. All accessor
+// helpers below tolerate a NULL vtable and return safe defaults.
+static inline bool loom_loop_like_isa(loom_loop_like_t loop) {
+  return loop.op != NULL;
+}
+
+// Casts |op| to loom_loop_like_t if it implements the LoopLike interface.
+// Returns {NULL, NULL} if |op| is NULL or does not implement it. Safe to
+// call unconditionally — callers check the result with loom_loop_like_isa().
+loom_loop_like_t loom_loop_like_cast(const loom_module_t* module,
+                                     loom_op_t* op);
+
+// Returns the primary body region of a loop-like op, or NULL if |loop|
+// is not valid.
+static inline loom_region_t* loom_loop_like_body(loom_loop_like_t loop) {
+  if (!loop.vtable) return NULL;
+  return loom_op_regions(loop.op)[loop.vtable->body_region_index];
+}
+
+// Returns the condition region of a loop-like op, or NULL for loops
+// without a separate condition region (scf.for) or if |loop| is not
+// valid. For scf.while this returns the "before" region.
+static inline loom_region_t* loom_loop_like_condition_region(
+    loom_loop_like_t loop) {
+  if (!loop.vtable) return NULL;
+  if (loop.vtable->condition_region_index == LOOM_REGION_INDEX_NONE) {
+    return NULL;
+  }
+  return loom_op_regions(loop.op)[loop.vtable->condition_region_index];
+}
+
+// Returns the induction variable value ID for a loop-like op, or
+// LOOM_VALUE_ID_INVALID for loops without an induction variable
+// (scf.while) or if |loop| is not valid. The IV is a block argument
+// on the body region's entry block.
+static inline loom_value_id_t loom_loop_like_iv(loom_loop_like_t loop) {
+  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
+  if (loop.vtable->iv_block_arg_index == LOOM_BLOCK_ARG_INDEX_NONE) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  loom_region_t* body = loom_loop_like_body(loop);
+  return loom_region_entry_arg_id(body, loop.vtable->iv_block_arg_index);
+}
+
+// Returns the initial values for loop-carried state as a variadic
+// operand slice. The slice starts at iter_args_operand_offset and
+// extends to the end of the op's operand list. Returns an empty
+// slice for loops with no iter_args or if |loop| is not valid.
+static inline loom_value_slice_t loom_loop_like_iter_args(
+    loom_loop_like_t loop) {
+  if (!loop.vtable) return (loom_value_slice_t){.values = NULL, .count = 0};
+  uint8_t offset = loop.vtable->iter_args_operand_offset;
+  if (offset >= loop.op->operand_count) {
+    return (loom_value_slice_t){.values = NULL, .count = 0};
+  }
+  loom_value_slice_t slice;
+  slice.values = loom_op_operands(loop.op) + offset;
+  slice.count = (uint16_t)(loop.op->operand_count - offset);
+  return slice;
+}
+
+//===----------------------------------------------------------------------===//
+// RegionBranch interface
+//===----------------------------------------------------------------------===//
+
+// Returns true if |branch| refers to a valid region-branch op. All
+// accessor helpers below tolerate a NULL vtable and return safe defaults.
+static inline bool loom_region_branch_isa(loom_region_branch_t branch) {
+  return branch.op != NULL;
+}
+
+// Casts |op| to loom_region_branch_t if it implements the RegionBranch
+// interface. Returns {NULL, NULL} if |op| is NULL or does not implement
+// it. Safe to call unconditionally — callers check the result with
+// loom_region_branch_isa().
+loom_region_branch_t loom_region_branch_cast(const loom_module_t* module,
+                                             loom_op_t* op);
+
+// Returns the selector operand value ID for a region-branch op, or
+// LOOM_VALUE_ID_INVALID if |branch| is not valid. For scf.if this is
+// the i1 condition; for scf.switch this is the index selector.
+static inline loom_value_id_t loom_region_branch_selector(
+    loom_region_branch_t branch) {
+  if (!branch.vtable) return LOOM_VALUE_ID_INVALID;
+  return loom_op_operands(branch.op)[branch.vtable->selector_operand_index];
 }
 
 //===----------------------------------------------------------------------===//

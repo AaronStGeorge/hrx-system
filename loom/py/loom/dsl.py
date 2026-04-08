@@ -123,10 +123,14 @@ __all__ = [
     "BlockArgsMatchElementTypes",
     "YieldCountMatchesResults",
     "YieldTypesMatchResults",
+    "YieldElementTypesMatchResults",
+    "IterArgsMatchResults",
     # Op group.
     "Dialect",
     # Interfaces.
     "FuncLikeInterface",
+    "LoopLikeInterface",
+    "RegionBranchInterface",
     # Op declaration.
     "Op",
     # Type declaration.
@@ -934,6 +938,30 @@ def YieldElementTypesMatchResults(region: str, results: str) -> Constraint:
     )
 
 
+def IterArgsMatchResults(iter_args: str, results: str) -> Constraint:
+    """Two variadic value fields must agree on count and per-position type.
+
+    Used by ops that thread loop-carried state through a region (e.g.,
+    scf.for): the iter_args operands provide initial values, the body
+    yields the next iteration's values, and the results expose the
+    final values. The yield-to-results match is enforced by
+    YieldTypesMatchResults; this constraint enforces that iter_args
+    and results agree directly so a count or type mismatch is reported
+    on the loop op itself, not just the terminator.
+
+    Both fields must be variadic value fields (operands or results).
+    A count mismatch produces a single ERR_STRUCTURE_013; per-position
+    type mismatches each produce an ERR_TYPE_001.
+    """
+    from loom.error.structure import ERR_STRUCTURE_013
+
+    return Constraint(
+        "IterArgsMatchResults",
+        (iter_args, results),
+        error=ERR_STRUCTURE_013,
+    )
+
+
 # ============================================================================
 # Op group
 # ============================================================================
@@ -1340,6 +1368,55 @@ class FuncLikeInterface(NamedTuple):
     # ops that have a signature but no body (the parser stores parsed
     # FUNC_ARGS as operands when no REGION follows).
     args_as_operands: bool = False
+
+
+class LoopLikeInterface(NamedTuple):
+    """Interface for loop-like ops that iterate a body region.
+
+    Each field is the name of a region, an implicit block argument,
+    or an operand on the op (or None where applicable). The generator
+    resolves names to indices and emits a loom_loop_like_vtable_t in
+    .rodata. Used by LICM, loop-invariant sinking, trip count
+    analysis, and loop transformation passes.
+    """
+
+    # Region name for the primary loop body. For scf.for this is the
+    # one body region; for scf.while this is the "after" region that
+    # contains the iteration body.
+    body: str
+    # Operand name where loop-carried state begins. For scf.for this
+    # is the iter_args variadic operand following lower_bound,
+    # upper_bound, step; for scf.while iter_args are the only
+    # operands and this names that variadic.
+    iter_args: str
+    # Implicit block argument name for the induction variable on the
+    # body region's entry block. None for loops without an IV (while
+    # loops). For scf.for this is "iv" — the implicit_args entry on
+    # the body region.
+    iv: str | None = None
+    # Region name for the condition region, if the loop has one
+    # separate from the body. For scf.for this is None; for scf.while
+    # this is the "before" region that computes the loop condition.
+    condition_region: str | None = None
+
+
+class RegionBranchInterface(NamedTuple):
+    """Interface for ops whose regions are mutually-exclusive
+    conditional branches of a single decision.
+
+    Implementing this interface declares that every region of the op
+    is an alternative of the same decision (then/else for scf.if,
+    case/default for scf.switch). Ops with iterating body regions do
+    NOT implement this interface — they implement LoopLikeInterface
+    instead.
+
+    The generator resolves the selector operand name to its index
+    and emits a loom_region_branch_vtable_t in .rodata.
+    """
+
+    # Operand name that drives the branch decision. For scf.if this
+    # is the i1 condition; for scf.switch this is the index selector.
+    selector: str
 
 
 # ============================================================================

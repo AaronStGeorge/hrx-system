@@ -133,10 +133,12 @@ static bool loom_diagnostic_matches_annotation(
     return false;
   }
 
-  // Substring: empty means "match any message".
-  if (annotation->message_substring.size > 0) {
+  // Substrings: zero count means "match any message"; non-zero count
+  // requires every entry to appear somewhere in the diagnostic message
+  // (order independent).
+  for (uint8_t i = 0; i < annotation->message_substring_count; ++i) {
     if (iree_string_view_find(diagnostic->message,
-                              annotation->message_substring,
+                              annotation->message_substrings[i],
                               0) == IREE_STRING_VIEW_NPOS) {
       return false;
     }
@@ -202,10 +204,10 @@ static iree_status_t loom_assemble_verify_detail(
           detail, "unmatched annotation line %zu: expected %s",
           ann->target_line, severity_name));
     }
-    if (ann->message_substring.size > 0) {
+    for (uint8_t i = 0; i < ann->message_substring_count; ++i) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-          detail, " \"%.*s\"", (int)ann->message_substring.size,
-          ann->message_substring.data));
+          detail, " \"%.*s\"", (int)ann->message_substrings[i].size,
+          ann->message_substrings[i].data));
     }
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(detail, "\n"));
   }

@@ -345,8 +345,52 @@ TEST_F(CheckParseTest, AnnotationWithSubstring) {
             "  %x = test.bad : i32\n"));
   ASSERT_EQ(file_.cases[0].annotation_count, 1);
   const auto& ann = file_.cases[0].annotations[0];
-  EXPECT_TRUE(iree_string_view_equal(ann.message_substring,
+  ASSERT_EQ(ann.message_substring_count, 1);
+  EXPECT_TRUE(iree_string_view_equal(ann.message_substrings[0],
                                      iree_make_cstring_view("does not match")));
+}
+
+TEST_F(CheckParseTest, AnnotationWithMultipleSubstrings) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: verify\n"
+            "// ERROR@+1: STRUCTURE/013 \"operand 3\" \"result 0\"\n"
+            "  %x = test.bad : i32\n"));
+  ASSERT_EQ(file_.cases[0].annotation_count, 1);
+  const auto& ann = file_.cases[0].annotations[0];
+  EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_STRUCTURE);
+  EXPECT_EQ(ann.code, 13);
+  ASSERT_EQ(ann.message_substring_count, 2);
+  EXPECT_TRUE(iree_string_view_equal(ann.message_substrings[0],
+                                     iree_make_cstring_view("operand 3")));
+  EXPECT_TRUE(iree_string_view_equal(ann.message_substrings[1],
+                                     iree_make_cstring_view("result 0")));
+}
+
+TEST_F(CheckParseTest, AnnotationMultipleSubstringsNoDomain) {
+  // Substring-only annotations also accept multiple quoted matchers.
+  IREE_ASSERT_OK(
+      Parse("// RUN: verify\n"
+            "// ERROR@+1: \"first\" \"second\" \"third\"\n"
+            "  %x = test.bad : i32\n"));
+  ASSERT_EQ(file_.cases[0].annotation_count, 1);
+  const auto& ann = file_.cases[0].annotations[0];
+  EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_COUNT_);
+  ASSERT_EQ(ann.message_substring_count, 3);
+  EXPECT_TRUE(iree_string_view_equal(ann.message_substrings[0],
+                                     iree_make_cstring_view("first")));
+  EXPECT_TRUE(iree_string_view_equal(ann.message_substrings[1],
+                                     iree_make_cstring_view("second")));
+  EXPECT_TRUE(iree_string_view_equal(ann.message_substrings[2],
+                                     iree_make_cstring_view("third")));
+}
+
+TEST_F(CheckParseTest, AnnotationTooManySubstringsRejected) {
+  // Five substrings exceeds LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS (4).
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      Parse("// RUN: verify\n"
+            "// ERROR@+1: TYPE/001 \"a\" \"b\" \"c\" \"d\" \"e\"\n"
+            "  %x = test.bad : i32\n"));
 }
 
 TEST_F(CheckParseTest, AnnotationSubstringOnly) {
@@ -358,8 +402,10 @@ TEST_F(CheckParseTest, AnnotationSubstringOnly) {
   const auto& ann = file_.cases[0].annotations[0];
   EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_COUNT_);
   EXPECT_EQ(ann.code, 0);
-  EXPECT_TRUE(iree_string_view_equal(
-      ann.message_substring, iree_make_cstring_view("something went wrong")));
+  ASSERT_EQ(ann.message_substring_count, 1);
+  EXPECT_TRUE(
+      iree_string_view_equal(ann.message_substrings[0],
+                             iree_make_cstring_view("something went wrong")));
 }
 
 TEST_F(CheckParseTest, AnnotationWarning) {
@@ -826,7 +872,7 @@ TEST_F(CheckParseTest, AnnotationWithEmptyMatcher) {
   EXPECT_EQ(ann.severity, LOOM_DIAGNOSTIC_ERROR);
   EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_COUNT_);
   EXPECT_EQ(ann.code, 0);
-  EXPECT_TRUE(iree_string_view_is_empty(ann.message_substring));
+  EXPECT_EQ(ann.message_substring_count, 0);
 }
 
 TEST_F(CheckParseTest, SeverityWordInNormalTextNotAnnotation) {
@@ -886,7 +932,8 @@ TEST_F(CheckParseTest, AnnotationWithExtraWhitespace) {
   const auto& ann = file_.cases[0].annotations[0];
   EXPECT_EQ(ann.domain, LOOM_ERROR_DOMAIN_TYPE);
   EXPECT_EQ(ann.code, 1);
-  EXPECT_TRUE(iree_string_view_equal(ann.message_substring,
+  ASSERT_EQ(ann.message_substring_count, 1);
+  EXPECT_TRUE(iree_string_view_equal(ann.message_substrings[0],
                                      iree_make_cstring_view("msg")));
 }
 

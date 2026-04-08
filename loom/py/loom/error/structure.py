@@ -174,6 +174,23 @@ ERR_STRUCTURE_012 = ErrorDef(
     "unreachable op",
 )
 
+# ERR_STRUCTURE_013: Two variadic fields disagree on element count.
+ERR_STRUCTURE_013 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=13,
+    severity=Severity.ERROR,
+    summary="Variadic field count mismatch.",
+    message="'{field_a}' has {actual_count} values but '{field_b}' has "
+    "{expected_count}",
+    params=(
+        ErrorParam("field_a", ParamKind.STRING),
+        ErrorParam("actual_count", ParamKind.U32),
+        ErrorParam("field_b", ParamKind.STRING),
+        ErrorParam("expected_count", ParamKind.U32),
+    ),
+    fix_hint="Ensure '{field_a}' and '{field_b}' have the same number of values",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -187,4 +204,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_010,
     ERR_STRUCTURE_011,
     ERR_STRUCTURE_012,
+    ERR_STRUCTURE_013,
 )

@@ -1667,6 +1667,10 @@ class Parser:
                 return True
             case Ref() | Refs():
                 return tok.at(TokenKind.SSA_VALUE)
+            case BindingList():
+                # BindingList prints/parses as `(%name = %value : type, ...)`,
+                # so the trigger token is the opening paren.
+                return tok.at(TokenKind.LPAREN)
             case _:
                 return False
 

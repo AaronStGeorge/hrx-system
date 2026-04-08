@@ -44,6 +44,13 @@
 //   // REMARK: "substring"
 //   // ERROR@+1: DOMAIN/CODE "substring"
 //   // ERROR@-2: "substring"
+//   // ERROR@+1: DOMAIN/CODE "first" "second"
+//
+// Multiple quoted substrings may follow the DOMAIN/CODE (or appear
+// alone). All listed substrings must appear in the diagnostic message
+// for the annotation to match. Order does not matter; substrings may
+// overlap. Up to LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS substrings per
+// annotation are supported.
 //
 // The offset (@+N / @-N) targets a line relative to the annotation.
 // Without an offset, the annotation targets its own line.
@@ -103,20 +110,32 @@ static inline const char* loom_check_mode_name(loom_check_mode_t mode) {
 // Annotations
 //===----------------------------------------------------------------------===//
 
+// Maximum number of message substrings a single annotation may declare.
+// Each substring is an independent constraint: the diagnostic message
+// must contain all of them. Real annotations rarely need more than 2-3,
+// but a small fixed cap keeps the struct compact and avoids a heap
+// allocation per annotation.
+#define LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS 4
+
 // One expected diagnostic annotation extracted from a comment.
 typedef struct loom_check_annotation_t {
+  // Number of populated entries in message_substrings. 0 means "match
+  // any message"; non-zero means every entry in [0, count) must be a
+  // substring of the diagnostic message. Placed first so the matcher's
+  // hot path can check it without touching the 64-byte substring array.
+  uint8_t message_substring_count;
   // Expected severity (error, warning, remark).
   loom_diagnostic_severity_t severity;
-  // 1-based line in the input that this annotation targets.
-  iree_host_size_t target_line;
   // Error domain (TYPE, PARSE, etc.). LOOM_ERROR_DOMAIN_COUNT_ is the
   // sentinel meaning "match any domain" — used when the annotation
   // omits the domain (e.g., // ERROR: "substring").
   loom_error_domain_t domain;
   // Error code within the domain. 0 matches any code.
   uint16_t code;
-  // Optional substring that must appear in the diagnostic message.
-  iree_string_view_t message_substring;
+  // 1-based line in the input that this annotation targets.
+  iree_host_size_t target_line;
+  // Substrings that must all appear in the diagnostic message.
+  iree_string_view_t message_substrings[LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS];
 } loom_check_annotation_t;
 
 //===----------------------------------------------------------------------===//

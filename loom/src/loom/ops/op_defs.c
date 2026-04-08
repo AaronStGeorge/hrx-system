@@ -50,6 +50,7 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_REGION_ARG_MATCH] = "RegionArgMatch",
       [LOOM_RELATION_YIELD_COUNT] = "YieldCount",
       [LOOM_RELATION_YIELD_MATCH] = "YieldMatch",
+      [LOOM_RELATION_VARIADIC_MATCH] = "VariadicMatch",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_RELATION_COUNT_,
                 "relation names out of sync with enum");
@@ -126,6 +127,34 @@ loom_func_like_t loom_func_like_cast(const loom_module_t* module,
     return (loom_func_like_t){.op = NULL, .vtable = NULL};
   }
   return (loom_func_like_t){.op = op, .vtable = vtable->func_like};
+}
+
+//===----------------------------------------------------------------------===//
+// LoopLike interface
+//===----------------------------------------------------------------------===//
+
+loom_loop_like_t loom_loop_like_cast(const loom_module_t* module,
+                                     loom_op_t* op) {
+  if (!op) return (loom_loop_like_t){.op = NULL, .vtable = NULL};
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !vtable->loop_like) {
+    return (loom_loop_like_t){.op = NULL, .vtable = NULL};
+  }
+  return (loom_loop_like_t){.op = op, .vtable = vtable->loop_like};
+}
+
+//===----------------------------------------------------------------------===//
+// RegionBranch interface
+//===----------------------------------------------------------------------===//
+
+loom_region_branch_t loom_region_branch_cast(const loom_module_t* module,
+                                             loom_op_t* op) {
+  if (!op) return (loom_region_branch_t){.op = NULL, .vtable = NULL};
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !vtable->region_branch) {
+    return (loom_region_branch_t){.op = NULL, .vtable = NULL};
+  }
+  return (loom_region_branch_t){.op = op, .vtable = vtable->region_branch};
 }
 
 //===----------------------------------------------------------------------===//

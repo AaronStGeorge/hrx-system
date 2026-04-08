@@ -180,44 +180,92 @@ static bool loom_check_looks_like_annotation(iree_string_view_t comment_text) {
 static bool loom_check_is_annotation_line(
     iree_string_view_t trimmed_line);  // forward decl
 
-// Parses the matcher part of an annotation: DOMAIN/CODE "substring".
-// All three components are independently optional. A quoted string
-// alone is a substring-only matcher. A bare identifier is a domain-only
-// matcher. DOMAIN/CODE with a trailing quoted string matches all three.
-// Domain names are validated against the known set (TYPE, SHAPE, etc.).
-static iree_status_t loom_check_parse_matcher(
-    iree_string_view_t text, loom_error_domain_t* out_domain,
-    uint16_t* out_code, iree_string_view_t* out_substring) {
-  *out_domain = LOOM_ERROR_DOMAIN_COUNT_;  // Sentinel: match any domain.
-  *out_code = 0;
-  *out_substring = iree_string_view_empty();
+// Parses one quoted string from |text|, returning the unquoted contents
+// in |*out_substring| and the trimmed remainder (everything after the
+// closing quote) in |*out_remainder|. Errors if |text| does not start
+// with a quote or the quote is unterminated.
+static iree_status_t loom_check_parse_quoted_substring(
+    iree_string_view_t text, iree_string_view_t* out_substring,
+    iree_string_view_t* out_remainder) {
+  if (!iree_string_view_starts_with_char(text, '"')) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected quoted string at '%.*s'", (int)text.size,
+                            text.data);
+  }
+  iree_host_size_t close = iree_string_view_find_char(text, '"', 1);
+  if (close == IREE_STRING_VIEW_NPOS) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unterminated string in annotation matcher");
+  }
+  *out_substring = iree_string_view_substr(text, 1, close - 1);
+  *out_remainder = iree_string_view_trim(
+      iree_string_view_substr(text, close + 1, IREE_HOST_SIZE_MAX));
+  return iree_ok_status();
+}
+
+// Consumes a sequence of quoted substrings from |text| and appends them
+// to the annotation's substring array. |text| must contain only quoted
+// strings separated by whitespace, or be empty. Errors on unterminated
+// quotes, non-quote text, or overflow of LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS.
+static iree_status_t loom_check_parse_substring_list(
+    iree_string_view_t text, loom_check_annotation_t* out) {
+  text = iree_string_view_trim(text);
+  while (!iree_string_view_is_empty(text)) {
+    if (out->message_substring_count >= LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "annotation has more than %d quoted substrings; raise "
+          "LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS if this is intentional",
+          (int)LOOM_CHECK_MAX_ANNOTATION_SUBSTRINGS);
+    }
+    if (!iree_string_view_starts_with_char(text, '"')) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "unexpected text after annotation matcher: '%.*s' "
+          "(expected a quoted substring)",
+          (int)text.size, text.data);
+    }
+    iree_string_view_t substring;
+    iree_string_view_t remainder;
+    IREE_RETURN_IF_ERROR(
+        loom_check_parse_quoted_substring(text, &substring, &remainder));
+    out->message_substrings[out->message_substring_count++] = substring;
+    text = remainder;
+  }
+  return iree_ok_status();
+}
+
+// Parses the matcher part of an annotation: DOMAIN/CODE followed by
+// zero or more quoted substrings, OR just one or more quoted
+// substrings, OR a bare DOMAIN. All three components are independently
+// optional. Multiple substrings are AND-combined: every listed
+// substring must appear in the diagnostic message for the annotation
+// to match.
+//
+// Examples:
+//   TYPE/001                       — domain + code only
+//   TYPE/001 "field_a"             — domain + code + one substring
+//   TYPE/001 "operand 3" "result 0" — domain + code + two substrings
+//   "fragment"                     — substring only (any diagnostic)
+//   PARSE                          — domain only (any code, any message)
+static iree_status_t loom_check_parse_matcher(iree_string_view_t text,
+                                              loom_check_annotation_t* out) {
+  out->domain = LOOM_ERROR_DOMAIN_COUNT_;  // Sentinel: match any domain.
+  out->code = 0;
+  out->message_substring_count = 0;
   text = iree_string_view_trim(text);
 
   if (iree_string_view_is_empty(text)) {
     return iree_ok_status();
   }
 
-  // Quoted string at the start means substring-only matcher.
+  // Substring-only matcher: text starts with a quote.
   if (iree_string_view_starts_with_char(text, '"')) {
-    iree_host_size_t close = iree_string_view_find_char(text, '"', 1);
-    if (close == IREE_STRING_VIEW_NPOS) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unterminated string in annotation matcher");
-    }
-    *out_substring = iree_string_view_substr(text, 1, close - 1);
-    iree_string_view_t remainder = iree_string_view_trim(
-        iree_string_view_substr(text, close + 1, IREE_HOST_SIZE_MAX));
-    if (!iree_string_view_is_empty(remainder)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "unexpected text after quoted string in annotation: '%.*s'",
-          (int)remainder.size, remainder.data);
-    }
-    return iree_ok_status();
+    return loom_check_parse_substring_list(text, out);
   }
 
-  // Otherwise expect DOMAIN or DOMAIN/CODE, optionally followed by a
-  // quoted substring. Isolate the DOMAIN/CODE token (ends at space or
+  // Otherwise expect DOMAIN or DOMAIN/CODE, optionally followed by
+  // quoted substrings. Isolate the DOMAIN/CODE token (ends at space or
   // end of string).
   iree_string_view_t domain_code = text;
   iree_string_view_t after_code = iree_string_view_empty();
@@ -234,7 +282,7 @@ static iree_status_t loom_check_parse_matcher(
   intptr_t slash =
       iree_string_view_split(domain_code, '/', &domain_str, &code_str);
   if (slash >= 0) {
-    if (!loom_error_domain_from_name(domain_str, out_domain)) {
+    if (!loom_error_domain_from_name(domain_str, &out->domain)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown error domain in annotation: '%.*s'",
                               (int)domain_str.size, domain_str.data);
@@ -254,42 +302,17 @@ static iree_status_t loom_check_parse_matcher(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "annotation code out of range: %d", code_value);
     }
-    *out_code = (uint16_t)code_value;
+    out->code = (uint16_t)code_value;
   } else {
     // Bare domain name without a code (e.g., "// ERROR: TYPE").
-    if (!loom_error_domain_from_name(domain_code, out_domain)) {
+    if (!loom_error_domain_from_name(domain_code, &out->domain)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown error domain in annotation: '%.*s'",
                               (int)domain_code.size, domain_code.data);
     }
   }
 
-  // Parse optional trailing quoted substring.
-  if (!iree_string_view_is_empty(after_code)) {
-    if (iree_string_view_starts_with_char(after_code, '"')) {
-      iree_host_size_t close = iree_string_view_find_char(after_code, '"', 1);
-      if (close == IREE_STRING_VIEW_NPOS) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "unterminated string in annotation matcher");
-      }
-      *out_substring = iree_string_view_substr(after_code, 1, close - 1);
-      iree_string_view_t remainder = iree_string_view_trim(
-          iree_string_view_substr(after_code, close + 1, IREE_HOST_SIZE_MAX));
-      if (!iree_string_view_is_empty(remainder)) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "unexpected text after quoted string in annotation: '%.*s'",
-            (int)remainder.size, remainder.data);
-      }
-    } else {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "unexpected text after DOMAIN/CODE in annotation: '%.*s'",
-          (int)after_code.size, after_code.data);
-    }
-  }
-
-  return iree_ok_status();
+  return loom_check_parse_substring_list(after_code, out);
 }
 
 // Tries to parse an annotation from the text after "// " in a line.
@@ -365,8 +388,7 @@ static iree_status_t loom_check_try_parse_annotation(
 
   out->target_line = target_line;
 
-  IREE_RETURN_IF_ERROR(loom_check_parse_matcher(text, &out->domain, &out->code,
-                                                &out->message_substring));
+  IREE_RETURN_IF_ERROR(loom_check_parse_matcher(text, out));
 
   *out_found = true;
   return iree_ok_status();
