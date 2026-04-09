@@ -141,6 +141,7 @@ loom_cc_library(
   DEPS
     ::check
     ::execute
+    ::report
     iree::base
     loom::src::loom::util::json
     loom::src::loom::util::stream
@@ -156,6 +157,7 @@ loom_cc_test(
     ::check
     ::execute
     ::json_output
+    ::report
     iree::base
     iree::base::internal::arena
     loom::src::loom::util::stream

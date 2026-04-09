@@ -6,6 +6,8 @@
 
 #include "loom/tools/loom-check/check.h"
 
+#include <cstring>
+
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
@@ -31,6 +33,24 @@ class CheckParseTest : public ::testing::Test {
     file_ = {};
     source_ = iree_make_cstring_view(source);
     return loom_check_parse(source_, &arena_, &file_);
+  }
+
+  iree_host_size_t OffsetOf(const char* fragment) {
+    const char* found = strstr(source_.data, fragment);
+    EXPECT_NE(found, nullptr);
+    return found ? (iree_host_size_t)(found - source_.data) : 0;
+  }
+
+  void ExpectRange(loom_check_source_range_t source_range,
+                   iree_host_size_t start_byte, iree_host_size_t end_byte) {
+    EXPECT_EQ(source_range.start_byte, start_byte);
+    EXPECT_EQ(source_range.end_byte, end_byte);
+  }
+
+  void ExpectRangeForFragment(loom_check_source_range_t source_range,
+                              const char* fragment) {
+    iree_host_size_t start_byte = OffsetOf(fragment);
+    ExpectRange(source_range, start_byte, start_byte + strlen(fragment));
   }
 
   iree_allocator_t allocator_;
@@ -712,6 +732,51 @@ TEST_F(CheckParseTest, BlankLinesBetweenDirectives) {
   EXPECT_TRUE(iree_string_view_find(file_.cases[0].input,
                                     iree_make_cstring_view("// XFAIL:"),
                                     0) == IREE_STRING_VIEW_NPOS);
+}
+
+// ===----------------------------------------------------------------------===
+// Source ranges
+// ===----------------------------------------------------------------------===
+
+TEST_F(CheckParseTest, SourceRangesForSingleCaseSections) {
+  const char* source =
+      "// RUN: pass dce\n"
+      "// XFAIL: nope\n"
+      "func.def @f() {}\n"
+      "// ----\n"
+      "func.def @g() {}\n";
+  IREE_ASSERT_OK(Parse(source));
+  ASSERT_EQ(file_.case_count, 1);
+
+  const loom_check_case_t& test_case = file_.cases[0];
+  ExpectRange(test_case.source_range, 0, strlen(source));
+  EXPECT_TRUE(loom_check_source_range_is_empty(test_case.separator_range));
+  ExpectRangeForFragment(test_case.run_directive_range, "// RUN: pass dce");
+  ExpectRangeForFragment(test_case.xfail_directive_range, "// XFAIL: nope");
+  ExpectRange(test_case.input_range, OffsetOf("func.def @f()"),
+              OffsetOf("// ----"));
+  ExpectRangeForFragment(test_case.expected_separator_range, "// ----");
+  ExpectRange(test_case.expected_range, OffsetOf("func.def @g()"),
+              strlen(source));
+}
+
+TEST_F(CheckParseTest, SourceRangesForSeparatorsAndAnnotations) {
+  const char* source =
+      "// RUN: verify\n"
+      "// ====\n"
+      "  // ERROR@+1: PARSE/006 \"bogus\"\n"
+      "  bogus.nonexistent\n";
+  IREE_ASSERT_OK(Parse(source));
+  ASSERT_EQ(file_.case_count, 1);
+  ASSERT_EQ(file_.cases[0].annotation_count, 1);
+
+  const loom_check_case_t& test_case = file_.cases[0];
+  ExpectRangeForFragment(test_case.separator_range, "// ====");
+  EXPECT_TRUE(loom_check_source_range_is_empty(test_case.run_directive_range));
+  ExpectRange(test_case.source_range, OffsetOf("  // ERROR"), strlen(source));
+  ExpectRange(test_case.input_range, OffsetOf("  // ERROR"), strlen(source));
+  ExpectRangeForFragment(test_case.annotations[0].source_range,
+                         "  // ERROR@+1: PARSE/006 \"bogus\"");
 }
 
 // ===----------------------------------------------------------------------===

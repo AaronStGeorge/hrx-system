@@ -107,6 +107,29 @@ static inline const char* loom_check_mode_name(loom_check_mode_t mode) {
 }
 
 //===----------------------------------------------------------------------===//
+// Source ranges
+//===----------------------------------------------------------------------===//
+
+// Byte range in the original .loom-test source buffer. Ranges are half-open:
+// [start_byte, end_byte). Newlines that separate structural lines are excluded
+// from line-level directive and annotation ranges.
+typedef struct loom_check_source_range_t {
+  iree_host_size_t start_byte;
+  iree_host_size_t end_byte;
+} loom_check_source_range_t;
+
+// Returns the sentinel empty source range used for absent optional ranges.
+static inline loom_check_source_range_t loom_check_source_range_empty(void) {
+  return (loom_check_source_range_t){0};
+}
+
+// Returns true if |source_range| is the absent optional range sentinel.
+static inline bool loom_check_source_range_is_empty(
+    loom_check_source_range_t source_range) {
+  return source_range.start_byte == 0 && source_range.end_byte == 0;
+}
+
+//===----------------------------------------------------------------------===//
 // Annotations
 //===----------------------------------------------------------------------===//
 
@@ -132,6 +155,8 @@ typedef struct loom_check_annotation_t {
   loom_error_domain_t domain;
   // Error code within the domain. 0 matches any code.
   uint16_t code;
+  // Source range of the annotation comment line.
+  loom_check_source_range_t source_range;
   // 1-based line in the input that this annotation targets.
   iree_host_size_t target_line;
   // Substrings that must all appear in the diagnostic message.
@@ -146,23 +171,40 @@ typedef struct loom_check_annotation_t {
 typedef struct loom_check_case_t {
   // What operation to perform.
   loom_check_mode_t mode;
+  // Source range of the complete case text, excluding the preceding case
+  // separator line when present.
+  loom_check_source_range_t source_range;
+  // Source range of the preceding // ==== separator line. Empty when this case
+  // was not preceded by a separator.
+  loom_check_source_range_t separator_range;
   // Whether this case contained its own // RUN: directive. When false,
   // the mode/pipeline/format_target were inherited from the file default.
   bool has_run_directive;
+  // Source range of the // RUN: directive line. Empty when inherited.
+  loom_check_source_range_t run_directive_range;
   // For PASS mode: comma-separated pass pipeline (e.g. "dce,cse").
   iree_string_view_t pipeline;
   // For FORMAT mode: target format name (e.g. "bytecode").
   iree_string_view_t format_target;
   // Whether this case is expected to fail.
   bool xfail;
+  // Source range of the // XFAIL: directive line. Empty when absent.
+  loom_check_source_range_t xfail_directive_range;
   // Reason for expected failure.
   iree_string_view_t xfail_reason;
   // IR text with directives stripped. Points into source.
   iree_string_view_t input;
+  // Source range of input.
+  loom_check_source_range_t input_range;
   // Expected output. Equals input when no // ---- separator is present.
   iree_string_view_t expected;
+  // Source range of expected output. Empty when no // ---- separator is
+  // present.
+  loom_check_source_range_t expected_range;
   // Whether a // ---- separator was present.
   bool has_expected_section;
+  // Source range of the // ---- separator line. Empty when absent.
+  loom_check_source_range_t expected_separator_range;
   // Arena-allocated array of annotations extracted from the input.
   loom_check_annotation_t* annotations;
   // Number of annotations.

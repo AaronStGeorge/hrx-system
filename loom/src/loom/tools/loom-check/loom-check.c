@@ -34,9 +34,73 @@ IREE_FLAG(bool, update, false,
           "Rewrite test files with actual output in the expected\n"
           "section (after // ----). Inserts the separator if absent.\n"
           "Cannot be used with stdin or verify mode.");
-IREE_FLAG(bool, json, false, "Structured JSON output to stdout.");
 IREE_FLAG(bool, verbose, false,
           "Print PASS/FAIL for every case, not just failures.");
+
+typedef struct loom_check_json_flag_t {
+  bool enabled;
+  loom_check_json_output_mode_t output_mode;
+} loom_check_json_flag_t;
+
+static const char* loom_check_json_output_mode_name(
+    loom_check_json_output_mode_t output_mode) {
+  switch (output_mode) {
+    case LOOM_CHECK_JSON_OUTPUT_FAILURES:
+      return "failures";
+    case LOOM_CHECK_JSON_OUTPUT_SUMMARY:
+      return "summary";
+    case LOOM_CHECK_JSON_OUTPUT_ALL:
+      return "all";
+  }
+  return "unknown";
+}
+
+static iree_status_t loom_check_parse_json_flag(iree_string_view_t flag_name,
+                                                void* storage,
+                                                iree_string_view_t value) {
+  (void)flag_name;
+  loom_check_json_flag_t* flag = (loom_check_json_flag_t*)storage;
+  IREE_ASSERT_ARGUMENT(flag);
+
+  flag->enabled = true;
+  if (iree_string_view_is_empty(value) ||
+      iree_string_view_equal(value, iree_make_cstring_view("failures"))) {
+    flag->output_mode = LOOM_CHECK_JSON_OUTPUT_FAILURES;
+  } else if (iree_string_view_equal(value, iree_make_cstring_view("summary"))) {
+    flag->output_mode = LOOM_CHECK_JSON_OUTPUT_SUMMARY;
+  } else if (iree_string_view_equal(value, iree_make_cstring_view("all"))) {
+    flag->output_mode = LOOM_CHECK_JSON_OUTPUT_ALL;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "invalid --json mode '%.*s'; expected failures, summary, or all",
+        (int)value.size, value.data);
+  }
+
+  return iree_ok_status();
+}
+
+static void loom_check_print_json_flag(iree_string_view_t flag_name,
+                                       void* storage, FILE* file) {
+  const loom_check_json_flag_t* flag = (const loom_check_json_flag_t*)storage;
+  IREE_ASSERT_ARGUMENT(flag);
+  if (!flag->enabled) {
+    fprintf(file, "# --%.*s[=failures|summary|all]\n", (int)flag_name.size,
+            flag_name.data);
+    return;
+  }
+  fprintf(file, "--%.*s=%s\n", (int)flag_name.size, flag_name.data,
+          loom_check_json_output_mode_name(flag->output_mode));
+}
+
+static loom_check_json_flag_t FLAG_json = {
+    .enabled = false,
+    .output_mode = LOOM_CHECK_JSON_OUTPUT_FAILURES,
+};
+IREE_FLAG_CALLBACK(loom_check_parse_json_flag, loom_check_print_json_flag,
+                   &FLAG_json, json,
+                   "Structured JSON output to stdout. Bare --json is the same\n"
+                   "as --json=failures. Modes: failures, summary, all.");
 
 //===----------------------------------------------------------------------===//
 // Outcome formatting
@@ -236,12 +300,12 @@ static iree_status_t loom_check_process_file(
   }
 
   // Emit --json output to stdout (after execution, before cleanup).
-  if (iree_status_is_ok(status) && FLAG_json) {
+  if (iree_status_is_ok(status) && FLAG_json.enabled) {
     loom_output_stream_t stdout_stream;
     loom_output_stream_for_file(stdout, &stdout_stream);
-    status = loom_check_json_write_file_result(filename, &file, results,
-                                               *pass_count, *fail_count,
-                                               *skip_count, &stdout_stream);
+    status = loom_check_json_write_file_result(
+        filename, &file, &report, results, *pass_count, *fail_count,
+        *skip_count, FLAG_json.output_mode, &stdout_stream);
   }
 
   // Clean up results.

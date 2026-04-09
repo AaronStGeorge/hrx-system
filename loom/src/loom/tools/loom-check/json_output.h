@@ -17,14 +17,30 @@
 //   {
 //     "file": "<filename>",
 //     "default_mode": "roundtrip",
+//     "default_pipeline": null,
+//     "default_format_target": null,
 //     "cases": [
 //       {
 //         "index": 1,
 //         "mode": "roundtrip",
+//         "has_run_directive": true,
+//         "pipeline": null,
+//         "format_target": null,
+//         "source_range": {"start_byte": 0, "end_byte": 42},
+//         "separator_range": null,
+//         "run_directive_range": {"start_byte": 0, "end_byte": 17},
 //         "xfail": false,
+//         "xfail_directive_range": null,
+//         "xfail_reason": null,
 //         "raw_outcome": "pass",
 //         "final_outcome": "pass",
-//         "detail": ""
+//         "detail": "",
+//         "input_range": {"start_byte": 18, "end_byte": 42},
+//         "expected_separator_range": null,
+//         "expected_range": null,
+//         "has_expected_section": false,
+//         "annotations": [],
+//         "diagnostics": []
 //       }
 //     ],
 //     "summary": {
@@ -41,25 +57,38 @@
 #include "iree/base/api.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/execute.h"
+#include "loom/tools/loom-check/report.h"
 #include "loom/util/stream.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+// Controls how much per-case detail is included in the JSON output. The summary
+// is always emitted.
+typedef enum loom_check_json_output_mode_t {
+  // Include only failing cases. This is the default CLI mode for --json.
+  LOOM_CHECK_JSON_OUTPUT_FAILURES = 0,
+  // Omit all cases and emit the summary only.
+  LOOM_CHECK_JSON_OUTPUT_SUMMARY = 1,
+  // Include every case, including passing cases and their diagnostics.
+  LOOM_CHECK_JSON_OUTPUT_ALL = 2,
+} loom_check_json_output_mode_t;
+
 // Writes the JSON output for a processed file. The caller provides all
 // results and the stream to write to. Does not do file I/O — the
 // caller can direct the stream to stdout, a string builder, or wherever.
 //
-// |filename| appears as the "file" field. |file| provides case metadata
-// (mode, xfail, etc.). |results| is a parallel array of per-case
-// outcomes. The pass/fail/skip counts are provided directly by the
-// caller (rather than recomputed) to stay consistent with the text
-// output path.
+// |filename| appears as the "file" field. |file| provides parsed case and
+// annotation metadata. |report| provides per-run annotation match state.
+// |results| is a parallel array of per-case outcomes; it may be NULL only when
+// |file| has no cases. The pass/fail/skip counts are provided directly by the
+// caller (rather than recomputed) to stay consistent with the text output path.
 iree_status_t loom_check_json_write_file_result(
     iree_string_view_t filename, const loom_check_file_t* file,
-    const loom_check_result_t* results, iree_host_size_t pass_count,
-    iree_host_size_t fail_count, iree_host_size_t skip_count,
+    const loom_check_file_report_t* report, const loom_check_result_t* results,
+    iree_host_size_t pass_count, iree_host_size_t fail_count,
+    iree_host_size_t skip_count, loom_check_json_output_mode_t output_mode,
     loom_output_stream_t* stream);
 
 #ifdef __cplusplus

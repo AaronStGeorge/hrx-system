@@ -43,6 +43,25 @@ static const char* loom_check_scanner_end(iree_string_view_t scanner,
   return scanner.data ? scanner.data : fallback_end;
 }
 
+static loom_check_source_range_t loom_check_source_range_from_pointers(
+    const char* source_start, const char* start, const char* end) {
+  IREE_ASSERT_ARGUMENT(source_start);
+  IREE_ASSERT_ARGUMENT(start);
+  IREE_ASSERT_ARGUMENT(end);
+  IREE_ASSERT(start <= end);
+  return (loom_check_source_range_t){
+      .start_byte = (iree_host_size_t)(start - source_start),
+      .end_byte = (iree_host_size_t)(end - source_start),
+  };
+}
+
+static loom_check_source_range_t loom_check_source_range_from_view(
+    const char* source_start, iree_string_view_t view) {
+  if (!view.data) return loom_check_source_range_empty();
+  return loom_check_source_range_from_pointers(source_start, view.data,
+                                               view.data + view.size);
+}
+
 // Returns true if |line| is a case separator: starts with "// ====".
 static bool loom_check_is_case_separator(iree_string_view_t line) {
   return iree_string_view_starts_with(line, iree_make_cstring_view("// ===="));
@@ -440,8 +459,8 @@ static bool loom_check_text_contains_annotations(iree_string_view_t text) {
 // lines. Line numbers are 1-based within |input|. Annotations are
 // counted first, then arena-allocated and populated in a second scan.
 static iree_status_t loom_check_extract_annotations(
-    iree_string_view_t input, iree_arena_allocator_t* arena,
-    loom_check_annotation_t** out_annotations,
+    const char* source_start, iree_string_view_t input,
+    iree_arena_allocator_t* arena, loom_check_annotation_t** out_annotations,
     iree_host_size_t* out_annotation_count) {
   *out_annotations = NULL;
   *out_annotation_count = 0;
@@ -474,6 +493,7 @@ static iree_status_t loom_check_extract_annotations(
   line_number = 0;
   iree_host_size_t annotation_index = 0;
   while (!iree_string_view_is_empty(scanner)) {
+    const char* line_start = scanner.data;
     iree_string_view_t line = loom_check_consume_line(&scanner);
     ++line_number;
     iree_string_view_t comment_text = loom_check_extract_comment_text(line);
@@ -483,6 +503,8 @@ static iree_status_t loom_check_extract_annotations(
     IREE_RETURN_IF_ERROR(loom_check_try_parse_annotation(
         comment_text, line_number, &annotation, &found));
     if (found) {
+      annotation.source_range = loom_check_source_range_from_pointers(
+          source_start, line_start, line.data + line.size);
       (*out_annotations)[annotation_index++] = annotation;
     }
   }
@@ -510,7 +532,8 @@ static iree_status_t loom_check_extract_annotations(
 // Within the body, a // ---- line splits input from expected output;
 // without it, expected equals input (round-trip identity).
 static iree_status_t loom_check_parse_case_sections(
-    iree_string_view_t case_text, loom_check_case_t* out_case,
+    const char* source_start, iree_string_view_t case_text,
+    loom_check_source_range_t separator_range, loom_check_case_t* out_case,
     iree_arena_allocator_t* arena) {
   memset(out_case, 0, sizeof(*out_case));
   out_case->mode = LOOM_CHECK_MODE_ROUNDTRIP;
@@ -520,6 +543,9 @@ static iree_status_t loom_check_parse_case_sections(
   static const char kEmptySource[] = "";
   if (!case_text.data) case_text.data = kEmptySource;
   const char* case_end = case_text.data + case_text.size;
+  out_case->source_range =
+      loom_check_source_range_from_view(source_start, case_text);
+  out_case->separator_range = separator_range;
 
   // Scan through the header region. Directives, blank lines, and
   // non-annotation comments are consumed. The first annotation line
@@ -554,6 +580,8 @@ static iree_status_t loom_check_parse_case_sections(
                                 "multiple RUN directives in one test case");
       }
       found_run = true;
+      out_case->run_directive_range = loom_check_source_range_from_pointers(
+          source_start, line_start, line.data + line.size);
       iree_string_view_t run_value = trimmed;
       iree_string_view_consume_prefix(&run_value,
                                       iree_make_cstring_view("// RUN: "));
@@ -573,6 +601,8 @@ static iree_status_t loom_check_parse_case_sections(
             (int)trimmed.size, trimmed.data);
       }
       out_case->xfail = true;
+      out_case->xfail_directive_range = loom_check_source_range_from_pointers(
+          source_start, line_start, line.data + line.size);
       iree_string_view_t xfail_value = trimmed;
       iree_string_view_consume_prefix(&xfail_value,
                                       iree_make_cstring_view("// XFAIL: "));
@@ -646,6 +676,9 @@ static iree_status_t loom_check_parse_case_sections(
     iree_string_view_t line = loom_check_consume_line(&scanner);
 
     if (loom_check_is_expected_separator(line)) {
+      out_case->expected_separator_range =
+          loom_check_source_range_from_pointers(source_start, line_start,
+                                                line.data + line.size);
       iree_host_size_t input_length =
           (iree_host_size_t)(line_start - body.data);
       input = iree_string_view_substr(body, 0, input_length);
@@ -655,6 +688,8 @@ static iree_status_t loom_check_parse_case_sections(
                              body.data);
       expected =
           iree_string_view_substr(body, expected_offset, IREE_HOST_SIZE_MAX);
+      out_case->expected_range =
+          loom_check_source_range_from_view(source_start, expected);
       out_case->has_expected_section = true;
       break;
     }
@@ -662,6 +697,8 @@ static iree_status_t loom_check_parse_case_sections(
 
   out_case->input = input;
   out_case->expected = expected;
+  out_case->input_range =
+      loom_check_source_range_from_view(source_start, input);
 
   // Annotations in the expected section are always a mistake — they
   // belong in the input section where line numbers are meaningful.
@@ -679,7 +716,8 @@ static iree_status_t loom_check_parse_case_sections(
 
   // Extract diagnostic annotations from comments in the input.
   IREE_RETURN_IF_ERROR(loom_check_extract_annotations(
-      input, arena, &out_case->annotations, &out_case->annotation_count));
+      source_start, input, arena, &out_case->annotations,
+      &out_case->annotation_count));
 
   return iree_ok_status();
 }
@@ -692,6 +730,7 @@ static iree_status_t loom_check_parse_case_sections(
 typedef struct loom_check_case_boundary_t {
   const char* start;
   iree_host_size_t length;
+  loom_check_source_range_t separator_range;
 } loom_check_case_boundary_t;
 
 iree_status_t loom_check_parse(iree_string_view_t source,
@@ -723,6 +762,7 @@ iree_status_t loom_check_parse(iree_string_view_t source,
       (void**)&boundaries));
 
   boundaries[0].start = source.data;
+  boundaries[0].separator_range = loom_check_source_range_empty();
   iree_host_size_t case_index = 0;
   const char* source_end = source.data + source.size;
 
@@ -736,6 +776,9 @@ iree_status_t loom_check_parse(iree_string_view_t source,
           (iree_host_size_t)(line_start - boundaries[case_index].start);
 
       ++case_index;
+      boundaries[case_index].separator_range =
+          loom_check_source_range_from_pointers(source.data, line_start,
+                                                line.data + line.size);
       boundaries[case_index].start =
           loom_check_scanner_end(scanner, source_end);
     }
@@ -765,8 +808,9 @@ iree_status_t loom_check_parse(iree_string_view_t source,
         .size = boundaries[0].length,
     };
     loom_check_case_t preamble_case;
-    IREE_RETURN_IF_ERROR(
-        loom_check_parse_case_sections(preamble_text, &preamble_case, arena));
+    IREE_RETURN_IF_ERROR(loom_check_parse_case_sections(
+        source.data, preamble_text, boundaries[0].separator_range,
+        &preamble_case, arena));
 
     if (iree_string_view_is_empty(iree_string_view_trim(preamble_case.input))) {
       // Pure preamble — no IR body. Extract its RUN directive as the
@@ -792,8 +836,9 @@ iree_status_t loom_check_parse(iree_string_view_t source,
         .data = boundaries[boundary_index].start,
         .size = boundaries[boundary_index].length,
     };
-    IREE_RETURN_IF_ERROR(
-        loom_check_parse_case_sections(case_text, &out_file->cases[i], arena));
+    IREE_RETURN_IF_ERROR(loom_check_parse_case_sections(
+        source.data, case_text, boundaries[boundary_index].separator_range,
+        &out_file->cases[i], arena));
   }
 
   // When the preamble was not dropped (first_case == 0) and the first

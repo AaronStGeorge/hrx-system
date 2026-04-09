@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/execute.h"
+#include "loom/tools/loom-check/report.h"
 #include "loom/util/stream.h"
 
 namespace {
@@ -55,17 +56,39 @@ class JsonOutputTest : public ::testing::Test {
     return result;
   }
 
+  loom_check_file_report_t MakeReport(const loom_check_file_t& file) {
+    loom_check_file_report_t report = {0};
+    IREE_EXPECT_OK(loom_check_file_report_initialize(&file, &arena_, &report));
+    return report;
+  }
+
   // Writes JSON for the given file and results, returns the output string.
-  std::string WriteJson(iree_string_view_t filename,
-                        const loom_check_file_t& file,
-                        const loom_check_result_t* results,
-                        iree_host_size_t pass_count,
-                        iree_host_size_t fail_count,
-                        iree_host_size_t skip_count) {
+  std::string WriteJson(
+      iree_string_view_t filename, const loom_check_file_t& file,
+      const loom_check_file_report_t& report,
+      const loom_check_result_t* results, iree_host_size_t pass_count,
+      iree_host_size_t fail_count, iree_host_size_t skip_count,
+      loom_check_json_output_mode_t output_mode = LOOM_CHECK_JSON_OUTPUT_ALL) {
     loom_output_stream_t stream;
     loom_output_stream_for_builder(&output_, &stream);
     IREE_EXPECT_OK(loom_check_json_write_file_result(
-        filename, &file, results, pass_count, fail_count, skip_count, &stream));
+        filename, &file, &report, results, pass_count, fail_count, skip_count,
+        output_mode, &stream));
+    return std::string(iree_string_builder_buffer(&output_),
+                       iree_string_builder_size(&output_));
+  }
+
+  std::string WriteJson(
+      iree_string_view_t filename, const loom_check_file_t& file,
+      const loom_check_result_t* results, iree_host_size_t pass_count,
+      iree_host_size_t fail_count, iree_host_size_t skip_count,
+      loom_check_json_output_mode_t output_mode = LOOM_CHECK_JSON_OUTPUT_ALL) {
+    loom_check_file_report_t report = MakeReport(file);
+    loom_output_stream_t stream;
+    loom_output_stream_for_builder(&output_, &stream);
+    IREE_EXPECT_OK(loom_check_json_write_file_result(
+        filename, &file, &report, results, pass_count, fail_count, skip_count,
+        output_mode, &stream));
     return std::string(iree_string_builder_buffer(&output_),
                        iree_string_builder_size(&output_));
   }
@@ -90,12 +113,30 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
 
   EXPECT_NE(json.find("\"file\": \"test.loom-test\""), std::string::npos);
   EXPECT_NE(json.find("\"default_mode\": \"roundtrip\""), std::string::npos);
+  EXPECT_NE(json.find("\"default_pipeline\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"default_format_target\": null"), std::string::npos);
   EXPECT_NE(json.find("\"index\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"mode\": \"roundtrip\""), std::string::npos);
+  EXPECT_NE(json.find("\"has_run_directive\": true"), std::string::npos);
+  EXPECT_NE(json.find("\"pipeline\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"format_target\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"source_range\": {\"start_byte\": 0"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"separator_range\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"run_directive_range\": {\"start_byte\": 0, "
+                      "\"end_byte\": 17}"),
+            std::string::npos);
   EXPECT_NE(json.find("\"xfail\": false"), std::string::npos);
+  EXPECT_NE(json.find("\"xfail_directive_range\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"xfail_reason\": null"), std::string::npos);
   EXPECT_NE(json.find("\"raw_outcome\": \"pass\""), std::string::npos);
   EXPECT_NE(json.find("\"final_outcome\": \"pass\""), std::string::npos);
   EXPECT_NE(json.find("\"detail\": \"\""), std::string::npos);
+  EXPECT_NE(json.find("\"input_range\": {\"start_byte\": 18"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"expected_separator_range\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"expected_range\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"has_expected_section\": false"), std::string::npos);
   EXPECT_NE(json.find("\"total\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"passed\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"failed\": 0"), std::string::npos);
@@ -149,6 +190,47 @@ TEST_F(JsonOutputTest, EmbedsStructuredDiagnosticsArray) {
   loom_check_result_deinitialize(&results[0]);
 }
 
+TEST_F(JsonOutputTest, EmitsVerifyAnnotationsWithMatchedState) {
+  auto file = Parse(
+      "// RUN: verify\n"
+      "// ERROR@+1: PARSE/006 \"unknown\" \"operation\"\n"
+      "bogus.nonexistent\n"
+      "// WARNING: \"left unmatched\"\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+  ASSERT_EQ(file.cases[0].annotation_count, 2u);
+
+  loom_check_file_report_t report = MakeReport(file);
+  IREE_ASSERT_OK(loom_check_file_report_mark_annotation_matched(&report, 0, 0));
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "unmatched annotation\n"),
+  };
+
+  std::string json = WriteJson(iree_make_cstring_view("annotations.loom-test"),
+                               file, report, results, 0, 1, 0);
+
+  EXPECT_NE(json.find("\"annotations\": ["), std::string::npos);
+  EXPECT_NE(json.find("\"index\": 1"), std::string::npos);
+  EXPECT_NE(json.find("\"source_range\": {\"start_byte\": 15"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"target_line\": 2"), std::string::npos);
+  EXPECT_NE(json.find("\"severity\": \"error\""), std::string::npos);
+  EXPECT_NE(json.find("\"domain\": \"PARSE\""), std::string::npos);
+  EXPECT_NE(json.find("\"code\": 6"), std::string::npos);
+  EXPECT_NE(json.find("\"message_substrings\": [\"unknown\", \"operation\"]"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"matched\": true"), std::string::npos);
+  EXPECT_NE(json.find("\"severity\": \"warning\""), std::string::npos);
+  EXPECT_NE(json.find("\"domain\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"code\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"message_substrings\": [\"left unmatched\"]"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"matched\": false"), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
 TEST_F(JsonOutputTest, XfailCase) {
   auto file = Parse(
       "// RUN: roundtrip\n"
@@ -194,6 +276,33 @@ TEST_F(JsonOutputTest, VerifyMode) {
   loom_check_result_deinitialize(&results[0]);
 }
 
+TEST_F(JsonOutputTest, EmitsInheritedRunMetadata) {
+  auto file = Parse(
+      "// RUN: pass dce,cse\n"
+      "// ====\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+  ASSERT_FALSE(file.cases[0].has_run_directive);
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
+  };
+
+  std::string json = WriteJson(iree_make_cstring_view("inherited.loom-test"),
+                               file, results, 1, 0, 0);
+
+  EXPECT_NE(json.find("\"default_mode\": \"pass\""), std::string::npos);
+  EXPECT_NE(json.find("\"default_pipeline\": \"dce,cse\""), std::string::npos);
+  EXPECT_NE(json.find("\"mode\": \"pass\""), std::string::npos);
+  EXPECT_NE(json.find("\"has_run_directive\": false"), std::string::npos);
+  EXPECT_NE(json.find("\"pipeline\": \"dce,cse\""), std::string::npos);
+  EXPECT_NE(json.find("\"run_directive_range\": null"), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
 TEST_F(JsonOutputTest, MultipleCases) {
   auto file = Parse(
       "// RUN: roundtrip\n"
@@ -217,6 +326,72 @@ TEST_F(JsonOutputTest, MultipleCases) {
 
   EXPECT_NE(json.find("\"index\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"index\": 2"), std::string::npos);
+  EXPECT_NE(json.find("\"total\": 2"), std::string::npos);
+  EXPECT_NE(json.find("\"passed\": 1"), std::string::npos);
+  EXPECT_NE(json.find("\"failed\": 1"), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+  loom_check_result_deinitialize(&results[1]);
+}
+
+TEST_F(JsonOutputTest, FailuresModeOnlyEmitsFailingCases) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @a() {\n"
+      "}\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @b() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 2u);
+
+  loom_check_result_t results[2] = {
+      MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
+      MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "diff output\n"),
+  };
+
+  std::string json =
+      WriteJson(iree_make_cstring_view("filtered.loom-test"), file, results, 1,
+                1, 0, LOOM_CHECK_JSON_OUTPUT_FAILURES);
+
+  EXPECT_EQ(json.find("      \"index\": 1"), std::string::npos);
+  EXPECT_NE(json.find("      \"index\": 2"), std::string::npos);
+  EXPECT_NE(json.find("\"final_outcome\": \"fail\""), std::string::npos);
+  EXPECT_NE(json.find("\"total\": 2"), std::string::npos);
+  EXPECT_NE(json.find("\"passed\": 1"), std::string::npos);
+  EXPECT_NE(json.find("\"failed\": 1"), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+  loom_check_result_deinitialize(&results[1]);
+}
+
+TEST_F(JsonOutputTest, SummaryModeOmitsCases) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @a() {\n"
+      "}\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @b() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 2u);
+
+  loom_check_result_t results[2] = {
+      MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
+      MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "diff output\n"),
+  };
+
+  std::string json =
+      WriteJson(iree_make_cstring_view("summary.loom-test"), file, results, 1,
+                1, 0, LOOM_CHECK_JSON_OUTPUT_SUMMARY);
+
+  EXPECT_NE(json.find("\"cases\": [\n  ]"), std::string::npos);
+  EXPECT_EQ(json.find("\"final_outcome\""), std::string::npos);
+  EXPECT_EQ(json.find("\"detail\""), std::string::npos);
   EXPECT_NE(json.find("\"total\": 2"), std::string::npos);
   EXPECT_NE(json.find("\"passed\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"failed\": 1"), std::string::npos);
