@@ -136,48 +136,51 @@ static iree_status_t loom_check_process_file(
   iree_arena_initialize(block_pool, &arena);
 
   loom_check_file_t file = {0};
-  IREE_RETURN_IF_ERROR(loom_check_parse(source, &arena, &file));
+  iree_status_t status = loom_check_parse(source, &arena, &file);
+
+  loom_check_file_report_t report = {0};
+  if (iree_status_is_ok(status)) {
+    status = loom_check_file_report_initialize(&file, &arena, &report);
+  }
 
   // Allocate update tracking if --update is requested.
   loom_check_case_update_t* updates = NULL;
-  if (FLAG_update) {
+  if (iree_status_is_ok(status) && FLAG_update) {
     if (is_stdin) {
-      iree_arena_deinitialize(&arena);
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "--update cannot be used with stdin");
-    }
-    updates =
-        (loom_check_case_update_t*)calloc(file.case_count, sizeof(*updates));
-    if (!updates) {
-      iree_arena_deinitialize(&arena);
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "failed to allocate update tracking");
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "--update cannot be used with stdin");
+    } else {
+      updates =
+          (loom_check_case_update_t*)calloc(file.case_count, sizeof(*updates));
+      if (!updates) {
+        status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                  "failed to allocate update tracking");
+      }
     }
   }
 
   // Execute each case. Results are allocated per-case and cleaned up
   // after reporting (or after --update).
   loom_check_result_t* results = NULL;
-  if (file.case_count > 0) {
+  if (iree_status_is_ok(status) && file.case_count > 0) {
     results = (loom_check_result_t*)calloc(file.case_count, sizeof(*results));
     if (!results) {
-      free(updates);
-      iree_arena_deinitialize(&arena);
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "failed to allocate result array");
+      status = iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                                "failed to allocate result array");
     }
   }
 
-  iree_status_t status = iree_ok_status();
-  for (iree_host_size_t i = 0; i < file.case_count; ++i) {
+  iree_host_size_t initialized_result_count = 0;
+  for (iree_host_size_t i = 0; iree_status_is_ok(status) && i < file.case_count;
+       ++i) {
     const loom_check_case_t* test_case = &file.cases[i];
 
     loom_check_result_initialize(allocator, &results[i]);
-    status = loom_check_execute_case(test_case, filename, context, block_pool,
-                                     allocator, &results[i]);
+    ++initialized_result_count;
+    status = loom_check_execute_case(test_case, i, &report, filename, context,
+                                     block_pool, allocator, &results[i]);
     if (!iree_status_is_ok(status)) {
       // Infrastructure failure — bail.
-      loom_check_result_deinitialize(&results[i]);
       break;
     }
 
@@ -233,7 +236,7 @@ static iree_status_t loom_check_process_file(
   }
 
   // Emit --json output to stdout (after execution, before cleanup).
-  if (iree_status_is_ok(status) && FLAG_json && results) {
+  if (iree_status_is_ok(status) && FLAG_json) {
     loom_output_stream_t stdout_stream;
     loom_output_stream_for_file(stdout, &stdout_stream);
     status = loom_check_json_write_file_result(filename, &file, results,
@@ -243,7 +246,7 @@ static iree_status_t loom_check_process_file(
 
   // Clean up results.
   if (results) {
-    for (iree_host_size_t i = 0; i < file.case_count; ++i) {
+    for (iree_host_size_t i = 0; i < initialized_result_count; ++i) {
       loom_check_result_deinitialize(&results[i]);
     }
     free(results);

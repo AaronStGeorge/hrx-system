@@ -38,6 +38,7 @@ typedef struct loom_diagnostic_collector_t {
   iree_host_size_t capacity;
   iree_arena_allocator_t* arena;
   iree_allocator_t host_allocator;
+  loom_check_result_t* result;
 } loom_diagnostic_collector_t;
 
 // Grows the diagnostics array by doubling capacity. Arena-allocated.
@@ -101,6 +102,11 @@ static iree_status_t loom_collector_sink(void* user_data,
       .origin_line = diagnostic->origin.start_line,
       .message = iree_make_string_view(arena_copy, rendered.size),
   };
+  loom_check_diagnostic_capture_t diagnostic_capture = {
+      .result = collector->result,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_check_diagnostic_capture_sink(&diagnostic_capture, diagnostic));
   return iree_ok_status();
 }
 
@@ -150,23 +156,24 @@ static bool loom_diagnostic_matches_annotation(
 // Greedy O(A×D) matching. For each annotation, find the first unmatched
 // diagnostic that matches. Greedy is correct because annotations are
 // line-targeted — ambiguity is effectively impossible in well-written tests.
-static void loom_match_annotations(loom_collected_diagnostic_t* diagnostics,
-                                   iree_host_size_t diagnostic_count,
-                                   const loom_check_annotation_t* annotations,
-                                   iree_host_size_t annotation_count,
-                                   bool* out_annotation_matched) {
+static iree_status_t loom_match_annotations(
+    loom_collected_diagnostic_t* diagnostics, iree_host_size_t diagnostic_count,
+    const loom_check_annotation_t* annotations,
+    iree_host_size_t annotation_count, loom_check_file_report_t* report,
+    iree_host_size_t case_index) {
   for (iree_host_size_t a = 0; a < annotation_count; ++a) {
-    out_annotation_matched[a] = false;
     for (iree_host_size_t d = 0; d < diagnostic_count; ++d) {
       if (diagnostics[d].matched) continue;
       if (loom_diagnostic_matches_annotation(&diagnostics[d],
                                              &annotations[a])) {
         diagnostics[d].matched = true;
-        out_annotation_matched[a] = true;
+        IREE_RETURN_IF_ERROR(loom_check_file_report_mark_annotation_matched(
+            report, case_index, a));
         break;
       }
     }
   }
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -178,11 +185,14 @@ static iree_status_t loom_assemble_verify_detail(
     const loom_collected_diagnostic_t* diagnostics,
     iree_host_size_t diagnostic_count,
     const loom_check_annotation_t* annotations,
-    iree_host_size_t annotation_count, const bool* annotation_matched,
-    iree_string_builder_t* detail) {
+    iree_host_size_t annotation_count, const loom_check_file_report_t* report,
+    iree_host_size_t case_index, iree_string_builder_t* detail) {
   // Report unmatched annotations.
   for (iree_host_size_t a = 0; a < annotation_count; ++a) {
-    if (annotation_matched[a]) continue;
+    bool annotation_matched = false;
+    IREE_RETURN_IF_ERROR(loom_check_file_report_annotation_matched(
+        report, case_index, a, &annotation_matched));
+    if (annotation_matched) continue;
     const loom_check_annotation_t* ann = &annotations[a];
     const char* severity_name = loom_diagnostic_severity_name(ann->severity);
     if (ann->domain != LOOM_ERROR_DOMAIN_COUNT_ && ann->code != 0) {
@@ -230,12 +240,17 @@ static iree_status_t loom_assemble_verify_detail(
 // Verify execution
 //===----------------------------------------------------------------------===//
 
-iree_status_t loom_check_execute_verify(const loom_check_case_t* test_case,
-                                        iree_string_view_t filename,
-                                        loom_context_t* context,
-                                        iree_arena_block_pool_t* block_pool,
-                                        iree_allocator_t allocator,
-                                        loom_check_result_t* result) {
+iree_status_t loom_check_execute_verify(
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, loom_check_result_t* result) {
+  IREE_ASSERT_ARGUMENT(test_case);
+  IREE_ASSERT_ARGUMENT(report);
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(block_pool);
+  IREE_ASSERT_ARGUMENT(result);
+
   // Arena for collector storage (diagnostics array, message copies).
   // Deinitialized at the end — no per-entry cleanup needed.
   iree_arena_allocator_t collector_arena;
@@ -244,6 +259,7 @@ iree_status_t loom_check_execute_verify(const loom_check_case_t* test_case,
   loom_diagnostic_collector_t collector = {
       .arena = &collector_arena,
       .host_allocator = allocator,
+      .result = result,
   };
 
   // Strip standalone comment lines from input. Comments become blank
@@ -252,32 +268,24 @@ iree_status_t loom_check_execute_verify(const loom_check_case_t* test_case,
   iree_string_builder_initialize(allocator, &stripped_input);
   iree_status_t status =
       loom_check_strip_comments(test_case->input, &stripped_input);
-  if (!iree_status_is_ok(status)) {
-    iree_string_builder_deinitialize(&stripped_input);
-    iree_arena_deinitialize(&collector_arena);
-    return status;
-  }
 
   // Parse the stripped input with the collector as the diagnostic sink.
   // Parse errors are emitted as diagnostics (not status failures).
   loom_module_t* module = NULL;
-  loom_text_parse_options_t parse_options = {
-      .diagnostic_sink = {.fn = loom_collector_sink, .user_data = &collector},
-      .max_errors = 100,
-  };
   iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
-  status = loom_text_parse(stripped_view, filename, context, block_pool,
-                           &parse_options, &module);
-  if (!iree_status_is_ok(status)) {
-    iree_string_builder_deinitialize(&stripped_input);
-    iree_arena_deinitialize(&collector_arena);
-    return status;
+  if (iree_status_is_ok(status)) {
+    loom_text_parse_options_t parse_options = {
+        .diagnostic_sink = {.fn = loom_collector_sink, .user_data = &collector},
+        .max_errors = 100,
+    };
+    status = loom_text_parse(stripped_view, filename, context, block_pool,
+                             &parse_options, &module);
   }
 
   // If parsing succeeded (module != NULL), run the verifier to collect
   // additional diagnostics. The source resolver uses the stripped input
   // so verifier diagnostics get the same line numbers as parse diagnostics.
-  if (module) {
+  if (iree_status_is_ok(status) && module) {
     loom_source_entry_t source_entry = {
         .source_id = 0,
         .source = stripped_view,
@@ -296,12 +304,6 @@ iree_status_t loom_check_execute_verify(const loom_check_case_t* test_case,
 
     loom_verify_result_t verify_result;
     status = loom_verify_module(module, &verify_options, &verify_result);
-    loom_module_free(module);
-    if (!iree_status_is_ok(status)) {
-      iree_string_builder_deinitialize(&stripped_input);
-      iree_arena_deinitialize(&collector_arena);
-      return status;
-    }
   }
 
   // The stripped input builder is no longer needed (diagnostics already
@@ -309,19 +311,20 @@ iree_status_t loom_check_execute_verify(const loom_check_case_t* test_case,
   iree_string_builder_deinitialize(&stripped_input);
 
   // Match collected diagnostics against annotations.
-  bool* annotation_matched = NULL;
-  if (test_case->annotation_count > 0) {
-    annotation_matched =
-        (bool*)iree_alloca(test_case->annotation_count * sizeof(bool));
+  if (iree_status_is_ok(status)) {
+    status = loom_match_annotations(
+        collector.diagnostics, collector.count, test_case->annotations,
+        test_case->annotation_count, report, case_index);
   }
-  loom_match_annotations(collector.diagnostics, collector.count,
-                         test_case->annotations, test_case->annotation_count,
-                         annotation_matched);
 
   // Determine outcome: all annotations matched and no unexpected diagnostics.
   bool all_annotations_matched = true;
-  for (iree_host_size_t a = 0; a < test_case->annotation_count; ++a) {
-    if (!annotation_matched[a]) {
+  for (iree_host_size_t a = 0;
+       iree_status_is_ok(status) && a < test_case->annotation_count; ++a) {
+    bool annotation_matched = false;
+    status = loom_check_file_report_annotation_matched(report, case_index, a,
+                                                       &annotation_matched);
+    if (iree_status_is_ok(status) && !annotation_matched) {
       all_annotations_matched = false;
       break;
     }
@@ -334,15 +337,18 @@ iree_status_t loom_check_execute_verify(const loom_check_case_t* test_case,
     }
   }
 
-  if (all_annotations_matched && all_diagnostics_matched) {
-    result->raw_outcome = LOOM_CHECK_PASS;
-  } else {
-    result->raw_outcome = LOOM_CHECK_FAIL;
-    status = loom_assemble_verify_detail(
-        collector.diagnostics, collector.count, test_case->annotations,
-        test_case->annotation_count, annotation_matched, &result->detail);
+  if (iree_status_is_ok(status)) {
+    if (all_annotations_matched && all_diagnostics_matched) {
+      result->raw_outcome = LOOM_CHECK_PASS;
+    } else {
+      result->raw_outcome = LOOM_CHECK_FAIL;
+      status = loom_assemble_verify_detail(
+          collector.diagnostics, collector.count, test_case->annotations,
+          test_case->annotation_count, report, case_index, &result->detail);
+    }
   }
 
+  loom_module_free(module);
   iree_arena_deinitialize(&collector_arena);
   return status;
 }

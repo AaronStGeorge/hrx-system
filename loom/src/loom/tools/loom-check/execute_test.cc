@@ -38,18 +38,27 @@ class ExecuteTest : public ::testing::Test {
     iree_arena_allocator_t arena;
     iree_arena_initialize(&block_pool_, &arena);
     loom_check_file_t file = {0};
-    IREE_RETURN_IF_ERROR(
-        loom_check_parse(iree_make_cstring_view(source), &arena, &file));
-    if (file.case_count == 0) {
-      iree_arena_deinitialize(&arena);
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "no test cases");
+    iree_status_t status =
+        loom_check_parse(iree_make_cstring_view(source), &arena, &file);
+
+    loom_check_file_report_t report = {};
+    if (iree_status_is_ok(status)) {
+      status = loom_check_file_report_initialize(&file, &arena, &report);
     }
-    loom_check_result_initialize(iree_allocator_system(), out_result);
-    iree_status_t status = loom_check_execute_case(
-        &file.cases[0], iree_make_cstring_view("test.loom-test"), &context_,
-        &block_pool_, iree_allocator_system(), out_result);
+
+    bool result_initialized = false;
+    if (iree_status_is_ok(status) && file.case_count == 0) {
+      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "no test cases");
+    }
+    if (iree_status_is_ok(status)) {
+      loom_check_result_initialize(iree_allocator_system(), out_result);
+      result_initialized = true;
+      status = loom_check_execute_case(
+          &file.cases[0], 0, &report, iree_make_cstring_view("test.loom-test"),
+          &context_, &block_pool_, iree_allocator_system(), out_result);
+    }
     iree_arena_deinitialize(&arena);
-    if (!iree_status_is_ok(status)) {
+    if (!iree_status_is_ok(status) && result_initialized) {
       loom_check_result_deinitialize(out_result);
     }
     return status;
@@ -61,6 +70,11 @@ class ExecuteTest : public ::testing::Test {
 
   std::string ActualOutputString(const loom_check_result_t& result) {
     return std::string(result.actual_output.buffer, result.actual_output.size);
+  }
+
+  std::string DiagnosticJsonString(const loom_check_result_t& result) {
+    return std::string(result.diagnostic_json.buffer,
+                       result.diagnostic_json.size);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -121,6 +135,9 @@ TEST_F(ExecuteTest, RoundtripParseError) {
   // Diagnostics are collected in the detail string.
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_FALSE(DetailString(result).empty()) << "expected parse diagnostics";
+  EXPECT_GT(result.diagnostic_count, 0u);
+  EXPECT_NE(DiagnosticJsonString(result).find("\"error_id\":\"ERR_PARSE_"),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -234,6 +251,11 @@ TEST_F(ExecuteTest, VerifyUnexpectedDiagnostic) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_TRUE(DetailString(result).find("unexpected") != std::string::npos)
       << "detail: " << DetailString(result);
+  EXPECT_EQ(result.diagnostic_count, 1u);
+  EXPECT_NE(DiagnosticJsonString(result).find("\"domain\":\"PARSE\""),
+            std::string::npos);
+  EXPECT_NE(DiagnosticJsonString(result).find("\"error_id\":\"ERR_PARSE_006\""),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

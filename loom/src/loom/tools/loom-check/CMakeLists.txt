@@ -35,10 +35,12 @@ loom_cc_library(
     "verify.c"
   DEPS
     ::check
+    ::report
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
+    loom::src::loom::error::json_sink
     loom::src::loom::error::renderer
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
@@ -57,6 +59,20 @@ loom_cc_library(
     loom::src::loom::transforms::pass
     loom::src::loom::transforms::verify
     loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    report
+  HDRS
+    "report.h"
+  SRCS
+    "report.c"
+  DEPS
+    ::check
+    iree::base
+    iree::base::internal::arena
   PUBLIC
 )
 
@@ -81,6 +97,7 @@ loom_cc_test(
   DEPS
     ::check
     ::execute
+    ::report
     iree::base
     iree::base::internal::arena
     iree::testing::gtest
@@ -155,6 +172,7 @@ loom_cc_binary(
     ::check
     ::execute
     ::json_output
+    ::report
     ::update
     iree::base
     iree::base::internal::arena

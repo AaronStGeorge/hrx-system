@@ -27,8 +27,10 @@ loom_cc_library(
     hdrs = ["execute.h"],
     deps = [
         ":check",
+        ":report",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:json_sink",
         "//loom/src/loom/error:renderer",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/format/text:printer",
@@ -52,6 +54,17 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "report",
+    srcs = ["report.c"],
+    hdrs = ["report.h"],
+    deps = [
+        ":check",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "check_test",
     srcs = ["check_test.cc"],
@@ -70,6 +83,7 @@ loom_cc_test(
     deps = [
         ":check",
         ":execute",
+        ":report",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
@@ -135,6 +149,7 @@ loom_cc_binary(
         ":check",
         ":execute",
         ":json_output",
+        ":report",
         ":update",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",

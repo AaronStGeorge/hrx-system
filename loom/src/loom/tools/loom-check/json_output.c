@@ -82,7 +82,20 @@ iree_status_t loom_check_json_write_file_result(
         loom_output_stream_write_cstring(stream, "      \"detail\": "));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         stream, iree_string_builder_view(&result->detail)));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
+
+    // "diagnostics": [<shared diagnostic JSON objects>]
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "      \"diagnostics\": ["));
+    if (result->diagnostic_count > 0) {
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "\n        "));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write(
+          stream, iree_string_builder_view(&result->diagnostic_json)));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "\n      "));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]\n"));
 
     // Close the case object.
     if (i + 1 < file->case_count) {

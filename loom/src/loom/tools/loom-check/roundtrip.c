@@ -4,22 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/error/diagnostic.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/execute.h"
-
-// Diagnostic sink that formats each diagnostic in caret style and
-// appends it to a string builder via a stream adapter.
-static iree_status_t loom_check_detail_sink(
-    void* user_data, const loom_diagnostic_t* diagnostic) {
-  iree_string_builder_t* builder = (iree_string_builder_t*)user_data;
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(builder, &stream);
-  return loom_diagnostic_format(diagnostic, &stream);
-}
 
 iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
                                            iree_string_view_t filename,
@@ -36,9 +25,13 @@ iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
 
   // Parse the stripped input.
   loom_module_t* module = NULL;
+  loom_check_diagnostic_capture_t diagnostic_capture = {
+      .detail = &result->detail,
+      .result = result,
+  };
   loom_text_parse_options_t parse_options = {
-      .diagnostic_sink = {.fn = loom_check_detail_sink,
-                          .user_data = &result->detail},
+      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
+                          .user_data = &diagnostic_capture},
       .max_errors = 20,
   };
   iree_status_t parse_status =

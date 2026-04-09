@@ -126,6 +126,29 @@ TEST_F(JsonOutputTest, SingleFailingCase) {
   loom_check_result_deinitialize(&results[0]);
 }
 
+TEST_F(JsonOutputTest, EmbedsStructuredDiagnosticsArray) {
+  auto file = Parse(
+      "// RUN: verify\n"
+      "bogus.nonexistent\n");
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "unexpected diagnostic\n"),
+  };
+  IREE_ASSERT_OK(iree_string_builder_append_cstring(
+      &results[0].diagnostic_json,
+      "{\"severity\":\"error\",\"error_id\":\"ERR_PARSE_006\"}"));
+  results[0].diagnostic_count = 1;
+
+  std::string json = WriteJson(iree_make_cstring_view("diagnostic.loom-test"),
+                               file, results, 0, 1, 0);
+
+  EXPECT_NE(json.find("\"diagnostics\": [\n        {\"severity\":\"error\","
+                      "\"error_id\":\"ERR_PARSE_006\"}\n      ]"),
+            std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
 TEST_F(JsonOutputTest, XfailCase) {
   auto file = Parse(
       "// RUN: roundtrip\n"

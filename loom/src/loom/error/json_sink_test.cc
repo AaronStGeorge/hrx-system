@@ -50,6 +50,21 @@ std::string EmitJson(const loom_diagnostic_t* diagnostic,
   return result;
 }
 
+std::string EmitJsonObject(const loom_diagnostic_t* diagnostic,
+                           loom_type_formatter_t type_formatter = {nullptr,
+                                                                   nullptr}) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_EXPECT_OK(
+      loom_diagnostic_json_write_object(&stream, diagnostic, type_formatter));
+  std::string result(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+  return result;
+}
+
 //===----------------------------------------------------------------------===//
 // Basic structured diagnostics
 //===----------------------------------------------------------------------===//
@@ -84,6 +99,24 @@ TEST(JsonSink, SimpleStructuredError) {
   EXPECT_NE(json.find("\"value_name\":\"x\""), std::string::npos);
   // Ends with newline.
   EXPECT_EQ(json.back(), '\n');
+}
+
+TEST(JsonSink, ObjectWriterOmitsTrailingNewline) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("x")),
+  };
+
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = &loom_err_parse_001;
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.emitter = LOOM_EMITTER_PARSER;
+
+  std::string json = EmitJsonObject(&diagnostic);
+  EXPECT_NE(json.find("\"error_id\":\"ERR_PARSE_001\""), std::string::npos);
+  ASSERT_FALSE(json.empty());
+  EXPECT_EQ(json.back(), '}');
 }
 
 TEST(JsonSink, WarningFormat) {

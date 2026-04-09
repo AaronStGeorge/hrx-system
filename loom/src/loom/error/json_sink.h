@@ -95,6 +95,15 @@ typedef struct loom_json_sink_options_t {
   loom_type_formatter_t type_formatter;
 } loom_json_sink_options_t;
 
+// Writes one structured diagnostic JSON object with no trailing newline.
+//
+// This is the shared object writer underneath loom_diagnostic_json_sink().
+// Tool-level JSON outputs that need to embed diagnostics in a larger result
+// object should use this API instead of re-spelling diagnostic fields.
+iree_status_t loom_diagnostic_json_write_object(
+    loom_output_stream_t* stream, const loom_diagnostic_t* diagnostic,
+    loom_type_formatter_t type_formatter);
+
 // Diagnostic sink callback that emits JSONL output. Pass a
 // loom_json_sink_options_t* as user_data.
 iree_status_t loom_diagnostic_json_sink(void* user_data,

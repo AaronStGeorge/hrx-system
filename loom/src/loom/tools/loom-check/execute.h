@@ -27,8 +27,10 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
 #include "loom/tools/loom-check/check.h"
+#include "loom/tools/loom-check/report.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,7 +61,26 @@ typedef struct loom_check_result_t {
   // Printed IR from roundtrip/pass/format modes. Empty for verify
   // mode. Used by --update to rewrite expected sections in test files.
   iree_string_builder_t actual_output;
+
+  // Structured diagnostic JSON objects emitted through the shared
+  // loom_diagnostic_json_write_object path, separated by ",\n". This is ready
+  // to embed in a JSON array while preserving the full parser/verifier
+  // diagnostic shape: source ranges, highlights, related locations, params,
+  // field refs, rendered message, and fix hints.
+  iree_string_builder_t diagnostic_json;
+
+  // Number of objects in diagnostic_json.
+  iree_host_size_t diagnostic_count;
 } loom_check_result_t;
+
+// Diagnostic capture shared by loom-check execution modes. The sink appends
+// human-readable caret diagnostics to |detail| when non-NULL and appends the
+// canonical structured diagnostic JSON object to |result->diagnostic_json|
+// when |result| is non-NULL.
+typedef struct loom_check_diagnostic_capture_t {
+  iree_string_builder_t* detail;
+  loom_check_result_t* result;
+} loom_check_diagnostic_capture_t;
 
 //===----------------------------------------------------------------------===//
 // API
@@ -73,6 +94,11 @@ void loom_check_result_initialize(iree_allocator_t allocator,
 // Releases all resources owned by the result.
 void loom_check_result_deinitialize(loom_check_result_t* result);
 
+// Captures one diagnostic for loom-check detail and JSON output. Pass a
+// loom_check_diagnostic_capture_t* as user_data.
+iree_status_t loom_check_diagnostic_capture_sink(
+    void* user_data, const loom_diagnostic_t* diagnostic);
+
 // Registers all known dialects (test, func, scalar, encoding, pool)
 // with the context and finalizes it. The context must have been
 // initialized with loom_context_initialize() before calling this.
@@ -85,12 +111,11 @@ iree_status_t loom_check_context_initialize(loom_context_t* context);
 // locations. Infrastructure errors (OOM, missing vtables) propagate as
 // non-ok status. Test failures (mismatch, unmatched annotations) set
 // raw_outcome = FAIL and return iree_ok_status().
-iree_status_t loom_check_execute_case(const loom_check_case_t* test_case,
-                                      iree_string_view_t filename,
-                                      loom_context_t* context,
-                                      iree_arena_block_pool_t* block_pool,
-                                      iree_allocator_t allocator,
-                                      loom_check_result_t* result);
+iree_status_t loom_check_execute_case(
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, loom_check_result_t* result);
 
 // Strips comments from input, parses, prints, and compares against the
 // expected section. On mismatch, appends a unified diff to result->detail
@@ -106,12 +131,11 @@ iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
 // (collecting more diagnostics), then matches collected diagnostics against
 // the case's annotations. Unmatched annotations and unexpected diagnostics
 // are reported in result->detail.
-iree_status_t loom_check_execute_verify(const loom_check_case_t* test_case,
-                                        iree_string_view_t filename,
-                                        loom_context_t* context,
-                                        iree_arena_block_pool_t* block_pool,
-                                        iree_allocator_t allocator,
-                                        loom_check_result_t* result);
+iree_status_t loom_check_execute_verify(
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, loom_check_result_t* result);
 
 // Strips comments from input, parses, runs the pass pipeline specified
 // in test_case->pipeline, prints the result, and compares against the

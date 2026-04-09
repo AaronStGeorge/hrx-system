@@ -7,6 +7,7 @@
 #include "loom/tools/loom-check/execute.h"
 
 #include "loom/error/diagnostic.h"
+#include "loom/error/json_sink.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
@@ -28,11 +29,43 @@ void loom_check_result_initialize(iree_allocator_t allocator,
   memset(out_result, 0, sizeof(*out_result));
   iree_string_builder_initialize(allocator, &out_result->detail);
   iree_string_builder_initialize(allocator, &out_result->actual_output);
+  iree_string_builder_initialize(allocator, &out_result->diagnostic_json);
 }
 
 void loom_check_result_deinitialize(loom_check_result_t* result) {
+  iree_string_builder_deinitialize(&result->diagnostic_json);
   iree_string_builder_deinitialize(&result->actual_output);
   iree_string_builder_deinitialize(&result->detail);
+}
+
+static iree_status_t loom_check_append_diagnostic_json(
+    loom_check_result_t* result, const loom_diagnostic_t* diagnostic) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&result->diagnostic_json, &stream);
+  if (result->diagnostic_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\n"));
+  }
+  IREE_RETURN_IF_ERROR(loom_diagnostic_json_write_object(
+      &stream, diagnostic,
+      (loom_type_formatter_t){loom_type_format_minimal, NULL}));
+  ++result->diagnostic_count;
+  return iree_ok_status();
+}
+
+iree_status_t loom_check_diagnostic_capture_sink(
+    void* user_data, const loom_diagnostic_t* diagnostic) {
+  loom_check_diagnostic_capture_t* capture =
+      (loom_check_diagnostic_capture_t*)user_data;
+  if (capture->detail) {
+    loom_output_stream_t stream;
+    loom_output_stream_for_builder(capture->detail, &stream);
+    IREE_RETURN_IF_ERROR(loom_diagnostic_format(diagnostic, &stream));
+  }
+  if (capture->result) {
+    IREE_RETURN_IF_ERROR(
+        loom_check_append_diagnostic_json(capture->result, diagnostic));
+  }
+  return iree_ok_status();
 }
 
 // Registers a single dialect's vtable array with the context.
@@ -67,12 +100,17 @@ iree_status_t loom_check_context_initialize(loom_context_t* context) {
 // Execution
 //===----------------------------------------------------------------------===//
 
-iree_status_t loom_check_execute_case(const loom_check_case_t* test_case,
-                                      iree_string_view_t filename,
-                                      loom_context_t* context,
-                                      iree_arena_block_pool_t* block_pool,
-                                      iree_allocator_t allocator,
-                                      loom_check_result_t* result) {
+iree_status_t loom_check_execute_case(
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, loom_check_result_t* result) {
+  IREE_ASSERT_ARGUMENT(test_case);
+  IREE_ASSERT_ARGUMENT(report);
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(block_pool);
+  IREE_ASSERT_ARGUMENT(result);
+
   switch (test_case->mode) {
     case LOOM_CHECK_MODE_ROUNDTRIP: {
       IREE_RETURN_IF_ERROR(loom_check_execute_roundtrip(
@@ -80,8 +118,9 @@ iree_status_t loom_check_execute_case(const loom_check_case_t* test_case,
       break;
     }
     case LOOM_CHECK_MODE_VERIFY: {
-      IREE_RETURN_IF_ERROR(loom_check_execute_verify(
-          test_case, filename, context, block_pool, allocator, result));
+      IREE_RETURN_IF_ERROR(
+          loom_check_execute_verify(test_case, case_index, report, filename,
+                                    context, block_pool, allocator, result));
       break;
     }
     case LOOM_CHECK_MODE_PASS: {
@@ -110,15 +149,6 @@ iree_status_t loom_check_execute_case(const loom_check_case_t* test_case,
   }
 
   return iree_ok_status();
-}
-
-// Diagnostic sink for pass mode (same as roundtrip).
-static iree_status_t loom_check_pass_detail_sink(
-    void* user_data, const loom_diagnostic_t* diagnostic) {
-  iree_string_builder_t* builder = (iree_string_builder_t*)user_data;
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(builder, &stream);
-  return loom_diagnostic_format(diagnostic, &stream);
 }
 
 // Runs a comma-separated pass pipeline on a module.
@@ -174,9 +204,13 @@ iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
                                       loom_check_result_t* result) {
   // Parse the input.
   loom_module_t* module = NULL;
+  loom_check_diagnostic_capture_t diagnostic_capture = {
+      .detail = &result->detail,
+      .result = result,
+  };
   loom_text_parse_options_t parse_options = {
-      .diagnostic_sink = {.fn = loom_check_pass_detail_sink,
-                          .user_data = &result->detail},
+      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
+                          .user_data = &diagnostic_capture},
       .max_errors = 20,
   };
   iree_status_t parse_status = loom_text_parse(

@@ -315,11 +315,9 @@ static iree_status_t loom_json_render_param_fields(
   return iree_ok_status();
 }
 
-iree_status_t loom_diagnostic_json_sink(void* user_data,
-                                        const loom_diagnostic_t* diagnostic) {
-  loom_json_sink_options_t* options = (loom_json_sink_options_t*)user_data;
-  loom_output_stream_t* stream = options->stream;
-
+iree_status_t loom_diagnostic_json_write_object(
+    loom_output_stream_t* stream, const loom_diagnostic_t* diagnostic,
+    loom_type_formatter_t type_formatter) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
 
   // Severity (always present).
@@ -376,8 +374,8 @@ iree_status_t loom_diagnostic_json_sink(void* user_data,
     loom_output_stream_t escape_stream;
     loom_json_escape_stream_init(stream, &escape_data, &escape_stream);
     IREE_RETURN_IF_ERROR(loom_diagnostic_render_message(
-        error, diagnostic->params, diagnostic->param_count,
-        options->type_formatter, &escape_stream));
+        error, diagnostic->params, diagnostic->param_count, type_formatter,
+        &escape_stream));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
   }
 
@@ -389,8 +387,8 @@ iree_status_t loom_diagnostic_json_sink(void* user_data,
     loom_output_stream_t escape_stream;
     loom_json_escape_stream_init(stream, &escape_data, &escape_stream);
     IREE_RETURN_IF_ERROR(loom_diagnostic_render_fix_hint(
-        error, diagnostic->params, diagnostic->param_count,
-        options->type_formatter, &escape_stream));
+        error, diagnostic->params, diagnostic->param_count, type_formatter,
+        &escape_stream));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
   }
 
@@ -422,15 +420,23 @@ iree_status_t loom_diagnostic_json_sink(void* user_data,
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
       // Param value.
       IREE_RETURN_IF_ERROR(loom_json_render_param_value(
-          &diagnostic->params[i], options->type_formatter, stream));
+          &diagnostic->params[i], type_formatter, stream));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
   }
   IREE_RETURN_IF_ERROR(loom_json_render_param_fields(
       stream, error, diagnostic->params, emit_param_count));
 
-  // Close object and newline.
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}\n"));
+  // Close object.
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
 
   return iree_ok_status();
+}
+
+iree_status_t loom_diagnostic_json_sink(void* user_data,
+                                        const loom_diagnostic_t* diagnostic) {
+  loom_json_sink_options_t* options = (loom_json_sink_options_t*)user_data;
+  IREE_RETURN_IF_ERROR(loom_diagnostic_json_write_object(
+      options->stream, diagnostic, options->type_formatter));
+  return loom_output_stream_write_cstring(options->stream, "\n");
 }
