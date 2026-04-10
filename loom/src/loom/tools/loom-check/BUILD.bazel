@@ -28,6 +28,7 @@ loom_cc_library(
     deps = [
         ":check",
         ":report",
+        ":update",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:json_sink",
@@ -48,6 +49,7 @@ loom_cc_library(
         "//loom/src/loom/transforms:dce",
         "//loom/src/loom/transforms:pass",
         "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -122,6 +124,7 @@ loom_cc_library(
         ":check",
         ":execute",
         ":report",
+        ":update",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",

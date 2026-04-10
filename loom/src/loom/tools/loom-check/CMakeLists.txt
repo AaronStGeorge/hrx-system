@@ -36,6 +36,7 @@ loom_cc_library(
   DEPS
     ::check
     ::report
+    ::update
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::diagnostic
@@ -58,6 +59,7 @@ loom_cc_library(
     loom::src::loom::transforms::dce
     loom::src::loom::transforms::pass
     loom::src::loom::transforms::verify
+    loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC
 )
@@ -142,6 +144,7 @@ loom_cc_library(
     ::check
     ::execute
     ::report
+    ::update
     iree::base
     loom::src::loom::util::json
     loom::src::loom::util::stream

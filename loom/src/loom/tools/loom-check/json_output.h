@@ -35,6 +35,8 @@
 //         "raw_outcome": "pass",
 //         "final_outcome": "pass",
 //         "detail": "",
+//         "diff": null,
+//         "update_edit": null,
 //         "input_range": {"start_byte": 18, "end_byte": 42},
 //         "expected_separator_range": null,
 //         "expected_range": null,

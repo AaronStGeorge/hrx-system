@@ -26,8 +26,8 @@
 // two inputs. This is fine for IR text (typically tens to hundreds of
 // lines). For very large inputs, consider a streaming approach.
 //
-// All output goes through an iree_string_builder_t — the caller owns
-// the builder and its allocator.
+// Callers can either format the diff directly as text with loom_diff(), or
+// compute a structured result and format/serialize it themselves.
 
 #ifndef LOOM_TESTING_DIFF_H_
 #define LOOM_TESTING_DIFF_H_
@@ -40,6 +40,64 @@ extern "C" {
 
 // Number of unchanged context lines to show around each change hunk.
 #define LOOM_DIFF_DEFAULT_CONTEXT 3
+
+// Line kind inside a diff hunk.
+typedef enum loom_diff_hunk_line_kind_e {
+  LOOM_DIFF_HUNK_LINE_CONTEXT = 0,
+  LOOM_DIFF_HUNK_LINE_DELETE = 1,
+  LOOM_DIFF_HUNK_LINE_INSERT = 2,
+} loom_diff_hunk_line_kind_t;
+
+// One displayed line in a diff hunk. |text| is a view into the original
+// expected or actual input passed to loom_diff_compute().
+typedef struct loom_diff_hunk_line_t {
+  loom_diff_hunk_line_kind_t kind;
+  iree_string_view_t text;
+} loom_diff_hunk_line_t;
+
+// A line-oriented diff hunk. Line numbers are 1-based.
+typedef struct loom_diff_hunk_t {
+  iree_host_size_t expected_start_line;
+  iree_host_size_t expected_line_count;
+  iree_host_size_t actual_start_line;
+  iree_host_size_t actual_line_count;
+  iree_host_size_t line_offset;
+  iree_host_size_t line_count;
+} loom_diff_hunk_t;
+
+// Structured diff result. Hunk lines are stored in |lines|; each hunk owns a
+// contiguous subrange described by |line_offset| and |line_count|.
+typedef struct loom_diff_result_t {
+  loom_diff_hunk_t* hunks;
+  iree_host_size_t hunk_count;
+  loom_diff_hunk_line_t* lines;
+  iree_host_size_t line_count;
+} loom_diff_result_t;
+
+// Returns a stable JSON/text spelling for a hunk line kind.
+const char* loom_diff_hunk_line_kind_name(loom_diff_hunk_line_kind_t kind);
+
+// Releases memory owned by |result|. The expected/actual input strings passed
+// to loom_diff_compute() remain caller-owned and must outlive |result| while
+// hunk line text views are being read.
+void loom_diff_result_deinitialize(iree_allocator_t allocator,
+                                   loom_diff_result_t* result);
+
+// Computes a structured diff between |expected| and |actual|. When the inputs
+// have no line-level differences, |out_result| is left empty.
+//
+// The caller must keep |expected| and |actual| alive while reading
+// |out_result|, because hunk lines contain views into those input strings.
+iree_status_t loom_diff_compute(iree_string_view_t expected,
+                                iree_string_view_t actual,
+                                iree_host_size_t context_lines,
+                                iree_allocator_t allocator,
+                                loom_diff_result_t* out_result);
+
+// Formats a structured diff result as unified diff text. Empty results append
+// nothing.
+iree_status_t loom_diff_format_result(const loom_diff_result_t* result,
+                                      iree_string_builder_t* builder);
 
 // Computes a unified diff between |expected| and |actual|.
 //

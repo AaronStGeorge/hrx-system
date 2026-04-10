@@ -23,19 +23,94 @@
 #include "loom/transforms/cse.h"
 #include "loom/transforms/dce.h"
 #include "loom/transforms/pass.h"
+#include "loom/util/json.h"
+#include "loom/util/stream.h"
 
 void loom_check_result_initialize(iree_allocator_t allocator,
                                   loom_check_result_t* out_result) {
   memset(out_result, 0, sizeof(*out_result));
   iree_string_builder_initialize(allocator, &out_result->detail);
+  iree_string_builder_initialize(allocator, &out_result->diff_hunk_json);
   iree_string_builder_initialize(allocator, &out_result->actual_output);
+  iree_string_builder_initialize(allocator, &out_result->update_edit.text);
   iree_string_builder_initialize(allocator, &out_result->diagnostic_json);
 }
 
 void loom_check_result_deinitialize(loom_check_result_t* result) {
   iree_string_builder_deinitialize(&result->diagnostic_json);
+  iree_string_builder_deinitialize(&result->update_edit.text);
   iree_string_builder_deinitialize(&result->actual_output);
+  iree_string_builder_deinitialize(&result->diff_hunk_json);
   iree_string_builder_deinitialize(&result->detail);
+}
+
+static iree_status_t loom_check_write_diff_hunk_json(
+    const loom_diff_result_t* diff, const loom_diff_hunk_t* hunk,
+    loom_output_stream_t* stream) {
+  IREE_ASSERT_ARGUMENT(diff);
+  IREE_ASSERT_ARGUMENT(hunk);
+  IREE_ASSERT_ARGUMENT(stream);
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      "\"expected_start_line\": %zu, \"expected_line_count\": %zu, "
+      "\"actual_start_line\": %zu, \"actual_line_count\": %zu, \"lines\": [",
+      hunk->expected_start_line, hunk->expected_line_count,
+      hunk->actual_start_line, hunk->actual_line_count));
+  for (iree_host_size_t i = 0; i < hunk->line_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+    }
+    const loom_diff_hunk_line_t* line = &diff->lines[hunk->line_offset + i];
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "{\"kind\": "));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+        stream, loom_diff_hunk_line_kind_name(line->kind)));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ", \"text\": "));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, line->text));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]}"));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_write_diff_json_hunks(
+    const loom_diff_result_t* diff, loom_check_result_t* result) {
+  IREE_ASSERT_ARGUMENT(diff);
+  IREE_ASSERT_ARGUMENT(result);
+
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&result->diff_hunk_json, &stream);
+  for (iree_host_size_t i = 0; i < diff->hunk_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\n"));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_check_write_diff_hunk_json(diff, &diff->hunks[i], &stream));
+  }
+  result->diff_hunk_count = diff->hunk_count;
+  return iree_ok_status();
+}
+
+iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
+                                            iree_string_view_t actual,
+                                            iree_allocator_t allocator,
+                                            loom_check_result_t* result) {
+  IREE_ASSERT_ARGUMENT(result);
+
+  loom_diff_result_t diff = {0};
+  iree_status_t status = loom_diff_compute(
+      expected, actual, LOOM_DIFF_DEFAULT_CONTEXT, allocator, &diff);
+  if (iree_status_is_ok(status)) {
+    status = loom_diff_format_result(&diff, &result->detail);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_check_write_diff_json_hunks(&diff, result);
+  }
+  loom_diff_result_deinitialize(allocator, &diff);
+  return status;
 }
 
 static iree_status_t loom_check_append_diagnostic_json(
@@ -252,8 +327,8 @@ iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
     result->raw_outcome = LOOM_CHECK_PASS;
   } else {
     result->raw_outcome = LOOM_CHECK_FAIL;
-    status = loom_diff(expected_trimmed, actual_trimmed,
-                       LOOM_DIFF_DEFAULT_CONTEXT, allocator, &result->detail);
+    status = loom_check_result_record_diff(expected_trimmed, actual_trimmed,
+                                           allocator, result);
   }
 
   iree_string_builder_deinitialize(&stripped_expected);

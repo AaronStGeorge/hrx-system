@@ -264,21 +264,36 @@ static iree_status_t loom_check_process_file(
       ++(*fail_count);
     }
 
-    // Track update info for --update.
-    if (updates && results[i].actual_output.size > 0) {
+    // Track update info for JSON code actions and --update.
+    bool wants_json_case =
+        FLAG_json.enabled &&
+        (FLAG_json.output_mode == LOOM_CHECK_JSON_OUTPUT_ALL ||
+         (FLAG_json.output_mode == LOOM_CHECK_JSON_OUTPUT_FAILURES &&
+          results[i].final_outcome == LOOM_CHECK_FAIL));
+    if ((wants_json_case || updates) && results[i].actual_output.size > 0) {
       iree_string_view_t stripped_expected_trimmed =
           iree_string_view_trim(test_case->expected);
-      iree_string_view_t actual_trimmed = iree_string_view_trim(
-          iree_string_builder_view(&results[i].actual_output));
+      iree_string_view_t actual_output =
+          iree_string_builder_view(&results[i].actual_output);
+      iree_string_view_t actual_trimmed = iree_string_view_trim(actual_output);
       if (!iree_string_view_equal(stripped_expected_trimmed, actual_trimmed)) {
-        updates[i].needs_update = true;
-        updates[i].actual_output =
-            iree_string_builder_view(&results[i].actual_output);
-        updates[i].input_end = test_case->input.data + test_case->input.size;
-        if (test_case->has_expected_section) {
-          updates[i].expected_start = test_case->expected.data;
-          updates[i].expected_end =
-              test_case->expected.data + test_case->expected.size;
+        if (wants_json_case) {
+          status = loom_check_build_update_edit(
+              source, test_case, actual_output, &results[i].update_edit.text,
+              &results[i].update_edit.value);
+          if (iree_status_is_ok(status)) {
+            results[i].update_edit.present = true;
+          }
+        }
+        if (iree_status_is_ok(status) && updates) {
+          updates[i].needs_update = true;
+          updates[i].actual_output = actual_output;
+          updates[i].input_end = test_case->input.data + test_case->input.size;
+          if (test_case->has_expected_section) {
+            updates[i].expected_start = test_case->expected.data;
+            updates[i].expected_end =
+                test_case->expected.data + test_case->expected.size;
+          }
         }
       }
     }
@@ -373,7 +388,7 @@ int main(int argc, char** argv) {
       "diagnostic details on failure. Use .loom for ordinary Loom IR files.\n"
       "\n"
       "Usage:\n"
-      "  loom-check [flags] [file...]\n"
+      "  loom-check [flags] [file]\n"
       "  cat test.loom-test | loom-check\n"
       "\n"
       "Modes (set via // RUN: directive, default is roundtrip):\n"
@@ -425,7 +440,17 @@ int main(int argc, char** argv) {
   // Initialize context with all known dialects.
   loom_context_t context;
   loom_context_initialize(host_allocator, &context);
-  iree_status_t status = loom_check_context_initialize(&context);
+  iree_status_t status = iree_ok_status();
+  if (argc > 2) {
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "loom-check accepts at most one input file or '-' for stdin; got %d "
+        "inputs",
+        argc - 1);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_check_context_initialize(&context);
+  }
 
   iree_host_size_t pass_count = 0;
   iree_host_size_t fail_count = 0;
@@ -438,11 +463,9 @@ int main(int argc, char** argv) {
           iree_string_view_empty(), &context, &block_pool, host_allocator,
           &pass_count, &fail_count, &skip_count);
     } else {
-      for (int i = 1; i < argc && iree_status_is_ok(status); ++i) {
-        status = loom_check_read_and_process(
-            iree_make_cstring_view(argv[i]), &context, &block_pool,
-            host_allocator, &pass_count, &fail_count, &skip_count);
-      }
+      status = loom_check_read_and_process(
+          iree_make_cstring_view(argv[1]), &context, &block_pool,
+          host_allocator, &pass_count, &fail_count, &skip_count);
     }
   }
 

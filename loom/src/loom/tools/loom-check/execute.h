@@ -31,6 +31,7 @@
 #include "loom/ir/context.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
+#include "loom/tools/loom-check/update.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,9 +59,28 @@ typedef struct loom_check_result_t {
   // messages for parse errors. Empty on PASS.
   iree_string_builder_t detail;
 
+  // Structured diff hunk JSON objects for roundtrip/pass mismatches, separated
+  // by ",\n" for direct embedding in a JSON array.
+  iree_string_builder_t diff_hunk_json;
+
+  // Number of objects in diff_hunk_json.
+  iree_host_size_t diff_hunk_count;
+
   // Printed IR from roundtrip/pass/format modes. Empty for verify
   // mode. Used by --update to rewrite expected sections in test files.
   iree_string_builder_t actual_output;
+
+  // Machine-readable edit for accepting actual_output into the expected
+  // section.
+  struct {
+    // Whether an update edit is available for this result.
+    bool present;
+    // Edit kind and source byte range. Valid only when present is true.
+    loom_check_update_edit_t value;
+    // Replacement text to apply at the edit range. Valid only when present is
+    // true.
+    iree_string_builder_t text;
+  } update_edit;
 
   // Structured diagnostic JSON objects emitted through the shared
   // loom_diagnostic_json_write_object path, separated by ",\n". This is ready
@@ -98,6 +118,13 @@ void loom_check_result_deinitialize(loom_check_result_t* result);
 // loom_check_diagnostic_capture_t* as user_data.
 iree_status_t loom_check_diagnostic_capture_sink(
     void* user_data, const loom_diagnostic_t* diagnostic);
+
+// Records a roundtrip/pass mismatch as both human-readable unified diff text
+// in |result->detail| and structured hunk objects in |result->diff_hunk_json|.
+iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
+                                            iree_string_view_t actual,
+                                            iree_allocator_t allocator,
+                                            loom_check_result_t* result);
 
 // Registers all known dialects (test, func, scalar, encoding, pool)
 // with the context and finalizes it. The context must have been

@@ -64,6 +64,33 @@ static iree_status_t loom_check_json_write_optional_string(
   return loom_json_write_escaped_string(stream, string);
 }
 
+static iree_status_t loom_check_json_write_update_edit(
+    const loom_check_result_t* result, loom_output_stream_t* stream) {
+  IREE_ASSERT_ARGUMENT(result);
+  IREE_ASSERT_ARGUMENT(stream);
+
+  if (!result->update_edit.present) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\n"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "        \"kind\": "));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      stream,
+      loom_check_update_edit_kind_name(result->update_edit.value.kind)));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\n        \"range\": "));
+  IREE_RETURN_IF_ERROR(loom_check_json_write_source_range(
+      result->update_edit.value.range, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\n        \"text\": "));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, iree_string_builder_view(&result->update_edit.text)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n      }"));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_json_write_annotation(
     const loom_check_annotation_t* annotation, bool matched,
     iree_host_size_t annotation_index, loom_output_stream_t* stream) {
@@ -237,6 +264,28 @@ static iree_status_t loom_check_json_write_case(
       loom_output_stream_write_cstring(stream, "      \"detail\": "));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       stream, iree_string_builder_view(&result->detail)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
+
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "      \"diff\": "));
+  if (result->diff_hunk_count == 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null,\n"));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        stream, "{\n        \"expected_range\": "));
+    IREE_RETURN_IF_ERROR(loom_check_json_write_optional_source_range(
+        test_case->expected_range, stream));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        stream, ",\n        \"hunks\": [\n          "));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(
+        stream, iree_string_builder_view(&result->diff_hunk_json)));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "\n        ]\n      },\n"));
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "      \"update_edit\": "));
+  IREE_RETURN_IF_ERROR(loom_check_json_write_update_edit(result, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
 
   IREE_RETURN_IF_ERROR(

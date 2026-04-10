@@ -132,6 +132,8 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
   EXPECT_NE(json.find("\"raw_outcome\": \"pass\""), std::string::npos);
   EXPECT_NE(json.find("\"final_outcome\": \"pass\""), std::string::npos);
   EXPECT_NE(json.find("\"detail\": \"\""), std::string::npos);
+  EXPECT_NE(json.find("\"diff\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"update_edit\": null"), std::string::npos);
   EXPECT_NE(json.find("\"input_range\": {\"start_byte\": 18"),
             std::string::npos);
   EXPECT_NE(json.find("\"expected_separator_range\": null"), std::string::npos);
@@ -186,6 +188,72 @@ TEST_F(JsonOutputTest, EmbedsStructuredDiagnosticsArray) {
   EXPECT_NE(json.find("\"diagnostics\": [\n        {\"severity\":\"error\","
                       "\"error_id\":\"ERR_PARSE_006\"}\n      ]"),
             std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
+TEST_F(JsonOutputTest, EmbedsStructuredDiffHunks) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n"
+      "// ----\n"
+      "func.def @different() {\n"
+      "}\n");
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "diff output\n"),
+  };
+  IREE_ASSERT_OK(iree_string_builder_append_cstring(
+      &results[0].diff_hunk_json,
+      "{\"expected_start_line\": 1, \"expected_line_count\": 1, "
+      "\"actual_start_line\": 1, \"actual_line_count\": 1, \"lines\": "
+      "[{\"kind\": \"delete\", \"text\": \"old\"}, {\"kind\": \"insert\", "
+      "\"text\": \"new\"}]}"));
+  results[0].diff_hunk_count = 1;
+
+  std::string json = WriteJson(iree_make_cstring_view("diff.loom-test"), file,
+                               results, 0, 1, 0);
+
+  EXPECT_NE(json.find("\"diff\": {"), std::string::npos);
+  EXPECT_NE(json.find("\"expected_range\": {\"start_byte\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"hunks\": ["), std::string::npos);
+  EXPECT_NE(json.find("\"expected_start_line\": 1"), std::string::npos);
+  EXPECT_NE(json.find("\"kind\": \"delete\""), std::string::npos);
+  EXPECT_NE(json.find("\"kind\": \"insert\""), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
+TEST_F(JsonOutputTest, EmbedsUpdateEdit) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n"
+      "// ----\n"
+      "func.def @different() {\n"
+      "}\n");
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "diff output\n"),
+  };
+  results[0].update_edit.present = true;
+  results[0].update_edit.value = (loom_check_update_edit_t){
+      .kind = LOOM_CHECK_UPDATE_EDIT_REPLACE_EXPECTED_OUTPUT,
+      .range = file.cases[0].expected_range,
+  };
+  IREE_ASSERT_OK(iree_string_builder_append_cstring(
+      &results[0].update_edit.text, "func.def @f() {\n}\n"));
+
+  std::string json = WriteJson(iree_make_cstring_view("edit.loom-test"), file,
+                               results, 0, 1, 0);
+
+  EXPECT_NE(json.find("\"update_edit\": {"), std::string::npos);
+  EXPECT_NE(json.find("\"kind\": \"replace_expected_output\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"range\": {\"start_byte\""), std::string::npos);
+  EXPECT_NE(json.find("\"text\": \"func.def @f()"), std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
 }

@@ -133,6 +133,32 @@ TEST_F(DiffTest, HunkHeaderLineNumbers) {
             IREE_STRING_VIEW_NPOS);
 }
 
+TEST_F(DiffTest, StructuredHunkLineNumbersAndKinds) {
+  loom_diff_result_t result = {};
+  IREE_ASSERT_OK(loom_diff_compute(IREE_SV("aaa\nold\nccc\n"),
+                                   IREE_SV("aaa\nnew\nccc\n"), 1,
+                                   iree_allocator_system(), &result));
+  ASSERT_EQ(result.hunk_count, 1u);
+  EXPECT_EQ(result.hunks[0].expected_start_line, 1u);
+  EXPECT_EQ(result.hunks[0].expected_line_count, 3u);
+  EXPECT_EQ(result.hunks[0].actual_start_line, 1u);
+  EXPECT_EQ(result.hunks[0].actual_line_count, 3u);
+  ASSERT_EQ(result.hunks[0].line_count, 4u);
+  const iree_host_size_t line_offset = result.hunks[0].line_offset;
+  EXPECT_EQ(result.lines[line_offset + 0].kind, LOOM_DIFF_HUNK_LINE_CONTEXT);
+  EXPECT_EQ(result.lines[line_offset + 1].kind, LOOM_DIFF_HUNK_LINE_DELETE);
+  EXPECT_EQ(result.lines[line_offset + 2].kind, LOOM_DIFF_HUNK_LINE_INSERT);
+  EXPECT_EQ(result.lines[line_offset + 3].kind, LOOM_DIFF_HUNK_LINE_CONTEXT);
+  EXPECT_TRUE(iree_string_view_equal(result.lines[line_offset + 1].text,
+                                     IREE_SV("old")));
+  EXPECT_TRUE(iree_string_view_equal(result.lines[line_offset + 2].text,
+                                     IREE_SV("new")));
+  EXPECT_STREQ(
+      loom_diff_hunk_line_kind_name(result.lines[line_offset + 2].kind),
+      "insert");
+  loom_diff_result_deinitialize(iree_allocator_system(), &result);
+}
+
 //===----------------------------------------------------------------------===//
 // Context lines
 //===----------------------------------------------------------------------===//

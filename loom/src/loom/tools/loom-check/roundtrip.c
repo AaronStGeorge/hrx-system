@@ -7,7 +7,6 @@
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
-#include "loom/testing/diff.h"
 #include "loom/tools/loom-check/execute.h"
 
 iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
@@ -73,8 +72,8 @@ iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
     result->raw_outcome = LOOM_CHECK_PASS;
   } else {
     result->raw_outcome = LOOM_CHECK_FAIL;
-    status = loom_diff(expected_trimmed, actual_trimmed,
-                       LOOM_DIFF_DEFAULT_CONTEXT, allocator, &result->detail);
+    status = loom_check_result_record_diff(expected_trimmed, actual_trimmed,
+                                           allocator, result);
   }
 
   iree_string_builder_deinitialize(&stripped_expected);

@@ -48,6 +48,24 @@ typedef struct loom_check_case_update_t {
   const char* expected_end;
 } loom_check_case_update_t;
 
+// Kind of machine-readable text edit needed to apply an update.
+typedef enum loom_check_update_edit_kind_e {
+  LOOM_CHECK_UPDATE_EDIT_REPLACE_EXPECTED_OUTPUT = 0,
+  LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT = 1,
+} loom_check_update_edit_kind_t;
+
+// Machine-readable update edit metadata. |range| is a byte range in the
+// original source. The replacement text is caller-owned separately so the same
+// metadata can be used with different string storage strategies.
+typedef struct loom_check_update_edit_t {
+  loom_check_update_edit_kind_t kind;
+  loom_check_source_range_t range;
+} loom_check_update_edit_t;
+
+// Returns a stable JSON/text spelling for an update edit kind.
+const char* loom_check_update_edit_kind_name(
+    loom_check_update_edit_kind_t kind);
+
 // Reconstructs the source with updated expected sections. Writes the
 // result into |new_source|. Does NOT write to disk — the caller decides
 // whether and where to write. Returns the number of cases that were
@@ -62,6 +80,15 @@ iree_status_t loom_check_apply_updates(iree_string_view_t original_source,
                                        const loom_check_case_update_t* updates,
                                        iree_string_builder_t* new_source,
                                        iree_host_size_t* out_update_count);
+
+// Builds the exact replacement text and range that loom_check_apply_updates()
+// would use for one case. The caller owns |new_text| and |out_edit|. The source
+// and parsed case must come from the same buffer.
+iree_status_t loom_check_build_update_edit(iree_string_view_t original_source,
+                                           const loom_check_case_t* test_case,
+                                           iree_string_view_t actual_output,
+                                           iree_string_builder_t* new_text,
+                                           loom_check_update_edit_t* out_edit);
 
 #ifdef __cplusplus
 }

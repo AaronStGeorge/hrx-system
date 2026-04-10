@@ -68,6 +68,11 @@ class ExecuteTest : public ::testing::Test {
     return std::string(result.detail.buffer, result.detail.size);
   }
 
+  std::string DiffJsonString(const loom_check_result_t& result) {
+    return std::string(result.diff_hunk_json.buffer,
+                       result.diff_hunk_json.size);
+  }
+
   std::string ActualOutputString(const loom_check_result_t& result) {
     return std::string(result.actual_output.buffer, result.actual_output.size);
   }
@@ -122,6 +127,11 @@ TEST_F(ExecuteTest, RoundtripMismatch) {
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_FALSE(DetailString(result).empty()) << "expected diff output";
+  EXPECT_GT(result.diff_hunk_count, 0u);
+  EXPECT_NE(DiffJsonString(result).find("\"kind\": \"delete\""),
+            std::string::npos);
+  EXPECT_NE(DiffJsonString(result).find("\"kind\": \"insert\""),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

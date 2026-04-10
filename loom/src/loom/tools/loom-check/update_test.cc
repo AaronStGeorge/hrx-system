@@ -48,6 +48,16 @@ class UpdateTest : public ::testing::Test {
                        iree_string_builder_size(&new_source_));
   }
 
+  // Builds one machine-readable update edit and returns its replacement text.
+  std::string BuildUpdateEdit(const loom_check_case_t& test_case,
+                              iree_string_view_t actual_output,
+                              loom_check_update_edit_t* out_edit) {
+    IREE_EXPECT_OK(loom_check_build_update_edit(
+        source_, &test_case, actual_output, &new_source_, out_edit));
+    return std::string(iree_string_builder_buffer(&new_source_),
+                       iree_string_builder_size(&new_source_));
+  }
+
   iree_arena_block_pool_t block_pool_;
   iree_arena_allocator_t arena_;
   iree_string_builder_t new_source_;
@@ -81,6 +91,29 @@ TEST_F(UpdateTest, ReplacesExpectedSection) {
   EXPECT_EQ(result.find("old expected"), std::string::npos);
 }
 
+TEST_F(UpdateTest, BuildEditReplacesExpectedSection) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n"
+      "\n"
+      "// ----\n"
+      "old expected\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_update_edit_t edit = {};
+  std::string text = BuildUpdateEdit(
+      file.cases[0], iree_make_cstring_view("new expected\n"), &edit);
+
+  EXPECT_EQ(edit.kind, LOOM_CHECK_UPDATE_EDIT_REPLACE_EXPECTED_OUTPUT);
+  EXPECT_EQ(edit.range.start_byte, file.cases[0].expected_range.start_byte);
+  EXPECT_EQ(edit.range.end_byte, file.cases[0].expected_range.end_byte);
+  EXPECT_EQ(text, "new expected\n");
+  EXPECT_STREQ(loom_check_update_edit_kind_name(edit.kind),
+               "replace_expected_output");
+}
+
 TEST_F(UpdateTest, InsertsExpectedSeparator) {
   auto file = Parse(
       "// RUN: roundtrip\n"
@@ -103,6 +136,26 @@ TEST_F(UpdateTest, InsertsExpectedSeparator) {
   EXPECT_NE(result.find("formatted output\n"), std::string::npos);
   // The original input should still be present.
   EXPECT_NE(result.find("func.def @f()"), std::string::npos);
+}
+
+TEST_F(UpdateTest, BuildEditInsertsExpectedSeparator) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+
+  loom_check_update_edit_t edit = {};
+  std::string text = BuildUpdateEdit(
+      file.cases[0], iree_make_cstring_view("formatted output\n"), &edit);
+
+  EXPECT_EQ(edit.kind, LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT);
+  EXPECT_EQ(edit.range.start_byte, file.cases[0].input_range.end_byte);
+  EXPECT_EQ(edit.range.end_byte, file.cases[0].input_range.end_byte);
+  EXPECT_EQ(text, "\n// ----\nformatted output\n");
+  EXPECT_STREQ(loom_check_update_edit_kind_name(edit.kind),
+               "insert_expected_output");
 }
 
 TEST_F(UpdateTest, InsertsExpectedWithFollowingCase) {
