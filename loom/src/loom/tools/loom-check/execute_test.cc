@@ -77,6 +77,11 @@ class ExecuteTest : public ::testing::Test {
     return std::string(result.actual_output.buffer, result.actual_output.size);
   }
 
+  std::string AnnotationEditJsonString(const loom_check_result_t& result) {
+    return std::string(result.annotation_edits.json.buffer,
+                       result.annotation_edits.json.size);
+  }
+
   std::string DiagnosticJsonString(const loom_check_result_t& result) {
     return std::string(result.diagnostic_json.buffer,
                        result.diagnostic_json.size);
@@ -242,12 +247,35 @@ TEST_F(ExecuteTest, VerifyUnmatchedAnnotation) {
       ExecuteFirst("// RUN: verify\n"
                    "// ERROR@+1: PARSE/006\n"
                    "func.def @f() {\n"
+                   "  func.return\n"
                    "}\n",
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_TRUE(DetailString(result).find("unmatched annotation") !=
               std::string::npos)
       << "detail: " << DetailString(result);
+  EXPECT_EQ(result.annotation_edits.count, 1u);
+  EXPECT_NE(AnnotationEditJsonString(result).find(
+                "\"kind\": \"delete_diagnostic_annotation\""),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, VerifyAnnotationDeleteEditConsumesCrlf) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: verify\r\n"
+                   "// ERROR@+1: PARSE/006\r\n"
+                   "func.def @f() {\r\n"
+                   "  func.return\r\n"
+                   "}\r\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
+      << "detail: " << DetailString(result);
+  EXPECT_EQ(result.annotation_edits.count, 1u);
+  EXPECT_NE(AnnotationEditJsonString(result).find(
+                "\"range\": {\"start_byte\": 16, \"end_byte\": 40}"),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -265,6 +293,13 @@ TEST_F(ExecuteTest, VerifyUnexpectedDiagnostic) {
   EXPECT_NE(DiagnosticJsonString(result).find("\"domain\":\"PARSE\""),
             std::string::npos);
   EXPECT_NE(DiagnosticJsonString(result).find("\"error_id\":\"ERR_PARSE_006\""),
+            std::string::npos);
+  EXPECT_EQ(result.annotation_edits.count, 1u);
+  EXPECT_NE(AnnotationEditJsonString(result).find(
+                "\"kind\": \"insert_diagnostic_annotations\""),
+            std::string::npos);
+  EXPECT_NE(AnnotationEditJsonString(result).find(
+                "\"text\": \"// ERROR@+1: PARSE/006\\n\""),
             std::string::npos);
   loom_check_result_deinitialize(&result);
 }
@@ -435,6 +470,13 @@ TEST_F(ExecuteTest, VerifyLineMismatch) {
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
       << "detail: " << DetailString(result);
+  EXPECT_EQ(result.annotation_edits.count, 2u);
+  EXPECT_NE(AnnotationEditJsonString(result).find(
+                "\"kind\": \"delete_diagnostic_annotation\""),
+            std::string::npos);
+  EXPECT_NE(AnnotationEditJsonString(result).find(
+                "\"kind\": \"insert_diagnostic_annotations\""),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -458,6 +500,28 @@ TEST_F(ExecuteTest, VerifyTypeError) {
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
       << "detail: " << DetailString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, VerifyTypeErrorAnnotationEditOffsets) {
+  // Three unexpected diagnostics on one target line should be grouped into one
+  // insertion edit whose generated offsets all still point at the op line after
+  // the edit is applied.
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: verify\n"
+                   "func.def @f(%a: f32, %b: f32) -> (f32) {\n"
+                   "  %r = test.addi %a, %b : f32\n"
+                   "  func.return %r : f32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
+      << "detail: " << DetailString(result);
+  EXPECT_EQ(result.annotation_edits.count, 1u);
+  std::string edits = AnnotationEditJsonString(result);
+  EXPECT_NE(edits.find("\"text\": \"  // ERROR@+3: TYPE/003\\n  // ERROR@+2: "
+                       "TYPE/003\\n  // ERROR@+1: TYPE/004\\n\""),
+            std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

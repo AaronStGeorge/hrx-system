@@ -134,6 +134,7 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
   EXPECT_NE(json.find("\"detail\": \"\""), std::string::npos);
   EXPECT_NE(json.find("\"diff\": null"), std::string::npos);
   EXPECT_NE(json.find("\"update_edit\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"annotation_edits\": []"), std::string::npos);
   EXPECT_NE(json.find("\"input_range\": {\"start_byte\": 18"),
             std::string::npos);
   EXPECT_NE(json.find("\"expected_separator_range\": null"), std::string::npos);
@@ -254,6 +255,33 @@ TEST_F(JsonOutputTest, EmbedsUpdateEdit) {
             std::string::npos);
   EXPECT_NE(json.find("\"range\": {\"start_byte\""), std::string::npos);
   EXPECT_NE(json.find("\"text\": \"func.def @f()"), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
+TEST_F(JsonOutputTest, EmbedsAnnotationEdits) {
+  auto file = Parse(
+      "// RUN: verify\n"
+      "bogus.nonexistent\n");
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_FAIL, LOOM_CHECK_FAIL, "unexpected diagnostic\n"),
+  };
+  IREE_ASSERT_OK(iree_string_builder_append_cstring(
+      &results[0].annotation_edits.json,
+      "{\"kind\": \"insert_diagnostic_annotations\", \"range\": "
+      "{\"start_byte\": 15, \"end_byte\": 15}, \"target_line\": 1, "
+      "\"text\": \"// ERROR@+1: PARSE/006\\n\"}"));
+  results[0].annotation_edits.count = 1;
+
+  std::string json = WriteJson(iree_make_cstring_view("annotation.loom-test"),
+                               file, results, 0, 1, 0);
+
+  EXPECT_NE(json.find("\"annotation_edits\": ["), std::string::npos);
+  EXPECT_NE(json.find("\"kind\": \"insert_diagnostic_annotations\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"text\": \"// ERROR@+1: PARSE/006\\n\""),
+            std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
 }

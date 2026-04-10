@@ -4,12 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Update logic for --update mode in loom-check.
+// Update edit logic for loom-check.
 //
-// Reconstructs a test file source with updated expected sections. The
-// reconstruction is pure computation (no file I/O) — the caller decides
-// where to write the result. This separation keeps the logic testable
-// without touching the filesystem.
+// Expected-output updates can reconstruct a test file source for --update mode.
+// The reconstruction is pure computation (no file I/O) — the caller decides
+// where to write the result. This separation keeps the logic testable without
+// touching the filesystem.
 //
 // The typical call sequence:
 //
@@ -52,13 +52,17 @@ typedef struct loom_check_case_update_t {
 typedef enum loom_check_update_edit_kind_e {
   LOOM_CHECK_UPDATE_EDIT_REPLACE_EXPECTED_OUTPUT = 0,
   LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT = 1,
+  LOOM_CHECK_UPDATE_EDIT_INSERT_DIAGNOSTIC_ANNOTATIONS = 2,
+  LOOM_CHECK_UPDATE_EDIT_DELETE_DIAGNOSTIC_ANNOTATION = 3,
 } loom_check_update_edit_kind_t;
 
 // Machine-readable update edit metadata. |range| is a byte range in the
 // original source. The replacement text is caller-owned separately so the same
 // metadata can be used with different string storage strategies.
 typedef struct loom_check_update_edit_t {
+  // Kind of text edit to apply.
   loom_check_update_edit_kind_t kind;
+  // Half-open byte range in the original source.
   loom_check_source_range_t range;
 } loom_check_update_edit_t;
 

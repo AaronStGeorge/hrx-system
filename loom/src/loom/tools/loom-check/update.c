@@ -15,6 +15,10 @@ const char* loom_check_update_edit_kind_name(
       return "replace_expected_output";
     case LOOM_CHECK_UPDATE_EDIT_INSERT_EXPECTED_OUTPUT:
       return "insert_expected_output";
+    case LOOM_CHECK_UPDATE_EDIT_INSERT_DIAGNOSTIC_ANNOTATIONS:
+      return "insert_diagnostic_annotations";
+    case LOOM_CHECK_UPDATE_EDIT_DELETE_DIAGNOSTIC_ANNOTATION:
+      return "delete_diagnostic_annotation";
   }
   return "unknown";
 }

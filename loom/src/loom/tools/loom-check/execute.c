@@ -33,11 +33,13 @@ void loom_check_result_initialize(iree_allocator_t allocator,
   iree_string_builder_initialize(allocator, &out_result->diff_hunk_json);
   iree_string_builder_initialize(allocator, &out_result->actual_output);
   iree_string_builder_initialize(allocator, &out_result->update_edit.text);
+  iree_string_builder_initialize(allocator, &out_result->annotation_edits.json);
   iree_string_builder_initialize(allocator, &out_result->diagnostic_json);
 }
 
 void loom_check_result_deinitialize(loom_check_result_t* result) {
   iree_string_builder_deinitialize(&result->diagnostic_json);
+  iree_string_builder_deinitialize(&result->annotation_edits.json);
   iree_string_builder_deinitialize(&result->update_edit.text);
   iree_string_builder_deinitialize(&result->actual_output);
   iree_string_builder_deinitialize(&result->diff_hunk_json);

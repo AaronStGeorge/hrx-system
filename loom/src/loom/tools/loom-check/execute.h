@@ -82,6 +82,17 @@ typedef struct loom_check_result_t {
     iree_string_builder_t text;
   } update_edit;
 
+  // Machine-readable edits for accepting actual verify diagnostics into
+  // diagnostic annotation comments. Edit ranges are in the original .loom-test
+  // source; apply multiple edits atomically or in descending range order.
+  struct {
+    // Structured annotation edit JSON objects, separated by ",\n" for direct
+    // embedding in a JSON array.
+    iree_string_builder_t json;
+    // Number of objects in json.
+    iree_host_size_t count;
+  } annotation_edits;
+
   // Structured diagnostic JSON objects emitted through the shared
   // loom_diagnostic_json_write_object path, separated by ",\n". This is ready
   // to embed in a JSON array while preserving the full parser/verifier

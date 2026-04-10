@@ -37,6 +37,14 @@
 //         "detail": "",
 //         "diff": null,
 //         "update_edit": null,
+//         "annotation_edits": [
+//           {
+//             "kind": "insert_diagnostic_annotations",
+//             "range": {"start_byte": 18, "end_byte": 18},
+//             "target_line": 2,
+//             "text": "// ERROR@+1: PARSE/006\n"
+//           }
+//         ],
 //         "input_range": {"start_byte": 18, "end_byte": 42},
 //         "expected_separator_range": null,
 //         "expected_range": null,

@@ -288,6 +288,17 @@ static iree_status_t loom_check_json_write_case(
   IREE_RETURN_IF_ERROR(loom_check_json_write_update_edit(result, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
 
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      stream, "      \"annotation_edits\": ["));
+  if (result->annotation_edits.count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "\n        "));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(
+        stream, iree_string_builder_view(&result->annotation_edits.json)));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "\n      "));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "],\n"));
+
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "      \"input_range\": "));
   IREE_RETURN_IF_ERROR(
