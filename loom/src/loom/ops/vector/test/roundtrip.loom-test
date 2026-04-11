@@ -60,6 +60,18 @@ func.def @casts(%h: vector<8xf16>, %f: vector<8xf32>, %i8: vector<8xi8>, %i32: v
 
 // ====
 
+// Bitfield ops make packed register interpretation explicit.
+func.def @bitfields(%bytes: vector<16xi8>, %zero: vector<16xi8>) {
+  %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>
+  %hi = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<16xi8> -> vector<16xi32>
+  %packed_lo = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
+  %packed = vector.bitfield.insert %hi into %packed_lo {offset = 4, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
+  test.use %packed : vector<16xi8>
+  func.return
+}
+
+// ====
+
 // Reductions consume a vector input and scalar accumulator/result of the same element type.
 func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32) -> (f32, i32) {
   %sum = vector.reduce<addf> %v, %zero : vector<16xf32> -> f32

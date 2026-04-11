@@ -165,3 +165,33 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
         "vector.atomic.rmw.mask",
     ):
         assert "Pure" not in {trait.name for trait in ops[name].traits}
+
+
+def test_vector_bitfield_ops_are_pure_integer_register_ops() -> None:
+    ops = _op_by_name()
+
+    extractu_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.bitfield.extractu"].constraints}
+    extracts_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.bitfield.extracts"].constraints}
+    insert_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.bitfield.insert"].constraints}
+
+    assert ("HasIntegerElement", ("source",)) in extractu_constraints
+    assert ("HasIntegerElement", ("result",)) in extractu_constraints
+    assert ("SameShape", ("source", "result")) in extractu_constraints
+    assert ("HasIntegerElement", ("source",)) in extracts_constraints
+    assert ("HasIntegerElement", ("result",)) in extracts_constraints
+    assert ("SameShape", ("source", "result")) in extracts_constraints
+
+    assert ("HasIntegerElement", ("field",)) in insert_constraints
+    assert ("HasIntegerElement", ("base",)) in insert_constraints
+    assert ("HasIntegerElement", ("result",)) in insert_constraints
+    assert ("SameShape", ("field", "base", "result")) in insert_constraints
+    assert ("SameType", ("base", "result")) in insert_constraints
+
+    for name in (
+        "vector.bitfield.extractu",
+        "vector.bitfield.extracts",
+        "vector.bitfield.insert",
+    ):
+        trait_names = {trait.name for trait in ops[name].traits}
+        assert "Pure" in trait_names
+        assert "Elementwise" in trait_names

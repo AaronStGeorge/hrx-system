@@ -714,6 +714,49 @@ class VectorBuilders:
         _operands.append(input)
         return cast(ValueRef, self._b.build("vector.bitcast", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def extractu(self, *, source: ValueRef, offset: int, width: int, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Extract and zero-extend one fixed bitfield from each integer source lane.
+
+        Example::
+            %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["offset"] = offset
+        _attributes["width"] = width
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("vector.bitfield.extractu", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def extracts(self, *, source: ValueRef, offset: int, width: int, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Extract and sign-extend one fixed bitfield from each integer source lane.
+
+        Example::
+            %signed = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<16xi8> -> vector<16xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["offset"] = offset
+        _attributes["width"] = width
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("vector.bitfield.extracts", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def bitfield_insert(self, *, field: ValueRef, base: ValueRef, offset: int, width: int, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Insert the low bits of each integer field lane into a fixed bitfield of each integer base lane.
+
+        Example::
+            %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["offset"] = offset
+        _attributes["width"] = width
+        _operands.append(field)
+        _operands.append(base)
+        return cast(ValueRef, self._b.build("vector.bitfield.insert", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def reduce(self, *, kind: str, input: ValueRef, init: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Reduce all lanes of a vector into a scalar accumulator/result.
 

@@ -1270,6 +1270,114 @@ iree_status_t loom_vector_bitcast_verify(const loom_module_t* module,
       IREE_SV("same element bitwidth as input"));
 }
 
+static iree_status_t loom_vector_verify_bitfield_range(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, int64_t offset,
+    int64_t width, int32_t storage_width) {
+  if (offset < 0) {
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("offset"), offset,
+        IREE_SV("non-negative bit offset"));
+  }
+  if (width <= 0) {
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("width"), width,
+        IREE_SV("positive bitfield width"));
+  }
+  if (storage_width <= 0) return iree_ok_status();
+  if (offset > storage_width || width > storage_width - offset) {
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("width"), width,
+        IREE_SV("bitfield range within storage element width"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_verify_bitfield_extract(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_value_id_t source_value,
+    loom_value_id_t result_value, int64_t offset, int64_t width) {
+  loom_type_t source_type = loom_module_value_type(module, source_value);
+  loom_type_t result_type = loom_module_value_type(module, result_value);
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(result_type)) {
+    return iree_ok_status();
+  }
+
+  loom_scalar_type_t source_element_type = loom_type_element_type(source_type);
+  loom_scalar_type_t result_element_type = loom_type_element_type(result_type);
+  if (!loom_scalar_type_is_integer(source_element_type) ||
+      !loom_scalar_type_is_integer(result_element_type)) {
+    return iree_ok_status();
+  }
+
+  int32_t source_width = loom_scalar_type_bitwidth(source_element_type);
+  IREE_RETURN_IF_ERROR(loom_vector_verify_bitfield_range(emitter, op, offset,
+                                                         width, source_width));
+
+  int32_t result_width = loom_scalar_type_bitwidth(result_element_type);
+  if (result_width > 0 && width > result_width) {
+    return loom_vector_emit_result_constraint(
+        emitter, op, IREE_SV("result"), result_type,
+        IREE_SV("integer element type at least bitfield width"));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_bitfield_extractu_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_vector_verify_bitfield_extract(
+      module, op, emitter, loom_vector_bitfield_extractu_source(op),
+      loom_vector_bitfield_extractu_result(op),
+      loom_vector_bitfield_extractu_offset(op),
+      loom_vector_bitfield_extractu_width(op));
+}
+
+iree_status_t loom_vector_bitfield_extracts_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_vector_verify_bitfield_extract(
+      module, op, emitter, loom_vector_bitfield_extracts_source(op),
+      loom_vector_bitfield_extracts_result(op),
+      loom_vector_bitfield_extracts_offset(op),
+      loom_vector_bitfield_extracts_width(op));
+}
+
+iree_status_t loom_vector_bitfield_insert_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t field_type =
+      loom_module_value_type(module, loom_vector_bitfield_insert_field(op));
+  loom_type_t base_type =
+      loom_module_value_type(module, loom_vector_bitfield_insert_base(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_bitfield_insert_result(op));
+  if (!loom_type_is_vector(field_type) || !loom_type_is_vector(base_type) ||
+      !loom_type_is_vector(result_type)) {
+    return iree_ok_status();
+  }
+
+  loom_scalar_type_t field_element_type = loom_type_element_type(field_type);
+  loom_scalar_type_t base_element_type = loom_type_element_type(base_type);
+  if (!loom_scalar_type_is_integer(field_element_type) ||
+      !loom_scalar_type_is_integer(base_element_type)) {
+    return iree_ok_status();
+  }
+
+  int64_t offset = loom_vector_bitfield_insert_offset(op);
+  int64_t width = loom_vector_bitfield_insert_width(op);
+  int32_t base_width = loom_scalar_type_bitwidth(base_element_type);
+  IREE_RETURN_IF_ERROR(loom_vector_verify_bitfield_range(emitter, op, offset,
+                                                         width, base_width));
+
+  int32_t field_width = loom_scalar_type_bitwidth(field_element_type);
+  if (field_width > 0 && width > field_width) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("field"), field_type,
+        IREE_SV("integer element type at least bitfield width"));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_vector_reduce_verify(const loom_module_t* module,
                                         const loom_op_t* op,
                                         iree_diagnostic_emitter_t emitter) {

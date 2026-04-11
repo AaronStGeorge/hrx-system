@@ -1465,6 +1465,119 @@ vector_bitcast = Op(
 
 
 # ============================================================================
+# Bitfield packing
+# ============================================================================
+
+
+def _bitfield_attrs() -> list[AttrDef]:
+    return [
+        AttrDef(
+            "offset",
+            ATTR_TYPE_I64,
+            doc="Least-significant bit position of the field within each source lane.",
+        ),
+        AttrDef(
+            "width",
+            ATTR_TYPE_I64,
+            doc="Number of bits in the field extracted or inserted in each lane.",
+        ),
+    ]
+
+
+vector_bitfield_extractu = Op(
+    "vector.bitfield.extractu",
+    group=vector_ops,
+    doc="Extract and zero-extend one fixed bitfield from each integer source lane.",
+    operands=[Operand("source", VECTOR)],
+    results=[Result("result", VECTOR)],
+    attrs=_bitfield_attrs(),
+    constraints=[
+        HasIntegerElement("source"),
+        HasIntegerElement("result"),
+        SameKind("source", "result"),
+        SameShape("source", "result"),
+    ],
+    verify="loom_vector_bitfield_extractu_verify",
+    traits=[PURE, ELEMENTWISE],
+    format=[
+        Ref("source"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>",
+    ],
+)
+
+vector_bitfield_extracts = Op(
+    "vector.bitfield.extracts",
+    group=vector_ops,
+    doc="Extract and sign-extend one fixed bitfield from each integer source lane.",
+    operands=[Operand("source", VECTOR)],
+    results=[Result("result", VECTOR)],
+    attrs=_bitfield_attrs(),
+    constraints=[
+        HasIntegerElement("source"),
+        HasIntegerElement("result"),
+        SameKind("source", "result"),
+        SameShape("source", "result"),
+    ],
+    verify="loom_vector_bitfield_extracts_verify",
+    traits=[PURE, ELEMENTWISE],
+    format=[
+        Ref("source"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%signed = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<16xi8> -> vector<16xi32>",
+    ],
+)
+
+vector_bitfield_insert = Op(
+    "vector.bitfield.insert",
+    group=vector_ops,
+    doc="Insert the low bits of each integer field lane into a fixed bitfield of each integer base lane.",
+    operands=[
+        Operand("field", VECTOR, doc="Integer field values. Only the low `width` bits are inserted."),
+        Operand("base", VECTOR, doc="Integer base lanes whose target bitfield is replaced."),
+    ],
+    results=[Result("result", VECTOR)],
+    attrs=_bitfield_attrs(),
+    constraints=[
+        HasIntegerElement("field"),
+        HasIntegerElement("base"),
+        HasIntegerElement("result"),
+        SameShape("field", "base", "result"),
+        SameType("base", "result"),
+    ],
+    verify="loom_vector_bitfield_insert_verify",
+    traits=[PURE, ELEMENTWISE],
+    format=[
+        Ref("field"),
+        kw("into"),
+        Ref("base"),
+        AttrDict(),
+        COLON,
+        TypeOf("field"),
+        COMMA,
+        TypeOf("base"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>",
+    ],
+)
+
+
+# ============================================================================
 # Reductions
 # ============================================================================
 
@@ -1546,5 +1659,8 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_fptosi,
     vector_fptoui,
     vector_bitcast,
+    vector_bitfield_extractu,
+    vector_bitfield_extracts,
+    vector_bitfield_insert,
     vector_reduce,
 )

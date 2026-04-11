@@ -472,6 +472,60 @@ func.def @bitcast_width_mismatch(%v: vector<4xf32>) {
 
 // ====
 
+// Bitfield extraction requires positive field widths.
+func.def @bitfield_extract_zero_width(%v: vector<4xi8>) {
+  // ERROR@+1: STRUCTURE/014 "width" "0" "positive bitfield width"
+  %r = vector.bitfield.extractu %v {offset = 0, width = 0} : vector<4xi8> -> vector<4xi32>
+  func.return
+}
+
+// ====
+
+// Bitfield offsets are least-significant bit positions and cannot be negative.
+func.def @bitfield_extract_negative_offset(%v: vector<4xi8>) {
+  // ERROR@+1: STRUCTURE/014 "offset" "-1" "non-negative bit offset"
+  %r = vector.bitfield.extractu %v {offset = -1, width = 4} : vector<4xi8> -> vector<4xi32>
+  func.return
+}
+
+// ====
+
+// Bitfield ranges must fit inside each source lane.
+func.def @bitfield_extract_range_overflow(%v: vector<4xi8>) {
+  // ERROR@+1: STRUCTURE/014 "width" "4" "bitfield range within storage element width"
+  %r = vector.bitfield.extracts %v {offset = 6, width = 4} : vector<4xi8> -> vector<4xi32>
+  func.return
+}
+
+// ====
+
+// Extract result lanes must be wide enough to hold the selected field.
+func.def @bitfield_extract_result_too_narrow(%v: vector<4xi8>) {
+  // ERROR@+1: TYPE/004 "integer element type at least bitfield width"
+  %r = vector.bitfield.extractu %v {offset = 0, width = 4} : vector<4xi8> -> vector<4xi1>
+  func.return
+}
+
+// ====
+
+// Insert source field lanes must be wide enough to provide the selected bits.
+func.def @bitfield_insert_field_too_narrow(%field: vector<4xi1>, %base: vector<4xi8>) {
+  // ERROR@+1: TYPE/003 "integer element type at least bitfield width"
+  %r = vector.bitfield.insert %field into %base {offset = 0, width = 4} : vector<4xi1>, vector<4xi8> -> vector<4xi8>
+  func.return
+}
+
+// ====
+
+// Insert ranges must fit inside each base lane.
+func.def @bitfield_insert_range_overflow(%field: vector<4xi32>, %base: vector<4xi8>) {
+  // ERROR@+1: STRUCTURE/014 "width" "4" "bitfield range within storage element width"
+  %r = vector.bitfield.insert %field into %base {offset = 6, width = 4} : vector<4xi32>, vector<4xi8> -> vector<4xi8>
+  func.return
+}
+
+// ====
+
 // Reduce template parameters are tied to the vector element family.
 func.def @reduce_kind_mismatch(%v: vector<4xi32>, %zero: i32) {
   // ERROR@+1: TYPE/003 "floating-point element type for reduce kind"

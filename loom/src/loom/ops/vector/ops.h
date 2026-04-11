@@ -61,8 +61,11 @@ enum {
   LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 40),
   LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 41),
   LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 42),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 43),
-  LOOM_OP_VECTOR_COUNT_ = 44,
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 43),
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 44),
+  LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 45),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 46),
+  LOOM_OP_VECTOR_COUNT_ = 47,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -985,6 +988,68 @@ iree_status_t loom_vector_bitcast_build(
     loom_location_id_t location, loom_op_t** out_op);
 extern const loom_op_vtable_t loom_vector_bitcast_vtable;
 iree_status_t loom_vector_bitcast_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_BITFIELD_EXTRACTU: Extract and zero-extend one fixed bitfield from each integer source lane.
+// %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>
+LOOM_DEFINE_ISA(loom_vector_bitfield_extractu_isa, LOOM_OP_VECTOR_BITFIELD_EXTRACTU)
+LOOM_DEFINE_OPERAND(loom_vector_bitfield_extractu_source, 0)
+LOOM_DEFINE_RESULT(loom_vector_bitfield_extractu_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitfield_extractu_offset, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitfield_extractu_width, 1)
+iree_status_t loom_vector_bitfield_extractu_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    int64_t offset,
+    int64_t width,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_bitfield_extractu_vtable;
+iree_status_t loom_vector_bitfield_extractu_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_BITFIELD_EXTRACTS: Extract and sign-extend one fixed bitfield from each integer source lane.
+// %signed = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<16xi8> -> vector<16xi32>
+LOOM_DEFINE_ISA(loom_vector_bitfield_extracts_isa, LOOM_OP_VECTOR_BITFIELD_EXTRACTS)
+LOOM_DEFINE_OPERAND(loom_vector_bitfield_extracts_source, 0)
+LOOM_DEFINE_RESULT(loom_vector_bitfield_extracts_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitfield_extracts_offset, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitfield_extracts_width, 1)
+iree_status_t loom_vector_bitfield_extracts_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    int64_t offset,
+    int64_t width,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_bitfield_extracts_vtable;
+iree_status_t loom_vector_bitfield_extracts_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_BITFIELD_INSERT: Insert the low bits of each integer field lane into a fixed bitfield of each integer base lane.
+// %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
+LOOM_DEFINE_ISA(loom_vector_bitfield_insert_isa, LOOM_OP_VECTOR_BITFIELD_INSERT)
+LOOM_DEFINE_OPERAND(loom_vector_bitfield_insert_field, 0)
+LOOM_DEFINE_OPERAND(loom_vector_bitfield_insert_base, 1)
+LOOM_DEFINE_RESULT(loom_vector_bitfield_insert_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitfield_insert_offset, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitfield_insert_width, 1)
+iree_status_t loom_vector_bitfield_insert_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t field,
+    loom_may_consume loom_value_id_t base,
+    int64_t offset,
+    int64_t width,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_bitfield_insert_vtable;
+iree_status_t loom_vector_bitfield_insert_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
