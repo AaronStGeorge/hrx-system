@@ -554,6 +554,18 @@ static iree_status_t loom_vector_verify_memory_access(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_verify_rank_one_vector(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t vector_name, bool vector_is_result,
+    loom_type_t vector_type) {
+  if (!loom_type_is_vector(vector_type) || loom_type_rank(vector_type) == 1) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_field_constraint(emitter, op, vector_is_result,
+                                           vector_name, vector_type,
+                                           IREE_SV("rank-1 vector"));
+}
+
 static iree_status_t loom_vector_verify_gather_scatter_access(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     loom_type_t view_type, loom_type_t offsets_type,
@@ -752,6 +764,36 @@ iree_status_t loom_vector_store_mask_verify(const loom_module_t* module,
       module, emitter, op, IREE_SV("value"), /*vector_is_result=*/false,
       view_type, value_type, loom_vector_store_mask_static_indices(op),
       loom_vector_store_mask_indices(op).count);
+}
+
+iree_status_t loom_vector_load_expand_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_vector_load_expand_view(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_load_expand_result(op));
+  IREE_RETURN_IF_ERROR(loom_vector_verify_rank_one_vector(
+      emitter, op, IREE_SV("result"), /*vector_is_result=*/true, result_type));
+  return loom_vector_verify_memory_access(
+      module, emitter, op, IREE_SV("result"), /*vector_is_result=*/true,
+      view_type, result_type, loom_vector_load_expand_static_indices(op),
+      loom_vector_load_expand_indices(op).count);
+}
+
+iree_status_t loom_vector_store_compress_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_vector_store_compress_view(op));
+  loom_type_t value_type =
+      loom_module_value_type(module, loom_vector_store_compress_value(op));
+  IREE_RETURN_IF_ERROR(loom_vector_verify_rank_one_vector(
+      emitter, op, IREE_SV("value"), /*vector_is_result=*/false, value_type));
+  return loom_vector_verify_memory_access(
+      module, emitter, op, IREE_SV("value"), /*vector_is_result=*/false,
+      view_type, value_type, loom_vector_store_compress_static_indices(op),
+      loom_vector_store_compress_indices(op).count);
 }
 
 iree_status_t loom_vector_gather_verify(const loom_module_t* module,

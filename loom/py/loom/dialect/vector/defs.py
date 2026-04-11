@@ -704,6 +704,96 @@ vector_store_mask = Op(
     ],
 )
 
+vector_load_expand = Op(
+    "vector.load.expand",
+    group=vector_ops,
+    doc=("Rank-1 masked expand load from consecutive view elements; active lanes consume memory in increasing lane order and inactive lanes take the passthrough value."),
+    operands=[
+        Operand("view", VIEW, doc="Typed source view."),
+        Operand("mask", VECTOR, doc="i1 rank-1 vector mask selecting loaded lanes."),
+        Operand("passthrough", VECTOR, doc="Value used for inactive lanes."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    results=[Result("result", VECTOR, doc="Expanded loaded vector value.")],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[
+        HasI1Element("mask"),
+        SameElementType("view", "passthrough", "result"),
+        SameShape("mask", "passthrough", "result"),
+        SameType("passthrough", "result"),
+    ],
+    effects=[Reads("view")],
+    verify="loom_vector_load_expand_verify",
+    format=[
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        COMMA,
+        Ref("mask"),
+        COMMA,
+        Ref("passthrough"),
+        COLON,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("mask"),
+        COMMA,
+        TypeOf("passthrough"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>",
+    ],
+)
+
+vector_store_compress = Op(
+    "vector.store.compress",
+    group=vector_ops,
+    doc=("Rank-1 masked compress store to consecutive view elements; active lanes produce memory in increasing lane order and inactive lanes do not write."),
+    operands=[
+        Operand("value", VECTOR, doc="Rank-1 vector value to store."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("mask", VECTOR, doc="i1 rank-1 vector mask selecting stored lanes."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[
+        HasI1Element("mask"),
+        SameElementType("value", "view"),
+        SameShape("mask", "value"),
+    ],
+    effects=[Writes("view")],
+    verify="loom_vector_store_compress_verify",
+    format=[
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        COMMA,
+        Ref("mask"),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("mask"),
+    ],
+    examples=[
+        "vector.store.compress %v, %view[%row, %col], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi1>",
+    ],
+)
+
 vector_gather = Op(
     "vector.gather",
     group=vector_ops,
@@ -1427,6 +1517,8 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_store,
     vector_load_mask,
     vector_store_mask,
+    vector_load_expand,
+    vector_store_compress,
     vector_gather,
     vector_scatter,
     vector_gather_mask,

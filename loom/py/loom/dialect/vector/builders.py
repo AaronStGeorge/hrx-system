@@ -259,6 +259,52 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.store.mask", _operands, attributes=_attributes, regions=_regions)
 
+    def expand(self, *, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef, passthrough: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Rank-1 masked expand load from consecutive view elements; active lanes consume memory in increasing lane order and inactive lanes take the passthrough value.
+
+        Example::
+            %v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(view)
+        _operands.append(mask)
+        _operands.append(passthrough)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("vector.load.expand", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def compress(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef) -> None:
+        """Rank-1 masked compress store to consecutive view elements; active lanes produce memory in increasing lane order and inactive lanes do not write.
+
+        Example::
+            vector.store.compress %v, %view[%row, %col], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi1>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        _operands.append(view)
+        _operands.append(mask)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("vector.store.compress", _operands, attributes=_attributes, regions=_regions)
+
     def gather(self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Gather a vector from per-lane signed element offsets relative to a full-rank view origin.
 

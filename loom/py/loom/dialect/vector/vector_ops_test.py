@@ -127,6 +127,10 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
     assert ops["vector.store"].effects[0].kind == EffectKind.WRITE
     assert ops["vector.store.mask"].effects[0].operand == "view"
     assert ops["vector.store.mask"].effects[0].kind == EffectKind.WRITE
+    assert ops["vector.load.expand"].effects[0].operand == "view"
+    assert ops["vector.load.expand"].effects[0].kind == EffectKind.READ
+    assert ops["vector.store.compress"].effects[0].operand == "view"
+    assert ops["vector.store.compress"].effects[0].kind == EffectKind.WRITE
     assert ops["vector.gather"].effects[0].operand == "view"
     assert ops["vector.gather"].effects[0].kind == EffectKind.READ
     assert ops["vector.gather.mask"].effects[0].operand == "view"
@@ -149,6 +153,8 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
         "vector.load.mask",
         "vector.store",
         "vector.store.mask",
+        "vector.load.expand",
+        "vector.store.compress",
         "vector.gather",
         "vector.gather.mask",
         "vector.scatter",

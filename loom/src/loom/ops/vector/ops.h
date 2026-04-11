@@ -32,35 +32,37 @@ enum {
   LOOM_OP_VECTOR_STORE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 11),
   LOOM_OP_VECTOR_LOAD_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 12),
   LOOM_OP_VECTOR_STORE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 13),
-  LOOM_OP_VECTOR_GATHER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 14),
-  LOOM_OP_VECTOR_SCATTER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 15),
-  LOOM_OP_VECTOR_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 16),
-  LOOM_OP_VECTOR_SCATTER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 17),
-  LOOM_OP_VECTOR_ATOMIC_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 18),
-  LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 19),
-  LOOM_OP_VECTOR_ATOMIC_RMW = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 20),
-  LOOM_OP_VECTOR_ATOMIC_RMW_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 21),
-  LOOM_OP_VECTOR_SELECT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 22),
-  LOOM_OP_VECTOR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 23),
-  LOOM_OP_VECTOR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 24),
-  LOOM_OP_VECTOR_ADDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 25),
-  LOOM_OP_VECTOR_MULF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 26),
-  LOOM_OP_VECTOR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 27),
-  LOOM_OP_VECTOR_ADDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 28),
-  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 29),
-  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 30),
-  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 31),
-  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 32),
-  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 33),
-  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 34),
-  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 35),
-  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 36),
-  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 37),
-  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 38),
-  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 39),
-  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 40),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 41),
-  LOOM_OP_VECTOR_COUNT_ = 42,
+  LOOM_OP_VECTOR_LOAD_EXPAND = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 14),
+  LOOM_OP_VECTOR_STORE_COMPRESS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 15),
+  LOOM_OP_VECTOR_GATHER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 16),
+  LOOM_OP_VECTOR_SCATTER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 17),
+  LOOM_OP_VECTOR_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 18),
+  LOOM_OP_VECTOR_SCATTER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 19),
+  LOOM_OP_VECTOR_ATOMIC_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 20),
+  LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 21),
+  LOOM_OP_VECTOR_ATOMIC_RMW = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 22),
+  LOOM_OP_VECTOR_ATOMIC_RMW_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 23),
+  LOOM_OP_VECTOR_SELECT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 24),
+  LOOM_OP_VECTOR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 25),
+  LOOM_OP_VECTOR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 26),
+  LOOM_OP_VECTOR_ADDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 27),
+  LOOM_OP_VECTOR_MULF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 28),
+  LOOM_OP_VECTOR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 29),
+  LOOM_OP_VECTOR_ADDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 30),
+  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 31),
+  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 32),
+  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 33),
+  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 34),
+  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 35),
+  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 36),
+  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 37),
+  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 38),
+  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 39),
+  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 40),
+  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 41),
+  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 42),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 43),
+  LOOM_OP_VECTOR_COUNT_ = 44,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -441,6 +443,56 @@ iree_status_t loom_vector_store_mask_build(
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_vector_store_mask_vtable;
 iree_status_t loom_vector_store_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_LOAD_EXPAND: Rank-1 masked expand load from consecutive view elements; active lanes consume memory in increasing lane order and inactive lanes take the passthrough value.
+// %v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_load_expand_isa, LOOM_OP_VECTOR_LOAD_EXPAND)
+LOOM_DEFINE_OPERAND(loom_vector_load_expand_view, 0)
+LOOM_DEFINE_OPERAND(loom_vector_load_expand_mask, 1)
+LOOM_DEFINE_OPERAND(loom_vector_load_expand_passthrough, 2)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_load_expand_indices, 3)
+LOOM_DEFINE_RESULT(loom_vector_load_expand_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_expand_static_indices, 0)
+iree_status_t loom_vector_load_expand_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_may_consume loom_value_id_t mask,
+    loom_may_consume loom_value_id_t passthrough,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_load_expand_vtable;
+iree_status_t loom_vector_load_expand_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_STORE_COMPRESS: Rank-1 masked compress store to consecutive view elements; active lanes produce memory in increasing lane order and inactive lanes do not write.
+// vector.store.compress %v, %view[%row, %col], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi1>
+LOOM_DEFINE_ISA(loom_vector_store_compress_isa, LOOM_OP_VECTOR_STORE_COMPRESS)
+LOOM_DEFINE_OPERAND(loom_vector_store_compress_value, 0)
+LOOM_DEFINE_OPERAND(loom_vector_store_compress_view, 1)
+LOOM_DEFINE_OPERAND(loom_vector_store_compress_mask, 2)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_store_compress_indices, 3)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_compress_static_indices, 0)
+iree_status_t loom_vector_store_compress_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_value_id_t mask,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_store_compress_vtable;
+iree_status_t loom_vector_store_compress_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
