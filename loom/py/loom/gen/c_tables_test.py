@@ -6,7 +6,7 @@
 
 import pytest
 
-from loom.assembly import Attr, AttrDict
+from loom.assembly import Attr, AttrDict, Ref, ResultType
 from loom.dsl import (
     INTEGER,
     AttrDef,
@@ -15,6 +15,7 @@ from loom.dsl import (
     EnumDef,
     Op,
     Operand,
+    Result,
     SameType,
     TypeConstraint,
 )
@@ -84,6 +85,28 @@ def test_generate_builders_keep_count_guard_for_optional_aggregate_attrs() -> No
     assert "loom_test_attrs_build_flags_t build_flags" not in builders_c
     assert "iree_any_bit_set(build_flags" not in builders_c
     assert "dict.count > 0" in builders_c
+
+
+def test_generate_builders_preserve_named_operands_for_non_binary_shapes() -> None:
+    op = Op(
+        "test.lookup",
+        group=Dialect("test"),
+        operands=[
+            Operand("table", INTEGER),
+            Operand("indices", INTEGER),
+        ],
+        results=[Result("result", INTEGER)],
+        format=[Ref("table"), Ref("indices"), ResultType("result")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+
+    assert "loom_value_id_t table" in ops_h
+    assert "loom_value_id_t indices" in ops_h
+    assert "LOOM_DEFINE_BINARY_OP_BUILDER" not in builders_c
+    assert "loom_op_operands(*out_op)[0] = table;" in builders_c
+    assert "loom_op_operands(*out_op)[1] = indices;" in builders_c
 
 
 def test_inline_attr_dict_uses_declared_attrs() -> None:

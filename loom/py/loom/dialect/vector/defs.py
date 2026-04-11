@@ -544,6 +544,41 @@ vector_shuffle = Op(
 )
 
 
+vector_table_lookup = Op(
+    "vector.table.lookup",
+    group=vector_ops,
+    doc="Select table vector lanes using explicit integer index lanes; every index lane must be within the table extent.",
+    operands=[
+        Operand("table", VECTOR, doc="Rank-1 register table containing selectable lane values."),
+        Operand("indices", VECTOR, doc="Index vector selecting one table lane for each result lane."),
+    ],
+    results=[Result("result", VECTOR)],
+    constraints=[
+        SameElementType("table", "result"),
+        SameShape("indices", "result"),
+    ],
+    verify="loom_vector_table_lookup_verify",
+    traits=[PURE],
+    format=[
+        Ref("table"),
+        GLUE,
+        LBRACKET,
+        Ref("indices"),
+        RBRACKET,
+        COLON,
+        TypeOf("table"),
+        COMMA,
+        TypeOf("indices"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%values = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<32xi8> -> vector<32xf16>",
+        "%values = vector.table.lookup %grid[%codes] : vector<16xf32>, vector<4x8xi8> -> vector<4x8xf32>",
+    ],
+)
+
+
 # ============================================================================
 # Memory
 # ============================================================================
@@ -1626,6 +1661,7 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_concat,
     vector_transpose,
     vector_shuffle,
+    vector_table_lookup,
     vector_load,
     vector_store,
     vector_load_mask,

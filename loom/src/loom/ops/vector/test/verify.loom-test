@@ -445,6 +445,64 @@ func.def @shuffle_dynamic_shape(%n: index, %v: vector<[%n]xf32>) {
 
 // ====
 
+// Register table lookup uses a rank-1 table vector.
+func.def @table_lookup_table_rank_mismatch(%table: vector<2x2xf32>, %indices: vector<4xi8>) {
+  // ERROR@+1: TYPE/003 "table" "vector<...>" "rank-1 vector"
+  %r = vector.table.lookup %table[%indices] : vector<2x2xf32>, vector<4xi8> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
+// Lookup index lanes are explicit index/non-i1 integer lanes, not masks.
+func.def @table_lookup_indices_i1(%table: vector<4xf32>, %indices: vector<4xi1>) {
+  // ERROR@+1: TYPE/003 "indices" "vector<...>" "vector with index or non-i1 integer elements"
+  %r = vector.table.lookup %table[%indices] : vector<4xf32>, vector<4xi1> -> vector<4xf32>
+  func.return
+}
+
+// ====
+
+// Lookup result lanes follow the index vector shape.
+func.def @table_lookup_shape_mismatch(%table: vector<4xf32>, %indices: vector<4xi8>) {
+  // ERROR@+1: SHAPE/002
+  %r = vector.table.lookup %table[%indices] : vector<4xf32>, vector<4xi8> -> vector<8xf32>
+  func.return
+}
+
+// ====
+
+// Lookup result element type follows the table element type.
+func.def @table_lookup_element_mismatch(%table: vector<4xf32>, %indices: vector<4xi8>) {
+  // ERROR@+1: TYPE/002
+  %r = vector.table.lookup %table[%indices] : vector<4xf32>, vector<4xi8> -> vector<4xi32>
+  func.return
+}
+
+// ====
+
+// Splat constant indices are rejected when statically outside the table range.
+func.def @table_lookup_static_index_out_of_bounds() {
+  %table = vector.constant 0.0 : vector<4xf32>
+  %indices = vector.constant 4 : vector<8xi8>
+  // ERROR@+1: SUBRANGE/004
+  %r = vector.table.lookup %table[%indices] : vector<4xf32>, vector<8xi8> -> vector<8xf32>
+  func.return
+}
+
+// ====
+
+// Negative splat constant indices are also statically invalid.
+func.def @table_lookup_static_negative_index() {
+  %table = vector.constant 0.0 : vector<4xf32>
+  %indices = vector.constant -1 : vector<8xi8>
+  // ERROR@+1: SUBRANGE/004
+  %r = vector.table.lookup %table[%indices] : vector<4xf32>, vector<8xi8> -> vector<8xf32>
+  func.return
+}
+
+// ====
+
 // Extension and truncation ops encode their width direction in the op name.
 func.def @extf_wrong_width(%v: vector<4xf32>) {
   // ERROR@+1: TYPE/004 "wider floating-point element type"

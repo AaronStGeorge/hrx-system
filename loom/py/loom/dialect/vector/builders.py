@@ -170,6 +170,19 @@ class VectorBuilders:
         _operands.append(source)
         return cast(ValueRef, self._b.build("vector.shuffle", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def lookup(self, *, table: ValueRef, indices: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Select table vector lanes using explicit integer index lanes; every index lane must be within the table extent.
+
+        Example::
+            %values = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<32xi8> -> vector<32xf16>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(table)
+        _operands.append(indices)
+        return cast(ValueRef, self._b.build("vector.table.lookup", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def load(self, *, view: ValueRef, indices: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
         """Load a vector footprint from a typed view at a full-rank logical origin.
 

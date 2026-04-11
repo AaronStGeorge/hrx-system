@@ -941,13 +941,33 @@ def _detect_builder_pattern(op: Op) -> str | None:
     non_flags = _non_flags_attrs(op)
     has_flags = _has_flags_attr(op)
     has_template_param = any(isinstance(e, TemplateParam) for e in _flatten_format(op.format))
+    operand_names = tuple(operand.name for operand in op.operands)
 
     # Binary: 2 fixed operands, 1 fixed result, no real attrs/regions.
-    if layout.fixed_operand_count == 2 and not layout.variadic_operand and layout.fixed_result_count == 1 and not layout.variadic_result and len(non_flags) == 0 and len(op.regions) == 0:
+    # Only use the generic lhs/rhs builder macro when the op uses those exact
+    # field names; otherwise the generated C API should preserve the op's
+    # semantic operand names.
+    if (
+        operand_names == ("lhs", "rhs")
+        and layout.fixed_operand_count == 2
+        and not layout.variadic_operand
+        and layout.fixed_result_count == 1
+        and not layout.variadic_result
+        and len(non_flags) == 0
+        and len(op.regions) == 0
+    ):
         return "BINARY_WITH_FLAGS" if has_flags else "BINARY"
 
     # Unary: 1 fixed operand, 1 fixed result, no real attrs/regions.
-    if layout.fixed_operand_count == 1 and not layout.variadic_operand and layout.fixed_result_count == 1 and not layout.variadic_result and len(non_flags) == 0 and len(op.regions) == 0:
+    if (
+        operand_names == ("input",)
+        and layout.fixed_operand_count == 1
+        and not layout.variadic_operand
+        and layout.fixed_result_count == 1
+        and not layout.variadic_result
+        and len(non_flags) == 0
+        and len(op.regions) == 0
+    ):
         # Distinguish cast from unary by checking for "to" keyword.
         has_to = any(isinstance(e, Keyword) and e.text == "to" for e in op.format)
         if has_to:
@@ -956,7 +976,8 @@ def _detect_builder_pattern(op: Op) -> str | None:
 
     # Comparison: 2 fixed operands, 1 fixed result, 1 enum attr, no regions.
     if (
-        layout.fixed_operand_count == 2
+        operand_names == ("lhs", "rhs")
+        and layout.fixed_operand_count == 2
         and not layout.variadic_operand
         and layout.fixed_result_count == 1
         and not layout.variadic_result

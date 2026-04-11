@@ -500,7 +500,7 @@ static bool loom_vector_find_static_memory_access_out_of_bounds(
   return false;
 }
 
-static bool loom_vector_type_has_index_or_integer_offset_element(
+static bool loom_vector_type_has_index_or_non_i1_integer_element(
     loom_type_t type) {
   if (!loom_type_is_vector(type)) return false;
   loom_scalar_type_t element_type = loom_type_element_type(type);
@@ -574,7 +574,7 @@ static iree_status_t loom_vector_verify_gather_scatter_access(
     return iree_ok_status();
   }
 
-  if (!loom_vector_type_has_index_or_integer_offset_element(offsets_type)) {
+  if (!loom_vector_type_has_index_or_non_i1_integer_element(offsets_type)) {
     return loom_vector_emit_operand_constraint(
         emitter, op, IREE_SV("offsets"), offsets_type,
         IREE_SV("vector with index or non-i1 integer elements"));
@@ -1204,6 +1204,54 @@ iree_status_t loom_vector_shuffle_verify(const loom_module_t* module,
         emitter, op, result_lane, source_lane, 1, source_lane_count);
   }
   return iree_ok_status();
+}
+
+static bool loom_vector_try_get_splat_i64_constant(const loom_module_t* module,
+                                                   loom_value_id_t value_id,
+                                                   int64_t* out_value) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) return false;
+  const loom_op_t* def_op = loom_value_def_op(value);
+  if (!def_op || !loom_vector_constant_isa(def_op)) return false;
+  loom_attribute_t attr = loom_vector_constant_value(def_op);
+  if (attr.kind != LOOM_ATTR_I64) return false;
+  *out_value = loom_attr_as_i64(attr);
+  return true;
+}
+
+iree_status_t loom_vector_table_lookup_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_value_id_t table_value = loom_vector_table_lookup_table(op);
+  loom_value_id_t indices_value = loom_vector_table_lookup_indices(op);
+  loom_type_t table_type = loom_module_value_type(module, table_value);
+  loom_type_t indices_type = loom_module_value_type(module, indices_value);
+  if (!loom_type_is_vector(table_type) || !loom_type_is_vector(indices_type)) {
+    return iree_ok_status();
+  }
+
+  if (loom_type_rank(table_type) != 1) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("table"), table_type, IREE_SV("rank-1 vector"));
+  }
+  if (!loom_vector_type_has_index_or_non_i1_integer_element(indices_type)) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("indices"), indices_type,
+        IREE_SV("vector with index or non-i1 integer elements"));
+  }
+  if (loom_type_dim_is_dynamic_at(table_type, 0)) return iree_ok_status();
+
+  int64_t table_lane_count = loom_type_dim_static_size_at(table_type, 0);
+  int64_t splat_index = 0;
+  if (!loom_vector_try_get_splat_i64_constant(module, indices_value,
+                                              &splat_index)) {
+    return iree_ok_status();
+  }
+  if (splat_index >= 0 && splat_index < table_lane_count) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_static_index_out_of_bounds(
+      emitter, op, /*axis=*/0, splat_index, table_lane_count);
 }
 
 iree_status_t loom_vector_extf_verify(const loom_module_t* module,

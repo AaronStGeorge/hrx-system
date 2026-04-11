@@ -29,9 +29,12 @@ LOOM_DEFINE_OPERAND(loom_buffer_view_buffer, 0)
 LOOM_DEFINE_OPERAND(loom_buffer_view_byte_offset, 1)
 LOOM_DEFINE_RESULT(loom_buffer_view_result, 0)
 iree_status_t loom_buffer_view_build(
-    loom_builder_t* builder, loom_value_id_t lhs,
-    loom_value_id_t rhs, loom_type_t result_type,
-    loom_location_id_t location, loom_op_t** out_op);
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t byte_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 extern const loom_op_vtable_t loom_buffer_view_vtable;
 iree_status_t loom_buffer_view_verify(
     const loom_module_t* module, const loom_op_t* op,

@@ -96,6 +96,16 @@ func.def @register_layout(%v: vector<8x16xf32>, %a: vector<4xf32>, %b: vector<4x
 
 // ====
 
+// Table lookup is a pure register lookup: rank-1 table, integer indices, and
+// result shape following the indices.
+func.def @table_lookup(%grid: vector<16xf16>, %codes: vector<32xi8>, %codes2d: vector<4x8xi8>) -> (vector<32xf16>, vector<4x8xf16>) {
+  %values = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<32xi8> -> vector<32xf16>
+  %tile = vector.table.lookup %grid[%codes2d] : vector<16xf16>, vector<4x8xi8> -> vector<4x8xf16>
+  func.return %values, %tile : vector<32xf16>, vector<4x8xf16>
+}
+
+// ====
+
 // Vector memory ops use typed views and full-rank logical origins.
 func.def @memory(%buffer: buffer, %offset: index, %row: index, %col: index, %m: index, %n: index) {
   %layout = view.layout.dense : encoding

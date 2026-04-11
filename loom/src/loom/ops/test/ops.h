@@ -448,8 +448,10 @@ LOOM_DEFINE_ISA(loom_test_read_resource_isa, LOOM_OP_TEST_READ_RESOURCE)
 LOOM_DEFINE_OPERAND(loom_test_read_resource_source, 0)
 LOOM_DEFINE_RESULT(loom_test_read_resource_result, 0)
 iree_status_t loom_test_read_resource_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_read_resource_vtable;
 
@@ -473,9 +475,12 @@ LOOM_DEFINE_OPERAND(loom_test_mutate_resource_target, 0)
 LOOM_DEFINE_OPERAND(loom_test_mutate_resource_value, 1)
 LOOM_DEFINE_RESULT(loom_test_mutate_resource_old_value, 0)
 iree_status_t loom_test_mutate_resource_build(
-    loom_builder_t* builder, loom_value_id_t lhs,
-    loom_value_id_t rhs, loom_type_t result_type,
-    loom_location_id_t location, loom_op_t** out_op);
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t target,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_mutate_resource_vtable;
 
 // LOOM_OP_TEST_ALLOC: Test allocation op. Each execution produces a distinct identity even with identical operands. Prevents CSE but allows DCE when unused.
@@ -484,8 +489,10 @@ LOOM_DEFINE_ISA(loom_test_alloc_isa, LOOM_OP_TEST_ALLOC)
 LOOM_DEFINE_OPERAND(loom_test_alloc_size, 0)
 LOOM_DEFINE_RESULT(loom_test_alloc_result, 0)
 iree_status_t loom_test_alloc_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t size,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_alloc_vtable;
 
@@ -539,8 +546,10 @@ LOOM_DEFINE_ISA(loom_test_fact_range_lo_isa, LOOM_OP_TEST_FACT_RANGE_LO)
 LOOM_DEFINE_OPERAND(loom_test_fact_range_lo_value, 0)
 LOOM_DEFINE_RESULT(loom_test_fact_range_lo_result, 0)
 iree_status_t loom_test_fact_range_lo_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_fact_range_lo_vtable;
 void loom_test_fact_range_lo_fold(
@@ -554,8 +563,10 @@ LOOM_DEFINE_ISA(loom_test_fact_range_hi_isa, LOOM_OP_TEST_FACT_RANGE_HI)
 LOOM_DEFINE_OPERAND(loom_test_fact_range_hi_value, 0)
 LOOM_DEFINE_RESULT(loom_test_fact_range_hi_result, 0)
 iree_status_t loom_test_fact_range_hi_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_fact_range_hi_vtable;
 void loom_test_fact_range_hi_fold(
@@ -569,8 +580,10 @@ LOOM_DEFINE_ISA(loom_test_fact_divisor_isa, LOOM_OP_TEST_FACT_DIVISOR)
 LOOM_DEFINE_OPERAND(loom_test_fact_divisor_value, 0)
 LOOM_DEFINE_RESULT(loom_test_fact_divisor_result, 0)
 iree_status_t loom_test_fact_divisor_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_fact_divisor_vtable;
 void loom_test_fact_divisor_fold(
@@ -584,8 +597,10 @@ LOOM_DEFINE_ISA(loom_test_fact_non_negative_isa, LOOM_OP_TEST_FACT_NON_NEGATIVE)
 LOOM_DEFINE_OPERAND(loom_test_fact_non_negative_value, 0)
 LOOM_DEFINE_RESULT(loom_test_fact_non_negative_result, 0)
 iree_status_t loom_test_fact_non_negative_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_fact_non_negative_vtable;
 void loom_test_fact_non_negative_fold(
@@ -599,8 +614,10 @@ LOOM_DEFINE_ISA(loom_test_fact_non_zero_isa, LOOM_OP_TEST_FACT_NON_ZERO)
 LOOM_DEFINE_OPERAND(loom_test_fact_non_zero_value, 0)
 LOOM_DEFINE_RESULT(loom_test_fact_non_zero_result, 0)
 iree_status_t loom_test_fact_non_zero_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_fact_non_zero_vtable;
 void loom_test_fact_non_zero_fold(
@@ -614,8 +631,10 @@ LOOM_DEFINE_ISA(loom_test_fact_positive_isa, LOOM_OP_TEST_FACT_POSITIVE)
 LOOM_DEFINE_OPERAND(loom_test_fact_positive_value, 0)
 LOOM_DEFINE_RESULT(loom_test_fact_positive_result, 0)
 iree_status_t loom_test_fact_positive_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_fact_positive_vtable;
 void loom_test_fact_positive_fold(
@@ -629,8 +648,10 @@ LOOM_DEFINE_ISA(loom_test_fact_power_of_two_isa, LOOM_OP_TEST_FACT_POWER_OF_TWO)
 LOOM_DEFINE_OPERAND(loom_test_fact_power_of_two_value, 0)
 LOOM_DEFINE_RESULT(loom_test_fact_power_of_two_result, 0)
 iree_status_t loom_test_fact_power_of_two_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_test_fact_power_of_two_vtable;
 void loom_test_fact_power_of_two_fold(

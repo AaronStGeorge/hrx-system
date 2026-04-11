@@ -167,6 +167,16 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
         assert "Pure" not in {trait.name for trait in ops[name].traits}
 
 
+def test_vector_table_lookup_is_pure_register_lookup() -> None:
+    op = _op_by_name()["vector.table.lookup"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+
+    assert ("SameElementType", ("table", "result")) in constraints
+    assert ("SameShape", ("indices", "result")) in constraints
+    assert "Pure" in {trait.name for trait in op.traits}
+    assert op.effects == ()
+
+
 def test_vector_bitfield_ops_are_pure_integer_register_ops() -> None:
     ops = _op_by_name()
 

@@ -94,8 +94,10 @@ LOOM_DEFINE_ISA(loom_pool_buffer_isa, LOOM_OP_POOL_BUFFER)
 LOOM_DEFINE_OPERAND(loom_pool_buffer_pool, 0)
 LOOM_DEFINE_RESULT(loom_pool_buffer_buffer, 0)
 iree_status_t loom_pool_buffer_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t result_type, loom_location_id_t location,
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t pool,
+    loom_type_t result_type,
+    loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_pool_buffer_vtable;
 
