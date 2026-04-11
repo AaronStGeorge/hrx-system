@@ -24,31 +24,43 @@ enum {
   LOOM_OP_VECTOR_FROM_ELEMENTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 3),
   LOOM_OP_VECTOR_EXTRACT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 4),
   LOOM_OP_VECTOR_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 5),
-  LOOM_OP_VECTOR_LOAD = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 6),
-  LOOM_OP_VECTOR_STORE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 7),
-  LOOM_OP_VECTOR_LOAD_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 8),
-  LOOM_OP_VECTOR_STORE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 9),
-  LOOM_OP_VECTOR_SELECT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 10),
-  LOOM_OP_VECTOR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 11),
-  LOOM_OP_VECTOR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 12),
-  LOOM_OP_VECTOR_ADDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 13),
-  LOOM_OP_VECTOR_MULF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 14),
-  LOOM_OP_VECTOR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 15),
-  LOOM_OP_VECTOR_ADDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 16),
-  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 17),
-  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 18),
-  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 19),
-  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 20),
-  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 21),
-  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 22),
-  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 23),
-  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 24),
-  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 25),
-  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 26),
-  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 27),
-  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 28),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 29),
-  LOOM_OP_VECTOR_COUNT_ = 30,
+  LOOM_OP_VECTOR_SLICE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 6),
+  LOOM_OP_VECTOR_CONCAT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 7),
+  LOOM_OP_VECTOR_TRANSPOSE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 8),
+  LOOM_OP_VECTOR_SHUFFLE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 9),
+  LOOM_OP_VECTOR_LOAD = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 10),
+  LOOM_OP_VECTOR_STORE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 11),
+  LOOM_OP_VECTOR_LOAD_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 12),
+  LOOM_OP_VECTOR_STORE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 13),
+  LOOM_OP_VECTOR_GATHER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 14),
+  LOOM_OP_VECTOR_SCATTER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 15),
+  LOOM_OP_VECTOR_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 16),
+  LOOM_OP_VECTOR_SCATTER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 17),
+  LOOM_OP_VECTOR_ATOMIC_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 18),
+  LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 19),
+  LOOM_OP_VECTOR_ATOMIC_RMW = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 20),
+  LOOM_OP_VECTOR_ATOMIC_RMW_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 21),
+  LOOM_OP_VECTOR_SELECT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 22),
+  LOOM_OP_VECTOR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 23),
+  LOOM_OP_VECTOR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 24),
+  LOOM_OP_VECTOR_ADDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 25),
+  LOOM_OP_VECTOR_MULF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 26),
+  LOOM_OP_VECTOR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 27),
+  LOOM_OP_VECTOR_ADDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 28),
+  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 29),
+  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 30),
+  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 31),
+  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 32),
+  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 33),
+  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 34),
+  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 35),
+  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 36),
+  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 37),
+  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 38),
+  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 39),
+  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 40),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 41),
+  LOOM_OP_VECTOR_COUNT_ = 42,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -59,6 +71,47 @@ enum {
 // Integer overflow behavior flags.
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NSW ((uint8_t)1)
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NUW ((uint8_t)2)
+
+// Read-modify-write operations supported by vector atomics.
+typedef enum loom_vector_kind_e {
+  LOOM_VECTOR_KIND_XCHGI = 0,
+  LOOM_VECTOR_KIND_XCHGF = 1,
+  LOOM_VECTOR_KIND_ADDI = 2,
+  LOOM_VECTOR_KIND_ADDF = 3,
+  LOOM_VECTOR_KIND_SUBI = 4,
+  LOOM_VECTOR_KIND_ANDI = 5,
+  LOOM_VECTOR_KIND_ORI = 6,
+  LOOM_VECTOR_KIND_XORI = 7,
+  LOOM_VECTOR_KIND_MINSI = 8,
+  LOOM_VECTOR_KIND_MAXSI = 9,
+  LOOM_VECTOR_KIND_MINUI = 10,
+  LOOM_VECTOR_KIND_MAXUI = 11,
+  LOOM_VECTOR_KIND_MINIMUMF = 12,
+  LOOM_VECTOR_KIND_MAXIMUMF = 13,
+  LOOM_VECTOR_KIND_MINNUMF = 14,
+  LOOM_VECTOR_KIND_MAXNUMF = 15,
+  LOOM_VECTOR_KIND_COUNT_ = 16,
+} loom_vector_kind_t;
+
+// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
+typedef enum loom_vector_ordering_e {
+  LOOM_VECTOR_ORDERING_RELAXED = 0,
+  LOOM_VECTOR_ORDERING_ACQUIRE = 1,
+  LOOM_VECTOR_ORDERING_RELEASE = 2,
+  LOOM_VECTOR_ORDERING_ACQ_REL = 3,
+  LOOM_VECTOR_ORDERING_SEQ_CST = 4,
+  LOOM_VECTOR_ORDERING_COUNT_ = 5,
+} loom_vector_ordering_t;
+
+// Synchronization scope for atomic memory effects.
+typedef enum loom_vector_scope_e {
+  LOOM_VECTOR_SCOPE_THREAD = 0,
+  LOOM_VECTOR_SCOPE_SUBGROUP = 1,
+  LOOM_VECTOR_SCOPE_WORKGROUP = 2,
+  LOOM_VECTOR_SCOPE_DEVICE = 3,
+  LOOM_VECTOR_SCOPE_SYSTEM = 4,
+  LOOM_VECTOR_SCOPE_COUNT_ = 5,
+} loom_vector_scope_t;
 
 // Integer comparison predicates.
 typedef enum loom_vector_cmpi_predicate_e {
@@ -218,6 +271,85 @@ iree_status_t loom_vector_insert_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
+// LOOM_OP_VECTOR_SLICE: Extract a rank-preserving contiguous register subvector at explicit offsets.
+// %tail = vector.slice %v[%i] : vector<[%n]xf32> -> vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_slice_isa, LOOM_OP_VECTOR_SLICE)
+LOOM_DEFINE_OPERAND(loom_vector_slice_source, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_slice_offsets, 1)
+LOOM_DEFINE_RESULT(loom_vector_slice_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_slice_static_offsets, 0)
+iree_status_t loom_vector_slice_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    const loom_value_id_t* offsets,
+    iree_host_size_t offsets_count,
+    const int64_t* static_offsets,
+    iree_host_size_t static_offsets_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_slice_vtable;
+iree_status_t loom_vector_slice_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_CONCAT: Concatenate same-rank vectors along one explicit result axis.
+// %wide = vector.concat<0> %a, %b : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+LOOM_DEFINE_ISA(loom_vector_concat_isa, LOOM_OP_VECTOR_CONCAT)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_concat_inputs, 0)
+LOOM_DEFINE_RESULT(loom_vector_concat_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_concat_axis, 0)
+iree_status_t loom_vector_concat_build(
+    loom_builder_t* builder,
+    int64_t axis,
+    loom_may_consume const loom_value_id_t* inputs,
+    iree_host_size_t inputs_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_concat_vtable;
+iree_status_t loom_vector_concat_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_TRANSPOSE: Reorder vector register axes using an explicit result-axis to source-axis permutation.
+// %t = vector.transpose<[1, 0]> %v : vector<4x8xf32> -> vector<8x4xf32>
+LOOM_DEFINE_ISA(loom_vector_transpose_isa, LOOM_OP_VECTOR_TRANSPOSE)
+LOOM_DEFINE_OPERAND(loom_vector_transpose_source, 0)
+LOOM_DEFINE_RESULT(loom_vector_transpose_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_transpose_permutation, 0)
+iree_status_t loom_vector_transpose_build(
+    loom_builder_t* builder,
+    const int64_t* permutation,
+    iree_host_size_t permutation_count,
+    loom_may_consume loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_transpose_vtable;
+iree_status_t loom_vector_transpose_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_SHUFFLE: Build a same-typed rank-1 vector by selecting source register lanes with a static lane map; duplicate lanes are allowed.
+// %rev = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_shuffle_isa, LOOM_OP_VECTOR_SHUFFLE)
+LOOM_DEFINE_OPERAND(loom_vector_shuffle_source, 0)
+LOOM_DEFINE_RESULT(loom_vector_shuffle_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_shuffle_source_lanes, 0)
+iree_status_t loom_vector_shuffle_build(
+    loom_builder_t* builder,
+    const int64_t* source_lanes,
+    iree_host_size_t source_lanes_count,
+    loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_shuffle_vtable;
+iree_status_t loom_vector_shuffle_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
 // LOOM_OP_VECTOR_LOAD: Load a vector footprint from a typed view at a full-rank logical origin.
 // %v = vector.load %view[%row, %col] : view<[%m]x[%n]xf32, %layout> -> vector<4x8xf32>
 LOOM_DEFINE_ISA(loom_vector_load_isa, LOOM_OP_VECTOR_LOAD)
@@ -309,6 +441,238 @@ iree_status_t loom_vector_store_mask_build(
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_vector_store_mask_vtable;
 iree_status_t loom_vector_store_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_GATHER: Gather a vector from per-lane signed element offsets relative to a full-rank view origin.
+// %v = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_gather_isa, LOOM_OP_VECTOR_GATHER)
+LOOM_DEFINE_OPERAND(loom_vector_gather_view, 0)
+LOOM_DEFINE_OPERAND(loom_vector_gather_offsets, 1)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_gather_indices, 2)
+LOOM_DEFINE_RESULT(loom_vector_gather_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_static_indices, 0)
+iree_status_t loom_vector_gather_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_may_consume loom_value_id_t offsets,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_gather_vtable;
+iree_status_t loom_vector_gather_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_SCATTER: Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin; active lane addresses must be distinct.
+// vector.scatter %v, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
+LOOM_DEFINE_ISA(loom_vector_scatter_isa, LOOM_OP_VECTOR_SCATTER)
+LOOM_DEFINE_OPERAND(loom_vector_scatter_value, 0)
+LOOM_DEFINE_OPERAND(loom_vector_scatter_view, 1)
+LOOM_DEFINE_OPERAND(loom_vector_scatter_offsets, 2)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_scatter_indices, 3)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_static_indices, 0)
+iree_status_t loom_vector_scatter_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_value_id_t offsets,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_scatter_vtable;
+iree_status_t loom_vector_scatter_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_GATHER_MASK: Masked vector gather from per-lane signed element offsets; masked-off lanes take the passthrough value.
+// %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_gather_mask_isa, LOOM_OP_VECTOR_GATHER_MASK)
+LOOM_DEFINE_OPERAND(loom_vector_gather_mask_view, 0)
+LOOM_DEFINE_OPERAND(loom_vector_gather_mask_offsets, 1)
+LOOM_DEFINE_OPERAND(loom_vector_gather_mask_mask, 2)
+LOOM_DEFINE_OPERAND(loom_vector_gather_mask_passthrough, 3)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_gather_mask_indices, 4)
+LOOM_DEFINE_RESULT(loom_vector_gather_mask_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_mask_static_indices, 0)
+iree_status_t loom_vector_gather_mask_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_may_consume loom_value_id_t offsets,
+    loom_may_consume loom_value_id_t mask,
+    loom_may_consume loom_value_id_t passthrough,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_gather_mask_vtable;
+iree_status_t loom_vector_gather_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_SCATTER_MASK: Masked non-atomic scatter; masked-off lanes leave memory unchanged and active lane addresses must be distinct.
+// vector.scatter.mask %v, %view[%row, %col][%offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>
+LOOM_DEFINE_ISA(loom_vector_scatter_mask_isa, LOOM_OP_VECTOR_SCATTER_MASK)
+LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_value, 0)
+LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_view, 1)
+LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_offsets, 2)
+LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_mask, 3)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_scatter_mask_indices, 4)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_mask_static_indices, 0)
+iree_status_t loom_vector_scatter_mask_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_value_id_t offsets,
+    loom_value_id_t mask,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_scatter_mask_vtable;
+iree_status_t loom_vector_scatter_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_ATOMIC_REDUCE: Atomic no-result scatter reduction/update into per-lane signed element offsets. Duplicate active lane addresses are allowed and are serialized by the atomic memory contract.
+// vector.atomic.reduce<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
+LOOM_DEFINE_ISA(loom_vector_atomic_reduce_isa, LOOM_OP_VECTOR_ATOMIC_REDUCE)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_value, 0)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_view, 1)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_offsets, 2)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_reduce_indices, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_kind, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_ordering, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_scope, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_static_indices, 3)
+iree_status_t loom_vector_atomic_reduce_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_value_id_t value,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_value_id_t offsets,
+    uint8_t ordering,
+    uint8_t scope,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_atomic_reduce_vtable;
+iree_status_t loom_vector_atomic_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK: Masked atomic no-result scatter reduction/update; masked-off lanes do not access memory.
+// vector.atomic.reduce.mask<addf> %v, %view[%row, %col][%offsets], %mask {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>
+LOOM_DEFINE_ISA(loom_vector_atomic_reduce_mask_isa, LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_value, 0)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_view, 1)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_offsets, 2)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_mask, 3)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_reduce_mask_indices, 4)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_kind, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_ordering, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_scope, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_mask_static_indices, 3)
+iree_status_t loom_vector_atomic_reduce_mask_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_value_id_t value,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_value_id_t offsets,
+    loom_value_id_t mask,
+    uint8_t ordering,
+    uint8_t scope,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_atomic_reduce_mask_vtable;
+iree_status_t loom_vector_atomic_reduce_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_ATOMIC_RMW: Atomic read-modify-write at per-lane signed element offsets, returning the old memory value for each lane.
+// %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
+LOOM_DEFINE_ISA(loom_vector_atomic_rmw_isa, LOOM_OP_VECTOR_ATOMIC_RMW)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_value, 0)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_view, 1)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_offsets, 2)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_rmw_indices, 3)
+LOOM_DEFINE_RESULT(loom_vector_atomic_rmw_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_kind, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_ordering, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_scope, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_static_indices, 3)
+iree_status_t loom_vector_atomic_rmw_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_may_consume loom_value_id_t value,
+    loom_may_consume loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_may_consume loom_value_id_t offsets,
+    uint8_t ordering,
+    uint8_t scope,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_atomic_rmw_vtable;
+iree_status_t loom_vector_atomic_rmw_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_ATOMIC_RMW_MASK: Masked atomic read-modify-write. Masked-off result lanes take the explicit passthrough value.
+// %old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_atomic_rmw_mask_isa, LOOM_OP_VECTOR_ATOMIC_RMW_MASK)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_value, 0)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_view, 1)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_offsets, 2)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_mask, 3)
+LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_passthrough, 4)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_rmw_mask_indices, 5)
+LOOM_DEFINE_RESULT(loom_vector_atomic_rmw_mask_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_kind, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_ordering, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_scope, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_mask_static_indices, 3)
+iree_status_t loom_vector_atomic_rmw_mask_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_may_consume loom_value_id_t value,
+    loom_may_consume loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_may_consume loom_value_id_t offsets,
+    loom_may_consume loom_value_id_t mask,
+    loom_may_consume loom_value_id_t passthrough,
+    uint8_t ordering,
+    uint8_t scope,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_atomic_rmw_mask_vtable;
+iree_status_t loom_vector_atomic_rmw_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

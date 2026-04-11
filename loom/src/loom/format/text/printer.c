@@ -803,6 +803,125 @@ static bool loom_print_attr_is_optional(const loom_op_vtable_t* vtable,
                           LOOM_ATTR_OPTIONAL);
 }
 
+static bool loom_print_format_element_covers_attr(
+    const loom_format_element_t* element, uint16_t attr_index) {
+  switch (element->kind) {
+    case LOOM_FORMAT_KIND_ATTR_VALUE:
+    case LOOM_FORMAT_KIND_SYMBOL_REF:
+    case LOOM_FORMAT_KIND_OP_REF:
+    case LOOM_FORMAT_KIND_TEMPLATE_PARAM:
+    case LOOM_FORMAT_KIND_PREDICATE_LIST:
+      return element->field_index == attr_index;
+    case LOOM_FORMAT_KIND_INDEX_LIST:
+      return element->data == attr_index;
+    case LOOM_FORMAT_KIND_ATTR_DICT:
+      if (iree_any_bit_set(element->data, LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS)) {
+        return false;
+      }
+      return element->field_index == attr_index;
+    default:
+      return false;
+  }
+}
+
+static bool loom_print_inline_attr_dict_attr_present(
+    const loom_op_t* op, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* inline_element, uint16_t attr_index) {
+  if (attr_index >= op->attribute_count) return false;
+  if (loom_attr_is_absent(loom_op_attrs(op)[attr_index])) return false;
+  const loom_format_element_t* elements = vtable->format_elements;
+  for (uint16_t i = 0; i < vtable->format_element_count; ++i) {
+    const loom_format_element_t* element = &elements[i];
+    if (element == inline_element) continue;
+    if (loom_print_format_element_covers_attr(element, attr_index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_print_find_next_inline_attr(
+    const loom_op_t* op, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* inline_element, bool has_previous_name,
+    iree_string_view_t previous_name, uint16_t* out_attr_index,
+    const loom_attr_descriptor_t** out_descriptor) {
+  bool found = false;
+  uint16_t best_index = 0;
+  iree_string_view_t best_name = iree_string_view_empty();
+  const loom_attr_descriptor_t* best_descriptor = NULL;
+
+  uint16_t count = iree_min(vtable->attribute_count, op->attribute_count);
+  for (uint16_t i = 0; i < count; ++i) {
+    if (!loom_print_inline_attr_dict_attr_present(op, vtable, inline_element,
+                                                  i)) {
+      continue;
+    }
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    iree_string_view_t name = loom_attr_descriptor_name(descriptor);
+    if (has_previous_name &&
+        iree_string_view_compare(name, previous_name) <= 0) {
+      continue;
+    }
+    if (found && iree_string_view_compare(name, best_name) >= 0) continue;
+    found = true;
+    best_index = i;
+    best_name = name;
+    best_descriptor = descriptor;
+  }
+
+  if (!found) return false;
+  *out_attr_index = best_index;
+  *out_descriptor = best_descriptor;
+  return true;
+}
+
+static iree_status_t loom_print_inline_attr_dict(
+    loom_print_context_t* ctx, const loom_op_t* op,
+    const loom_op_vtable_t* vtable,
+    const loom_format_element_t* inline_element) {
+  if (!vtable->attr_descriptors) return iree_ok_status();
+
+  bool has_previous_name = false;
+  iree_string_view_t previous_name = iree_string_view_empty();
+  bool wrote_dict = false;
+  for (;;) {
+    uint16_t attr_index = 0;
+    const loom_attr_descriptor_t* descriptor = NULL;
+    if (!loom_print_find_next_inline_attr(op, vtable, inline_element,
+                                          has_previous_name, previous_name,
+                                          &attr_index, &descriptor)) {
+      break;
+    }
+
+    if (!wrote_dict) {
+      IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+      wrote_dict = true;
+    } else {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
+
+    iree_host_size_t attr_start = ctx->stream->offset;
+    iree_string_view_t name = loom_attr_descriptor_name(descriptor);
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(ctx->stream, name));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, " = "));
+    IREE_RETURN_IF_ERROR(loom_print_attr(
+        ctx->stream, &loom_op_attrs(op)[attr_index], ctx->module, descriptor));
+    loom_print_report_field(
+        ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, attr_index),
+        attr_start, ctx->stream->offset);
+
+    previous_name = name;
+    has_previous_name = true;
+  }
+
+  if (wrote_dict) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+    loom_print_did_write(ctx);
+  }
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Format element walk — writes directly to stream via print context
 //===----------------------------------------------------------------------===//
@@ -1296,6 +1415,12 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         break;
       }
       case LOOM_FORMAT_KIND_ATTR_DICT: {
+        if (iree_any_bit_set(element->data,
+                             LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS)) {
+          IREE_RETURN_IF_ERROR(
+              loom_print_inline_attr_dict(ctx, op, vtable, element));
+          break;
+        }
         // AttrDict reads a LOOM_ATTR_DICT attribute at field_index and
         // emits its entries as {key = value, key = value, ...}.
         bool optional =

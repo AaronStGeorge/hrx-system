@@ -90,6 +90,23 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
     """
     layout = compute_layout(op)
     params: list[dict[str, Any]] = []
+    covered_attrs: set[str] = set()
+
+    def append_attr_param(name: str) -> None:
+        attr_def = op.attr(name)
+        type_hint = _attr_type_hint(attr_def)
+        is_optional = attr_def.optional if attr_def else False
+        params.append(
+            {
+                "name": name,
+                "kind": "attr",
+                "type_hint": type_hint,
+                "optional": is_optional,
+                "attr_def": attr_def,
+                "doc": attr_def.doc if attr_def else "",
+            }
+        )
+        covered_attrs.add(name)
 
     def walk(elements: tuple[FormatElement, ...]) -> None:
         for element in elements:
@@ -120,19 +137,7 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                     )
 
                 case Attr(field=name):
-                    attr_def = op.attr(name)
-                    type_hint = _attr_type_hint(attr_def)
-                    is_optional = attr_def.optional if attr_def else False
-                    params.append(
-                        {
-                            "name": name,
-                            "kind": "attr",
-                            "type_hint": type_hint,
-                            "optional": is_optional,
-                            "attr_def": attr_def,
-                            "doc": attr_def.doc if attr_def else "",
-                        }
-                    )
+                    append_attr_param(name)
 
                 case SymbolRef(field=name):
                     params.append(
@@ -143,6 +148,7 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             "doc": f"Symbol reference: {name}",
                         }
                     )
+                    covered_attrs.add(name)
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
                     params.append(
@@ -154,6 +160,7 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             "doc": f"Index list: {dynamic_field}",
                         }
                     )
+                    covered_attrs.add(static_field)
 
                 case BindingList(field=name, kind=binding_kind):
                     params.append(
@@ -225,34 +232,13 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             "doc": attr_def.doc if attr_def else "Instance flags.",
                         }
                     )
+                    covered_attrs.add(name)
 
                 case OpRef(field=name):
-                    attr_def = op.attr(name)
-                    params.append(
-                        {
-                            "name": name,
-                            "kind": "attr",
-                            "type_hint": "str",
-                            "optional": False,
-                            "attr_def": attr_def,
-                            "doc": f"Op kind reference: {name}",
-                        }
-                    )
+                    append_attr_param(name)
 
                 case TemplateParam(field=name):
-                    attr_def = op.attr(name)
-                    type_hint = _attr_type_hint(attr_def)
-                    is_optional = attr_def.optional if attr_def else False
-                    params.append(
-                        {
-                            "name": name,
-                            "kind": "attr",
-                            "type_hint": type_hint,
-                            "optional": is_optional,
-                            "attr_def": attr_def,
-                            "doc": attr_def.doc if attr_def else "",
-                        }
-                    )
+                    append_attr_param(name)
 
                 case PredicateList(field=name):
                     attr_def = op.attr(name)
@@ -266,22 +252,18 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             "doc": f"Predicate list: {name}",
                         }
                     )
+                    covered_attrs.add(name)
 
                 case AttrDict(field=name):
                     if name:
-                        attr_def = op.attr(name)
-                        type_hint = _attr_type_hint(attr_def)
-                        is_optional = attr_def.optional if attr_def else False
-                        params.append(
-                            {
-                                "name": name,
-                                "kind": "attr",
-                                "type_hint": type_hint,
-                                "optional": is_optional,
-                                "attr_def": attr_def,
-                                "doc": attr_def.doc if attr_def else "",
-                            }
-                        )
+                        append_attr_param(name)
+                    else:
+                        for attr_def in op.attrs:
+                            if attr_def.attr_type == "flags":
+                                continue
+                            if attr_def.name in covered_attrs:
+                                continue
+                            append_attr_param(attr_def.name)
 
                 case Keyword() | TypeOf() | TypesOf() | Glue():
                     pass  # Not parameters.

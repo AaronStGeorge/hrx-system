@@ -7,7 +7,17 @@
 import pytest
 
 from loom.assembly import Attr, AttrDict
-from loom.dsl import INTEGER, AttrDef, Dialect, Op, Operand, SameType, TypeConstraint
+from loom.dsl import (
+    INTEGER,
+    AttrDef,
+    Dialect,
+    EnumCase,
+    EnumDef,
+    Op,
+    Operand,
+    SameType,
+    TypeConstraint,
+)
 from loom.gen.c_tables import (
     TYPE_CONSTRAINT_MAP,
     generate_builders_c,
@@ -74,3 +84,27 @@ def test_generate_builders_keep_count_guard_for_optional_aggregate_attrs() -> No
     assert "loom_test_attrs_build_flags_t build_flags" not in builders_c
     assert "iree_any_bit_set(build_flags" not in builders_c
     assert "dict.count > 0" in builders_c
+
+
+def test_inline_attr_dict_uses_declared_attrs() -> None:
+    ordering = EnumDef("Ordering", [EnumCase("relaxed", 0)])
+    scope = EnumDef("Scope", [EnumCase("workgroup", 0)])
+    op = Op(
+        "test.atomic",
+        group=Dialect("test"),
+        attrs=[
+            AttrDef("ordering", "enum", enum_def=ordering),
+            AttrDef("scope", "enum", enum_def=scope),
+        ],
+        format=[AttrDict()],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS" in tables_c
+    assert "uint8_t ordering" in ops_h
+    assert "uint8_t scope" in ops_h
+    assert "loom_op_attrs(*out_op)[0] = loom_attr_enum(ordering);" in builders_c
+    assert "loom_op_attrs(*out_op)[1] = loom_attr_enum(scope);" in builders_c

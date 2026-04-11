@@ -740,6 +740,103 @@ static iree_status_t loom_parse_format_template_param(
                                           element->field_index, start_token);
 }
 
+static const loom_attr_descriptor_t* loom_parse_format_find_attr_descriptor(
+    const loom_op_vtable_t* vtable, iree_string_view_t attr_name,
+    uint8_t* out_attr_index) {
+  if (!vtable->attr_descriptors) return NULL;
+  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    if (!iree_string_view_equal(loom_attr_descriptor_name(descriptor),
+                                attr_name)) {
+      continue;
+    }
+    *out_attr_index = i;
+    return descriptor;
+  }
+  return NULL;
+}
+
+static bool loom_parse_format_parsed_attr_present(
+    const loom_parsed_op_t* parsed, uint8_t attr_index) {
+  if (attr_index >= parsed->attribute_count) return false;
+  return !loom_attr_is_absent(parsed->attributes[attr_index]);
+}
+
+static iree_status_t loom_parse_format_emit_unknown_attr_name(
+    loom_parser_t* parser, loom_token_t token) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("attribute")),
+      loom_param_string(token.text),
+  };
+  return loom_parser_emit(parser, &loom_err_parse_018, params,
+                          IREE_ARRAYSIZE(params), token);
+}
+
+static iree_status_t loom_parse_format_emit_duplicate_attr_name(
+    loom_parser_t* parser, loom_token_t token) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(token.text),
+  };
+  return loom_parser_emit(parser, &loom_err_parse_020, params,
+                          IREE_ARRAYSIZE(params), token);
+}
+
+static iree_status_t loom_parse_format_inline_attr_dict(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    loom_parsed_op_t* parsed) {
+  if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LBRACE)) {
+    return iree_ok_status();
+  }
+
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LBRACE, NULL);
+
+  uint16_t entry_count = 0;
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RBRACE) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if (entry_count > 0 &&
+        !loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+      break;
+    }
+
+    loom_token_t key_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &key_token);
+    uint8_t attr_index = 0;
+    const loom_attr_descriptor_t* descriptor =
+        loom_parse_format_find_attr_descriptor(vtable, key_token.text,
+                                               &attr_index);
+    if (!descriptor) {
+      IREE_RETURN_IF_ERROR(
+          loom_parse_format_emit_unknown_attr_name(parser, key_token));
+      loom_parser_sync_to_brace(parser);
+      return iree_ok_status();
+    }
+    if (loom_parse_format_parsed_attr_present(parsed, attr_index)) {
+      IREE_RETURN_IF_ERROR(
+          loom_parse_format_emit_duplicate_attr_name(parser, key_token));
+      loom_parser_sync_to_brace(parser);
+      return iree_ok_status();
+    }
+
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_EQUALS, NULL);
+    loom_attribute_t attr = {0};
+    uint32_t attr_errors_before = parser->error_count;
+    IREE_RETURN_IF_ERROR(loom_parse_attr_value(parser, descriptor, &attr));
+    if (parser->error_count > attr_errors_before) {
+      loom_parser_sync_to_brace(parser);
+      return iree_ok_status();
+    }
+
+    IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+        parsed, &parser->parser_arena, attr_index, attr));
+    IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+        parser, parsed, LOOM_LOCATION_FIELD_ATTRIBUTE, attr_index, key_token));
+    ++entry_count;
+  }
+
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACE, NULL);
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Format walker
 //===----------------------------------------------------------------------===//
@@ -1005,15 +1102,21 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       }
 
       case LOOM_FORMAT_KIND_ATTR_DICT: {
-        loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
-        loom_attribute_t attr = {0};
-        IREE_RETURN_IF_ERROR(loom_parse_attr_dict(parser, &attr));
-        IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
-            parsed, &parser->parser_arena, element->field_index, attr));
-        if (!loom_attr_is_absent(attr)) {
-          IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
-              parser, parsed, LOOM_LOCATION_FIELD_ATTRIBUTE,
-              element->field_index, start_token));
+        if (iree_any_bit_set(element->data,
+                             LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS)) {
+          IREE_RETURN_IF_ERROR(
+              loom_parse_format_inline_attr_dict(parser, vtable, parsed));
+        } else {
+          loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
+          loom_attribute_t attr = {0};
+          IREE_RETURN_IF_ERROR(loom_parse_attr_dict(parser, &attr));
+          IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+              parsed, &parser->parser_arena, element->field_index, attr));
+          if (!loom_attr_is_absent(attr)) {
+            IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+                parser, parsed, LOOM_LOCATION_FIELD_ATTRIBUTE,
+                element->field_index, start_token));
+          }
         }
         break;
       }

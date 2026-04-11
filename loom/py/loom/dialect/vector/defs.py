@@ -14,7 +14,11 @@ from loom.assembly import (
     ARROW,
     COLON,
     COMMA,
+    GLUE,
+    LBRACKET,
+    RBRACKET,
     Attr,
+    AttrDict,
     Flags,
     FormatElement,
     IndexList,
@@ -33,6 +37,7 @@ from loom.dsl import (
     ATTR_TYPE_ANY,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_FLAGS,
+    ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
     COMMUTATIVE,
     CONSTANT_LIKE,
@@ -56,6 +61,7 @@ from loom.dsl import (
     Op,
     Operand,
     Reads,
+    ReadWrites,
     Result,
     SameElementType,
     SameKind,
@@ -96,6 +102,53 @@ CombiningKind = EnumDef(
         EnumCase("maxnumf", 14, doc="C99 fmax-style floating-point maximum."),
     ],
     doc="Combining operations for vector reductions.",
+)
+
+AtomicKind = EnumDef(
+    "AtomicKind",
+    [
+        EnumCase("xchgi", 0, doc="Integer exchange."),
+        EnumCase("xchgf", 1, doc="Floating-point exchange."),
+        EnumCase("addi", 2, doc="Integer addition."),
+        EnumCase("addf", 3, doc="Floating-point addition."),
+        EnumCase("subi", 4, doc="Integer subtraction."),
+        EnumCase("andi", 5, doc="Bitwise AND."),
+        EnumCase("ori", 6, doc="Bitwise OR."),
+        EnumCase("xori", 7, doc="Bitwise XOR."),
+        EnumCase("minsi", 8, doc="Signed integer minimum."),
+        EnumCase("maxsi", 9, doc="Signed integer maximum."),
+        EnumCase("minui", 10, doc="Unsigned integer minimum."),
+        EnumCase("maxui", 11, doc="Unsigned integer maximum."),
+        EnumCase("minimumf", 12, doc="IEEE 754 floating-point minimum."),
+        EnumCase("maximumf", 13, doc="IEEE 754 floating-point maximum."),
+        EnumCase("minnumf", 14, doc="C99 fmin-style floating-point minimum."),
+        EnumCase("maxnumf", 15, doc="C99 fmax-style floating-point maximum."),
+    ],
+    doc="Read-modify-write operations supported by vector atomics.",
+)
+
+AtomicOrdering = EnumDef(
+    "AtomicOrdering",
+    [
+        EnumCase("relaxed", 0, doc="Atomicity without inter-address synchronization."),
+        EnumCase("acquire", 1, doc="Acquire ordering."),
+        EnumCase("release", 2, doc="Release ordering."),
+        EnumCase("acq_rel", 3, doc="Acquire and release ordering."),
+        EnumCase("seq_cst", 4, doc="Sequentially consistent ordering."),
+    ],
+    doc="Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.",
+)
+
+AtomicScope = EnumDef(
+    "AtomicScope",
+    [
+        EnumCase("thread", 0, doc="Current invocation or thread."),
+        EnumCase("subgroup", 1, doc="Current SIMD subgroup or wave."),
+        EnumCase("workgroup", 2, doc="Current workgroup or block."),
+        EnumCase("device", 3, doc="Current device."),
+        EnumCase("system", 4, doc="Whole system."),
+    ],
+    doc="Synchronization scope for atomic memory effects.",
 )
 
 FloatAssumptionFlags = EnumDef(
@@ -367,6 +420,131 @@ vector_insert = Op(
 
 
 # ============================================================================
+# Register layout
+# ============================================================================
+
+vector_slice = Op(
+    "vector.slice",
+    group=vector_ops,
+    doc="Extract a rank-preserving contiguous register subvector at explicit offsets.",
+    operands=[
+        Operand("source", VECTOR),
+        Operand("offsets", INDEX, variadic=True),
+    ],
+    results=[Result("result", VECTOR)],
+    attrs=[
+        AttrDef(
+            "static_offsets",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static offsets with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[SameElementType("source", "result")],
+    verify="loom_vector_slice_verify",
+    traits=[PURE],
+    format=[
+        Ref("source"),
+        IndexList("offsets", "static_offsets"),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%tail = vector.slice %v[%i] : vector<[%n]xf32> -> vector<4xf32>",
+        "%tile = vector.slice %v[0, 4] : vector<8x16xf32> -> vector<4x8xf32>",
+    ],
+)
+
+vector_concat = Op(
+    "vector.concat",
+    group=vector_ops,
+    doc="Concatenate same-rank vectors along one explicit result axis.",
+    operands=[Operand("inputs", VECTOR, variadic=True)],
+    results=[Result("result", VECTOR)],
+    attrs=[
+        AttrDef(
+            "axis",
+            ATTR_TYPE_I64,
+            doc="Axis along which input extents concatenate.",
+        ),
+    ],
+    constraints=[SameElementType("inputs", "result")],
+    verify="loom_vector_concat_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("axis"),
+        Refs("inputs"),
+        COLON,
+        TypesOf("inputs"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%wide = vector.concat<0> %a, %b : vector<4xf32>, vector<4xf32> -> vector<8xf32>",
+        "%cols = vector.concat<1> %a, %b : vector<4x8xf32>, vector<4x8xf32> -> vector<4x16xf32>",
+    ],
+)
+
+vector_transpose = Op(
+    "vector.transpose",
+    group=vector_ops,
+    doc="Reorder vector register axes using an explicit result-axis to source-axis permutation.",
+    operands=[Operand("source", VECTOR)],
+    results=[Result("result", VECTOR)],
+    attrs=[
+        AttrDef(
+            "permutation",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Permutation mapping each result axis to the corresponding source axis.",
+        ),
+    ],
+    constraints=[SameElementType("source", "result")],
+    verify="loom_vector_transpose_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("permutation"),
+        Ref("source"),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%t = vector.transpose<[1, 0]> %v : vector<4x8xf32> -> vector<8x4xf32>",
+    ],
+)
+
+vector_shuffle = Op(
+    "vector.shuffle",
+    group=vector_ops,
+    doc="Build a same-typed rank-1 vector by selecting source register lanes with a static lane map; duplicate lanes are allowed.",
+    operands=[Operand("source", VECTOR)],
+    results=[Result("result", VECTOR)],
+    attrs=[
+        AttrDef(
+            "source_lanes",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Source lane index for each result lane.",
+        ),
+    ],
+    constraints=[SameType("source", "result")],
+    verify="loom_vector_shuffle_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("source_lanes"),
+        Ref("source"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%rev = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xf32>",
+        "%dup = vector.shuffle<[0, 0, 2, 2]> %v : vector<4xf32>",
+    ],
+)
+
+
+# ============================================================================
 # Memory
 # ============================================================================
 
@@ -523,6 +701,405 @@ vector_store_mask = Op(
     ],
     examples=[
         "vector.store.mask %v, %view[%row, %col], %mask : vector<4x8xf32>, view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>",
+    ],
+)
+
+vector_gather = Op(
+    "vector.gather",
+    group=vector_ops,
+    doc="Gather a vector from per-lane signed element offsets relative to a full-rank view origin.",
+    operands=[
+        Operand("view", VIEW, doc="Typed source view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    results=[Result("result", VECTOR, doc="Gathered vector value.")],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[
+        SameElementType("view", "result"),
+        SameShape("offsets", "result"),
+    ],
+    effects=[Reads("view")],
+    verify="loom_vector_gather_verify",
+    format=[
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        COLON,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%v = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>",
+    ],
+)
+
+vector_scatter = Op(
+    "vector.scatter",
+    group=vector_ops,
+    doc="Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin; active lane addresses must be distinct.",
+    operands=[
+        Operand("value", VECTOR, doc="Vector value to store."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[
+        SameElementType("value", "view"),
+        SameShape("offsets", "value"),
+    ],
+    effects=[Writes("view")],
+    verify="loom_vector_scatter_verify",
+    format=[
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+    ],
+    examples=[
+        "vector.scatter %v, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>",
+    ],
+)
+
+vector_gather_mask = Op(
+    "vector.gather.mask",
+    group=vector_ops,
+    doc="Masked vector gather from per-lane signed element offsets; masked-off lanes take the passthrough value.",
+    operands=[
+        Operand("view", VIEW, doc="Typed source view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("mask", VECTOR, doc="i1 vector mask selecting gathered lanes."),
+        Operand("passthrough", VECTOR, doc="Value used for masked-off lanes."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    results=[Result("result", VECTOR, doc="Gathered vector value.")],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[
+        HasI1Element("mask"),
+        SameElementType("view", "passthrough", "result"),
+        SameShape("offsets", "mask", "passthrough", "result"),
+        SameType("passthrough", "result"),
+    ],
+    effects=[Reads("view")],
+    verify="loom_vector_gather_mask_verify",
+    format=[
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        COMMA,
+        Ref("mask"),
+        COMMA,
+        Ref("passthrough"),
+        COLON,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+        COMMA,
+        TypeOf("mask"),
+        COMMA,
+        TypeOf("passthrough"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>",
+    ],
+)
+
+vector_scatter_mask = Op(
+    "vector.scatter.mask",
+    group=vector_ops,
+    doc="Masked non-atomic scatter; masked-off lanes leave memory unchanged and active lane addresses must be distinct.",
+    operands=[
+        Operand("value", VECTOR, doc="Vector value to store."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("mask", VECTOR, doc="i1 vector mask selecting stored lanes."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[
+        HasI1Element("mask"),
+        SameElementType("value", "view"),
+        SameShape("offsets", "mask", "value"),
+    ],
+    effects=[Writes("view")],
+    verify="loom_vector_scatter_mask_verify",
+    format=[
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        COMMA,
+        Ref("mask"),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+        COMMA,
+        TypeOf("mask"),
+    ],
+    examples=[
+        "vector.scatter.mask %v, %view[%row, %col][%offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>",
+    ],
+)
+
+
+def _atomic_memory_attrs() -> list[AttrDef]:
+    return [
+        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=AtomicKind),
+        AttrDef(
+            "ordering",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicOrdering,
+            doc="Required atomic memory ordering.",
+        ),
+        AttrDef(
+            "scope",
+            ATTR_TYPE_ENUM,
+            enum_def=AtomicScope,
+            doc="Required atomic synchronization scope.",
+        ),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ]
+
+
+vector_atomic_reduce = Op(
+    "vector.atomic.reduce",
+    group=vector_ops,
+    doc="Atomic no-result scatter reduction/update into per-lane signed element offsets. Duplicate active lane addresses are allowed and are serialized by the atomic memory contract.",
+    operands=[
+        Operand("value", VECTOR, doc="Vector contribution for each lane."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    attrs=_atomic_memory_attrs(),
+    constraints=[
+        SameElementType("value", "view"),
+        SameShape("offsets", "value"),
+    ],
+    effects=[ReadWrites("view")],
+    verify="loom_vector_atomic_reduce_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+    ],
+    examples=[
+        "vector.atomic.reduce<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>",
+    ],
+)
+
+vector_atomic_reduce_mask = Op(
+    "vector.atomic.reduce.mask",
+    group=vector_ops,
+    doc="Masked atomic no-result scatter reduction/update; masked-off lanes do not access memory.",
+    operands=[
+        Operand("value", VECTOR, doc="Vector contribution for each lane."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("mask", VECTOR, doc="i1 vector mask selecting active atomic lanes."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    attrs=_atomic_memory_attrs(),
+    constraints=[
+        HasI1Element("mask"),
+        SameElementType("value", "view"),
+        SameShape("offsets", "mask", "value"),
+    ],
+    effects=[ReadWrites("view")],
+    verify="loom_vector_atomic_reduce_mask_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        COMMA,
+        Ref("mask"),
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+        COMMA,
+        TypeOf("mask"),
+    ],
+    examples=[
+        "vector.atomic.reduce.mask<addf> %v, %view[%row, %col][%offsets], %mask {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>",
+    ],
+)
+
+vector_atomic_rmw = Op(
+    "vector.atomic.rmw",
+    group=vector_ops,
+    doc="Atomic read-modify-write at per-lane signed element offsets, returning the old memory value for each lane.",
+    operands=[
+        Operand("value", VECTOR, doc="Vector update value for each lane."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    results=[Result("result", VECTOR, doc="Old memory values read by the atomic operations.")],
+    attrs=_atomic_memory_attrs(),
+    constraints=[
+        SameElementType("value", "view", "result"),
+        SameShape("offsets", "value", "result"),
+        SameType("value", "result"),
+    ],
+    effects=[ReadWrites("view")],
+    verify="loom_vector_atomic_rmw_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>",
+    ],
+)
+
+vector_atomic_rmw_mask = Op(
+    "vector.atomic.rmw.mask",
+    group=vector_ops,
+    doc="Masked atomic read-modify-write. Masked-off result lanes take the explicit passthrough value.",
+    operands=[
+        Operand("value", VECTOR, doc="Vector update value for each lane."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
+        Operand("mask", VECTOR, doc="i1 vector mask selecting active atomic lanes."),
+        Operand("passthrough", VECTOR, doc="Value used for masked-off result lanes."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    results=[Result("result", VECTOR, doc="Old memory values for active lanes and passthrough for inactive lanes.")],
+    attrs=_atomic_memory_attrs(),
+    constraints=[
+        HasI1Element("mask"),
+        SameElementType("value", "view", "passthrough", "result"),
+        SameShape("offsets", "mask", "value"),
+        SameType("value", "passthrough", "result"),
+    ],
+    effects=[ReadWrites("view")],
+    verify="loom_vector_atomic_rmw_mask_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        GLUE,
+        LBRACKET,
+        Ref("offsets"),
+        RBRACKET,
+        COMMA,
+        Ref("mask"),
+        COMMA,
+        Ref("passthrough"),
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("offsets"),
+        COMMA,
+        TypeOf("mask"),
+        COMMA,
+        TypeOf("passthrough"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>",
     ],
 )
 
@@ -842,10 +1419,22 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_from_elements,
     vector_extract,
     vector_insert,
+    vector_slice,
+    vector_concat,
+    vector_transpose,
+    vector_shuffle,
     vector_load,
     vector_store,
     vector_load_mask,
     vector_store_mask,
+    vector_gather,
+    vector_scatter,
+    vector_gather_mask,
+    vector_scatter_mask,
+    vector_atomic_reduce,
+    vector_atomic_reduce_mask,
+    vector_atomic_rmw,
+    vector_atomic_rmw_mask,
     vector_select,
     vector_cmpi,
     vector_cmpf,

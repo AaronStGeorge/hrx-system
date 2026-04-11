@@ -101,6 +101,9 @@ typedef enum loom_format_kind_e {
   // Literal keyword token: , : -> to step else.
   LOOM_FORMAT_KIND_KEYWORD = 8,
   // Optional attribute dictionary: {key = value, ...}.
+  // If data has LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS, dictionary entries map to
+  // declared op attrs by key and field_index is ignored. Otherwise field_index
+  // references one named LOOM_ATTR_DICT attribute.
   LOOM_FORMAT_KIND_ATTR_DICT = 9,
   // Nested region: { block+ }.
   LOOM_FORMAT_KIND_REGION = 10,
@@ -176,6 +179,13 @@ enum loom_result_type_list_flag_bits_e {
   // Wrap result types in parentheses: (type, type).
   // When clear, result types are bare: type, type.
   LOOM_RESULT_TYPE_LIST_PARENS = 1u << 0,
+};
+
+// Data field flags for ATTR_DICT elements. Stored in the element's data field.
+enum loom_attr_dict_format_flag_bits_e {
+  // The dictionary contains ordinary declared op attributes that were not
+  // otherwise printed by the format, instead of a single named dict attribute.
+  LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS = 1u << 0,
 };
 
 // Anchor categories for OPTIONAL_GROUP elements. Encoded in the low

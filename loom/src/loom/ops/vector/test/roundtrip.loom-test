@@ -69,6 +69,21 @@ func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32
 
 // ====
 
+// Register layout ops are pure vector-to-vector transforms with explicit
+// compile-time axis/lane maps.
+func.def @register_layout(%v: vector<8x16xf32>, %a: vector<4xf32>, %b: vector<4xf32>, %n: index, %dyn: vector<[%n]xf32>, %i: index) {
+  %static_slice = vector.slice %v[0, 4] : vector<8x16xf32> -> vector<4x8xf32>
+  %dynamic_slice = vector.slice %dyn[%i] : vector<[%n]xf32> -> vector<4xf32>
+  %wide = vector.concat<0> %a, %b : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+  %transposed = vector.transpose<[1, 0]> %v : vector<8x16xf32> -> vector<16x8xf32>
+  %reversed = vector.shuffle<[3, 2, 1, 0]> %a : vector<4xf32>
+  %duplicated = vector.shuffle<[0, 0, 2, 2]> %b : vector<4xf32>
+  test.use %static_slice, %dynamic_slice, %wide, %transposed, %reversed, %duplicated : vector<4x8xf32>, vector<4xf32>, vector<8xf32>, vector<16x8xf32>, vector<4xf32>, vector<4xf32>
+  func.return
+}
+
+// ====
+
 // Vector memory ops use typed views and full-rank logical origins.
 func.def @memory(%buffer: buffer, %offset: index, %row: index, %col: index, %m: index, %n: index) {
   %layout = view.layout.dense : encoding
@@ -98,5 +113,36 @@ func.def @masked_tail_memory(%buffer: buffer, %offset: index, %row: index, %col:
   %view = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
   %loaded = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32> -> vector<4x8xf32>
   vector.store.mask %loaded, %view[%row, %col], %mask : vector<4x8xf32>, view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>
+  func.return
+}
+
+// ====
+
+// Gathers and scatters use a full-rank logical origin plus one per-lane
+// element-offset vector. Non-atomic scatters require active lane addresses to
+// be distinct.
+func.def @gather_scatter(%buffer: buffer, %offset: index, %row: index, %col: index, %m: index, %n: index, %offsets: vector<4xindex>, %i32_offsets: vector<4xi32>, %old: vector<4xf32>, %mask: vector<4xi1>) {
+  %layout = view.layout.dense : encoding
+  %view = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
+  %gathered = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
+  vector.scatter %gathered, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
+  %masked = vector.gather.mask %view[%row, %col][%i32_offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  vector.scatter.mask %masked, %view[%row, %col][%i32_offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>
+  func.return
+}
+
+// ====
+
+// Vector atomics use the gather/scatter address form with required explicit
+// ordering and scope attributes.
+func.def @atomic_memory(%buffer: buffer, %offset: index, %row: index, %col: index, %m: index, %n: index, %offsets: vector<4xindex>, %i32_offsets: vector<4xi32>, %iv: vector<4xi32>, %fv: vector<4xf32>, %oldf: vector<4xf32>, %mask: vector<4xi1>) {
+  %layout = view.layout.dense : encoding
+  %iview = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xi32, %layout>
+  %fview = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
+  vector.atomic.reduce<addi> %iv, %iview[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
+  vector.atomic.reduce.mask<addf> %fv, %fview[%row, %col][%i32_offsets], %mask {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>
+  %oldi = vector.atomic.rmw<xchgi> %iv, %iview[%row, %col][%offsets] {ordering = acq_rel, scope = system} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
+  %masked = vector.atomic.rmw.mask<addf> %fv, %fview[%row, %col][%i32_offsets], %mask, %oldf {ordering = seq_cst, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  test.use %oldi, %masked : vector<4xi32>, vector<4xf32>
   func.return
 }

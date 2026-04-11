@@ -7,7 +7,13 @@
 from __future__ import annotations
 
 from loom.dialect.scalar import ALL_SCALAR_OPS
-from loom.dialect.vector import ALL_VECTOR_OPS, FloatAssumptionFlags
+from loom.dialect.vector import (
+    ALL_VECTOR_OPS,
+    AtomicKind,
+    AtomicOrdering,
+    AtomicScope,
+    FloatAssumptionFlags,
+)
 from loom.dsl import FLOAT, I1, INTEGER, EffectKind, Op
 
 
@@ -75,6 +81,41 @@ def test_vector_float_flags_are_assumptions_not_fastmath() -> None:
     ]
 
 
+def test_vector_atomic_attrs_are_explicit_enums() -> None:
+    assert [case.keyword for case in AtomicOrdering.cases] == [
+        "relaxed",
+        "acquire",
+        "release",
+        "acq_rel",
+        "seq_cst",
+    ]
+    assert [case.keyword for case in AtomicScope.cases] == [
+        "thread",
+        "subgroup",
+        "workgroup",
+        "device",
+        "system",
+    ]
+    assert [case.keyword for case in AtomicKind.cases] == [
+        "xchgi",
+        "xchgf",
+        "addi",
+        "addf",
+        "subi",
+        "andi",
+        "ori",
+        "xori",
+        "minsi",
+        "maxsi",
+        "minui",
+        "maxui",
+        "minimumf",
+        "maximumf",
+        "minnumf",
+        "maxnumf",
+    ]
+
+
 def test_vector_memory_ops_are_effectful_and_view_based() -> None:
     ops = _op_by_name()
 
@@ -86,6 +127,35 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
     assert ops["vector.store"].effects[0].kind == EffectKind.WRITE
     assert ops["vector.store.mask"].effects[0].operand == "view"
     assert ops["vector.store.mask"].effects[0].kind == EffectKind.WRITE
+    assert ops["vector.gather"].effects[0].operand == "view"
+    assert ops["vector.gather"].effects[0].kind == EffectKind.READ
+    assert ops["vector.gather.mask"].effects[0].operand == "view"
+    assert ops["vector.gather.mask"].effects[0].kind == EffectKind.READ
+    assert ops["vector.scatter"].effects[0].operand == "view"
+    assert ops["vector.scatter"].effects[0].kind == EffectKind.WRITE
+    assert ops["vector.scatter.mask"].effects[0].operand == "view"
+    assert ops["vector.scatter.mask"].effects[0].kind == EffectKind.WRITE
+    assert ops["vector.atomic.reduce"].effects[0].operand == "view"
+    assert ops["vector.atomic.reduce"].effects[0].kind == EffectKind.READWRITE
+    assert ops["vector.atomic.reduce.mask"].effects[0].operand == "view"
+    assert ops["vector.atomic.reduce.mask"].effects[0].kind == EffectKind.READWRITE
+    assert ops["vector.atomic.rmw"].effects[0].operand == "view"
+    assert ops["vector.atomic.rmw"].effects[0].kind == EffectKind.READWRITE
+    assert ops["vector.atomic.rmw.mask"].effects[0].operand == "view"
+    assert ops["vector.atomic.rmw.mask"].effects[0].kind == EffectKind.READWRITE
 
-    for name in ("vector.load", "vector.load.mask", "vector.store", "vector.store.mask"):
+    for name in (
+        "vector.load",
+        "vector.load.mask",
+        "vector.store",
+        "vector.store.mask",
+        "vector.gather",
+        "vector.gather.mask",
+        "vector.scatter",
+        "vector.scatter.mask",
+        "vector.atomic.reduce",
+        "vector.atomic.reduce.mask",
+        "vector.atomic.rmw",
+        "vector.atomic.rmw.mask",
+    ):
         assert "Pure" not in {trait.name for trait in ops[name].traits}

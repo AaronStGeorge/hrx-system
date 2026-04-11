@@ -110,6 +110,66 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("vector.insert", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def slice(self, *, source: ValueRef, offsets: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Extract a rank-preserving contiguous register subvector at explicit offsets.
+
+        Example::
+            %tail = vector.slice %v[%i] : vector<[%n]xf32> -> vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(source)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in offsets:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_offsets"] = _static
+        return cast(ValueRef, self._b.build("vector.slice", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def concat(self, *, axis: int, inputs: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Concatenate same-rank vectors along one explicit result axis.
+
+        Example::
+            %wide = vector.concat<0> %a, %b : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["axis"] = axis
+        _operands.extend(inputs)
+        return cast(ValueRef, self._b.build("vector.concat", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def transpose(self, *, permutation: list[int], source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Reorder vector register axes using an explicit result-axis to source-axis permutation.
+
+        Example::
+            %t = vector.transpose<[1, 0]> %v : vector<4x8xf32> -> vector<8x4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["permutation"] = permutation
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("vector.transpose", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def shuffle(self, *, source_lanes: list[int], source: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Build a same-typed rank-1 vector by selecting source register lanes with a static lane map; duplicate lanes are allowed.
+
+        Example::
+            %rev = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["source_lanes"] = source_lanes
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("vector.shuffle", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def load(self, *, view: ValueRef, indices: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
         """Load a vector footprint from a typed view at a full-rank logical origin.
 
@@ -198,6 +258,219 @@ class VectorBuilders:
                 _static.append(_idx)
         _attributes["static_indices"] = _static
         self._b.build("vector.store.mask", _operands, attributes=_attributes, regions=_regions)
+
+    def gather(self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Gather a vector from per-lane signed element offsets relative to a full-rank view origin.
+
+        Example::
+            %v = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(view)
+        _operands.append(offsets)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("vector.gather", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def scatter(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef) -> None:
+        """Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin; active lane addresses must be distinct.
+
+        Example::
+            vector.scatter %v, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        _operands.append(view)
+        _operands.append(offsets)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("vector.scatter", _operands, attributes=_attributes, regions=_regions)
+
+    def gather_mask(self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef, passthrough: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Masked vector gather from per-lane signed element offsets; masked-off lanes take the passthrough value.
+
+        Example::
+            %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(view)
+        _operands.append(offsets)
+        _operands.append(mask)
+        _operands.append(passthrough)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("vector.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def scatter_mask(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef) -> None:
+        """Masked non-atomic scatter; masked-off lanes leave memory unchanged and active lane addresses must be distinct.
+
+        Example::
+            vector.scatter.mask %v, %view[%row, %col][%offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        _operands.append(view)
+        _operands.append(offsets)
+        _operands.append(mask)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("vector.scatter.mask", _operands, attributes=_attributes, regions=_regions)
+
+    def atomic_reduce(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, ordering: str, scope: str) -> None:
+        """Atomic no-result scatter reduction/update into per-lane signed element offsets. Duplicate active lane addresses are allowed and are serialized by the atomic memory contract.
+
+        Example::
+            vector.atomic.reduce<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _attributes["ordering"] = ordering
+        _attributes["scope"] = scope
+        _operands.append(value)
+        _operands.append(view)
+        _operands.append(offsets)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("vector.atomic.reduce", _operands, attributes=_attributes, regions=_regions)
+
+    def atomic_reduce_mask(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef, ordering: str, scope: str) -> None:
+        """Masked atomic no-result scatter reduction/update; masked-off lanes do not access memory.
+
+        Example::
+            vector.atomic.reduce.mask<addf> %v, %view[%row, %col][%offsets], %mask {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _attributes["ordering"] = ordering
+        _attributes["scope"] = scope
+        _operands.append(value)
+        _operands.append(view)
+        _operands.append(offsets)
+        _operands.append(mask)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("vector.atomic.reduce.mask", _operands, attributes=_attributes, regions=_regions)
+
+    def rmw(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, ordering: str, scope: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Atomic read-modify-write at per-lane signed element offsets, returning the old memory value for each lane.
+
+        Example::
+            %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _attributes["ordering"] = ordering
+        _attributes["scope"] = scope
+        _operands.append(value)
+        _operands.append(view)
+        _operands.append(offsets)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("vector.atomic.rmw", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def atomic_rmw_mask(
+        self,
+        *,
+        kind: str,
+        value: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        offsets: ValueRef,
+        mask: ValueRef,
+        passthrough: ValueRef,
+        ordering: str,
+        scope: str,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
+        """Masked atomic read-modify-write. Masked-off result lanes take the explicit passthrough value.
+
+        Example::
+            %old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _attributes["ordering"] = ordering
+        _attributes["scope"] = scope
+        _operands.append(value)
+        _operands.append(view)
+        _operands.append(offsets)
+        _operands.append(mask)
+        _operands.append(passthrough)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("vector.atomic.rmw.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def select(self, *, condition: ValueRef, true_value: ValueRef, false_value: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise select from two same-typed vector values using an i1 mask vector.

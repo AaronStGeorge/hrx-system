@@ -191,6 +191,22 @@ ERR_STRUCTURE_013 = ErrorDef(
     fix_hint="Ensure '{field_a}' and '{field_b}' have the same number of values",
 )
 
+# ERR_STRUCTURE_014: Attribute value violates a structural constraint.
+ERR_STRUCTURE_014 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=14,
+    severity=Severity.ERROR,
+    summary="Attribute value violates a structural constraint.",
+    message="attribute '{attr_name}' value {actual_value} must satisfy "
+    "{expected_constraint}",
+    params=(
+        ErrorParam("attr_name", ParamKind.STRING),
+        ErrorParam("actual_value", ParamKind.I64),
+        ErrorParam("expected_constraint", ParamKind.STRING),
+    ),
+    fix_hint="Choose an attribute value satisfying '{expected_constraint}'",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -205,4 +221,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_011,
     ERR_STRUCTURE_012,
     ERR_STRUCTURE_013,
+    ERR_STRUCTURE_014,
 )

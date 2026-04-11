@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from loom.dialect.vector.defs import (
     ALL_VECTOR_OPS,
+    AtomicKind,
+    AtomicOrdering,
+    AtomicScope,
     CombiningKind,
     FloatAssumptionFlags,
     vector_ops,
@@ -17,6 +20,9 @@ from loom.dialect.vector.defs import (
 
 __all__ = [
     "vector_ops",
+    "AtomicKind",
+    "AtomicOrdering",
+    "AtomicScope",
     "CombiningKind",
     "FloatAssumptionFlags",
     "ALL_VECTOR_OPS",

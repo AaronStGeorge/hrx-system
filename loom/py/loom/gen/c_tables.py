@@ -734,13 +734,16 @@ def _translate_format_elements(
 
                 case AttrDict(field=field_name):
                     attr_index = 0
+                    attr_dict_flags = "0"
                     if field_name:
                         non_flags = _non_flags_attrs(op)
                         for idx, ad in enumerate(non_flags):
                             if ad.name == field_name:
                                 attr_index = idx
                                 break
-                    elements.append(("LOOM_FORMAT_KIND_ATTR_DICT", attr_index, "0"))
+                    else:
+                        attr_dict_flags = "LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS"
+                    elements.append(("LOOM_FORMAT_KIND_ATTR_DICT", attr_index, attr_dict_flags))
 
                 case RegionFmt(field=name):
                     kind, index = _resolve_field(name)
@@ -1047,6 +1050,24 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
     layout = compute_layout(op)
     params: list[dict[str, Any]] = []
     implicit_fields = {"iv", "args"}
+    covered_attrs: set[str] = set()
+
+    def append_attr_param(name: str) -> None:
+        attr_def = op.attr(name)
+        if attr_def is None:
+            return
+        c_type = _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t")
+        params.append(
+            {
+                "name": name,
+                "kind": "attr",
+                "c_type": c_type,
+                "attr_type": attr_def.attr_type,
+                "optional": attr_def.optional,
+                "attr_index": layout.fields[name].index,
+            }
+        )
+        covered_attrs.add(name)
 
     # Collect field names that are anchors of OptionalGroups.
     optional_anchors: set[str] = set()
@@ -1111,20 +1132,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                     )
 
                 case Attr(field=name):
-                    attr_def = op.attr(name)
-                    if attr_def is None:
-                        continue
-                    c_type = _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t")
-                    params.append(
-                        {
-                            "name": name,
-                            "kind": "attr",
-                            "c_type": c_type,
-                            "attr_type": attr_def.attr_type,
-                            "optional": attr_def.optional,
-                            "attr_index": layout.fields[name].index,
-                        }
-                    )
+                    append_attr_param(name)
 
                 case SymbolRef(field=name):
                     params.append(
@@ -1135,6 +1143,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "attr_index": layout.fields[name].index,
                         }
                     )
+                    covered_attrs.add(name)
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
                     static_desc = layout.fields.get(static_field)
@@ -1147,6 +1156,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "static_attr_index": (static_desc.index if static_desc else 0),
                         }
                     )
+                    covered_attrs.add(static_field)
 
                 case BindingList(field=name, kind=binding_kind):
                     params.append(
@@ -1227,22 +1237,10 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "attr_name": name,
                         }
                     )
+                    covered_attrs.add(name)
 
                 case TemplateParam(field=name):
-                    attr_def = op.attr(name)
-                    if attr_def is None:
-                        continue
-                    c_type = _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t")
-                    params.append(
-                        {
-                            "name": name,
-                            "kind": "attr",
-                            "c_type": c_type,
-                            "attr_type": attr_def.attr_type,
-                            "optional": attr_def.optional,
-                            "attr_index": layout.fields[name].index,
-                        }
-                    )
+                    append_attr_param(name)
 
                 case OptionalGroup(elements=inner, anchor=_anchor):
                     walk(inner)
@@ -1270,23 +1268,23 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                                 "attr_index": layout.fields[name].index,
                             }
                         )
+                        covered_attrs.add(name)
 
                 case AttrDict(field=name):
                     if name:
-                        attr_def = op.attr(name)
-                        if attr_def is not None:
-                            params.append(
-                                {
-                                    "name": name,
-                                    "kind": "attr",
-                                    "c_type": _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t"),
-                                    "attr_type": attr_def.attr_type,
-                                    "optional": attr_def.optional,
-                                    "attr_index": layout.fields[name].index,
-                                }
-                            )
+                        append_attr_param(name)
+                    else:
+                        for attr_def in op.attrs:
+                            if attr_def.attr_type == ATTR_TYPE_FLAGS:
+                                continue
+                            if attr_def.name in covered_attrs:
+                                continue
+                            append_attr_param(attr_def.name)
 
-                case Keyword() | TypeOf() | TypesOf() | Glue() | OpRef():
+                case OpRef(field=name):
+                    append_attr_param(name)
+
+                case Keyword() | TypeOf() | TypesOf() | Glue():
                     pass
 
     walk(op.format)

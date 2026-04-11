@@ -976,11 +976,8 @@ TEST_F(PrintOpTest, FuncTemplateOpRef) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_func_template_build(
-      &builder_, 0, 0, 0, 0, /*priority=*/0, callee, arg_types, 1, result_types,
-      1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
-
-  // Set the implements attribute to the interned op name string.
-  loom_op_attrs(op)[0] = loom_attr_string(implements_id);
+      &builder_, 0, implements_id, 0, 0, 0, /*priority=*/0, callee, arg_types,
+      1, result_types, 1, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &op));
 
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_NE(output.find("func.template<tile.contract>"), std::string::npos)
@@ -998,10 +995,10 @@ TEST_F(PrintOpTest, FuncTemplateWithPriority) {
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_func_template_build(
-      &builder_, LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PRIORITY, 0, 0, 0,
+      &builder_, LOOM_FUNC_TEMPLATE_BUILD_FLAG_HAS_PRIORITY, implements_id, 0,
+      0, 0,
       /*priority=*/10, callee, arg_types, 1, result_types, 1, NULL, 0, NULL, 0,
       LOOM_LOCATION_UNKNOWN, &op));
-  loom_op_attrs(op)[0] = loom_attr_string(implements_id);
 
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_NE(output.find("priority(10)"), std::string::npos)

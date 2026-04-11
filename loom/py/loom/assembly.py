@@ -277,14 +277,16 @@ class Keyword:
 
 @dataclass(frozen=True, slots=True)
 class AttrDict:
-    """An attribute dictionary backed by a named dict attribute.
+    """An attribute dictionary.
 
     Prints/parses: {key = value, key = value, ...}
 
-    The |field| parameter names the attr of type "dict" that stores
-    the key-value pairs. When empty (no entries), nothing is printed.
+    When |field| is set, the dictionary is backed by that attr of type
+    "dict". When |field| is empty, the dictionary contains uncovered
+    declared attributes from the op itself. Empty dictionaries print nothing.
 
-    For builders: maps to an optional dict parameter.
+    For builders: maps to either an optional dict parameter or the declared
+    attrs covered by the dictionary.
     """
 
     field: str = ""

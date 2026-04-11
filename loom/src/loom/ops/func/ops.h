@@ -143,6 +143,7 @@ typedef uint32_t loom_func_template_build_flags_t;
 iree_status_t loom_func_template_build(
     loom_builder_t* builder,
     loom_func_template_build_flags_t build_flags,
+    loom_string_id_t implements,
     loom_optional uint8_t visibility,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
@@ -180,6 +181,7 @@ typedef uint32_t loom_func_ukernel_build_flags_t;
 iree_status_t loom_func_ukernel_build(
     loom_builder_t* builder,
     loom_func_ukernel_build_flags_t build_flags,
+    loom_string_id_t implements,
     loom_optional uint8_t visibility,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,
