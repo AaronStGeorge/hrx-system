@@ -118,10 +118,14 @@ __all__ = [
     # Constraints.
     "Constraint",
     "SameType",
+    "SameKind",
     "SameElementType",
     "SameEncoding",
     "SameShape",
     "RanksMatch",
+    "HasIntegerElement",
+    "HasFloatElement",
+    "HasI1Element",
     "OffsetCountMatchesRank",
     "DimIndexInBounds",
     "AllShapesMatch",
@@ -662,6 +666,53 @@ def _flatten_field(name: str, value: Any) -> list[tuple[str, Any]]:
     return [(name, value)]
 
 
+def _field_value_type(item: Any) -> Any:
+    """Returns the type carried by a field item, or the item if it is a type."""
+    return item.type if hasattr(item, "type") else item
+
+
+def _field_value_kind(item: Any) -> Any:
+    """Returns a type-kind-like discriminator for a field item."""
+    value_type = _field_value_type(item)
+    if hasattr(value_type, "type_kind"):
+        return value_type.type_kind
+    if hasattr(value_type, "kind"):
+        return value_type.kind
+    return None
+
+
+def _field_element_type(item: Any) -> Any:
+    """Returns the scalar element type carried by a scalar or shaped field."""
+    value_type = _field_value_type(item)
+    if hasattr(value_type, "element_type"):
+        return value_type.element_type
+    if hasattr(value_type, "dtype"):
+        return value_type.dtype
+    if hasattr(value_type, "type_kind") and hasattr(value_type, "kind"):
+        return value_type
+    return None
+
+
+def _field_shape(item: Any) -> Any:
+    """Returns the shape carried by a shaped field."""
+    value_type = _field_value_type(item)
+    if hasattr(value_type, "dims"):
+        return value_type.dims
+    if hasattr(value_type, "shape"):
+        return value_type.shape
+    return None
+
+
+def _field_rank(item: Any) -> Any:
+    """Returns the rank carried by a shaped field."""
+    value_type = _field_value_type(item)
+    if hasattr(value_type, "rank"):
+        return value_type.rank
+    if hasattr(value_type, "ndim"):
+        return value_type.ndim
+    return None
+
+
 def SameType(*fields: str) -> Constraint:
     """All named fields must have identical types.
 
@@ -697,6 +748,37 @@ def SameType(*fields: str) -> Constraint:
     )
 
 
+def SameKind(*fields: str) -> Constraint:
+    """All named fields must have the same type kind."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        kinds = []
+        for name in fields:
+            for display_name, item in _flatten_field(name, values.get(name)):
+                kind = _field_value_kind(item)
+                if kind is not None:
+                    kinds.append((display_name, kind))
+        if len(kinds) < 2:
+            return (True, "")
+        first_name, first_kind = kinds[0]
+        for entry_name, kind in kinds[1:]:
+            if kind != first_kind:
+                return (
+                    False,
+                    f"'{entry_name}' kind {kind} != '{first_name}' kind {first_kind}",
+                )
+        return (True, "")
+
+    from loom.error.type import ERR_TYPE_001
+
+    return Constraint(
+        "SameKind",
+        fields,
+        error=ERR_TYPE_001,
+        validate=_validate,
+    )
+
+
 def SameElementType(*fields: str) -> Constraint:
     """All named shaped fields must have the same element type.
 
@@ -708,8 +790,9 @@ def SameElementType(*fields: str) -> Constraint:
         element_types: list[tuple[str, Any]] = []
         for name in fields:
             for display_name, item in _flatten_field(name, values.get(name)):
-                if hasattr(item, "dtype"):
-                    element_types.append((display_name, item.dtype))
+                element_type = _field_element_type(item)
+                if element_type is not None:
+                    element_types.append((display_name, element_type))
         if len(element_types) < 2:
             return (True, "")
         first_name, first_dtype = element_types[0]
@@ -759,8 +842,9 @@ def SameShape(*fields: str) -> Constraint:
         shapes: list[tuple[str, Any]] = []
         for name in fields:
             for display_name, item in _flatten_field(name, values.get(name)):
-                if hasattr(item, "shape"):
-                    shapes.append((display_name, item.shape))
+                shape = _field_shape(item)
+                if shape is not None:
+                    shapes.append((display_name, shape))
         if len(shapes) < 2:
             return (True, "")
         first_name, first_shape = shapes[0]
@@ -792,24 +876,24 @@ def RanksMatch(a: str, b: str) -> Constraint:
 
     def _validate(values: dict[str, Any]) -> tuple[bool, str]:
         items_a = [
-            (display_name, item)
+            (display_name, rank)
             for display_name, item in _flatten_field(a, values.get(a))
-            if hasattr(item, "ndim")
+            if (rank := _field_rank(item)) is not None
         ]
         items_b = [
-            (display_name, item)
+            (display_name, rank)
             for display_name, item in _flatten_field(b, values.get(b))
-            if hasattr(item, "ndim")
+            if (rank := _field_rank(item)) is not None
         ]
         if not items_a or not items_b:
             return (True, "")
         # Check all pairs: every item in a against every item in b.
-        for name_a, val_a in items_a:
-            for name_b, val_b in items_b:
-                if val_a.ndim != val_b.ndim:
+        for name_a, rank_a in items_a:
+            for name_b, rank_b in items_b:
+                if rank_a != rank_b:
                     return (
                         False,
-                        f"'{name_a}' rank {val_a.ndim} != '{name_b}' rank {val_b.ndim}",
+                        f"'{name_a}' rank {rank_a} != '{name_b}' rank {rank_b}",
                     )
         return (True, "")
 
@@ -821,6 +905,79 @@ def RanksMatch(a: str, b: str) -> Constraint:
         error=ERR_SHAPE_001,
         validate=_validate,
     )
+
+
+def _type_satisfies_element_constraint(
+    value_type: Any, constraint: TypeConstraint
+) -> bool:
+    from loom.ir import ScalarTypeKind, ShapedType
+
+    if not isinstance(value_type, ShapedType):
+        return False
+    element_kind = value_type.element_type.kind
+    if constraint == INTEGER_ELEMENT:
+        return element_kind in {
+            ScalarTypeKind.I1,
+            ScalarTypeKind.I8,
+            ScalarTypeKind.I16,
+            ScalarTypeKind.I32,
+            ScalarTypeKind.I64,
+        }
+    if constraint == FLOAT_ELEMENT:
+        return element_kind in {
+            ScalarTypeKind.F8E4M3,
+            ScalarTypeKind.F8E5M2,
+            ScalarTypeKind.F16,
+            ScalarTypeKind.BF16,
+            ScalarTypeKind.F32,
+            ScalarTypeKind.F64,
+        }
+    if constraint == I1_ELEMENT:
+        return element_kind == ScalarTypeKind.I1
+    return False
+
+
+def _has_element_constraint(name: str, constraint: TypeConstraint) -> Constraint:
+    """A shaped field's element type must satisfy a family constraint."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        for display_name, item in _flatten_field(name, values.get(name)):
+            value_type = _field_value_type(item)
+            if _type_satisfies_element_constraint(value_type, constraint):
+                continue
+            return (
+                False,
+                f"'{display_name}' type {value_type} does not satisfy "
+                f"{constraint.value}",
+            )
+        return (True, "")
+
+    from loom.error.type import ERR_TYPE_003
+
+    return Constraint(
+        f"Has{constraint.name.title().replace('_', '')}",
+        (name,),
+        error=ERR_TYPE_003,
+        validate=_validate,
+    )
+
+
+def HasIntegerElement(field: str) -> Constraint:
+    """A shaped field must have an integer element type."""
+
+    return _has_element_constraint(field, INTEGER_ELEMENT)
+
+
+def HasFloatElement(field: str) -> Constraint:
+    """A shaped field must have a floating-point element type."""
+
+    return _has_element_constraint(field, FLOAT_ELEMENT)
+
+
+def HasI1Element(field: str) -> Constraint:
+    """A shaped field must have an i1 element type."""
+
+    return _has_element_constraint(field, I1_ELEMENT)
 
 
 def OffsetCountMatchesRank(shaped: str, offsets: str) -> Constraint:
@@ -1204,6 +1361,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         Scope,
         ShapeOf,
         SymbolRef,
+        TemplateParam,
         TypeOf,
         TypesOf,
     )
@@ -1213,7 +1371,13 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         match elem:
             case Ref(field=f) | Refs(field=f):
                 fields.add(f)
-            case Attr(field=f) | SymbolRef(field=f) | Flags(field=f) | OpRef(field=f):
+            case (
+                Attr(field=f)
+                | SymbolRef(field=f)
+                | Flags(field=f)
+                | OpRef(field=f)
+                | TemplateParam(field=f)
+            ):
                 fields.add(f)
             case TypeOf(field=f) | TypesOf(field=f):
                 fields.add(f)

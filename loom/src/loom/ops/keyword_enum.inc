@@ -28,3 +28,5 @@
   LOOM_KW_PRIORITY = 19,  // "priority"
   LOOM_KW_X = 20,  // "x"
   LOOM_KW_IMPORT = 21,  // "import"
+  LOOM_KW_LAYOUT = 22,  // "layout"
+  LOOM_KW_INTO = 23,  // "into"

@@ -50,6 +50,7 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
   static const char* const names[] = {
       [LOOM_RELATION_PAIRWISE_EQ] = "PairwiseEq",
       [LOOM_RELATION_ALL_SAME] = "AllSame",
+      [LOOM_RELATION_FIELD_SATISFIES] = "FieldSatisfies",
       [LOOM_RELATION_COUNT_MATCHES_RANK] = "CountMatchesRank",
       [LOOM_RELATION_ATTR_IN_RANGE_RANK] = "AttrInRangeRank",
       [LOOM_RELATION_REGION_ARG_COUNT] = "RegionArgCount",
@@ -67,6 +68,7 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
 const char* loom_constraint_property_name(loom_constraint_property_t property) {
   static const char* const names[] = {
       [LOOM_PROPERTY_TYPE] = "Type",
+      [LOOM_PROPERTY_KIND] = "Kind",
       [LOOM_PROPERTY_ELEMENT_TYPE] = "ElementType",
       [LOOM_PROPERTY_ENCODING] = "Encoding",
       [LOOM_PROPERTY_SHAPE] = "Shape",

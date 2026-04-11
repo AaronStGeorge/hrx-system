@@ -73,6 +73,7 @@ __all__ = [
     # Angle-bracket elements.
     "Flags",
     "OpRef",
+    "TemplateParam",
     # Type-interior format elements.
     "ShapeOf",
     "ScalarOf",
@@ -470,7 +471,8 @@ class Glue:
 
     Most composite elements have built-in glue behavior and don't
     need an explicit Glue:
-      - IndexList: always glues (always %ref[...])
+      - IndexList: glues when following another format element (always %ref[...]),
+        but not when it is the first element after the op name
       - BindingList: always glues (always keyword(...) or opname(...))
       - FuncArgs: always glues (always @name(...))
 
@@ -532,6 +534,23 @@ class OpRef:
     Examples:
         func.template<tile.contract> device @name(...)
         func.ukernel<tile.reduce> device @name(...)
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateParam:
+    """Required compile-time op parameter in angle brackets after the op name.
+
+    Prints/parses: <addf> or <some_enum_case>, glued to the op name.
+
+    The field names an ordinary attribute. The attribute descriptor still owns
+    parsing and validation, so enum parameters use the same case table and
+    diagnostics as attrs in positional syntax.
+
+    Examples:
+        vector.reduce<addf> %v, %zero : vector<16xf32> -> f32
     """
 
     field: str
@@ -620,6 +639,7 @@ type FormatElement = (
     | Glue
     | Flags
     | OpRef
+    | TemplateParam
     | ShapeOf
     | ScalarOf
     | EncodingOf

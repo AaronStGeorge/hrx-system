@@ -1307,6 +1307,8 @@ static bool loom_constraint_property_equals(
   switch ((enum loom_constraint_property_e)property) {
     case LOOM_PROPERTY_TYPE:
       return memcmp(&a, &b, sizeof(loom_type_t)) == 0;
+    case LOOM_PROPERTY_KIND:
+      return loom_type_kind(a) == loom_type_kind(b);
     case LOOM_PROPERTY_ELEMENT_TYPE:
       return loom_type_element_type(a) == loom_type_element_type(b);
     case LOOM_PROPERTY_ENCODING:
@@ -1326,6 +1328,8 @@ static const loom_error_def_t* loom_pairwise_eq_default_error(
   switch ((enum loom_constraint_property_e)property) {
     case LOOM_PROPERTY_TYPE:
       return &loom_err_type_001;
+    case LOOM_PROPERTY_KIND:
+      return &loom_err_type_001;
     case LOOM_PROPERTY_ELEMENT_TYPE:
       return &loom_err_type_002;
     case LOOM_PROPERTY_ENCODING:
@@ -1341,7 +1345,7 @@ static const loom_error_def_t* loom_pairwise_eq_default_error(
 
 // Builds diagnostic params for a pairwise property mismatch.
 // Different properties produce different param schemas:
-//   TYPE: (name_a, type_a, name_b, type_b)
+//   TYPE/KIND: (name_a, type_a, name_b, type_b)
 //   ELEMENT_TYPE: (name_a, element_type_a, name_b, element_type_b)
 //   ENCODING: (name_a, name_b)
 //   SHAPE: (name_a, name_b)
@@ -1362,6 +1366,18 @@ static void loom_verify_emit_pairwise_mismatch(
 
   switch ((enum loom_constraint_property_e)constraint->property) {
     case LOOM_PROPERTY_TYPE: {
+      loom_diagnostic_param_t params[] = {
+          loom_verify_param_string_for_field(name_a, ref_a),
+          loom_param_type(type_a),
+          loom_verify_param_string_for_field(name_b, ref_b),
+          loom_param_type(type_b),
+      };
+      loom_verify_emit_structured(
+          state, op, error, params,
+          error->param_count < 4 ? error->param_count : 4);
+      break;
+    }
+    case LOOM_PROPERTY_KIND: {
       loom_diagnostic_param_t params[] = {
           loom_verify_param_string_for_field(name_a, ref_a),
           loom_param_type(type_a),
@@ -1602,6 +1618,72 @@ static void loom_verify_relation_all_same(loom_verify_state_t* state,
         state, op, error, params,
         error->param_count < 3 ? error->param_count : 3);
     return;
+  }
+}
+
+// FIELD_SATISFIES: every element of every listed value field satisfies
+// the type constraint stored in the constraint property slot. Args:
+// 1+ value fields.
+static void loom_verify_relation_field_satisfies(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 1) return;
+  loom_type_constraint_t expected =
+      (loom_type_constraint_t)constraint->property;
+  if (expected >= LOOM_TYPE_CONSTRAINT_COUNT_) return;
+
+  for (uint8_t i = 0; i < constraint->arg_count; ++i) {
+    uint8_t field_ref = constraint->args[i];
+    if (!loom_verify_is_variadic_field(vtable, field_ref)) {
+      loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+      if (value_id == LOOM_VALUE_ID_INVALID) continue;
+      loom_type_t value_type = loom_verify_value_type(state, value_id);
+      if (loom_type_satisfies_constraint(value_type, expected)) continue;
+
+      char name_buffer[32];
+      iree_string_view_t field_name = loom_verify_field_name(
+          op, vtable, field_ref, name_buffer, sizeof(name_buffer));
+      const loom_error_def_t* error =
+          LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
+              ? &loom_err_type_004
+              : &loom_err_type_003;
+      loom_diagnostic_param_t params[] = {
+          loom_verify_param_string_for_field(field_name, field_ref),
+          loom_param_type(value_type),
+          loom_param_string(
+              iree_make_cstring_view(loom_type_constraint_name(expected))),
+      };
+      loom_verify_emit_structured(
+          state, op, error, params,
+          error->param_count < 3 ? error->param_count : 3);
+      return;
+    }
+
+    uint16_t count = 0;
+    const loom_value_id_t* values =
+        loom_verify_resolve_variadic_field(op, field_ref, &count);
+    for (uint16_t j = 0; j < count; ++j) {
+      loom_type_t value_type = loom_verify_value_type(state, values[j]);
+      if (loom_type_satisfies_constraint(value_type, expected)) continue;
+
+      char name_buffer[32];
+      iree_string_view_t field_name = loom_verify_indexed_field_name(
+          op, vtable, field_ref, j, name_buffer, sizeof(name_buffer));
+      const loom_error_def_t* error =
+          LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
+              ? &loom_err_type_004
+              : &loom_err_type_003;
+      loom_diagnostic_param_t params[] = {
+          loom_verify_param_string_for_indexed_field(field_name, field_ref, j),
+          loom_param_type(value_type),
+          loom_param_string(
+              iree_make_cstring_view(loom_type_constraint_name(expected))),
+      };
+      loom_verify_emit_structured(
+          state, op, error, params,
+          error->param_count < 3 ? error->param_count : 3);
+      return;
+    }
   }
 }
 
@@ -1875,6 +1957,7 @@ typedef void (*loom_verify_relation_fn_t)(loom_verify_state_t* state,
 static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_PAIRWISE_EQ] = loom_verify_relation_pairwise_eq,
     [LOOM_RELATION_ALL_SAME] = loom_verify_relation_all_same,
+    [LOOM_RELATION_FIELD_SATISFIES] = loom_verify_relation_field_satisfies,
     [LOOM_RELATION_COUNT_MATCHES_RANK] =
         loom_verify_relation_count_matches_rank,
     [LOOM_RELATION_ATTR_IN_RANGE_RANK] =

@@ -329,6 +329,7 @@ static iree_status_t loom_parse_format_index_list(
 
   int64_t static_values[32];
   uint16_t value_count = 0;
+  uint16_t dynamic_value_count = 0;
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RBRACKET) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
     if (value_count > 0) {
@@ -348,9 +349,9 @@ static iree_status_t loom_parse_format_index_list(
       loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
       LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
       static_values[value_count] = INT64_MIN;  // Sentinel.
-      uint16_t operand_index = parsed->operand_count;
-      IREE_RETURN_IF_ERROR(
-          loom_parsed_op_add_operand(parsed, &parser->parser_arena, value_id));
+      uint16_t operand_index = element->field_index + dynamic_value_count++;
+      IREE_RETURN_IF_ERROR(loom_parsed_op_set_operand(
+          parsed, &parser->parser_arena, operand_index, value_id));
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
           parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
           operand_index, token, token.line, token.end_column));
@@ -715,6 +716,30 @@ static iree_status_t loom_parse_format_op_ref(
       op_ref_start_token);
 }
 
+// Parses a required template parameter attribute: <attr-value>.
+static iree_status_t loom_parse_format_template_param(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* element, loom_parsed_op_t* parsed) {
+  loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'<'"));
+  }
+  const loom_attr_descriptor_t* descriptor =
+      &vtable->attr_descriptors[element->field_index];
+  loom_attribute_t attr = {0};
+  IREE_RETURN_IF_ERROR(loom_parse_attr_value(parser, descriptor, &attr));
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
+  }
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+      parsed, &parser->parser_arena, element->field_index, attr));
+  return loom_parse_format_add_field_span(parser, parsed,
+                                          LOOM_LOCATION_FIELD_ATTRIBUTE,
+                                          element->field_index, start_token);
+}
+
 //===----------------------------------------------------------------------===//
 // Format walker
 //===----------------------------------------------------------------------===//
@@ -752,9 +777,9 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
         LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &token);
         loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
         LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
-        uint16_t operand_index = parsed->operand_count;
-        IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
-            parsed, &parser->parser_arena, value_id));
+        uint16_t operand_index = element->field_index;
+        IREE_RETURN_IF_ERROR(loom_parsed_op_set_operand(
+            parsed, &parser->parser_arena, operand_index, value_id));
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
             parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
             operand_index, token, token.line, token.end_column));
@@ -970,6 +995,12 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
 
       case LOOM_FORMAT_KIND_OP_REF: {
         IREE_RETURN_IF_ERROR(loom_parse_format_op_ref(parser, element, parsed));
+        break;
+      }
+
+      case LOOM_FORMAT_KIND_TEMPLATE_PARAM: {
+        IREE_RETURN_IF_ERROR(
+            loom_parse_format_template_param(parser, vtable, element, parsed));
         break;
       }
 

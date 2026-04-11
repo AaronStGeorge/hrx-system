@@ -527,6 +527,14 @@ iree_status_t loom_parsed_op_add_operand(loom_parsed_op_t* parsed,
                                          iree_arena_allocator_t* arena,
                                          loom_value_id_t value_id);
 
+// Sets a parsed operand by storage index, growing the parsed operand list and
+// filling any intervening slots with LOOM_VALUE_ID_INVALID. This lets assembly
+// formats mention fields in a different order than the op storage layout.
+iree_status_t loom_parsed_op_set_operand(loom_parsed_op_t* parsed,
+                                         iree_arena_allocator_t* arena,
+                                         uint16_t index,
+                                         loom_value_id_t value_id);
+
 // Appends a result value ID and its defining token. Parser-synthesized results
 // without a user-authored LHS name should pass loom_token_none(). Spills to
 // arena on overflow.

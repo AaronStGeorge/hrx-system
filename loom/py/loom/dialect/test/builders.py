@@ -107,9 +107,9 @@ class TestBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
-        _operands.extend(inputs)
         if body is not None:
             _regions.append(body)
+        _operands.extend(inputs)
         return cast(ValueRef, self._b.build("test.map", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def update(self, *, source: ValueRef, target: ValueRef, offsets: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
@@ -180,12 +180,12 @@ class TestBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if body is not None:
+            _regions.append(body)
         _operands.append(lower_bound)
         _operands.append(upper_bound)
         _operands.append(step)
         _operands.extend(iter_args)
-        if body is not None:
-            _regions.append(body)
         return cast(list[ValueRef], self._b.build("test.loop", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def branch(self, *, condition: ValueRef, results: list[Type | TiedResultSpec], then_region: Region | None = None, else_region: Region | None = None) -> list[ValueRef]:
@@ -201,11 +201,11 @@ class TestBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
-        _operands.append(condition)
         if then_region is not None:
             _regions.append(then_region)
         if else_region is not None:
             _regions.append(else_region)
+        _operands.append(condition)
         return cast(list[ValueRef], self._b.build("test.branch", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def implicit_yield(self) -> None:
@@ -294,9 +294,9 @@ class TestBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
-        _operands.append(input)
         if dict is not None:
             _attributes["dict"] = dict
+        _operands.append(input)
         return cast(ValueRef, self._b.build("test.attrs", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def deflate(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
@@ -320,8 +320,8 @@ class TestBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
-        _operands.extend(values)
         _attributes["predicates"] = predicates
+        _operands.extend(values)
         return cast(list[ValueRef], self._b.build("test.assume", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def convert(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
@@ -435,8 +435,8 @@ class TestBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
-        _operands.append(source)
         _attributes["dim_index"] = dim_index
+        _operands.append(source)
         return cast(ValueRef, self._b.build("test.dim", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def fact_range_lo(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:

@@ -1077,6 +1077,25 @@ iree_status_t loom_parsed_op_add_operand(loom_parsed_op_t* parsed,
   return iree_ok_status();
 }
 
+iree_status_t loom_parsed_op_set_operand(loom_parsed_op_t* parsed,
+                                         iree_arena_allocator_t* arena,
+                                         uint16_t index,
+                                         loom_value_id_t value_id) {
+  iree_host_size_t required_capacity = (iree_host_size_t)index + 1;
+  if (required_capacity > parsed->operand_capacity) {
+    iree_host_size_t capacity = parsed->operand_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, parsed->operand_count, required_capacity,
+        sizeof(loom_value_id_t), &capacity, (void**)&parsed->operand_ids));
+    parsed->operand_capacity = (uint16_t)capacity;
+  }
+  while (parsed->operand_count <= index) {
+    parsed->operand_ids[parsed->operand_count++] = LOOM_VALUE_ID_INVALID;
+  }
+  parsed->operand_ids[index] = value_id;
+  return iree_ok_status();
+}
+
 iree_status_t loom_parsed_op_add_result(loom_parsed_op_t* parsed,
                                         iree_arena_allocator_t* arena,
                                         loom_value_id_t value_id,

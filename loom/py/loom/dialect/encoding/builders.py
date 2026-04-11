@@ -41,6 +41,6 @@ class EncodingBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
-        _operands.append(enc)
         _attributes["category"] = category
+        _operands.append(enc)
         return cast(ValueRef, self._b.build("encoding.isa", _operands, results=result_types, attributes=_attributes, regions=_regions))

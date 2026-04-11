@@ -1191,7 +1191,7 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         const loom_value_id_t* operands = loom_op_const_operands(op);
         uint16_t dynamic_start = element->field_index;
         uint16_t dynamic_index = 0;
-        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "[", true));
+        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "[", i > 0));
         for (uint16_t j = 0; j < static_attr.count; ++j) {
           if (j > 0) {
             IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
@@ -1406,6 +1406,34 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index),
               op_ref_start, ctx->stream->offset);
         }
+        break;
+      }
+      case LOOM_FORMAT_KIND_TEMPLATE_PARAM: {
+        // Required compile-time op parameter in angle brackets, glued to
+        // the op name: vector.reduce<addf>.
+        if (element->field_index >= op->attribute_count) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "format TEMPLATE_PARAM field_index %u out of range (op has %u "
+              "attributes)",
+              element->field_index, op->attribute_count);
+        }
+        const loom_attr_descriptor_t* descriptor =
+            (vtable->attr_descriptors &&
+             element->field_index < vtable->attribute_count)
+                ? &vtable->attr_descriptors[element->field_index]
+                : NULL;
+        loom_attribute_t attr = loom_op_attrs(op)[element->field_index];
+        iree_host_size_t param_start = ctx->stream->offset;
+        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "<", true));
+        IREE_RETURN_IF_ERROR(
+            loom_print_attr(ctx->stream, &attr, ctx->module, descriptor));
+        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ">", true));
+        loom_print_did_write(ctx);
+        loom_print_report_field(
+            ctx,
+            loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index),
+            param_start, ctx->stream->offset);
         break;
       }
       case LOOM_FORMAT_KIND_GLUE:

@@ -190,6 +190,7 @@ LOOM_DEFINE_OPERAND(loom_test_update_source, 0)
 LOOM_DEFINE_OPERAND(loom_test_update_target, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_test_update_offsets, 2)
 LOOM_DEFINE_RESULT(loom_test_update_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_test_update_static_offsets, 0)
 iree_status_t loom_test_update_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,
@@ -231,6 +232,7 @@ LOOM_DEFINE_ISA(loom_test_slice_isa, LOOM_OP_TEST_SLICE)
 LOOM_DEFINE_OPERAND(loom_test_slice_source, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_test_slice_offsets, 1)
 LOOM_DEFINE_RESULT(loom_test_slice_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_test_slice_static_offsets, 0)
 iree_status_t loom_test_slice_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t source,

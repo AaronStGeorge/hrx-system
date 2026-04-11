@@ -1274,6 +1274,6 @@ class ScalarBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
-        _operands.extend(values)
         _attributes["predicates"] = predicates
+        _operands.extend(values)
         return cast(list[ValueRef], self._b.build("scalar.assume", _operands, results=result_types, attributes=_attributes, regions=_regions))

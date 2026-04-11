@@ -45,6 +45,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TemplateParam,
     TypeOf,
     TypesOf,
 )
@@ -99,6 +100,8 @@ KEYWORD_MAP: dict[str, str] = {
     "priority": "LOOM_KW_PRIORITY",
     "x": "LOOM_KW_X",
     "import": "LOOM_KW_IMPORT",
+    "layout": "LOOM_KW_LAYOUT",
+    "into": "LOOM_KW_INTO",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.
@@ -142,10 +145,23 @@ TRAIT_MAP: dict[str, str] = {
 # Maps Python constraint names to (relation, property) C enum pairs.
 CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
     "SameType": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_TYPE"),
+    "SameKind": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_KIND"),
     "SameElementType": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_ELEMENT_TYPE"),
     "SameEncoding": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_ENCODING"),
     "SameShape": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_SHAPE"),
     "RanksMatch": ("LOOM_RELATION_PAIRWISE_EQ", "LOOM_PROPERTY_RANK"),
+    "HasIntegerElement": (
+        "LOOM_RELATION_FIELD_SATISFIES",
+        "LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT",
+    ),
+    "HasFloatElement": (
+        "LOOM_RELATION_FIELD_SATISFIES",
+        "LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT",
+    ),
+    "HasI1Element": (
+        "LOOM_RELATION_FIELD_SATISFIES",
+        "LOOM_TYPE_CONSTRAINT_I1_ELEMENT",
+    ),
     "OffsetCountMatchesRank": (
         "LOOM_RELATION_COUNT_MATCHES_RANK",
         "LOOM_PROPERTY_RANK",
@@ -806,6 +822,10 @@ def _translate_format_elements(
                     kind, index = _resolve_field(name)
                     elements.append(("LOOM_FORMAT_KIND_OP_REF", index, "0"))
 
+                case TemplateParam(field=name):
+                    kind, index = _resolve_field(name)
+                    elements.append(("LOOM_FORMAT_KIND_TEMPLATE_PARAM", index, "0"))
+
                 case Glue():
                     elements.append(("LOOM_FORMAT_KIND_GLUE", 0, "0"))
 
@@ -917,6 +937,7 @@ def _detect_builder_pattern(op: Op) -> str | None:
     layout = compute_layout(op)
     non_flags = _non_flags_attrs(op)
     has_flags = _has_flags_attr(op)
+    has_template_param = any(isinstance(e, TemplateParam) for e in _flatten_format(op.format))
 
     # Binary: 2 fixed operands, 1 fixed result, no real attrs/regions.
     if layout.fixed_operand_count == 2 and not layout.variadic_operand and layout.fixed_result_count == 1 and not layout.variadic_result and len(non_flags) == 0 and len(op.regions) == 0:
@@ -938,6 +959,7 @@ def _detect_builder_pattern(op: Op) -> str | None:
         and not layout.variadic_result
         and len(non_flags) == 1
         and non_flags[0].attr_type == "enum"
+        and not has_template_param
         and len(op.regions) == 0
     ):
         return "COMPARISON_WITH_FLAGS" if has_flags else "COMPARISON"
@@ -1203,6 +1225,22 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "kind": "instance_flags",
                             "c_type": "uint8_t",
                             "attr_name": name,
+                        }
+                    )
+
+                case TemplateParam(field=name):
+                    attr_def = op.attr(name)
+                    if attr_def is None:
+                        continue
+                    c_type = _C_ATTR_TYPE_MAP.get(attr_def.attr_type, "loom_attribute_t")
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "attr",
+                            "c_type": c_type,
+                            "attr_type": attr_def.attr_type,
+                            "optional": attr_def.optional,
+                            "attr_index": layout.fields[name].index,
                         }
                     )
 
@@ -1794,6 +1832,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 "f64": "LOOM_DEFINE_ATTR_F64",
                 "string": "LOOM_DEFINE_ATTR_STRING",
                 "bool": "LOOM_DEFINE_ATTR_BOOL",
+                "i64_array": "LOOM_DEFINE_ATTR_I64_ARRAY",
                 "dict": "LOOM_DEFINE_ATTR_DICT",
                 "encoding": "LOOM_DEFINE_ATTR_ENCODING",
                 "enum": "LOOM_DEFINE_ATTR_ENUM",
@@ -2686,6 +2725,7 @@ def generate_keyword_table_inc() -> str:
 def main() -> None:
     """Generate C tables for all registered dialects."""
     from loom.builtin_types import ALL_BUILTIN_TYPES
+    from loom.dialect.buffer import ALL_BUFFER_OPS, buffer_ops
     from loom.dialect.encoding import ALL_ENCODING_OPS, encoding_ops
     from loom.dialect.func import ALL_FUNC_OPS, func_ops
     from loom.dialect.globals import ALL_GLOBAL_OPS, global_ops
@@ -2694,6 +2734,8 @@ def main() -> None:
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
     from loom.dialect.test import ALL_TEST_OPS, test_ops
+    from loom.dialect.vector import ALL_VECTOR_OPS, vector_ops
+    from loom.dialect.view import ALL_VIEW_OPS, view_ops
 
     dialects = [
         (test_ops, list(ALL_TEST_OPS)),
@@ -2703,6 +2745,9 @@ def main() -> None:
         (pool_ops, list(ALL_POOL_OPS)),
         (global_ops, list(ALL_GLOBAL_OPS)),
         (scf_ops, list(ALL_SCF_OPS)),
+        (buffer_ops, list(ALL_BUFFER_OPS)),
+        (view_ops, list(ALL_VIEW_OPS)),
+        (vector_ops, list(ALL_VECTOR_OPS)),
     ]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"

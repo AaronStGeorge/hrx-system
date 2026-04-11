@@ -54,6 +54,9 @@ from loom.dsl import (
     DimIndexInBounds,
     EnumCase,
     EnumDef,
+    HasFloatElement,
+    HasI1Element,
+    HasIntegerElement,
     HasParent,
     ImplicitTerminator,
     OffsetCountMatchesRank,
@@ -65,6 +68,7 @@ from loom.dsl import (
     Result,
     SameElementType,
     SameEncoding,
+    SameKind,
     SameShape,
     SameType,
     TypeConstraint,
@@ -343,6 +347,11 @@ class TestConstraints:
         ok, msg = c.check({"a": None})
         assert ok, "Missing values should pass (can't check)"
 
+    def test_same_kind(self) -> None:
+        c = SameKind("a", "b")
+        assert c.error is not None
+        assert c.error.error_id == "ERR_TYPE_001"
+
     def test_same_element_type(self) -> None:
         c = SameElementType("x", "y")
         assert c.error is not None
@@ -365,6 +374,11 @@ class TestConstraints:
         c = RanksMatch("a", "b")
         assert c.error is not None
         assert c.error.error_id == "ERR_SHAPE_001"
+
+    def test_element_family_constraints(self) -> None:
+        assert HasIntegerElement("x").name == "HasIntegerElement"
+        assert HasFloatElement("x").name == "HasFloatElement"
+        assert HasI1Element("x").name == "HasI1Element"
 
     def test_offset_count_matches_rank(self) -> None:
         c = OffsetCountMatchesRank("src", "offsets")

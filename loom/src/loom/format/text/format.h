@@ -45,7 +45,8 @@
 // - Single space between tokens, except:
 //   - No space before: , ) ] }
 //   - No space after: ( [ {
-//   - IndexList glues to preceding token: %src[0, %off]
+//   - IndexList glues to a preceding format element: %src[0, %off].
+//     Leading IndexList forms keep a space after the op name: op [0, %off].
 //   - BindingList glues to preceding token: iter_args(%acc = %init : f32)
 //   - FuncArgs glues to preceding symbol: @name(%a: type)
 //   - Explicit Glue suppresses space: @callee(%x) not @callee (%x)
@@ -406,13 +407,15 @@
 //                           Glued to the op name. Stored in instance_flags.
 //   OpRef(field)          Op kind reference: <tile.contract>.
 //                           Glued to the op name. For template/ukernel.
+//   TemplateParam(field)  Required compile-time op parameter: <add>.
+//                           Glued to the op name. Parsed as an attribute.
 //
 // --- Spacing rules ---
 //
 // Default: single space between tokens.
 // Backward-glue (no space before): , ) ] }
 // Forward-glue (no space after): ( [ {
-// Built-in glue: IndexList, BindingList, FuncArgs always glue.
+// Built-in glue: non-leading IndexList, BindingList, FuncArgs.
 // Explicit Glue: suppresses space before the next token.
 // ResultTypeList and PredicateList never glue.
 //

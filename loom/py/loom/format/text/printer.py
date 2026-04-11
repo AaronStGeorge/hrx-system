@@ -51,6 +51,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TemplateParam,
     TypeOf,
     TypesOf,
 )
@@ -346,8 +347,8 @@ class TokenStream:
       - Default: space before each token.
       - Backward-glue punctuation (, ) ] }): always suppress space before.
       - Explicit Glue element: marks the next token to suppress space.
-      - Composite elements with built-in glue (IndexList, BindingList,
-        FuncArgs): their output is emitted with glue=True.
+      - Composite elements with built-in glue (BindingList, FuncArgs, and
+        non-leading IndexList): their output is emitted with glue=True.
 
     The token joiner is trivial: check the glue flag, emit space or not.
     No character-level heuristics.
@@ -886,7 +887,7 @@ class Printer:
         if a region was printed — the old stream is flushed as a line and
         a new one starts with '}').
         """
-        for element in elements:
+        for element_index, element in enumerate(elements):
             match element:
                 case Ref(field=name):
                     try:
@@ -989,7 +990,7 @@ class Printer:
                     covered_attrs.add(static_field)
                     stream.emit(
                         self._format_index_list(fields, dynamic_field, static_field),
-                        glue=True,
+                        glue=element_index != 0,
                     )
 
                 case BindingList(field=name):
@@ -1052,6 +1053,11 @@ class Printer:
                     value = fields.attr(name)
                     if value:
                         stream.emit(f"<{value}>", glue=True)
+
+                case TemplateParam(field=name):
+                    covered_attrs.add(name)
+                    value = fields.attr(name)
+                    stream.emit(f"<{value}>", glue=True)
 
                 case Glue():
                     stream.set_glue()

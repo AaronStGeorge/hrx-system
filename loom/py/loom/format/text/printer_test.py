@@ -12,6 +12,7 @@ from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.test import ALL_TEST_OPS
+from loom.dialect.view import ALL_VIEW_OPS
 from loom.format.text.parser import Parser
 from loom.format.text.printer import Printer, print_type
 from loom.ir import (
@@ -445,6 +446,28 @@ class TestPrintSlice:
         assert (
             _printer().print_operation(op, module)
             == "%r = test.slice %src[0, %off] : tile<64x64xf16> -> (tile<16x16xf16>)"
+        )
+
+
+class TestPrintLayoutStrided:
+    """Exercises: leading IndexList keeps a space after the op name."""
+
+    def test_leading_index_list(self) -> None:
+        sentinel = -(2**63)
+        module, [row_stride, layout] = _module_with(
+            ("row_stride", INDEX), ("layout", ENCODING_TYPE)
+        )
+        op = Operation(
+            name="view.layout.strided",
+            operands=[row_stride],
+            results=[layout],
+            attributes={"static_strides": [sentinel, 1]},
+        )
+        printer = _printer()
+        printer.register_ops(ALL_VIEW_OPS)
+        assert (
+            printer.print_operation(op, module)
+            == "%layout = view.layout.strided [%row_stride, 1] : encoding"
         )
 
 

@@ -46,6 +46,7 @@ loom_cc_library(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::global
@@ -53,6 +54,8 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::ops::test
+    loom::src::loom::ops::vector
+    loom::src::loom::ops::view
     loom::src::loom::testing::diff
     loom::src::loom::transforms::canonicalize
     loom::src::loom::transforms::cse

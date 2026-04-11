@@ -143,6 +143,11 @@ typedef enum loom_format_kind_e {
   // definitions where type annotations introduce named type variables.
   // data = child_count (number of following format elements in scope).
   LOOM_FORMAT_KIND_SCOPE = 20,
+
+  // Required compile-time op parameter in angle brackets: <add>.
+  // Glued to the preceding token (op name). The field_index references
+  // an ordinary attribute parsed with the attr descriptor.
+  LOOM_FORMAT_KIND_TEMPLATE_PARAM = 21,
 };
 typedef uint8_t loom_format_kind_t;
 
@@ -336,37 +341,42 @@ enum loom_constraint_relation_e {
   // property. Args: 1 variadic value field. Used by AllShapesMatch.
   LOOM_RELATION_ALL_SAME = 1,
 
+  // Every element of every listed field satisfies a type constraint.
+  // The property slot stores a loom_type_constraint_t. Args: 1+ value
+  // fields. Used by HasIntegerElement, HasFloatElement, HasI1Element.
+  LOOM_RELATION_FIELD_SATISFIES = 2,
+
   // The element count of a variadic value field equals the rank of a
   // shaped value field. Args: (shaped value field, variadic value
   // field). Used by OffsetCountMatchesRank.
-  LOOM_RELATION_COUNT_MATCHES_RANK = 2,
+  LOOM_RELATION_COUNT_MATCHES_RANK = 3,
 
   // An i64 attribute's value falls within [0, rank) of a shaped value
   // field. Args: (shaped value field, i64 attr field). Used by
   // DimIndexInBounds.
-  LOOM_RELATION_ATTR_IN_RANGE_RANK = 3,
+  LOOM_RELATION_ATTR_IN_RANGE_RANK = 4,
 
   // A region's entry block argument count matches the element count
   // of a variadic value field. Args: (region field, variadic value
   // field). Used by BlockArgCount.
-  LOOM_RELATION_REGION_ARG_COUNT = 4,
+  LOOM_RELATION_REGION_ARG_COUNT = 5,
 
   // Each region entry block argument's property matches the
   // corresponding element of a variadic value field at the same
   // position. Args: (region field, variadic value field). Used by
   // BlockArgsMatchElementTypes.
-  LOOM_RELATION_REGION_ARG_MATCH = 5,
+  LOOM_RELATION_REGION_ARG_MATCH = 6,
 
   // A region's terminator (yield) operand count matches the element
   // count of a variadic value field. Args: (region field, variadic
   // value field). Used by YieldCountMatchesResults.
-  LOOM_RELATION_YIELD_COUNT = 6,
+  LOOM_RELATION_YIELD_COUNT = 7,
 
   // Each region terminator (yield) operand's property matches the
   // corresponding element of a variadic value field at the same
   // position. Args: (region field, variadic value field). Used by
   // YieldTypesMatchResults and YieldElementTypesMatchResults.
-  LOOM_RELATION_YIELD_MATCH = 7,
+  LOOM_RELATION_YIELD_MATCH = 8,
 
   // Two variadic value fields agree position-by-position. The two
   // fields must have the same element count, and the property at
@@ -374,7 +384,7 @@ enum loom_constraint_relation_e {
   // error and per-position property mismatches with one error each.
   // Args: (variadic value field, variadic value field). Used by
   // IterArgsMatchResults.
-  LOOM_RELATION_VARIADIC_MATCH = 8,
+  LOOM_RELATION_VARIADIC_MATCH = 9,
 
   LOOM_RELATION_COUNT_,
 };
@@ -384,19 +394,21 @@ typedef uint8_t loom_constraint_relation_t;
 enum loom_constraint_property_e {
   // Full type equality, including shape, element type, and encoding.
   LOOM_PROPERTY_TYPE = 0,
+  // Type kind only: scalar vs tile vs tensor vs vector vs view, etc.
+  LOOM_PROPERTY_KIND = 1,
   // Element type only — ignores shape and encoding. For shaped types
   // this lets a constraint compare a tile<...x f32> against a scalar
   // f32 successfully.
-  LOOM_PROPERTY_ELEMENT_TYPE = 1,
+  LOOM_PROPERTY_ELEMENT_TYPE = 2,
   // Encoding only — ignores shape and element type. Used to check
   // that two tiles share an encoding regardless of element type.
-  LOOM_PROPERTY_ENCODING = 2,
+  LOOM_PROPERTY_ENCODING = 3,
   // Shape only — ignores element type and encoding. Two tiles with
   // identical dimensions but different element types match.
-  LOOM_PROPERTY_SHAPE = 3,
+  LOOM_PROPERTY_SHAPE = 4,
   // Rank only — ignores dimension sizes, element type, and encoding.
   // Two shaped types with the same number of dimensions match.
-  LOOM_PROPERTY_RANK = 4,
+  LOOM_PROPERTY_RANK = 5,
   LOOM_PROPERTY_COUNT_,
 };
 typedef uint8_t loom_constraint_property_t;
@@ -896,6 +908,13 @@ static inline loom_value_id_t loom_region_branch_selector(
   enum { func_name##_ATTR_INDEX = (index) };                     \
   static inline uint16_t func_name(const loom_op_t* op) {        \
     return loom_attr_as_encoding_id(loom_op_attrs(op)[(index)]); \
+  }
+
+// Defines a function that reads an i64 array attribute by index.
+#define LOOM_DEFINE_ATTR_I64_ARRAY(func_name, index)              \
+  enum { func_name##_ATTR_INDEX = (index) };                      \
+  static inline loom_attribute_t func_name(const loom_op_t* op) { \
+    return loom_op_attrs(op)[(index)];                            \
   }
 
 // Defines a function that reads a DICT attribute by index.

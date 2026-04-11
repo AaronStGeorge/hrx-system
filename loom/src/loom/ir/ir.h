@@ -532,6 +532,9 @@ typedef enum loom_dialect_id_e {
   LOOM_DIALECT_ENCODING = 0x09,
   LOOM_DIALECT_POOL = 0x0A,
   LOOM_DIALECT_GLOBAL = 0x0B,
+  LOOM_DIALECT_BUFFER = 0x0C,
+  LOOM_DIALECT_VIEW = 0x0D,
+  LOOM_DIALECT_VECTOR = 0x0E,
   LOOM_DIALECT_RESERVED = 0xFF,
 } loom_dialect_id_t;
 #define LOOM_OP_KIND_UNKNOWN ((loom_op_kind_t)0)

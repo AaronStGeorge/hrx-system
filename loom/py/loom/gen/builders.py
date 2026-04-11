@@ -41,6 +41,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TemplateParam,
     TypeOf,
     TypesOf,
 )
@@ -238,6 +239,21 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                         }
                     )
 
+                case TemplateParam(field=name):
+                    attr_def = op.attr(name)
+                    type_hint = _attr_type_hint(attr_def)
+                    is_optional = attr_def.optional if attr_def else False
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "attr",
+                            "type_hint": type_hint,
+                            "optional": is_optional,
+                            "attr_def": attr_def,
+                            "doc": attr_def.doc if attr_def else "",
+                        }
+                    )
+
                 case PredicateList(field=name):
                     attr_def = op.attr(name)
                     is_optional = attr_def.optional if attr_def else False
@@ -312,10 +328,11 @@ def generate_builders(ops: Sequence[Op], class_name: str) -> str:
     Returns the Python source code as a string.
     """
     # Generate method bodies first so we can scan for used imports.
+    method_names = _builder_method_names(ops)
     method_lines: list[str] = []
-    for op in ops:
+    for op, method_name in zip(ops, method_names, strict=True):
         method_lines.append("")
-        method_lines.extend(_generate_method(op))
+        method_lines.extend(_generate_method(op, method_name))
 
     # Scan generated code to determine which imports are actually needed.
     body_text = "\n".join(method_lines)
@@ -364,10 +381,39 @@ def generate_builders(ops: Sequence[Op], class_name: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _generate_method(op: Op) -> list[str]:
+def _builder_method_names(ops: Sequence[Op]) -> list[str]:
+    """Return unique Python method names for builder ops.
+
+    Most ops use the final op-name segment (`scalar.addi` -> `addi`). When
+    that segment collides within a dialect, use the full dialect-local suffix
+    (`vector.load.mask` -> `load_mask`) so dotted op families remain distinct.
+    """
+    short_name_counts: dict[str, int] = {}
+    for op in ops:
+        short_name_counts[op.short_name] = short_name_counts.get(op.short_name, 0) + 1
+
+    method_names: list[str] = []
+    used_by: dict[str, str] = {}
+    for op in ops:
+        if short_name_counts[op.short_name] == 1:
+            method_name = op.short_name
+        else:
+            dialect_separator = op.name.find(".")
+            local_name = op.name[dialect_separator + 1 :] if dialect_separator >= 0 else op.name
+            method_name = local_name.replace(".", "_")
+        if method_name in _PYTHON_KEYWORDS:
+            method_name = method_name + "_"
+        prior_op_name = used_by.get(method_name)
+        if prior_op_name is not None:
+            raise ValueError(f"Python builder method name collision: {prior_op_name!r} and {op.name!r} both map to {method_name!r}")
+        used_by[method_name] = op.name
+        method_names.append(method_name)
+    return method_names
+
+
+def _generate_method(op: Op, method_name: str) -> list[str]:
     """Generate one builder method for an op."""
     params = _extract_params(op)
-    method_name = op.short_name
 
     # Build parameter list.
     keyword_param_strs: list[str] = []
@@ -406,10 +452,6 @@ def _generate_method(op: Op) -> list[str]:
     lines: list[str] = []
 
     # Method signature.
-    if method_name in _PYTHON_KEYWORDS:
-        method_name = method_name + "_"
-
-    # Method signature.
     sig = ", ".join(param_strs)
     lines.append(f"    def {method_name}({sig}) -> {return_type}:")
 
@@ -429,30 +471,28 @@ def _generate_method(op: Op) -> list[str]:
     lines.append("        _attributes: builtins.dict[str, Any] = {}")
     lines.append("        _regions: list[Region] = []")
 
+    params_by_name = {param["name"]: param for param in params}
+    operand_param_kinds = frozenset(
+        {
+            "operand",
+            "operand_variadic",
+            "index_list",
+            "binding_list",
+        }
+    )
+
     for param in params:
+        if param["kind"] in operand_param_kinds:
+            continue
         match param["kind"]:
-            case "operand":
-                lines.append(f"        _operands.append({param['name']})")
-            case "operand_variadic":
-                lines.append(f"        _operands.extend({param['name']})")
             case "attr":
                 if param.get("optional"):
                     lines.append(f"        if {param['name']} is not None:")
                     lines.append(f'            _attributes["{param["name"]}"] = {param["name"]}')
                 else:
                     lines.append(f'        _attributes["{param["name"]}"] = {param["name"]}')
-            case "index_list":
-                lines.append("        _sentinel = -(2**63)")
-                lines.append("        _static = []")
-                lines.append(f"        for _idx in {param['name']}:")
-                lines.append("            if isinstance(_idx, ValueRef):")
-                lines.append("                _static.append(_sentinel)")
-                lines.append("                _operands.append(_idx)")
-                lines.append("            else:")
-                lines.append("                _static.append(_idx)")
-                lines.append(f'        _attributes["{param["static_field"]}"] = _static')
-            case "binding_list":
-                lines.append(f"        _operands.extend({param['name']})")
+            case "binding_list" | "index_list" | "operand" | "operand_variadic":
+                pass
             case "func_args":
                 lines.append(f"        if {param['name']} is not None:")
                 lines.append(f"            _func_args.extend({param['name']})")
@@ -470,6 +510,28 @@ def _generate_method(op: Op) -> list[str]:
             case "region":
                 lines.append(f"        if {param['name']} is not None:")
                 lines.append(f"            _regions.append({param['name']})")
+
+    for operand in op.operands:
+        operand_param = params_by_name.get(operand.name)
+        if operand_param is None:
+            continue
+        match operand_param["kind"]:
+            case "operand":
+                lines.append(f"        _operands.append({operand_param['name']})")
+            case "operand_variadic":
+                lines.append(f"        _operands.extend({operand_param['name']})")
+            case "index_list":
+                lines.append("        _sentinel = -(2**63)")
+                lines.append("        _static = []")
+                lines.append(f"        for _idx in {operand_param['name']}:")
+                lines.append("            if isinstance(_idx, ValueRef):")
+                lines.append("                _static.append(_sentinel)")
+                lines.append("                _operands.append(_idx)")
+                lines.append("            else:")
+                lines.append("                _static.append(_idx)")
+                lines.append(f'        _attributes["{operand_param["static_field"]}"] = _static')
+            case "binding_list":
+                lines.append(f"        _operands.extend({operand_param['name']})")
 
     # Build call and return with appropriate type narrowing.
     if has_result_type_list:
@@ -523,11 +585,14 @@ def _has_typeof_result(op: Op) -> bool:
 
 def main() -> None:
     """Generate builder stubs for all registered dialects."""
+    from loom.dialect.buffer import ALL_BUFFER_OPS
     from loom.dialect.encoding import ALL_ENCODING_OPS
     from loom.dialect.func import ALL_FUNC_OPS
     from loom.dialect.pool import ALL_POOL_OPS
     from loom.dialect.scalar import ALL_SCALAR_OPS
     from loom.dialect.test import ALL_TEST_OPS
+    from loom.dialect.vector import ALL_VECTOR_OPS
+    from loom.dialect.view import ALL_VIEW_OPS
 
     dialect_root = _bootstrap.REPO_ROOT / "loom" / "py" / "loom" / "dialect"
 
@@ -542,6 +607,9 @@ def main() -> None:
         ),
         ("func", list(ALL_FUNC_OPS), "FuncBuilders", "func/builders.py"),
         ("pool", list(ALL_POOL_OPS), "PoolBuilders", "pool/builders.py"),
+        ("buffer", list(ALL_BUFFER_OPS), "BufferBuilders", "buffer/builders.py"),
+        ("view", list(ALL_VIEW_OPS), "ViewBuilders", "view/builders.py"),
+        ("vector", list(ALL_VECTOR_OPS), "VectorBuilders", "vector/builders.py"),
     ]
 
     for _dialect_name, ops, class_name, rel_path in dialects:

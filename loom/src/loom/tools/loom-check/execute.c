@@ -11,6 +11,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/global/ops.h"
@@ -18,6 +19,8 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/testing/diff.h"
 #include "loom/transforms/canonicalize.h"
 #include "loom/transforms/cse.h"
@@ -170,6 +173,12 @@ iree_status_t loom_check_context_initialize(loom_context_t* context) {
       context, LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables));
   IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_SCF,
                                                    loom_scf_dialect_vtables));
+  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
+      context, LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables));
+  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_VIEW,
+                                                   loom_view_dialect_vtables));
+  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
+      context, LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables));
   return loom_context_finalize(context);
 }
 

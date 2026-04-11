@@ -42,6 +42,7 @@ from loom.assembly import (
     ResultTypeList,
     Scope,
     SymbolRef,
+    TemplateParam,
     TypeOf,
     TypesOf,
 )
@@ -1640,6 +1641,12 @@ class Parser:
                         op_name_tok = tok.expect(TokenKind.OP_NAME)
                         tok.expect(TokenKind.RANGLE)
                         parsed.attributes[name] = op_name_tok.text
+
+                case TemplateParam(field=name):
+                    tok.expect(TokenKind.LANGLE)
+                    attr_def = op_decl.attr(name)
+                    parsed.attributes[name] = self._parse_attr_value(attr_def)
+                    tok.expect(TokenKind.RANGLE)
 
                 case Glue():
                     pass

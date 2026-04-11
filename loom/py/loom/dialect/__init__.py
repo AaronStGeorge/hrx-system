@@ -11,21 +11,27 @@ that defines its operations and exports them for use in IR construction.
 """
 
 from loom.dialect import (
+    buffer,
     encoding,
     func,
     hal,
     pool,
     scalar,
     scf,
+    vector,
+    view,
     vm,
 )
 
 __all__ = [
+    "buffer",
     "encoding",
     "func",
     "hal",
     "pool",
     "scalar",
     "scf",
+    "vector",
+    "view",
     "vm",
 ]

@@ -28,3 +28,5 @@
     [LOOM_KW_PRIORITY] = (const uint8_t*)"\x08" "priority",
     [LOOM_KW_X] = (const uint8_t*)"\x01" "x",
     [LOOM_KW_IMPORT] = (const uint8_t*)"\x06" "import",
+    [LOOM_KW_LAYOUT] = (const uint8_t*)"\x06" "layout",
+    [LOOM_KW_INTO] = (const uint8_t*)"\x04" "into",
