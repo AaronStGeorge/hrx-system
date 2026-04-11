@@ -7,9 +7,11 @@
 """Built-in loom type declarations.
 
 These TypeDefs define the textual format for the core loom types.
-Scalar types (f32, i32, index) are keywords, not TypeDefs. Everything
-with angle-bracket syntax (tile<...>, tensor<...>, group<...>) or
-dotted-name syntax (hal.buffer, vm.ref<...>) is a TypeDef.
+Scalar types (f32, i32, index) and the first-class ``encoding`` SSA
+type are keywords, not TypeDefs. Core named types such as tile<...>,
+tensor<...>, vector<...>, view<...>, bare buffer, pool<...>, and
+group<...>, plus dotted dialect types such as hal.buffer and vm.ref<...>,
+are TypeDefs.
 
 Dialect-specific types are declared in their respective dialect files
 (e.g., dialect/hal/, dialect/vm/) using the same TypeDef pattern.
@@ -38,6 +40,10 @@ __all__ = [
     # Shaped types.
     "tile_type",
     "tensor_type",
+    "vector_type",
+    "view_type",
+    # Buffer type.
+    "buffer_type",
     # Pool type.
     "pool_type",
     # Group type.
@@ -45,12 +51,14 @@ __all__ = [
 ]
 
 # ============================================================================
-# tile<...> — local compute tile
+# tile<...> — tile-level aggregate value
 # ============================================================================
 
 tile_type = TypeDef(
     name="tile",
-    doc="Local compute tile with static/dynamic dims and optional encoding.",
+    doc=(
+        "Tile-level aggregate SSA value with static/dynamic dims and optional encoding."
+    ),
     ir_kind="tile",
     params=[
         ShapeParam("dims"),
@@ -66,12 +74,12 @@ tile_type = TypeDef(
 )
 
 # ============================================================================
-# tensor<...> — global storage tensor
+# tensor<...> — logical tensor value
 # ============================================================================
 
 tensor_type = TypeDef(
     name="tensor",
-    doc="Global storage tensor with static/dynamic dims and optional encoding.",
+    doc=("Logical tensor SSA value with static/dynamic dims and optional encoding."),
     ir_kind="tensor",
     params=[
         ShapeParam("dims"),
@@ -84,6 +92,59 @@ tensor_type = TypeDef(
         ScalarOf("element_type"),
         OptionalGroup([COMMA, EncodingOf("encoding")], anchor="encoding"),
     ],
+)
+
+# ============================================================================
+# vector<...> — register lane grid
+# ============================================================================
+
+vector_type = TypeDef(
+    name="vector",
+    doc="Register lane-grid SSA value with static/dynamic lane dimensions.",
+    ir_kind="vector",
+    params=[
+        ShapeParam("dims"),
+        ScalarParam("element_type"),
+    ],
+    format=[
+        ShapeOf("dims"),
+        kw("x"),
+        ScalarOf("element_type"),
+    ],
+)
+
+# ============================================================================
+# view<...> — typed addressable logical coordinate space
+# ============================================================================
+
+view_type = TypeDef(
+    name="view",
+    doc=(
+        "Typed non-owning logical coordinate space over buffer storage with "
+        "optional address layout."
+    ),
+    ir_kind="view",
+    params=[
+        ShapeParam("dims"),
+        ScalarParam("element_type"),
+        EncodingParam("layout"),
+    ],
+    format=[
+        ShapeOf("dims"),
+        kw("x"),
+        ScalarOf("element_type"),
+        OptionalGroup([COMMA, EncodingOf("layout")], anchor="layout"),
+    ],
+)
+
+# ============================================================================
+# buffer — opaque storage identity
+# ============================================================================
+
+buffer_type = TypeDef(
+    name="buffer",
+    doc="Opaque untyped storage identity used as the root for typed views.",
+    ir_kind="buffer",
 )
 
 # ============================================================================
@@ -121,6 +182,9 @@ group_type = TypeDef(
 ALL_BUILTIN_TYPES: tuple[TypeDef, ...] = (
     tile_type,
     tensor_type,
+    vector_type,
+    view_type,
+    buffer_type,
     pool_type,
     group_type,
 )

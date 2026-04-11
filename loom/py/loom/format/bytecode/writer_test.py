@@ -20,6 +20,7 @@ from loom.format.bytecode.writer import (
 )
 from loom.ir import (
     BF16,
+    BUFFER_TYPE,
     F32,
     I8,
     I32,
@@ -32,6 +33,7 @@ from loom.ir import (
     CanonicalAttrDict,
     DialectType,
     DynamicDim,
+    DynamicEncoding,
     EncodingInstance,
     FunctionType,
     GroupScope,
@@ -400,6 +402,31 @@ class TestTypesSection:
     def test_tensor_1d(self) -> None:
         self._roundtrip_type(ShapedType(TypeKind.TENSOR, I8, (StaticDim(256),)))
 
+    def test_vector_1d(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.VECTOR, F32, (StaticDim(16),)))
+
+    def test_vector_dynamic(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.VECTOR, I32, (DynamicDim(),)))
+
+    def test_view_1d(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.VIEW, I8, (StaticDim(256),)))
+
+    def test_view_with_layout(self) -> None:
+        layout = EncodingInstance(name="strided", params=(("stride", 64),))
+        self._roundtrip_type(
+            ShapedType(TypeKind.VIEW, F32, (StaticDim(256),), encoding=layout)
+        )
+
+    def test_view_with_dynamic_layout(self) -> None:
+        self._roundtrip_type(
+            ShapedType(
+                TypeKind.VIEW,
+                F32,
+                (StaticDim(256),),
+                encoding=DynamicEncoding(),
+            )
+        )
+
     def test_tensor_large_dim(self) -> None:
         self._roundtrip_type(ShapedType(TypeKind.TENSOR, F32, (StaticDim(1048576),)))
 
@@ -445,6 +472,9 @@ class TestTypesSection:
 
     def test_pool_dynamic(self) -> None:
         self._roundtrip_type(PoolType(DynamicDim()))
+
+    def test_buffer_type(self) -> None:
+        self._roundtrip_type(BUFFER_TYPE)
 
     def test_encoding_type(self) -> None:
         from loom.ir import ENCODING_TYPE

@@ -29,6 +29,12 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint) {
       [LOOM_TYPE_CONSTRAINT_ENCODING] = "encoding",
       [LOOM_TYPE_CONSTRAINT_POOL] = "pool",
       [LOOM_TYPE_CONSTRAINT_I1] = "i1",
+      [LOOM_TYPE_CONSTRAINT_VECTOR] = "vector",
+      [LOOM_TYPE_CONSTRAINT_VIEW] = "view",
+      [LOOM_TYPE_CONSTRAINT_BUFFER] = "buffer",
+      [LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT] = "integer_element",
+      [LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT] = "float_element",
+      [LOOM_TYPE_CONSTRAINT_I1_ELEMENT] = "i1_element",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_TYPE_CONSTRAINT_COUNT_,
                 "constraint names out of sync with enum");

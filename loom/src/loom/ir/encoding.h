@@ -6,10 +6,11 @@
 
 // Static encoding records and context-owned encoding family vtables.
 //
-// Shaped types carry either:
+// Tile/tensor encodings and view layouts carry either:
 //   - a dynamic encoding SSA binding (`%enc`) in `loom_type_t.encoding_id`
 //     with `LOOM_ENCODING_FLAG_SSA`, or
 //   - a 1-based index into a module-owned `loom_encoding_table_t`.
+// Vector types are shaped but intentionally cannot carry this attachment slot.
 //
 // Each static module encoding entry is identified by `(name_id, attributes)`.
 // `alias_id` is a display-only spelling hint used by the text printer and is

@@ -52,6 +52,11 @@ def main() -> int:
         cwd=REPO_ROOT,
     )
     ok &= _run(
+        "c errors",
+        [sys.executable, "loom/py/loom/gen/run.py", "c_errors"],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
         "c tables",
         [sys.executable, "loom/py/loom/gen/run.py", "c_tables"],
         cwd=REPO_ROOT,

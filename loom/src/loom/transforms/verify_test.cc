@@ -1695,6 +1695,73 @@ TEST_F(VerifyTest, SsaEncodingWrongType) {
   ExpectTypeParam(*entry, 2, i32_type);
 }
 
+TEST_F(VerifyTest, RejectsRankZeroVectorType) {
+  loom_type_t vector_type =
+      loom_type_shaped_0d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, 0);
+  loom_type_t arg_types[] = {vector_type};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, 1, args);
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_010);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/010 malformed vector error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
+  ExpectNoFieldRefParam(*entry, 0);
+  ExpectTypeParam(*entry, 1, vector_type);
+  EXPECT_EQ(GetStringParam(*entry, 2), "vector types must have rank >= 1");
+}
+
+TEST_F(VerifyTest, RejectsOutOfRangeTypeKind) {
+  loom_type_t invalid_type = {0};
+  invalid_type.header =
+      loom_type_make_header((loom_type_kind_t)99, (loom_scalar_type_t)0, 0, 0);
+  loom_type_t arg_types[] = {invalid_type};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, 1, args);
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_010);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/010 invalid type kind error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
+  ExpectNoFieldRefParam(*entry, 0);
+  ExpectTypeParam(*entry, 1, invalid_type);
+  EXPECT_EQ(GetStringParam(*entry, 2), "type kind is out of range");
+}
+
+TEST_F(VerifyTest, RejectsVectorEncodingAttachment) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t arg_types[] = {i32_type};
+  loom_value_id_t args[1];
+  EnterTestFunc(arg_types, 1, args);
+
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 7);
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_convert_build(&builder_, args[0], vector_type,
+                                         LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(structured, &loom_err_type_010);
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/010 vector encoding error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "result 0");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
+  ExpectTypeParam(*entry, 1, vector_type);
+  EXPECT_EQ(GetStringParam(*entry, 2),
+            "vector types must not carry encoding or layout attachments");
+}
+
 //===----------------------------------------------------------------------===//
 // Variadic field constraint checks
 //===----------------------------------------------------------------------===//

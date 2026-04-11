@@ -17,9 +17,10 @@ from typing import Any
 import pytest
 
 from loom.format.bytecode.reader import BytecodeError, BytecodeReader, read_module
-from loom.format.bytecode.writer import write_module
+from loom.format.bytecode.writer import BYTECODE_TYPE_KIND_BY_IR_KIND, write_module
 from loom.ir import (
     BF16,
+    BUFFER_TYPE,
     F32,
     I8,
     I32,
@@ -32,6 +33,7 @@ from loom.ir import (
     CanonicalAttrDict,
     DialectType,
     DynamicDim,
+    DynamicEncoding,
     EncodingInstance,
     FunctionType,
     GroupScope,
@@ -186,6 +188,76 @@ class TestTruncatedInput:
             read_module(data[:24])
 
 
+class TestMalformedTypeSection:
+    def _read_types(
+        self,
+        data: bytes,
+        encodings: list[EncodingInstance] | None = None,
+    ) -> list[Type]:
+        reader = BytecodeReader(b"")
+        reader._encodings = encodings or []
+        reader._read_types_section((0, data))
+        return reader._types
+
+    def test_vector_rank_zero_is_rejected(self) -> None:
+        data = bytes(
+            [
+                1,  # type count
+                BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.VECTOR],
+                F32.kind.value,
+                0,  # rank
+                0,  # no encoding/layout attachment
+                0,  # attachment id
+            ]
+        )
+        with pytest.raises(BytecodeError, match="rank >= 1"):
+            self._read_types(data)
+
+    def test_vector_encoding_attachment_is_rejected(self) -> None:
+        data = bytes(
+            [
+                1,  # type count
+                BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.VECTOR],
+                F32.kind.value,
+                1,  # rank
+                1,  # static encoding/layout attachment
+                1,  # encoding table id
+                0,  # static dim
+                4,  # dim size
+            ]
+        )
+        with pytest.raises(BytecodeError, match="must not carry"):
+            self._read_types(data, [EncodingInstance(name="dense")])
+
+    def test_unknown_encoding_attachment_is_rejected(self) -> None:
+        data = bytes(
+            [
+                1,  # type count
+                BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.TILE],
+                F32.kind.value,
+                0,  # rank
+                9,  # unknown encoding attachment
+                0,  # attachment id
+            ]
+        )
+        with pytest.raises(BytecodeError, match="unknown encoding attachment"):
+            self._read_types(data)
+
+    def test_static_encoding_id_zero_is_rejected(self) -> None:
+        data = bytes(
+            [
+                1,  # type count
+                2,  # tile
+                F32.kind.value,
+                0,  # rank
+                1,  # static encoding attachment
+                0,  # invalid zero table id
+            ]
+        )
+        with pytest.raises(BytecodeError, match="static encoding id out of range"):
+            self._read_types(data)
+
+
 # ============================================================================
 # Module structure
 # ============================================================================
@@ -299,6 +371,40 @@ class TestTypeRoundTrips:
         t = ShapedType(TypeKind.TENSOR, I8, (StaticDim(256),))
         assert self._roundtrip_type(t) == t
 
+    def test_vector_1d(self) -> None:
+        t = ShapedType(TypeKind.VECTOR, F32, (StaticDim(16),))
+        assert self._roundtrip_type(t) == t
+
+    def test_vector_dynamic(self) -> None:
+        t = ShapedType(TypeKind.VECTOR, I32, (DynamicDim(),))
+        assert self._roundtrip_type(t) == t
+
+    def test_view_1d(self) -> None:
+        t = ShapedType(TypeKind.VIEW, I8, (StaticDim(256),))
+        assert self._roundtrip_type(t) == t
+
+    def test_view_with_layout(self) -> None:
+        layout = EncodingInstance(name="strided", params=(("stride", 64),))
+        t = ShapedType(TypeKind.VIEW, F32, (StaticDim(256),), encoding=layout)
+        loaded = self._roundtrip_type(t)
+        assert isinstance(loaded, ShapedType)
+        assert loaded.type_kind == TypeKind.VIEW
+        assert isinstance(loaded.encoding, EncodingInstance)
+        assert loaded.encoding.name == "strided"
+        assert loaded.encoding.params == (("stride", 64),)
+
+    def test_view_with_dynamic_layout(self) -> None:
+        t = ShapedType(
+            TypeKind.VIEW,
+            F32,
+            (StaticDim(256),),
+            encoding=DynamicEncoding(),
+        )
+        loaded = self._roundtrip_type(t)
+        assert isinstance(loaded, ShapedType)
+        assert loaded.type_kind == TypeKind.VIEW
+        assert isinstance(loaded.encoding, DynamicEncoding)
+
     def test_tile_dynamic(self) -> None:
         t = ShapedType(TypeKind.TILE, F32, (DynamicDim(), StaticDim(4)))
         assert self._roundtrip_type(t) == t
@@ -396,6 +502,9 @@ class TestTypeRoundTrips:
         assert isinstance(loaded.params[1], DialectType)
         assert loaded.params[0].name == "hal.buffer"
         assert loaded.params[1].name == "hal.fence"
+
+    def test_buffer_type(self) -> None:
+        assert self._roundtrip_type(BUFFER_TYPE) is BUFFER_TYPE
 
 
 # ============================================================================

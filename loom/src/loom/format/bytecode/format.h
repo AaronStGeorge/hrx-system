@@ -648,6 +648,9 @@ typedef enum loom_bytecode_type_kind_e {
   LOOM_BYTECODE_TYPE_DIALECT = 6,
   LOOM_BYTECODE_TYPE_ENCODING = 7,
   LOOM_BYTECODE_TYPE_POOL = 8,
+  LOOM_BYTECODE_TYPE_VECTOR = 9,
+  LOOM_BYTECODE_TYPE_VIEW = 10,
+  LOOM_BYTECODE_TYPE_BUFFER = 11,
 } loom_bytecode_type_kind_t;
 
 // Group scope byte in the TYPES section (GROUP payload).
@@ -657,7 +660,7 @@ typedef enum loom_bytecode_group_scope_e {
   LOOM_BYTECODE_GROUP_SCOPE_SUBGROUP = 1,
 } loom_bytecode_group_scope_t;
 
-// Encoding attachment discriminator in TILE/TENSOR type payloads.
+// Encoding/layout attachment discriminator in TILE/TENSOR/VIEW type payloads.
 typedef enum loom_bytecode_encoding_attachment_e {
   LOOM_BYTECODE_ENCODING_ATTACHMENT_NONE = 0,
   LOOM_BYTECODE_ENCODING_ATTACHMENT_STATIC = 1,

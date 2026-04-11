@@ -63,6 +63,7 @@ from loom.format.text.tokenizer import (
     TokenKind,
 )
 from loom.ir import (
+    BUFFER_TYPE,
     ENCODING_TYPE,
     GROUP_SCOPE_BY_NAME,
     NONE_TYPE,
@@ -540,12 +541,14 @@ def parse_type_from_tokens(
         type_def = type_registry.get(token.text)
         if type_def is not None:
             tokenizer.next()
+            if type_def.ir_kind == "buffer" and type_def.is_opaque:
+                return BUFFER_TYPE, {}
             if type_def.is_opaque:
                 return DialectType(type_def.name), {}
             tokenizer.expect(TokenKind.LANGLE)
-            # Shaped types (tile, tensor, pool) parse from the token
-            # stream using in_dim_list for 'x' separators. Other types
-            # use the interior tokenizer approach.
+            # Shape-grammar types parse from the token stream using in_dim_list
+            # for 'x' separators. Other types use the interior tokenizer
+            # approach.
             has_shape = any(isinstance(p, ShapeParam) for p in type_def.params)
             if has_shape:
                 result = _parse_shaped_type_from_tokens(
@@ -781,7 +784,7 @@ def _parse_shaped_type_from_tokens(
     module: Module,
     mode: TypeParseMode,
 ) -> tuple[ShapedType | PoolType, dict[int, int]]:
-    """Parse a shaped type (tile, tensor, pool) from the token stream.
+    """Parse a shaped type (tile, tensor, vector, view, pool) from the token stream.
 
     Called after LANGLE has been consumed. Consumes tokens through
     RANGLE. Uses in_dim_list on the tokenizer to handle 'x' as a
@@ -808,8 +811,13 @@ def _parse_shaped_type_from_tokens(
             dim_bindings[0] = binding_id
         return PoolType(block_size=dim), dim_bindings
 
-    # Shaped type (tile, tensor).
-    _IR_KIND_TO_TYPE_KIND = {"tile": TypeKind.TILE, "tensor": TypeKind.TENSOR}
+    # Shaped type (tile, tensor, vector, view).
+    _IR_KIND_TO_TYPE_KIND = {
+        "tile": TypeKind.TILE,
+        "tensor": TypeKind.TENSOR,
+        "vector": TypeKind.VECTOR,
+        "view": TypeKind.VIEW,
+    }
     type_kind = _IR_KIND_TO_TYPE_KIND.get(type_def.ir_kind)
     if type_kind is None:
         token = tokenizer.peek()
@@ -852,6 +860,13 @@ def _parse_shaped_type_from_tokens(
         # Rank 0 — no dims. Clear in_dim_list before element type.
         tokenizer.in_dim_list = False
 
+    if type_kind == TypeKind.VECTOR and not dims:
+        raise ParseError(
+            "vector types must have rank >= 1",
+            token.location,
+            filename,
+        )
+
     # Parse element type (in_dim_list is false here).
     element_token = tokenizer.expect(TokenKind.BARE_IDENT)
     scalar_kind = _SCALAR_NAMES.get(element_token.text)
@@ -867,6 +882,12 @@ def _parse_shaped_type_from_tokens(
     encoding: EncodingInstance | DynamicEncoding | None = None
     encoding_binding = -1
     if tokenizer.try_consume(TokenKind.COMMA):
+        if type_kind == TypeKind.VECTOR:
+            raise ParseError(
+                "vector types must not carry encoding or layout attachments",
+                tokenizer.peek().location,
+                filename,
+            )
         encoding, encoding_binding = _parse_type_encoding_from_tokens(
             tokenizer, scope, module, mode, filename
         )

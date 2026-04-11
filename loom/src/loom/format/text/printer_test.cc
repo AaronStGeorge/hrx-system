@@ -150,6 +150,27 @@ TEST(PrintType, Tensor1D) {
   EXPECT_EQ(print_type(type), "tensor<256xf32>");
 }
 
+TEST(PrintType, Vector1D) {
+  loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                                         loom_dim_pack_static(16), 0);
+  EXPECT_EQ(print_type(type), "vector<16xf32>");
+}
+
+TEST(PrintType, Vector2D) {
+  loom_type_t type =
+      loom_type_shaped_2d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(4), loom_dim_pack_static(16), 0);
+  EXPECT_EQ(print_type(type), "vector<4x16xf32>");
+}
+
+TEST(PrintType, View1D) {
+  loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                                         loom_dim_pack_static(256), 0);
+  EXPECT_EQ(print_type(type), "view<256xf32>");
+}
+
+TEST(PrintType, Buffer) { EXPECT_EQ(print_type(loom_type_buffer()), "buffer"); }
+
 TEST(PrintType, GroupWorkgroup) {
   loom_type_t type;
   memset(&type, 0, sizeof(type));

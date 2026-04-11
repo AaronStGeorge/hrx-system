@@ -247,6 +247,34 @@
     "fix_hint_template": "Convert yielded value to type {result_element_type}"
   },
   {
+    "error_id": "ERR_TYPE_010",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Malformed type payload.",
+    "message_template": "'{field_name}' has malformed type {actual_type}: {reason}",
+    "params": [
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Construct a well-formed type before verification"
+  },
+  {
     "error_id": "ERR_SHAPE_001",
     "domain": 1,
     "domain_name": "SHAPE",

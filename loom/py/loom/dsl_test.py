@@ -23,15 +23,19 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    BUFFER,
     COMMUTATIVE,
     CONSTANT_LIKE,
     DECOMPOSABLE,
     ELEMENTWISE,
     FLOAT,
+    FLOAT_ELEMENT,
     I1,
+    I1_ELEMENT,
     IDEMPOTENT,
     INDEX,
     INTEGER,
+    INTEGER_ELEMENT,
     INVOLUTION,
     NON_DETERMINISTIC,
     POOL,
@@ -111,12 +115,28 @@ class TestTypeConstraints:
     def test_singleton_equality(self) -> None:
         assert TILE == TypeConstraint.TILE
         assert INTEGER == TypeConstraint.INTEGER
+        assert BUFFER == TypeConstraint.BUFFER
+        assert INTEGER_ELEMENT == TypeConstraint.INTEGER_ELEMENT
         assert TILE != TENSOR
 
     def test_values(self) -> None:
         assert TILE.value == "tile"
         assert FLOAT.value == "float"
+        assert FLOAT_ELEMENT.value == "float_element"
+        assert I1_ELEMENT.value == "i1_element"
         assert INDEX.value == "index"
+
+    def test_element_family_constraints_are_shaped_specific(self) -> None:
+        element_family_constraints = {
+            constraint
+            for constraint in TypeConstraint
+            if constraint.value.startswith(("integer_", "float_", "i1_"))
+        }
+        assert element_family_constraints == {
+            TypeConstraint.INTEGER_ELEMENT,
+            TypeConstraint.FLOAT_ELEMENT,
+            TypeConstraint.I1_ELEMENT,
+        }
 
 
 # ============================================================================

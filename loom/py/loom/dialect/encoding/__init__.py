@@ -7,9 +7,9 @@
 """Encoding dialect: encoding definition and query ops.
 
 Encodings describe the physical data layout (quantization, packing, etc.)
-of tile and tensor types. The encoding dialect provides ops to create
-and query encoding values as first-class SSA values, enabling encodings
-that compose across library boundaries.
+of tile and tensor types and the address layout of view types. The encoding
+dialect provides ops to create and query encoding values as first-class SSA
+values, enabling encodings/layouts that compose across library boundaries.
 
 A model author picks an encoding in one top-level file and it propagates
 through hundreds of library .loom files unchanged — function signatures

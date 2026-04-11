@@ -11,6 +11,7 @@ extern const loom_error_def_t loom_err_type_006;
 extern const loom_error_def_t loom_err_type_007;
 extern const loom_error_def_t loom_err_type_008;
 extern const loom_error_def_t loom_err_type_009;
+extern const loom_error_def_t loom_err_type_010;
 extern const loom_error_def_t loom_err_shape_001;
 extern const loom_error_def_t loom_err_shape_002;
 extern const loom_error_def_t loom_err_shape_003;

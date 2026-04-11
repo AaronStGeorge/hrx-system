@@ -67,6 +67,7 @@ from loom.fields import (
 )
 from loom.ir import (
     Block,
+    BufferType,
     DialectType,
     DynamicDim,
     DynamicEncoding,
@@ -178,6 +179,8 @@ def print_type(
             return repr(ir_type)
         case ShapedType():
             return _print_shaped_type(ir_type, context)
+        case BufferType():
+            return "buffer"
         case PoolType():
             return _print_pool_type(ir_type, context)
         case GroupType(scope=scope):
@@ -270,8 +273,14 @@ def _print_dialect_type(
 def _print_shaped_type(
     shaped: ShapedType, context: TypePrintContext | None = None
 ) -> str:
-    """Print tile<...> or tensor<...> with optional dim names and encodings."""
-    kind_name = "tile" if shaped.type_kind == TypeKind.TILE else "tensor"
+    """Print shaped types with optional dim names and encodings/layouts."""
+    kind_names = {
+        TypeKind.TILE: "tile",
+        TypeKind.TENSOR: "tensor",
+        TypeKind.VECTOR: "vector",
+        TypeKind.VIEW: "view",
+    }
+    kind_name = kind_names[shaped.type_kind]
     if shaped.rank == 0:
         inner = repr(shaped.element_type)
     else:

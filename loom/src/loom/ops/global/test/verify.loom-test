@@ -82,3 +82,24 @@ global.constant @pi_bad_initializer : f32 = 1
 // i1 integer initializers must be 0 or 1.
 // ERROR@+1: TYPE/005 "initializer"
 global.variable @bad_flag : i1 = 2
+
+// ====
+
+// Dynamic vector globals match structurally; declaration-local dim names do not
+// need to be the same SSA ids as use-site co-results.
+global.variable @vec_state : vector<[%n]xf32>
+
+func.def @vector_global_load() {
+  %vec, %m = global.load @vec_state : vector<[%m]xf32>
+  func.return
+}
+
+// ====
+
+// View globals use the same structural dim/layout matching path.
+global.variable @view_state : view<[%n]xf32, %layout>
+
+func.def @view_global_load() {
+  %view, %m, %layout = global.load @view_state : view<[%m]xf32, %layout>
+  func.return
+}

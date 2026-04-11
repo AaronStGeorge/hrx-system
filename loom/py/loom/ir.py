@@ -48,6 +48,8 @@ __all__ = [
     # Type kinds and types.
     "TypeKind",
     "ShapedType",
+    "BufferType",
+    "BUFFER_TYPE",
     "GroupScope",
     "GROUP_SCOPE_BY_NAME",
     "GroupType",
@@ -222,7 +224,10 @@ class TypeKind(IntEnum):
     DIALECT = 6
     ENCODING = 7
     POOL = 8
-    PLACEHOLDER = 9
+    VECTOR = 9
+    VIEW = 10
+    BUFFER = 11
+    PLACEHOLDER = 12
 
 
 # ============================================================================
@@ -295,28 +300,47 @@ F64 = ScalarType(ScalarTypeKind.F64)
 
 @dataclass(frozen=True, slots=True)
 class ShapedType:
-    """A tile or tensor type with shape, element type, and optional encoding.
+    """A shaped type with shape, element type, and optional encoding/layout.
 
     Types are structural: dynamic dims are DynamicDim() flags, not
     references to specific SSA values. The binding of dynamic dims to
     values happens on the Value that carries this type.
 
-    encoding is None for dense (no encoding), an EncodingInstance for
-    a statically-known encoding, or DynamicEncoding for an encoding
+    Tensor, tile, and vector shaped types describe SSA values at different
+    lowering levels. View shaped types describe typed, non-owning logical
+    coordinate spaces over buffer storage; the view-producing op still carries
+    the storage identity and offset/dynamic binding information needed for
+    alias reasoning.
+
+    Tile/tensor/view types may carry an encoding/layout attachment. The
+    attachment is None for the default representation, an EncodingInstance
+    for a statically-known attachment, or DynamicEncoding for an attachment
     bound via SSA value. Since all variants are frozen and hashable,
-    ShapedType remains internable.
+    ShapedType remains internable. Vector types are pure register lane grids
+    and do not carry encoding/layout attachments.
     """
 
-    type_kind: TypeKind  # TILE or TENSOR
+    type_kind: TypeKind  # TILE, TENSOR, VECTOR, or VIEW
     element_type: ScalarType
     dims: tuple[Dim, ...]
     encoding: EncodingInstance | DynamicEncoding | None = None
 
     def __post_init__(self) -> None:
-        if self.type_kind not in (TypeKind.TILE, TypeKind.TENSOR):
+        if self.type_kind not in (
+            TypeKind.TILE,
+            TypeKind.TENSOR,
+            TypeKind.VECTOR,
+            TypeKind.VIEW,
+        ):
             raise ValueError(
-                f"ShapedType type_kind must be TILE or TENSOR, got {self.type_kind}"
+                "ShapedType type_kind must be TILE, TENSOR, VECTOR, or VIEW, "
+                f"got {self.type_kind}"
             )
+        if self.type_kind == TypeKind.VECTOR:
+            if not self.dims:
+                raise ValueError("vector types must have rank >= 1")
+            if self.encoding is not None:
+                raise ValueError("vector types must not carry encodings/layouts")
 
     @property
     def rank(self) -> int:
@@ -339,7 +363,7 @@ class ShapedType:
         return all(isinstance(d, StaticDim) for d in self.dims)
 
     def __repr__(self) -> str:
-        kind_name = "tile" if self.type_kind == TypeKind.TILE else "tensor"
+        kind_name = _SHAPED_TYPE_KIND_NAMES[self.type_kind]
         if self.dims:
             dim_strs = []
             for d in self.dims:
@@ -351,6 +375,30 @@ class ShapedType:
             shape = "x".join(dim_strs)
             return f"{kind_name}<{shape}x{self.element_type}>"
         return f"{kind_name}<{self.element_type}>"
+
+
+_SHAPED_TYPE_KIND_NAMES: dict[TypeKind, str] = {
+    TypeKind.TILE: "tile",
+    TypeKind.TENSOR: "tensor",
+    TypeKind.VECTOR: "vector",
+    TypeKind.VIEW: "view",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class BufferType:
+    """An opaque untyped storage identity used as the root for typed views."""
+
+    @property
+    def type_kind(self) -> TypeKind:
+        return TypeKind.BUFFER
+
+    def __repr__(self) -> str:
+        return "buffer"
+
+
+# Singleton for the first-class buffer type.
+BUFFER_TYPE = BufferType()
 
 
 class GroupScope(IntEnum):
@@ -439,8 +487,8 @@ class EncodingType:
     """The type of an encoding SSA value.
 
     encoding.define produces a value of this type. Values of
-    EncodingType are referenced in the encoding position of
-    tile/tensor types (tile<4xf32, %enc>).
+    EncodingType are referenced in encoding/layout attachment positions
+    such as tile<4xf32, %enc> and view<[%N]xf32, %layout>.
     """
 
     @property
@@ -508,6 +556,7 @@ class PlaceholderType:
 type Type = (
     ScalarType
     | ShapedType
+    | BufferType
     | GroupType
     | FunctionType
     | DialectType
@@ -521,7 +570,7 @@ type Type = (
 def binding_element_type(operand_type: Type) -> Type:
     """Extract the element type for an 'element' binding.
 
-    For shaped types (tile, tensor): returns the scalar element type.
+    For shaped types (tile, tensor, vector, view): returns the scalar element type.
     For scalar types: returns the type itself (identity).
     For dialect types: returns the first type parameter if available,
       otherwise the type itself. Custom types can override this by

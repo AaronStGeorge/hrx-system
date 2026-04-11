@@ -25,6 +25,7 @@ from typing import Any, ClassVar
 from loom.format.bytecode.encoding import ByteBuffer
 from loom.ir import (
     Block,
+    BufferType,
     DialectType,
     DynamicDim,
     DynamicEncoding,
@@ -79,6 +80,27 @@ ATTR_KIND_TYPE = 7
 ATTR_KIND_PREDICATE_LIST = 8
 ATTR_KIND_DICT = 9
 ATTR_KIND_ENCODING = 10
+
+# Type kind bytes. These must match loom_bytecode_type_kind_e, not just the
+# current Python enum spelling.
+BYTECODE_TYPE_KIND_BY_IR_KIND: dict[TypeKind, int] = {
+    TypeKind.NONE: 0,
+    TypeKind.SCALAR: 1,
+    TypeKind.TILE: 2,
+    TypeKind.TENSOR: 3,
+    TypeKind.GROUP: 4,
+    TypeKind.FUNCTION: 5,
+    TypeKind.DIALECT: 6,
+    TypeKind.ENCODING: 7,
+    TypeKind.POOL: 8,
+    TypeKind.VECTOR: 9,
+    TypeKind.VIEW: 10,
+    TypeKind.BUFFER: 11,
+}
+
+BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
+    type_kind: ir_kind for ir_kind, type_kind in BYTECODE_TYPE_KIND_BY_IR_KIND.items()
+}
 
 # File magic and version.
 MAGIC = b"LOOM"
@@ -394,13 +416,12 @@ class BytecodeWriter:
         """Serialize one type entry."""
         match ir_type:
             case NoneType():
-                buf.write_u8(0)
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.NONE])
             case ScalarType(kind=kind):
-                buf.write_u8(1)
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.SCALAR])
                 buf.write_u8(kind.value)
             case ShapedType():
-                kind_byte = 2 if ir_type.type_kind == TypeKind.TILE else 3
-                buf.write_u8(kind_byte)
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[ir_type.type_kind])
                 buf.write_u8(ir_type.element_type.kind.value)
                 buf.write_u8(ir_type.rank)
                 # Encoding attachment: 0 = none, 1 = static (table index
@@ -416,6 +437,10 @@ class BytecodeWriter:
                         if enc == ir_type.encoding:
                             enc_index = i + 1  # 1-based
                             break
+                    if enc_index == 0:
+                        raise ValueError(
+                            f"encoding {ir_type.encoding!r} was not numbered"
+                        )
                     buf.write_u8(1)  # static encoding
                     buf.write_varint(enc_index)
                 else:
@@ -429,10 +454,10 @@ class BytecodeWriter:
                         case DynamicDim():
                             buf.write_u8(1)  # is_dynamic = true
             case GroupType(scope=scope):
-                buf.write_u8(4)
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.GROUP])
                 buf.write_u8(scope.value)
             case FunctionType(arg_types=args, result_types=results):
-                buf.write_u8(5)
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.FUNCTION])
                 buf.write_varint(len(args))
                 buf.write_varint(len(results))
                 for arg in args:
@@ -440,21 +465,23 @@ class BytecodeWriter:
                 for result in results:
                     buf.write_varint(self._ctx.intern_type(result))
             case DialectType(name=name, params=params):
-                buf.write_u8(6)  # DIALECT kind
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.DIALECT])
                 buf.write_varint(self._ctx.strings[name])
                 buf.write_varint(len(params))
                 for param in params:
                     buf.write_varint(self._ctx.intern_type(param))
             case EncodingType():
-                buf.write_u8(7)  # ENCODING kind
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.ENCODING])
             case PoolType(block_size=block_size):
-                buf.write_u8(8)  # POOL kind
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.POOL])
                 match block_size:
                     case StaticDim(size=size):
                         buf.write_u8(0)  # static
                         buf.write_varint(size)
                     case DynamicDim():
                         buf.write_u8(1)  # dynamic
+            case BufferType():
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.BUFFER])
 
     def _write_ops(self) -> bytes:
         """Write the OPS section."""

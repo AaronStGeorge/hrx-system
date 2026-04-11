@@ -168,6 +168,12 @@ iree_status_t loom_type_format_minimal(loom_type_t type, void* user_data,
       return loom_output_stream_write_cstring(stream, "tile<...>");
     case LOOM_TYPE_TENSOR:
       return loom_output_stream_write_cstring(stream, "tensor<...>");
+    case LOOM_TYPE_VECTOR:
+      return loom_output_stream_write_cstring(stream, "vector<...>");
+    case LOOM_TYPE_VIEW:
+      return loom_output_stream_write_cstring(stream, "view<...>");
+    case LOOM_TYPE_BUFFER:
+      return loom_output_stream_write_cstring(stream, "buffer");
     case LOOM_TYPE_GROUP:
       return loom_output_stream_write_cstring(stream, "group<...>");
     case LOOM_TYPE_FUNCTION:
@@ -179,7 +185,8 @@ iree_status_t loom_type_format_minimal(loom_type_t type, void* user_data,
     case LOOM_TYPE_POOL:
       return loom_output_stream_write_cstring(stream, "pool<...>");
     case LOOM_TYPE_NONE:
-    default:
       return loom_output_stream_write_cstring(stream, "<none>");
+    default:
+      return loom_output_stream_write_format(stream, "<type:%d>", (int)kind);
   }
 }

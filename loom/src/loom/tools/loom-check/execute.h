@@ -137,9 +137,9 @@ iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
                                             iree_allocator_t allocator,
                                             loom_check_result_t* result);
 
-// Registers all known dialects (test, func, scalar, encoding, pool)
-// with the context and finalizes it. The context must have been
-// initialized with loom_context_initialize() before calling this.
+// Registers all dialects used by loom-check with the context and finalizes it.
+// The context must have been initialized with loom_context_initialize() before
+// calling this.
 iree_status_t loom_check_context_initialize(loom_context_t* context);
 
 // Executes a single test case: dispatches to the mode-specific function,

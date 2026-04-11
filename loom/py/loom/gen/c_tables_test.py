@@ -7,8 +7,17 @@
 import pytest
 
 from loom.assembly import Attr, AttrDict
-from loom.dsl import INTEGER, AttrDef, Dialect, Op, Operand, SameType
-from loom.gen.c_tables import generate_builders_c, generate_ops_h, generate_tables_c
+from loom.dsl import INTEGER, AttrDef, Dialect, Op, Operand, SameType, TypeConstraint
+from loom.gen.c_tables import (
+    TYPE_CONSTRAINT_MAP,
+    generate_builders_c,
+    generate_ops_h,
+    generate_tables_c,
+)
+
+
+def test_type_constraint_map_covers_every_constraint() -> None:
+    assert set(TYPE_CONSTRAINT_MAP) == set(TypeConstraint)
 
 
 def test_generate_tables_rejects_constraint_field_index_above_6_bit_max() -> None:

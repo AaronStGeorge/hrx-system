@@ -24,14 +24,10 @@ std::string RenderMessage(const loom_error_def_t* error,
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&builder, &stream);
-  iree_status_t status = loom_diagnostic_render_message(
-      error, params, param_count, type_formatter, &stream);
-  std::string result;
-  if (iree_status_is_ok(status)) {
-    result = std::string(iree_string_builder_buffer(&builder),
-                         iree_string_builder_size(&builder));
-  }
-  iree_status_ignore(status);
+  IREE_CHECK_OK(loom_diagnostic_render_message(error, params, param_count,
+                                               type_formatter, &stream));
+  std::string result(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
   iree_string_builder_deinitialize(&builder);
   return result;
 }
@@ -45,14 +41,22 @@ std::string RenderFixHint(const loom_error_def_t* error,
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&builder, &stream);
-  iree_status_t status = loom_diagnostic_render_fix_hint(
-      error, params, param_count, type_formatter, &stream);
-  std::string result;
-  if (iree_status_is_ok(status)) {
-    result = std::string(iree_string_builder_buffer(&builder),
-                         iree_string_builder_size(&builder));
-  }
-  iree_status_ignore(status);
+  IREE_CHECK_OK(loom_diagnostic_render_fix_hint(error, params, param_count,
+                                                type_formatter, &stream));
+  std::string result(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+  return result;
+}
+
+std::string FormatMinimalType(loom_type_t type) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_CHECK_OK(loom_type_format_minimal(type, nullptr, &stream));
+  std::string result(iree_string_builder_buffer(&builder),
+                     iree_string_builder_size(&builder));
   iree_string_builder_deinitialize(&builder);
   return result;
 }
@@ -164,29 +168,32 @@ TEST(Renderer, TypeWithoutFormatter) {
 
 TEST(Renderer, MinimalTypeFormatterScalar) {
   loom_type_t f16_type = loom_type_scalar(LOOM_SCALAR_TYPE_F16);
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&builder, &stream);
-  IREE_ASSERT_OK(loom_type_format_minimal(f16_type, nullptr, &stream));
-  std::string result(iree_string_builder_buffer(&builder),
-                     iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-  EXPECT_EQ(result, "f16");
+  EXPECT_EQ(FormatMinimalType(f16_type), "f16");
 }
 
 TEST(Renderer, MinimalTypeFormatterTile) {
   loom_type_t tile_type = loom_type_shaped_1d(
       LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&builder, &stream);
-  IREE_ASSERT_OK(loom_type_format_minimal(tile_type, nullptr, &stream));
-  std::string result(iree_string_builder_buffer(&builder),
-                     iree_string_builder_size(&builder));
-  iree_string_builder_deinitialize(&builder);
-  EXPECT_EQ(result, "tile<...>");
+  EXPECT_EQ(FormatMinimalType(tile_type), "tile<...>");
+}
+
+TEST(Renderer, MinimalTypeFormatterVector) {
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(16), 0);
+  EXPECT_EQ(FormatMinimalType(vector_type), "vector<...>");
+}
+
+TEST(Renderer, MinimalTypeFormatterView) {
+  loom_type_t view_type = loom_type_shaped_1d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(16), 0);
+  EXPECT_EQ(FormatMinimalType(view_type), "view<...>");
+}
+
+TEST(Renderer, MinimalTypeFormatterUnknownKind) {
+  loom_type_t unknown_type = {0};
+  unknown_type.header =
+      loom_type_make_header((loom_type_kind_t)99, (loom_scalar_type_t)0, 0, 0);
+  EXPECT_EQ(FormatMinimalType(unknown_type), "<type:99>");
 }
 
 //===----------------------------------------------------------------------===//

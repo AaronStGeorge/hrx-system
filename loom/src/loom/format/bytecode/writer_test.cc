@@ -194,9 +194,8 @@ class WriterTest : public ::testing::Test {
             IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_RESIZABLE,
         4096, iree_allocator_system(), &stream));
 
-    iree_status_t status =
-        loom_bytecode_write_module(module, stream, nullptr, &block_pool_);
-    IREE_CHECK_OK(status);
+    IREE_CHECK_OK(
+        loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
 
     // Read the bytes back from the stream.
     iree_io_stream_pos_t length = iree_io_stream_length(stream);
@@ -582,10 +581,9 @@ TEST_F(WriterTest, NullContextFails) {
           IREE_IO_STREAM_MODE_RESIZABLE,
       4096, iree_allocator_system(), &stream));
 
-  iree_status_t status =
-      loom_bytecode_write_module(module, stream, nullptr, &block_pool_);
-  EXPECT_TRUE(iree_status_is_failed_precondition(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
 
   iree_io_stream_release(stream);
   module->context = saved_context;
@@ -601,10 +599,81 @@ TEST_F(WriterTest, NonSeekableStreamFails) {
       IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_RESIZABLE, 4096,
       iree_allocator_system(), &stream));
 
-  iree_status_t status =
-      loom_bytecode_write_module(module, stream, nullptr, &block_pool_);
-  EXPECT_TRUE(iree_status_is_permission_denied(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_PERMISSION_DENIED,
+      loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
+
+  iree_io_stream_release(stream);
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, RankZeroVectorTypeFails) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_type_t vector_type =
+      loom_type_shaped_0d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, 0);
+  IREE_ASSERT_OK(loom_module_intern_type(module, vector_type, &vector_type));
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("bad"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, &vector_type, 1,
+      /*result_types=*/nullptr, 0, /*arg_names=*/nullptr, 0,
+      /*result_names=*/nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  iree_io_stream_t* stream = nullptr;
+  IREE_ASSERT_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+          IREE_IO_STREAM_MODE_RESIZABLE,
+      4096, iree_allocator_system(), &stream));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
+
+  iree_io_stream_release(stream);
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, VectorEncodingAttachmentFails) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 7);
+  IREE_ASSERT_OK(loom_module_intern_type(module, vector_type, &vector_type));
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("bad"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, &vector_type, 1,
+      /*result_types=*/nullptr, 0, /*arg_names=*/nullptr, 0,
+      /*result_names=*/nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  iree_io_stream_t* stream = nullptr;
+  IREE_ASSERT_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+          IREE_IO_STREAM_MODE_RESIZABLE,
+      4096, iree_allocator_system(), &stream));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
 
   iree_io_stream_release(stream);
   loom_module_free(module);

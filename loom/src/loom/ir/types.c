@@ -56,7 +56,11 @@ bool loom_type_equal(loom_type_t a, loom_type_t b) {
       a.encoding_flags != b.encoding_flags) {
     return false;
   }
-  switch (loom_type_kind(a)) {
+  loom_type_kind_t kind = loom_type_kind(a);
+  if (!loom_type_kind_is_valid(kind)) {
+    return a.dims[0] == b.dims[0] && a.dims[1] == b.dims[1];
+  }
+  switch (kind) {
     case LOOM_TYPE_FUNCTION: {
       const loom_func_type_data_t* a_data = loom_type_func_data(a);
       const loom_func_type_data_t* b_data = loom_type_func_data(b);
@@ -136,7 +140,12 @@ uint32_t loom_type_hash(loom_type_t type) {
   hash = loom_type_hash_mix_u16(hash, type.encoding_id);
   hash = loom_type_hash_mix_u16(hash, type.encoding_flags);
 
-  switch (loom_type_kind(type)) {
+  loom_type_kind_t kind = loom_type_kind(type);
+  if (!loom_type_kind_is_valid(kind)) {
+    hash = loom_type_hash_mix_u64(hash, type.dims[0]);
+    return loom_type_hash_mix_u64(hash, type.dims[1]);
+  }
+  switch (kind) {
     case LOOM_TYPE_FUNCTION: {
       const loom_func_type_data_t* data = loom_type_func_data(type);
       if (!data) return hash;

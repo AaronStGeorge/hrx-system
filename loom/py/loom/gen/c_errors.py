@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import subprocess
 
 from loom.errors import Emitter, ErrorDef, ErrorDomain, ParamKind, Severity
 from loom.gen import bootstrap as _bootstrap
@@ -66,6 +67,18 @@ def _c_symbol(error: ErrorDef) -> str:
 def _escape_c_string(text: str) -> str:
     """Escapes a string for C string literal."""
     return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def _clang_format_source(source: str) -> str:
+    """Formats generated C so generator and pre-commit formatting converge."""
+    result = subprocess.run(
+        ["clang-format"],
+        input=source,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    return result.stdout
 
 
 def generate_error_defs_inc(errors: list[ErrorDef]) -> str:
@@ -196,7 +209,7 @@ def generate_error_tables_c(errors: list[ErrorDef]) -> str:
     lines.append("}")
     lines.append("")
 
-    return "\n".join(lines)
+    return _clang_format_source("\n".join(lines))
 
 
 def generate_error_catalog_json(errors: list[ErrorDef]) -> str:

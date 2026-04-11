@@ -224,6 +224,15 @@ typedef enum loom_type_constraint_e {
   // Unlike INTEGER (which accepts any integer width), this requires
   // the type to be specifically i1.
   LOOM_TYPE_CONSTRAINT_I1 = 10,
+  LOOM_TYPE_CONSTRAINT_VECTOR = 11,
+  LOOM_TYPE_CONSTRAINT_VIEW = 12,
+  LOOM_TYPE_CONSTRAINT_BUFFER = 13,
+  // Shaped type with an integer element type.
+  LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT = 14,
+  // Shaped type with a floating-point element type.
+  LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT = 15,
+  // Shaped type with element type i1.
+  LOOM_TYPE_CONSTRAINT_I1_ELEMENT = 16,
   LOOM_TYPE_CONSTRAINT_COUNT_,
 } loom_type_constraint_t;
 
@@ -242,6 +251,12 @@ static inline bool loom_type_satisfies_constraint(
       return loom_type_is_tile(type);
     case LOOM_TYPE_CONSTRAINT_TENSOR:
       return loom_type_is_tensor(type);
+    case LOOM_TYPE_CONSTRAINT_VECTOR:
+      return loom_type_is_vector(type);
+    case LOOM_TYPE_CONSTRAINT_VIEW:
+      return loom_type_is_view(type);
+    case LOOM_TYPE_CONSTRAINT_BUFFER:
+      return loom_type_is_buffer(type);
     case LOOM_TYPE_CONSTRAINT_SCALAR:
       return loom_type_is_scalar(type);
     case LOOM_TYPE_CONSTRAINT_INDEX:
@@ -261,6 +276,15 @@ static inline bool loom_type_satisfies_constraint(
       return loom_type_is_pool(type);
     case LOOM_TYPE_CONSTRAINT_I1:
       return loom_type_is_scalar(type) &&
+             loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+    case LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT:
+      return loom_type_is_shaped(type) &&
+             loom_scalar_type_is_integer(loom_type_element_type(type));
+    case LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT:
+      return loom_type_is_shaped(type) &&
+             loom_scalar_type_is_float(loom_type_element_type(type));
+    case LOOM_TYPE_CONSTRAINT_I1_ELEMENT:
+      return loom_type_is_shaped(type) &&
              loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
     default:
       return false;

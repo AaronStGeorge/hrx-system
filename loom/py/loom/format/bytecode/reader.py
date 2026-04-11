@@ -20,6 +20,7 @@ from typing import Any, ClassVar
 
 from loom.format.bytecode.encoding import decode_signed_varint, decode_varint
 from loom.format.bytecode.writer import (
+    BYTECODE_IR_KIND_BY_TYPE_KIND,
     FORMAT_VERSION,
     MAGIC,
     SECTION_ENCODINGS,
@@ -32,6 +33,7 @@ from loom.format.bytecode.writer import (
     SECTION_TYPES,
 )
 from loom.ir import (
+    BUFFER_TYPE,
     ENCODING_TYPE,
     NONE_TYPE,
     Block,
@@ -348,16 +350,19 @@ class BytecodeReader:
         for _ in range(count):
             kind = data[offset]
             offset += 1
+            try:
+                type_kind = BYTECODE_IR_KIND_BY_TYPE_KIND[kind]
+            except KeyError as err:
+                raise BytecodeError(f"unknown type kind: {kind}") from err
             ir_type: Type
-            match kind:
-                case 0:  # NONE
+            match type_kind:
+                case TypeKind.NONE:
                     ir_type = NONE_TYPE
-                case 1:  # SCALAR
+                case TypeKind.SCALAR:
                     scalar_kind = ScalarTypeKind(data[offset])
                     offset += 1
                     ir_type = ScalarType(scalar_kind)
-                case 2 | 3:  # TILE | TENSOR
-                    type_kind = TypeKind.TILE if kind == 2 else TypeKind.TENSOR
+                case TypeKind.TILE | TypeKind.TENSOR | TypeKind.VECTOR | TypeKind.VIEW:
                     elem_kind = ScalarTypeKind(data[offset])
                     offset += 1
                     rank = data[offset]
@@ -377,19 +382,43 @@ class BytecodeReader:
                             dims.append(StaticDim(size))
 
                     encoding: EncodingInstance | DynamicEncoding | None = None
-                    if encoding_attachment == 2:
-                        # Dynamic SSA encoding.
-                        encoding = DynamicEncoding()
-                    elif enc_instance > 0 and enc_instance <= len(self._encodings):
-                        encoding = self._encodings[enc_instance - 1]
+                    match encoding_attachment:
+                        case 0:
+                            if enc_instance != 0:
+                                raise BytecodeError(
+                                    "none encoding attachment must have id 0"
+                                )
+                        case 1:
+                            if enc_instance == 0 or enc_instance > len(self._encodings):
+                                raise BytecodeError(
+                                    f"static encoding id out of range: {enc_instance}"
+                                )
+                            encoding = self._encodings[enc_instance - 1]
+                        case 2:
+                            if enc_instance != 0:
+                                raise BytecodeError(
+                                    "dynamic encoding attachment must have id 0"
+                                )
+                            encoding = DynamicEncoding()
+                        case _:
+                            raise BytecodeError(
+                                f"unknown encoding attachment: {encoding_attachment}"
+                            )
+                    if type_kind == TypeKind.VECTOR and encoding is not None:
+                        raise BytecodeError(
+                            "vector types must not carry encoding/layout suffixes"
+                        )
 
-                    ir_type = ShapedType(
-                        type_kind=type_kind,
-                        element_type=ScalarType(elem_kind),
-                        dims=tuple(dims),
-                        encoding=encoding,
-                    )
-                case 4:  # GROUP
+                    try:
+                        ir_type = ShapedType(
+                            type_kind=type_kind,
+                            element_type=ScalarType(elem_kind),
+                            dims=tuple(dims),
+                            encoding=encoding,
+                        )
+                    except ValueError as err:
+                        raise BytecodeError(str(err)) from err
+                case TypeKind.GROUP:
                     scope_byte = data[offset]
                     offset += 1
                     try:
@@ -399,7 +428,7 @@ class BytecodeReader:
                             f"unknown group scope byte: {scope_byte}"
                         ) from err
                     ir_type = GroupType(scope)
-                case 5:  # FUNCTION
+                case TypeKind.FUNCTION:
                     arg_count, offset = decode_varint(data, offset)
                     result_count, offset = decode_varint(data, offset)
                     arg_types = []
@@ -411,7 +440,7 @@ class BytecodeReader:
                         type_idx, offset = decode_varint(data, offset)
                         result_types.append(self._types[type_idx])
                     ir_type = FunctionType(tuple(arg_types), tuple(result_types))
-                case 6:  # DIALECT
+                case TypeKind.DIALECT:
                     name_id, offset = decode_varint(data, offset)
                     param_count, offset = decode_varint(data, offset)
                     params = []
@@ -419,9 +448,9 @@ class BytecodeReader:
                         type_idx, offset = decode_varint(data, offset)
                         params.append(self._types[type_idx])
                     ir_type = DialectType(self._strings[name_id], tuple(params))
-                case 7:  # ENCODING
+                case TypeKind.ENCODING:
                     ir_type = ENCODING_TYPE
-                case 8:  # POOL
+                case TypeKind.POOL:
                     is_dynamic = data[offset]
                     offset += 1
                     if is_dynamic:
@@ -429,8 +458,10 @@ class BytecodeReader:
                     else:
                         size, offset = decode_varint(data, offset)
                         ir_type = PoolType(block_size=StaticDim(size))
+                case TypeKind.BUFFER:
+                    ir_type = BUFFER_TYPE
                 case _:
-                    raise BytecodeError(f"unknown type kind: {kind}")
+                    raise BytecodeError(f"unsupported type kind: {type_kind.name}")
             self._types.append(ir_type)
 
     def _read_ops_section(self, section: tuple[int, bytes]) -> None:

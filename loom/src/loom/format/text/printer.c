@@ -311,6 +311,23 @@ static iree_status_t loom_print_shaped_interior(loom_output_stream_t* stream,
   return iree_ok_status();
 }
 
+static iree_status_t loom_print_shaped_type_prefix(loom_output_stream_t* stream,
+                                                   loom_type_kind_t kind) {
+  switch (kind) {
+    case LOOM_TYPE_TILE:
+      return loom_output_stream_write_cstring(stream, "tile<");
+    case LOOM_TYPE_TENSOR:
+      return loom_output_stream_write_cstring(stream, "tensor<");
+    case LOOM_TYPE_VECTOR:
+      return loom_output_stream_write_cstring(stream, "vector<");
+    case LOOM_TYPE_VIEW:
+      return loom_output_stream_write_cstring(stream, "view<");
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "type kind %d is not shaped", (int)kind);
+  }
+}
+
 iree_status_t loom_text_print_type(loom_type_t type,
                                    const loom_module_t* module,
                                    loom_output_stream_t* stream) {
@@ -319,13 +336,12 @@ iree_status_t loom_text_print_type(loom_type_t type,
       return loom_output_stream_write_cstring(stream, "none");
     case LOOM_TYPE_SCALAR:
       return loom_print_scalar_type(stream, loom_type_element_type(type));
-    case LOOM_TYPE_TILE: {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "tile<"));
-      IREE_RETURN_IF_ERROR(loom_print_shaped_interior(stream, type, module));
-      return loom_output_stream_write_cstring(stream, ">");
-    }
-    case LOOM_TYPE_TENSOR: {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "tensor<"));
+    case LOOM_TYPE_TILE:
+    case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW: {
+      IREE_RETURN_IF_ERROR(
+          loom_print_shaped_type_prefix(stream, loom_type_kind(type)));
       IREE_RETURN_IF_ERROR(loom_print_shaped_interior(stream, type, module));
       return loom_output_stream_write_cstring(stream, ">");
     }
@@ -368,6 +384,8 @@ iree_status_t loom_text_print_type(loom_type_t type,
     }
     case LOOM_TYPE_ENCODING:
       return loom_output_stream_write_cstring(stream, "encoding");
+    case LOOM_TYPE_BUFFER:
+      return loom_output_stream_write_cstring(stream, "buffer");
     case LOOM_TYPE_POOL: {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "pool<"));
       IREE_RETURN_IF_ERROR(loom_print_dim(stream, type, 0, module));
@@ -412,10 +430,11 @@ static iree_status_t loom_text_print_result_type(loom_type_t type,
                                                  loom_output_stream_t* stream) {
   switch (loom_type_kind(type)) {
     case LOOM_TYPE_TILE:
-    case LOOM_TYPE_TENSOR: {
-      const char* prefix =
-          loom_type_kind(type) == LOOM_TYPE_TILE ? "tile<" : "tensor<";
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, prefix));
+    case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW: {
+      IREE_RETURN_IF_ERROR(
+          loom_print_shaped_type_prefix(stream, loom_type_kind(type)));
       uint8_t rank = loom_type_rank(type);
       for (uint8_t i = 0; i < rank; ++i) {
         if (i > 0) {

@@ -121,9 +121,17 @@ func.def @test_constant_float_payload_kind() {
 
 // ====
 
-// test.constant only supports scalar and shaped element-bearing results.
+// test.constant only supports scalar/tile/tensor/vector element-bearing results.
 func.def @test_constant_result_type_kind() {
-  // ERROR@+1: TYPE/004 "scalar/tile/tensor"
+  // ERROR@+1: TYPE/004 "scalar/tile/tensor/vector"
   %c = test.constant 0 : encoding
+  func.return
+}
+
+// ====
+
+// Vector constants are register-value constants with scalar element payloads.
+func.def @test_constant_vector_payload_kind() {
+  %c = test.constant 1 : vector<4xi32>
   func.return
 }

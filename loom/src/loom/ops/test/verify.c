@@ -227,6 +227,8 @@ static bool loom_test_signature_type_matches(
     }
     case LOOM_TYPE_TILE:
     case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW:
     case LOOM_TYPE_POOL: {
       uint8_t rank = loom_type_rank(callee_type);
       for (uint8_t i = 0; i < rank; ++i) {
@@ -242,6 +244,7 @@ static bool loom_test_signature_type_matches(
     case LOOM_TYPE_SCALAR:
     case LOOM_TYPE_GROUP:
     case LOOM_TYPE_ENCODING:
+    case LOOM_TYPE_BUFFER:
     case LOOM_TYPE_COUNT_:
       return true;
   }
@@ -285,7 +288,7 @@ static iree_status_t loom_test_emit_constant_result_type_mismatch(
   loom_diagnostic_param_t params[] = {
       loom_param_string(IREE_SV("result 0")),
       loom_param_type(result_type),
-      loom_param_string(IREE_SV("scalar/tile/tensor")),
+      loom_param_string(IREE_SV("scalar/tile/tensor/vector")),
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
@@ -440,7 +443,7 @@ iree_status_t loom_test_constant_verify(const loom_module_t* module,
       loom_module_value_type(module, loom_test_constant_result(op));
   loom_type_kind_t result_kind = loom_type_kind(result_type);
   if (result_kind != LOOM_TYPE_SCALAR && result_kind != LOOM_TYPE_TILE &&
-      result_kind != LOOM_TYPE_TENSOR) {
+      result_kind != LOOM_TYPE_TENSOR && result_kind != LOOM_TYPE_VECTOR) {
     return loom_test_emit_constant_result_type_mismatch(op, emitter,
                                                         result_type);
   }

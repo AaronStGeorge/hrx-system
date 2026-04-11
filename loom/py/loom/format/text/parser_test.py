@@ -27,6 +27,7 @@ from loom.format.text.printer import Printer, print_type
 from loom.format.text.tokenizer import ParseError
 from loom.ir import (
     BF16,
+    BUFFER_TYPE,
     ENCODING_TYPE,
     F32,
     I8,
@@ -214,11 +215,35 @@ class TestParseShapedStatic:
         assert result.element_type == I8
         assert result.dims == (StaticDim(256),)
 
+    def test_vector_1d(self) -> None:
+        result = _parse_type("vector<16xf32>")
+        assert isinstance(result, ShapedType)
+        assert result.type_kind == TypeKind.VECTOR
+        assert result.element_type == F32
+        assert result.dims == (StaticDim(16),)
+
+    def test_vector_2d(self) -> None:
+        result = _parse_type("vector<4x16xf32>")
+        assert isinstance(result, ShapedType)
+        assert result.type_kind == TypeKind.VECTOR
+        assert result.dims == (StaticDim(4), StaticDim(16))
+
+    def test_view_1d(self) -> None:
+        result = _parse_type("view<256xi8>")
+        assert isinstance(result, ShapedType)
+        assert result.type_kind == TypeKind.VIEW
+        assert result.element_type == I8
+        assert result.dims == (StaticDim(256),)
+
     def test_tile_0d(self) -> None:
         result = _parse_type("tile<f32>")
         assert isinstance(result, ShapedType)
         assert result.rank == 0
         assert result.element_type == F32
+
+    def test_vector_0d_fails(self) -> None:
+        with pytest.raises(ParseError, match="rank >= 1"):
+            _parse_type("vector<f32>")
 
     def test_large_dims(self) -> None:
         result = _parse_type("tile<1024x2048xf16>")
@@ -262,6 +287,18 @@ class TestParseDynamicDims:
         assert result.dims == (DynamicDim(), DynamicDim())
         assert bindings[0] == m_id
         assert bindings[1] == k_id
+
+    def test_dynamic_vector(self) -> None:
+        scope = NameScope()
+        module = Module()
+        n_id = module.add_value(Value(name="N", type=INDEX))
+        scope.define("N", n_id)
+
+        result, bindings = _parse("vector<[%N]xi32>", scope=scope, module=module)
+        assert isinstance(result, ShapedType)
+        assert result.type_kind == TypeKind.VECTOR
+        assert result.dims == (DynamicDim(),)
+        assert bindings[0] == n_id
 
     def test_undefined_dim_fails(self) -> None:
         with pytest.raises(ParseError, match="undefined SSA value"):
@@ -317,6 +354,35 @@ class TestParseEncoding:
         enc = module.encodings[0]
         assert enc.params == (("block", 32), ("group", 128))
 
+    def test_view_static_layout(self) -> None:
+        module = Module()
+        result, _ = _parse("view<256xf32, #strided<stride=64>>", module=module)
+        assert isinstance(result, ShapedType)
+        assert result.type_kind == TypeKind.VIEW
+        assert result.has_encoding
+        assert len(module.encodings) == 1
+        assert module.encodings[0].name == "strided"
+        assert module.encodings[0].params == (("stride", 64),)
+
+    def test_view_dynamic_layout(self) -> None:
+        scope = NameScope()
+        module = Module()
+        n_id = module.add_value(Value(name="N", type=INDEX))
+        layout_id = module.add_value(Value(name="layout", type=ENCODING_TYPE))
+        scope.define("N", n_id)
+        scope.define("layout", layout_id)
+
+        result, bindings = _parse("view<[%N]xf32, %layout>", scope=scope, module=module)
+        assert isinstance(result, ShapedType)
+        assert result.type_kind == TypeKind.VIEW
+        assert result.encoding == DynamicEncoding()
+        assert bindings[0] == n_id
+        assert bindings[-1] == layout_id
+
+    def test_vector_encoding_fails(self) -> None:
+        with pytest.raises(ParseError, match="must not carry"):
+            _parse("vector<4xf32, #dense>")
+
 
 # ============================================================================
 # Group types
@@ -333,6 +399,17 @@ class TestParseGroupType:
         result = _parse_type("group<subgroup>")
         assert isinstance(result, GroupType)
         assert result.scope == GroupScope.SUBGROUP
+
+
+# ============================================================================
+# Buffer type
+# ============================================================================
+
+
+class TestParseBufferType:
+    def test_basic(self) -> None:
+        result = _parse_type("buffer")
+        assert result is BUFFER_TYPE
 
 
 # ============================================================================
@@ -438,10 +515,16 @@ class TestTypeRoundTrip:
         self._roundtrip("tile<4xf32>")
         self._roundtrip("tile<4x4xf32>")
         self._roundtrip("tensor<256xi8>")
+        self._roundtrip("vector<16xf32>")
+        self._roundtrip("vector<4x16xf32>")
+        self._roundtrip("view<256xi8>")
         self._roundtrip("tile<f32>")
 
     def test_group_roundtrip(self) -> None:
         self._roundtrip("group<workgroup>")
+
+    def test_buffer_roundtrip(self) -> None:
+        self._roundtrip("buffer")
 
     def test_dialect_opaque_roundtrip(self) -> None:
         registry = {td.name: td for td in ALL_BUILTIN_TYPES}

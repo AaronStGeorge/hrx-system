@@ -97,5 +97,53 @@ TEST(TypesTest, DialectTypeEqualAndHashAreStructural) {
   EXPECT_FALSE(loom_type_equal(first, different_params));
 }
 
+TEST(TypesTest, VectorIsShapedButLayoutFree) {
+  loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                                         loom_dim_pack_static(16), 0);
+  EXPECT_TRUE(loom_type_is_shaped(type));
+  EXPECT_TRUE(loom_type_is_vector(type));
+  EXPECT_FALSE(loom_type_can_have_encoding(type));
+}
+
+TEST(TypesTest, ViewCanCarryLayoutAttachment) {
+  loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                                         loom_dim_pack_static(256), 7);
+  EXPECT_TRUE(loom_type_is_shaped(type));
+  EXPECT_TRUE(loom_type_is_view(type));
+  EXPECT_TRUE(loom_type_can_have_encoding(type));
+  EXPECT_TRUE(loom_type_has_static_encoding(type));
+}
+
+TEST(TypesTest, BufferIsOpaqueStorageIdentity) {
+  loom_type_t type = loom_type_buffer();
+  EXPECT_TRUE(loom_type_is_buffer(type));
+  EXPECT_FALSE(loom_type_is_shaped(type));
+  EXPECT_FALSE(loom_type_has_encoding(type));
+  EXPECT_TRUE(loom_type_is_all_static(type));
+  EXPECT_TRUE(loom_type_equal(type, loom_type_buffer()));
+  EXPECT_EQ(loom_type_hash(type), loom_type_hash(loom_type_buffer()));
+  EXPECT_TRUE(loom_type_is_all_static(loom_type_buffer()));
+}
+
+TEST(TypesTest, InvalidKindEqualityAndHashDoNotInterpretPayload) {
+  loom_type_t first = {0};
+  first.header =
+      loom_type_make_header((loom_type_kind_t)99, (loom_scalar_type_t)0, 3, 0);
+  first.dims[0] = 1;
+  first.dims[1] = 2;
+  loom_type_t duplicate = first;
+  loom_type_t different = first;
+  different.header =
+      loom_type_make_header((loom_type_kind_t)100, (loom_scalar_type_t)0, 3, 0);
+  loom_type_t different_payload = first;
+  different_payload.dims[1] = 3;
+
+  EXPECT_FALSE(loom_type_kind_is_valid(loom_type_kind(first)));
+  EXPECT_TRUE(loom_type_equal(first, duplicate));
+  EXPECT_EQ(loom_type_hash(first), loom_type_hash(duplicate));
+  EXPECT_FALSE(loom_type_equal(first, different));
+  EXPECT_FALSE(loom_type_equal(first, different_payload));
+}
+
 }  // namespace
 }  // namespace loom

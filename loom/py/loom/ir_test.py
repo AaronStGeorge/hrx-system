@@ -10,6 +10,7 @@ import pytest
 
 from loom.ir import (
     BF16,
+    BUFFER_TYPE,
     ENCODING_TYPE,
     F16,
     F32,
@@ -28,6 +29,7 @@ from loom.ir import (
     VALUE_FLAG_BLOCK_ARG,
     VALUE_FLAG_CONSUMED,
     Block,
+    BufferType,
     CanonicalAttrDict,
     Context,
     DynamicDim,
@@ -190,6 +192,36 @@ class TestShapedTypes:
         assert t.encoding.name == "q8_0"
         assert t.encoding.params == (("block", 32),)
 
+    def test_view_with_layout(self) -> None:
+        layout = EncodingInstance(name="strided", params=(("stride", 64),))
+        t = ShapedType(TypeKind.VIEW, F32, (DynamicDim(),), encoding=layout)
+        assert t.type_kind == TypeKind.VIEW
+        assert t.rank == 1
+        assert t.has_encoding
+        assert repr(t) == "view<?xf32>"
+
+    def test_vector_static(self) -> None:
+        t = ShapedType(TypeKind.VECTOR, F32, (StaticDim(16),))
+        assert t.type_kind == TypeKind.VECTOR
+        assert t.rank == 1
+        assert t.is_all_static
+        assert repr(t) == "vector<16xf32>"
+
+    def test_vector_dynamic(self) -> None:
+        t = ShapedType(TypeKind.VECTOR, I32, (DynamicDim(),))
+        assert t.type_kind == TypeKind.VECTOR
+        assert not t.is_all_static
+        assert repr(t) == "vector<?xi32>"
+
+    def test_vector_0d_rejected(self) -> None:
+        with pytest.raises(ValueError, match="rank >= 1"):
+            ShapedType(TypeKind.VECTOR, F32, ())
+
+    def test_vector_encoding_rejected(self) -> None:
+        enc = EncodingInstance(name="dense")
+        with pytest.raises(ValueError, match="must not carry"):
+            ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),), encoding=enc)
+
     def test_shaped_type_equality(self) -> None:
         a = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         b = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
@@ -205,7 +237,7 @@ class TestShapedTypes:
         assert len(s) == 1
 
     def test_invalid_kind_rejected(self) -> None:
-        with pytest.raises(ValueError, match="must be TILE or TENSOR"):
+        with pytest.raises(ValueError, match="must be TILE, TENSOR, VECTOR, or VIEW"):
             ShapedType(TypeKind.SCALAR, F32, ())
 
 
@@ -255,6 +287,20 @@ class TestEncodingType:
 
     def test_hashable(self) -> None:
         s = {EncodingType(), ENCODING_TYPE, EncodingType()}
+        assert len(s) == 1
+
+
+class TestBufferType:
+    def test_singleton(self) -> None:
+        assert BUFFER_TYPE.type_kind == TypeKind.BUFFER
+        assert repr(BUFFER_TYPE) == "buffer"
+
+    def test_equality(self) -> None:
+        assert BufferType() == BufferType()
+        assert BufferType() == BUFFER_TYPE
+
+    def test_hashable(self) -> None:
+        s = {BufferType(), BUFFER_TYPE, BufferType()}
         assert len(s) == 1
 
 

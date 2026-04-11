@@ -66,7 +66,7 @@ static bool loom_global_types_match(loom_type_t global_type,
                                     loom_type_t use_type) {
   loom_type_kind_t kind = loom_type_kind(global_type);
   if (kind != loom_type_kind(use_type)) return false;
-  if (kind != LOOM_TYPE_TILE && kind != LOOM_TYPE_TENSOR) {
+  if (!loom_type_is_shaped(global_type)) {
     return loom_type_equal(global_type, use_type);
   }
 

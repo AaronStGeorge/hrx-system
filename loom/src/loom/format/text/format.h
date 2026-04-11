@@ -192,7 +192,7 @@
 // Types
 // ==========================================================================
 //
-// type ::= scalar-type | shaped-type | pool-type | group-type
+// type ::= scalar-type | shaped-type | buffer-type | pool-type | group-type
 //        | function-type | encoding-type | dialect-type
 //
 // --- Scalar types ---
@@ -202,10 +202,14 @@
 //               | 'i' DIGIT+
 //               | 'index'
 //
-// --- Shaped types (tile, tensor) ---
+// --- Shaped types (tile, tensor, vector, view) ---
 //
-// shaped-type ::= ('tile' | 'tensor') '<' shape 'x' scalar-type
+// shaped-type ::= ('tile' | 'tensor') '<' shaped-body
 //                   (',' encoding)? '>'
+//               | 'view' '<' shaped-body (',' layout)? '>'
+//               | 'vector' '<' shape 'x' scalar-type '>'
+//
+// shaped-body ::= (shape 'x')? scalar-type
 //
 // shape       ::= dim ('x' dim)*
 // dim         ::= INTEGER             // static: 4, 128, 256
@@ -215,12 +219,13 @@
 //
 // encoding    ::= '#' identifier ('<' param (',' param)* '>')?
 //               | SSA-VALUE
+// layout      ::= encoding
 // param       ::= identifier '=' value
 //
-// Encodings in the first form are static — known at definition time.
-// Encodings in the second form (SSA value) are dynamic — the encoding
-// is an SSA value of type 'encoding' and is resolved at compilation
-// time. This enables library functions generic over encoding:
+// Encodings/layouts in the first form are static — known at definition time.
+// Encodings/layouts in the second form (SSA value) are dynamic — the value
+// is an SSA value of type 'encoding' and is resolved at compilation time.
+// This enables library functions generic over encoding:
 //
 //   func.def @generic(%enc: encoding, %t: tile<4xf32, %enc>) -> ()
 //
@@ -228,10 +233,17 @@
 //   tile<4x4xf32>                      All-static tile.
 //   tile<[%M]x4xf32>                   First dim dynamic, named %M.
 //   tensor<[%M]x[%K]xf32>              Both dims dynamic.
+//   vector<[%N]xf32>                   Dynamic 1-D register vector.
 //   tile<256x256xf32, #q6_k>           With static encoding (no params).
 //   tensor<[%N]xi8, #q8_0<block=32>>   Dynamic dim + parameterized encoding.
+//   view<[%N]xf32, #strided<stride=64>> Dynamic view + static layout.
+//   view<[%N]xf32, %layout>            Dynamic dim + SSA layout.
 //   tile<4xf32, %enc>                  SSA encoding (dynamic).
-//   tile<f32>                           0-d (scalar) tile.
+//   tile<f32>                          0-d (scalar) tile.
+//
+// Vector types are always rank >= 1 and cannot carry encoding/layout
+// attachments. Use explicit splat/broadcast/conversion ops to cross between
+// scalar and vector values.
 //
 // Static encodings are pluggable: each has a name ("q8_0", "q6_k")
 // and optional parameters. The encoding name indexes into a vtable
@@ -250,8 +262,16 @@
 // encoding-type ::= 'encoding'
 //
 // The type of an SSA encoding value. encoding.define produces values
-// of this type. These values appear in the encoding position of
-// shaped types: tile<4xf32, %enc>.
+// of this type. These values appear in the encoding/layout attachment
+// position of types such as tile<4xf32, %enc> and view<[%N]xf32, %layout>.
+//
+// --- Buffer type ---
+//
+// buffer-type ::= 'buffer'
+//
+// Opaque untyped storage identity. Views are typed projections over storage
+// roots such as buffers; the buffer type itself carries no shape, element type,
+// capacity, or layout.
 //
 // --- Pool type ---
 //
@@ -305,10 +325,10 @@
 //   vm.list<f32>                       Generic container.
 //   vm.list<hal.buffer>                Container of device buffers.
 //
-// The built-in shaped types (tile, tensor) and group are also
-// TypeDefs internally. Their format specs use ShapeOf, ScalarOf,
-// and EncodingOf elements for the dim-x-dim-x-element-type syntax
-// that is unique to shaped types.
+// The built-in shaped types (tile, tensor, vector, view), buffer, pool,
+// and group are also TypeDefs internally. Their format specs use elements
+// such as ShapeOf, ScalarOf, and EncodingOf for the dim-x-dim-x-element-type
+// syntax that is unique to shaped types.
 //
 // Type dispatch: the parser checks the token against the type
 // registry. Scalar keywords (f32, i32, index) are a fixed set.
@@ -785,7 +805,7 @@
 //
 // The grammar is LL(1) with two lookahead points:
 //   1. After '->', check '%' (tied) vs type keyword (fresh).
-//   2. In encoding position (after ',' in shaped type interior),
-//      check '%' (SSA encoding) vs '#' (static encoding).
+//   2. In encoding/layout attachment position (after ',' in shaped type
+//      interior), check '%' (SSA value) vs '#' (static attachment).
 
 #endif  // LOOM_FORMAT_TEXT_FORMAT_H_

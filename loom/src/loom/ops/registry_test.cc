@@ -73,6 +73,61 @@ TEST(OpRegistry, AllEntriesValid) {
 }
 
 //===----------------------------------------------------------------------===//
+// Type constraints
+//===----------------------------------------------------------------------===//
+
+TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
+  const uint64_t lanes = loom_dim_pack_static(4);
+  loom_type_t vector_i32 =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, lanes, 0);
+  loom_type_t vector_f32 =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, lanes, 0);
+  loom_type_t vector_i1 =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I1, lanes, 0);
+  loom_type_t tile_i32 =
+      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I32, lanes, 0);
+  loom_type_t tensor_i32 =
+      loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I32, lanes, 0);
+  loom_type_t view_i32 =
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I32, lanes, 0);
+  loom_type_t tile_f32 =
+      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32, lanes, 0);
+  loom_type_t scalar_i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  EXPECT_STREQ("integer_element",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
+  EXPECT_STREQ("float_element",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT));
+  EXPECT_STREQ("i1_element",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_I1_ELEMENT));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_i32, LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      tile_i32, LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      tensor_i32, LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      view_i32, LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_f32, LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      scalar_i32, LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_f32, LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      tile_f32, LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_i32, LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(vector_i1,
+                                             LOOM_TYPE_CONSTRAINT_I1_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(vector_i32,
+                                              LOOM_TYPE_CONSTRAINT_I1_ELEMENT));
+}
+
+//===----------------------------------------------------------------------===//
 // Type registry
 //===----------------------------------------------------------------------===//
 
@@ -90,6 +145,27 @@ TEST(TypeRegistry, LookupBuiltinTypes) {
   ASSERT_NE(desc, nullptr);
   EXPECT_EQ(desc->ir_kind, LOOM_TYPE_TENSOR);
   EXPECT_EQ(desc->param_count, 3);
+
+  desc = loom_type_registry_lookup(iree_make_cstring_view("vector"));
+  ASSERT_NE(desc, nullptr);
+  EXPECT_EQ(desc->ir_kind, LOOM_TYPE_VECTOR);
+  EXPECT_EQ(desc->param_count, 2);
+  EXPECT_NE(desc->format_elements, nullptr);
+  EXPECT_EQ(desc->format_element_count, 3);
+
+  desc = loom_type_registry_lookup(iree_make_cstring_view("view"));
+  ASSERT_NE(desc, nullptr);
+  EXPECT_EQ(desc->ir_kind, LOOM_TYPE_VIEW);
+  EXPECT_EQ(desc->param_count, 3);
+  EXPECT_NE(desc->format_elements, nullptr);
+  EXPECT_EQ(desc->format_element_count, 6);
+
+  desc = loom_type_registry_lookup(iree_make_cstring_view("buffer"));
+  ASSERT_NE(desc, nullptr);
+  EXPECT_EQ(desc->ir_kind, LOOM_TYPE_BUFFER);
+  EXPECT_EQ(desc->param_count, 0);
+  EXPECT_EQ(desc->format_elements, nullptr);
+  EXPECT_EQ(desc->format_element_count, 0);
 
   desc = loom_type_registry_lookup(iree_make_cstring_view("pool"));
   ASSERT_NE(desc, nullptr);
@@ -153,6 +229,34 @@ TEST(TypeRegistry, AllEntriesValid) {
 TEST(TypeRegistry, TileFormatElements) {
   const loom_type_descriptor_t* desc =
       loom_type_registry_lookup(iree_make_cstring_view("tile"));
+  ASSERT_NE(desc, nullptr);
+  ASSERT_EQ(desc->format_element_count, 6);
+  // ShapeOf, Keyword(x), ScalarOf, Optional, Keyword(,), EncodingOf.
+  EXPECT_EQ(desc->format_elements[0].kind, LOOM_TYPE_FMT_SHAPE);
+  EXPECT_EQ(desc->format_elements[1].kind, LOOM_TYPE_FMT_KEYWORD);
+  EXPECT_EQ(desc->format_elements[1].data, LOOM_KW_X);
+  EXPECT_EQ(desc->format_elements[2].kind, LOOM_TYPE_FMT_SCALAR);
+  EXPECT_EQ(desc->format_elements[3].kind, LOOM_TYPE_FMT_OPTIONAL);
+  EXPECT_EQ(desc->format_elements[4].kind, LOOM_TYPE_FMT_KEYWORD);
+  EXPECT_EQ(desc->format_elements[4].data, LOOM_KW_COMMA);
+  EXPECT_EQ(desc->format_elements[5].kind, LOOM_TYPE_FMT_ENCODING);
+}
+
+TEST(TypeRegistry, VectorFormatElements) {
+  const loom_type_descriptor_t* desc =
+      loom_type_registry_lookup(iree_make_cstring_view("vector"));
+  ASSERT_NE(desc, nullptr);
+  ASSERT_EQ(desc->format_element_count, 3);
+  // ShapeOf, Keyword(x), ScalarOf.
+  EXPECT_EQ(desc->format_elements[0].kind, LOOM_TYPE_FMT_SHAPE);
+  EXPECT_EQ(desc->format_elements[1].kind, LOOM_TYPE_FMT_KEYWORD);
+  EXPECT_EQ(desc->format_elements[1].data, LOOM_KW_X);
+  EXPECT_EQ(desc->format_elements[2].kind, LOOM_TYPE_FMT_SCALAR);
+}
+
+TEST(TypeRegistry, ViewFormatElements) {
+  const loom_type_descriptor_t* desc =
+      loom_type_registry_lookup(iree_make_cstring_view("view"));
   ASSERT_NE(desc, nullptr);
   ASSERT_EQ(desc->format_element_count, 6);
   // ShapeOf, Keyword(x), ScalarOf, Optional, Keyword(,), EncodingOf.

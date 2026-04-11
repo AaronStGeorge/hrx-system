@@ -461,7 +461,9 @@ static iree_status_t loom_bytecode_numbering_intern_type(
   loom_type_kind_t kind = loom_type_kind(type);
   switch (kind) {
     case LOOM_TYPE_TILE:
-    case LOOM_TYPE_TENSOR: {
+    case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW: {
       // Element type is a scalar — intern it.
       loom_type_t element_type = loom_type_scalar(loom_type_element_type(type));
       IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_type(
@@ -867,6 +869,15 @@ static iree_status_t loom_bytecode_type_kind_byte(loom_type_kind_t kind,
       return iree_ok_status();
     case LOOM_TYPE_TENSOR:
       *out_byte = LOOM_BYTECODE_TYPE_TENSOR;
+      return iree_ok_status();
+    case LOOM_TYPE_VECTOR:
+      *out_byte = LOOM_BYTECODE_TYPE_VECTOR;
+      return iree_ok_status();
+    case LOOM_TYPE_VIEW:
+      *out_byte = LOOM_BYTECODE_TYPE_VIEW;
+      return iree_ok_status();
+    case LOOM_TYPE_BUFFER:
+      *out_byte = LOOM_BYTECODE_TYPE_BUFFER;
       return iree_ok_status();
     case LOOM_TYPE_GROUP:
       *out_byte = LOOM_BYTECODE_TYPE_GROUP;
@@ -1593,10 +1604,23 @@ static iree_status_t loom_bytecode_write_types_section(
         break;
       }
       case LOOM_TYPE_TILE:
-      case LOOM_TYPE_TENSOR: {
+      case LOOM_TYPE_TENSOR:
+      case LOOM_TYPE_VECTOR:
+      case LOOM_TYPE_VIEW: {
         IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(
             page_writer, (uint8_t)loom_type_element_type(type)));
         uint8_t rank = loom_type_rank(type);
+        if (kind == LOOM_TYPE_VECTOR) {
+          if (rank == 0) {
+            return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                    "vector types must have rank >= 1");
+          }
+          if (type.encoding_id != 0 || type.encoding_flags != 0) {
+            return iree_make_status(
+                IREE_STATUS_INVALID_ARGUMENT,
+                "vector types must not carry encoding or layout attachments");
+          }
+        }
         IREE_RETURN_IF_ERROR(
             loom_bytecode_page_writer_write_u8(page_writer, rank));
         // Encoding.
@@ -1676,6 +1700,9 @@ static iree_status_t loom_bytecode_write_types_section(
         break;
       }
       case LOOM_TYPE_ENCODING:
+        // No additional data.
+        break;
+      case LOOM_TYPE_BUFFER:
         // No additional data.
         break;
       case LOOM_TYPE_POOL: {

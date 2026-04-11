@@ -150,6 +150,21 @@ ERR_TYPE_009 = ErrorDef(
     fix_hint="Convert yielded value to type {result_element_type}",
 )
 
+# ERR_TYPE_010: Malformed type payload.
+ERR_TYPE_010 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=10,
+    severity=Severity.ERROR,
+    summary="Malformed type payload.",
+    message="'{field_name}' has malformed type {actual_type}: {reason}",
+    params=(
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint="Construct a well-formed type before verification",
+)
+
 ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_001,
     ERR_TYPE_002,
@@ -160,4 +175,5 @@ ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_007,
     ERR_TYPE_008,
     ERR_TYPE_009,
+    ERR_TYPE_010,
 )

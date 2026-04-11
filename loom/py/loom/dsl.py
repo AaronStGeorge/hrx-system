@@ -51,8 +51,14 @@ __all__ = [
     "TypeConstraint",
     "TILE",
     "TENSOR",
+    "VECTOR",
+    "VIEW",
+    "BUFFER",
     "INTEGER",
+    "INTEGER_ELEMENT",
     "FLOAT",
+    "FLOAT_ELEMENT",
+    "I1_ELEMENT",
     "SCALAR",
     "INDEX",
     "ANY",
@@ -163,20 +169,37 @@ class TypeConstraint(Enum):
     Constraint → ir.py types that satisfy it:
       TILE     → ShapedType with type_kind=TILE
       TENSOR   → ShapedType with type_kind=TENSOR
+      VECTOR   → ShapedType with type_kind=VECTOR
+      VIEW     → ShapedType with type_kind=VIEW
+      BUFFER   → BufferType
       INTEGER  → ScalarType with kind in {I1, I8, I16, I32, I64}
       FLOAT    → ScalarType with kind in {F8*, F16, BF16, F32, F64}
+      INTEGER_ELEMENT → ShapedType with integer element type
+      FLOAT_ELEMENT   → ShapedType with float element type
+      I1_ELEMENT      → ShapedType with element type i1
       SCALAR   → any ScalarType (INTEGER | FLOAT | INDEX)
       INDEX    → ScalarType with kind=INDEX
       ANY      → any type
       GROUP    → GroupType
       ENCODING → EncodingType
       POOL     → PoolType
+
+    Element-qualified constraints are shaped-only: tile, tensor, vector,
+    and view types can satisfy them, while scalar values continue to use
+    INTEGER/FLOAT/I1. Combine a shaped kind constraint with SameElementType
+    when an op needs both a specific shaped kind and a shared element family.
     """
 
     TILE = "tile"
     TENSOR = "tensor"
+    VECTOR = "vector"
+    VIEW = "view"
+    BUFFER = "buffer"
     INTEGER = "integer"
     FLOAT = "float"
+    INTEGER_ELEMENT = "integer_element"
+    FLOAT_ELEMENT = "float_element"
+    I1_ELEMENT = "i1_element"
     SCALAR = "scalar"
     INDEX = "index"
     ANY = "any"
@@ -189,8 +212,14 @@ class TypeConstraint(Enum):
 # Singletons for use in op declarations.
 TILE = TypeConstraint.TILE
 TENSOR = TypeConstraint.TENSOR
+VECTOR = TypeConstraint.VECTOR
+VIEW = TypeConstraint.VIEW
+BUFFER = TypeConstraint.BUFFER
 INTEGER = TypeConstraint.INTEGER
 FLOAT = TypeConstraint.FLOAT
+INTEGER_ELEMENT = TypeConstraint.INTEGER_ELEMENT
+FLOAT_ELEMENT = TypeConstraint.FLOAT_ELEMENT
+I1_ELEMENT = TypeConstraint.I1_ELEMENT
 SCALAR = TypeConstraint.SCALAR
 INDEX = TypeConstraint.INDEX
 ANY = TypeConstraint.ANY
@@ -535,6 +564,8 @@ def ReadWrites(operand: str) -> Effect:
 _RESOURCE_TYPE_CONSTRAINTS = frozenset(
     {
         TypeConstraint.POOL,
+        TypeConstraint.BUFFER,
+        TypeConstraint.VIEW,
         TypeConstraint.TENSOR,
         TypeConstraint.GROUP,
         TypeConstraint.ANY,
@@ -1100,7 +1131,7 @@ class TypeDef:
     doc: str = ""
     params: tuple[TypeParamDef, ...] = ()
     format: tuple[FormatElement, ...] = ()
-    ir_kind: str = "dialect"  # "tile", "tensor", "group", or "dialect"
+    ir_kind: str = "dialect"  # "tile", "tensor", "vector", "view", etc.
 
     def __init__(
         self,

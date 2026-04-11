@@ -836,6 +836,30 @@ TEST_F(ParserTest, FuncDeclBareArgTypesRoundTrip) {
       << text;
 }
 
+TEST_F(ParserTest, VectorViewAndBufferTypesRoundTrip) {
+  std::string text = RoundTrip(
+      "test.decl @types(%N: index, %vec: vector<[%N]xf32>, "
+      "%storage: buffer, %view: view<[%N]xf32>)"
+      " -> (%view as view<[%N]xf32>)\n");
+  EXPECT_NE(text.find("test.decl @types(%N: index, "
+                      "%vec: vector<[%N]xf32>, %storage: buffer, "
+                      "%view: view<[%N]xf32>) -> (%view as view<[%N]xf32>)"),
+            std::string::npos)
+      << "vector/view/buffer signature types should round-trip: " << text;
+}
+
+TEST_F(ParserTest, ViewDynamicLayoutRoundTrip) {
+  std::string text = RoundTrip(
+      "test.decl @layout(%N: index, %layout: encoding, "
+      "%view: view<[%N]xf32, %layout>)"
+      " -> (%view as view<[%N]xf32, %layout>)\n");
+  EXPECT_NE(text.find("test.decl @layout(%N: index, %layout: encoding, "
+                      "%view: view<[%N]xf32, %layout>) -> "
+                      "(%view as view<[%N]xf32, %layout>)"),
+            std::string::npos)
+      << "dynamic view layouts should round-trip: " << text;
+}
+
 TEST_F(ParserTest, FuncDeclNamedResultCanReferenceSignatureArg) {
   std::string text = RoundTrip(
       "test.decl @shape(%M: index, %x: tensor<[%M]xf32>)"
@@ -1592,6 +1616,24 @@ TEST_F(ParserTest, UnknownStaticEncodingFamilyInType) {
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0], &loom_err_parse_008);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "bogus");
+}
+
+TEST_F(ParserTest, VectorRequiresRank) {
+  const auto& diagnostics =
+      ParseExpectErrors("%c = test.constant 0 : vector<f32>\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_003);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1),
+            "vector types must have rank >= 1");
+}
+
+TEST_F(ParserTest, VectorRejectsEncodingAttachment) {
+  const auto& diagnostics =
+      ParseExpectErrors("%c = test.constant 0 : vector<4xf32, #dense>\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_004);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0),
+            "vector types must not carry encoding or layout attachments");
 }
 
 TEST_F(ParserTest, EncodingAlias) {

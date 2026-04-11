@@ -8,6 +8,7 @@
 
 #include "loom/format/text/parser_internal.h"
 #include "loom/ir/context.h"
+#include "loom/ops/type_registry.h"
 
 //===----------------------------------------------------------------------===//
 // Encoding parameter parsing
@@ -491,8 +492,8 @@ static iree_status_t loom_intern_shaped_type(
 // Shaped type parsing
 //===----------------------------------------------------------------------===//
 
-// Parses a shaped type (tile or tensor) from the token stream. Called
-// after LANGLE has been consumed. Consumes tokens through RANGLE.
+// Parses a shaped type (tile, tensor, vector, or view) from the token stream.
+// Called after LANGLE has been consumed. Consumes tokens through RANGLE.
 //
 // Grammar: dim (x dim)* x element_type [, encoding] >
 //
@@ -536,6 +537,12 @@ static iree_status_t loom_parse_shaped_type(loom_parser_t* parser,
     parser->tokenizer.in_dim_list = false;
   }
 
+  if (kind == LOOM_TYPE_VECTOR && rank == 0) {
+    token = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(
+        parser, token, IREE_SV("vector types must have rank >= 1"));
+  }
+
   // Parse element type.
   loom_token_t element_token;
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &element_token);
@@ -551,6 +558,16 @@ static iree_status_t loom_parse_shaped_type(loom_parser_t* parser,
   // Parse optional encoding.
   uint16_t encoding_id = 0;
   loom_encoding_flags_t encoding_flags = 0;
+  if (kind == LOOM_TYPE_VECTOR &&
+      loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+    loom_token_t comma_token = loom_tokenizer_peek(&parser->tokenizer);
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV(
+            "vector types must not carry encoding or layout attachments")),
+    };
+    return loom_parser_emit(parser, &loom_err_parse_004, params,
+                            IREE_ARRAYSIZE(params), comma_token);
+  }
   if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
     IREE_RETURN_IF_ERROR(
         loom_parse_type_encoding(parser, mode, &encoding_id, &encoding_flags));
@@ -778,7 +795,7 @@ static iree_status_t loom_parse_function_type(loom_parser_t* parser,
 //===----------------------------------------------------------------------===//
 
 // Consumes keyword, expects LANGLE, dispatches to the type-specific
-// parser. Shared entry for tile, tensor, pool, and group.
+// parser. Shared entry for tile, tensor, vector, view, pool, and group.
 static iree_status_t loom_parse_angle_bracketed_type(
     loom_parser_t* parser, loom_type_kind_t kind, loom_type_parse_mode_t mode,
     loom_type_t* out_type) {
@@ -797,6 +814,37 @@ static iree_status_t loom_parse_angle_bracketed_type(
   }
   parser->tokenizer.in_dim_list = false;  // cleanup on error paths
   return status;
+}
+
+static iree_status_t loom_parse_registered_bare_type(
+    loom_parser_t* parser, loom_token_t token, loom_type_parse_mode_t mode,
+    loom_type_t* out_type, bool* out_matched) {
+  *out_matched = false;
+  const loom_type_descriptor_t* descriptor =
+      loom_type_registry_lookup(token.text);
+  if (!descriptor) return iree_ok_status();
+  *out_matched = true;
+
+  switch (descriptor->ir_kind) {
+    case LOOM_TYPE_TILE:
+    case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW:
+    case LOOM_TYPE_POOL:
+    case LOOM_TYPE_GROUP:
+      return loom_parse_angle_bracketed_type(parser, descriptor->ir_kind, mode,
+                                             out_type);
+    case LOOM_TYPE_BUFFER:
+      loom_tokenizer_next(&parser->tokenizer);
+      *out_type = loom_type_buffer();
+      return iree_ok_status();
+    case LOOM_TYPE_DIALECT:
+      loom_tokenizer_next(&parser->tokenizer);
+      return loom_parse_dialect_type(parser, token, mode, out_type);
+    default:
+      break;
+  }
+  return loom_parser_emit_unexpected_token(parser, token, IREE_SV("a type"));
 }
 
 iree_status_t loom_parse_type(loom_parser_t* parser,
@@ -820,22 +868,11 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
       return iree_ok_status();
     }
 
-    // Angle-bracketed types: tile, tensor, pool, group.
-    if (iree_string_view_equal(token.text, IREE_SV("tile"))) {
-      return loom_parse_angle_bracketed_type(parser, LOOM_TYPE_TILE, mode,
-                                             out_type);
-    }
-    if (iree_string_view_equal(token.text, IREE_SV("tensor"))) {
-      return loom_parse_angle_bracketed_type(parser, LOOM_TYPE_TENSOR, mode,
-                                             out_type);
-    }
-    if (iree_string_view_equal(token.text, IREE_SV("pool"))) {
-      return loom_parse_angle_bracketed_type(parser, LOOM_TYPE_POOL, mode,
-                                             out_type);
-    }
-    if (iree_string_view_equal(token.text, IREE_SV("group"))) {
-      return loom_parse_angle_bracketed_type(parser, LOOM_TYPE_GROUP, mode,
-                                             out_type);
+    bool matched_registered_type = false;
+    IREE_RETURN_IF_ERROR(loom_parse_registered_bare_type(
+        parser, token, mode, out_type, &matched_registered_type));
+    if (matched_registered_type) {
+      return iree_ok_status();
     }
 
     // Unknown bare ident.

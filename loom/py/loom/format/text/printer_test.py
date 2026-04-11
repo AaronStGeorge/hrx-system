@@ -16,6 +16,7 @@ from loom.format.text.parser import Parser
 from loom.format.text.printer import Printer, print_type
 from loom.ir import (
     BF16,
+    BUFFER_TYPE,
     ENCODING_TYPE,
     F32,
     I1,
@@ -106,6 +107,8 @@ def _module_with(*names_and_types: tuple[str, Type]) -> tuple[Module, list[int]]
 _tile_4xf32 = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
 _tile_4x4xf32 = ShapedType(TypeKind.TILE, F32, (StaticDim(4), StaticDim(4)))
 _tensor_4xf32 = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
+_vector_16xf32 = ShapedType(TypeKind.VECTOR, F32, (StaticDim(16),))
+_view_4xf32 = ShapedType(TypeKind.VIEW, F32, (StaticDim(4),))
 _tile_64x64xf16 = ShapedType(
     TypeKind.TILE, ScalarType(ScalarTypeKind.F16), (StaticDim(64), StaticDim(64))
 )
@@ -135,6 +138,12 @@ class TestPrintType:
 
     def test_tensor(self) -> None:
         assert print_type(_tensor_4xf32) == "tensor<4xf32>"
+
+    def test_vector(self) -> None:
+        assert print_type(_vector_16xf32) == "vector<16xf32>"
+
+    def test_view(self) -> None:
+        assert print_type(_view_4xf32) == "view<4xf32>"
 
     def test_tile_0d(self) -> None:
         assert print_type(ShapedType(TypeKind.TILE, F32, ())) == "tile<f32>"
@@ -179,6 +188,32 @@ class TestPrintType:
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         assert print_type(t) == "tile<256xi8, #enc>"
 
+    def test_view_layout_with_alias(self) -> None:
+        """View layout uses the same attachment syntax as tile encodings."""
+
+        layout = EncodingInstance(name="strided", alias="layout")
+        t = ShapedType(TypeKind.VIEW, F32, (StaticDim(256),), encoding=layout)
+        assert print_type(t) == "view<256xf32, #layout>"
+
+    def test_view_dynamic_layout_with_context(self) -> None:
+        from loom.format.text.printer import TypePrintContext
+
+        t = ShapedType(
+            TypeKind.VIEW,
+            F32,
+            (DynamicDim(),),
+            encoding=DynamicEncoding(),
+        )
+        module = Module(name="test")
+        module.add_value(Value(name="N", type=INDEX))
+        module.add_value(Value(name="layout", type=ENCODING_TYPE))
+        context = TypePrintContext(
+            dim_bindings={0: 0},
+            encoding_binding=1,
+            module=module,
+        )
+        assert print_type(t, context) == "view<[%N]xf32, %layout>"
+
     def test_encoding_without_alias(self) -> None:
         """Without alias, prints #name<params>."""
 
@@ -207,6 +242,9 @@ class TestPrintType:
 
     def test_none_type(self) -> None:
         assert print_type(NONE_TYPE) == "none"
+
+    def test_buffer_type(self) -> None:
+        assert print_type(BUFFER_TYPE) == "buffer"
 
     def test_dialect_type_opaque(self) -> None:
         from loom.ir import DialectType

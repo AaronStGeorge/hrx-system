@@ -7,11 +7,14 @@
 // Loom IR type system.
 //
 // Types describe the shapes and element types of values in loom IR.
-// The type system has five categories:
+// The type system has these core categories:
 //
 //   Scalar types:    f16, f32, f64, bf16, i1, i8, i16, i32, i64, index
-//   Tile types:      tile<[%M]x4xf32>     (local compute, register-like)
-//   Tensor types:    tensor<[%M]xf32>     (global storage, memory-backed)
+//   Tensor types:    tensor<[%M]xf32>     (logical tensor value)
+//   Tile types:      tile<[%M]x4xf32>     (tile-level aggregate value)
+//   Vector types:    vector<[%M]xf32>     (register lane grid value)
+//   Buffer types:    buffer               (opaque storage identity)
+//   View types:      view<[%M]xf32, %layout> (typed buffer projection)
 //   Group types:     group<scope>         (barrier scoping)
 //   Function types:  (f32, i32) -> (f64)  (callable signatures)
 //
@@ -24,6 +27,28 @@
 //   tile<4x4xf32>           All static.
 //   tile<[%M]x4xf32>        First dim dynamic, named %M.
 //   tensor<[%M]x[%K]xf32>   Both dims dynamic.
+//   vector<16xf32>          Static 1-D register vector.
+//   vector<[%N]xi32>        Dynamic register vector extent.
+//   view<[%N]xf32, %layout> Dynamic view layout carried by an SSA value.
+//   buffer                  Opaque buffer storage identity.
+//
+// Tensor, tile, and vector types describe SSA values, not aliasable storage.
+// A tensor is a logical n-D aggregate used before storage has been chosen, a
+// tile is the same value-space idea after tiling decisions have made local
+// worksets explicit, and a vector is the register-level lane grid used by
+// vector lowering. Vector types are always rank >= 1 and cannot carry
+// encodings/layouts; use an explicit splat/broadcast/conversion op when a
+// scalar value must feed vector code.
+//
+// Buffers and views carry the storage story. A buffer is an untyped, unshaped
+// storage identity: it says "this SSA value may alias other values derived from
+// the same storage," but it says nothing about element type, logical extents,
+// or byte layout. A view is a non-owning projection over a buffer-like storage
+// identity. The view type records the logical element space and optional
+// address layout, while the op that creates the view records which buffer,
+// offset, and dynamic bindings the view comes from. This keeps alias reasoning
+// attached to SSA use-def structure instead of hiding it in a polymorphic
+// kernel signature.
 //
 // Dynamic dims are printed with SSA value names. At use sites, those names
 // resolve to ordinary index-typed SSA values in the current lexical scope. In
@@ -31,14 +56,20 @@
 // first inside a type may be parsed as declaration-local placeholders, but
 // function body visibility still comes from explicit binders or op results.
 //
-// Types may carry an encoding that describes the physical data layout
-// (quantization, packing, etc.):
+// Tile and tensor types may carry an encoding that describes the physical data
+// layout (quantization, packing, etc.). View types use the same representation
+// slot for address layout. Vector types are pure register lane grids and do not
+// carry layout attachments.
 //
 //   tile<256x256xf32, #q6_k>
 //   tensor<[%N]x[%K]xi8, #q8_0<block=32>>
+//   view<[%N]xf32, #strided<stride=64>>
 //
-// The encoding is metadata: it doesn't change the logical shape or
-// element type, but determines how bytes map to logical elements.
+// The encoding/layout attachment is metadata: it doesn't change the logical
+// shape or element type, but determines how bytes map to logical elements.
+// The first-class `encoding` type is an SSA value type used in attachment
+// position (`tile<4xf32, %enc>`, `view<[%N]xf32, %layout>`). It is parsed as a
+// built-in keyword rather than as a parameterized TypeDef registry entry.
 //
 // ==========================================================================
 // Memory layout
@@ -184,8 +215,17 @@ typedef enum loom_type_kind_e {
   LOOM_TYPE_DIALECT = 6,   // hal.buffer, vm.ref<T>, etc.
   LOOM_TYPE_ENCODING = 7,  // encoding (first-class SSA encoding value)
   LOOM_TYPE_POOL = 8,      // pool<[%block_size]> (block-managed memory)
+  LOOM_TYPE_VECTOR = 9,    // vector<[%M]xf32> (register lane grid)
+  LOOM_TYPE_VIEW = 10,     // view<[%M]xf32, %layout> (buffer projection)
+  LOOM_TYPE_BUFFER = 11,   // buffer (opaque storage identity)
   LOOM_TYPE_COUNT_,
 } loom_type_kind_t;
+
+// Returns true if |kind| names a real type kind. The LOOM_TYPE_COUNT_
+// sentinel is not a type and must not be serialized or interpreted.
+static inline bool loom_type_kind_is_valid(loom_type_kind_t kind) {
+  return (uint32_t)kind < LOOM_TYPE_COUNT_;
+}
 
 // Group scope kind. Stored in the element_type byte of the type header
 // for LOOM_TYPE_GROUP (that byte is unused for non-shaped types).
@@ -408,6 +448,18 @@ static inline bool loom_type_is_tensor(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_TENSOR;
 }
 
+static inline bool loom_type_is_vector(loom_type_t type) {
+  return loom_type_kind(type) == LOOM_TYPE_VECTOR;
+}
+
+static inline bool loom_type_is_view(loom_type_t type) {
+  return loom_type_kind(type) == LOOM_TYPE_VIEW;
+}
+
+static inline bool loom_type_is_buffer(loom_type_t type) {
+  return loom_type_kind(type) == LOOM_TYPE_BUFFER;
+}
+
 static inline bool loom_type_is_function(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_FUNCTION;
 }
@@ -425,10 +477,19 @@ static inline bool loom_type_is_pool(loom_type_t type) {
 }
 
 // Returns true if the type is shaped (has rank, dims, element type):
-// tile or tensor. Scalar types are NOT shaped.
+// tile, tensor, vector, or view. Scalar types are NOT shaped.
 static inline bool loom_type_is_shaped(loom_type_t type) {
   loom_type_kind_t kind = loom_type_kind(type);
-  return kind == LOOM_TYPE_TILE || kind == LOOM_TYPE_TENSOR;
+  return kind == LOOM_TYPE_TILE || kind == LOOM_TYPE_TENSOR ||
+         kind == LOOM_TYPE_VECTOR || kind == LOOM_TYPE_VIEW;
+}
+
+// Returns true if the type kind can carry the shared encoding/layout
+// attachment slot. Vector types are shaped but intentionally layout-free.
+static inline bool loom_type_can_have_encoding(loom_type_t type) {
+  loom_type_kind_t kind = loom_type_kind(type);
+  return kind == LOOM_TYPE_TILE || kind == LOOM_TYPE_TENSOR ||
+         kind == LOOM_TYPE_VIEW;
 }
 
 // --- Type comparison ---
@@ -482,20 +543,20 @@ static inline bool loom_type_encoding_equals(loom_type_t a, loom_type_t b) {
 // encoding_id == 0 (valid value_id), so we also check encoding_flags. Returns
 // false for non-shaped types.
 static inline bool loom_type_has_encoding(loom_type_t type) {
-  return loom_type_is_shaped(type) &&
+  return loom_type_can_have_encoding(type) &&
          (type.encoding_id != 0 || type.encoding_flags != 0);
 }
 
 // Returns true if the encoding is an SSA value reference rather than
 // a static encoding table index. Returns false for non-shaped types.
 static inline bool loom_type_has_ssa_encoding(loom_type_t type) {
-  return loom_type_is_shaped(type) &&
+  return loom_type_can_have_encoding(type) &&
          (type.encoding_flags & LOOM_ENCODING_FLAG_SSA) != 0;
 }
 
 // Returns true if the shaped type has a static (non-SSA) encoding.
 static inline bool loom_type_has_static_encoding(loom_type_t type) {
-  return loom_type_is_shaped(type) && type.encoding_id != 0 &&
+  return loom_type_can_have_encoding(type) && type.encoding_id != 0 &&
          !loom_type_has_ssa_encoding(type);
 }
 
@@ -515,6 +576,15 @@ static inline loom_type_t loom_type_encoding(void) {
   loom_type_t type = {0};
   type.header = loom_type_make_header(LOOM_TYPE_ENCODING, (loom_scalar_type_t)0,
                                       0, LOOM_TYPE_FLAG_INLINE_DIMS);
+  return type;
+}
+
+// Creates a buffer type used as an opaque storage identity for views.
+static inline loom_type_t loom_type_buffer(void) {
+  loom_type_t type = {0};
+  type.header = loom_type_make_header(
+      LOOM_TYPE_BUFFER, (loom_scalar_type_t)0, 0,
+      LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
   return type;
 }
 
@@ -544,7 +614,9 @@ static inline loom_type_t loom_type_scalar(loom_scalar_type_t scalar_type) {
   return type;
 }
 
-// Creates a 0-d (scalar) tile or tensor type.
+// Creates a rank-0 shaped type for kinds that permit scalar-shaped forms.
+// Vector types are always rank >= 1 and are rejected by verifiers if a caller
+// hand-constructs them with this helper.
 static inline loom_type_t loom_type_shaped_0d(loom_type_kind_t kind,
                                               loom_scalar_type_t element_type,
                                               uint16_t encoding_id) {
