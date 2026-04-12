@@ -16,7 +16,6 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ATTR_TYPE_I64_ARRAY,
-    ENCODING,
     INDEX,
     PURE,
     VIEW,
@@ -37,53 +36,7 @@ from loom.dsl import (
 view_ops = Dialect(
     "view",
     dialect_id=0x0D,
-    doc="View layout construction and logical subview operations.",
-)
-
-# ============================================================================
-# view.layout.dense — dense logical-to-physical layout
-# ============================================================================
-
-view_layout_dense = Op(
-    name="view.layout.dense",
-    group=view_ops,
-    doc=("Construct a dense row-major address layout. The consuming view type provides the rank and logical extents."),
-    results=[Result("result", ENCODING, doc="Dense address-layout value.")],
-    traits=[PURE],
-    format=[COLON, ResultType("result")],
-    examples=[
-        "%layout = view.layout.dense : encoding",
-    ],
-)
-
-# ============================================================================
-# view.layout.strided — explicit element-stride layout
-# ============================================================================
-
-view_layout_strided = Op(
-    name="view.layout.strided",
-    group=view_ops,
-    doc=("Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list."),
-    operands=[Operand("strides", INDEX, doc="Dynamic element strides.", variadic=True)],
-    results=[Result("result", ENCODING, doc="Strided address-layout value.")],
-    attrs=[
-        AttrDef(
-            "static_strides",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static element strides with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
-    traits=[PURE],
-    verify="loom_view_layout_strided_verify",
-    format=[
-        IndexList("strides", "static_strides"),
-        COLON,
-        ResultType("result"),
-    ],
-    examples=[
-        "%layout = view.layout.strided [%row_stride, 1] : encoding",
-        "%layout = view.layout.strided [4096, 1] : encoding",
-    ],
+    doc="Logical view operations.",
 )
 
 # ============================================================================
@@ -130,8 +83,4 @@ view_subview = Op(
 # Registry
 # ============================================================================
 
-ALL_VIEW_OPS: tuple[Op, ...] = (
-    view_layout_dense,
-    view_layout_strided,
-    view_subview,
-)
+ALL_VIEW_OPS: tuple[Op, ...] = (view_subview,)

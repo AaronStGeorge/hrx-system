@@ -19,37 +19,6 @@ class ViewBuilders:
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
 
-    def dense(self, *, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Construct a dense row-major address layout. The consuming view type provides the rank and logical extents.
-
-        Example::
-            %layout = view.layout.dense : encoding
-        """
-        _operands: list[ValueRef | int] = []
-        _attributes: builtins.dict[str, Any] = {}
-        _regions: list[Region] = []
-        return cast(ValueRef, self._b.build("view.layout.dense", _operands, results=results, attributes=_attributes, regions=_regions))
-
-    def strided(self, *, strides: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list.
-
-        Example::
-            %layout = view.layout.strided [%row_stride, 1] : encoding
-        """
-        _operands: list[ValueRef | int] = []
-        _attributes: builtins.dict[str, Any] = {}
-        _regions: list[Region] = []
-        _sentinel = -(2**63)
-        _static = []
-        for _idx in strides:
-            if isinstance(_idx, ValueRef):
-                _static.append(_sentinel)
-                _operands.append(_idx)
-            else:
-                _static.append(_idx)
-        _attributes["static_strides"] = _static
-        return cast(ValueRef, self._b.build("view.layout.strided", _operands, results=results, attributes=_attributes, regions=_regions))
-
     def subview(self, *, source: ValueRef, offsets: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
         """Form a logical subview from an existing view. Offsets select the logical origin; result type dimensions provide the subview extents.
 

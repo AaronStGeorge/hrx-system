@@ -14,7 +14,7 @@ func.def @buffer_view_missing_layout(%buffer: buffer, %offset: index) {
 
 // view.subview requires one logical offset position per source rank.
 func.def @subview_offset_count(%buffer: buffer, %offset: index) {
-  %layout = view.layout.strided [4, 1] : encoding
+  %layout = encoding.layout.strided [4, 1] : encoding
   %source = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %layout>
   // ERROR@+1: SUBRANGE/001 "source" "1" "2"
   %sub = view.subview %source[0] : view<4x4xf32, %layout> -> view<4x4xf32, %layout>
@@ -25,8 +25,22 @@ func.def @subview_offset_count(%buffer: buffer, %offset: index) {
 
 // A concrete strided layout must provide one stride per result view rank.
 func.def @buffer_view_stride_rank_mismatch(%buffer: buffer, %offset: index) {
-  %layout = view.layout.strided [1] : encoding
+  %layout = encoding.layout.strided [1] : encoding
   // ERROR@+1: SHAPE/001 "result type" "2" "layout stride list" "1"
   %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %layout>
+  func.return
+}
+
+// ====
+
+// Encoded physical storage views still expose their address layout explicitly.
+// buffer.view must recover it through #physical_storage instead of treating the
+// storage schema as part of address arithmetic.
+func.def @buffer_view_physical_storage_stride_rank_mismatch(%buffer: buffer, %offset: index) {
+  %layout = encoding.layout.strided [1] : encoding
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding
+  %storage = encoding.define #physical_storage {layout = %layout : encoding, schema = %schema : encoding} : encoding
+  // ERROR@+1: SHAPE/001 "result type" "2" "layout stride list" "1"
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x18xi8, %storage>
   func.return
 }

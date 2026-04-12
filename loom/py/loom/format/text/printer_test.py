@@ -12,7 +12,6 @@ from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.test import ALL_TEST_OPS
-from loom.dialect.view import ALL_VIEW_OPS
 from loom.format.text.parser import Parser
 from loom.format.text.printer import Printer, print_type
 from loom.ir import (
@@ -189,8 +188,8 @@ class TestPrintType:
         t = ShapedType(TypeKind.TILE, I8, (StaticDim(256),), encoding=enc)
         assert print_type(t) == "tile<256xi8, #enc>"
 
-    def test_view_layout_with_alias(self) -> None:
-        """View layout uses the same attachment syntax as tile encodings."""
+    def test_view_encoding_attachment_with_alias(self) -> None:
+        """View encoding attachments print aliases like tile encodings."""
 
         layout = EncodingInstance(name="strided", alias="layout")
         t = ShapedType(TypeKind.VIEW, F32, (StaticDim(256),), encoding=layout)
@@ -458,16 +457,16 @@ class TestPrintLayoutStrided:
             ("row_stride", INDEX), ("layout", ENCODING_TYPE)
         )
         op = Operation(
-            name="view.layout.strided",
+            name="encoding.layout.strided",
             operands=[row_stride],
             results=[layout],
             attributes={"static_strides": [sentinel, 1]},
         )
         printer = _printer()
-        printer.register_ops(ALL_VIEW_OPS)
+        printer.register_ops(ALL_ENCODING_OPS)
         assert (
             printer.print_operation(op, module)
-            == "%layout = view.layout.strided [%row_stride, 1] : encoding"
+            == "%layout = encoding.layout.strided [%row_stride, 1] : encoding"
         )
 
 

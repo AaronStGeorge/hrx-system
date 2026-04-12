@@ -553,6 +553,105 @@ const loom_error_def_t loom_err_encoding_006 = {
     .param_count = 1,
 };
 
+static const loom_error_param_def_t loom_err_encoding_007_params[] = {
+    {"encoding_name", LOOM_PARAM_STRING},
+    {"param_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_encoding_007 = {
+    .error_id = "ERR_ENCODING_007",
+    .domain = LOOM_ERROR_DOMAIN_ENCODING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 7,
+    .summary = "Required encoding parameter is missing.",
+    .message_template =
+        "encoding '{encoding_name}' requires parameter '{param_name}'",
+    .fix_hint_template =
+        "Add the required parameter to the encoding.define operand dictionary",
+    .param_defs = loom_err_encoding_007_params,
+    .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_encoding_008_params[] = {
+    {"encoding_name", LOOM_PARAM_STRING},
+    {"param_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_encoding_008 = {
+    .error_id = "ERR_ENCODING_008",
+    .domain = LOOM_ERROR_DOMAIN_ENCODING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 8,
+    .summary = "Unknown encoding parameter.",
+    .message_template =
+        "encoding '{encoding_name}' does not support parameter '{param_name}'",
+    .fix_hint_template =
+        "Remove the unsupported parameter or use an encoding family that "
+        "defines it",
+    .param_defs = loom_err_encoding_008_params,
+    .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_encoding_009_params[] = {
+    {"encoding_name", LOOM_PARAM_STRING},
+    {"param_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},
+    {"expected_type", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_encoding_009 = {
+    .error_id = "ERR_ENCODING_009",
+    .domain = LOOM_ERROR_DOMAIN_ENCODING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 9,
+    .summary = "Encoding parameter has wrong type.",
+    .message_template =
+        "encoding '{encoding_name}' parameter '{param_name}' has type "
+        "{actual_type}, expected '{expected_type}'",
+    .fix_hint_template =
+        "Pass an SSA value whose type matches the encoding family contract",
+    .param_defs = loom_err_encoding_009_params,
+    .param_count = 4,
+};
+
+static const loom_error_param_def_t loom_err_encoding_010_params[] = {
+    {"encoding_name", LOOM_PARAM_STRING},
+    {"param_name", LOOM_PARAM_STRING},
+    {"actual_kind", LOOM_PARAM_U32},
+    {"expected_kind", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_encoding_010 = {
+    .error_id = "ERR_ENCODING_010",
+    .domain = LOOM_ERROR_DOMAIN_ENCODING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 10,
+    .summary = "Encoding static parameter has wrong attribute kind.",
+    .message_template =
+        "encoding '{encoding_name}' parameter '{param_name}' has attribute "
+        "kind {actual_kind}, expected '{expected_kind}'",
+    .fix_hint_template =
+        "Use a static parameter value whose kind matches the encoding contract",
+    .param_defs = loom_err_encoding_010_params,
+    .param_count = 4,
+};
+
+static const loom_error_param_def_t loom_err_encoding_011_params[] = {
+    {"encoding_name", LOOM_PARAM_STRING},
+    {"param_name", LOOM_PARAM_STRING},
+    {"expected_role", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_encoding_011 = {
+    .error_id = "ERR_ENCODING_011",
+    .domain = LOOM_ERROR_DOMAIN_ENCODING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 11,
+    .summary = "Encoding parameter has wrong role.",
+    .message_template =
+        "encoding '{encoding_name}' parameter '{param_name}' must be "
+        "{expected_role}",
+    .fix_hint_template =
+        "Pass an encoding value with the role required by the family contract",
+    .param_defs = loom_err_encoding_011_params,
+    .param_count = 3,
+};
+
 static const loom_error_param_def_t loom_err_structure_001_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"actual_count", LOOM_PARAM_U32},
@@ -1650,28 +1749,30 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_subrange_001,  &loom_err_subrange_002,  &loom_err_subrange_003,
     &loom_err_subrange_004,  &loom_err_encoding_001,  &loom_err_encoding_002,
     &loom_err_encoding_003,  &loom_err_encoding_004,  &loom_err_encoding_005,
-    &loom_err_encoding_006,  &loom_err_structure_001, &loom_err_structure_002,
-    &loom_err_structure_003, &loom_err_structure_004, &loom_err_structure_005,
-    &loom_err_structure_006, &loom_err_structure_007, &loom_err_structure_008,
-    &loom_err_structure_009, &loom_err_structure_010, &loom_err_structure_011,
-    &loom_err_structure_012, &loom_err_structure_013, &loom_err_structure_014,
-    &loom_err_dominance_001, &loom_err_dominance_002, &loom_err_dominance_003,
-    &loom_err_dominance_004, &loom_err_dominance_005, &loom_err_dominance_006,
-    &loom_err_dominance_007, &loom_err_dominance_008, &loom_err_symbol_001,
-    &loom_err_symbol_002,    &loom_err_symbol_003,    &loom_err_symbol_004,
-    &loom_err_parse_001,     &loom_err_parse_002,     &loom_err_parse_003,
-    &loom_err_parse_004,     &loom_err_parse_005,     &loom_err_parse_006,
-    &loom_err_parse_007,     &loom_err_parse_008,     &loom_err_parse_009,
-    &loom_err_parse_010,     &loom_err_parse_011,     &loom_err_parse_012,
-    &loom_err_parse_013,     &loom_err_parse_014,     &loom_err_parse_015,
-    &loom_err_parse_016,     &loom_err_parse_017,     &loom_err_parse_018,
-    &loom_err_parse_019,     &loom_err_parse_020,     &loom_err_parse_021,
-    &loom_err_parse_022,     &loom_err_parse_023,     &loom_err_parse_024,
-    &loom_err_parse_025,     &loom_err_parse_026,     &loom_err_parse_027,
-    &loom_err_parse_028,     &loom_err_parse_029,     &loom_err_bytecode_001,
-    &loom_err_bytecode_002,  &loom_err_bytecode_003,  &loom_err_bytecode_004,
-    &loom_err_bytecode_005,  &loom_err_fold_001,      &loom_err_fold_002,
-    &loom_err_fold_003,      &loom_err_fold_004,      &loom_err_fold_005,
+    &loom_err_encoding_006,  &loom_err_encoding_007,  &loom_err_encoding_008,
+    &loom_err_encoding_009,  &loom_err_encoding_010,  &loom_err_encoding_011,
+    &loom_err_structure_001, &loom_err_structure_002, &loom_err_structure_003,
+    &loom_err_structure_004, &loom_err_structure_005, &loom_err_structure_006,
+    &loom_err_structure_007, &loom_err_structure_008, &loom_err_structure_009,
+    &loom_err_structure_010, &loom_err_structure_011, &loom_err_structure_012,
+    &loom_err_structure_013, &loom_err_structure_014, &loom_err_dominance_001,
+    &loom_err_dominance_002, &loom_err_dominance_003, &loom_err_dominance_004,
+    &loom_err_dominance_005, &loom_err_dominance_006, &loom_err_dominance_007,
+    &loom_err_dominance_008, &loom_err_symbol_001,    &loom_err_symbol_002,
+    &loom_err_symbol_003,    &loom_err_symbol_004,    &loom_err_parse_001,
+    &loom_err_parse_002,     &loom_err_parse_003,     &loom_err_parse_004,
+    &loom_err_parse_005,     &loom_err_parse_006,     &loom_err_parse_007,
+    &loom_err_parse_008,     &loom_err_parse_009,     &loom_err_parse_010,
+    &loom_err_parse_011,     &loom_err_parse_012,     &loom_err_parse_013,
+    &loom_err_parse_014,     &loom_err_parse_015,     &loom_err_parse_016,
+    &loom_err_parse_017,     &loom_err_parse_018,     &loom_err_parse_019,
+    &loom_err_parse_020,     &loom_err_parse_021,     &loom_err_parse_022,
+    &loom_err_parse_023,     &loom_err_parse_024,     &loom_err_parse_025,
+    &loom_err_parse_026,     &loom_err_parse_027,     &loom_err_parse_028,
+    &loom_err_parse_029,     &loom_err_bytecode_001,  &loom_err_bytecode_002,
+    &loom_err_bytecode_003,  &loom_err_bytecode_004,  &loom_err_bytecode_005,
+    &loom_err_fold_001,      &loom_err_fold_002,      &loom_err_fold_003,
+    &loom_err_fold_004,      &loom_err_fold_005,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

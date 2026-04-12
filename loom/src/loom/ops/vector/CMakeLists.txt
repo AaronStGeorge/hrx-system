@@ -26,8 +26,8 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::view
   PUBLIC
 )
 
@@ -40,8 +40,8 @@ loom_cc_test(
     ::vector
     iree::base::internal::arena
     loom::src::loom::ir
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
-    loom::src::loom::ops::view
     iree::testing::gtest
     iree::testing::gtest_main
 )

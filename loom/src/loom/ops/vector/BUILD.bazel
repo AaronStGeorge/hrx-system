@@ -29,7 +29,7 @@ loom_cc_library(
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/view",
+        "//loom/src/loom/ops/encoding",
         "//runtime/src/iree/base",
     ],
 )
@@ -41,7 +41,7 @@ loom_cc_test(
         ":vector",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/view",
+        "//loom/src/loom/ops/encoding",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

@@ -7,7 +7,8 @@
 #include "loom/ops/vector/memory.h"
 
 #include "loom/ir/scalar_type.h"
-#include "loom/ops/view/ops.h"
+#include "loom/ops/encoding/ops.h"
+#include "loom/ops/encoding/storage.h"
 
 static const loom_op_t* loom_vector_memory_layout_op(
     const loom_module_t* module, loom_type_t view_type) {
@@ -17,18 +18,21 @@ static const loom_op_t* loom_vector_memory_layout_op(
       (loom_value_id_t)loom_type_encoding_value_id(view_type);
   if (layout_value_id >= module->values.count) return NULL;
 
-  const loom_value_t* layout_value = loom_module_value(module, layout_value_id);
-  if (loom_value_is_block_arg(layout_value)) return NULL;
-  return loom_value_def_op(layout_value);
+  const loom_op_t* layout_op = NULL;
+  if (!loom_encoding_resolve_address_layout_op(module, layout_value_id,
+                                               &layout_op)) {
+    return NULL;
+  }
+  return layout_op;
 }
 
 static loom_vector_memory_layout_kind_t loom_vector_memory_layout_kind(
     const loom_op_t* layout_op) {
   if (!layout_op) return LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN;
-  if (loom_view_layout_dense_isa(layout_op)) {
+  if (loom_encoding_layout_dense_isa(layout_op)) {
     return LOOM_VECTOR_MEMORY_LAYOUT_DENSE;
   }
-  if (loom_view_layout_strided_isa(layout_op)) {
+  if (loom_encoding_layout_strided_isa(layout_op)) {
     return LOOM_VECTOR_MEMORY_LAYOUT_STRIDED;
   }
   return LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN;
@@ -118,7 +122,7 @@ bool loom_vector_memory_access_static_axis_stride(
           access, view_axis, out_stride);
     case LOOM_VECTOR_MEMORY_LAYOUT_STRIDED: {
       loom_attribute_t static_strides =
-          loom_view_layout_strided_static_strides(access->layout_op);
+          loom_encoding_layout_strided_static_strides(access->layout_op);
       if (static_strides.kind != LOOM_ATTR_I64_ARRAY ||
           view_axis >= static_strides.count) {
         return false;

@@ -10,11 +10,14 @@ from loom.dialect.encoding import (
     ALL_ENCODING_OPS,
     encoding_define,
     encoding_isa,
+    encoding_layout_dense,
+    encoding_layout_strided,
     encoding_ops,
 )
 from loom.dsl import (
     ATTR_TYPE_DICT,
     ATTR_TYPE_ENCODING,
+    ATTR_TYPE_I64_ARRAY,
     ENCODING,
     TypeConstraint,
 )
@@ -22,15 +25,15 @@ from loom.dsl import (
 
 class TestAllOpsRegistered:
     def test_count(self) -> None:
-        assert len(ALL_ENCODING_OPS) == 2
+        assert len(ALL_ENCODING_OPS) == 4
 
     def test_unique_names(self) -> None:
         names = [op.name for op in ALL_ENCODING_OPS]
         assert len(set(names)) == len(names)
 
-    def test_all_in_encoding_namespace(self) -> None:
+    def test_all_in_encoding_dialect(self) -> None:
         for op in ALL_ENCODING_OPS:
-            assert op.namespace == "encoding", f"{op.name} not in encoding namespace"
+            assert op.name.startswith("encoding."), f"{op.name} not in encoding dialect"
 
     def test_all_have_group(self) -> None:
         for op in ALL_ENCODING_OPS:
@@ -47,6 +50,41 @@ class TestAllOpsRegistered:
     def test_all_have_examples(self) -> None:
         for op in ALL_ENCODING_OPS:
             assert op.examples
+
+
+class TestEncodingLayoutDense:
+    def test_name(self) -> None:
+        assert encoding_layout_dense.name == "encoding.layout.dense"
+
+    def test_result_is_encoding(self) -> None:
+        assert len(encoding_layout_dense.results) == 1
+        assert encoding_layout_dense.results[0].type_constraint == ENCODING
+
+    def test_is_pure(self) -> None:
+        assert encoding_layout_dense.is_pure
+
+
+class TestEncodingLayoutStrided:
+    def test_name(self) -> None:
+        assert encoding_layout_strided.name == "encoding.layout.strided"
+
+    def test_dynamic_strides_variadic(self) -> None:
+        operand = encoding_layout_strided.operand("strides")
+        assert operand is not None
+        assert operand.variadic
+        assert operand.type_constraint == TypeConstraint.INDEX
+
+    def test_static_strides_attr(self) -> None:
+        attr = encoding_layout_strided.attr("static_strides")
+        assert attr is not None
+        assert attr.attr_type == ATTR_TYPE_I64_ARRAY
+
+    def test_result_is_encoding(self) -> None:
+        assert len(encoding_layout_strided.results) == 1
+        assert encoding_layout_strided.results[0].type_constraint == ENCODING
+
+    def test_is_pure(self) -> None:
+        assert encoding_layout_strided.is_pure
 
 
 class TestEncodingDefine:

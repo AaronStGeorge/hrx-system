@@ -18,42 +18,9 @@ extern "C" {
 #endif
 
 enum {
-  LOOM_OP_VIEW_LAYOUT_DENSE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 0),
-  LOOM_OP_VIEW_LAYOUT_STRIDED = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 1),
-  LOOM_OP_VIEW_SUBVIEW = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 2),
-  LOOM_OP_VIEW_COUNT_ = 3,
+  LOOM_OP_VIEW_SUBVIEW = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 0),
+  LOOM_OP_VIEW_COUNT_ = 1,
 };
-
-// LOOM_OP_VIEW_LAYOUT_DENSE: Construct a dense row-major address layout. The consuming view type provides the rank and logical extents.
-// %layout = view.layout.dense : encoding
-LOOM_DEFINE_ISA(loom_view_layout_dense_isa, LOOM_OP_VIEW_LAYOUT_DENSE)
-LOOM_DEFINE_RESULT(loom_view_layout_dense_result, 0)
-iree_status_t loom_view_layout_dense_build(
-    loom_builder_t* builder,
-    loom_type_t result_type,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-extern const loom_op_vtable_t loom_view_layout_dense_vtable;
-
-// LOOM_OP_VIEW_LAYOUT_STRIDED: Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list.
-// %layout = view.layout.strided [%row_stride, 1] : encoding
-LOOM_DEFINE_ISA(loom_view_layout_strided_isa, LOOM_OP_VIEW_LAYOUT_STRIDED)
-LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_layout_strided_strides, 0)
-LOOM_DEFINE_RESULT(loom_view_layout_strided_result, 0)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_layout_strided_static_strides, 0)
-iree_status_t loom_view_layout_strided_build(
-    loom_builder_t* builder,
-    const loom_value_id_t* strides,
-    iree_host_size_t strides_count,
-    const int64_t* static_strides,
-    iree_host_size_t static_strides_count,
-    loom_type_t result_type,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-extern const loom_op_vtable_t loom_view_layout_strided_vtable;
-iree_status_t loom_view_layout_strided_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VIEW_SUBVIEW: Form a logical subview from an existing view. Offsets select the logical origin; result type dimensions provide the subview extents.
 // %sub = view.subview %source[%row, 0] : view<[%M]x[%N]xf32, %layout> -> view<16x[%N]xf32, %layout>

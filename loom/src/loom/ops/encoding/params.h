@@ -16,7 +16,7 @@
 extern "C" {
 #endif
 
-typedef struct loom_encoding_define_param_view_t {
+struct loom_encoding_define_param_view_t {
   // Static encoding table entry referenced by the `spec` attribute.
   const loom_encoding_t* spec;
 
@@ -29,7 +29,7 @@ typedef struct loom_encoding_define_param_view_t {
   // Dynamic parameter names, sorted by name and mapped to dynamic_values
   // ordinals with i64 attributes.
   loom_named_attr_slice_t dynamic_names;
-} loom_encoding_define_param_view_t;
+};
 
 static inline loom_encoding_define_param_view_t loom_encoding_define_param_view(
     const loom_module_t* module, const loom_op_t* op) {

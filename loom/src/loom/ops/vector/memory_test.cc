@@ -11,7 +11,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/view/ops.h"
+#include "loom/ops/encoding/ops.h"
 
 namespace loom {
 namespace {
@@ -22,12 +22,12 @@ class VectorMemoryTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
-    iree_host_size_t view_vtable_count = 0;
-    const loom_op_vtable_t* const* view_vtables =
-        loom_view_dialect_vtables(&view_vtable_count);
-    IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_VIEW,
-                                                 view_vtables,
-                                                 (uint16_t)view_vtable_count));
+    iree_host_size_t encoding_vtable_count = 0;
+    const loom_op_vtable_t* const* encoding_vtables =
+        loom_encoding_dialect_vtables(&encoding_vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_ENCODING, encoding_vtables,
+        (uint16_t)encoding_vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, NULL,
@@ -44,9 +44,9 @@ class VectorMemoryTest : public ::testing::Test {
 
   void BuildDenseLayout(loom_value_id_t* out_layout) {
     loom_op_t* layout = nullptr;
-    IREE_ASSERT_OK(loom_view_layout_dense_build(
+    IREE_ASSERT_OK(loom_encoding_layout_dense_build(
         &builder_, loom_type_encoding(), LOOM_LOCATION_UNKNOWN, &layout));
-    *out_layout = loom_view_layout_dense_result(layout);
+    *out_layout = loom_encoding_layout_dense_result(layout);
   }
 
   void BuildStridedLayout(const loom_value_id_t* dynamic_strides,
@@ -55,11 +55,85 @@ class VectorMemoryTest : public ::testing::Test {
                           iree_host_size_t static_stride_count,
                           loom_value_id_t* out_layout) {
     loom_op_t* layout = nullptr;
-    IREE_ASSERT_OK(loom_view_layout_strided_build(
+    IREE_ASSERT_OK(loom_encoding_layout_strided_build(
         &builder_, dynamic_strides, dynamic_stride_count, static_strides,
         static_stride_count, loom_type_encoding(), LOOM_LOCATION_UNKNOWN,
         &layout));
-    *out_layout = loom_view_layout_strided_result(layout);
+    *out_layout = loom_encoding_layout_strided_result(layout);
+  }
+
+  uint16_t AddEncoding(iree_string_view_t name,
+                       const loom_named_attr_t* attributes,
+                       uint8_t attribute_count) {
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_module_intern_string(module_, name, &name_id));
+    loom_encoding_t encoding = {
+        .name_id = name_id,
+        .alias_id = LOOM_STRING_ID_INVALID,
+        .attribute_count = attribute_count,
+        .attributes = attributes,
+    };
+    uint16_t encoding_id = 0;
+    IREE_CHECK_OK(loom_module_add_encoding(module_, &encoding, &encoding_id));
+    return encoding_id;
+  }
+
+  uint16_t AddGgmlQ4_0Schema() {
+    loom_string_id_t block_elems_name = LOOM_STRING_ID_INVALID;
+    loom_string_id_t storage_bytes_name = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_module_intern_string(module_, IREE_SV("block_elems"),
+                                            &block_elems_name));
+    IREE_CHECK_OK(loom_module_intern_string(module_, IREE_SV("storage_bytes"),
+                                            &storage_bytes_name));
+    loom_named_attr_t attributes[] = {
+        {
+            .name_id = block_elems_name,
+            .value = loom_attr_i64(32),
+        },
+        {
+            .name_id = storage_bytes_name,
+            .value = loom_attr_i64(18),
+        },
+    };
+    return AddEncoding(IREE_SV("ggml_q4_0"), attributes,
+                       (uint8_t)IREE_ARRAYSIZE(attributes));
+  }
+
+  void BuildGgmlQ4_0Schema(loom_value_id_t* out_schema) {
+    uint16_t spec = AddGgmlQ4_0Schema();
+    loom_op_t* schema = nullptr;
+    IREE_ASSERT_OK(loom_encoding_define_build(
+        &builder_, spec, /*params=*/nullptr, /*params_count=*/0,
+        loom_type_encoding(), LOOM_LOCATION_UNKNOWN, &schema));
+    *out_schema = loom_encoding_define_result(schema);
+  }
+
+  void BuildPhysicalStorage(loom_value_id_t layout, loom_value_id_t schema,
+                            loom_value_id_t* out_storage) {
+    uint16_t spec =
+        AddEncoding(IREE_SV("physical_storage"), /*attributes=*/nullptr,
+                    /*attribute_count=*/0);
+    loom_string_id_t layout_name = LOOM_STRING_ID_INVALID;
+    loom_string_id_t schema_name = LOOM_STRING_ID_INVALID;
+    IREE_ASSERT_OK(
+        loom_module_intern_string(module_, IREE_SV("layout"), &layout_name));
+    IREE_ASSERT_OK(
+        loom_module_intern_string(module_, IREE_SV("schema"), &schema_name));
+    loom_named_value_t params[] = {
+        {
+            .name_id = layout_name,
+            .value_id = layout,
+        },
+        {
+            .name_id = schema_name,
+            .value_id = schema,
+        },
+    };
+    loom_op_t* storage = nullptr;
+    IREE_ASSERT_OK(loom_encoding_define_build(
+        &builder_, spec, params, IREE_ARRAYSIZE(params), loom_type_encoding(),
+        LOOM_LOCATION_UNKNOWN, &storage));
+    *out_storage = loom_encoding_define_result(storage);
   }
 
   static loom_type_t ViewWithLayout(loom_type_t view_type,
@@ -156,6 +230,41 @@ TEST_F(VectorMemoryTest, StridedLayoutComputesPaddedLaneOffsets) {
       &access, static_index_attr, lane_indices,
       (uint8_t)IREE_ARRAYSIZE(lane_indices), &element_offset));
   EXPECT_EQ(element_offset, 133);
+}
+
+TEST_F(VectorMemoryTest, PhysicalStorageCompositionUsesAddressLayout) {
+  int64_t static_strides[] = {64, 1};
+  loom_value_id_t layout = LOOM_VALUE_ID_INVALID;
+  BuildStridedLayout(
+      /*dynamic_strides=*/nullptr, /*dynamic_stride_count=*/0, static_strides,
+      IREE_ARRAYSIZE(static_strides), &layout);
+  loom_value_id_t schema = LOOM_VALUE_ID_INVALID;
+  BuildGgmlQ4_0Schema(&schema);
+  loom_value_id_t storage = LOOM_VALUE_ID_INVALID;
+  BuildPhysicalStorage(layout, schema, &storage);
+
+  loom_type_t view_type = ViewWithLayout(
+      loom_type_shaped_2d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I8,
+                          loom_dim_pack_static(8), loom_dim_pack_static(18),
+                          /*encoding_id=*/0),
+      storage);
+  loom_type_t vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
+                          loom_dim_pack_static(18), /*encoding_id=*/0);
+
+  loom_vector_memory_access_t access;
+  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
+                                                 vector_type, &access));
+  EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
+
+  int64_t row_stride = 0;
+  int64_t byte_stride = 0;
+  EXPECT_TRUE(
+      loom_vector_memory_access_static_axis_stride(&access, 0, &row_stride));
+  EXPECT_TRUE(
+      loom_vector_memory_access_static_axis_stride(&access, 1, &byte_stride));
+  EXPECT_EQ(row_stride, 64);
+  EXPECT_EQ(byte_stride, 1);
 }
 
 TEST_F(VectorMemoryTest, DenseLayoutReportsUnknownStaticSuffixStride) {

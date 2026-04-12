@@ -80,7 +80,7 @@ bool loom_vector_memory_access_static_axis_extent(
 
 // Returns the static element stride for a view axis. Dense row-major strides
 // are derived from the view dimensions. Strided layouts read the corresponding
-// static stride entry from view.layout.strided. Returns false for unknown
+// static stride entry from encoding.layout.strided. Returns false for unknown
 // layouts, dynamic strides, dynamic dense suffix dimensions, and malformed
 // axes.
 bool loom_vector_memory_access_static_axis_stride(

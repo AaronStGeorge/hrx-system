@@ -670,6 +670,146 @@
     "fix_hint_template": "Keep compile-time values in #family<...> and SSA values in the encoding.define operand dictionary; each parameter name must appear in exactly one place"
   },
   {
+    "error_id": "ERR_ENCODING_007",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Required encoding parameter is missing.",
+    "message_template": "encoding '{encoding_name}' requires parameter '{param_name}'",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Add the required parameter to the encoding.define operand dictionary"
+  },
+  {
+    "error_id": "ERR_ENCODING_008",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Unknown encoding parameter.",
+    "message_template": "encoding '{encoding_name}' does not support parameter '{param_name}'",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Remove the unsupported parameter or use an encoding family that defines it"
+  },
+  {
+    "error_id": "ERR_ENCODING_009",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding parameter has wrong type.",
+    "message_template": "encoding '{encoding_name}' parameter '{param_name}' has type {actual_type}, expected '{expected_type}'",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_type",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Pass an SSA value whose type matches the encoding family contract"
+  },
+  {
+    "error_id": "ERR_ENCODING_010",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding static parameter has wrong attribute kind.",
+    "message_template": "encoding '{encoding_name}' parameter '{param_name}' has attribute kind {actual_kind}, expected '{expected_kind}'",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use a static parameter value whose kind matches the encoding contract"
+  },
+  {
+    "error_id": "ERR_ENCODING_011",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 11,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding parameter has wrong role.",
+    "message_template": "encoding '{encoding_name}' parameter '{param_name}' must be {expected_role}",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_role",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Pass an encoding value with the role required by the family contract"
+  },
+  {
     "error_id": "ERR_STRUCTURE_001",
     "domain": 4,
     "domain_name": "STRUCTURE",

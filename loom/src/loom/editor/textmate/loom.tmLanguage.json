@@ -89,7 +89,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(encoding)\\.(define|isa)\\b",
+          "match": "\\b(encoding)\\.(layout\\.strided|layout\\.dense|define|isa)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"
@@ -185,7 +185,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(view)\\.(layout\\.strided|layout\\.dense|subview)\\b",
+          "match": "\\b(view)\\.(subview)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"

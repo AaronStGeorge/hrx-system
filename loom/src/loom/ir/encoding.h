@@ -21,6 +21,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/attribute.h"
 
 #ifdef __cplusplus
@@ -28,6 +29,8 @@ extern "C" {
 #endif
 
 typedef struct loom_module_t loom_module_t;
+typedef struct loom_encoding_define_param_view_t
+    loom_encoding_define_param_view_t;
 
 // A single static encoding instance, such as `#q8_0<block=32>`.
 //
@@ -73,6 +76,18 @@ typedef struct loom_encoding_vtable_t {
   // May be NULL when the family accepts any canonical named attrs.
   iree_status_t (*verify)(const loom_module_t* module,
                           const loom_encoding_t* encoding);
+
+  // Verifies one encoding.define op after generic OperandDict validation.
+  // Receives the merged static/dynamic parameter view so families can enforce
+  // required dynamic operands, reject unknown parameters, and diagnose type
+  // mismatches at the op that introduced the dynamic encoding value.
+  //
+  // May be NULL when the family has no dynamic-parameter contract. Static
+  // parsing/printing stays generic; family-specific logic belongs here.
+  iree_status_t (*verify_define)(
+      const loom_module_t* module, const loom_op_t* op,
+      const loom_encoding_define_param_view_t* params,
+      iree_diagnostic_emitter_t emitter);
 
   // Computes storage size in bytes for `element_count` logical elements.
   // May be NULL for families that are compile-time-only metadata.

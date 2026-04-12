@@ -99,6 +99,87 @@ ERR_ENCODING_006 = ErrorDef(
     ),
 )
 
+# ERR_ENCODING_007: encoding.define is missing a required family parameter.
+ERR_ENCODING_007 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=7,
+    severity=Severity.ERROR,
+    summary="Required encoding parameter is missing.",
+    message="encoding '{encoding_name}' requires parameter '{param_name}'",
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("param_name", ParamKind.STRING),
+    ),
+    fix_hint="Add the required parameter to the encoding.define operand dictionary",
+)
+
+# ERR_ENCODING_008: encoding.define parameter is not supported by the family.
+ERR_ENCODING_008 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=8,
+    severity=Severity.ERROR,
+    summary="Unknown encoding parameter.",
+    message="encoding '{encoding_name}' does not support parameter '{param_name}'",
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("param_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Remove the unsupported parameter or use an encoding family that defines it"
+    ),
+)
+
+# ERR_ENCODING_009: encoding.define parameter has the wrong SSA type.
+ERR_ENCODING_009 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=9,
+    severity=Severity.ERROR,
+    summary="Encoding parameter has wrong type.",
+    message="encoding '{encoding_name}' parameter '{param_name}' has type "
+    "{actual_type}, expected '{expected_type}'",
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("param_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("expected_type", ParamKind.STRING),
+    ),
+    fix_hint="Pass an SSA value whose type matches the encoding family contract",
+)
+
+# ERR_ENCODING_010: encoding.define static parameter has the wrong attr kind.
+ERR_ENCODING_010 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=10,
+    severity=Severity.ERROR,
+    summary="Encoding static parameter has wrong attribute kind.",
+    message="encoding '{encoding_name}' parameter '{param_name}' has attribute "
+    "kind {actual_kind}, expected '{expected_kind}'",
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("param_name", ParamKind.STRING),
+        ErrorParam("actual_kind", ParamKind.U32),
+        ErrorParam("expected_kind", ParamKind.STRING),
+    ),
+    fix_hint="Use a static parameter value whose kind matches the encoding contract",
+)
+
+# ERR_ENCODING_011: encoding.define parameter has the wrong semantic role.
+ERR_ENCODING_011 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=11,
+    severity=Severity.ERROR,
+    summary="Encoding parameter has wrong role.",
+    message=(
+        "encoding '{encoding_name}' parameter '{param_name}' must be {expected_role}"
+    ),
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("param_name", ParamKind.STRING),
+        ErrorParam("expected_role", ParamKind.STRING),
+    ),
+    fix_hint="Pass an encoding value with the role required by the family contract",
+)
+
 ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_001,
     ERR_ENCODING_002,
@@ -106,4 +187,9 @@ ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_004,
     ERR_ENCODING_005,
     ERR_ENCODING_006,
+    ERR_ENCODING_007,
+    ERR_ENCODING_008,
+    ERR_ENCODING_009,
+    ERR_ENCODING_010,
+    ERR_ENCODING_011,
 )

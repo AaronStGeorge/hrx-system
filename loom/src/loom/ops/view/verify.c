@@ -66,14 +66,6 @@ static iree_status_t loom_view_verify_static_index_count_matches_rank(
                         IREE_ARRAYSIZE(params));
 }
 
-iree_status_t loom_view_layout_strided_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter) {
-  return loom_view_verify_dynamic_index_count(
-      module, op, emitter, loom_view_layout_strided_static_strides(op),
-      loom_view_layout_strided_strides(op).count);
-}
-
 iree_status_t loom_view_subview_verify(const loom_module_t* module,
                                        const loom_op_t* op,
                                        iree_diagnostic_emitter_t emitter) {
