@@ -445,6 +445,60 @@ func.def @shuffle_dynamic_shape(%n: index, %v: vector<[%n]xf32>) {
 
 // ====
 
+// Interleave axis must refer to an existing vector axis.
+func.def @interleave_axis_out_of_bounds(%a: vector<4xi8>, %b: vector<4xi8>) {
+  // ERROR@+1: SUBRANGE/002 "1" "1"
+  %r = vector.interleave<1> %a, %b : vector<4xi8>, vector<4xi8> -> vector<8xi8>
+  func.return
+}
+
+// ====
+
+// Interleave is rank-preserving except for doubling one axis extent.
+func.def @interleave_rank_mismatch(%a: vector<4xi8>, %b: vector<4xi8>) {
+  // ERROR@+1: SHAPE/001
+  %r = vector.interleave<0> %a, %b : vector<4xi8>, vector<4xi8> -> vector<2x4xi8>
+  func.return
+}
+
+// ====
+
+// Interleave non-axis dimensions must match the inputs exactly.
+func.def @interleave_non_axis_shape_mismatch(%a: vector<4x8xi8>, %b: vector<4x8xi8>) {
+  // ERROR@+1: SHAPE/002
+  %r = vector.interleave<1> %a, %b : vector<4x8xi8>, vector<4x8xi8> -> vector<5x16xi8>
+  func.return
+}
+
+// ====
+
+// Interleave doubles the selected static axis extent.
+func.def @interleave_axis_shape_mismatch(%a: vector<4xi8>, %b: vector<4xi8>) {
+  // ERROR@+1: TYPE/004 "interleave axis extent"
+  %r = vector.interleave<0> %a, %b : vector<4xi8>, vector<4xi8> -> vector<7xi8>
+  func.return
+}
+
+// ====
+
+// Deinterleave source axes must be evenly splittable when statically known.
+func.def @deinterleave_odd_source_axis(%source: vector<5xi8>) {
+  // ERROR@+1: TYPE/003 "even deinterleave axis extent"
+  %even, %odd = vector.deinterleave<0> %source : vector<5xi8> -> vector<2xi8>, vector<2xi8>
+  func.return
+}
+
+// ====
+
+// Deinterleave results have half the selected static source axis extent.
+func.def @deinterleave_axis_shape_mismatch(%source: vector<8xi8>) {
+  // ERROR@+1: TYPE/004 "deinterleave axis extent"
+  %even, %odd = vector.deinterleave<0> %source : vector<8xi8> -> vector<5xi8>, vector<5xi8>
+  func.return
+}
+
+// ====
+
 // Register table lookup uses a rank-1 table vector.
 func.def @table_lookup_table_rank_mismatch(%table: vector<2x2xf32>, %indices: vector<4xi8>) {
   // ERROR@+1: TYPE/003 "table" "vector<...>" "rank-1 vector"
@@ -521,10 +575,19 @@ func.def @trunci_wrong_width(%v: vector<4xi8>) {
 
 // ====
 
-// Bitcasts preserve shape and per-lane bitwidth.
+// Bitcasts require statically provable total register bit preservation.
 func.def @bitcast_width_mismatch(%v: vector<4xf32>) {
-  // ERROR@+1: TYPE/004 "same element bitwidth as input"
+  // ERROR@+1: TYPE/004 "statically provable same total bit count as input"
   %r = vector.bitcast %v : vector<4xf32> to vector<4xi16>
+  func.return
+}
+
+// ====
+
+// Aggregate bitcasts can reinterpret packed bytes as narrower element counts.
+func.def @bitcast_aggregate_width_mismatch(%v: vector<3xi8>) {
+  // ERROR@+1: TYPE/004 "statically provable same total bit count as input"
+  %r = vector.bitcast %v : vector<3xi8> to vector<1xf16>
   func.return
 }
 

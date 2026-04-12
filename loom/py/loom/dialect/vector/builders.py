@@ -170,6 +170,33 @@ class VectorBuilders:
         _operands.append(source)
         return cast(ValueRef, self._b.build("vector.shuffle", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def interleave(self, *, axis: int, even: ValueRef, odd: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Interleave two same-typed vectors along one axis; even lanes come from the first operand and odd lanes come from the second operand.
+
+        Example::
+            %r = vector.interleave<0> %lo, %hi : vector<16xi8>, vector<16xi8> -> vector<32xi8>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["axis"] = axis
+        _operands.append(even)
+        _operands.append(odd)
+        return cast(ValueRef, self._b.build("vector.interleave", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def deinterleave(self, *, axis: int, source: ValueRef, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
+        """Split one vector along an axis into even-position and odd-position vectors of the same type.
+
+        Example::
+            %lo, %hi = vector.deinterleave<0> %r : vector<32xi8> -> vector<16xi8>, vector<16xi8>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["axis"] = axis
+        _operands.append(source)
+        return cast(list[ValueRef], self._b.build("vector.deinterleave", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def lookup(self, *, table: ValueRef, indices: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Select table vector lanes using explicit integer index lanes; every index lane must be within the table extent.
 
@@ -716,7 +743,7 @@ class VectorBuilders:
         return cast(ValueRef, self._b.build("vector.fptoui", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def bitcast(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Lanewise bit reinterpretation between same-shaped vector types.
+        """Bitwise reinterpretation between vector register types with the same total bit count.
 
         Example::
             %r = vector.bitcast %input : vector<16xf32> to vector<16xi32>

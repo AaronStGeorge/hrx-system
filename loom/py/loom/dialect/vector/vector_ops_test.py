@@ -177,6 +177,33 @@ def test_vector_table_lookup_is_pure_register_lookup() -> None:
     assert op.effects == ()
 
 
+def test_vector_layout_ops_make_lane_structure_explicit() -> None:
+    ops = _op_by_name()
+    interleave_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.interleave"].constraints}
+    deinterleave_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.deinterleave"].constraints}
+
+    assert ("SameType", ("even", "odd")) in interleave_constraints
+    assert ("SameElementType", ("even", "result")) in interleave_constraints
+    assert ("SameType", ("results",)) in deinterleave_constraints
+    assert ("SameElementType", ("source", "results")) in deinterleave_constraints
+
+    for name in ("vector.interleave", "vector.deinterleave"):
+        trait_names = {trait.name for trait in ops[name].traits}
+        assert "Pure" in trait_names
+        assert "Elementwise" not in trait_names
+        assert ops[name].effects == ()
+
+
+def test_vector_bitcast_is_whole_register_not_lanewise_only() -> None:
+    op = _op_by_name()["vector.bitcast"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    trait_names = {trait.name for trait in op.traits}
+
+    assert ("SameShape", ("input", "result")) not in constraints
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
+
+
 def test_vector_bitfield_ops_are_pure_integer_register_ops() -> None:
     ops = _op_by_name()
 

@@ -454,6 +454,16 @@ static bool loom_vector_dim_equals(loom_type_t lhs_type, uint8_t lhs_axis,
   return loom_type_dim(lhs_type, lhs_axis) == loom_type_dim(rhs_type, rhs_axis);
 }
 
+static bool loom_vector_shapes_match(loom_type_t lhs_type,
+                                     loom_type_t rhs_type) {
+  uint8_t rank = loom_type_rank(lhs_type);
+  if (loom_type_rank(rhs_type) != rank) return false;
+  for (uint8_t axis = 0; axis < rank; ++axis) {
+    if (!loom_vector_dim_equals(lhs_type, axis, rhs_type, axis)) return false;
+  }
+  return true;
+}
+
 static bool loom_vector_find_static_memory_access_out_of_bounds(
     const loom_vector_memory_access_t* access, loom_attribute_t static_indices,
     uint16_t* out_axis, int64_t* out_offset, int64_t* out_extent,
@@ -1206,6 +1216,138 @@ iree_status_t loom_vector_shuffle_verify(const loom_module_t* module,
   return iree_ok_status();
 }
 
+iree_status_t loom_vector_interleave_verify(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            iree_diagnostic_emitter_t emitter) {
+  loom_type_t even_type =
+      loom_module_value_type(module, loom_vector_interleave_even(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_interleave_result(op));
+  if (!loom_type_is_vector(even_type) || !loom_type_is_vector(result_type)) {
+    return iree_ok_status();
+  }
+
+  uint8_t even_rank = loom_type_rank(even_type);
+  uint8_t result_rank = loom_type_rank(result_type);
+  if (result_rank != even_rank) {
+    return loom_vector_emit_rank_mismatch(emitter, op, IREE_SV("result"),
+                                          result_rank, IREE_SV("even"),
+                                          even_rank);
+  }
+
+  int64_t axis = loom_vector_interleave_axis(op);
+  if (axis < 0 || axis >= even_rank) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_i64(axis),
+        loom_param_i64(even_rank),
+    };
+    return loom_vector_emit(emitter, op, &loom_err_subrange_002, params,
+                            IREE_ARRAYSIZE(params));
+  }
+
+  for (uint8_t i = 0; i < even_rank; ++i) {
+    if (i == (uint8_t)axis) continue;
+    if (loom_vector_dim_equals(even_type, i, result_type, i)) continue;
+    return loom_vector_emit_shape_mismatch(emitter, op, IREE_SV("result"),
+                                           IREE_SV("even"));
+  }
+
+  if (loom_type_dim_is_dynamic_at(even_type, (uint8_t)axis) ||
+      loom_type_dim_is_dynamic_at(result_type, (uint8_t)axis)) {
+    return iree_ok_status();
+  }
+
+  int64_t expected_result_axis_size = 0;
+  int64_t even_axis_size =
+      loom_type_dim_static_size_at(even_type, (uint8_t)axis);
+  if (!iree_checked_mul_i64(even_axis_size, 2, &expected_result_axis_size)) {
+    return loom_vector_emit_result_constraint(
+        emitter, op, IREE_SV("result"), result_type,
+        IREE_SV("representable interleave axis extent"));
+  }
+
+  int64_t result_axis_size =
+      loom_type_dim_static_size_at(result_type, (uint8_t)axis);
+  if (result_axis_size == expected_result_axis_size) return iree_ok_status();
+  return loom_vector_emit_result_constraint(
+      emitter, op, IREE_SV("result"), result_type,
+      IREE_SV("interleave axis extent twice input axis extent"));
+}
+
+iree_status_t loom_vector_deinterleave_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t source_type =
+      loom_module_value_type(module, loom_vector_deinterleave_source(op));
+  loom_value_slice_t results = loom_vector_deinterleave_results(op);
+  if (results.count != 2) {
+    return loom_vector_emit_count_mismatch(emitter, op, IREE_SV("results"),
+                                           results.count,
+                                           IREE_SV("required result count"), 2);
+  }
+  loom_type_t even_type = loom_module_value_type(module, results.values[0]);
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(even_type)) {
+    return iree_ok_status();
+  }
+
+  uint8_t source_rank = loom_type_rank(source_type);
+  uint8_t even_rank = loom_type_rank(even_type);
+  if (even_rank != source_rank) {
+    return loom_vector_emit_rank_mismatch(emitter, op, IREE_SV("even"),
+                                          even_rank, IREE_SV("source"),
+                                          source_rank);
+  }
+
+  int64_t axis = loom_vector_deinterleave_axis(op);
+  if (axis < 0 || axis >= source_rank) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_i64(axis),
+        loom_param_i64(source_rank),
+    };
+    return loom_vector_emit(emitter, op, &loom_err_subrange_002, params,
+                            IREE_ARRAYSIZE(params));
+  }
+
+  for (uint8_t i = 0; i < source_rank; ++i) {
+    if (i == (uint8_t)axis) continue;
+    if (loom_vector_dim_equals(source_type, i, even_type, i)) continue;
+    return loom_vector_emit_shape_mismatch(emitter, op, IREE_SV("even"),
+                                           IREE_SV("source"));
+  }
+
+  bool source_axis_is_static =
+      !loom_type_dim_is_dynamic_at(source_type, (uint8_t)axis);
+  bool even_axis_is_static =
+      !loom_type_dim_is_dynamic_at(even_type, (uint8_t)axis);
+
+  int64_t source_axis_size =
+      source_axis_is_static
+          ? loom_type_dim_static_size_at(source_type, (uint8_t)axis)
+          : 0;
+  if (source_axis_is_static && (source_axis_size & 1) != 0) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("source"), source_type,
+        IREE_SV("even deinterleave axis extent"));
+  }
+
+  if (!even_axis_is_static) return iree_ok_status();
+  int64_t expected_source_axis_size = 0;
+  int64_t even_axis_size =
+      loom_type_dim_static_size_at(even_type, (uint8_t)axis);
+  if (!iree_checked_mul_i64(even_axis_size, 2, &expected_source_axis_size)) {
+    return loom_vector_emit_result_constraint(
+        emitter, op, IREE_SV("even"), even_type,
+        IREE_SV("representable deinterleave source axis extent"));
+  }
+
+  if (!source_axis_is_static || source_axis_size == expected_source_axis_size) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_result_constraint(
+      emitter, op, IREE_SV("even"), even_type,
+      IREE_SV("deinterleave axis extent half of source axis extent"));
+}
+
 static bool loom_vector_try_get_splat_i64_constant(const loom_module_t* module,
                                                    loom_value_id_t value_id,
                                                    int64_t* out_value) {
@@ -1310,12 +1452,33 @@ iree_status_t loom_vector_bitcast_verify(const loom_module_t* module,
       loom_scalar_type_bitwidth(loom_type_element_type(input_type));
   int32_t result_width =
       loom_scalar_type_bitwidth(loom_type_element_type(result_type));
-  if (input_width == 0 || result_width == 0 || input_width == result_width) {
+  if (input_width == 0 || result_width == 0) return iree_ok_status();
+
+  if (input_width == result_width &&
+      loom_vector_shapes_match(input_type, result_type)) {
     return iree_ok_status();
   }
+
+  bool input_element_count_is_static = false;
+  uint64_t input_element_count = loom_vector_static_element_count(
+      input_type, &input_element_count_is_static);
+  bool result_element_count_is_static = false;
+  uint64_t result_element_count = loom_vector_static_element_count(
+      result_type, &result_element_count_is_static);
+  if (input_element_count_is_static && result_element_count_is_static) {
+    uint64_t input_bit_count = 0;
+    uint64_t result_bit_count = 0;
+    if (input_element_count <= UINT64_MAX / (uint64_t)input_width &&
+        result_element_count <= UINT64_MAX / (uint64_t)result_width) {
+      input_bit_count = input_element_count * (uint64_t)input_width;
+      result_bit_count = result_element_count * (uint64_t)result_width;
+      if (input_bit_count == result_bit_count) return iree_ok_status();
+    }
+  }
+
   return loom_vector_emit_result_constraint(
       emitter, op, IREE_SV("result"), result_type,
-      IREE_SV("same element bitwidth as input"));
+      IREE_SV("statically provable same total bit count as input"));
 }
 
 static iree_status_t loom_vector_verify_bitfield_range(

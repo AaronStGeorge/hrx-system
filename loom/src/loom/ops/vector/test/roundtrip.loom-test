@@ -42,8 +42,8 @@ func.def @cmp_select(%a: vector<16xf32>, %b: vector<16xf32>, %i: vector<16xi32>,
 
 // ====
 
-// Casts preserve vector shape and make source/result element types explicit.
-func.def @casts(%h: vector<8xf16>, %f: vector<8xf32>, %i8: vector<8xi8>, %i32: vector<8xi32>) {
+// Numeric casts preserve vector shape; bitcast reinterprets total register bits.
+func.def @casts(%h: vector<8xf16>, %f: vector<8xf32>, %i8: vector<8xi8>, %i32: vector<8xi32>, %scale_bytes: vector<2xi8>) {
   %w = vector.extf %h : vector<8xf16> to vector<8xf32>
   %n = vector.fptrunc %f : vector<8xf32> to vector<8xf16>
   %si = vector.extsi %i8 : vector<8xi8> to vector<8xi32>
@@ -54,7 +54,8 @@ func.def @casts(%h: vector<8xf16>, %f: vector<8xf32>, %i8: vector<8xi8>, %i32: v
   %fs = vector.fptosi %f : vector<8xf32> to vector<8xi32>
   %fu = vector.fptoui %f : vector<8xf32> to vector<8xi32>
   %bits = vector.bitcast %f : vector<8xf32> to vector<8xi32>
-  test.use %w, %n, %si, %ui, %tr, %sf, %uf, %fs, %fu, %bits : vector<8xf32>, vector<8xf16>, vector<8xi32>, vector<8xi32>, vector<8xi8>, vector<8xf32>, vector<8xf32>, vector<8xi32>, vector<8xi32>, vector<8xi32>
+  %scale = vector.bitcast %scale_bytes : vector<2xi8> to vector<1xf16>
+  test.use %w, %n, %si, %ui, %tr, %sf, %uf, %fs, %fu, %bits, %scale : vector<8xf32>, vector<8xf16>, vector<8xi32>, vector<8xi32>, vector<8xi8>, vector<8xf32>, vector<8xf32>, vector<8xi32>, vector<8xi32>, vector<8xi32>, vector<1xf16>
   func.return
 }
 
@@ -72,6 +73,38 @@ func.def @bitfields(%bytes: vector<16xi8>, %zero: vector<16xi8>) {
 
 // ====
 
+// Block-quant register decode snippets make storage reinterpretation and lane
+// ordering explicit without hidden decode pseudo-ops.
+func.def @q4_0_register_decode(%scale_bytes: vector<2xi8>, %qs: vector<16xi8>) {
+  %scale = vector.bitcast %scale_bytes : vector<2xi8> to vector<1xf16>
+  %lo = vector.bitfield.extractu %qs {offset = 0, width = 4} : vector<16xi8> -> vector<16xi8>
+  %hi = vector.bitfield.extractu %qs {offset = 4, width = 4} : vector<16xi8> -> vector<16xi8>
+  %logical = vector.concat<0> %lo, %hi : vector<16xi8>, vector<16xi8> -> vector<32xi8>
+  %paired = vector.interleave<0> %lo, %hi : vector<16xi8>, vector<16xi8> -> vector<32xi8>
+  %paired_lo, %paired_hi = vector.deinterleave<0> %paired : vector<32xi8> -> vector<16xi8>, vector<16xi8>
+  test.use %scale, %logical, %paired_lo, %paired_hi : vector<1xf16>, vector<32xi8>, vector<16xi8>, vector<16xi8>
+  func.return
+}
+
+// ====
+
+// Q6-style decode is explicit about forming 6-bit lanes from low nibbles and
+// high-bit side registers before choosing a logical lane order.
+func.def @q6_k_register_decode(%scale_bytes: vector<2xi8>, %low_packed: vector<16xi8>, %high_packed: vector<16xi8>) {
+  %scale = vector.bitcast %scale_bytes : vector<2xi8> to vector<1xf16>
+  %lo4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<16xi8> -> vector<16xi8>
+  %hi4 = vector.bitfield.extractu %low_packed {offset = 4, width = 4} : vector<16xi8> -> vector<16xi8>
+  %lo2 = vector.bitfield.extractu %high_packed {offset = 0, width = 2} : vector<16xi8> -> vector<16xi8>
+  %hi2 = vector.bitfield.extractu %high_packed {offset = 2, width = 2} : vector<16xi8> -> vector<16xi8>
+  %lo6 = vector.bitfield.insert %lo2 into %lo4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8> -> vector<16xi8>
+  %hi6 = vector.bitfield.insert %hi2 into %hi4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8> -> vector<16xi8>
+  %logical = vector.interleave<0> %lo6, %hi6 : vector<16xi8>, vector<16xi8> -> vector<32xi8>
+  test.use %scale, %logical : vector<1xf16>, vector<32xi8>
+  func.return
+}
+
+// ====
+
 // Reductions consume a vector input and scalar accumulator/result of the same element type.
 func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32) -> (f32, i32) {
   %sum = vector.reduce<addf> %v, %zero : vector<16xf32> -> f32
@@ -83,14 +116,16 @@ func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32
 
 // Register layout ops are pure vector-to-vector transforms with explicit
 // compile-time axis/lane maps.
-func.def @register_layout(%v: vector<8x16xf32>, %a: vector<4xf32>, %b: vector<4xf32>, %n: index, %dyn: vector<[%n]xf32>, %i: index) {
+func.def @register_layout(%v: vector<8x16xf32>, %a: vector<4xf32>, %b: vector<4xf32>, %n: index, %half: index, %full: index, %dyn: vector<[%n]xf32>, %i: index, %dyn_lo: vector<[%half]xi8>, %dyn_hi: vector<[%half]xi8>, %dyn_paired: vector<[%full]xi8>) {
   %static_slice = vector.slice %v[0, 4] : vector<8x16xf32> -> vector<4x8xf32>
   %dynamic_slice = vector.slice %dyn[%i] : vector<[%n]xf32> -> vector<4xf32>
   %wide = vector.concat<0> %a, %b : vector<4xf32>, vector<4xf32> -> vector<8xf32>
   %transposed = vector.transpose<[1, 0]> %v : vector<8x16xf32> -> vector<16x8xf32>
   %reversed = vector.shuffle<[3, 2, 1, 0]> %a : vector<4xf32>
   %duplicated = vector.shuffle<[0, 0, 2, 2]> %b : vector<4xf32>
-  test.use %static_slice, %dynamic_slice, %wide, %transposed, %reversed, %duplicated : vector<4x8xf32>, vector<4xf32>, vector<8xf32>, vector<16x8xf32>, vector<4xf32>, vector<4xf32>
+  %paired = vector.interleave<0> %dyn_lo, %dyn_hi : vector<[%half]xi8>, vector<[%half]xi8> -> vector<[%full]xi8>
+  %unpaired_lo, %unpaired_hi = vector.deinterleave<0> %dyn_paired : vector<[%full]xi8> -> vector<[%half]xi8>, vector<[%half]xi8>
+  test.use %static_slice, %dynamic_slice, %wide, %transposed, %reversed, %duplicated, %paired, %unpaired_lo, %unpaired_hi : vector<4x8xf32>, vector<4xf32>, vector<8xf32>, vector<16x8xf32>, vector<4xf32>, vector<4xf32>, vector<[%full]xi8>, vector<[%half]xi8>, vector<[%half]xi8>
   func.return
 }
 

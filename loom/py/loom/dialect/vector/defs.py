@@ -25,6 +25,7 @@ from loom.assembly import (
     Ref,
     Refs,
     ResultType,
+    ResultTypeList,
     TemplateParam,
     TypeOf,
     TypesOf,
@@ -540,6 +541,80 @@ vector_shuffle = Op(
     examples=[
         "%rev = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xf32>",
         "%dup = vector.shuffle<[0, 0, 2, 2]> %v : vector<4xf32>",
+    ],
+)
+
+
+vector_interleave = Op(
+    "vector.interleave",
+    group=vector_ops,
+    doc=("Interleave two same-typed vectors along one axis; even lanes come from the first operand and odd lanes come from the second operand."),
+    operands=[
+        Operand("even", VECTOR, doc="Vector providing result lanes at even positions along the interleaved axis."),
+        Operand("odd", VECTOR, doc="Vector providing result lanes at odd positions along the interleaved axis."),
+    ],
+    results=[Result("result", VECTOR)],
+    attrs=[
+        AttrDef(
+            "axis",
+            ATTR_TYPE_I64,
+            doc="Axis whose extent is doubled in the result.",
+        ),
+    ],
+    constraints=[
+        SameType("even", "odd"),
+        SameElementType("even", "result"),
+    ],
+    verify="loom_vector_interleave_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("axis"),
+        Ref("even"),
+        COMMA,
+        Ref("odd"),
+        COLON,
+        TypeOf("even"),
+        COMMA,
+        TypeOf("odd"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%r = vector.interleave<0> %lo, %hi : vector<16xi8>, vector<16xi8> -> vector<32xi8>",
+        "%r = vector.interleave<1> %a, %b : vector<4x8xi8>, vector<4x8xi8> -> vector<4x16xi8>",
+    ],
+)
+
+vector_deinterleave = Op(
+    "vector.deinterleave",
+    group=vector_ops,
+    doc=("Split one vector along an axis into even-position and odd-position vectors of the same type."),
+    operands=[Operand("source", VECTOR)],
+    results=[Result("results", VECTOR, variadic=True, doc="Even-position result followed by odd-position result.")],
+    attrs=[
+        AttrDef(
+            "axis",
+            ATTR_TYPE_I64,
+            doc="Axis whose extent is halved in each result.",
+        ),
+    ],
+    constraints=[
+        SameType("results"),
+        SameElementType("source", "results"),
+    ],
+    verify="loom_vector_deinterleave_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("axis"),
+        Ref("source"),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultTypeList("results", parens=False),
+    ],
+    examples=[
+        "%lo, %hi = vector.deinterleave<0> %r : vector<32xi8> -> vector<16xi8>, vector<16xi8>",
+        "%a, %b = vector.deinterleave<1> %r : vector<4x16xi8> -> vector<4x8xi8>, vector<4x8xi8>",
     ],
 )
 
@@ -1482,12 +1557,11 @@ vector_fptoui = _vector_cast(
 vector_bitcast = Op(
     "vector.bitcast",
     group=vector_ops,
-    doc="Lanewise bit reinterpretation between same-shaped vector types.",
+    doc="Bitwise reinterpretation between vector register types with the same total bit count.",
     operands=[Operand("input", VECTOR)],
     results=[Result("result", VECTOR)],
-    constraints=[SameShape("input", "result")],
     verify="loom_vector_bitcast_verify",
-    traits=[PURE, ELEMENTWISE],
+    traits=[PURE],
     format=[
         Ref("input"),
         COLON,
@@ -1495,7 +1569,10 @@ vector_bitcast = Op(
         kw("to"),
         TypeOf("result"),
     ],
-    examples=["%r = vector.bitcast %input : vector<16xf32> to vector<16xi32>"],
+    examples=[
+        "%r = vector.bitcast %input : vector<16xf32> to vector<16xi32>",
+        "%s = vector.bitcast %bytes : vector<2xi8> to vector<1xf16>",
+    ],
 )
 
 
@@ -1661,6 +1738,8 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_concat,
     vector_transpose,
     vector_shuffle,
+    vector_interleave,
+    vector_deinterleave,
     vector_table_lookup,
     vector_load,
     vector_store,
