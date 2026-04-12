@@ -797,6 +797,45 @@ class VectorBuilders:
         _operands.append(base)
         return cast(ValueRef, self._b.build("vector.bitfield.insert", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def bitpack(self, *, width: int, source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Pack the low bits of each integer source lane into a contiguous little-endian bitstream stored in integer result lanes.
+
+        Example::
+            %packed = vector.bitpack<4> %codes : vector<32xi8> -> vector<16xi8>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["width"] = width
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("vector.bitpack", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def bitunpacku(self, *, width: int, source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes.
+
+        Example::
+            %codes = vector.bitunpacku<4> %packed : vector<16xi8> -> vector<32xi8>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["width"] = width
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("vector.bitunpacku", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def bitunpacks(self, *, width: int, source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes.
+
+        Example::
+            %deltas = vector.bitunpacks<3> %packed : vector<12xi8> -> vector<32xi8>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["width"] = width
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("vector.bitunpacks", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def reduce(self, *, kind: str, input: ValueRef, init: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Reduce all lanes of a vector into a scalar accumulator/result.
 

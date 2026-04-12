@@ -173,7 +173,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(vector)\\.(atomic\\.reduce\\.mask|bitfield\\.extracts|bitfield\\.extractu|atomic\\.rmw\\.mask|bitfield\\.insert|store\\.compress|atomic\\.reduce|from_elements|deinterleave|scatter\\.mask|table\\.lookup|gather\\.mask|load\\.expand|atomic\\.rmw|interleave|store\\.mask|broadcast|load\\.mask|transpose|constant|bitcast|extract|fptrunc|scatter|shuffle|concat|fptosi|fptoui|gather|insert|reduce|select|sitofp|trunci|uitofp|extsi|extui|slice|splat|sqrtf|store|addf|addi|cmpf|cmpi|extf|fmaf|load|mulf|muli)\\b",
+          "match": "\\b(vector)\\.(atomic\\.reduce\\.mask|bitfield\\.extracts|bitfield\\.extractu|atomic\\.rmw\\.mask|bitfield\\.insert|store\\.compress|atomic\\.reduce|from_elements|deinterleave|scatter\\.mask|table\\.lookup|gather\\.mask|load\\.expand|atomic\\.rmw|bitunpacks|bitunpacku|interleave|store\\.mask|broadcast|load\\.mask|transpose|constant|bitcast|bitpack|extract|fptrunc|scatter|shuffle|concat|fptosi|fptoui|gather|insert|reduce|select|sitofp|trunci|uitofp|extsi|extui|slice|splat|sqrtf|store|addf|addi|cmpf|cmpi|extf|fmaf|load|mulf|muli)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"

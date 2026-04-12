@@ -1689,6 +1689,105 @@ vector_bitfield_insert = Op(
 )
 
 
+vector_bitpack = Op(
+    "vector.bitpack",
+    group=vector_ops,
+    doc=("Pack the low bits of each integer source lane into a contiguous little-endian bitstream stored in integer result lanes."),
+    operands=[Operand("source", VECTOR, doc="Integer lanes whose low `width` bits are packed.")],
+    results=[Result("result", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
+    attrs=[
+        AttrDef(
+            "width",
+            ATTR_TYPE_I64,
+            doc="Number of low source bits consumed from each lane.",
+        ),
+    ],
+    constraints=[
+        HasIntegerElement("source"),
+        HasIntegerElement("result"),
+    ],
+    verify="loom_vector_bitpack_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("width"),
+        Ref("source"),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%packed = vector.bitpack<4> %codes : vector<32xi8> -> vector<16xi8>",
+        "%packed = vector.bitpack<1> %mask : vector<128xi1> -> vector<16xi8>",
+    ],
+)
+
+vector_bitunpacku = Op(
+    "vector.bitunpacku",
+    group=vector_ops,
+    doc=("Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes."),
+    operands=[Operand("source", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
+    results=[Result("result", VECTOR, doc="Integer lanes receiving zero-extended unpacked fields.")],
+    attrs=[
+        AttrDef(
+            "width",
+            ATTR_TYPE_I64,
+            doc="Number of packed bits read for each result lane.",
+        ),
+    ],
+    constraints=[
+        HasIntegerElement("source"),
+        HasIntegerElement("result"),
+    ],
+    verify="loom_vector_bitunpacku_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("width"),
+        Ref("source"),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%codes = vector.bitunpacku<4> %packed : vector<16xi8> -> vector<32xi8>",
+        "%mask = vector.bitunpacku<1> %packed : vector<16xi8> -> vector<128xi1>",
+    ],
+)
+
+vector_bitunpacks = Op(
+    "vector.bitunpacks",
+    group=vector_ops,
+    doc=("Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes."),
+    operands=[Operand("source", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
+    results=[Result("result", VECTOR, doc="Integer lanes receiving sign-extended unpacked fields.")],
+    attrs=[
+        AttrDef(
+            "width",
+            ATTR_TYPE_I64,
+            doc="Number of packed bits read for each result lane.",
+        ),
+    ],
+    constraints=[
+        HasIntegerElement("source"),
+        HasIntegerElement("result"),
+    ],
+    verify="loom_vector_bitunpacks_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("width"),
+        Ref("source"),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%deltas = vector.bitunpacks<3> %packed : vector<12xi8> -> vector<32xi8>",
+    ],
+)
+
+
 # ============================================================================
 # Reductions
 # ============================================================================
@@ -1777,5 +1876,8 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_bitfield_extractu,
     vector_bitfield_extracts,
     vector_bitfield_insert,
+    vector_bitpack,
+    vector_bitunpacku,
+    vector_bitunpacks,
     vector_reduce,
 )

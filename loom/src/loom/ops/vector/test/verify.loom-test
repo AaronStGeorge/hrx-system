@@ -647,6 +647,51 @@ func.def @bitfield_insert_range_overflow(%field: vector<4xi32>, %base: vector<4x
 
 // ====
 
+// Bitpack widths must be positive.
+func.def @bitpack_zero_width(%v: vector<4xi8>) {
+  // ERROR@+1: STRUCTURE/014 "width" "0" "positive bit width"
+  %r = vector.bitpack<0> %v : vector<4xi8> -> vector<1xi8>
+  func.return
+}
+
+// ====
+
+// Bitpack consumes low bits already present in each source lane.
+func.def @bitpack_source_too_narrow(%v: vector<8xi1>) {
+  // ERROR@+1: TYPE/003 "integer element type at least bit width"
+  %r = vector.bitpack<2> %v : vector<8xi1> -> vector<2xi8>
+  func.return
+}
+
+// ====
+
+// Bitpack fills the result storage exactly when both sides are static.
+func.def @bitpack_static_count_mismatch(%v: vector<4xi8>) {
+  // ERROR@+1: TYPE/004 "packed payload bit count equal to result storage bit count"
+  %r = vector.bitpack<4> %v : vector<4xi8> -> vector<3xi8>
+  func.return
+}
+
+// ====
+
+// Bitunpack result lanes must be wide enough to hold each recovered field.
+func.def @bitunpack_result_too_narrow(%v: vector<1xi8>) {
+  // ERROR@+1: TYPE/004 "integer element type at least bit width"
+  %r = vector.bitunpacku<2> %v : vector<1xi8> -> vector<4xi1>
+  func.return
+}
+
+// ====
+
+// Bitunpack consumes the source storage exactly when both sides are static.
+func.def @bitunpack_static_count_mismatch(%v: vector<1xi8>) {
+  // ERROR@+1: TYPE/004 "unpacked payload bit count equal to source storage bit count"
+  %r = vector.bitunpacks<3> %v : vector<1xi8> -> vector<3xi8>
+  func.return
+}
+
+// ====
+
 // Reduce template parameters are tied to the vector element family.
 func.def @reduce_kind_mismatch(%v: vector<4xi32>, %zero: i32) {
   // ERROR@+1: TYPE/003 "floating-point element type for reduce kind"

@@ -67,8 +67,11 @@ enum {
   LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 46),
   LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 47),
   LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 48),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 49),
-  LOOM_OP_VECTOR_COUNT_ = 50,
+  LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 49),
+  LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 50),
+  LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 51),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 52),
+  LOOM_OP_VECTOR_COUNT_ = 53,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -1116,6 +1119,60 @@ iree_status_t loom_vector_bitfield_insert_build(
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_vector_bitfield_insert_vtable;
 iree_status_t loom_vector_bitfield_insert_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_BITPACK: Pack the low bits of each integer source lane into a contiguous little-endian bitstream stored in integer result lanes.
+// %packed = vector.bitpack<4> %codes : vector<32xi8> -> vector<16xi8>
+LOOM_DEFINE_ISA(loom_vector_bitpack_isa, LOOM_OP_VECTOR_BITPACK)
+LOOM_DEFINE_OPERAND(loom_vector_bitpack_source, 0)
+LOOM_DEFINE_RESULT(loom_vector_bitpack_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitpack_width, 0)
+iree_status_t loom_vector_bitpack_build(
+    loom_builder_t* builder,
+    int64_t width,
+    loom_may_consume loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_bitpack_vtable;
+iree_status_t loom_vector_bitpack_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_BITUNPACKU: Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes.
+// %codes = vector.bitunpacku<4> %packed : vector<16xi8> -> vector<32xi8>
+LOOM_DEFINE_ISA(loom_vector_bitunpacku_isa, LOOM_OP_VECTOR_BITUNPACKU)
+LOOM_DEFINE_OPERAND(loom_vector_bitunpacku_source, 0)
+LOOM_DEFINE_RESULT(loom_vector_bitunpacku_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitunpacku_width, 0)
+iree_status_t loom_vector_bitunpacku_build(
+    loom_builder_t* builder,
+    int64_t width,
+    loom_may_consume loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_bitunpacku_vtable;
+iree_status_t loom_vector_bitunpacku_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_BITUNPACKS: Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes.
+// %deltas = vector.bitunpacks<3> %packed : vector<12xi8> -> vector<32xi8>
+LOOM_DEFINE_ISA(loom_vector_bitunpacks_isa, LOOM_OP_VECTOR_BITUNPACKS)
+LOOM_DEFINE_OPERAND(loom_vector_bitunpacks_source, 0)
+LOOM_DEFINE_RESULT(loom_vector_bitunpacks_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_vector_bitunpacks_width, 0)
+iree_status_t loom_vector_bitunpacks_build(
+    loom_builder_t* builder,
+    int64_t width,
+    loom_may_consume loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_bitunpacks_vtable;
+iree_status_t loom_vector_bitunpacks_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

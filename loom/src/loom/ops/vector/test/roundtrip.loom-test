@@ -73,6 +73,23 @@ func.def @bitfields(%bytes: vector<16xi8>, %zero: vector<16xi8>) {
 
 // ====
 
+// Bitpack ops cross lane boundaries explicitly; bitunpack signedness is spelled
+// in the op name because it controls the recovered lane values.
+func.def @bitpack(%codes: vector<32xi8>, %signed_deltas: vector<32xi8>, %signs: vector<128xi1>, %n: index, %m: index, %dyn_codes: vector<[%n]xi8>, %dyn_packed: vector<[%m]xi8>) {
+  %q4 = vector.bitpack<4> %codes : vector<32xi8> -> vector<16xi8>
+  %q4_unpacked = vector.bitunpacku<4> %q4 : vector<16xi8> -> vector<32xi8>
+  %sign_stream = vector.bitpack<1> %signs : vector<128xi1> -> vector<16xi8>
+  %sign_mask = vector.bitunpacku<1> %sign_stream : vector<16xi8> -> vector<128xi1>
+  %q3 = vector.bitpack<3> %signed_deltas : vector<32xi8> -> vector<12xi8>
+  %q3_unpacked = vector.bitunpacks<3> %q3 : vector<12xi8> -> vector<32xi8>
+  %dyn_stream = vector.bitpack<4> %dyn_codes : vector<[%n]xi8> -> vector<[%m]xi8>
+  %dyn_unpacked = vector.bitunpacku<4> %dyn_packed : vector<[%m]xi8> -> vector<[%n]xi8>
+  test.use %q4_unpacked, %sign_mask, %q3_unpacked, %dyn_stream, %dyn_unpacked : vector<32xi8>, vector<128xi1>, vector<32xi8>, vector<[%m]xi8>, vector<[%n]xi8>
+  func.return
+}
+
+// ====
+
 // Block-quant register decode snippets make storage reinterpretation and lane
 // ordering explicit without hidden decode pseudo-ops.
 func.def @q4_0_register_decode(%scale_bytes: vector<2xi8>, %qs: vector<16xi8>) {
@@ -90,16 +107,29 @@ func.def @q4_0_register_decode(%scale_bytes: vector<2xi8>, %qs: vector<16xi8>) {
 
 // Q6-style decode is explicit about forming 6-bit lanes from low nibbles and
 // high-bit side registers before choosing a logical lane order.
-func.def @q6_k_register_decode(%scale_bytes: vector<2xi8>, %low_packed: vector<16xi8>, %high_packed: vector<16xi8>) {
+func.def @q6_k_register_decode(%scale_bytes: vector<2xi8>, %low_packed: vector<16xi8>, %high_packed: vector<8xi8>) {
   %scale = vector.bitcast %scale_bytes : vector<2xi8> to vector<1xf16>
   %lo4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<16xi8> -> vector<16xi8>
   %hi4 = vector.bitfield.extractu %low_packed {offset = 4, width = 4} : vector<16xi8> -> vector<16xi8>
-  %lo2 = vector.bitfield.extractu %high_packed {offset = 0, width = 2} : vector<16xi8> -> vector<16xi8>
-  %hi2 = vector.bitfield.extractu %high_packed {offset = 2, width = 2} : vector<16xi8> -> vector<16xi8>
+  %high2 = vector.bitunpacku<2> %high_packed : vector<8xi8> -> vector<32xi8>
+  %lo2 = vector.slice %high2[0] : vector<32xi8> -> vector<16xi8>
+  %hi2 = vector.slice %high2[16] : vector<32xi8> -> vector<16xi8>
   %lo6 = vector.bitfield.insert %lo2 into %lo4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8> -> vector<16xi8>
   %hi6 = vector.bitfield.insert %hi2 into %hi4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8> -> vector<16xi8>
   %logical = vector.interleave<0> %lo6, %hi6 : vector<16xi8>, vector<16xi8> -> vector<32xi8>
   test.use %scale, %logical : vector<1xf16>, vector<32xi8>
+  func.return
+}
+
+// ====
+
+// Online encode sketches produce packed streams explicitly instead of relying
+// on quant-specific packing pseudo-ops.
+func.def @block_quant_register_encode(%q4_codes: vector<32xi8>, %q6_high: vector<32xi8>, %residual_signs: vector<128xi1>) {
+  %q4_stream = vector.bitpack<4> %q4_codes : vector<32xi8> -> vector<16xi8>
+  %q6_high_stream = vector.bitpack<2> %q6_high : vector<32xi8> -> vector<8xi8>
+  %sign_stream = vector.bitpack<1> %residual_signs : vector<128xi1> -> vector<16xi8>
+  test.use %q4_stream, %q6_high_stream, %sign_stream : vector<16xi8>, vector<8xi8>, vector<16xi8>
   func.return
 }
 

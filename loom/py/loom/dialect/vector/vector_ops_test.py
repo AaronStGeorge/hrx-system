@@ -232,3 +232,28 @@ def test_vector_bitfield_ops_are_pure_integer_register_ops() -> None:
         trait_names = {trait.name for trait in ops[name].traits}
         assert "Pure" in trait_names
         assert "Elementwise" in trait_names
+
+
+def test_vector_bitpack_ops_are_pure_register_pack_ops() -> None:
+    ops = _op_by_name()
+
+    pack_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.bitpack"].constraints}
+    unpacku_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.bitunpacku"].constraints}
+    unpacks_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.bitunpacks"].constraints}
+
+    assert ("HasIntegerElement", ("source",)) in pack_constraints
+    assert ("HasIntegerElement", ("result",)) in pack_constraints
+    assert ("HasIntegerElement", ("source",)) in unpacku_constraints
+    assert ("HasIntegerElement", ("result",)) in unpacku_constraints
+    assert ("HasIntegerElement", ("source",)) in unpacks_constraints
+    assert ("HasIntegerElement", ("result",)) in unpacks_constraints
+
+    for name in (
+        "vector.bitpack",
+        "vector.bitunpacku",
+        "vector.bitunpacks",
+    ):
+        trait_names = {trait.name for trait in ops[name].traits}
+        assert "Pure" in trait_names
+        assert "Elementwise" not in trait_names
+        assert ops[name].effects == ()

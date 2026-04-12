@@ -1589,6 +1589,156 @@ iree_status_t loom_vector_bitfield_insert_verify(
   return iree_ok_status();
 }
 
+static bool loom_vector_integer_element_width_is_less_than(loom_type_t type,
+                                                           int64_t width) {
+  if (!loom_type_is_vector(type)) return false;
+
+  loom_scalar_type_t element_type = loom_type_element_type(type);
+  if (!loom_scalar_type_is_integer(element_type)) return false;
+
+  int32_t element_width = loom_scalar_type_bitwidth(element_type);
+  return element_width > 0 && width > element_width;
+}
+
+static bool loom_vector_static_bit_count(loom_type_t type,
+                                         int64_t bit_width_per_element,
+                                         bool* out_is_static,
+                                         uint64_t* out_bit_count) {
+  *out_is_static = false;
+  *out_bit_count = 0;
+  if (bit_width_per_element < 0) return false;
+
+  bool element_count_is_static = false;
+  uint64_t element_count =
+      loom_vector_static_element_count(type, &element_count_is_static);
+  if (!element_count_is_static) return true;
+
+  *out_is_static = true;
+  if (bit_width_per_element == 0) return true;
+  uint64_t bit_width = (uint64_t)bit_width_per_element;
+  if (element_count > UINT64_MAX / bit_width) return false;
+  *out_bit_count = element_count * bit_width;
+  return true;
+}
+
+static iree_status_t loom_vector_verify_static_bit_count_relation(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t payload_name, loom_type_t payload_type,
+    int64_t payload_bit_width, bool payload_is_result,
+    iree_string_view_t storage_name, loom_type_t storage_type,
+    int64_t storage_bit_width, bool storage_is_result,
+    loom_type_t mismatch_result_type, iree_string_view_t expected_constraint) {
+  bool payload_bit_count_is_static = false;
+  uint64_t payload_bit_count = 0;
+  if (!loom_vector_static_bit_count(payload_type, payload_bit_width,
+                                    &payload_bit_count_is_static,
+                                    &payload_bit_count)) {
+    return loom_vector_emit_field_constraint(
+        emitter, op, payload_is_result, payload_name, payload_type,
+        IREE_SV("representable static payload bit count"));
+  }
+
+  bool storage_bit_count_is_static = false;
+  uint64_t storage_bit_count = 0;
+  if (!loom_vector_static_bit_count(storage_type, storage_bit_width,
+                                    &storage_bit_count_is_static,
+                                    &storage_bit_count)) {
+    return loom_vector_emit_field_constraint(
+        emitter, op, storage_is_result, storage_name, storage_type,
+        IREE_SV("representable static storage bit count"));
+  }
+
+  if (!payload_bit_count_is_static || !storage_bit_count_is_static) {
+    return iree_ok_status();
+  }
+  if (payload_bit_count == storage_bit_count) return iree_ok_status();
+  return loom_vector_emit_result_constraint(emitter, op, IREE_SV("result"),
+                                            mismatch_result_type,
+                                            expected_constraint);
+}
+
+iree_status_t loom_vector_bitpack_verify(const loom_module_t* module,
+                                         const loom_op_t* op,
+                                         iree_diagnostic_emitter_t emitter) {
+  loom_type_t source_type =
+      loom_module_value_type(module, loom_vector_bitpack_source(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_bitpack_result(op));
+  int64_t width = loom_vector_bitpack_width(op);
+  if (width <= 0) {
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("width"), width, IREE_SV("positive bit width"));
+  }
+  if (loom_vector_integer_element_width_is_less_than(source_type, width)) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("source"), source_type,
+        IREE_SV("integer element type at least bit width"));
+  }
+
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(result_type)) {
+    return iree_ok_status();
+  }
+  loom_scalar_type_t result_element_type = loom_type_element_type(result_type);
+  if (!loom_scalar_type_is_integer(result_element_type)) {
+    return iree_ok_status();
+  }
+
+  int32_t result_element_width = loom_scalar_type_bitwidth(result_element_type);
+  return loom_vector_verify_static_bit_count_relation(
+      emitter, op, IREE_SV("source"), source_type, width,
+      /*payload_is_result=*/false, IREE_SV("result"), result_type,
+      result_element_width, /*storage_is_result=*/true, result_type,
+      IREE_SV("packed payload bit count equal to result storage bit count"));
+}
+
+static iree_status_t loom_vector_verify_bitunpack(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_value_id_t source_value,
+    loom_value_id_t result_value, int64_t width) {
+  loom_type_t source_type = loom_module_value_type(module, source_value);
+  loom_type_t result_type = loom_module_value_type(module, result_value);
+  if (width <= 0) {
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("width"), width, IREE_SV("positive bit width"));
+  }
+  if (loom_vector_integer_element_width_is_less_than(result_type, width)) {
+    return loom_vector_emit_result_constraint(
+        emitter, op, IREE_SV("result"), result_type,
+        IREE_SV("integer element type at least bit width"));
+  }
+
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(result_type)) {
+    return iree_ok_status();
+  }
+  loom_scalar_type_t source_element_type = loom_type_element_type(source_type);
+  if (!loom_scalar_type_is_integer(source_element_type)) {
+    return iree_ok_status();
+  }
+
+  int32_t source_element_width = loom_scalar_type_bitwidth(source_element_type);
+  return loom_vector_verify_static_bit_count_relation(
+      emitter, op, IREE_SV("result"), result_type, width,
+      /*payload_is_result=*/true, IREE_SV("source"), source_type,
+      source_element_width, /*storage_is_result=*/false, result_type,
+      IREE_SV("unpacked payload bit count equal to source storage bit count"));
+}
+
+iree_status_t loom_vector_bitunpacku_verify(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            iree_diagnostic_emitter_t emitter) {
+  return loom_vector_verify_bitunpack(
+      module, op, emitter, loom_vector_bitunpacku_source(op),
+      loom_vector_bitunpacku_result(op), loom_vector_bitunpacku_width(op));
+}
+
+iree_status_t loom_vector_bitunpacks_verify(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            iree_diagnostic_emitter_t emitter) {
+  return loom_vector_verify_bitunpack(
+      module, op, emitter, loom_vector_bitunpacks_source(op),
+      loom_vector_bitunpacks_result(op), loom_vector_bitunpacks_width(op));
+}
+
 iree_status_t loom_vector_reduce_verify(const loom_module_t* module,
                                         const loom_op_t* op,
                                         iree_diagnostic_emitter_t emitter) {
