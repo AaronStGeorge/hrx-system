@@ -70,8 +70,9 @@ enum {
   LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 49),
   LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 50),
   LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 51),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 52),
-  LOOM_OP_VECTOR_COUNT_ = 53,
+  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 52),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 53),
+  LOOM_OP_VECTOR_COUNT_ = 54,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -157,6 +158,15 @@ typedef enum loom_vector_cmpf_predicate_e {
   LOOM_VECTOR_CMPF_PREDICATE_UNO = 13,
   LOOM_VECTOR_CMPF_PREDICATE_COUNT_ = 14,
 } loom_vector_cmpf_predicate_t;
+
+// Signedness variants for four-lane i8 dot products accumulated into i32 lanes.
+typedef enum loom_vector_dot4i_kind_e {
+  LOOM_VECTOR_DOT4I_KIND_S8S8 = 0,
+  LOOM_VECTOR_DOT4I_KIND_U8S8 = 1,
+  LOOM_VECTOR_DOT4I_KIND_S8U8 = 2,
+  LOOM_VECTOR_DOT4I_KIND_U8U8 = 3,
+  LOOM_VECTOR_DOT4I_KIND_COUNT_ = 4,
+} loom_vector_dot4i_kind_t;
 
 // Combining operations for vector reductions.
 typedef enum loom_vector_reduce_kind_e {
@@ -1173,6 +1183,28 @@ iree_status_t loom_vector_bitunpacks_build(
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_vector_bitunpacks_vtable;
 iree_status_t loom_vector_bitunpacks_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_DOT4I: Group adjacent four-lane i8 products into i32 accumulator lanes.
+// %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
+LOOM_DEFINE_ISA(loom_vector_dot4i_isa, LOOM_OP_VECTOR_DOT4I)
+LOOM_DEFINE_OPERAND(loom_vector_dot4i_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_dot4i_rhs, 1)
+LOOM_DEFINE_OPERAND(loom_vector_dot4i_acc, 2)
+LOOM_DEFINE_RESULT(loom_vector_dot4i_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_dot4i_kind, 0)
+iree_status_t loom_vector_dot4i_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_value_id_t lhs,
+    loom_value_id_t rhs,
+    loom_value_id_t acc,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+extern const loom_op_vtable_t loom_vector_dot4i_vtable;
+iree_status_t loom_vector_dot4i_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

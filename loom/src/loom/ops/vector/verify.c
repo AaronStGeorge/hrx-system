@@ -464,6 +464,52 @@ static bool loom_vector_shapes_match(loom_type_t lhs_type,
   return true;
 }
 
+static iree_status_t loom_vector_verify_dot4i_shape(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    loom_type_t source_type, loom_type_t result_type) {
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(result_type)) {
+    return iree_ok_status();
+  }
+
+  uint8_t source_rank = loom_type_rank(source_type);
+  uint8_t result_rank = loom_type_rank(result_type);
+  if (source_rank == 0 || result_rank == 0) return iree_ok_status();
+  if (result_rank != source_rank) {
+    return loom_vector_emit_rank_mismatch(emitter, op, IREE_SV("result"),
+                                          result_rank, IREE_SV("lhs"),
+                                          source_rank);
+  }
+
+  uint8_t grouped_axis = source_rank - 1;
+  for (uint8_t axis = 0; axis < grouped_axis; ++axis) {
+    if (loom_vector_dim_equals(source_type, axis, result_type, axis)) continue;
+    return loom_vector_emit_shape_mismatch(emitter, op, IREE_SV("result"),
+                                           IREE_SV("lhs leading axes"));
+  }
+
+  if (loom_type_dim_is_dynamic_at(source_type, grouped_axis)) {
+    return iree_ok_status();
+  }
+
+  int64_t source_axis_size =
+      loom_type_dim_static_size_at(source_type, grouped_axis);
+  if ((source_axis_size % 4) != 0) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("lhs"), source_type,
+        IREE_SV("last axis extent divisible by 4"));
+  }
+  if (loom_type_dim_is_dynamic_at(result_type, grouped_axis)) {
+    return iree_ok_status();
+  }
+
+  int64_t result_axis_size =
+      loom_type_dim_static_size_at(result_type, grouped_axis);
+  if (result_axis_size == source_axis_size / 4) return iree_ok_status();
+  return loom_vector_emit_result_constraint(
+      emitter, op, IREE_SV("result"), result_type,
+      IREE_SV("last axis extent equal to lhs last axis extent divided by 4"));
+}
+
 static bool loom_vector_find_static_memory_access_out_of_bounds(
     const loom_vector_memory_access_t* access, loom_attribute_t static_indices,
     uint16_t* out_axis, int64_t* out_offset, int64_t* out_extent,
@@ -1737,6 +1783,36 @@ iree_status_t loom_vector_bitunpacks_verify(const loom_module_t* module,
   return loom_vector_verify_bitunpack(
       module, op, emitter, loom_vector_bitunpacks_source(op),
       loom_vector_bitunpacks_result(op), loom_vector_bitunpacks_width(op));
+}
+
+iree_status_t loom_vector_dot4i_verify(const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       iree_diagnostic_emitter_t emitter) {
+  loom_type_t lhs_type =
+      loom_module_value_type(module, loom_vector_dot4i_lhs(op));
+  loom_type_t rhs_type =
+      loom_module_value_type(module, loom_vector_dot4i_rhs(op));
+  loom_type_t acc_type =
+      loom_module_value_type(module, loom_vector_dot4i_acc(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_dot4i_result(op));
+
+  if (loom_type_is_vector(lhs_type) &&
+      loom_type_element_type(lhs_type) != LOOM_SCALAR_TYPE_I8) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("lhs"), lhs_type, IREE_SV("i8 element type"));
+  }
+  if (loom_type_is_vector(rhs_type) &&
+      loom_type_element_type(rhs_type) != LOOM_SCALAR_TYPE_I8) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("rhs"), rhs_type, IREE_SV("i8 element type"));
+  }
+  if (loom_type_is_vector(acc_type) &&
+      loom_type_element_type(acc_type) != LOOM_SCALAR_TYPE_I32) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("acc"), acc_type, IREE_SV("i32 element type"));
+  }
+  return loom_vector_verify_dot4i_shape(emitter, op, lhs_type, result_type);
 }
 
 iree_status_t loom_vector_reduce_verify(const loom_module_t* module,

@@ -836,6 +836,21 @@ class VectorBuilders:
         _operands.append(source)
         return cast(ValueRef, self._b.build("vector.bitunpacks", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def dot4i(self, *, kind: str, lhs: ValueRef, rhs: ValueRef, acc: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Group adjacent four-lane i8 products into i32 accumulator lanes.
+
+        Example::
+            %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _operands.append(lhs)
+        _operands.append(rhs)
+        _operands.append(acc)
+        return cast(ValueRef, self._b.build("vector.dot4i", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def reduce(self, *, kind: str, input: ValueRef, init: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Reduce all lanes of a vector into a scalar accumulator/result.
 

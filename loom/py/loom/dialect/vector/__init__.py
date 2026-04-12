@@ -15,6 +15,7 @@ from loom.dialect.vector.defs import (
     AtomicScope,
     CombiningKind,
     FloatAssumptionFlags,
+    IntegerDot4Kind,
     vector_ops,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "AtomicScope",
     "CombiningKind",
     "FloatAssumptionFlags",
+    "IntegerDot4Kind",
     "ALL_VECTOR_OPS",
 ]

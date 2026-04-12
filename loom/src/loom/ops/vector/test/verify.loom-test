@@ -692,6 +692,52 @@ func.def @bitunpack_static_count_mismatch(%v: vector<1xi8>) {
 
 // ====
 
+// Dot4 source lanes are byte lanes; larger integer lanes are not silently
+// reinterpreted.
+func.def @dot4i_source_not_i8(%lhs: vector<16xi32>, %rhs: vector<16xi8>, %acc: vector<4xi32>) {
+  // ERROR@+1: TYPE/003 "i8 element type"
+  %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi32>, vector<16xi8>, vector<4xi32>
+  func.return
+}
+
+// ====
+
+// Dot4 accumulates into i32 lanes, not into the source lane width.
+func.def @dot4i_acc_not_i32(%lhs: vector<16xi8>, %rhs: vector<16xi8>, %acc: vector<4xi16>) {
+  // ERROR@+1: TYPE/003 "i32 element type"
+  %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi16>
+  func.return
+}
+
+// ====
+
+// The last source axis is grouped by fours.
+func.def @dot4i_source_last_axis_not_multiple_of_four(%lhs: vector<10xi8>, %rhs: vector<10xi8>, %acc: vector<2xi32>) {
+  // ERROR@+1: TYPE/003 "last axis extent divisible by 4"
+  %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<10xi8>, vector<10xi8>, vector<2xi32>
+  func.return
+}
+
+// ====
+
+// Static accumulator/result lanes must be the grouped last-axis source extent.
+func.def @dot4i_result_axis_mismatch(%lhs: vector<16xi8>, %rhs: vector<16xi8>, %acc: vector<5xi32>) {
+  // ERROR@+1: TYPE/004 "last axis extent equal to lhs last axis extent divided by 4"
+  %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<5xi32>
+  func.return
+}
+
+// ====
+
+// Leading axes are preserved while the last axis is grouped.
+func.def @dot4i_leading_axis_mismatch(%lhs: vector<2x16xi8>, %rhs: vector<2x16xi8>, %acc: vector<3x4xi32>) {
+  // ERROR@+1: SHAPE/002
+  %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<2x16xi8>, vector<2x16xi8>, vector<3x4xi32>
+  func.return
+}
+
+// ====
+
 // Reduce template parameters are tied to the vector element family.
 func.def @reduce_kind_mismatch(%v: vector<4xi32>, %zero: i32) {
   // ERROR@+1: TYPE/003 "floating-point element type for reduce kind"

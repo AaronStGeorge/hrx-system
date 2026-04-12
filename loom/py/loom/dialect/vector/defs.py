@@ -105,6 +105,17 @@ CombiningKind = EnumDef(
     doc="Combining operations for vector reductions.",
 )
 
+IntegerDot4Kind = EnumDef(
+    "IntegerDot4Kind",
+    [
+        EnumCase("s8s8", 0, doc="Signed i8 lhs times signed i8 rhs."),
+        EnumCase("u8s8", 1, doc="Unsigned i8 lhs times signed i8 rhs."),
+        EnumCase("s8u8", 2, doc="Signed i8 lhs times unsigned i8 rhs."),
+        EnumCase("u8u8", 3, doc="Unsigned i8 lhs times unsigned i8 rhs."),
+    ],
+    doc="Signedness variants for four-lane i8 dot products accumulated into i32 lanes.",
+)
+
 AtomicKind = EnumDef(
     "AtomicKind",
     [
@@ -1789,6 +1800,51 @@ vector_bitunpacks = Op(
 
 
 # ============================================================================
+# Dot products
+# ============================================================================
+
+vector_dot4i = Op(
+    "vector.dot4i",
+    group=vector_ops,
+    doc=("Group adjacent four-lane i8 products into i32 accumulator lanes."),
+    operands=[
+        Operand("lhs", VECTOR, doc="Integer source lanes grouped in fours along the last axis."),
+        Operand("rhs", VECTOR, doc="Integer source lanes grouped in fours along the last axis."),
+        Operand("acc", VECTOR, doc="Integer accumulator lanes updated by each four-lane dot product."),
+    ],
+    results=[Result("result", VECTOR, doc="Updated i32 accumulator lanes.")],
+    attrs=[AttrDef("kind", ATTR_TYPE_ENUM, enum_def=IntegerDot4Kind)],
+    constraints=[
+        HasIntegerElement("lhs"),
+        HasIntegerElement("rhs"),
+        HasIntegerElement("acc"),
+        SameShape("lhs", "rhs"),
+        SameType("acc", "result"),
+    ],
+    verify="loom_vector_dot4i_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("kind"),
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COMMA,
+        Ref("acc"),
+        COLON,
+        TypeOf("lhs"),
+        COMMA,
+        TypeOf("rhs"),
+        COMMA,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>",
+        "%r = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<2x16xi8>, vector<2x16xi8>, vector<2x4xi32>",
+    ],
+)
+
+
+# ============================================================================
 # Reductions
 # ============================================================================
 
@@ -1879,5 +1935,6 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_bitpack,
     vector_bitunpacku,
     vector_bitunpacks,
+    vector_dot4i,
     vector_reduce,
 )

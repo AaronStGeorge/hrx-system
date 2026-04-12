@@ -77,6 +77,36 @@ func.def @q8_0_reference_chunk() -> (i1) {
 
 // ====
 
+// Integer byte dot products should stay as grouped register operations once a
+// lowering path chooses a DP4A/VNNI-style substrate instead of scalarizing early.
+//
+// Lhs lanes: -3, -1, 2, 7
+// Rhs lanes: 4, 5, -2, 1
+// Acc lane: 10
+// Expected mathematical lane: 10 + (-12) + (-5) + (-4) + 7 = -4
+func.def @q8_0_dot4_reference_chunk() -> (vector<1xi32>) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding
+  test.use %schema : encoding
+
+  %a0 = scalar.constant -3 : i8
+  %a1 = scalar.constant -1 : i8
+  %a2 = scalar.constant 2 : i8
+  %a3 = scalar.constant 7 : i8
+  %lhs = vector.from_elements %a0, %a1, %a2, %a3 : i8, i8, i8, i8 -> vector<4xi8>
+
+  %b0 = scalar.constant 4 : i8
+  %b1 = scalar.constant 5 : i8
+  %b2 = scalar.constant -2 : i8
+  %b3 = scalar.constant 1 : i8
+  %rhs = vector.from_elements %b0, %b1, %b2, %b3 : i8, i8, i8, i8 -> vector<4xi8>
+
+  %acc = vector.constant 10 : vector<1xi32>
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %dot : vector<1xi32>
+}
+
+// ====
+
 // Q6_K-like chunks combine low nibbles with a side stream containing two high
 // bits per lane. The full ggml block has more scale/min structure; this sample
 // isolates the register bit assembly that must lower cleanly.

@@ -90,6 +90,20 @@ func.def @bitpack(%codes: vector<32xi8>, %signed_deltas: vector<32xi8>, %signs: 
 
 // ====
 
+// Four-lane integer dot products keep signedness explicit and group the last
+// source axis into i32 accumulator lanes.
+func.def @dot4i(%lhs: vector<16xi8>, %rhs: vector<16xi8>, %acc: vector<4xi32>, %lhs2: vector<2x16xi8>, %rhs2: vector<2x16xi8>, %acc2: vector<2x4xi32>, %n: index, %m: index, %dyn_lhs: vector<[%n]xi8>, %dyn_rhs: vector<[%n]xi8>, %dyn_acc: vector<[%m]xi32>) {
+  %ss = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
+  %us = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
+  %su = vector.dot4i<s8u8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
+  %uu = vector.dot4i<u8u8> %lhs2, %rhs2, %acc2 : vector<2x16xi8>, vector<2x16xi8>, vector<2x4xi32>
+  %dyn = vector.dot4i<s8s8> %dyn_lhs, %dyn_rhs, %dyn_acc : vector<[%n]xi8>, vector<[%n]xi8>, vector<[%m]xi32>
+  test.use %ss, %us, %su, %uu, %dyn : vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<2x4xi32>, vector<[%m]xi32>
+  func.return
+}
+
+// ====
+
 // Block-quant register decode snippets make storage reinterpretation and lane
 // ordering explicit without hidden decode pseudo-ops.
 func.def @q4_0_register_decode(%scale_bytes: vector<2xi8>, %qs: vector<16xi8>) {

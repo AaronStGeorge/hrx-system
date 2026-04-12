@@ -13,6 +13,7 @@ from loom.dialect.vector import (
     AtomicOrdering,
     AtomicScope,
     FloatAssumptionFlags,
+    IntegerDot4Kind,
 )
 from loom.dsl import FLOAT, I1, INTEGER, EffectKind, Op
 
@@ -257,3 +258,24 @@ def test_vector_bitpack_ops_are_pure_register_pack_ops() -> None:
         assert "Pure" in trait_names
         assert "Elementwise" not in trait_names
         assert ops[name].effects == ()
+
+
+def test_vector_dot4i_is_pure_grouped_i8_to_i32_dot() -> None:
+    op = _op_by_name()["vector.dot4i"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    trait_names = {trait.name for trait in op.traits}
+
+    assert [case.keyword for case in IntegerDot4Kind.cases] == [
+        "s8s8",
+        "u8s8",
+        "s8u8",
+        "u8u8",
+    ]
+    assert ("HasIntegerElement", ("lhs",)) in constraints
+    assert ("HasIntegerElement", ("rhs",)) in constraints
+    assert ("HasIntegerElement", ("acc",)) in constraints
+    assert ("SameShape", ("lhs", "rhs")) in constraints
+    assert ("SameType", ("acc", "result")) in constraints
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
+    assert op.effects == ()
