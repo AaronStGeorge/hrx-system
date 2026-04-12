@@ -135,3 +135,41 @@ func.def @test_constant_vector_payload_kind() {
   %c = test.constant 1 : vector<4xi32>
   func.return
 }
+
+// ====
+
+// Verifying a moderately sized block must not grow module location storage on
+// every parsed op. This catches accidental exponential table growth.
+func.def @many_locations() {
+  %v00 = scalar.constant 0 : i32
+  %v01 = scalar.constant 1 : i32
+  %v02 = scalar.constant 2 : i32
+  %v03 = scalar.constant 3 : i32
+  %v04 = scalar.constant 4 : i32
+  %v05 = scalar.constant 5 : i32
+  %v06 = scalar.constant 6 : i32
+  %v07 = scalar.constant 7 : i32
+  %v08 = scalar.constant 8 : i32
+  %v09 = scalar.constant 9 : i32
+  %v10 = scalar.constant 10 : i32
+  %v11 = scalar.constant 11 : i32
+  %v12 = scalar.constant 12 : i32
+  %v13 = scalar.constant 13 : i32
+  %v14 = scalar.constant 14 : i32
+  %v15 = scalar.constant 15 : i32
+  %v16 = scalar.constant 16 : i32
+  %v17 = scalar.constant 17 : i32
+  %v18 = scalar.constant 18 : i32
+  %v19 = scalar.constant 19 : i32
+  %v20 = scalar.constant 20 : i32
+  %v21 = scalar.constant 21 : i32
+  %v22 = scalar.constant 22 : i32
+  %v23 = scalar.constant 23 : i32
+  %v24 = scalar.constant 24 : i32
+  %v25 = scalar.constant 25 : i32
+  %v26 = scalar.constant 26 : i32
+  %v27 = scalar.constant 27 : i32
+  %v28 = scalar.constant 28 : i32
+  %v29 = scalar.constant 29 : i32
+  func.return
+}

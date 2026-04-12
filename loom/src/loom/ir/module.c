@@ -226,6 +226,34 @@ static iree_status_t loom_type_table_ensure_capacity(
   return iree_ok_status();
 }
 
+static iree_status_t loom_encoding_table_ensure_capacity(
+    iree_arena_allocator_t* arena, loom_encoding_table_t* table) {
+  if (table->count < table->capacity) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+      arena, table->count, /*minimum_capacity=*/8, sizeof(loom_encoding_t),
+      &table->capacity, (void**)&table->entries));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbol_table_ensure_capacity(
+    iree_arena_allocator_t* arena, loom_symbol_table_t* table) {
+  if (table->count < table->capacity) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+      arena, table->count, /*minimum_capacity=*/8, sizeof(loom_symbol_t),
+      &table->capacity, (void**)&table->entries));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_location_table_ensure_capacity(
+    iree_arena_allocator_t* arena, loom_location_table_t* table) {
+  if (table->count < table->capacity) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(
+      iree_arena_grow_array(arena, table->count, /*minimum_capacity=*/16,
+                            sizeof(loom_location_entry_t), &table->capacity,
+                            (void**)&table->entries));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_block_ops_ensure_capacity(
     iree_arena_allocator_t* arena, loom_block_t* block) {
   if (block->op_count < block->op_capacity) return iree_ok_status();
@@ -517,11 +545,8 @@ iree_status_t loom_module_add_encoding(loom_module_t* module,
                             module->encodings.count, (unsigned)UINT16_MAX);
   }
 
-  // Grow the table if needed.
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      &module->arena, module->encodings.count,
-      /*minimum_capacity=*/8, sizeof(loom_encoding_t),
-      &module->encodings.capacity, (void**)&module->encodings.entries));
+  IREE_RETURN_IF_ERROR(
+      loom_encoding_table_ensure_capacity(&module->arena, &module->encodings));
 
   loom_encoding_t* entry = &module->encodings.entries[module->encodings.count];
   memset(entry, 0, sizeof(*entry));
@@ -573,10 +598,8 @@ iree_status_t loom_module_add_symbol(loom_module_t* module,
                             (unsigned)(LOOM_SYMBOL_ID_INVALID - 1));
   }
 
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      &module->arena, module->symbols.count,
-      /*minimum_capacity=*/8, sizeof(loom_symbol_t), &module->symbols.capacity,
-      (void**)&module->symbols.entries));
+  IREE_RETURN_IF_ERROR(
+      loom_symbol_table_ensure_capacity(&module->arena, &module->symbols));
 
   uint16_t symbol_id = (uint16_t)module->symbols.count;
   loom_symbol_t* symbol = &module->symbols.entries[module->symbols.count++];
@@ -596,10 +619,8 @@ iree_status_t loom_module_add_location(loom_module_t* module,
                                        loom_location_id_t* out_location_id) {
   // Lazily initialize with entry 0 = LOOM_LOCATION_NONE.
   if (module->locations.count == 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        &module->arena, /*existing_count=*/0, /*minimum_capacity=*/16,
-        sizeof(loom_location_entry_t), &module->locations.capacity,
-        (void**)&module->locations.entries));
+    IREE_RETURN_IF_ERROR(loom_location_table_ensure_capacity(
+        &module->arena, &module->locations));
     module->locations.entries[0] = (loom_location_entry_t){
         .kind = LOOM_LOCATION_NONE,
     };
@@ -616,10 +637,8 @@ iree_status_t loom_module_add_location(loom_module_t* module,
                             module->locations.count, (unsigned)UINT32_MAX);
   }
 
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      &module->arena, module->locations.count, /*minimum_capacity=*/16,
-      sizeof(loom_location_entry_t), &module->locations.capacity,
-      (void**)&module->locations.entries));
+  IREE_RETURN_IF_ERROR(
+      loom_location_table_ensure_capacity(&module->arena, &module->locations));
 
   loom_location_id_t id = (loom_location_id_t)module->locations.count;
   module->locations.entries[id] = entry;
