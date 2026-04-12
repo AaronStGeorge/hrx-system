@@ -210,6 +210,19 @@ class VectorBuilders:
         _operands.append(indices)
         return cast(ValueRef, self._b.build("vector.table.lookup", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def transform(self, *, source: ValueRef, transform: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Apply an explicit numeric transform descriptor to vector register lanes.
+
+        Example::
+            %r = vector.transform %v, %xf : vector<128xf32>, encoding -> vector<128xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(source)
+        _operands.append(transform)
+        return cast(ValueRef, self._b.build("vector.transform", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def load(self, *, view: ValueRef, indices: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
         """Load a vector footprint from a typed view at a full-rank logical origin.
 

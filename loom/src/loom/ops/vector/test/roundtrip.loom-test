@@ -185,6 +185,38 @@ func.def @table_lookup(%grid: vector<16xf16>, %codes: vector<32xi8>, %codes2d: v
 
 // ====
 
+// Numeric transforms are explicit register transforms described by SSA
+// encodings. The descriptor carries its input and output last-axis extents so
+// target matching does not infer transform domains from loose metadata.
+func.def @numeric_transform_hadamard(%v: vector<128xf32>, %seed: index, %signs: vector<128xi1>) -> (vector<128xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, normalization="orthonormal", output_elems=128> {seed = %seed : index, signs = %signs : vector<128xi1>} : encoding
+  %r = vector.transform %v, %xf : vector<128xf32>, encoding -> vector<128xf32>
+  func.return %r : vector<128xf32>
+}
+
+// ====
+
+// JL-style descriptors can change only the last vector axis; leading axes stay
+// tied to the source so batched sketches remain structurally obvious.
+func.def @numeric_transform_jl(%v: vector<4x128xf32>, %matrix: vector<64x128xf32>) -> (vector<4x64xf32>) {
+  %jl = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %matrix : vector<64x128xf32>} : encoding
+  %sketch = vector.transform %v, %jl : vector<4x128xf32>, encoding -> vector<4x64xf32>
+  func.return %sketch : vector<4x64xf32>
+}
+
+// ====
+
+// Dynamic transform extents use the same SSA values as the source/result type
+// dimensions, preserving the use-def link instead of relying on an attribute
+// side channel.
+func.def @numeric_transform_dynamic(%n: index, %v: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard", normalization="none"> {input_elems = %n : index, output_elems = %n : index} : encoding
+  %r = vector.transform %v, %xf : vector<[%n]xf32>, encoding -> vector<[%n]xf32>
+  func.return %r : vector<[%n]xf32>
+}
+
+// ====
+
 // Vector memory ops use typed views and full-rank logical origins.
 func.def @memory(%buffer: buffer, %offset: index, %row: index, %col: index, %m: index, %n: index) {
   %layout = encoding.layout.dense : encoding

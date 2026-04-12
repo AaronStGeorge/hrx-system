@@ -9,13 +9,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/params.h"
-
-typedef enum loom_encoding_storage_role_e {
-  LOOM_ENCODING_STORAGE_ROLE_UNKNOWN = 0,
-  LOOM_ENCODING_STORAGE_ROLE_ADDRESS_LAYOUT = 1,
-  LOOM_ENCODING_STORAGE_ROLE_STORAGE_SCHEMA = 2,
-  LOOM_ENCODING_STORAGE_ROLE_PHYSICAL_STORAGE = 3,
-} loom_encoding_storage_role_t;
+#include "loom/ops/encoding/roles.h"
 
 static iree_string_view_t loom_encoding_physical_storage_name(void) {
   return IREE_SV("physical_storage");
@@ -44,28 +38,6 @@ static bool loom_encoding_name_equal(const loom_module_t* module,
                                      iree_string_view_t expected) {
   if (!encoding) return false;
   return loom_encoding_string_id_equal(module, encoding->name_id, expected);
-}
-
-static bool loom_encoding_static_name_has_address_layout_role(
-    iree_string_view_t name) {
-  return iree_string_view_equal(name, IREE_SV("dense")) ||
-         iree_string_view_equal(name, IREE_SV("strided"));
-}
-
-static loom_encoding_storage_role_t loom_encoding_static_role(
-    const loom_module_t* module, const loom_encoding_t* encoding) {
-  if (!encoding || encoding->name_id == LOOM_STRING_ID_INVALID ||
-      encoding->name_id >= module->strings.count) {
-    return LOOM_ENCODING_STORAGE_ROLE_UNKNOWN;
-  }
-  iree_string_view_t name = module->strings.entries[encoding->name_id];
-  if (iree_string_view_equal(name, loom_encoding_physical_storage_name())) {
-    return LOOM_ENCODING_STORAGE_ROLE_PHYSICAL_STORAGE;
-  }
-  if (loom_encoding_static_name_has_address_layout_role(name)) {
-    return LOOM_ENCODING_STORAGE_ROLE_ADDRESS_LAYOUT;
-  }
-  return LOOM_ENCODING_STORAGE_ROLE_STORAGE_SCHEMA;
 }
 
 static const loom_named_attr_t* loom_encoding_find_param(
@@ -102,35 +74,6 @@ static bool loom_encoding_physical_storage_define_isa(
       loom_module_encoding(module, loom_encoding_define_spec(op));
   return loom_encoding_name_equal(module, spec,
                                   loom_encoding_physical_storage_name());
-}
-
-static loom_encoding_storage_role_t loom_encoding_value_role(
-    const loom_module_t* module, loom_value_id_t value_id) {
-  if (!module || value_id == LOOM_VALUE_ID_INVALID ||
-      value_id >= module->values.count) {
-    return LOOM_ENCODING_STORAGE_ROLE_UNKNOWN;
-  }
-  loom_type_t type = loom_module_value_type(module, value_id);
-  if (!loom_type_is_encoding(type)) {
-    return LOOM_ENCODING_STORAGE_ROLE_UNKNOWN;
-  }
-
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return LOOM_ENCODING_STORAGE_ROLE_UNKNOWN;
-  }
-
-  const loom_op_t* op = loom_value_def_op(value);
-  if (loom_encoding_address_layout_op_isa(op)) {
-    return LOOM_ENCODING_STORAGE_ROLE_ADDRESS_LAYOUT;
-  }
-  if (!op || !loom_encoding_define_isa(op)) {
-    return LOOM_ENCODING_STORAGE_ROLE_UNKNOWN;
-  }
-
-  const loom_encoding_t* spec =
-      loom_module_encoding(module, loom_encoding_define_spec(op));
-  return loom_encoding_static_role(module, spec);
 }
 
 static bool loom_encoding_resolve_address_layout_op_rec(
@@ -244,7 +187,7 @@ static iree_status_t loom_encoding_emit_role_error(
 static iree_status_t loom_encoding_physical_storage_verify_static_param(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter, const loom_named_attr_t* entry,
-    iree_string_view_t param_name, loom_encoding_storage_role_t expected_role,
+    iree_string_view_t param_name, loom_encoding_role_t expected_role,
     iree_string_view_t expected_role_name) {
   if (entry->value.kind != LOOM_ATTR_ENCODING) {
     return loom_encoding_emit_static_kind_error(
@@ -254,8 +197,7 @@ static iree_status_t loom_encoding_physical_storage_verify_static_param(
 
   const loom_encoding_t* nested =
       loom_module_encoding(module, loom_attr_as_encoding_id(entry->value));
-  loom_encoding_storage_role_t actual_role =
-      loom_encoding_static_role(module, nested);
+  loom_encoding_role_t actual_role = loom_encoding_static_role(module, nested);
   if (actual_role != expected_role) {
     return loom_encoding_emit_role_error(emitter, op, param_name,
                                          expected_role_name);
@@ -268,8 +210,7 @@ static iree_status_t loom_encoding_physical_storage_verify_dynamic_param(
     iree_diagnostic_emitter_t emitter,
     const loom_encoding_define_param_view_t* params,
     const loom_named_attr_t* entry, iree_string_view_t param_name,
-    loom_encoding_storage_role_t expected_role,
-    iree_string_view_t expected_role_name) {
+    loom_encoding_role_t expected_role, iree_string_view_t expected_role_name) {
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
   if (!loom_encoding_dynamic_param_value(params, entry, &value_id)) {
     return iree_make_status(
@@ -283,8 +224,7 @@ static iree_status_t loom_encoding_physical_storage_verify_dynamic_param(
                                                  param_name, value_id);
   }
 
-  loom_encoding_storage_role_t actual_role =
-      loom_encoding_value_role(module, value_id);
+  loom_encoding_role_t actual_role = loom_encoding_value_role(module, value_id);
   if (actual_role != expected_role) {
     return loom_encoding_emit_role_error(emitter, op, param_name,
                                          expected_role_name);
@@ -340,29 +280,27 @@ static iree_status_t loom_encoding_physical_storage_verify_define(
   if (static_layout) {
     IREE_RETURN_IF_ERROR(loom_encoding_physical_storage_verify_static_param(
         module, op, emitter, static_layout, loom_encoding_layout_param_name(),
-        LOOM_ENCODING_STORAGE_ROLE_ADDRESS_LAYOUT,
-        IREE_SV("an address layout encoding")));
+        LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
+        loom_encoding_role_description(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT)));
   }
   if (dynamic_layout) {
     IREE_RETURN_IF_ERROR(loom_encoding_physical_storage_verify_dynamic_param(
         module, op, emitter, params, dynamic_layout,
-        loom_encoding_layout_param_name(),
-        LOOM_ENCODING_STORAGE_ROLE_ADDRESS_LAYOUT,
-        IREE_SV("an address layout encoding")));
+        loom_encoding_layout_param_name(), LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
+        loom_encoding_role_description(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT)));
   }
 
   if (static_schema) {
     IREE_RETURN_IF_ERROR(loom_encoding_physical_storage_verify_static_param(
         module, op, emitter, static_schema, loom_encoding_schema_param_name(),
-        LOOM_ENCODING_STORAGE_ROLE_STORAGE_SCHEMA,
-        IREE_SV("a storage schema encoding")));
+        LOOM_ENCODING_ROLE_STORAGE_SCHEMA,
+        loom_encoding_role_description(LOOM_ENCODING_ROLE_STORAGE_SCHEMA)));
   }
   if (dynamic_schema) {
     IREE_RETURN_IF_ERROR(loom_encoding_physical_storage_verify_dynamic_param(
         module, op, emitter, params, dynamic_schema,
-        loom_encoding_schema_param_name(),
-        LOOM_ENCODING_STORAGE_ROLE_STORAGE_SCHEMA,
-        IREE_SV("a storage schema encoding")));
+        loom_encoding_schema_param_name(), LOOM_ENCODING_ROLE_STORAGE_SCHEMA,
+        loom_encoding_role_description(LOOM_ENCODING_ROLE_STORAGE_SCHEMA)));
   }
 
   return iree_ok_status();
@@ -404,7 +342,7 @@ static iree_status_t loom_encoding_physical_storage_verify_static(
     const loom_encoding_t* layout_encoding =
         loom_module_encoding(module, loom_attr_as_encoding_id(layout->value));
     if (loom_encoding_static_role(module, layout_encoding) !=
-        LOOM_ENCODING_STORAGE_ROLE_ADDRESS_LAYOUT) {
+        LOOM_ENCODING_ROLE_ADDRESS_LAYOUT) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "encoding 'physical_storage' parameter 'layout' must be an address "
@@ -416,7 +354,7 @@ static iree_status_t loom_encoding_physical_storage_verify_static(
     const loom_encoding_t* schema_encoding =
         loom_module_encoding(module, loom_attr_as_encoding_id(schema->value));
     if (loom_encoding_static_role(module, schema_encoding) !=
-        LOOM_ENCODING_STORAGE_ROLE_STORAGE_SCHEMA) {
+        LOOM_ENCODING_ROLE_STORAGE_SCHEMA) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
           "encoding 'physical_storage' parameter 'schema' must be a storage "
@@ -429,6 +367,7 @@ static iree_status_t loom_encoding_physical_storage_verify_static(
 
 const loom_encoding_vtable_t loom_encoding_physical_storage_vtable = {
     .name = IREE_SVL("physical_storage"),
+    .role = LOOM_ENCODING_ROLE_PHYSICAL_STORAGE,
     .verify = loom_encoding_physical_storage_verify_static,
     .verify_define = loom_encoding_physical_storage_verify_define,
 };

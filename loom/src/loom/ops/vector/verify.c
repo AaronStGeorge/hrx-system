@@ -9,6 +9,8 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/ops/encoding/params.h"
+#include "loom/ops/encoding/roles.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 
@@ -1440,6 +1442,501 @@ iree_status_t loom_vector_table_lookup_verify(
   }
   return loom_vector_emit_static_index_out_of_bounds(
       emitter, op, /*axis=*/0, splat_index, table_lane_count);
+}
+
+typedef enum loom_vector_transform_family_e {
+  LOOM_VECTOR_TRANSFORM_FAMILY_UNKNOWN = 0,
+  LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD = 1,
+  LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD_SIGN = 2,
+  LOOM_VECTOR_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD = 3,
+  LOOM_VECTOR_TRANSFORM_FAMILY_JL_DENSE = 4,
+} loom_vector_transform_family_t;
+
+static iree_string_view_t loom_vector_transform_family_param_name(void) {
+  return IREE_SV("family");
+}
+
+static iree_string_view_t loom_vector_transform_input_elems_param_name(void) {
+  return IREE_SV("input_elems");
+}
+
+static iree_string_view_t loom_vector_transform_output_elems_param_name(void) {
+  return IREE_SV("output_elems");
+}
+
+static iree_string_view_t loom_vector_transform_normalization_param_name(void) {
+  return IREE_SV("normalization");
+}
+
+static iree_string_view_t loom_vector_transform_seed_param_name(void) {
+  return IREE_SV("seed");
+}
+
+static iree_string_view_t loom_vector_transform_signs_param_name(void) {
+  return IREE_SV("signs");
+}
+
+static iree_string_view_t loom_vector_transform_permutation_param_name(void) {
+  return IREE_SV("permutation");
+}
+
+static iree_string_view_t loom_vector_transform_matrix_param_name(void) {
+  return IREE_SV("matrix");
+}
+
+static bool loom_vector_string_id_equal(const loom_module_t* module,
+                                        loom_string_id_t string_id,
+                                        iree_string_view_t expected) {
+  if (string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return false;
+  }
+  return iree_string_view_equal(module->strings.entries[string_id], expected);
+}
+
+static const loom_named_attr_t* loom_vector_find_named_attr(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    const loom_named_attr_t* entry = &attrs.entries[i];
+    if (loom_vector_string_id_equal(module, entry->name_id, name)) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static bool loom_vector_encoding_dynamic_param_value(
+    const loom_encoding_define_param_view_t* params,
+    const loom_named_attr_t* name_entry, loom_value_id_t* out_value) {
+  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
+  int64_t ordinal = name_entry->value.i64;
+  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
+  *out_value = params->dynamic_values.values[ordinal];
+  return true;
+}
+
+static iree_status_t loom_vector_emit_encoding_param_error(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    const loom_error_def_t* error, iree_string_view_t encoding_name,
+    iree_string_view_t param_name) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(encoding_name),
+      loom_param_string(param_name),
+  };
+  return loom_vector_emit(emitter, op, error, params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_vector_emit_encoding_static_kind_error(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t encoding_name, iree_string_view_t param_name,
+    loom_attr_kind_t actual_kind, iree_string_view_t expected_kind) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(encoding_name),
+      loom_param_string(param_name),
+      loom_param_u32(actual_kind),
+      loom_param_string(expected_kind),
+  };
+  return loom_vector_emit(emitter, op, &loom_err_encoding_010, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_vector_emit_encoding_dynamic_type_error(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t encoding_name,
+    iree_string_view_t param_name, loom_value_id_t value_id,
+    iree_string_view_t expected_type) {
+  loom_type_t actual_type = loom_module_value_type(module, value_id);
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(encoding_name),
+      loom_param_string(param_name),
+      loom_param_type(actual_type),
+      loom_param_string(expected_type),
+  };
+  return loom_vector_emit(emitter, op, &loom_err_encoding_009, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static bool loom_vector_transform_param_name_is_static(
+    const loom_module_t* module, loom_string_id_t name_id) {
+  return loom_vector_string_id_equal(
+             module, name_id, loom_vector_transform_family_param_name()) ||
+         loom_vector_string_id_equal(
+             module, name_id, loom_vector_transform_input_elems_param_name()) ||
+         loom_vector_string_id_equal(
+             module, name_id,
+             loom_vector_transform_output_elems_param_name()) ||
+         loom_vector_string_id_equal(
+             module, name_id, loom_vector_transform_normalization_param_name());
+}
+
+static bool loom_vector_transform_param_name_is_dynamic(
+    const loom_module_t* module, loom_string_id_t name_id) {
+  return loom_vector_string_id_equal(
+             module, name_id, loom_vector_transform_input_elems_param_name()) ||
+         loom_vector_string_id_equal(
+             module, name_id,
+             loom_vector_transform_output_elems_param_name()) ||
+         loom_vector_string_id_equal(module, name_id,
+                                     loom_vector_transform_seed_param_name()) ||
+         loom_vector_string_id_equal(
+             module, name_id, loom_vector_transform_signs_param_name()) ||
+         loom_vector_string_id_equal(
+             module, name_id, loom_vector_transform_permutation_param_name()) ||
+         loom_vector_string_id_equal(module, name_id,
+                                     loom_vector_transform_matrix_param_name());
+}
+
+static bool loom_vector_string_attr_value(const loom_module_t* module,
+                                          loom_attribute_t attr,
+                                          iree_string_view_t* out_value) {
+  if (attr.kind != LOOM_ATTR_STRING ||
+      attr.string_id == LOOM_STRING_ID_INVALID ||
+      attr.string_id >= module->strings.count) {
+    return false;
+  }
+  *out_value = module->strings.entries[attr.string_id];
+  return true;
+}
+
+static loom_vector_transform_family_t loom_vector_transform_family_from_name(
+    iree_string_view_t name) {
+  if (iree_string_view_equal(name, IREE_SV("hadamard"))) {
+    return LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD;
+  }
+  if (iree_string_view_equal(name, IREE_SV("hadamard_sign"))) {
+    return LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD_SIGN;
+  }
+  if (iree_string_view_equal(name, IREE_SV("sign_permute_hadamard"))) {
+    return LOOM_VECTOR_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD;
+  }
+  if (iree_string_view_equal(name, IREE_SV("jl_dense"))) {
+    return LOOM_VECTOR_TRANSFORM_FAMILY_JL_DENSE;
+  }
+  return LOOM_VECTOR_TRANSFORM_FAMILY_UNKNOWN;
+}
+
+static bool loom_vector_transform_family_is_hadamard_like(
+    loom_vector_transform_family_t family) {
+  return family == LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD ||
+         family == LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD_SIGN ||
+         family == LOOM_VECTOR_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD;
+}
+
+static bool loom_vector_i64_is_power_of_two(int64_t value) {
+  if (value <= 0) return false;
+  return (value & (value - 1)) == 0;
+}
+
+static iree_status_t loom_vector_transform_verify_static_param_kinds(
+    const loom_module_t* module, const loom_op_t* define_op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t encoding_name) {
+  for (iree_host_size_t i = 0; i < params->static_attrs.count; ++i) {
+    const loom_named_attr_t* entry = &params->static_attrs.entries[i];
+    if (!loom_vector_transform_param_name_is_static(module, entry->name_id)) {
+      iree_string_view_t param_name = module->strings.entries[entry->name_id];
+      return loom_vector_emit_encoding_param_error(emitter, define_op,
+                                                   &loom_err_encoding_008,
+                                                   encoding_name, param_name);
+    }
+
+    if (loom_vector_string_id_equal(
+            module, entry->name_id,
+            loom_vector_transform_normalization_param_name())) {
+      if (entry->value.kind == LOOM_ATTR_STRING) continue;
+      iree_string_view_t param_name = module->strings.entries[entry->name_id];
+      return loom_vector_emit_encoding_static_kind_error(
+          emitter, define_op, encoding_name, param_name,
+          (loom_attr_kind_t)entry->value.kind, IREE_SV("string"));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_transform_verify_dynamic_param_types(
+    const loom_module_t* module, const loom_op_t* define_op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t encoding_name,
+    loom_type_t source_type) {
+  for (iree_host_size_t i = 0; i < params->dynamic_names.count; ++i) {
+    const loom_named_attr_t* entry = &params->dynamic_names.entries[i];
+    iree_string_view_t param_name = module->strings.entries[entry->name_id];
+    if (!loom_vector_transform_param_name_is_dynamic(module, entry->name_id)) {
+      return loom_vector_emit_encoding_param_error(emitter, define_op,
+                                                   &loom_err_encoding_008,
+                                                   encoding_name, param_name);
+    }
+
+    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    if (!loom_vector_encoding_dynamic_param_value(params, entry, &value_id)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "malformed encoding.define operand dictionary for parameter '%.*s'",
+          (int)param_name.size, param_name.data);
+    }
+
+    if (loom_vector_string_id_equal(
+            module, entry->name_id,
+            loom_vector_transform_input_elems_param_name()) ||
+        loom_vector_string_id_equal(
+            module, entry->name_id,
+            loom_vector_transform_output_elems_param_name())) {
+      continue;
+    }
+
+    loom_type_t actual_type = loom_module_value_type(module, value_id);
+    bool expects_index = loom_vector_string_id_equal(
+        module, entry->name_id, loom_vector_transform_seed_param_name());
+    if (expects_index) {
+      if (loom_type_equal(actual_type,
+                          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX))) {
+        continue;
+      }
+      return loom_vector_emit_encoding_dynamic_type_error(
+          module, emitter, define_op, encoding_name, param_name, value_id,
+          IREE_SV("index"));
+    }
+
+    if (loom_vector_string_id_equal(module, entry->name_id,
+                                    loom_vector_transform_signs_param_name())) {
+      if (loom_type_is_vector(actual_type) &&
+          loom_type_element_type(actual_type) == LOOM_SCALAR_TYPE_I1 &&
+          loom_vector_shapes_match(actual_type, source_type)) {
+        continue;
+      }
+      return loom_vector_emit_encoding_dynamic_type_error(
+          module, emitter, define_op, encoding_name, param_name, value_id,
+          IREE_SV("i1 vector with source shape"));
+    }
+
+    if (loom_vector_string_id_equal(
+            module, entry->name_id,
+            loom_vector_transform_permutation_param_name())) {
+      if (loom_vector_type_has_index_or_non_i1_integer_element(actual_type) &&
+          loom_vector_shapes_match(actual_type, source_type)) {
+        continue;
+      }
+      return loom_vector_emit_encoding_dynamic_type_error(
+          module, emitter, define_op, encoding_name, param_name, value_id,
+          IREE_SV("index or non-i1 integer vector with source shape"));
+    }
+
+    if (loom_type_is_vector(actual_type) &&
+        loom_scalar_type_is_float(loom_type_element_type(actual_type))) {
+      continue;
+    }
+    return loom_vector_emit_encoding_dynamic_type_error(
+        module, emitter, define_op, encoding_name, param_name, value_id,
+        IREE_SV("floating-point vector"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_transform_verify_required_param(
+    const loom_module_t* module, const loom_op_t* define_op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t encoding_name,
+    iree_string_view_t param_name) {
+  const loom_named_attr_t* static_param =
+      loom_vector_find_named_attr(module, params->static_attrs, param_name);
+  const loom_named_attr_t* dynamic_param =
+      loom_vector_find_named_attr(module, params->dynamic_names, param_name);
+  if (static_param || dynamic_param) return iree_ok_status();
+  return loom_vector_emit_encoding_param_error(
+      emitter, define_op, &loom_err_encoding_007, encoding_name, param_name);
+}
+
+static iree_status_t loom_vector_transform_verify_extent_param(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, const loom_op_t* define_op,
+    const loom_encoding_define_param_view_t* params,
+    iree_string_view_t encoding_name, iree_string_view_t param_name,
+    iree_string_view_t field_name, loom_type_t field_type, uint8_t axis,
+    bool field_is_result) {
+  const loom_named_attr_t* static_param =
+      loom_vector_find_named_attr(module, params->static_attrs, param_name);
+  const loom_named_attr_t* dynamic_param =
+      loom_vector_find_named_attr(module, params->dynamic_names, param_name);
+  if (!static_param && !dynamic_param) return iree_ok_status();
+
+  if (static_param) {
+    if (static_param->value.kind != LOOM_ATTR_I64) {
+      return loom_vector_emit_encoding_static_kind_error(
+          emitter, define_op, encoding_name, param_name,
+          (loom_attr_kind_t)static_param->value.kind, IREE_SV("i64"));
+    }
+    int64_t expected_extent = loom_attr_as_i64(static_param->value);
+    if (expected_extent <= 0) {
+      return loom_vector_emit_attribute_value_constraint(
+          emitter, define_op, param_name, expected_extent,
+          IREE_SV("positive extent"));
+    }
+    if (loom_type_dim_is_dynamic_at(field_type, axis)) {
+      return loom_vector_emit_field_constraint(
+          emitter, op, field_is_result, field_name, field_type,
+          IREE_SV("last axis matching static transform extent"));
+    }
+    int64_t actual_extent = loom_type_dim_static_size_at(field_type, axis);
+    if (actual_extent == expected_extent) return iree_ok_status();
+    return loom_vector_emit_field_constraint(
+        emitter, op, field_is_result, field_name, field_type,
+        IREE_SV("last axis matching static transform extent"));
+  }
+
+  loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+  if (!loom_vector_encoding_dynamic_param_value(params, dynamic_param,
+                                                &value_id)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "malformed encoding.define operand dictionary for parameter '%.*s'",
+        (int)param_name.size, param_name.data);
+  }
+  if (!loom_type_equal(loom_module_value_type(module, value_id),
+                       loom_type_scalar(LOOM_SCALAR_TYPE_INDEX))) {
+    return loom_vector_emit_encoding_dynamic_type_error(
+        module, emitter, define_op, encoding_name, param_name, value_id,
+        IREE_SV("index"));
+  }
+  if (!loom_type_dim_is_dynamic_at(field_type, axis) ||
+      loom_type_dim_value_id_at(field_type, axis) != value_id) {
+    return loom_vector_emit_field_constraint(
+        emitter, op, field_is_result, field_name, field_type,
+        IREE_SV("last axis matching dynamic transform extent"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_transform_verify_family(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_op_t* define_op, const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t encoding_name,
+    loom_type_t source_type, loom_type_t result_type) {
+  const loom_named_attr_t* family_param = loom_vector_find_named_attr(
+      module, params->static_attrs, loom_vector_transform_family_param_name());
+  if (!family_param) {
+    if (loom_vector_find_named_attr(
+            module, params->dynamic_names,
+            loom_vector_transform_family_param_name())) {
+      return iree_ok_status();
+    }
+    return loom_vector_emit_encoding_param_error(
+        emitter, define_op, &loom_err_encoding_007, encoding_name,
+        loom_vector_transform_family_param_name());
+  }
+
+  iree_string_view_t family_name = iree_string_view_empty();
+  if (!loom_vector_string_attr_value(module, family_param->value,
+                                     &family_name)) {
+    return loom_vector_emit_encoding_static_kind_error(
+        emitter, define_op, encoding_name,
+        loom_vector_transform_family_param_name(),
+        (loom_attr_kind_t)family_param->value.kind, IREE_SV("string"));
+  }
+
+  loom_vector_transform_family_t family =
+      loom_vector_transform_family_from_name(family_name);
+  if (family == LOOM_VECTOR_TRANSFORM_FAMILY_UNKNOWN) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("transform"),
+        loom_module_value_type(module, loom_vector_transform_transform(op)),
+        IREE_SV("supported numeric transform family"));
+  }
+
+  if (!loom_vector_transform_family_is_hadamard_like(family)) {
+    return iree_ok_status();
+  }
+  if (!loom_vector_shapes_match(source_type, result_type)) {
+    return loom_vector_emit_shape_mismatch(emitter, op, IREE_SV("result"),
+                                           IREE_SV("source"));
+  }
+
+  uint8_t last_axis = (uint8_t)(loom_type_rank(source_type) - 1);
+  if (loom_type_dim_is_dynamic_at(source_type, last_axis)) {
+    return iree_ok_status();
+  }
+  int64_t last_axis_size = loom_type_dim_static_size_at(source_type, last_axis);
+  if (loom_vector_i64_is_power_of_two(last_axis_size)) return iree_ok_status();
+  return loom_vector_emit_operand_constraint(
+      emitter, op, IREE_SV("source"), source_type,
+      IREE_SV("power-of-two last axis extent for Hadamard transform"));
+}
+
+iree_status_t loom_vector_transform_verify(const loom_module_t* module,
+                                           const loom_op_t* op,
+                                           iree_diagnostic_emitter_t emitter) {
+  loom_value_id_t source_value = loom_vector_transform_source(op);
+  loom_value_id_t transform_value = loom_vector_transform_transform(op);
+  loom_value_id_t result_value = loom_vector_transform_result(op);
+  loom_type_t source_type = loom_module_value_type(module, source_value);
+  loom_type_t transform_type = loom_module_value_type(module, transform_value);
+  loom_type_t result_type = loom_module_value_type(module, result_value);
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(result_type) ||
+      !loom_type_is_encoding(transform_type)) {
+    return iree_ok_status();
+  }
+
+  if (loom_encoding_value_role(module, transform_value) !=
+      LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("transform"), transform_type,
+        IREE_SV("numeric transform encoding"));
+  }
+
+  uint8_t source_rank = loom_type_rank(source_type);
+  uint8_t result_rank = loom_type_rank(result_type);
+  if (source_rank == 0 || result_rank == 0) return iree_ok_status();
+  if (source_rank != result_rank) {
+    return loom_vector_emit_rank_mismatch(emitter, op, IREE_SV("result"),
+                                          result_rank, IREE_SV("source"),
+                                          source_rank);
+  }
+
+  uint8_t last_axis = (uint8_t)(source_rank - 1);
+  for (uint8_t axis = 0; axis < last_axis; ++axis) {
+    if (loom_vector_dim_equals(source_type, axis, result_type, axis)) continue;
+    return loom_vector_emit_shape_mismatch(emitter, op, IREE_SV("result"),
+                                           IREE_SV("source leading axes"));
+  }
+
+  const loom_value_t* transform = loom_module_value(module, transform_value);
+  if (loom_value_is_block_arg(transform)) return iree_ok_status();
+  const loom_op_t* define_op = loom_value_def_op(transform);
+  if (!define_op || !loom_encoding_define_isa(define_op)) {
+    return iree_ok_status();
+  }
+
+  loom_encoding_define_param_view_t params =
+      loom_encoding_define_param_view(module, define_op);
+  if (!params.spec || params.spec->name_id == LOOM_STRING_ID_INVALID ||
+      params.spec->name_id >= module->strings.count) {
+    return iree_ok_status();
+  }
+  iree_string_view_t encoding_name =
+      module->strings.entries[params.spec->name_id];
+  IREE_RETURN_IF_ERROR(loom_vector_transform_verify_static_param_kinds(
+      module, define_op, &params, emitter, encoding_name));
+  IREE_RETURN_IF_ERROR(loom_vector_transform_verify_dynamic_param_types(
+      module, define_op, &params, emitter, encoding_name, source_type));
+  IREE_RETURN_IF_ERROR(loom_vector_transform_verify_required_param(
+      module, define_op, &params, emitter, encoding_name,
+      loom_vector_transform_input_elems_param_name()));
+  IREE_RETURN_IF_ERROR(loom_vector_transform_verify_required_param(
+      module, define_op, &params, emitter, encoding_name,
+      loom_vector_transform_output_elems_param_name()));
+
+  IREE_RETURN_IF_ERROR(loom_vector_transform_verify_extent_param(
+      module, emitter, op, define_op, &params, encoding_name,
+      loom_vector_transform_input_elems_param_name(), IREE_SV("source"),
+      source_type, last_axis, /*field_is_result=*/false));
+  IREE_RETURN_IF_ERROR(loom_vector_transform_verify_extent_param(
+      module, emitter, op, define_op, &params, encoding_name,
+      loom_vector_transform_output_elems_param_name(), IREE_SV("result"),
+      result_type, last_axis, /*field_is_result=*/true));
+
+  return loom_vector_transform_verify_family(module, op, define_op, &params,
+                                             emitter, encoding_name,
+                                             source_type, result_type);
 }
 
 iree_status_t loom_vector_extf_verify(const loom_module_t* module,

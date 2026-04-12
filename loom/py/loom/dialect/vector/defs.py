@@ -43,6 +43,7 @@ from loom.dsl import (
     COMMUTATIVE,
     CONSTANT_LIKE,
     ELEMENTWISE,
+    ENCODING,
     FLOAT_ELEMENT,
     I1_ELEMENT,
     INDEX,
@@ -661,6 +662,39 @@ vector_table_lookup = Op(
     examples=[
         "%values = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<32xi8> -> vector<32xf16>",
         "%values = vector.table.lookup %grid[%codes] : vector<16xf32>, vector<4x8xi8> -> vector<4x8xf32>",
+    ],
+)
+
+vector_transform = Op(
+    "vector.transform",
+    group=vector_ops,
+    doc="Apply an explicit numeric transform descriptor to vector register lanes.",
+    operands=[
+        Operand("source", VECTOR, doc="Vector lanes to transform."),
+        Operand("transform", ENCODING, doc="Numeric transform descriptor."),
+    ],
+    results=[Result("result", VECTOR, doc="Transformed vector lanes.")],
+    constraints=[
+        HasFloatElement("source"),
+        HasFloatElement("result"),
+        SameElementType("source", "result"),
+    ],
+    verify="loom_vector_transform_verify",
+    traits=[PURE],
+    format=[
+        Ref("source"),
+        COMMA,
+        Ref("transform"),
+        COLON,
+        TypeOf("source"),
+        COMMA,
+        TypeOf("transform"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%r = vector.transform %v, %xf : vector<128xf32>, encoding -> vector<128xf32>",
+        "%sketch = vector.transform %v, %jl : vector<128xf32>, encoding -> vector<64xf32>",
     ],
 )
 
@@ -1896,6 +1930,7 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_interleave,
     vector_deinterleave,
     vector_table_lookup,
+    vector_transform,
     vector_load,
     vector_store,
     vector_load_mask,

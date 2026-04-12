@@ -16,9 +16,11 @@ loom_cc_library(
   HDRS
     "ops.h"
     "params.h"
+    "roles.h"
     "storage.h"
   SRCS
     "builders.c"
+    "roles.c"
     "storage.c"
     "tables.c"
     "verify.c"

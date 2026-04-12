@@ -15,7 +15,7 @@ from loom.dialect.vector import (
     FloatAssumptionFlags,
     IntegerDot4Kind,
 )
-from loom.dsl import FLOAT, I1, INTEGER, EffectKind, Op
+from loom.dsl import ENCODING, FLOAT, I1, INTEGER, EffectKind, Op
 
 
 def _op_by_name() -> dict[str, Op]:
@@ -175,6 +175,22 @@ def test_vector_table_lookup_is_pure_register_lookup() -> None:
     assert ("SameElementType", ("table", "result")) in constraints
     assert ("SameShape", ("indices", "result")) in constraints
     assert "Pure" in {trait.name for trait in op.traits}
+    assert op.effects == ()
+
+
+def test_vector_transform_is_pure_numeric_transform_boundary() -> None:
+    op = _op_by_name()["vector.transform"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    trait_names = {trait.name for trait in op.traits}
+    transform_operand = op.operand("transform")
+
+    assert transform_operand is not None
+    assert transform_operand.type_constraint == ENCODING
+    assert ("HasFloatElement", ("source",)) in constraints
+    assert ("HasFloatElement", ("result",)) in constraints
+    assert ("SameElementType", ("source", "result")) in constraints
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
     assert op.effects == ()
 
 
