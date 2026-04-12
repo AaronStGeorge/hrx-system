@@ -1266,6 +1266,147 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
 }
 
 //===----------------------------------------------------------------------===//
+// Operand dictionary representation checks
+//===----------------------------------------------------------------------===//
+
+static iree_string_view_t loom_verify_attr_descriptor_name(
+    const loom_op_vtable_t* vtable, uint16_t attr_index) {
+  if (!vtable->attr_descriptors || attr_index >= vtable->attribute_count) {
+    return IREE_SV("operand dictionary names");
+  }
+  return loom_bstring_view(vtable->attr_descriptors[attr_index].name);
+}
+
+static void loom_verify_emit_operand_dict_count_mismatch(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, uint16_t attr_index, uint16_t names_count,
+    uint16_t operand_count) {
+  iree_string_view_t attr_name =
+      loom_verify_attr_descriptor_name(vtable, attr_index);
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_diagnostic_field(
+          attr_name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, attr_index),
+      loom_param_u32(names_count),
+      loom_param_string(IREE_SV("operand dictionary operands")),
+      loom_param_u32(operand_count),
+  };
+  loom_verify_emit_structured(state, op, &loom_err_structure_013, params,
+                              IREE_ARRAYSIZE(params));
+}
+
+static void loom_verify_emit_operand_dict_attr_violation(
+    loom_verify_state_t* state, const loom_op_t* op,
+    iree_string_view_t attr_name, uint16_t attr_index, int64_t actual_value,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_diagnostic_field(
+          attr_name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, attr_index),
+      loom_param_i64(actual_value),
+      loom_param_string(expected_constraint),
+  };
+  loom_verify_emit_structured(state, op, &loom_err_structure_014, params,
+                              IREE_ARRAYSIZE(params));
+}
+
+static void loom_verify_operand_dicts(loom_verify_state_t* state,
+                                      const loom_op_t* op,
+                                      const loom_op_vtable_t* vtable) {
+  if (!vtable->format_elements) return;
+  for (uint16_t element_index = 0; element_index < vtable->format_element_count;
+       ++element_index) {
+    const loom_format_element_t* element =
+        &vtable->format_elements[element_index];
+    if (element->kind != LOOM_FORMAT_KIND_OPERAND_DICT) continue;
+
+    uint16_t operand_start = element->field_index;
+    uint16_t attr_index = element->data;
+    if (operand_start > op->operand_count ||
+        attr_index >= op->attribute_count) {
+      continue;
+    }
+    uint16_t operand_count = (uint16_t)(op->operand_count - operand_start);
+    loom_attribute_t names_attr = loom_op_attrs(op)[attr_index];
+    if (loom_attr_is_absent(names_attr)) {
+      if (operand_count != 0) {
+        loom_verify_emit_operand_dict_count_mismatch(
+            state, op, vtable, attr_index, 0, operand_count);
+      }
+      continue;
+    }
+    if (names_attr.kind != LOOM_ATTR_DICT) continue;
+    if (names_attr.count != operand_count) {
+      loom_verify_emit_operand_dict_count_mismatch(
+          state, op, vtable, attr_index, names_attr.count, operand_count);
+      continue;
+    }
+    if (names_attr.count == 0) continue;
+
+    iree_string_view_t attr_name =
+        loom_verify_attr_descriptor_name(vtable, attr_index);
+    if (!names_attr.dict_entries) {
+      loom_verify_emit_operand_dict_attr_violation(
+          state, op, attr_name, attr_index, names_attr.count,
+          IREE_SV("non-null dictionary entries"));
+      continue;
+    }
+
+    for (uint16_t i = 0; i < names_attr.count; ++i) {
+      const loom_named_attr_t* entry = &names_attr.dict_entries[i];
+      if (entry->name_id == LOOM_STRING_ID_INVALID ||
+          entry->name_id >= state->module->strings.count) {
+        loom_verify_emit_operand_dict_attr_violation(
+            state, op, attr_name, attr_index, entry->name_id,
+            IREE_SV("interned key string id"));
+        continue;
+      }
+      iree_string_view_t key_name =
+          state->module->strings.entries[entry->name_id];
+      if (i > 0) {
+        const loom_named_attr_t* previous_entry =
+            &names_attr.dict_entries[i - 1];
+        if (previous_entry->name_id < state->module->strings.count) {
+          iree_string_view_t previous_key_name =
+              state->module->strings.entries[previous_entry->name_id];
+          if (iree_string_view_compare(previous_key_name, key_name) >= 0) {
+            loom_verify_emit_operand_dict_attr_violation(
+                state, op, attr_name, attr_index, i,
+                IREE_SV("canonical sorted unique keys"));
+          }
+        }
+      }
+      if (entry->value.kind != LOOM_ATTR_I64) {
+        loom_diagnostic_param_t params[] = {
+            loom_verify_param_string_for_diagnostic_field(
+                key_name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, attr_index),
+            loom_param_u32(entry->value.kind),
+            loom_param_u32(LOOM_ATTR_I64),
+        };
+        loom_verify_emit_structured(state, op, &loom_err_type_005, params,
+                                    IREE_ARRAYSIZE(params));
+        continue;
+      }
+      int64_t ordinal = entry->value.i64;
+      if (ordinal < 0 || ordinal >= operand_count) {
+        loom_verify_emit_operand_dict_attr_violation(
+            state, op, key_name, attr_index, ordinal,
+            IREE_SV("operand ordinal in range"));
+        continue;
+      }
+      for (uint16_t j = 0; j < i; ++j) {
+        const loom_named_attr_t* previous_entry = &names_attr.dict_entries[j];
+        if (previous_entry->value.kind == LOOM_ATTR_I64 &&
+            previous_entry->value.i64 == ordinal) {
+          loom_verify_emit_operand_dict_attr_violation(
+              state, op, key_name, attr_index, ordinal,
+              IREE_SV("unique operand ordinal"));
+          break;
+        }
+      }
+    }
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Semantic constraint interpreter
 //===----------------------------------------------------------------------===//
 
@@ -2731,6 +2872,13 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   // Per-field type constraint checks (operand/result types satisfy
   // the type category declared in the vtable descriptors).
   loom_verify_type_constraints(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
+
+  // OperandDict format elements are stored as ordinary variadic operands plus
+  // a key -> operand-ordinal DICT attribute. Verify that sidecar metadata is
+  // canonical and exactly describes the operand segment before later passes
+  // depend on keyed lookup.
+  loom_verify_operand_dicts(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // SSA encoding references embedded in operand/result types must point to

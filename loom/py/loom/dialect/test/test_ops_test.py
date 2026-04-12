@@ -19,6 +19,7 @@ from loom.assembly import (
     FuncArgs,
     IndexList,
     Keyword,
+    OperandDict,
     OptionalGroup,
     PredicateList,
     Ref,
@@ -47,6 +48,7 @@ from loom.dialect.test import (
     test_loop,
     test_map,
     test_neg,
+    test_operand_dict,
     test_ops,
     test_slice,
     test_update,
@@ -114,6 +116,9 @@ class TestFormatFieldsMatchDeclarations:
                     fields.add(f)
                 case BindingList(field=f) | FuncArgs(field=f):
                     fields.add(f)
+                case OperandDict(operands=operands, names=names):
+                    fields.add(operands)
+                    fields.add(names)
                 case PredicateList(field=f):
                     fields.add(f)
                 case IndexList(dynamic=d, static=s):
@@ -209,6 +214,7 @@ class TestFormatElementCoverage:
             ResultTypeList,
             Keyword,
             AttrDict,
+            OperandDict,
             Region,
             IndexList,
             BindingList,
@@ -335,6 +341,17 @@ class TestSpecificOps:
         # Format includes AttrDict.
         has_attr_dict = any(isinstance(e, AttrDict) for e in test_attrs.format)
         assert has_attr_dict
+
+    def test_operand_dict(self) -> None:
+        params_operand = test_operand_dict.operand("params")
+        assert params_operand is not None
+        assert params_operand.variadic
+        param_names_attr = test_operand_dict.attr("param_names")
+        assert param_names_attr is not None
+        assert param_names_attr.attr_type == "dict"
+        assert param_names_attr.optional
+        has_operand_dict = any(isinstance(e, OperandDict) for e in test_operand_dict.format)
+        assert has_operand_dict
 
     def test_convert(self) -> None:
         assert test_convert.is_pure

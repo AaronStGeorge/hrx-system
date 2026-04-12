@@ -70,6 +70,15 @@
 // The first-class `encoding` type is an SSA value type used in attachment
 // position (`tile<4xf32, %enc>`, `view<[%N]xf32, %layout>`). It is parsed as a
 // built-in keyword rather than as a parameterized TypeDef registry entry.
+// Static attachments use only attribute parameters:
+//
+//   tile<256xi8, #q8_0<block=32>>
+//
+// Dynamic parameters are named operands on encoding.define, and the resulting
+// `%enc` value is attached to shaped types:
+//
+//   %enc = encoding.define #q8_0<block=32> {group_size = %g : index} : encoding
+//   tile<256xi8, %enc>
 //
 // ==========================================================================
 // Memory layout

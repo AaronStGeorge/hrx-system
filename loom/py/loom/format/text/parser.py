@@ -19,7 +19,7 @@ Architecture (bottom to top):
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from enum import Enum, unique
 from typing import Any
 
@@ -33,6 +33,7 @@ from loom.assembly import (
     Glue,
     IndexList,
     Keyword,
+    OperandDict,
     OpRef,
     OptionalGroup,
     PredicateList,
@@ -227,6 +228,15 @@ def _parse_static_encoding_params_from_tokens(
                 )
             seen_names.add(name_token.text)
             tokenizer.expect(TokenKind.EQUALS)
+            if tokenizer.at(TokenKind.SSA_VALUE):
+                raise ParseError(
+                    f"static encoding parameter '{name_token.text}' cannot use "
+                    "an SSA value; pass dynamic parameters with "
+                    "encoding.define #family<static attrs> "
+                    "{param = %value : type} : encoding",
+                    tokenizer.peek().location,
+                    filename,
+                )
             value = _parse_generic_attr_value_from_tokens(
                 tokenizer,
                 module,
@@ -1291,7 +1301,28 @@ class Parser:
             regions=parsed.regions,
             location_id=location_id,
         )
+        self._validate_operation(op, start_loc)
         return op
+
+    def _validate_operation(self, op: Operation, location: SourceLocation) -> None:
+        """Apply parse-time checks that depend on multiple parsed fields."""
+        if op.name != "encoding.define":
+            return
+        spec = op.attributes.get("spec")
+        param_names = op.attributes.get("param_names")
+        if not isinstance(spec, EncodingInstance) or not isinstance(
+            param_names, Mapping
+        ):
+            return
+        static_names = {name for name, _value in spec.params}
+        for dynamic_name in param_names:
+            if dynamic_name in static_names:
+                raise ParseError(
+                    "encoding.define parameter "
+                    f"'{dynamic_name}' is both static and dynamic",
+                    location,
+                    self._tokenizer._filename,
+                )
 
     # --- Location annotation parsing ---
 
@@ -1550,6 +1581,10 @@ class Parser:
                 case AttrDict(field=dict_field):
                     if tok.at(TokenKind.LBRACE):
                         self._parse_attr_dict(parsed, dict_field)
+
+                case OperandDict(operands=operand_field, names=names_field):
+                    if tok.at(TokenKind.LBRACE):
+                        self._parse_operand_dict(parsed, operand_field, names_field)
 
                 case RegionFmt(field=name):
                     implicit_terminator_decl = self._implicit_terminator_decl(op_decl)
@@ -2286,3 +2321,61 @@ class Parser:
             parsed.attributes[field] = CanonicalAttrDict(entries)
         else:
             parsed.attributes.update(CanonicalAttrDict(entries))
+
+    # --- Operand dict ---
+
+    def _parse_operand_dict(
+        self, parsed: ParsedFields, _operand_field: str, names_field: str
+    ) -> None:
+        """Parse {key = %value : type, ...} into keyed variadic operands."""
+        tok = self._tokenizer
+        tok.expect(TokenKind.LBRACE)
+        entries: list[tuple[str, int]] = []
+        seen_keys: set[str] = set()
+        while not tok.at(TokenKind.RBRACE):
+            key_tok = tok.expect(TokenKind.BARE_IDENT)
+            key = key_tok.text
+            if key in seen_keys:
+                raise ParseError(
+                    f"duplicate operand dictionary key '{key}'",
+                    key_tok.location,
+                    tok._filename,
+                )
+            seen_keys.add(key)
+            tok.expect(TokenKind.EQUALS)
+            value_tok = tok.expect(TokenKind.SSA_VALUE)
+            try:
+                value_id = self._scope.lookup(value_tok.text)
+            except KeyError:
+                raise ParseError(
+                    f"undefined SSA value '%{value_tok.text}'",
+                    value_tok.location,
+                    tok._filename,
+                ) from None
+            tok.expect(TokenKind.COLON)
+            annotated_type, _ = parse_type_from_tokens(
+                tok,
+                self._scope,
+                self._module,
+                self._type_registry,
+                TypeParseMode.BODY,
+            )
+            actual_type = self._module.values[value_id].type
+            if actual_type != annotated_type:
+                raise ParseError(
+                    f"operand dictionary entry '{key}' has type "
+                    f"{actual_type}, but annotation is {annotated_type}",
+                    value_tok.location,
+                    tok._filename,
+                )
+            entries.append((key, value_id))
+            if not tok.try_consume(TokenKind.COMMA):
+                break
+        tok.expect(TokenKind.RBRACE)
+        sorted_entries = sorted(entries, key=lambda item: item[0])
+        name_entries: list[tuple[str, int]] = []
+        for ordinal, (key, value_id) in enumerate(sorted_entries):
+            name_entries.append((key, ordinal))
+            parsed.operand_ids.append(value_id)
+        if name_entries:
+            parsed.attributes[names_field] = CanonicalAttrDict(name_entries)

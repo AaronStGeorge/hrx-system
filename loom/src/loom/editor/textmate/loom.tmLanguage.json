@@ -161,7 +161,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(test)\\.(fact_non_negative|fact_power_of_two|isolated_region|mutate_resource|implicit_yield|write_resource|fact_non_zero|fact_positive|fact_range_hi|fact_range_lo|read_resource|fact_divisor|constant|convert|counter|deflate|assume|branch|invoke|reduce|update|alloc|attrs|slice|yield|addi|cast|decl|func|loop|cmp|dim|map|neg|use)\\b",
+          "match": "\\b(test)\\.(fact_non_negative|fact_power_of_two|isolated_region|mutate_resource|implicit_yield|write_resource|fact_non_zero|fact_positive|fact_range_hi|fact_range_lo|read_resource|fact_divisor|operand_dict|constant|convert|counter|deflate|assume|branch|invoke|reduce|update|alloc|attrs|slice|yield|addi|cast|decl|func|loop|cmp|dim|map|neg|use)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"

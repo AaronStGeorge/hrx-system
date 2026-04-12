@@ -32,6 +32,7 @@ from loom.assembly import (
     Glue,
     IndexList,
     Keyword,
+    OperandDict,
     OpRef,
     OptionalGroup,
     PredicateList,
@@ -172,6 +173,18 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             "doc": f"Binding list: {name}",
                         }
                     )
+
+                case OperandDict(operands=operand_field, names=names_field):
+                    params.append(
+                        {
+                            "name": operand_field,
+                            "kind": "operand_dict",
+                            "type_hint": "dict[str, ValueRef]",
+                            "names_field": names_field,
+                            "doc": f"Operand dictionary: {operand_field}",
+                        }
+                    )
+                    covered_attrs.add(names_field)
 
                 case ResultType(field=name):
                     params.append(
@@ -460,6 +473,7 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
             "operand_variadic",
             "index_list",
             "binding_list",
+            "operand_dict",
         }
     )
 
@@ -514,6 +528,13 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
                 lines.append(f'        _attributes["{operand_param["static_field"]}"] = _static')
             case "binding_list":
                 lines.append(f"        _operands.extend({operand_param['name']})")
+            case "operand_dict":
+                lines.append(f"        if {operand_param['name']}:")
+                lines.append("            _operand_dict_names: builtins.dict[str, int] = {}")
+                lines.append(f"            for _name in sorted({operand_param['name']}):")
+                lines.append("                _operand_dict_names[_name] = len(_operand_dict_names)")
+                lines.append(f"                _operands.append({operand_param['name']}[_name])")
+                lines.append(f'            _attributes["{operand_param["names_field"]}"] = _operand_dict_names')
 
     # Build call and return with appropriate type narrowing.
     if has_result_type_list:

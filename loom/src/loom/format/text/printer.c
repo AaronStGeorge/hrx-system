@@ -122,6 +122,8 @@ static iree_status_t loom_print_attr(loom_output_stream_t* stream,
                                      const loom_attribute_t* attr,
                                      const loom_module_t* module,
                                      const loom_attr_descriptor_t* descriptor);
+static iree_status_t loom_print_value_type(loom_print_context_t* ctx,
+                                           loom_value_id_t value_id);
 
 // Emits a canonical JSON-compatible string literal. Stored strings are expected
 // to contain decoded UTF-8 payload bytes; this helper validates that invariant
@@ -814,6 +816,8 @@ static bool loom_print_format_element_covers_attr(
       return element->field_index == attr_index;
     case LOOM_FORMAT_KIND_INDEX_LIST:
       return element->data == attr_index;
+    case LOOM_FORMAT_KIND_OPERAND_DICT:
+      return element->data == attr_index;
     case LOOM_FORMAT_KIND_ATTR_DICT:
       if (iree_any_bit_set(element->data, LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS)) {
         return false;
@@ -919,6 +923,126 @@ static iree_status_t loom_print_inline_attr_dict(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
     loom_print_did_write(ctx);
   }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_operand_dict(
+    loom_print_context_t* ctx, const loom_op_t* op,
+    const loom_format_element_t* element) {
+  uint16_t start = element->field_index;
+  if (start > op->operand_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format OPERAND_DICT field_index %u out of range (op has %u operands)",
+        start, op->operand_count);
+  }
+  uint16_t operand_count = (uint16_t)(op->operand_count - start);
+  if (element->data >= op->attribute_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format OPERAND_DICT attr index %u out of range (op has %u attributes)",
+        element->data, op->attribute_count);
+  }
+
+  loom_attribute_t names_attr = loom_op_attrs(op)[element->data];
+  if (loom_attr_is_absent(names_attr)) {
+    if (operand_count == 0) return iree_ok_status();
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format OPERAND_DICT has %u operands but names attr %u is absent",
+        operand_count, element->data);
+  }
+  if (names_attr.kind != LOOM_ATTR_DICT) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format OPERAND_DICT attr index %u expected DICT attr but found %d",
+        element->data, (int)names_attr.kind);
+  }
+  if (names_attr.count == 0) {
+    if (operand_count == 0) return iree_ok_status();
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format OPERAND_DICT has %u operands but names attr is empty",
+        operand_count);
+  }
+  if (!names_attr.dict_entries) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "OPERAND_DICT names attr has count %u but NULL "
+                            "entries",
+                            names_attr.count);
+  }
+  if (names_attr.count != operand_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "format OPERAND_DICT has %u names but %u operands",
+                            names_attr.count, operand_count);
+  }
+
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  iree_host_size_t dict_start = ctx->stream->offset;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+  for (uint16_t i = 0; i < names_attr.count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
+    const loom_named_attr_t* entry = &names_attr.dict_entries[i];
+    if (entry->name_id >= ctx->module->strings.count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "OPERAND_DICT key string id %u out of range (module has %" PRIhsz
+          " strings)",
+          entry->name_id, ctx->module->strings.count);
+    }
+    if (i > 0) {
+      int comparison = iree_string_view_compare(
+          ctx->module->strings.entries[names_attr.dict_entries[i - 1].name_id],
+          ctx->module->strings.entries[entry->name_id]);
+      if (comparison >= 0) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "OPERAND_DICT names attr keys are not "
+                                "canonical sorted unique keys");
+      }
+    }
+    if (entry->value.kind != LOOM_ATTR_I64) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "OPERAND_DICT key attr expected I64 ordinal but found %d",
+          (int)entry->value.kind);
+    }
+    int64_t ordinal = entry->value.i64;
+    if (ordinal < 0 || ordinal >= operand_count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "OPERAND_DICT key ordinal %" PRId64
+                              " out of range for %u operands",
+                              ordinal, operand_count);
+    }
+    for (uint16_t j = 0; j < i; ++j) {
+      if (names_attr.dict_entries[j].value.kind == LOOM_ATTR_I64 &&
+          names_attr.dict_entries[j].value.i64 == ordinal) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "OPERAND_DICT key ordinal %" PRId64 " is duplicated", ordinal);
+      }
+    }
+
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(
+        ctx->stream, ctx->module->strings.entries[entry->name_id]));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, " = "));
+    uint16_t operand_index = (uint16_t)(start + (uint16_t)ordinal);
+    iree_host_size_t value_start = ctx->stream->offset;
+    IREE_RETURN_IF_ERROR(loom_print_value_ref(
+        ctx->stream, ctx->module, loom_op_const_operands(op)[operand_index]));
+    loom_print_report_field(
+        ctx, loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index),
+        value_start, ctx->stream->offset);
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, " : "));
+    IREE_RETURN_IF_ERROR(
+        loom_print_value_type(ctx, loom_op_const_operands(op)[operand_index]));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+  loom_print_did_write(ctx);
+  loom_print_report_field(
+      ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->data),
+      dict_start, ctx->stream->offset);
   return iree_ok_status();
 }
 
@@ -1449,6 +1573,10 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         IREE_RETURN_IF_ERROR(loom_print_attr_with_field(
             ctx, &dict_attr, NULL,
             loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->field_index)));
+        break;
+      }
+      case LOOM_FORMAT_KIND_OPERAND_DICT: {
+        IREE_RETURN_IF_ERROR(loom_print_operand_dict(ctx, op, element));
         break;
       }
       case LOOM_FORMAT_KIND_PREDICATE_LIST: {

@@ -9,16 +9,14 @@
 from loom.assembly import (
     COLON,
     COMMA,
-    LPAREN,
-    RPAREN,
     Attr,
-    OptionalGroup,
+    OperandDict,
     Ref,
-    Refs,
     TypeOf,
 )
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_DICT,
     ATTR_TYPE_ENCODING,
     ATTR_TYPE_STRING,
     ENCODING,
@@ -46,22 +44,29 @@ encoding_define = Op(
     group=encoding_ops,
     doc="Create an encoding value from a static encoding specification.",
     operands=[
-        Operand("captures", ANY, variadic=True),
+        Operand("params", ANY, variadic=True),
     ],
     results=[Result("result", ENCODING)],
     attrs=[
         AttrDef("spec", ATTR_TYPE_ENCODING, doc="Static encoding specification."),
+        AttrDef(
+            "param_names",
+            ATTR_TYPE_DICT,
+            optional=True,
+            doc="Sorted dynamic parameter names mapped to operand ordinals.",
+        ),
     ],
     traits=[PURE],
+    verify="loom_encoding_define_verify",
     format=[
         Attr("spec"),
-        OptionalGroup([LPAREN, Refs("captures"), RPAREN], anchor="captures"),
+        OperandDict("params", "param_names"),
         COLON,
         TypeOf("result"),
     ],
     examples=[
         "%enc = encoding.define #q8_0<block=32> : encoding",
-        "%enc = encoding.define #q6_k : encoding",
+        "%enc = encoding.define #q8_0<block=32> {group_size = %group_size : index} : encoding",
     ],
 )
 

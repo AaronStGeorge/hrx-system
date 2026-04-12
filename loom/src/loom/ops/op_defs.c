@@ -266,6 +266,128 @@ iree_status_t loom_builder_intern_string(loom_builder_t* builder,
   return loom_module_intern_string(builder->module, string, out_string_id);
 }
 
+static iree_status_t loom_builder_compare_string_ids(
+    const loom_module_t* module, loom_string_id_t lhs_id,
+    loom_string_id_t rhs_id, int* out_comparison) {
+  if (lhs_id == LOOM_STRING_ID_INVALID || lhs_id >= module->strings.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operand dictionary key string id %u is out of range (module has "
+        "%" PRIhsz " strings)",
+        lhs_id, module->strings.count);
+  }
+  if (rhs_id == LOOM_STRING_ID_INVALID || rhs_id >= module->strings.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operand dictionary key string id %u is out of range (module has "
+        "%" PRIhsz " strings)",
+        rhs_id, module->strings.count);
+  }
+  *out_comparison = iree_string_view_compare(module->strings.entries[lhs_id],
+                                             module->strings.entries[rhs_id]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_builder_set_operand_dict(
+    loom_builder_t* builder, loom_named_value_slice_t named_values,
+    loom_value_id_t* operand_storage, loom_attribute_t* out_names_attr) {
+  if (!out_names_attr) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operand dictionary names attribute output is NULL");
+  }
+  *out_names_attr = loom_attr_absent();
+  if (!builder || !builder->module || !builder->arena) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "builder has no module or arena");
+  }
+  if (named_values.count == 0) return iree_ok_status();
+  if (!named_values.entries) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty operand dictionary has a NULL entry pointer");
+  }
+  if (!operand_storage) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty operand dictionary has a NULL operand storage pointer");
+  }
+  if (named_values.count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "operand dictionary has %" PRIhsz
+                            " entries, max %u",
+                            named_values.count, (unsigned)UINT16_MAX);
+  }
+
+  loom_named_value_t* sorted_values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      builder->arena, named_values.count, sizeof(*sorted_values),
+      (void**)&sorted_values));
+
+  iree_host_size_t sorted_count = 0;
+  for (iree_host_size_t i = 0; i < named_values.count; ++i) {
+    const loom_named_value_t entry = named_values.entries[i];
+    if (entry.reserved != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "operand dictionary entry reserved bits must be zero");
+    }
+    if (entry.name_id == LOOM_STRING_ID_INVALID ||
+        entry.name_id >= builder->module->strings.count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "operand dictionary key string id %u is out of range (module has "
+          "%" PRIhsz " strings)",
+          entry.name_id, builder->module->strings.count);
+    }
+    if (entry.value_id == LOOM_VALUE_ID_INVALID ||
+        entry.value_id >= builder->module->values.count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "operand dictionary value id %u is out of range (module has %" PRIhsz
+          " values)",
+          entry.value_id, builder->module->values.count);
+    }
+
+    iree_host_size_t insert_index = sorted_count;
+    while (insert_index > 0) {
+      int comparison = 0;
+      IREE_RETURN_IF_ERROR(loom_builder_compare_string_ids(
+          builder->module, entry.name_id,
+          sorted_values[insert_index - 1].name_id, &comparison));
+      if (comparison == 0) {
+        iree_string_view_t name =
+            builder->module->strings.entries[entry.name_id];
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate operand dictionary key '%.*s'",
+                                (int)name.size, name.data);
+      }
+      if (comparison > 0) break;
+      sorted_values[insert_index] = sorted_values[insert_index - 1];
+      --insert_index;
+    }
+
+    sorted_values[insert_index] = entry;
+    ++sorted_count;
+  }
+
+  loom_named_attr_t* name_entries = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(builder->arena, named_values.count,
+                                sizeof(*name_entries), (void**)&name_entries));
+  for (iree_host_size_t i = 0; i < sorted_count; ++i) {
+    operand_storage[i] = sorted_values[i].value_id;
+    name_entries[i] = (loom_named_attr_t){
+        .name_id = sorted_values[i].name_id,
+        .reserved = 0,
+        .value = loom_attr_i64((int64_t)i),
+    };
+  }
+  return loom_module_make_canonical_attr_dict(
+      builder->module, loom_make_named_attr_slice(name_entries, sorted_count),
+      out_names_attr);
+}
+
 iree_status_t loom_builder_allocate_op(
     loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
     uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,

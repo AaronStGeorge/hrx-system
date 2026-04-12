@@ -23,6 +23,7 @@ from loom.assembly import (
     FuncArgs,
     IndexList,
     Keyword,
+    OperandDict,
     OptionalGroup,
     PredicateList,
     Ref,
@@ -127,6 +128,13 @@ class TestAttrDict:
 
     def test_singleton_equality(self) -> None:
         assert AttrDict() == AttrDict()
+
+
+class TestOperandDict:
+    def test_construct(self) -> None:
+        operand_dict = OperandDict("params", "param_names")
+        assert operand_dict.operands == "params"
+        assert operand_dict.names == "param_names"
 
 
 class TestRegion:

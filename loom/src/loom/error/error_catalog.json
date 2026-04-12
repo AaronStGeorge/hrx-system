@@ -652,6 +652,24 @@
     "fix_hint_template": "The encoding value must have type 'encoding'; it should be the result of an encoding.define op"
   },
   {
+    "error_id": "ERR_ENCODING_006",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding parameter is both static and dynamic.",
+    "message_template": "encoding.define parameter '{param_name}' is both static and dynamic",
+    "params": [
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Keep compile-time values in #family<...> and SSA values in the encoding.define operand dictionary; each parameter name must appear in exactly one place"
+  },
+  {
     "error_id": "ERR_STRUCTURE_001",
     "domain": 4,
     "domain_name": "STRUCTURE",
@@ -1735,6 +1753,60 @@
     "summary": "Unterminated angle bracket.",
     "message_template": "unterminated angle bracket",
     "params": []
+  },
+  {
+    "error_id": "ERR_PARSE_027",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 27,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate operand dictionary key.",
+    "message_template": "operand dictionary key '{key_name}' is already defined",
+    "params": [
+      {
+        "name": "key_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Each key in an operand dictionary must be unique"
+  },
+  {
+    "error_id": "ERR_PARSE_028",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 28,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Static encoding parameter uses an SSA value.",
+    "message_template": "static encoding parameter '{param_name}' cannot use an SSA value",
+    "params": [
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Keep #family<...> parameters static; pass dynamic parameters with encoding.define #family<static attrs> {name = %value : type} : encoding"
+  },
+  {
+    "error_id": "ERR_PARSE_029",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 29,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate encoding parameter.",
+    "message_template": "encoding parameter '{param_name}' is already defined",
+    "params": [
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Each static encoding parameter name must be unique"
   },
   {
     "error_id": "ERR_BYTECODE_001",

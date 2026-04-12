@@ -42,6 +42,7 @@ from loom.assembly import (
     Glue,
     IndexList,
     Keyword,
+    OperandDict,
     OpRef,
     OptionalGroup,
     PredicateList,
@@ -963,6 +964,15 @@ class Printer:
                         if attr_str:
                             stream.emit(attr_str)
 
+                case OperandDict(operands=operand_field, names=names_field):
+                    assert isinstance(fields, ResolvedFields)
+                    covered_attrs.add(names_field)
+                    operand_dict_str = self._format_operand_dict(
+                        fields, operand_field, names_field, module
+                    )
+                    if operand_dict_str:
+                        stream.emit(operand_dict_str)
+
                 case RegionFmt(field=name):
                     region = fields.region(name)
                     implicit_terminator_name = _implicit_terminator_name(op_decl)
@@ -1171,6 +1181,42 @@ class Printer:
                 parts.append(f"{operand_name} : {operand_type}")
 
         return "(" + ", ".join(parts) + ")"
+
+    def _format_operand_dict(
+        self,
+        fields: ResolvedFields,
+        operand_field: str,
+        names_field: str,
+        module: Module,
+    ) -> str:
+        """Format {key = %value : type, ...} from keyed variadic operands."""
+        names = fields.attr(names_field)
+        if not names:
+            return ""
+        if not isinstance(names, Mapping):
+            raise TypeError(
+                f"OperandDict names field '{names_field}' must be a mapping, "
+                f"got {type(names).__name__}."
+            )
+
+        operand_ids = fields.value_ids(operand_field)
+        parts: list[str] = []
+        for key, ordinal in names.items():
+            if not isinstance(ordinal, int):
+                raise TypeError(
+                    f"OperandDict entry '{key}' must map to an integer ordinal, "
+                    f"got {type(ordinal).__name__}."
+                )
+            if ordinal < 0 or ordinal >= len(operand_ids):
+                raise ValueError(
+                    f"OperandDict entry '{key}' maps to ordinal {ordinal}, "
+                    f"but field '{operand_field}' has {len(operand_ids)} operands."
+                )
+            operand_id = operand_ids[ordinal]
+            operand_name = self._value_name(operand_id)
+            operand_type = self._print_value_type(operand_id, module)
+            parts.append(f"{key} = {operand_name} : {operand_type}")
+        return "{" + ", ".join(parts) + "}"
 
     def _format_named_dict(self, dict_value: Mapping[str, Any], op_decl: Op) -> str:
         """Format {key = value, ...} from a named dict attribute."""

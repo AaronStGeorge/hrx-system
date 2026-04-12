@@ -19,7 +19,7 @@ class EncodingBuilders:
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
 
-    def define(self, *, spec: Any, captures: list[ValueRef], result_types: list[Type]) -> ValueRef:
+    def define(self, *, spec: Any, params: dict[str, ValueRef], result_types: list[Type]) -> ValueRef:
         """Create an encoding value from a static encoding specification.
 
         Example::
@@ -29,7 +29,12 @@ class EncodingBuilders:
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
         _attributes["spec"] = spec
-        _operands.extend(captures)
+        if params:
+            _operand_dict_names: builtins.dict[str, int] = {}
+            for _name in sorted(params):
+                _operand_dict_names[_name] = len(_operand_dict_names)
+                _operands.append(params[_name])
+            _attributes["param_names"] = _operand_dict_names
         return cast(ValueRef, self._b.build("encoding.define", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def isa(self, *, enc: ValueRef, category: str, result_types: list[Type]) -> ValueRef:

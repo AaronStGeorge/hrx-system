@@ -675,9 +675,11 @@ class EncodingInstance:
         When set, the printer uses the alias instead of the full
         #name<params> form. Defined at file level: #enc = #q8_0<block=32>
         Aliases are display-only and do not participate in equality/hash.
-    params: Canonical named attributes as sorted key-value pairs. Values use
+    params: Canonical static attributes as sorted key-value pairs. Values use
         the same Python attribute domain as op attrs: ints, floats, bools,
-        strings, EncodingInstance, CanonicalAttrDict, and i64 arrays.
+        strings, EncodingInstance, CanonicalAttrDict, and i64 arrays. Dynamic
+        encoding parameters are named SSA operands on encoding.define, not
+        nested values in this static attribute payload.
     """
 
     name: str

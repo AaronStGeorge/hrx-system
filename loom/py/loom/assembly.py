@@ -63,6 +63,7 @@ __all__ = [
     "AttrDict",
     "Region",
     "IndexList",
+    "OperandDict",
     "BindingList",
     "FuncArgs",
     "PredicateList",
@@ -290,6 +291,22 @@ class AttrDict:
     """
 
     field: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class OperandDict:
+    """A keyed SSA operand dictionary.
+
+    Prints/parses: {key = %value : type, key = %value : type, ...}
+
+    |operands| names a variadic operand field. |names| names an optional dict
+    attribute whose keys are the operand dictionary keys and whose values are
+    operand ordinals relative to the variadic field start. The dictionary never
+    stores SSA value IDs; the SSA values are ordinary op operands.
+    """
+
+    operands: str
+    names: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -633,6 +650,7 @@ type FormatElement = (
     | AttrDict
     | Region
     | IndexList
+    | OperandDict
     | BindingList
     | FuncArgs
     | PredicateList

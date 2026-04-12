@@ -12,6 +12,31 @@
 // Format element parsers
 //===----------------------------------------------------------------------===//
 
+#define LOOM_OPERAND_DICT_INLINE_ENTRIES 16
+
+typedef struct loom_parsed_operand_dict_entry_t {
+  // Interned key spelling for this operand dictionary entry.
+  loom_string_id_t name_id;
+  // SSA value referenced by this entry.
+  loom_value_id_t value_id;
+  // Source token for the entry key.
+  loom_token_t key_token;
+  // Source token for the entry SSA value.
+  loom_token_t value_token;
+} loom_parsed_operand_dict_entry_t;
+
+typedef struct loom_parsed_operand_dict_entries_t {
+  // Mutable entry storage, initially pointing at inline_entries.
+  loom_parsed_operand_dict_entry_t* entries;
+  // Number of populated entries.
+  iree_host_size_t count;
+  // Allocated entry capacity.
+  iree_host_size_t capacity;
+  // Inline storage for small operand dictionaries.
+  loom_parsed_operand_dict_entry_t
+      inline_entries[LOOM_OPERAND_DICT_INLINE_ENTRIES];
+} loom_parsed_operand_dict_entries_t;
+
 static iree_status_t loom_parse_format_add_field_span(
     loom_parser_t* parser, loom_parsed_op_t* parsed,
     loom_location_field_kind_t kind, uint16_t index, loom_token_t start_token) {
@@ -781,6 +806,217 @@ static iree_status_t loom_parse_format_emit_duplicate_attr_name(
                           IREE_ARRAYSIZE(params), token);
 }
 
+static iree_status_t loom_parse_format_emit_duplicate_operand_dict_key(
+    loom_parser_t* parser, loom_token_t key_token,
+    loom_token_t previous_key_token) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(key_token.text),
+  };
+  return loom_parser_emit_related(
+      parser, &loom_err_parse_027, params, IREE_ARRAYSIZE(params), key_token,
+      IREE_SV("previously defined here"), previous_key_token);
+}
+
+static void loom_parsed_operand_dict_entries_initialize(
+    loom_parsed_operand_dict_entries_t* entries) {
+  entries->entries = entries->inline_entries;
+  entries->count = 0;
+  entries->capacity = LOOM_OPERAND_DICT_INLINE_ENTRIES;
+}
+
+static iree_status_t loom_parsed_operand_dict_entries_add(
+    loom_parser_t* parser, loom_parsed_operand_dict_entries_t* entries,
+    loom_parsed_operand_dict_entry_t entry) {
+  if (entries->count >= UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "operand dictionary has more than %u entries",
+                            (unsigned)UINT16_MAX);
+  }
+  if (entries->count >= entries->capacity) {
+    iree_host_size_t capacity = entries->capacity;
+    IREE_RETURN_IF_ERROR(
+        iree_arena_grow_array(&parser->parser_arena, entries->count, 0,
+                              sizeof(loom_parsed_operand_dict_entry_t),
+                              &capacity, (void**)&entries->entries));
+    entries->capacity = capacity;
+  }
+  entries->entries[entries->count++] = entry;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_compare_string_ids(
+    const loom_module_t* module, loom_string_id_t lhs_id,
+    loom_string_id_t rhs_id, int* out_comparison) {
+  if (lhs_id == LOOM_STRING_ID_INVALID || lhs_id >= module->strings.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operand dictionary key string id %u is out of range (module has "
+        "%" PRIhsz " strings)",
+        lhs_id, module->strings.count);
+  }
+  if (rhs_id == LOOM_STRING_ID_INVALID || rhs_id >= module->strings.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operand dictionary key string id %u is out of range (module has "
+        "%" PRIhsz " strings)",
+        rhs_id, module->strings.count);
+  }
+  *out_comparison = iree_string_view_compare(module->strings.entries[lhs_id],
+                                             module->strings.entries[rhs_id]);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_sort_operand_dict_entries(
+    loom_parser_t* parser, loom_parsed_operand_dict_entries_t* entries) {
+  for (iree_host_size_t i = 1; i < entries->count; ++i) {
+    loom_parsed_operand_dict_entry_t entry = entries->entries[i];
+    iree_host_size_t insert_index = i;
+    while (insert_index > 0) {
+      int comparison = 0;
+      IREE_RETURN_IF_ERROR(loom_parse_format_compare_string_ids(
+          parser->module, entry.name_id,
+          entries->entries[insert_index - 1].name_id, &comparison));
+      if (comparison > 0) break;
+      entries->entries[insert_index] = entries->entries[insert_index - 1];
+      --insert_index;
+    }
+    entries->entries[insert_index] = entry;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_emit_operand_dict_type_mismatch(
+    loom_parser_t* parser, loom_token_t key_token, loom_token_t value_token,
+    loom_type_t actual_type, loom_type_t annotated_type) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(key_token.text),
+      loom_param_type(actual_type),
+      loom_param_string(IREE_SV("type annotation")),
+      loom_param_type(annotated_type),
+  };
+  return loom_parser_emit(parser, &loom_err_type_001, params,
+                          IREE_ARRAYSIZE(params), value_token);
+}
+
+static iree_status_t loom_parse_format_operand_dict(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed) {
+  if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LBRACE)) {
+    return iree_ok_status();
+  }
+
+  uint32_t errors_before = parser->error_count;
+  loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LBRACE, NULL);
+
+  loom_parsed_operand_dict_entries_t entries;
+  loom_parsed_operand_dict_entries_initialize(&entries);
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RBRACE) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if (entries.count > 0 &&
+        !loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+      break;
+    }
+
+    loom_token_t key_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &key_token);
+    loom_string_id_t key_id = LOOM_STRING_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_module_intern_string(parser->module, key_token.text, &key_id));
+    for (iree_host_size_t i = 0; i < entries.count; ++i) {
+      if (entries.entries[i].name_id == key_id) {
+        IREE_RETURN_IF_ERROR(loom_parse_format_emit_duplicate_operand_dict_key(
+            parser, key_token, entries.entries[i].key_token));
+        loom_parser_sync_to_brace(parser);
+        return iree_ok_status();
+      }
+    }
+
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_EQUALS, NULL);
+
+    loom_token_t value_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &value_token);
+    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    LOOM_PARSE_RESOLVE_VALUE(parser, value_token, &value_id);
+
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+
+    loom_type_t annotated_type = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &annotated_type));
+    if (parser->error_count > errors_before) {
+      loom_parser_sync_to_brace(parser);
+      return iree_ok_status();
+    }
+
+    loom_type_t actual_type = loom_module_value_type(parser->module, value_id);
+    if (!loom_type_equal(actual_type, annotated_type)) {
+      IREE_RETURN_IF_ERROR(loom_parse_format_emit_operand_dict_type_mismatch(
+          parser, key_token, value_token, actual_type, annotated_type));
+      loom_parser_sync_to_brace(parser);
+      return iree_ok_status();
+    }
+
+    IREE_RETURN_IF_ERROR(
+        loom_parsed_operand_dict_entries_add(parser, &entries,
+                                             (loom_parsed_operand_dict_entry_t){
+                                                 .name_id = key_id,
+                                                 .value_id = value_id,
+                                                 .key_token = key_token,
+                                                 .value_token = value_token,
+                                             }));
+  }
+
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACE, NULL);
+
+  if (entries.count == 0) return iree_ok_status();
+  if (element->data > UINT8_MAX) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "format OPERAND_DICT attr index %u out of range",
+                            element->data);
+  }
+  if ((iree_host_size_t)element->field_index + entries.count > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "operand dictionary storage range exceeds max operand count %u",
+        (unsigned)UINT16_MAX);
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_parse_format_sort_operand_dict_entries(parser, &entries));
+
+  loom_named_attr_t* name_entries = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&parser->parser_arena, entries.count,
+                                sizeof(*name_entries), (void**)&name_entries));
+  for (iree_host_size_t i = 0; i < entries.count; ++i) {
+    uint16_t operand_index = (uint16_t)(element->field_index + i);
+    IREE_RETURN_IF_ERROR(
+        loom_parsed_op_set_operand(parsed, &parser->parser_arena, operand_index,
+                                   entries.entries[i].value_id));
+    IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+        parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+        operand_index, entries.entries[i].value_token,
+        entries.entries[i].value_token.line,
+        entries.entries[i].value_token.end_column));
+    name_entries[i] = (loom_named_attr_t){
+        .name_id = entries.entries[i].name_id,
+        .reserved = 0,
+        .value = loom_attr_i64((int64_t)i),
+    };
+  }
+
+  loom_attribute_t names_attr = {0};
+  IREE_RETURN_IF_ERROR(loom_module_make_canonical_attr_dict(
+      parser->module, loom_make_named_attr_slice(name_entries, entries.count),
+      &names_attr));
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+      parsed, &parser->parser_arena, (uint8_t)element->data, names_attr));
+  return loom_parse_format_add_field_span(parser, parsed,
+                                          LOOM_LOCATION_FIELD_ATTRIBUTE,
+                                          (uint8_t)element->data, start_token);
+}
+
 static iree_status_t loom_parse_format_inline_attr_dict(
     loom_parser_t* parser, const loom_op_vtable_t* vtable,
     loom_parsed_op_t* parsed) {
@@ -1118,6 +1354,12 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
                 element->field_index, start_token));
           }
         }
+        break;
+      }
+
+      case LOOM_FORMAT_KIND_OPERAND_DICT: {
+        IREE_RETURN_IF_ERROR(
+            loom_parse_format_operand_dict(parser, element, parsed));
         break;
       }
 

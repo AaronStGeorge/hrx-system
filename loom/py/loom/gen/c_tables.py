@@ -36,6 +36,7 @@ from loom.assembly import (
     Glue,
     IndexList,
     Keyword,
+    OperandDict,
     OpRef,
     OptionalGroup,
     PredicateList,
@@ -745,6 +746,21 @@ def _translate_format_elements(
                         attr_dict_flags = "LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS"
                     elements.append(("LOOM_FORMAT_KIND_ATTR_DICT", attr_index, attr_dict_flags))
 
+                case OperandDict(operands=operand_field, names=names_field):
+                    operand_kind, operand_index = _resolve_field(operand_field)
+                    names_kind, names_index = _resolve_field(names_field)
+                    if operand_kind != FieldKind.OPERAND:
+                        raise ValueError(f"Op '{op.name}': OperandDict operands field '{operand_field}' is not an operand field")
+                    if names_kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': OperandDict names field '{names_field}' is not an attr field")
+                    operand_desc = layout.fields[operand_field]
+                    if not operand_desc.variadic:
+                        raise ValueError(f"Op '{op.name}': OperandDict operands field '{operand_field}' must be variadic")
+                    attr_def = op.attr(names_field)
+                    if attr_def is None or attr_def.attr_type != "dict":
+                        raise ValueError(f"Op '{op.name}': OperandDict names field '{names_field}' must be a dict attr")
+                    elements.append(("LOOM_FORMAT_KIND_OPERAND_DICT", operand_index, str(names_index)))
+
                 case RegionFmt(field=name):
                     kind, index = _resolve_field(name)
                     elements.append(("LOOM_FORMAT_KIND_REGION", index, "0"))
@@ -1152,6 +1168,20 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                         }
                     )
 
+                case OperandDict(operands=operand_field, names=names_field):
+                    params.append(
+                        {
+                            "name": operand_field,
+                            "kind": "operand_dict",
+                            "c_type": "const loom_named_value_t*",
+                            "operand_index": layout.fields[operand_field].index,
+                            "names_attr_index": layout.fields[names_field].index,
+                            "names_field": names_field,
+                            "may_consume": has_result_type_list,
+                        }
+                    )
+                    covered_attrs.add(names_field)
+
                 case Attr(field=name):
                     append_attr_param(name)
 
@@ -1387,6 +1417,9 @@ def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pr
             case "operand_variadic":
                 c_params.append(f"{consume}const loom_value_id_t* {param['name']}")
                 c_params.append(f"iree_host_size_t {param['name']}_count")
+            case "operand_dict":
+                c_params.append(f"{consume}const loom_named_value_t* {param['name']}")
+                c_params.append(f"iree_host_size_t {param['name']}_count")
             case "attr":
                 c_params.append(f"{opt}{param['c_type']} {param['name']}")
                 if param["attr_type"] == "i64_array":
@@ -1443,6 +1476,20 @@ def _generate_builder_declaration(op: Op, prefix: str) -> list[str]:
     return lines
 
 
+def _emit_builder_count_check(
+    lines: list[str],
+    *,
+    count: str,
+    max_value: str,
+    message: str,
+) -> None:
+    """Emits a C range check before narrowing a host-size builder count."""
+    lines.append(f"  if ({count} > {max_value}) {{")
+    lines.append("    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,")
+    lines.append(f'                            "{message}");')
+    lines.append("  }")
+
+
 def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> list[str]:
     """Generates the C builder function implementation for a complex op."""
     params = _extract_c_params(op)
@@ -1461,6 +1508,9 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
         if param["kind"] in ("operand_variadic", "binding_list"):
             variadic_operand_param = param["name"]
             break
+        if param["kind"] == "operand_dict":
+            variadic_operand_param = param["name"]
+            break
         if param["kind"] == "index_list":
             variadic_operand_param = param["dynamic_field"]
             break
@@ -1474,6 +1524,54 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
     for i, p in enumerate(c_params):
         comma = "," if i < len(c_params) - 1 else ") {"
         lines.append(f"    {p}{comma}")
+
+    # Validate all host-size counts before narrowing to the op storage width.
+    if variadic_operand_param:
+        max_variadic_operand_count = "UINT16_MAX"
+        if fixed_operand_count:
+            max_variadic_operand_count = f"UINT16_MAX - {fixed_operand_count}"
+        _emit_builder_count_check(
+            lines,
+            count=f"{variadic_operand_param}_count",
+            max_value=max_variadic_operand_count,
+            message=f"{op.name} operand count exceeds uint16_t range",
+        )
+    if has_variadic_result:
+        _emit_builder_count_check(
+            lines,
+            count="result_count",
+            max_value="UINT16_MAX",
+            message=f"{op.name} result count exceeds uint16_t range",
+        )
+    if any(param["kind"] == "tied_results" for param in params):
+        _emit_builder_count_check(
+            lines,
+            count="tied_result_count",
+            max_value="UINT16_MAX",
+            message=f"{op.name} tied result count exceeds uint16_t range",
+        )
+    for param in params:
+        if param["kind"] == "index_list":
+            _emit_builder_count_check(
+                lines,
+                count=f"{param['static_field']}_count",
+                max_value="UINT16_MAX",
+                message=f"{op.name} static index count exceeds uint16_t range",
+            )
+        elif param["kind"] == "predicate_list":
+            _emit_builder_count_check(
+                lines,
+                count=f"{param['name']}_count",
+                max_value="UINT16_MAX",
+                message=f"{op.name} predicate count exceeds uint16_t range",
+            )
+        elif param["kind"] == "attr" and param["attr_type"] == "i64_array":
+            _emit_builder_count_check(
+                lines,
+                count=f"{param['name']}_count",
+                max_value="UINT16_MAX",
+                message=f"{op.name} i64 array attribute count exceeds uint16_t range",
+            )
 
     # Compute operand count expression.
     if variadic_operand_param:
@@ -1516,6 +1614,14 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             lines.append(f"    memcpy(loom_op_operands(*out_op) + {fixed_operand_count},")
             lines.append(f"           {name}, {name}_count * sizeof(loom_value_id_t));")
             lines.append("  }")
+        elif param["kind"] == "operand_dict":
+            name = param["name"]
+            operand_index = param["operand_index"]
+            attr_index = param["names_attr_index"]
+            lines.append("  IREE_RETURN_IF_ERROR(loom_builder_set_operand_dict(")
+            lines.append(f"      builder, loom_make_named_value_slice({name}, {name}_count),")
+            lines.append(f"      loom_op_operands(*out_op) + {operand_index},")
+            lines.append(f"      &loom_op_attrs(*out_op)[{attr_index}]));")
         elif param["kind"] == "index_list":
             dyn = param["dynamic_field"]
             lines.append(f"  if ({dyn}_count > 0) {{")

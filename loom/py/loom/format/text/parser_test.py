@@ -997,6 +997,53 @@ class TestParseEncodingAlias:
             EncodingInstance(name="q8_0", params=(("block", 32),))
         ]
 
+    def test_encoding_define_dynamic_params(self) -> None:
+        module = self._parse_module(
+            "func.def @f(%group_size: index, %scales: tensor<[%group_size]xf32>) "
+            "-> () {\n"
+            "  %enc = encoding.define #q8_0<block=32> "
+            "{scales = %scales : tensor<[%group_size]xf32>, "
+            "group_size = %group_size : index} : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        printed = _op_printer().print_module(module)
+        assert printed == (
+            "func.def @f(%group_size: index, "
+            "%scales: tensor<[%group_size]xf32>) {\n"
+            "  %enc = encoding.define #q8_0<block=32> "
+            "{group_size = %group_size : index, "
+            "scales = %scales : tensor<[%group_size]xf32>} : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        func_op = module.symbols[0].op
+        assert func_op is not None
+        define_op = func_op.regions[0].blocks[0].ops[0]
+        assert define_op.name == "encoding.define"
+        assert define_op.attributes["param_names"] == CanonicalAttrDict(
+            (("group_size", 0), ("scales", 1))
+        )
+
+    def test_encoding_define_rejects_static_dynamic_duplicate(self) -> None:
+        with pytest.raises(ParseError, match="both static and dynamic"):
+            self._parse_module(
+                "func.def @f(%block: index) -> () {\n"
+                "  %enc = encoding.define #q8_0<block=32> "
+                "{block = %block : index} : encoding\n"
+                "  test.yield\n"
+                "}\n"
+            )
+
+    def test_static_encoding_rejects_ssa_parameter(self) -> None:
+        with pytest.raises(ParseError, match="cannot use an SSA value"):
+            self._parse_module(
+                "func.def @f(%group_size: index) -> () {\n"
+                "  %enc = encoding.define #q8_0<group_size=%group_size> : encoding\n"
+                "  test.yield\n"
+                "}\n"
+            )
+
     def test_encoding_define_alias_spec_attr(self) -> None:
         module = self._parse_module(
             "#enc = #q8_0<block=32>\n"
@@ -1095,6 +1142,54 @@ class TestRoundTrip:
             "  test.yield %r : tile<4xf32>\n"
             "}\n"
         )
+
+    def test_empty_operand_dict(self) -> None:
+        self._roundtrip_text(
+            "func.def @operand_dict_empty(%input: f32) -> (f32) {\n"
+            "  %result = test.operand_dict %input : f32\n"
+            "  test.yield %result : f32\n"
+            "}\n"
+        )
+
+
+class TestOperandDict:
+    def test_unsorted_keys_print_in_canonical_order(self) -> None:
+        module = _op_parser().parse(
+            "func.def @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
+            "-> (f32) {\n"
+            "  %result = test.operand_dict %input "
+            "{beta = %beta : f32, alpha = %alpha : i32} : f32\n"
+            "  test.yield %result : f32\n"
+            "}\n"
+        )
+        printed = _op_printer().print_module(module)
+        assert printed == (
+            "func.def @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
+            "-> (f32) {\n"
+            "  %result = test.operand_dict %input "
+            "{alpha = %alpha : i32, beta = %beta : f32} : f32\n"
+            "  test.yield %result : f32\n"
+            "}\n"
+        )
+
+    def test_duplicate_key_rejected(self) -> None:
+        with pytest.raises(ParseError, match="duplicate operand dictionary key"):
+            _op_parser().parse(
+                "func.def @operand_dict(%input: f32, %alpha: f32) -> (f32) {\n"
+                "  %result = test.operand_dict %input "
+                "{alpha = %alpha : f32, alpha = %input : f32} : f32\n"
+                "  test.yield %result : f32\n"
+                "}\n"
+            )
+
+    def test_type_annotation_mismatch_rejected(self) -> None:
+        with pytest.raises(ParseError, match="operand dictionary entry 'alpha'"):
+            _op_parser().parse(
+                "func.def @operand_dict(%input: f32, %alpha: i32) -> (f32) {\n"
+                "  %result = test.operand_dict %input {alpha = %alpha : f32} : f32\n"
+                "  test.yield %result : f32\n"
+                "}\n"
+            )
 
 
 # ============================================================================

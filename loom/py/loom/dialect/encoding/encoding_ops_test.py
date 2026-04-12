@@ -13,6 +13,7 @@ from loom.dialect.encoding import (
     encoding_ops,
 )
 from loom.dsl import (
+    ATTR_TYPE_DICT,
     ATTR_TYPE_ENCODING,
     ENCODING,
     TypeConstraint,
@@ -61,10 +62,16 @@ class TestEncodingDefine:
         assert attr is not None
         assert attr.attr_type == ATTR_TYPE_ENCODING
 
-    def test_captures_variadic(self) -> None:
-        operand = encoding_define.operand("captures")
+    def test_dynamic_params_variadic(self) -> None:
+        operand = encoding_define.operand("params")
         assert operand is not None
         assert operand.variadic
+
+    def test_dynamic_param_names_attr(self) -> None:
+        attr = encoding_define.attr("param_names")
+        assert attr is not None
+        assert attr.attr_type == ATTR_TYPE_DICT
+        assert attr.optional
 
     def test_is_pure(self) -> None:
         assert encoding_define.is_pure

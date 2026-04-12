@@ -32,6 +32,7 @@ from loom.assembly import (
     BindingList,
     FuncArgs,
     IndexList,
+    OperandDict,
     OptionalGroup,
     PredicateList,
     Ref,
@@ -661,6 +662,40 @@ test_attrs = Op(
 )
 
 # ============================================================================
+# test.operand_dict — op with keyed SSA operand dictionary
+# ============================================================================
+
+test_operand_dict = Op(
+    "test.operand_dict",
+    group=test_ops,
+    doc="Test op with a keyed SSA operand dictionary.",
+    operands=[
+        Operand("input", ANY),
+        Operand("params", ANY, variadic=True),
+    ],
+    results=[Result("result", ANY)],
+    attrs=[
+        AttrDef(
+            "param_names",
+            "dict",
+            optional=True,
+            doc="Sorted operand dictionary keys mapped to operand ordinals.",
+        ),
+    ],
+    constraints=[SameType("input", "result")],
+    traits=[PURE],
+    format=[
+        Ref("input"),
+        OperandDict("params", "param_names"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%result = test.operand_dict %input {alpha = %a : i32, beta = %b : f32} : f32",
+    ],
+)
+
+# ============================================================================
 # test.deflate — result dim references
 # ============================================================================
 
@@ -953,6 +988,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_func,
     test_decl,
     test_attrs,
+    test_operand_dict,
     test_deflate,
     test_assume,
     test_convert,

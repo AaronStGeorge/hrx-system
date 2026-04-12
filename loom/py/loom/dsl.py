@@ -1349,6 +1349,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         Glue,
         IndexList,
         Keyword,
+        OperandDict,
         OpRef,
         OptionalGroup,
         PredicateList,
@@ -1392,6 +1393,9 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
             case IndexList(dynamic=d, static=s):
                 fields.add(d)
                 fields.add(s)
+            case OperandDict(operands=operands, names=names):
+                fields.add(operands)
+                fields.add(names)
             case OptionalGroup(elements=inner):
                 fields |= _collect_format_fields(inner)
             case Scope(elements=inner):

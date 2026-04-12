@@ -26,18 +26,22 @@ enum {
 // LOOM_OP_ENCODING_DEFINE: Create an encoding value from a static encoding specification.
 // %enc = encoding.define #q8_0<block=32> : encoding
 LOOM_DEFINE_ISA(loom_encoding_define_isa, LOOM_OP_ENCODING_DEFINE)
-LOOM_DEFINE_VARIADIC_OPERANDS(loom_encoding_define_captures, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_encoding_define_params, 0)
 LOOM_DEFINE_RESULT(loom_encoding_define_result, 0)
 LOOM_DEFINE_ATTR_ENCODING(loom_encoding_define_spec, 0)
+LOOM_DEFINE_ATTR_DICT(loom_encoding_define_param_names, 1)
 iree_status_t loom_encoding_define_build(
     loom_builder_t* builder,
     uint16_t spec,
-    const loom_value_id_t* captures,
-    iree_host_size_t captures_count,
+    const loom_named_value_t* params,
+    iree_host_size_t params_count,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
 extern const loom_op_vtable_t loom_encoding_define_vtable;
+iree_status_t loom_encoding_define_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_ENCODING_ISA: Test if an encoding belongs to a category.
 // %is_quantized = encoding.isa %enc, "quantized" : i1

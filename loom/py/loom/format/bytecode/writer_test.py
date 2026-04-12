@@ -14,10 +14,17 @@ is the oracle for the C reader — these tests must be exhaustive.
 
 import struct
 
+from loom.builtin_types import ALL_BUILTIN_TYPES
+from loom.dialect.encoding import ALL_ENCODING_OPS
+from loom.dialect.func import ALL_FUNC_OPS
+from loom.dialect.test import ALL_TEST_OPS
+from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import (
     FORMAT_VERSION,
     write_module,
 )
+from loom.format.text.parser import Parser
+from loom.format.text.printer import Printer
 from loom.ir import (
     BF16,
     BUFFER_TYPE,
@@ -58,6 +65,38 @@ from loom.ir import (
 # ============================================================================
 # Helpers
 # ============================================================================
+
+
+def _text_parser(*, include_encoding: bool = False) -> Parser:
+    parser = Parser()
+    ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
+    if include_encoding:
+        ops += list(ALL_ENCODING_OPS)
+    parser.register_ops(ops)
+    parser.register_types(ALL_BUILTIN_TYPES)
+    return parser
+
+
+def _text_printer(*, include_encoding: bool = False) -> Printer:
+    printer = Printer()
+    ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
+    if include_encoding:
+        ops += list(ALL_ENCODING_OPS)
+    printer.register_ops(ops)
+    printer.register_types(ALL_BUILTIN_TYPES)
+    return printer
+
+
+def _parse_write_read(text: str, *, include_encoding: bool = False) -> Module:
+    module = _text_parser(include_encoding=include_encoding).parse(text)
+    return read_module(write_module(module))
+
+
+def _roundtrip_text_through_bytecode(
+    text: str, *, include_encoding: bool = False
+) -> str:
+    loaded = _parse_write_read(text, include_encoding=include_encoding)
+    return _text_printer(include_encoding=include_encoding).print_module(loaded)
 
 
 def _make_func_op(
@@ -968,12 +1007,6 @@ class TestCrossFormatRoundTrip:
     """text → parse → IR → write bytecode → read bytecode → IR → print text."""
 
     def test_simple_function(self) -> None:
-        from loom.builtin_types import ALL_BUILTIN_TYPES
-        from loom.dialect.func import ALL_FUNC_OPS
-        from loom.dialect.test import ALL_TEST_OPS
-        from loom.format.bytecode.reader import read_module as read
-        from loom.format.text.parser import Parser
-
         text = (
             "func.def @negate(%input: f32) -> (f32) {\n"
             "  %neg0 = test.neg %input : f32\n"
@@ -981,25 +1014,51 @@ class TestCrossFormatRoundTrip:
             "}\n"
         )
 
-        # Parse text → IR.
-        parser = Parser()
-        parser.register_ops(list(ALL_FUNC_OPS) + list(ALL_TEST_OPS))
-        parser.register_types(ALL_BUILTIN_TYPES)
-        module = parser.parse(text)
-
-        # Write IR → bytecode.
-        bc_data = write_module(module)
-
-        # Read bytecode → IR.
-        loaded = read(bc_data)
-
-        # Verify structure survived.
+        loaded = _parse_write_read(text)
         assert len(loaded.symbols) == 1
         func_op = loaded.symbols[0].op
         assert func_op is not None
         assert func_op.attributes.get("callee") == "negate"
         assert func_op.regions
         assert len(func_op.regions[0].blocks[0].ops) == 2
+
+    def test_operand_dict_survives_bytecode(self) -> None:
+        text = (
+            "func.def @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
+            "-> (f32) {\n"
+            "  %result = test.operand_dict %input "
+            "{beta = %beta : f32, alpha = %alpha : i32} : f32\n"
+            "  test.yield %result : f32\n"
+            "}\n"
+        )
+        expected = (
+            "func.def @operand_dict(%input: f32, %beta: f32, %alpha: i32) "
+            "-> (f32) {\n"
+            "  %result = test.operand_dict %input "
+            "{alpha = %alpha : i32, beta = %beta : f32} : f32\n"
+            "  test.yield %result : f32\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text) == expected
+
+    def test_encoding_define_dynamic_params_survive_bytecode(self) -> None:
+        text = (
+            "func.def @encoding_params(%group_size: index, %scale: f32) -> () {\n"
+            "  %enc = encoding.define #q8_0<block=32> "
+            "{scale = %scale : f32, group_size = %group_size : index} : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        expected = (
+            "func.def @encoding_params(%group_size: index, %scale: f32) {\n"
+            "  %enc = encoding.define #q8_0<block=32> "
+            "{group_size = %group_size : index, scale = %scale : f32} : encoding\n"
+            "  test.yield\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_encoding=True) == expected
 
     def test_attr_dict_parser_programmatic_and_readback_converge(self) -> None:
         from loom.builtin_types import ALL_BUILTIN_TYPES

@@ -6,7 +6,7 @@
 
 import pytest
 
-from loom.assembly import Attr, AttrDict, Ref, ResultType
+from loom.assembly import Attr, AttrDict, OperandDict, Ref, ResultType
 from loom.dsl import (
     INTEGER,
     AttrDef,
@@ -131,3 +131,32 @@ def test_inline_attr_dict_uses_declared_attrs() -> None:
     assert "uint8_t scope" in ops_h
     assert "loom_op_attrs(*out_op)[0] = loom_attr_enum(ordering);" in builders_c
     assert "loom_op_attrs(*out_op)[1] = loom_attr_enum(scope);" in builders_c
+
+
+def test_operand_dict_generates_format_and_builder_support() -> None:
+    op = Op(
+        "test.operand_dict",
+        group=Dialect("test"),
+        operands=[
+            Operand("input", INTEGER),
+            Operand("params", INTEGER, variadic=True),
+        ],
+        results=[Result("result", INTEGER)],
+        attrs=[AttrDef("param_names", "dict", optional=True)],
+        constraints=[SameType("input", "result")],
+        format=[
+            Ref("input"),
+            OperandDict("params", "param_names"),
+            ResultType("result"),
+        ],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_FORMAT_KIND_OPERAND_DICT" in tables_c
+    assert "const loom_named_value_t* params" in ops_h
+    assert "iree_host_size_t params_count" in ops_h
+    assert "loom_make_named_value_slice(params, params_count)" in builders_c
+    assert "&loom_op_attrs(*out_op)[0]" in builders_c

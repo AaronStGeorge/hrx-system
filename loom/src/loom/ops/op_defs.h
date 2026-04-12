@@ -73,6 +73,36 @@ static inline void loom_value_slice_replace(loom_value_slice_t slice,
   }
 }
 
+// A keyed SSA value used by OperandDict builders. The name is static metadata
+// identifying the dictionary entry; the value remains an ordinary operand and
+// participates in the normal use-def lists.
+typedef struct loom_named_value_t {
+  // Interned dictionary key in the destination module string table.
+  loom_string_id_t name_id;
+  // Reserved for stable ABI alignment and must be zero.
+  uint32_t reserved;
+  // SSA value ID stored in the variadic operand segment.
+  loom_value_id_t value_id;
+} loom_named_value_t;
+
+// A borrowed range of named SSA values.
+typedef struct loom_named_value_slice_t {
+  // Borrowed entry pointer. NULL is valid only when count is zero.
+  const loom_named_value_t* entries;
+  // Number of entries in the borrowed range.
+  iree_host_size_t count;
+} loom_named_value_slice_t;
+
+// Bundles |entries| and |count| as a named value slice.
+static inline loom_named_value_slice_t loom_make_named_value_slice(
+    const loom_named_value_t* entries, iree_host_size_t count) {
+  loom_named_value_slice_t slice = {
+      .entries = count > 0 ? entries : NULL,
+      .count = count,
+  };
+  return slice;
+}
+
 //===----------------------------------------------------------------------===//
 // Format elements
 //===----------------------------------------------------------------------===//
@@ -151,6 +181,12 @@ typedef enum loom_format_kind_e {
   // Glued to the preceding token (op name). The field_index references
   // an ordinary attribute parsed with the attr descriptor.
   LOOM_FORMAT_KIND_TEMPLATE_PARAM = 21,
+
+  // Keyed variadic operand dictionary: {key = %value : type, ...}.
+  // field_index = variadic operand start, data = dict attr field index storing
+  // key -> operand ordinal relative to field_index. The dict stores only
+  // integer ordinals, never SSA value IDs.
+  LOOM_FORMAT_KIND_OPERAND_DICT = 22,
 };
 typedef uint8_t loom_format_kind_t;
 
@@ -162,6 +198,7 @@ typedef uint8_t loom_format_kind_t;
 // field is kind-specific:
 //   KEYWORD:        keyword ID (loom_keyword_id_t).
 //   INDEX_LIST:     static attribute field index.
+//   OPERAND_DICT:   dict attribute field index storing key -> operand ordinal.
 //   BINDING_LIST:   binding kind (CAPTURE=0, ELEMENT=1).
 //   OPTIONAL_GROUP: (skip_count << 2) | anchor_category.
 typedef struct loom_format_element_t {
@@ -1076,6 +1113,16 @@ iree_status_t loom_builder_define_value(loom_builder_t* builder,
 iree_status_t loom_builder_intern_string(loom_builder_t* builder,
                                          iree_string_view_t string,
                                          loom_string_id_t* out_string_id);
+
+// Canonicalizes a keyed variadic operand dictionary.
+//
+// Writes the sorted operand values into |operand_storage| and writes a
+// canonical DICT attribute to |out_names_attr| mapping each key to its operand
+// ordinal relative to |operand_storage|. Empty dictionaries produce an absent
+// names attribute so optional OperandDict fields print nothing.
+iree_status_t loom_builder_set_operand_dict(
+    loom_builder_t* builder, loom_named_value_slice_t named_values,
+    loom_value_id_t* operand_storage, loom_attribute_t* out_names_attr);
 
 // Creates a fresh value with the given type and adds it as a block
 // argument. Convenience wrapper for the define_value + block_add_arg

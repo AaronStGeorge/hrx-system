@@ -1,0 +1,20 @@
+// RUN: verify
+
+// ====
+
+// Static encoding attrs and dynamic encoding operands are two views of one
+// parameter namespace; a name can appear in only one place.
+func.def @static_dynamic_duplicate(%block: index) {
+  // ERROR@+1: ENCODING/006 "block"
+  %enc = encoding.define #q8_0<block=32> {block = %block : index} : encoding
+  func.return
+}
+
+// ====
+
+// SSA values never appear inside static #family<...> parameter attributes.
+func.def @static_param_ssa_value(%group_size: index) {
+  // ERROR@+1: PARSE/028 "group_size"
+  %enc = encoding.define #q8_0<group_size=%group_size> : encoding
+  func.return
+}

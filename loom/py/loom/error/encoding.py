@@ -84,10 +84,26 @@ ERR_ENCODING_005 = ErrorDef(
     "it should be the result of an encoding.define op",
 )
 
+# ERR_ENCODING_006: encoding.define parameter is both static and dynamic.
+ERR_ENCODING_006 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=6,
+    severity=Severity.ERROR,
+    summary="Encoding parameter is both static and dynamic.",
+    message="encoding.define parameter '{param_name}' is both static and dynamic",
+    params=(ErrorParam("param_name", ParamKind.STRING),),
+    fix_hint=(
+        "Keep compile-time values in #family<...> and SSA values in the "
+        "encoding.define operand dictionary; each parameter name must appear "
+        "in exactly one place"
+    ),
+)
+
 ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_001,
     ERR_ENCODING_002,
     ERR_ENCODING_003,
     ERR_ENCODING_004,
     ERR_ENCODING_005,
+    ERR_ENCODING_006,
 )

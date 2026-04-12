@@ -56,11 +56,15 @@ typedef struct loom_encoding_table_t {
 
 // Vtable for one encoding family (`q6_k`, `q8_0`, `dense`, etc.).
 //
-// Module encoding entries store family name + canonical parameter attrs. The
-// context-owned family vtable supplies runtime hooks for interpreting those
-// instances: parameter verification, storage sizing, and byte encode/decode.
-// Text and bytecode syntax are generic named attrs, so parsing/printing do not
-// go through the family vtable.
+// Module encoding entries store only static family name + canonical parameter
+// attrs. Dynamic parameters are ordinary SSA operands on encoding.define, named
+// by an OperandDict sidecar so the merged parameter view is explicit in the IR
+// instead of hidden inside attribute payloads.
+//
+// The context-owned family vtable supplies runtime hooks for interpreting
+// static instances: parameter verification, storage sizing, and byte
+// encode/decode. Text and bytecode syntax are generic named attrs, so
+// parsing/printing do not go through the family vtable.
 typedef struct loom_encoding_vtable_t {
   // Encoding family name for lookup and printing, without a leading '#'.
   iree_string_view_t name;

@@ -218,14 +218,20 @@
 //
 // dim-ref     ::= SSA-VALUE           // [%M] — references an SSA value
 //
-// encoding    ::= '#' identifier ('<' param (',' param)* '>')?
+// encoding    ::= '#' identifier ('<' static-param (',' static-param)* '>')?
 //               | SSA-VALUE
 // layout      ::= encoding
-// param       ::= identifier '=' value
+// static-param ::= identifier '=' attr-value
 //
 // Encodings/layouts in the first form are static — known at definition time.
+// Static encoding parameters are attributes only; SSA values are rejected here.
 // Encodings/layouts in the second form (SSA value) are dynamic — the value
 // is an SSA value of type 'encoding' and is resolved at compilation time.
+// Dynamic parameters are introduced explicitly by encoding.define:
+//
+//   %enc = encoding.define #q8_0<block=32> {group_size = %g : index}
+//       : encoding
+//
 // This enables library functions generic over encoding:
 //
 //   func.def @generic(%enc: encoding, %t: tile<4xf32, %enc>) -> ()
@@ -375,7 +381,7 @@
 //
 // --- Format elements ---
 //
-// The format element vocabulary (20 types):
+// The format element vocabulary:
 //
 //   Ref(field)            Single SSA value reference: %name.
 //   Refs(field)           Variadic SSA values: %a, %b, %c.
@@ -389,6 +395,10 @@
 //                           -> (type, %op as type). Always uses parens.
 //   Keyword(text)         Literal token: , : -> to step else ( ) etc.
 //   AttrDict()            Optional {key = value, ...} dictionary.
+//   OperandDict(o, n)     Optional keyed SSA operand dictionary:
+//                           {key = %value : type, ...}. Values are ordinary
+//                           operands in field o. Attribute field n stores only
+//                           key -> operand ordinal metadata.
 //   Region(field)         Nested { block+ } region.
 //   IndexList(d, s)       Bracket list [0, %x, 4] with static/dynamic
 //                           mix. Always glues to preceding token.
@@ -417,7 +427,7 @@
 // Forward-glue (no space after): ( [ {
 // Built-in glue: non-leading IndexList, BindingList, FuncArgs.
 // Explicit Glue: suppresses space before the next token.
-// ResultTypeList and PredicateList never glue.
+// ResultTypeList, PredicateList, and OperandDict never glue.
 //
 // --- Common format patterns ---
 //

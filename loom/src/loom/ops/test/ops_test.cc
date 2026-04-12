@@ -36,15 +36,15 @@ TEST(OpKind, TestAddiValue) {
 
 TEST(OpKind, AllDistinct) {
   int kinds[] = {
-      LOOM_OP_TEST_ADDI,     LOOM_OP_TEST_NEG,    LOOM_OP_TEST_CAST,
-      LOOM_OP_TEST_CONSTANT, LOOM_OP_TEST_CMP,    LOOM_OP_TEST_MAP,
-      LOOM_OP_TEST_UPDATE,   LOOM_OP_TEST_INVOKE, LOOM_OP_TEST_SLICE,
-      LOOM_OP_TEST_LOOP,     LOOM_OP_TEST_BRANCH, LOOM_OP_TEST_YIELD,
-      LOOM_OP_TEST_FUNC,     LOOM_OP_TEST_DECL,   LOOM_OP_TEST_ATTRS,
-      LOOM_OP_TEST_DEFLATE,
+      LOOM_OP_TEST_ADDI,         LOOM_OP_TEST_NEG,     LOOM_OP_TEST_CAST,
+      LOOM_OP_TEST_CONSTANT,     LOOM_OP_TEST_CMP,     LOOM_OP_TEST_MAP,
+      LOOM_OP_TEST_UPDATE,       LOOM_OP_TEST_INVOKE,  LOOM_OP_TEST_SLICE,
+      LOOM_OP_TEST_LOOP,         LOOM_OP_TEST_BRANCH,  LOOM_OP_TEST_YIELD,
+      LOOM_OP_TEST_FUNC,         LOOM_OP_TEST_DECL,    LOOM_OP_TEST_ATTRS,
+      LOOM_OP_TEST_OPERAND_DICT, LOOM_OP_TEST_DEFLATE,
   };
-  for (int i = 0; i < 16; ++i) {
-    for (int j = i + 1; j < 16; ++j) {
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kinds); ++i) {
+    for (iree_host_size_t j = i + 1; j < IREE_ARRAYSIZE(kinds); ++j) {
       EXPECT_NE(kinds[i], kinds[j])
           << "kinds[" << i << "] == kinds[" << j << "]";
     }
@@ -247,6 +247,83 @@ TEST_F(BuilderTest, VariadicOperands) {
   EXPECT_EQ(values.values[0], 10u);
   EXPECT_EQ(values.values[1], 20u);
   EXPECT_EQ(values.values[2], 30u);
+}
+
+TEST_F(BuilderTest, OperandDictBuilderCanonicalizesNames) {
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t beta = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t alpha = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module_, loom_type_scalar(LOOM_SCALAR_TYPE_F32), &input));
+  IREE_ASSERT_OK(loom_module_define_value(
+      module_, loom_type_scalar(LOOM_SCALAR_TYPE_F32), &beta));
+  IREE_ASSERT_OK(loom_module_define_value(
+      module_, loom_type_scalar(LOOM_SCALAR_TYPE_I32), &alpha));
+
+  loom_string_id_t alpha_name = LOOM_STRING_ID_INVALID;
+  loom_string_id_t beta_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("alpha"), &alpha_name));
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("beta"), &beta_name));
+
+  loom_named_value_t params[] = {
+      {.name_id = beta_name, .reserved = 0, .value_id = beta},
+      {.name_id = alpha_name, .reserved = 0, .value_id = alpha},
+  };
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_operand_dict_build(
+      &builder_, input, params, IREE_ARRAYSIZE(params),
+      loom_type_scalar(LOOM_SCALAR_TYPE_F32), LOOM_LOCATION_UNKNOWN, &op));
+
+  ASSERT_NE(op, nullptr);
+  ASSERT_TRUE(loom_test_operand_dict_isa(op));
+  EXPECT_EQ(loom_test_operand_dict_input(op), input);
+  loom_value_slice_t sorted_params = loom_test_operand_dict_params(op);
+  ASSERT_EQ(sorted_params.count, 2u);
+  EXPECT_EQ(sorted_params.values[0], alpha);
+  EXPECT_EQ(sorted_params.values[1], beta);
+
+  loom_named_attr_slice_t names = loom_test_operand_dict_param_names(op);
+  ASSERT_EQ(names.count, 2u);
+  ASSERT_NE(names.entries, nullptr);
+  EXPECT_EQ(names.entries[0].name_id, alpha_name);
+  EXPECT_EQ(names.entries[0].value.i64, 0);
+  EXPECT_EQ(names.entries[1].name_id, beta_name);
+  EXPECT_EQ(names.entries[1].value.i64, 1);
+}
+
+TEST_F(BuilderTest, GeneratedBuildersRejectCountsBeforeNarrowing) {
+  constexpr iree_host_size_t kTooMany = (iree_host_size_t)UINT16_MAX + 1;
+  loom_op_t* op = NULL;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_test_assume_build(&builder_, NULL, 0, NULL, 0, NULL, kTooMany,
+                             LOOM_LOCATION_UNKNOWN, &op));
+  EXPECT_EQ(op, nullptr);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_test_assume_build(&builder_, NULL, 0, NULL, kTooMany, NULL, 0,
+                             LOOM_LOCATION_UNKNOWN, &op));
+  EXPECT_EQ(op, nullptr);
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module_, loom_type_scalar(LOOM_SCALAR_TYPE_F32), &input));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_test_operand_dict_build(&builder_, input, NULL, UINT16_MAX,
+                                   loom_type_scalar(LOOM_SCALAR_TYPE_F32),
+                                   LOOM_LOCATION_UNKNOWN, &op));
+  EXPECT_EQ(op, nullptr);
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_test_slice_build(&builder_, input, NULL, 0, NULL, kTooMany,
+                            loom_type_scalar(LOOM_SCALAR_TYPE_F32), NULL, 0,
+                            LOOM_LOCATION_UNKNOWN, &op));
+  EXPECT_EQ(op, nullptr);
 }
 
 TEST_F(BuilderTest, EnumAttribute) {

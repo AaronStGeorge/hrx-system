@@ -6,8 +6,8 @@
 
 """Tests for Python builder stub generation."""
 
-from loom.assembly import AttrDict, IndexList, Ref
-from loom.dsl import ANY, ATTR_TYPE_I64_ARRAY, AttrDef, EnumCase, EnumDef, Op, Operand
+from loom.assembly import AttrDict, IndexList, OperandDict, Ref, ResultType
+from loom.dsl import ANY, ATTR_TYPE_I64_ARRAY, AttrDef, EnumCase, EnumDef, Op, Operand, Result
 from loom.gen.builders import generate_builders
 
 
@@ -78,3 +78,33 @@ def test_builder_params_include_attrs_from_inline_attr_dict() -> None:
     assert "def atomic(self, *, value: ValueRef, ordering: str, scope: str) -> None:" in generated
     assert '_attributes["ordering"] = ordering' in generated
     assert '_attributes["scope"] = scope' in generated
+
+
+def test_builder_params_include_operand_dict_as_keyed_values() -> None:
+    generated = generate_builders(
+        [
+            Op(
+                "test.operand_dict",
+                operands=[
+                    Operand("input", ANY),
+                    Operand("params", ANY, variadic=True),
+                ],
+                results=[Result("result", ANY)],
+                attrs=[AttrDef("param_names", "dict", optional=True)],
+                format=[
+                    Ref("input"),
+                    OperandDict("params", "param_names"),
+                    ResultType("result"),
+                ],
+            ),
+        ],
+        "TestBuilders",
+    )
+
+    assert "def operand_dict(self, *, input: ValueRef" in generated
+    assert "params: dict[str, ValueRef]" in generated
+    assert "results:" in generated
+    assert "for _name in sorted(params):" in generated
+    assert "_operand_dict_names[_name] = len(_operand_dict_names)" in generated
+    assert "_operands.append(params[_name])" in generated
+    assert '_attributes["param_names"] = _operand_dict_names' in generated

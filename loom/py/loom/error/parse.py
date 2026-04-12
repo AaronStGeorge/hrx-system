@@ -296,6 +296,42 @@ ERR_PARSE_026 = ErrorDef(
     params=(),
 )
 
+# ERR_PARSE_027: Duplicate operand dictionary key.
+ERR_PARSE_027 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=27,
+    severity=Severity.ERROR,
+    summary="Duplicate operand dictionary key.",
+    message="operand dictionary key '{key_name}' is already defined",
+    params=(ErrorParam("key_name", ParamKind.STRING),),
+    fix_hint="Each key in an operand dictionary must be unique",
+)
+
+# ERR_PARSE_028: Static encoding parameter used an SSA value.
+ERR_PARSE_028 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=28,
+    severity=Severity.ERROR,
+    summary="Static encoding parameter uses an SSA value.",
+    message="static encoding parameter '{param_name}' cannot use an SSA value",
+    params=(ErrorParam("param_name", ParamKind.STRING),),
+    fix_hint=(
+        "Keep #family<...> parameters static; pass dynamic parameters with "
+        "encoding.define #family<static attrs> {name = %value : type} : encoding"
+    ),
+)
+
+# ERR_PARSE_029: Duplicate encoding parameter.
+ERR_PARSE_029 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=29,
+    severity=Severity.ERROR,
+    summary="Duplicate encoding parameter.",
+    message="encoding parameter '{param_name}' is already defined",
+    params=(ErrorParam("param_name", ParamKind.STRING),),
+    fix_hint="Each static encoding parameter name must be unique",
+)
+
 ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_001,
     ERR_PARSE_002,
@@ -323,4 +359,7 @@ ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_024,
     ERR_PARSE_025,
     ERR_PARSE_026,
+    ERR_PARSE_027,
+    ERR_PARSE_028,
+    ERR_PARSE_029,
 )

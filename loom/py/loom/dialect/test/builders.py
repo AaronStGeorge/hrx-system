@@ -299,6 +299,24 @@ class TestBuilders:
         _operands.append(input)
         return cast(ValueRef, self._b.build("test.attrs", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def operand_dict(self, *, input: ValueRef, params: dict[str, ValueRef], result_types: list[Type]) -> ValueRef:
+        """Test op with a keyed SSA operand dictionary.
+
+        Example::
+            %result = test.operand_dict %input {alpha = %a : i32, beta = %b : f32} : f32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        if params:
+            _operand_dict_names: builtins.dict[str, int] = {}
+            for _name in sorted(params):
+                _operand_dict_names[_name] = len(_operand_dict_names)
+                _operands.append(params[_name])
+            _attributes["param_names"] = _operand_dict_names
+        return cast(ValueRef, self._b.build("test.operand_dict", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def deflate(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
         """Test op with result type referencing a co-result dim.
 

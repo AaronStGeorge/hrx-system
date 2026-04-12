@@ -51,6 +51,24 @@ static void loom_parser_release_encoding_params(
   parser->encoding_params_free_list = params;
 }
 
+static iree_status_t loom_parse_encoding_params_emit_static_ssa_value(
+    loom_parser_t* parser, loom_token_t name_token, loom_token_t value_token) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(name_token.text),
+  };
+  return loom_parser_emit(parser, &loom_err_parse_028, params,
+                          IREE_ARRAYSIZE(params), value_token);
+}
+
+static iree_status_t loom_parse_encoding_params_emit_duplicate_name(
+    loom_parser_t* parser, loom_token_t name_token) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(name_token.text),
+  };
+  return loom_parser_emit(parser, &loom_err_parse_029, params,
+                          IREE_ARRAYSIZE(params), name_token);
+}
+
 // Parses encoding parameters from the token stream. Called after LANGLE
 // has been consumed. Consumes tokens through the closing RANGLE
 // (inclusive). Grammar: key=value [, key=value]* >.
@@ -85,12 +103,24 @@ static iree_status_t loom_parse_encoding_params(
     loom_string_id_t param_name_id = 0;
     IREE_RETURN_IF_ERROR(loom_module_intern_string(
         parser->module, name_token.text, &param_name_id));
+    for (uint8_t i = 0; i < params->count; ++i) {
+      if (params->attrs[i].name_id == param_name_id) {
+        return loom_parse_encoding_params_emit_duplicate_name(parser,
+                                                              name_token);
+      }
+    }
     params->attrs[params->count].name_id = param_name_id;
     params->attrs[params->count].reserved = 0;
 
     uint32_t errors_before = parser->error_count;
-    IREE_RETURN_IF_ERROR(loom_parse_generic_attr_value(
-        parser, /*nesting_depth=*/0, &params->attrs[params->count].value));
+    if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_SSA_VALUE)) {
+      loom_token_t value_token = loom_tokenizer_peek(&parser->tokenizer);
+      IREE_RETURN_IF_ERROR(loom_parse_encoding_params_emit_static_ssa_value(
+          parser, name_token, value_token));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_parse_generic_attr_value(
+          parser, /*nesting_depth=*/0, &params->attrs[params->count].value));
+    }
     if (parser->error_count > errors_before) {
       return iree_ok_status();
     }

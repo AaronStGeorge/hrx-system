@@ -696,6 +696,42 @@ TEST_F(ParserTest, AttrDictEmptyArrayPayloadIsCanonical) {
   loom_module_free(module);
 }
 
+TEST_F(ParserTest, OperandDictUnsortedKeysRoundTripInCanonicalOrder) {
+  std::string text = RoundTrip(
+      "%input = test.constant 0 : f32\n"
+      "%beta = test.constant 1 : f32\n"
+      "%alpha = test.constant 2 : i32\n"
+      "%result = test.operand_dict %input "
+      "{beta = %beta : f32, alpha = %alpha : i32} : f32\n");
+  EXPECT_NE(text.find("test.operand_dict %input {alpha = %alpha : i32, beta = "
+                      "%beta : f32} : f32"),
+            std::string::npos)
+      << "operand dictionary keys should print in canonical order: " << text;
+
+  loom_module_t* module = ParseOk(text.c_str());
+  if (!module) return;
+  loom_block_t* body = loom_module_block(module);
+  ASSERT_NE(body, nullptr);
+  ASSERT_GE(body->op_count, 4u);
+  loom_op_t* operand_dict_op = body->ops[3];
+  ASSERT_NE(operand_dict_op, nullptr);
+  ASSERT_TRUE(loom_test_operand_dict_isa(operand_dict_op));
+  ASSERT_EQ(operand_dict_op->operand_count, 3u);
+  EXPECT_EQ(loom_op_operands(operand_dict_op)[1],
+            loom_op_results(body->ops[2])[0]);
+  EXPECT_EQ(loom_op_operands(operand_dict_op)[2],
+            loom_op_results(body->ops[1])[0]);
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, EmptyOperandDictIsOmittedCanonically) {
+  std::string text = RoundTrip(
+      "%input = test.constant 0 : f32\n"
+      "%result = test.operand_dict %input : f32\n");
+  EXPECT_NE(text.find("test.operand_dict %input : f32"), std::string::npos)
+      << "empty operand dictionary should omit braces: " << text;
+}
+
 TEST_F(ParserTest, EmptyPredicateListPayloadRoundTripsExplicitly) {
   loom_module_t* module = ParseOk(
       "%x = test.constant 0 : index\n"
@@ -1540,6 +1576,32 @@ TEST_F(ParserTest, DuplicateAttrDictKey) {
   EXPECT_EQ(previous_key_note.source_location.end_column, 26u);
 }
 
+TEST_F(ParserTest, DuplicateOperandDictKey) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%input = test.constant 0 : f32\n"
+      "%alpha = test.constant 1 : f32\n"
+      "%result = test.operand_dict %input "
+      "{alpha = %alpha : f32, alpha = %input : f32} : f32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_027);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "alpha");
+  EXPECT_EQ(diagnostics[0].origin_line, 3u);
+  ASSERT_EQ(diagnostics[0].related_locations.size(), 1u);
+  EXPECT_EQ(diagnostics[0].related_locations[0].label,
+            "previously defined here");
+}
+
+TEST_F(ParserTest, OperandDictTypeAnnotationMismatch) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%input = test.constant 0 : f32\n"
+      "%alpha = test.constant 1 : i32\n"
+      "%result = test.operand_dict %input {alpha = %alpha : f32} : f32\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_type_001);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "alpha");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 2), "type annotation");
+}
+
 TEST_F(ParserTest, DuplicateNestedAttrDictKey) {
   const auto& diagnostics = ParseExpectErrors(
       "%c = test.constant 0 : f32\n"
@@ -1702,6 +1764,70 @@ TEST_F(ParserTest, EncodingDefineInlineSpec) {
   EXPECT_EQ(PrintModule(module),
             "%enc = encoding.define #q8_0<block=32> : encoding\n");
   loom_module_free(module);
+}
+
+TEST_F(ParserTest, EncodingDefineDynamicParams) {
+  loom_module_t* module = ParseOk(
+      "func.def @test(%group_size : index, %scale : f32) {\n"
+      "  %enc = encoding.define #q8_0<block=32> "
+      "{scale = %scale : f32, group_size = %group_size : index} : encoding\n"
+      "  func.return\n"
+      "}\n");
+  ASSERT_NE(module, nullptr);
+
+  loom_op_t* func_op = GetFirstFunctionOp(module);
+  ASSERT_NE(func_op, nullptr);
+  loom_block_t* entry = GetEntryBlock(loom_func_def_body(func_op));
+  ASSERT_NE(entry, nullptr);
+  ASSERT_GE(entry->op_count, 1u);
+  const loom_op_t* op = loom_block_const_op(entry, 0);
+  ASSERT_TRUE(loom_encoding_define_isa(op));
+
+  loom_value_slice_t params = loom_encoding_define_params(op);
+  ASSERT_EQ(params.count, 2u);
+  EXPECT_EQ(params.values[0], entry->arg_ids[0]);
+  EXPECT_EQ(params.values[1], entry->arg_ids[1]);
+
+  loom_named_attr_slice_t param_names = loom_encoding_define_param_names(op);
+  ASSERT_EQ(param_names.count, 2u);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[param_names.entries[0].name_id],
+      IREE_SV("group_size")));
+  EXPECT_EQ(param_names.entries[0].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(param_names.entries[0].value.i64, 0);
+  EXPECT_TRUE(iree_string_view_equal(
+      module->strings.entries[param_names.entries[1].name_id],
+      IREE_SV("scale")));
+  EXPECT_EQ(param_names.entries[1].value.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(param_names.entries[1].value.i64, 1);
+
+  EXPECT_EQ(PrintModule(module),
+            "func.def @test(%group_size: index, %scale: f32) {\n"
+            "  %enc = encoding.define #q8_0<block=32> "
+            "{group_size = %group_size : index, scale = %scale : f32} : "
+            "encoding\n"
+            "  func.return\n"
+            "}\n");
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, StaticEncodingRejectsSSAParameter) {
+  const auto& diagnostics = ParseExpectErrors(
+      "func.def @test(%group_size : index) {\n"
+      "  %enc = encoding.define #q8_0<group_size=%group_size> : encoding\n"
+      "  func.return\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_028);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "group_size");
+}
+
+TEST_F(ParserTest, StaticEncodingRejectsDuplicateParameter) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%enc = encoding.define #q8_0<block=32, block=64> : encoding\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_029);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "block");
 }
 
 TEST_F(ParserTest, EncodingDefineAliasSpec) {
