@@ -54,6 +54,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    special_values
+  HDRS
+    "special_values.h"
+  SRCS
+    "special_values.c"
+  DEPS
+    ::op_defs
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     type_registry
   HDRS
     "type_registry.h"

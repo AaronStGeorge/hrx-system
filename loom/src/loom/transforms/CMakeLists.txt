@@ -25,6 +25,8 @@ loom_cc_library(
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::special_values
+    loom::src::loom::ops::vector
   PUBLIC
 )
 
@@ -157,6 +159,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    strip_hints
+  HDRS
+    "strip_hints.h"
+  SRCS
+    "strip_hints.c"
+  DEPS
+    ::pass
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     verify
   HDRS
     "verify.h"
@@ -171,7 +188,9 @@ loom_cc_library(
     loom::src::loom::error::renderer
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::special_values
   PUBLIC
 )
 

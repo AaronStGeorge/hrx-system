@@ -89,6 +89,16 @@ static void RegisterTestDialect(loom_context_t* context) {
                                                vtables, (uint16_t)count));
 }
 
+static const loom_op_vtable_t* TestVtable(loom_op_kind_t kind) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = loom_test_dialect_vtables(&count);
+  uint8_t index = loom_op_dialect_index(kind);
+  if (loom_op_dialect_id(kind) != LOOM_DIALECT_TEST || index >= count) {
+    return nullptr;
+  }
+  return vtables[index];
+}
+
 class VerifyTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -299,6 +309,102 @@ class VerifyTest : public ::testing::Test {
   DiagnosticCollector collector_;
   loom_verify_options_t options_;
 };
+
+static loom_trait_flags_t BadHintPureEffectiveTraits(const loom_op_t* op) {
+  (void)op;
+  return LOOM_TRAIT_HINT | LOOM_TRAIT_PURE;
+}
+
+static void ExpectBadHintTraitDiagnostic(const loom_op_vtable_t* bad_vtable) {
+  iree_arena_block_pool_t block_pool;
+  iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
+
+  loom_context_t context;
+  loom_context_initialize(iree_allocator_system(), &context);
+  RegisterTestDialect(&context);
+
+  const loom_op_vtable_t* const kBadDialectVtables[] = {
+      bad_vtable,
+  };
+  constexpr uint8_t kBadDialectId = LOOM_DIALECT_BUILTIN_COUNT_ - 1;
+  IREE_ASSERT_OK(
+      loom_context_register_dialect(&context, kBadDialectId, kBadDialectVtables,
+                                    IREE_ARRAYSIZE(kBadDialectVtables)));
+  IREE_ASSERT_OK(loom_context_finalize(&context));
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate(&context, IREE_SV("bad_traits"),
+                                      &block_pool, nullptr,
+                                      iree_allocator_system(), &module));
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder, IREE_SV("test"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(&builder, 0, 0, 0, callee, nullptr, 0,
+                                      nullptr, 0, nullptr, 0, nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_region_t* body = loom_test_func_body(func_op);
+  loom_builder_set_block(&builder, loom_region_entry_block(body));
+
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_builder_allocate_op(&builder,
+                                          LOOM_OP_KIND(kBadDialectId, 0), 0, 0,
+                                          0, 0, 0, LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_builder_finalize_op(&builder, op));
+  loom_op_t* yield_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&builder, nullptr, 0,
+                                       LOOM_LOCATION_UNKNOWN, &yield_op));
+
+  DiagnosticCapture capture;
+  loom_verify_options_t options = {};
+  options.sink = capture.sink();
+  options.max_errors = 20;
+  loom_verify_result_t result = {};
+  IREE_ASSERT_OK(loom_verify_module(module, &options, &result));
+
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(capture, &loom_err_structure_016);
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/016 incompatible-traits error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "bad.hint");
+  EXPECT_EQ(GetStringParam(*entry, 1), "HINT");
+  EXPECT_EQ(GetStringParam(*entry, 2), "PURE");
+
+  loom_module_free(module);
+  loom_context_deinitialize(&context);
+  iree_arena_block_pool_deinitialize(&block_pool);
+}
+
+TEST(VerifyTraitConsistencyTest, RejectsDeclaredIncompatibleHintTraits) {
+  static const uint8_t kBadHintName[] = {
+      8, 3, 'b', 'a', 'd', '.', 'h', 'i', 'n', 't', '\0',
+  };
+  static const loom_op_vtable_t kBadHintVtable = {
+      .traits = LOOM_TRAIT_HINT | LOOM_TRAIT_PURE,
+      .name = kBadHintName,
+  };
+  ExpectBadHintTraitDiagnostic(&kBadHintVtable);
+}
+
+TEST(VerifyTraitConsistencyTest, RejectsEffectiveIncompatibleHintTraits) {
+  static const uint8_t kBadHintName[] = {
+      8, 3, 'b', 'a', 'd', '.', 'h', 'i', 'n', 't', '\0',
+  };
+  static const loom_op_vtable_t kBadHintVtable = {
+      .traits = LOOM_TRAIT_HINT,
+      .effective_traits = BadHintPureEffectiveTraits,
+      .name = kBadHintName,
+  };
+  ExpectBadHintTraitDiagnostic(&kBadHintVtable);
+}
 
 //===----------------------------------------------------------------------===//
 // Structural checks
@@ -577,28 +683,28 @@ TEST_F(VerifyTest, ConstraintTableSize) {
 }
 
 TEST_F(VerifyTest, AddiHasConstraints) {
-  EXPECT_EQ(loom_test_addi_vtable.constraint_count, 1);
-  EXPECT_NE(loom_test_addi_vtable.constraints, nullptr);
-  EXPECT_EQ(loom_test_addi_vtable.constraints[0].relation,
-            LOOM_RELATION_PAIRWISE_EQ);
-  EXPECT_EQ(loom_test_addi_vtable.constraints[0].property, LOOM_PROPERTY_TYPE);
-  EXPECT_EQ(loom_test_addi_vtable.constraints[0].arg_count, 3);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_ADDI);
+  EXPECT_EQ(vtable->constraint_count, 1);
+  EXPECT_NE(vtable->constraints, nullptr);
+  EXPECT_EQ(vtable->constraints[0].relation, LOOM_RELATION_PAIRWISE_EQ);
+  EXPECT_EQ(vtable->constraints[0].property, LOOM_PROPERTY_TYPE);
+  EXPECT_EQ(vtable->constraints[0].arg_count, 3);
 }
 
 TEST_F(VerifyTest, MapHasRegionConstraints) {
   // test.map has 5 constraints including region-value relationships.
-  EXPECT_EQ(loom_test_map_vtable.constraint_count, 5);
-  EXPECT_NE(loom_test_map_vtable.constraints, nullptr);
-  EXPECT_EQ(loom_test_map_vtable.constraints[0].relation,
-            LOOM_RELATION_ALL_SAME);
-  EXPECT_EQ(loom_test_map_vtable.constraints[0].property, LOOM_PROPERTY_SHAPE);
-  EXPECT_EQ(loom_test_map_vtable.constraints[1].relation,
-            LOOM_RELATION_REGION_ARG_COUNT);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_MAP);
+  EXPECT_EQ(vtable->constraint_count, 5);
+  EXPECT_NE(vtable->constraints, nullptr);
+  EXPECT_EQ(vtable->constraints[0].relation, LOOM_RELATION_ALL_SAME);
+  EXPECT_EQ(vtable->constraints[0].property, LOOM_PROPERTY_SHAPE);
+  EXPECT_EQ(vtable->constraints[1].relation, LOOM_RELATION_REGION_ARG_COUNT);
 }
 
 TEST_F(VerifyTest, ConstantHasNoConstraints) {
-  EXPECT_EQ(loom_test_constant_vtable.constraint_count, 0);
-  EXPECT_EQ(loom_test_constant_vtable.constraints, nullptr);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_CONSTANT);
+  EXPECT_EQ(vtable->constraint_count, 0);
+  EXPECT_EQ(vtable->constraints, nullptr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1642,7 +1748,7 @@ TEST_F(VerifyTest, SsaEncodingNotDefined) {
   IREE_ASSERT_OK(loom_test_convert_build(&builder_, args[0], i32_type,
                                          LOOM_LOCATION_UNKNOWN, &op));
   // Inject the undefined encoding ref into the operand's type.
-  loom_module_set_value_type(module_, args[0], tile_type);
+  IREE_ASSERT_OK(loom_module_set_value_type(module_, args[0], tile_type));
 
   TerminateFunc();
   DiagnosticCapture structured;
@@ -1677,7 +1783,7 @@ TEST_F(VerifyTest, SsaEncodingWrongType) {
   IREE_ASSERT_OK(loom_test_convert_build(&builder_, args[1], i32_type,
                                          LOOM_LOCATION_UNKNOWN, &op));
   // Inject the wrong-type encoding ref into the operand's type.
-  loom_module_set_value_type(module_, args[1], tile_type);
+  IREE_ASSERT_OK(loom_module_set_value_type(module_, args[1], tile_type));
 
   TerminateFunc();
   DiagnosticCapture structured;
@@ -2202,8 +2308,8 @@ TEST_F(VerifyTest, RegionArgMatchViolation) {
   // Change the block arg type to i32.
   loom_region_t* body = loom_test_map_body(op);
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
-  loom_module_set_value_type(module_, loom_region_entry_arg_id(body, 0),
-                             i32_type);
+  IREE_ASSERT_OK(loom_module_set_value_type(
+      module_, loom_region_entry_arg_id(body, 0), i32_type));
 
   // Yield the (now i32) block arg. This yields an i32 for a tile<4xf32>
   // result, which will also trigger a yield type mismatch, but the specific

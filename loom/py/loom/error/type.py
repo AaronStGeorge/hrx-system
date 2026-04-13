@@ -165,6 +165,39 @@ ERR_TYPE_010 = ErrorDef(
     fix_hint="Construct a well-formed type before verification",
 )
 
+# ERR_TYPE_011: Integer code result type is too small.
+ERR_TYPE_011 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=11,
+    severity=Severity.ERROR,
+    summary="Integer code result type is too small.",
+    message="result '{result_name}' has type {actual_type}, but {threshold_count} "
+    "thresholds require codes in [0, {max_code}]",
+    params=(
+        ErrorParam("result_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("threshold_count", ParamKind.I64),
+        ErrorParam("max_code", ParamKind.I64),
+    ),
+    fix_hint="Use a result integer element type with enough bits for every code",
+)
+
+# ERR_TYPE_012: Poison value observed at a boundary.
+ERR_TYPE_012 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=12,
+    severity=Severity.ERROR,
+    summary="Poison value observed at boundary.",
+    message="poison value '{value_name}' cannot be used by {boundary_kind} '{op_name}'",
+    params=(
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("boundary_kind", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+    ),
+    fix_hint="Canonicalize away dead poison or prevent the invalid observation "
+    "before it reaches this boundary",
+)
+
 ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_001,
     ERR_TYPE_002,
@@ -176,4 +209,6 @@ ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_008,
     ERR_TYPE_009,
     ERR_TYPE_010,
+    ERR_TYPE_011,
+    ERR_TYPE_012,
 )

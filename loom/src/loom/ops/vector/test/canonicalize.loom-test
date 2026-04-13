@@ -1,0 +1,82 @@
+// RUN: pass canonicalize
+
+// Zero-lane construction produces the empty aggregate even when the source
+// scalar is poison: no vector lane observes the operand.
+func.def @empty_splat_ignores_poison() -> (vector<0xf32>) {
+  %p = scalar.poison : f32
+  %r = vector.splat %p : f32 -> vector<0xf32>
+  func.return %r : vector<0xf32>
+}
+// ----
+func.def @empty_splat_ignores_poison() -> (vector<0xf32>) {
+  %r = vector.empty : vector<0xf32>
+  func.return %r : vector<0xf32>
+}
+
+// ====
+
+// Zero-lane lanewise computation has exactly one valid result: vector.empty.
+func.def @empty_lanewise(%a: vector<0xf32>, %b: vector<0xf32>) -> (vector<0xf32>) {
+  %r = vector.addf %a, %b : vector<0xf32>
+  func.return %r : vector<0xf32>
+}
+// ----
+func.def @empty_lanewise(%a: vector<0xf32>, %b: vector<0xf32>) -> (vector<0xf32>) {
+  %r = vector.empty : vector<0xf32>
+  func.return %r : vector<0xf32>
+}
+
+// ====
+
+// Reducing zero lanes observes no input lanes and returns the explicit init.
+func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
+  %r = vector.reduce<addf> %v, %init : vector<0xf32> -> f32
+  func.return %r : f32
+}
+// ----
+func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
+  func.return %init : f32
+}
+
+// ====
+
+// Extracting a scalar from a statically empty axis observes an impossible lane.
+func.def @extract_from_empty_axis(%v: vector<0xf32>) -> (f32) {
+  %r = vector.extract %v[0] : vector<0xf32> -> f32
+  func.return %r : f32
+}
+// ----
+func.def @extract_from_empty_axis(%v: vector<0xf32>) -> (f32) {
+  %r = scalar.poison : f32
+  func.return %r : f32
+}
+
+// ====
+
+// A zero-lane load has no memory footprint and returns vector.empty.
+func.def @empty_load(%buffer: buffer, %offset: index) -> (vector<0xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %r = vector.load %view[0] : view<16xf32, %layout> -> vector<0xf32>
+  func.return %r : vector<0xf32>
+}
+// ----
+func.def @empty_load(%buffer: buffer, %offset: index) -> (vector<0xf32>) {
+  %r = vector.empty : vector<0xf32>
+  func.return %r : vector<0xf32>
+}
+
+// ====
+
+// A zero-lane store has no memory footprint and erases completely.
+func.def @empty_store(%buffer: buffer, %offset: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %v = vector.empty : vector<0xf32>
+  vector.store %v, %view[0] : vector<0xf32>, view<16xf32, %layout>
+  func.return
+}
+// ----
+func.def @empty_store(%buffer: buffer, %offset: index) {
+  func.return
+}

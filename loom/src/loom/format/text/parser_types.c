@@ -358,13 +358,15 @@ static iree_status_t loom_assign_type_binding_value_type(
       return loom_parser_emit_duplicate_value_name(parser,
                                                    placeholder->name_token);
     }
-    value->type = binding_type;
+    IREE_RETURN_IF_ERROR(
+        loom_module_set_value_type(parser->module, value_id, binding_type));
     placeholder->resolved = true;
     return iree_ok_status();
   }
 
   if (loom_type_kind(value->type) == LOOM_TYPE_NONE) {
-    value->type = binding_type;
+    IREE_RETURN_IF_ERROR(
+        loom_module_set_value_type(parser->module, value_id, binding_type));
   }
   return iree_ok_status();
 }
@@ -824,6 +826,31 @@ static iree_status_t loom_parse_function_type(loom_parser_t* parser,
 // Type dispatch
 //===----------------------------------------------------------------------===//
 
+// Parses the optional role parameter on an encoding type. Called after the
+// `encoding` keyword has been consumed.
+static iree_status_t loom_parse_encoding_type(loom_parser_t* parser,
+                                              loom_type_t* out_type) {
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
+    *out_type = loom_type_encoding();
+    return iree_ok_status();
+  }
+
+  loom_token_t role_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &role_token);
+  loom_encoding_role_t role = LOOM_ENCODING_ROLE_UNKNOWN;
+  if (!loom_encoding_role_parse(role_token.text, &role)) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("encoding role")),
+        loom_param_string(role_token.text),
+    };
+    return loom_parser_emit(parser, &loom_err_parse_018, params,
+                            IREE_ARRAYSIZE(params), role_token);
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
+  *out_type = loom_type_encoding_with_role(role);
+  return iree_ok_status();
+}
+
 // Consumes keyword, expects LANGLE, dispatches to the type-specific
 // parser. Shared entry for tile, tensor, vector, view, pool, and group.
 static iree_status_t loom_parse_angle_bracketed_type(
@@ -894,8 +921,7 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
     // "encoding" keyword.
     if (iree_string_view_equal(token.text, IREE_SV("encoding"))) {
       loom_tokenizer_next(&parser->tokenizer);
-      *out_type = loom_type_encoding();
-      return iree_ok_status();
+      return loom_parse_encoding_type(parser, out_type);
     }
 
     bool matched_registered_type = false;

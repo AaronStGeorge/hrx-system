@@ -121,7 +121,11 @@ TYPE_CONSTRAINT_MAP: dict[TypeConstraint, str] = {
     TypeConstraint.INDEX: "LOOM_TYPE_CONSTRAINT_INDEX",
     TypeConstraint.ANY: "LOOM_TYPE_CONSTRAINT_ANY",
     TypeConstraint.GROUP: "LOOM_TYPE_CONSTRAINT_GROUP",
-    TypeConstraint.ENCODING: "LOOM_TYPE_CONSTRAINT_ENCODING",
+    TypeConstraint.ANY_ENCODING: "LOOM_TYPE_CONSTRAINT_ANY_ENCODING",
+    TypeConstraint.ENCODING_LAYOUT: "LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT",
+    TypeConstraint.ENCODING_SCHEMA: "LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA",
+    TypeConstraint.ENCODING_STORAGE: "LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE",
+    TypeConstraint.ENCODING_TRANSFORM: "LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM",
     TypeConstraint.POOL: "LOOM_TYPE_CONSTRAINT_POOL",
     TypeConstraint.I1: "LOOM_TYPE_CONSTRAINT_I1",
 }
@@ -141,6 +145,7 @@ TRAIT_MAP: dict[str, str] = {
     "NonDeterministic": "LOOM_TRAIT_NON_DETERMINISTIC",
     "UnknownEffects": "LOOM_TRAIT_UNKNOWN_EFFECTS",
     "UniqueIdentity": "LOOM_TRAIT_UNIQUE_IDENTITY",
+    "Hint": "LOOM_TRAIT_HINT",
 }
 
 # Maps Python constraint names to (relation, property) C enum pairs.
@@ -916,11 +921,13 @@ def _trait_flags(op: Op) -> str:
     explicit_pure = any(t.name == "Pure" for t in op.traits)
     has_non_deterministic = any(t.name == "NonDeterministic" for t in op.traits)
     has_unknown_effects = any(t.name == "UnknownEffects" for t in op.traits)
+    has_hint = any(t.name == "Hint" for t in op.traits)
     if (
         not explicit_pure
         and not op.effects
         and not has_non_deterministic
         and not has_unknown_effects
+        and not has_hint
         and not has_allocating_result
         and not has_explicit_unique_identity
         and not has_read
@@ -2020,9 +2027,6 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
         else:
             lines.extend(_generate_builder_declaration(op, prefix))
 
-        # Vtable extern.
-        lines.append(f"extern const loom_op_vtable_t {prefix}_vtable;")
-
         # Canonicalize function declaration (hand-written, linked in).
         if op.canonicalize:
             lines.append(f"iree_status_t {op.canonicalize}(loom_op_t* op, loom_rewriter_t* rewriter);")
@@ -2338,7 +2342,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         constraint_ptr = f"{prefix}_constraints" if op.constraints else "NULL"
         fmt_ptr = f"{prefix}_format" if elements else "NULL"
 
-        lines.append(f"const loom_op_vtable_t {prefix}_vtable = {{")
+        lines.append(f"static const loom_op_vtable_t {prefix}_vtable = {{")
 
         # Cache line 1: compiler pass hot path.
         lines.append(f"    .traits = {traits},")

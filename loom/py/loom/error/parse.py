@@ -317,7 +317,7 @@ ERR_PARSE_028 = ErrorDef(
     params=(ErrorParam("param_name", ParamKind.STRING),),
     fix_hint=(
         "Keep #family<...> parameters static; pass dynamic parameters with "
-        "encoding.define #family<static attrs> {name = %value : type} : encoding"
+        "encoding.define #family<static attrs> {name = %value : type} : encoding<role>"
     ),
 )
 

@@ -886,14 +886,27 @@ TEST_F(ParserTest, VectorViewAndBufferTypesRoundTrip) {
 
 TEST_F(ParserTest, ViewDynamicLayoutRoundTrip) {
   std::string text = RoundTrip(
-      "test.decl @layout(%N: index, %layout: encoding, "
+      "test.decl @layout(%N: index, %layout: encoding<layout>, "
       "%view: view<[%N]xf32, %layout>)"
       " -> (%view as view<[%N]xf32, %layout>)\n");
-  EXPECT_NE(text.find("test.decl @layout(%N: index, %layout: encoding, "
+  EXPECT_NE(text.find("test.decl @layout(%N: index, %layout: encoding<layout>, "
                       "%view: view<[%N]xf32, %layout>) -> "
                       "(%view as view<[%N]xf32, %layout>)"),
             std::string::npos)
       << "dynamic view layouts should round-trip: " << text;
+}
+
+TEST_F(ParserTest, EncodingRoleTypeRoundTrip) {
+  std::string text = RoundTrip(
+      "test.decl @encodings(%layout: encoding<layout>, "
+      "%schema: encoding<schema>, %storage: encoding<storage>, "
+      "%transform: encoding<transform>)\n");
+  EXPECT_NE(text.find("test.decl @encodings(%layout: encoding<layout>, "
+                      "%schema: encoding<schema>, "
+                      "%storage: encoding<storage>, "
+                      "%transform: encoding<transform>)"),
+            std::string::npos)
+      << "encoding role types should round-trip: " << text;
 }
 
 TEST_F(ParserTest, FuncDeclNamedResultCanReferenceSignatureArg) {
@@ -1662,6 +1675,15 @@ TEST_F(ParserTest, UnknownTypeName) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "foobar");
 }
 
+TEST_F(ParserTest, UnknownEncodingRole) {
+  const auto& diagnostics =
+      ParseExpectErrors("%c = test.constant 0 : encoding<address>\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_018);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "encoding role");
+  EXPECT_EQ(GetStringParam(diagnostics[0], 1), "address");
+}
+
 TEST_F(ParserTest, UnknownEncodingInType) {
   // Encoding references in types must start with '#' (static encoding) or
   // '%' (SSA encoding). A bare identifier triggers ERR_PARSE_008.
@@ -1687,6 +1709,15 @@ TEST_F(ParserTest, VectorRequiresRank) {
   ExpectError(diagnostics[0], &loom_err_parse_003);
   EXPECT_EQ(GetStringParam(diagnostics[0], 1),
             "vector types must have rank >= 1");
+}
+
+TEST_F(ParserTest, VectorZeroExtentIsNotRankZero) {
+  loom_module_t* module = ParseOk(
+      "func.def @empty(%v : vector<0xf32>, %m : vector<4x0xi32>) {\n"
+      "  test.use %v, %m : vector<0xf32>, vector<4x0xi32>\n"
+      "  func.return\n"
+      "}\n");
+  loom_module_free(module);
 }
 
 TEST_F(ParserTest, VectorRejectsEncodingAttachment) {
@@ -1738,7 +1769,7 @@ TEST_F(ParserTest, InlineEncoding) {
 
 TEST_F(ParserTest, EncodingDefineInlineSpec) {
   loom_module_t* module =
-      ParseOk("%enc = encoding.define #q8_0<block=32> : encoding\n");
+      ParseOk("%enc = encoding.define #q8_0<block=32> : encoding<schema>\n");
   ASSERT_NE(module, nullptr);
 
   loom_block_t* body = loom_module_block(module);
@@ -1762,7 +1793,7 @@ TEST_F(ParserTest, EncodingDefineInlineSpec) {
   EXPECT_EQ(spec_encoding->attributes[0].value.i64, 32);
 
   EXPECT_EQ(PrintModule(module),
-            "%enc = encoding.define #q8_0<block=32> : encoding\n");
+            "%enc = encoding.define #q8_0<block=32> : encoding<schema>\n");
   loom_module_free(module);
 }
 
@@ -1770,7 +1801,8 @@ TEST_F(ParserTest, EncodingDefineDynamicParams) {
   loom_module_t* module = ParseOk(
       "func.def @test(%group_size : index, %scale : f32) {\n"
       "  %enc = encoding.define #q8_0<block=32> "
-      "{scale = %scale : f32, group_size = %group_size : index} : encoding\n"
+      "{scale = %scale : f32, group_size = %group_size : index} : "
+      "encoding<schema>\n"
       "  func.return\n"
       "}\n");
   ASSERT_NE(module, nullptr);
@@ -1805,7 +1837,7 @@ TEST_F(ParserTest, EncodingDefineDynamicParams) {
             "func.def @test(%group_size: index, %scale: f32) {\n"
             "  %enc = encoding.define #q8_0<block=32> "
             "{group_size = %group_size : index, scale = %scale : f32} : "
-            "encoding\n"
+            "encoding<schema>\n"
             "  func.return\n"
             "}\n");
   loom_module_free(module);
@@ -1814,7 +1846,8 @@ TEST_F(ParserTest, EncodingDefineDynamicParams) {
 TEST_F(ParserTest, StaticEncodingRejectsSSAParameter) {
   const auto& diagnostics = ParseExpectErrors(
       "func.def @test(%group_size : index) {\n"
-      "  %enc = encoding.define #q8_0<group_size=%group_size> : encoding\n"
+      "  %enc = encoding.define #q8_0<group_size=%group_size> : "
+      "encoding<schema>\n"
       "  func.return\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
@@ -1824,7 +1857,7 @@ TEST_F(ParserTest, StaticEncodingRejectsSSAParameter) {
 
 TEST_F(ParserTest, StaticEncodingRejectsDuplicateParameter) {
   const auto& diagnostics = ParseExpectErrors(
-      "%enc = encoding.define #q8_0<block=32, block=64> : encoding\n");
+      "%enc = encoding.define #q8_0<block=32, block=64> : encoding<schema>\n");
   ASSERT_GE(diagnostics.size(), 1u);
   ExpectError(diagnostics[0], &loom_err_parse_029);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "block");
@@ -1833,7 +1866,7 @@ TEST_F(ParserTest, StaticEncodingRejectsDuplicateParameter) {
 TEST_F(ParserTest, EncodingDefineAliasSpec) {
   loom_module_t* module = ParseOk(
       "#enc = #q8_0<block=32>\n"
-      "%enc = encoding.define #enc : encoding\n");
+      "%enc = encoding.define #enc : encoding<schema>\n");
   ASSERT_NE(module, nullptr);
 
   loom_block_t* body = loom_module_block(module);
@@ -1852,14 +1885,14 @@ TEST_F(ParserTest, EncodingDefineAliasSpec) {
 
   EXPECT_EQ(PrintModule(module),
             "#enc = #q8_0<block=32>\n"
-            "%enc = encoding.define #enc : encoding\n");
+            "%enc = encoding.define #enc : encoding<schema>\n");
   loom_module_free(module);
 }
 
 TEST_F(ParserTest, EncodingDefineNestedInlineSpec) {
   loom_module_t* module = ParseOk(
       "%enc = encoding.define "
-      "#quantization<spec=#q8_0<block=32>> : encoding\n");
+      "#quantization<spec=#q8_0<block=32>> : encoding<schema>\n");
   ASSERT_NE(module, nullptr);
 
   loom_block_t* body = loom_module_block(module);
@@ -1893,7 +1926,7 @@ TEST_F(ParserTest, EncodingDefineNestedInlineSpec) {
 
   EXPECT_EQ(PrintModule(module),
             "%enc = encoding.define "
-            "#quantization<spec=#q8_0<block=32>> : encoding\n");
+            "#quantization<spec=#q8_0<block=32>> : encoding<schema>\n");
   loom_module_free(module);
 }
 

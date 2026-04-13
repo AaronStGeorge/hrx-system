@@ -211,7 +211,7 @@ static iree_status_t loom_global_verify_load_results(
     if (referenced_as_encoding) {
       IREE_RETURN_IF_ERROR(loom_global_verify_result_type(
           module, op, emitter, results, result_index,
-          LOOM_TYPE_CONSTRAINT_ENCODING));
+          LOOM_TYPE_CONSTRAINT_ANY_ENCODING));
     }
     if (result_index > 0) ++referenced_count;
   }

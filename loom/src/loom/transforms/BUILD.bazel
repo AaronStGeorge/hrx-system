@@ -22,7 +22,9 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:special_values",
         "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
     ],
 )
@@ -139,6 +141,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "strip_hints",
+    srcs = ["strip_hints.c"],
+    hdrs = ["strip_hints.h"],
+    deps = [
+        ":pass",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "verify",
     srcs = ["verify.c"],
     hdrs = ["verify.h"],
@@ -149,6 +163,8 @@ loom_cc_library(
         "//loom/src/loom/format/text:printer",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:special_values",
+        "//loom/src/loom/ops/func",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/internal:unicode",

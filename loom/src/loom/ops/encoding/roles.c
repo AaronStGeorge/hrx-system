@@ -21,7 +21,7 @@ iree_string_view_t loom_encoding_role_description(loom_encoding_role_t role) {
       return IREE_SV("a numeric transform encoding");
     case LOOM_ENCODING_ROLE_UNKNOWN:
     default:
-      return IREE_SV("a known-role encoding");
+      return IREE_SV("an encoding with any role");
   }
 }
 
@@ -76,6 +76,8 @@ loom_encoding_role_t loom_encoding_value_role(const loom_module_t* module,
   if (!loom_type_is_encoding(type)) {
     return LOOM_ENCODING_ROLE_UNKNOWN;
   }
+  loom_encoding_role_t type_role = loom_type_encoding_role(type);
+  if (type_role != LOOM_ENCODING_ROLE_UNKNOWN) return type_role;
 
   const loom_value_t* value = loom_module_value(module, value_id);
   if (loom_value_is_block_arg(value)) {

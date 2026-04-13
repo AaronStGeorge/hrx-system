@@ -614,6 +614,11 @@ enum loom_trait_bits_e {
   // loop-invariant allocation can be hoisted out of the loop). Derived
   // automatically by the generator when any result has LOOM_RESULT_ALLOCATES.
   LOOM_TRAIT_UNIQUE_IDENTITY = 1u << 14,
+  // Op is a compiler hint that may affect generated code quality but does not
+  // affect program values, memory contents, or control flow. Ordinary DCE and
+  // canonicalization preserve hints; dedicated hint-stripping passes may erase
+  // them explicitly.
+  LOOM_TRAIT_HINT = 1u << 15,
 };
 typedef uint32_t loom_trait_flags_t;
 
@@ -1282,6 +1287,58 @@ typedef struct loom_type_table_t {
   loom_type_t* entries;
 } loom_type_table_t;
 
+// Index into the module's type-use record table.
+typedef uint32_t loom_type_use_id_t;
+#define LOOM_TYPE_USE_ID_INVALID ((loom_type_use_id_t)UINT32_MAX)
+
+// Per-value heads for the type-use adjacency lists.
+typedef struct loom_value_type_use_heads_t {
+  // First record whose referenced_value_id is this value.
+  loom_type_use_id_t first_incoming_use_id;
+  // First record whose user_value_id is this value.
+  loom_type_use_id_t first_outgoing_use_id;
+} loom_value_type_use_heads_t;
+
+// A reference from one SSA value's type to another SSA value.
+//
+// Type uses are not operands: they describe symbolic type structure such as
+// dynamic dimensions and SSA encodings. They still participate in liveness and
+// RAUW because printed/serialized types contain the referenced SSA names.
+typedef struct loom_type_use_t {
+  // SSA value referenced by a type payload.
+  loom_value_id_t referenced_value_id;
+  // SSA value whose type carries the reference.
+  loom_value_id_t user_value_id;
+  // Next record in referenced_value_id's incoming list.
+  loom_type_use_id_t next_incoming_use_id;
+  // Previous record in referenced_value_id's incoming list.
+  loom_type_use_id_t previous_incoming_use_id;
+  // Next record in user_value_id's outgoing list.
+  loom_type_use_id_t next_outgoing_use_id;
+  // Previous record in user_value_id's outgoing list.
+  loom_type_use_id_t previous_outgoing_use_id;
+} loom_type_use_t;
+
+// Dense side metadata for SSA references embedded in value types.
+typedef struct loom_type_use_table_t {
+  // Number of per-value head entries allocated in value_heads.
+  iree_host_size_t value_capacity;
+  // Dense per-value incoming/outgoing list heads, indexed by value ID.
+  loom_value_type_use_heads_t* value_heads;
+  // Number of record slots ever allocated from records.
+  iree_host_size_t record_count;
+  // Number of record slots allocated in records.
+  iree_host_size_t record_capacity;
+  // Number of currently active type-use records.
+  iree_host_size_t active_count;
+  // Number of inactive record slots linked through first_free_use_id.
+  iree_host_size_t free_count;
+  // First inactive record slot available for reuse.
+  loom_type_use_id_t first_free_use_id;
+  // Sparse type-use records, indexed by loom_type_use_id_t.
+  loom_type_use_t* records;
+} loom_type_use_table_t;
+
 // Open-addressing hash table for deduplicating strings and types during
 // construction. Arena-allocated, freed when the module is destroyed.
 // Lazy-initialized: capacity 0 means uninitialized, first use allocates.
@@ -1354,6 +1411,9 @@ typedef struct loom_module_t {
   // All SSA values (op results and block arguments).
   // 64-byte aligned for cache-line access.
   loom_value_table_t values;
+
+  // SSA references carried by value types.
+  loom_type_use_table_t type_uses;
 
   // Module-level named symbols (functions, globals, executables).
   loom_symbol_table_t symbols;

@@ -46,7 +46,6 @@ iree_status_t loom_scf_for_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scf_for_vtable;
 
 // LOOM_OP_SCF_IF: Conditional execution with required else region.
 // scf.if %cond {
@@ -64,7 +63,6 @@ iree_status_t loom_scf_if_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scf_if_vtable;
 
 // LOOM_OP_SCF_YIELD: Region terminator forwarding values to the parent scf op.
 // scf.yield
@@ -76,7 +74,6 @@ iree_status_t loom_scf_yield_build(
     iree_host_size_t values_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scf_yield_vtable;
 
 // Returns the vtable array for the scf dialect.
 const loom_op_vtable_t* const* loom_scf_dialect_vtables(

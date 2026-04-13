@@ -31,6 +31,28 @@ class VectorBuilders:
         _attributes["value"] = value
         return cast(ValueRef, self._b.build("vector.constant", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def poison(self, *, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Materialize a typed Loom poison vector. Poison represents an invalid vector value and propagates through pure vector ops until dead-code elimination removes it or a boundary diagnoses it. A zero-lane vector such as vector<0xf32> is not poison: it is an empty aggregate whose pure lane-wise computation and zero-lane memory effects should canonicalize away. Poison is introduced when IR observes something that cannot exist, such as a lane extracted from a vector proven to have zero lanes.
+
+        Example::
+            %p = vector.poison : vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        return cast(ValueRef, self._b.build("vector.poison", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def empty(self, *, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Materialize the unique empty aggregate value for a static zero-lane vector type. Empty vectors are ordinary values, not poison, and pure zero-lane computation canonicalizes to this op.
+
+        Example::
+            %v = vector.empty : vector<0xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        return cast(ValueRef, self._b.build("vector.empty", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def splat(self, *, scalar: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Replicate one scalar value to every lane of a vector result.
 
@@ -210,11 +232,26 @@ class VectorBuilders:
         _operands.append(indices)
         return cast(ValueRef, self._b.build("vector.table.lookup", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def quantize(self, *, input: ValueRef, thresholds: ValueRef, nan: str, tie: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Map floating-point lanes to unsigned integer ordinal code lanes by counting ordered rank-1 threshold table entries.
+
+        Example::
+            %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<32xf32>, vector<15xf32> -> vector<32xi8>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["nan"] = nan
+        _attributes["tie"] = tie
+        _operands.append(input)
+        _operands.append(thresholds)
+        return cast(ValueRef, self._b.build("vector.table.quantize", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def transform(self, *, source: ValueRef, transform: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Apply an explicit numeric transform descriptor to vector register lanes.
 
         Example::
-            %r = vector.transform %v, %xf : vector<128xf32>, encoding -> vector<128xf32>
+            %r = vector.transform %v, %xf : vector<128xf32>, encoding<transform> -> vector<128xf32>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -672,6 +709,41 @@ class VectorBuilders:
         _operands.append(lhs)
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("vector.muli", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def andi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise bitwise AND."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.andi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def ori(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise bitwise OR."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.ori", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def xori(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise bitwise XOR."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.xori", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def ctpopi(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise population count over integer lanes."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.ctpopi", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def sqrtf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise square root."""

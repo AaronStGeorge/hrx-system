@@ -7,7 +7,7 @@ from __future__ import annotations
 import builtins
 from typing import Any, cast
 
-from loom.builder import IRBuilder, ValueRef
+from loom.builder import IRBuilder, TiedResultSpec, ValueRef
 from loom.ir import Predicate, Region, Type
 
 
@@ -1122,6 +1122,17 @@ class ScalarBuilders:
         _regions: list[Region] = []
         _attributes["value"] = value
         return cast(ValueRef, self._b.build("scalar.constant", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def poison(self, *, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Materialize a typed Loom poison scalar. Poison represents an invalid scalar observation, such as extracting a lane proven not to exist. Pure scalar ops with any poison operand canonicalize to poison of the corresponding result type. Poison is not an LLVM poison value: it must be removed by dead-code elimination or diagnosed before it reaches a store, return, kernel boundary, or target-lowering boundary.
+
+        Example::
+            %p = scalar.poison : f32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        return cast(ValueRef, self._b.build("scalar.poison", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def andi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
         """Bitwise AND.

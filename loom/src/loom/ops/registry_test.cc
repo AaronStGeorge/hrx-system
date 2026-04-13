@@ -127,6 +127,52 @@ TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
                                               LOOM_TYPE_CONSTRAINT_I1_ELEMENT));
 }
 
+TEST(TypeConstraint, EncodingRolesAreExplicit) {
+  loom_type_t any_encoding = loom_type_encoding();
+  loom_type_t layout =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+  loom_type_t schema =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_STORAGE_SCHEMA);
+  loom_type_t storage =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_PHYSICAL_STORAGE);
+  loom_type_t transform =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM);
+  loom_type_t scalar_i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  EXPECT_STREQ("encoding",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_ANY_ENCODING));
+  EXPECT_STREQ("encoding<layout>",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT));
+  EXPECT_STREQ("encoding<schema>",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA));
+  EXPECT_STREQ("encoding<storage>", loom_type_constraint_name(
+                                        LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE));
+  EXPECT_STREQ(
+      "encoding<transform>",
+      loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      any_encoding, LOOM_TYPE_CONSTRAINT_ANY_ENCODING));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      layout, LOOM_TYPE_CONSTRAINT_ANY_ENCODING));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      scalar_i32, LOOM_TYPE_CONSTRAINT_ANY_ENCODING));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      layout, LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      schema, LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      storage, LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      transform, LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM));
+
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      any_encoding, LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      schema, LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT));
+}
+
 //===----------------------------------------------------------------------===//
 // Type registry
 //===----------------------------------------------------------------------===//

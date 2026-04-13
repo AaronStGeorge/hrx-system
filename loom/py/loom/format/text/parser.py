@@ -66,6 +66,7 @@ from loom.format.text.tokenizer import (
 )
 from loom.ir import (
     BUFFER_TYPE,
+    ENCODING_ROLE_BY_NAME,
     ENCODING_TYPE,
     GROUP_SCOPE_BY_NAME,
     NONE_TYPE,
@@ -233,7 +234,7 @@ def _parse_static_encoding_params_from_tokens(
                     f"static encoding parameter '{name_token.text}' cannot use "
                     "an SSA value; pass dynamic parameters with "
                     "encoding.define #family<static attrs> "
-                    "{param = %value : type} : encoding",
+                    "{param = %value : type} : encoding<role>",
                     tokenizer.peek().location,
                     filename,
                 )
@@ -545,7 +546,17 @@ def parse_type_from_tokens(
     # Encoding type keyword?
     if token.kind == TokenKind.BARE_IDENT and token.text == "encoding":
         tokenizer.next()
-        return ENCODING_TYPE, {}
+        if tokenizer.try_consume(TokenKind.LANGLE) is None:
+            return ENCODING_TYPE, {}
+        role_token = tokenizer.expect(TokenKind.BARE_IDENT)
+        role = ENCODING_ROLE_BY_NAME.get(role_token.text)
+        if role is None:
+            raise ParseError(
+                f"unknown encoding role: {role_token.text!r}",
+                role_token.location,
+            )
+        tokenizer.expect(TokenKind.RANGLE)
+        return EncodingType(role), {}
 
     # Registered type (BARE_IDENT like "tile" or OP_NAME like "hal.buffer")?
     if token.kind in (TokenKind.BARE_IDENT, TokenKind.OP_NAME):

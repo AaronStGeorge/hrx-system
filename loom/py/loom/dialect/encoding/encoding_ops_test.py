@@ -15,10 +15,12 @@ from loom.dialect.encoding import (
     encoding_ops,
 )
 from loom.dsl import (
+    ANY_ENCODING,
     ATTR_TYPE_DICT,
     ATTR_TYPE_ENCODING,
     ATTR_TYPE_I64_ARRAY,
-    ENCODING,
+    ENCODING_LAYOUT,
+    I1,
     TypeConstraint,
 )
 
@@ -58,7 +60,7 @@ class TestEncodingLayoutDense:
 
     def test_result_is_encoding(self) -> None:
         assert len(encoding_layout_dense.results) == 1
-        assert encoding_layout_dense.results[0].type_constraint == ENCODING
+        assert encoding_layout_dense.results[0].type_constraint == ENCODING_LAYOUT
 
     def test_is_pure(self) -> None:
         assert encoding_layout_dense.is_pure
@@ -81,7 +83,7 @@ class TestEncodingLayoutStrided:
 
     def test_result_is_encoding(self) -> None:
         assert len(encoding_layout_strided.results) == 1
-        assert encoding_layout_strided.results[0].type_constraint == ENCODING
+        assert encoding_layout_strided.results[0].type_constraint == ENCODING_LAYOUT
 
     def test_is_pure(self) -> None:
         assert encoding_layout_strided.is_pure
@@ -93,7 +95,7 @@ class TestEncodingDefine:
 
     def test_result_is_encoding(self) -> None:
         assert len(encoding_define.results) == 1
-        assert encoding_define.results[0].type_constraint == ENCODING
+        assert encoding_define.results[0].type_constraint == ANY_ENCODING
 
     def test_has_spec_attr(self) -> None:
         attr = encoding_define.attr("spec")
@@ -121,11 +123,11 @@ class TestEncodingIsa:
 
     def test_operand_is_encoding(self) -> None:
         assert len(encoding_isa.operands) == 1
-        assert encoding_isa.operands[0].type_constraint == ENCODING
+        assert encoding_isa.operands[0].type_constraint == ANY_ENCODING
 
-    def test_result_is_integer(self) -> None:
+    def test_result_is_i1(self) -> None:
         assert len(encoding_isa.results) == 1
-        assert encoding_isa.results[0].type_constraint == TypeConstraint.INTEGER
+        assert encoding_isa.results[0].type_constraint == I1
 
     def test_has_category_attr(self) -> None:
         attr = encoding_isa.attr("category")

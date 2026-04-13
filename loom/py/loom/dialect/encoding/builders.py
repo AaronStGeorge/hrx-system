@@ -23,7 +23,7 @@ class EncodingBuilders:
         """Construct a dense row-major address layout. The consuming view type provides the rank and logical extents.
 
         Example::
-            %layout = encoding.layout.dense : encoding
+            %layout = encoding.layout.dense : encoding<layout>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -34,7 +34,7 @@ class EncodingBuilders:
         """Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list.
 
         Example::
-            %layout = encoding.layout.strided [%row_stride, 1] : encoding
+            %layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -54,7 +54,7 @@ class EncodingBuilders:
         """Create an encoding value from a static encoding specification.
 
         Example::
-            %enc = encoding.define #q8_0<block=32> : encoding
+            %enc = encoding.define #q8_0<block=32> : encoding<schema>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}

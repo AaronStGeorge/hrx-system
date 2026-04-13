@@ -11,6 +11,10 @@ import pytest
 from loom.ir import (
     BF16,
     BUFFER_TYPE,
+    ENCODING_LAYOUT_TYPE,
+    ENCODING_SCHEMA_TYPE,
+    ENCODING_STORAGE_TYPE,
+    ENCODING_TRANSFORM_TYPE,
     ENCODING_TYPE,
     F16,
     F32,
@@ -35,6 +39,7 @@ from loom.ir import (
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
+    EncodingRole,
     EncodingType,
     FileLocation,
     FunctionType,
@@ -207,6 +212,13 @@ class TestShapedTypes:
         assert t.is_all_static
         assert repr(t) == "vector<16xf32>"
 
+    def test_vector_zero_extent_is_empty_not_rank_zero(self) -> None:
+        t = ShapedType(TypeKind.VECTOR, F32, (StaticDim(0),))
+        assert t.type_kind == TypeKind.VECTOR
+        assert t.rank == 1
+        assert t.is_all_static
+        assert repr(t) == "vector<0xf32>"
+
     def test_vector_dynamic(self) -> None:
         t = ShapedType(TypeKind.VECTOR, I32, (DynamicDim(),))
         assert t.type_kind == TypeKind.VECTOR
@@ -280,14 +292,23 @@ class TestEncodingType:
     def test_singleton(self) -> None:
         assert ENCODING_TYPE.type_kind == TypeKind.ENCODING
         assert repr(ENCODING_TYPE) == "encoding"
+        assert ENCODING_LAYOUT_TYPE.type_kind == TypeKind.ENCODING
+        assert repr(ENCODING_LAYOUT_TYPE) == "encoding<layout>"
+        assert repr(ENCODING_SCHEMA_TYPE) == "encoding<schema>"
+        assert repr(ENCODING_STORAGE_TYPE) == "encoding<storage>"
+        assert repr(ENCODING_TRANSFORM_TYPE) == "encoding<transform>"
 
     def test_equality(self) -> None:
         assert EncodingType() == EncodingType()
         assert EncodingType() == ENCODING_TYPE
+        assert EncodingType(EncodingRole.LAYOUT) == ENCODING_LAYOUT_TYPE
+        assert ENCODING_LAYOUT_TYPE != ENCODING_SCHEMA_TYPE
 
     def test_hashable(self) -> None:
         s = {EncodingType(), ENCODING_TYPE, EncodingType()}
         assert len(s) == 1
+        role_set = {ENCODING_LAYOUT_TYPE, ENCODING_SCHEMA_TYPE, EncodingType()}
+        assert len(role_set) == 3
 
 
 class TestBufferType:

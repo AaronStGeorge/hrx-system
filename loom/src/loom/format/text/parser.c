@@ -409,7 +409,8 @@ iree_status_t loom_parser_define_value(loom_parser_t* parser,
             !loom_type_equal(placeholder_type, type)) {
           return loom_parser_emit_duplicate_value_name(parser, name_token);
         }
-        parser->module->values.entries[value_id].type = type;
+        IREE_RETURN_IF_ERROR(
+            loom_module_set_value_type(parser->module, value_id, type));
         placeholder->resolved = true;
         *out_value_id = value_id;
         return iree_ok_status();
@@ -1820,8 +1821,13 @@ iree_status_t loom_parse_keyword(loom_parser_t* parser, uint16_t keyword_id) {
       return loom_parser_expect(parser, LOOM_TOKEN_RBRACE, NULL);
     default: {
       // Text keyword — match as BARE_IDENT.
-      iree_string_view_t expected =
-          loom_bstring_view(loom_keyword_bstrings[keyword_id]);
+      loom_bstring_t keyword_bstring =
+          loom_keyword_bstring((loom_keyword_id_t)keyword_id);
+      if (!keyword_bstring) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "keyword id %u is out of range", keyword_id);
+      }
+      iree_string_view_t expected = loom_bstring_view(keyword_bstring);
       if (!loom_tokenizer_try_consume_keyword(&parser->tokenizer, expected)) {
         loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
         return loom_parser_emit_unexpected_token(parser, peek, expected);
@@ -1883,7 +1889,9 @@ static iree_status_t loom_finalize_op(
       }
       if (vtable->result_descriptors[i].type_constraint ==
           LOOM_TYPE_CONSTRAINT_I1) {
-        value->type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+        IREE_RETURN_IF_ERROR(
+            loom_module_set_value_type(parser->module, parsed->result_ids[i],
+                                       loom_type_scalar(LOOM_SCALAR_TYPE_I1)));
       }
     }
   }

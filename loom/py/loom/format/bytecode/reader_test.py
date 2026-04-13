@@ -375,6 +375,10 @@ class TestTypeRoundTrips:
         t = ShapedType(TypeKind.VECTOR, F32, (StaticDim(16),))
         assert self._roundtrip_type(t) == t
 
+    def test_vector_zero_extent(self) -> None:
+        t = ShapedType(TypeKind.VECTOR, F32, (StaticDim(0),))
+        assert self._roundtrip_type(t) == t
+
     def test_vector_dynamic(self) -> None:
         t = ShapedType(TypeKind.VECTOR, I32, (DynamicDim(),))
         assert self._roundtrip_type(t) == t

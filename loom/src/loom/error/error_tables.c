@@ -259,6 +259,48 @@ const loom_error_def_t loom_err_type_010 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_type_011_params[] = {
+    {"result_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},
+    {"threshold_count", LOOM_PARAM_I64},
+    {"max_code", LOOM_PARAM_I64},
+};
+const loom_error_def_t loom_err_type_011 = {
+    .error_id = "ERR_TYPE_011",
+    .domain = LOOM_ERROR_DOMAIN_TYPE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 11,
+    .summary = "Integer code result type is too small.",
+    .message_template =
+        "result '{result_name}' has type {actual_type}, but {threshold_count} "
+        "thresholds require codes in [0, {max_code}]",
+    .fix_hint_template =
+        "Use a result integer element type with enough bits for every code",
+    .param_defs = loom_err_type_011_params,
+    .param_count = 4,
+};
+
+static const loom_error_param_def_t loom_err_type_012_params[] = {
+    {"value_name", LOOM_PARAM_STRING},
+    {"boundary_kind", LOOM_PARAM_STRING},
+    {"op_name", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_type_012 = {
+    .error_id = "ERR_TYPE_012",
+    .domain = LOOM_ERROR_DOMAIN_TYPE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 12,
+    .summary = "Poison value observed at boundary.",
+    .message_template =
+        "poison value '{value_name}' cannot be used by {boundary_kind} "
+        "'{op_name}'",
+    .fix_hint_template =
+        "Canonicalize away dead poison or prevent the invalid observation "
+        "before it reaches this boundary",
+    .param_defs = loom_err_type_012_params,
+    .param_count = 3,
+};
+
 static const loom_error_param_def_t loom_err_shape_001_params[] = {
     {"operand_a", LOOM_PARAM_STRING},
     {"rank_a", LOOM_PARAM_I64},
@@ -652,6 +694,49 @@ const loom_error_def_t loom_err_encoding_011 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_encoding_012_params[] = {
+    {"encoding_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},
+    {"expected_type", LOOM_PARAM_TYPE},
+};
+const loom_error_def_t loom_err_encoding_012 = {
+    .error_id = "ERR_ENCODING_012",
+    .domain = LOOM_ERROR_DOMAIN_ENCODING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 12,
+    .summary = "Encoding result has wrong role.",
+    .message_template =
+        "encoding '{encoding_name}' result has type {actual_type}, expected "
+        "{expected_type}",
+    .fix_hint_template =
+        "Spell the encoding.define result type with the role produced by the "
+        "family",
+    .param_defs = loom_err_encoding_012_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_encoding_013_params[] = {
+    {"encoding_name", LOOM_PARAM_STRING},
+    {"param_name", LOOM_PARAM_STRING},
+    {"actual_value", LOOM_PARAM_STRING},
+    {"expected_values", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_encoding_013 = {
+    .error_id = "ERR_ENCODING_013",
+    .domain = LOOM_ERROR_DOMAIN_ENCODING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 13,
+    .summary = "Encoding static parameter has unsupported value.",
+    .message_template =
+        "encoding '{encoding_name}' parameter '{param_name}' has value "
+        "'{actual_value}', expected {expected_values}",
+    .fix_hint_template =
+        "Use one of the static parameter values supported by the encoding "
+        "family",
+    .param_defs = loom_err_encoding_013_params,
+    .param_count = 4,
+};
+
 static const loom_error_param_def_t loom_err_structure_001_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"actual_count", LOOM_PARAM_U32},
@@ -904,6 +989,44 @@ const loom_error_def_t loom_err_structure_014 = {
     .fix_hint_template =
         "Choose an attribute value satisfying '{expected_constraint}'",
     .param_defs = loom_err_structure_014_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_structure_015_params[] = {
+    {"field_name", LOOM_PARAM_STRING},
+    {"left_index", LOOM_PARAM_U32},
+    {"right_index", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_structure_015 = {
+    .error_id = "ERR_STRUCTURE_015",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 15,
+    .summary = "Static threshold table is not ordered.",
+    .message_template =
+        "threshold table '{field_name}' is not ordered at entries {left_index} "
+        "and {right_index}",
+    .fix_hint_template = "Provide static thresholds in nondecreasing order",
+    .param_defs = loom_err_structure_015_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_structure_016_params[] = {
+    {"op_name", LOOM_PARAM_STRING},
+    {"trait_a", LOOM_PARAM_STRING},
+    {"trait_b", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_structure_016 = {
+    .error_id = "ERR_STRUCTURE_016",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 16,
+    .summary = "Operation traits are mutually incompatible.",
+    .message_template =
+        "'{op_name}' has incompatible traits {trait_a} and {trait_b}",
+    .fix_hint_template =
+        "Remove one of the incompatible traits from '{op_name}'",
+    .param_defs = loom_err_structure_016_params,
     .param_count = 3,
 };
 
@@ -1546,7 +1669,7 @@ const loom_error_def_t loom_err_parse_028 = {
     .fix_hint_template =
         "Keep #family<...> parameters static; pass dynamic parameters with "
         "encoding.define #family<static attrs> {name = %value : type} : "
-        "encoding",
+        "encoding<role>",
     .param_defs = loom_err_parse_028_params,
     .param_count = 1,
 };
@@ -1744,18 +1867,20 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
     &loom_err_type_007,      &loom_err_type_008,      &loom_err_type_009,
-    &loom_err_type_010,      &loom_err_shape_001,     &loom_err_shape_002,
-    &loom_err_shape_003,     &loom_err_shape_004,     &loom_err_shape_005,
-    &loom_err_subrange_001,  &loom_err_subrange_002,  &loom_err_subrange_003,
-    &loom_err_subrange_004,  &loom_err_encoding_001,  &loom_err_encoding_002,
-    &loom_err_encoding_003,  &loom_err_encoding_004,  &loom_err_encoding_005,
-    &loom_err_encoding_006,  &loom_err_encoding_007,  &loom_err_encoding_008,
-    &loom_err_encoding_009,  &loom_err_encoding_010,  &loom_err_encoding_011,
-    &loom_err_structure_001, &loom_err_structure_002, &loom_err_structure_003,
-    &loom_err_structure_004, &loom_err_structure_005, &loom_err_structure_006,
-    &loom_err_structure_007, &loom_err_structure_008, &loom_err_structure_009,
-    &loom_err_structure_010, &loom_err_structure_011, &loom_err_structure_012,
-    &loom_err_structure_013, &loom_err_structure_014, &loom_err_dominance_001,
+    &loom_err_type_010,      &loom_err_type_011,      &loom_err_type_012,
+    &loom_err_shape_001,     &loom_err_shape_002,     &loom_err_shape_003,
+    &loom_err_shape_004,     &loom_err_shape_005,     &loom_err_subrange_001,
+    &loom_err_subrange_002,  &loom_err_subrange_003,  &loom_err_subrange_004,
+    &loom_err_encoding_001,  &loom_err_encoding_002,  &loom_err_encoding_003,
+    &loom_err_encoding_004,  &loom_err_encoding_005,  &loom_err_encoding_006,
+    &loom_err_encoding_007,  &loom_err_encoding_008,  &loom_err_encoding_009,
+    &loom_err_encoding_010,  &loom_err_encoding_011,  &loom_err_encoding_012,
+    &loom_err_encoding_013,  &loom_err_structure_001, &loom_err_structure_002,
+    &loom_err_structure_003, &loom_err_structure_004, &loom_err_structure_005,
+    &loom_err_structure_006, &loom_err_structure_007, &loom_err_structure_008,
+    &loom_err_structure_009, &loom_err_structure_010, &loom_err_structure_011,
+    &loom_err_structure_012, &loom_err_structure_013, &loom_err_structure_014,
+    &loom_err_structure_015, &loom_err_structure_016, &loom_err_dominance_001,
     &loom_err_dominance_002, &loom_err_dominance_003, &loom_err_dominance_004,
     &loom_err_dominance_005, &loom_err_dominance_006, &loom_err_dominance_007,
     &loom_err_dominance_008, &loom_err_symbol_001,    &loom_err_symbol_002,

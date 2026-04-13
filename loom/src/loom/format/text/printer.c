@@ -198,6 +198,22 @@ static iree_status_t loom_print_scalar_type(loom_output_stream_t* stream,
   return loom_output_stream_write_cstring(stream, name);
 }
 
+static iree_status_t loom_print_encoding_type(loom_output_stream_t* stream,
+                                              loom_type_t type) {
+  loom_encoding_role_t role = loom_type_encoding_role(type);
+  if (role == LOOM_ENCODING_ROLE_UNKNOWN) {
+    return loom_output_stream_write_cstring(stream, "encoding");
+  }
+  const char* role_name = loom_encoding_role_name(role);
+  if (!role_name) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown encoding role %d", (int)role);
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "encoding<"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, role_name));
+  return loom_output_stream_write_char(stream, '>');
+}
+
 // Writes %name for a value_id to the stream. Named values use their
 // string name (%foo). Unnamed values use their value_id (%0, %1, ...).
 // These occupy separate syntactic namespaces (identifiers vs digits)
@@ -385,7 +401,7 @@ iree_status_t loom_text_print_type(loom_type_t type,
       return iree_ok_status();
     }
     case LOOM_TYPE_ENCODING:
-      return loom_output_stream_write_cstring(stream, "encoding");
+      return loom_print_encoding_type(stream, type);
     case LOOM_TYPE_BUFFER:
       return loom_output_stream_write_cstring(stream, "buffer");
     case LOOM_TYPE_POOL: {
@@ -1371,9 +1387,10 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               "format KEYWORD data %u out of range (max %u)", element->data,
               (uint16_t)LOOM_KW_COUNT_);
         }
-        IREE_RETURN_IF_ERROR(loom_print_emit(
-            ctx, loom_bstring_view(loom_keyword_bstrings[element->data]),
-            false));
+        loom_bstring_t keyword_bstring =
+            loom_keyword_bstring((loom_keyword_id_t)element->data);
+        IREE_RETURN_IF_ERROR(
+            loom_print_emit(ctx, loom_bstring_view(keyword_bstring), false));
         break;
       }
       case LOOM_FORMAT_KIND_REGION: {

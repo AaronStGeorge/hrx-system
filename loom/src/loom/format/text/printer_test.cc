@@ -271,6 +271,18 @@ TEST(PrintType, FunctionTypeWithShapedTypes) {
 
 TEST(PrintType, EncodingType) {
   EXPECT_EQ(print_type(loom_type_encoding()), "encoding");
+  EXPECT_EQ(print_type(loom_type_encoding_with_role(
+                LOOM_ENCODING_ROLE_ADDRESS_LAYOUT)),
+            "encoding<layout>");
+  EXPECT_EQ(print_type(loom_type_encoding_with_role(
+                LOOM_ENCODING_ROLE_STORAGE_SCHEMA)),
+            "encoding<schema>");
+  EXPECT_EQ(print_type(loom_type_encoding_with_role(
+                LOOM_ENCODING_ROLE_PHYSICAL_STORAGE)),
+            "encoding<storage>");
+  EXPECT_EQ(print_type(loom_type_encoding_with_role(
+                LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM)),
+            "encoding<transform>");
 }
 
 TEST(PrintType, PoolStaticBlockSize) {

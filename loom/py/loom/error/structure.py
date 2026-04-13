@@ -207,6 +207,37 @@ ERR_STRUCTURE_014 = ErrorDef(
     fix_hint="Choose an attribute value satisfying '{expected_constraint}'",
 )
 
+# ERR_STRUCTURE_015: Static threshold table is not ordered.
+ERR_STRUCTURE_015 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=15,
+    severity=Severity.ERROR,
+    summary="Static threshold table is not ordered.",
+    message="threshold table '{field_name}' is not ordered at entries "
+    "{left_index} and {right_index}",
+    params=(
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("left_index", ParamKind.U32),
+        ErrorParam("right_index", ParamKind.U32),
+    ),
+    fix_hint="Provide static thresholds in nondecreasing order",
+)
+
+# ERR_STRUCTURE_016: Operation traits are mutually incompatible.
+ERR_STRUCTURE_016 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=16,
+    severity=Severity.ERROR,
+    summary="Operation traits are mutually incompatible.",
+    message="'{op_name}' has incompatible traits {trait_a} and {trait_b}",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("trait_a", ParamKind.STRING),
+        ErrorParam("trait_b", ParamKind.STRING),
+    ),
+    fix_hint="Remove one of the incompatible traits from '{op_name}'",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -222,4 +253,6 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_012,
     ERR_STRUCTURE_013,
     ERR_STRUCTURE_014,
+    ERR_STRUCTURE_015,
+    ERR_STRUCTURE_016,
 )

@@ -15,6 +15,8 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/special_values.h"
 
 //===----------------------------------------------------------------------===//
 // Internal verification state
@@ -970,6 +972,106 @@ static iree_status_t loom_verify_diagnostic_emitter_fn(
 static const loom_op_vtable_t* loom_verify_lookup_vtable(
     const loom_verify_state_t* state, loom_op_kind_t kind) {
   return loom_context_resolve_op(state->module->context, kind);
+}
+
+static bool loom_verify_trait_conflict(loom_trait_flags_t traits,
+                                       iree_string_view_t* out_trait_a,
+                                       iree_string_view_t* out_trait_b) {
+  if (iree_all_bits_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_PURE)) {
+    *out_trait_a = IREE_SV("HINT");
+    *out_trait_b = IREE_SV("PURE");
+    return true;
+  }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_UNKNOWN_EFFECTS)) {
+    *out_trait_a = IREE_SV("HINT");
+    *out_trait_b = IREE_SV("UNKNOWN_EFFECTS");
+    return true;
+  }
+  if (iree_all_bits_set(traits,
+                        LOOM_TRAIT_HINT | LOOM_TRAIT_NON_DETERMINISTIC)) {
+    *out_trait_a = IREE_SV("HINT");
+    *out_trait_b = IREE_SV("NON_DETERMINISTIC");
+    return true;
+  }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_READS_MEMORY)) {
+    *out_trait_a = IREE_SV("HINT");
+    *out_trait_b = IREE_SV("READS_MEMORY");
+    return true;
+  }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_HINT | LOOM_TRAIT_WRITES_MEMORY)) {
+    *out_trait_a = IREE_SV("HINT");
+    *out_trait_b = IREE_SV("WRITES_MEMORY");
+    return true;
+  }
+  if (iree_all_bits_set(traits,
+                        LOOM_TRAIT_PURE | LOOM_TRAIT_NON_DETERMINISTIC)) {
+    *out_trait_a = IREE_SV("PURE");
+    *out_trait_b = IREE_SV("NON_DETERMINISTIC");
+    return true;
+  }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_PURE | LOOM_TRAIT_UNKNOWN_EFFECTS)) {
+    *out_trait_a = IREE_SV("PURE");
+    *out_trait_b = IREE_SV("UNKNOWN_EFFECTS");
+    return true;
+  }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_PURE | LOOM_TRAIT_UNIQUE_IDENTITY)) {
+    *out_trait_a = IREE_SV("PURE");
+    *out_trait_b = IREE_SV("UNIQUE_IDENTITY");
+    return true;
+  }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_PURE | LOOM_TRAIT_READS_MEMORY)) {
+    *out_trait_a = IREE_SV("PURE");
+    *out_trait_b = IREE_SV("READS_MEMORY");
+    return true;
+  }
+  if (iree_all_bits_set(traits, LOOM_TRAIT_PURE | LOOM_TRAIT_WRITES_MEMORY)) {
+    *out_trait_a = IREE_SV("PURE");
+    *out_trait_b = IREE_SV("WRITES_MEMORY");
+    return true;
+  }
+  if (iree_all_bits_set(traits,
+                        LOOM_TRAIT_UNKNOWN_EFFECTS | LOOM_TRAIT_READS_MEMORY)) {
+    *out_trait_a = IREE_SV("UNKNOWN_EFFECTS");
+    *out_trait_b = IREE_SV("READS_MEMORY");
+    return true;
+  }
+  if (iree_all_bits_set(
+          traits, LOOM_TRAIT_UNKNOWN_EFFECTS | LOOM_TRAIT_WRITES_MEMORY)) {
+    *out_trait_a = IREE_SV("UNKNOWN_EFFECTS");
+    *out_trait_b = IREE_SV("WRITES_MEMORY");
+    return true;
+  }
+  return false;
+}
+
+static void loom_verify_op_trait_flags_consistency(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, loom_trait_flags_t traits) {
+  iree_string_view_t trait_a = iree_string_view_empty();
+  iree_string_view_t trait_b = iree_string_view_empty();
+  if (!loom_verify_trait_conflict(traits, &trait_a, &trait_b)) return;
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_vtable_name(vtable)),
+      loom_param_string(trait_a),
+      loom_param_string(trait_b),
+  };
+  loom_verify_emit_structured(state, op, &loom_err_structure_016, params,
+                              IREE_ARRAYSIZE(params));
+}
+
+static void loom_verify_op_declared_trait_consistency(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable) {
+  loom_verify_op_trait_flags_consistency(state, op, vtable, vtable->traits);
+}
+
+static void loom_verify_op_effective_trait_consistency(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable) {
+  loom_trait_flags_t effective_traits =
+      loom_op_effective_traits(state->module, op);
+  if (effective_traits == vtable->traits) return;
+  loom_verify_op_trait_flags_consistency(state, op, vtable, effective_traits);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2195,6 +2297,69 @@ static void loom_verify_operand_dominance(loom_verify_state_t* state,
   }
 }
 
+static bool loom_verify_op_observes_poison(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_string_view_t* out_boundary_kind) {
+  if (loom_func_return_isa(op)) {
+    *out_boundary_kind = IREE_SV("function return");
+    return true;
+  }
+  loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+  const loom_trait_flags_t boundary_traits =
+      LOOM_TRAIT_READS_MEMORY | LOOM_TRAIT_WRITES_MEMORY |
+      LOOM_TRAIT_NON_DETERMINISTIC | LOOM_TRAIT_UNKNOWN_EFFECTS;
+  if (iree_any_bit_set(traits, boundary_traits)) {
+    *out_boundary_kind = IREE_SV("effectful operation");
+    return true;
+  }
+  *out_boundary_kind = IREE_SV("");
+  return false;
+}
+
+static void loom_verify_poison_boundaries(loom_verify_state_t* state,
+                                          const loom_op_t* op,
+                                          const loom_op_vtable_t* vtable) {
+  iree_string_view_t boundary_kind = IREE_SV("");
+  if (!loom_verify_op_observes_poison(state->module, op, &boundary_kind)) {
+    return;
+  }
+
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    if (loom_verify_at_error_limit(state)) return;
+    loom_value_id_t value_id = operands[i];
+    if (value_id == LOOM_VALUE_ID_INVALID) continue;
+    if (value_id >= state->module->values.count) continue;
+    if (!loom_bitset_test(state->defined_bits, value_id)) continue;
+    if (!loom_value_is_poison(state->module, value_id)) continue;
+
+    const loom_value_t* value = loom_module_value(state->module, value_id);
+    const loom_op_t* poison_op = loom_value_def_op(value);
+    iree_string_view_t value_name = loom_verify_value_name(state, value_id);
+    iree_string_view_t op_name = loom_op_vtable_name(vtable);
+    loom_diagnostic_field_ref_t operand_ref =
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i);
+    loom_diagnostic_param_t params[] = {
+        loom_param_with_field_ref(loom_param_string(value_name), operand_ref),
+        loom_param_string(boundary_kind),
+        loom_param_string(op_name),
+    };
+    loom_diagnostic_related_op_t related_ops[] = {{
+        .label = IREE_SV("poison produced here"),
+        .op = poison_op,
+    }};
+    loom_diagnostic_emission_t emission = {
+        .op = op,
+        .error = &loom_err_type_012,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+        .related_ops = related_ops,
+        .related_op_count = IREE_ARRAYSIZE(related_ops),
+    };
+    loom_verify_emit_diagnostic(state, &emission);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // Type payload validation
 //===----------------------------------------------------------------------===//
@@ -2206,6 +2371,11 @@ static iree_string_view_t loom_verify_type_well_formed_detail(
     return IREE_SV("type kind is out of range");
   }
   switch (kind) {
+    case LOOM_TYPE_ENCODING:
+      if (!loom_encoding_role_is_valid(loom_type_encoding_role(type))) {
+        return IREE_SV("encoding role is out of range");
+      }
+      break;
     case LOOM_TYPE_VECTOR:
       if (loom_type_rank(type) == 0) {
         return IREE_SV("vector types must have rank >= 1");
@@ -2843,6 +3013,9 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
     return iree_ok_status();
   }
 
+  loom_verify_op_declared_trait_consistency(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
+
   const bool has_signature_scope = loom_verify_has_func_signature_scope(vtable);
   if (has_signature_scope) {
     IREE_RETURN_IF_ERROR(loom_verify_push_scope(state));
@@ -2862,6 +3035,13 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   // Structural checks: operand/result/attr/region counts match the
   // vtable declaration. Must pass before per-field checks below.
   loom_verify_op_structure(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
+
+  // Per-instance trait callbacks may refine the static vtable declaration but
+  // must preserve the same effect and optimization invariants as declared
+  // traits. Run this after structural checks so callbacks can safely inspect
+  // attributes.
+  loom_verify_op_effective_trait_consistency(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Operand and result type payloads must satisfy core representation
@@ -2886,6 +3066,11 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   // result co-references and global declaration placeholders have explicit
   // rules in loom_verify_encoding_ref.
   loom_verify_encoding_refs(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
+
+  // Poison may flow through pure SSA computation, but it must not be consumed
+  // by an operation that observes values outside ordinary use-def propagation.
+  loom_verify_poison_boundaries(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Semantic constraints: table-driven (relation, property) interpreter.

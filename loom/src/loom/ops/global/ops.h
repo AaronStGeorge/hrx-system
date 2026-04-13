@@ -40,7 +40,6 @@ iree_status_t loom_global_constant_build(
     loom_optional loom_attribute_t initializer,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_global_constant_vtable;
 iree_status_t loom_global_constant_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -60,7 +59,6 @@ iree_status_t loom_global_variable_build(
     loom_optional loom_attribute_t initializer,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_global_variable_vtable;
 iree_status_t loom_global_variable_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -77,7 +75,6 @@ iree_status_t loom_global_load_build(
     iree_host_size_t result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_global_load_vtable;
 iree_status_t loom_global_load_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -93,7 +90,6 @@ iree_status_t loom_global_store_build(
     loom_symbol_ref_t global,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_global_store_vtable;
 iree_status_t loom_global_store_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);

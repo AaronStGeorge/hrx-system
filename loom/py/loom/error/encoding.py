@@ -180,6 +180,47 @@ ERR_ENCODING_011 = ErrorDef(
     fix_hint="Pass an encoding value with the role required by the family contract",
 )
 
+# ERR_ENCODING_012: encoding.define result type has the wrong role.
+ERR_ENCODING_012 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=12,
+    severity=Severity.ERROR,
+    summary="Encoding result has wrong role.",
+    message=(
+        "encoding '{encoding_name}' result has type {actual_type}, "
+        "expected {expected_type}"
+    ),
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("expected_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Spell the encoding.define result type with the role produced by the family"
+    ),
+)
+
+# ERR_ENCODING_013: encoding.define static parameter has an unsupported value.
+ERR_ENCODING_013 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=13,
+    severity=Severity.ERROR,
+    summary="Encoding static parameter has unsupported value.",
+    message=(
+        "encoding '{encoding_name}' parameter '{param_name}' has value "
+        "'{actual_value}', expected {expected_values}"
+    ),
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("param_name", ParamKind.STRING),
+        ErrorParam("actual_value", ParamKind.STRING),
+        ErrorParam("expected_values", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Use one of the static parameter values supported by the encoding family"
+    ),
+)
+
 ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_001,
     ERR_ENCODING_002,
@@ -192,4 +233,6 @@ ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_009,
     ERR_ENCODING_010,
     ERR_ENCODING_011,
+    ERR_ENCODING_012,
+    ERR_ENCODING_013,
 )

@@ -27,9 +27,10 @@
 //   files are the common case. Modules are independently parseable.
 // - 64-bit: offsets are uint64 to support embedded weights (models
 //   can be tens of GB).
-// - Versionable: format_version in the header. Backward compatible
-//   (newer readers read older files). Not forward compatible (older
-//   readers reject newer formats with a clear error).
+// - Versionable: format_version in the header. Until Loom bytecode ships
+//   outside this tree, readers accept only the current version and reject all
+//   others with a clear error. Add explicit migration paths only when a durable
+//   compatibility contract exists.
 //
 // ==========================================================================
 // File layout
@@ -61,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 1)
+//   4       1     format_version (currently 2)
 //   5       1     flags (see loom_bytecode_file_flags_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -84,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 1
+#define LOOM_BYTECODE_FORMAT_VERSION 2
 
 // File-level flags.
 enum loom_bytecode_file_flag_bits_e {
@@ -283,9 +284,10 @@ typedef enum loom_bytecode_section_kind_e {
 //   For each type:
 //     [kind: byte]
 //       0 = none, 1 = scalar, 2 = tile, 3 = tensor, 4 = group,
-//       5 = function, 6 = dialect, 7 = encoding, 8 = pool
+//       5 = function, 6 = dialect, 7 = encoding, 8 = pool,
+//       9 = vector, 10 = view, 11 = buffer
 //     (SCALAR: [element_type: byte])
-//     (TILE/TENSOR:
+//     (TILE/TENSOR/VECTOR/VIEW:
 //       [element_type: byte]
 //       [rank: byte]
 //       [encoding_attachment: byte]
@@ -293,6 +295,7 @@ typedef enum loom_bytecode_section_kind_e {
 //             1 = static (instance index follows).
 //             2 = SSA dynamic (binding on the Value, not the type;
 //                 instance index is 0).
+//             Must be 0 for VECTOR.
 //       [encoding_instance: varint] (0 = none, else 1-based instance index)
 //       For each dim (rank times):
 //         [is_dynamic: byte]      (0 = static, 1 = dynamic)
@@ -306,7 +309,8 @@ typedef enum loom_bytecode_section_kind_e {
 //       [name_id: varint]         (string table index)
 //       [param_count: varint]
 //       For each param: [type_index: varint])
-//     (ENCODING: no additional data)
+//     (ENCODING:
+//       [role: byte]                (loom_bytecode_encoding_role_t))
 //     (POOL:
 //       [is_dynamic: byte]          (0 = static, 1 = dynamic)
 //       (if static: [size: varint]) (block size in bytes))
@@ -659,6 +663,16 @@ typedef enum loom_bytecode_group_scope_e {
   LOOM_BYTECODE_GROUP_SCOPE_WORKGROUP = 0,
   LOOM_BYTECODE_GROUP_SCOPE_SUBGROUP = 1,
 } loom_bytecode_group_scope_t;
+
+// Encoding role byte in the TYPES section (ENCODING payload).
+// Append-only; do not reorder.
+typedef enum loom_bytecode_encoding_role_e {
+  LOOM_BYTECODE_ENCODING_ROLE_UNKNOWN = 0,
+  LOOM_BYTECODE_ENCODING_ROLE_LAYOUT = 1,
+  LOOM_BYTECODE_ENCODING_ROLE_SCHEMA = 2,
+  LOOM_BYTECODE_ENCODING_ROLE_STORAGE = 3,
+  LOOM_BYTECODE_ENCODING_ROLE_TRANSFORM = 4,
+} loom_bytecode_encoding_role_t;
 
 // Encoding/layout attachment discriminator in TILE/TENSOR/VIEW type payloads.
 typedef enum loom_bytecode_encoding_attachment_e {

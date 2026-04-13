@@ -19,7 +19,11 @@ __all__ = [
     "IntOverflowFlags",
 ]
 
-scalar_ops = Dialect("scalar", dialect_id=0x02, doc="Scalar arithmetic, math, and conversion ops.")
+scalar_ops = Dialect(
+    "scalar",
+    dialect_id=0x02,
+    doc=("Scalar arithmetic, math, conversion, and typed poison ops. Loom poison is an invalid value sentinel introduced by canonicalization and diagnosed if it survives to an observation boundary."),
+)
 
 FastMathFlags = EnumDef(
     "FastMathFlags",

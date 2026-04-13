@@ -9,18 +9,23 @@
 from loom.assembly import (
     ARROW,
     COLON,
+    AttrDict,
     IndexList,
     Ref,
     ResultType,
     TypeOf,
 )
 from loom.dsl import (
+    ATTR_TYPE_ENUM,
     ATTR_TYPE_I64_ARRAY,
+    HINT,
     INDEX,
     PURE,
     VIEW,
     AttrDef,
     Dialect,
+    EnumCase,
+    EnumDef,
     Op,
     Operand,
     RanksMatch,
@@ -37,6 +42,26 @@ view_ops = Dialect(
     "view",
     dialect_id=0x0D,
     doc="Logical view operations.",
+)
+
+PrefetchIntent = EnumDef(
+    "PrefetchIntent",
+    [
+        EnumCase("read", 0, doc="Prefetch for an expected future read."),
+        EnumCase("write", 1, doc="Prefetch for an expected future write."),
+    ],
+    doc="Intended future access kind for a prefetch hint.",
+)
+
+PrefetchLocality = EnumDef(
+    "PrefetchLocality",
+    [
+        EnumCase("none", 0, doc="No temporal locality expected."),
+        EnumCase("l1", 1, doc="Prefer L1 or the nearest target cache."),
+        EnumCase("l2", 2, doc="Prefer L2 or the nearest mid-level target cache."),
+        EnumCase("l3", 3, doc="Prefer L3 or the nearest outer target cache."),
+    ],
+    doc="Target-independent prefetch locality hint.",
 )
 
 # ============================================================================
@@ -80,7 +105,47 @@ view_subview = Op(
 )
 
 # ============================================================================
+# view.prefetch — discardable compiler hint for a future view access
+# ============================================================================
+
+view_prefetch = Op(
+    name="view.prefetch",
+    group=view_ops,
+    doc=(
+        "Compiler hint for a future access to a logical view origin. Prefetch "
+        "has no semantic memory effects and may not fault semantically, but it "
+        "is intentionally preserved by ordinary canonicalization/DCE until an "
+        "explicit hint-stripping pass removes it."
+    ),
+    operands=[
+        Operand("view", VIEW, doc="Typed view whose address should be prefetched."),
+        Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
+    ],
+    attrs=[
+        AttrDef("intent", ATTR_TYPE_ENUM, enum_def=PrefetchIntent, doc="Required expected future access kind."),
+        AttrDef("locality", ATTR_TYPE_ENUM, enum_def=PrefetchLocality, doc="Required target-independent locality hint."),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    traits=[HINT],
+    verify="loom_view_prefetch_verify",
+    format=[
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        AttrDict(),
+        COLON,
+        TypeOf("view"),
+    ],
+    examples=[
+        "view.prefetch %view[%row, %col] {intent = read, locality = l2} : view<[%M]x[%N]xf32, %layout>",
+    ],
+)
+
+# ============================================================================
 # Registry
 # ============================================================================
 
-ALL_VIEW_OPS: tuple[Op, ...] = (view_subview,)
+ALL_VIEW_OPS: tuple[Op, ...] = (view_subview, view_prefetch)

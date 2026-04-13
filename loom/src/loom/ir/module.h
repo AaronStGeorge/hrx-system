@@ -78,13 +78,25 @@ static inline loom_type_t loom_module_value_type(const loom_module_t* module,
   return module->values.entries[value_id].type;
 }
 
-// Sets the type of a value by ID.
-static inline void loom_module_set_value_type(loom_module_t* module,
-                                              loom_value_id_t value_id,
-                                              loom_type_t type) {
-  IREE_ASSERT(value_id < module->values.count);
-  module->values.entries[value_id].type = type;
-}
+// Sets the type of a value by ID, updating SSA references carried by the old
+// and new type payloads in the module's type-use side table.
+iree_status_t loom_module_set_value_type(loom_module_t* module,
+                                         loom_value_id_t value_id,
+                                         loom_type_t type);
+
+// Removes type-use records carried by |value_id|'s current type while leaving
+// the stored type unchanged. Used when the carrier value is no longer live
+// enough for its type to keep referenced values alive, such as op erasure.
+void loom_module_drop_value_type_uses(loom_module_t* module,
+                                      loom_value_id_t value_id);
+
+// Rebuilds type-use records carried by one value's current type.
+//
+// References to values that do not exist yet are ignored; a later refresh after
+// defining those values will add the records. Structural validation remains the
+// verifier's job.
+iree_status_t loom_module_refresh_value_type_uses(loom_module_t* module,
+                                                  loom_value_id_t value_id);
 
 // Returns the type of a block argument by index.
 static inline loom_type_t loom_block_arg_type(const loom_module_t* module,
@@ -100,6 +112,22 @@ static inline loom_type_t loom_block_arg_type(const loom_module_t* module,
 // finalizing the defining op (or loom_block_add_arg for block args).
 iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
                                        loom_value_id_t* out_value_id);
+
+// Rebuilds the dense type-use side table by walking all value types.
+//
+// Most construction paths maintain the table incrementally, but bulk readers
+// and recovery paths can call this after setting value types directly.
+iree_status_t loom_module_recompute_type_uses(loom_module_t* module);
+
+// Returns true if |value_id| is referenced by any currently-active value type.
+bool loom_module_value_has_type_uses(const loom_module_t* module,
+                                     loom_value_id_t value_id);
+
+// Replaces all SSA references to |old_id| embedded in value types with
+// |new_id| and updates the module's type-use side table.
+iree_status_t loom_module_replace_value_type_uses(loom_module_t* module,
+                                                  loom_value_id_t old_id,
+                                                  loom_value_id_t new_id);
 
 // Interns a string in the module's string table. If an identical string
 // already exists, returns its ID. Otherwise, arena-allocates a copy of

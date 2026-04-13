@@ -17,6 +17,10 @@ from loom.format.text.printer import Printer, print_type
 from loom.ir import (
     BF16,
     BUFFER_TYPE,
+    ENCODING_LAYOUT_TYPE,
+    ENCODING_SCHEMA_TYPE,
+    ENCODING_STORAGE_TYPE,
+    ENCODING_TRANSFORM_TYPE,
     ENCODING_TYPE,
     F32,
     I1,
@@ -454,7 +458,7 @@ class TestPrintLayoutStrided:
     def test_leading_index_list(self) -> None:
         sentinel = -(2**63)
         module, [row_stride, layout] = _module_with(
-            ("row_stride", INDEX), ("layout", ENCODING_TYPE)
+            ("row_stride", INDEX), ("layout", ENCODING_LAYOUT_TYPE)
         )
         op = Operation(
             name="encoding.layout.strided",
@@ -466,7 +470,7 @@ class TestPrintLayoutStrided:
         printer.register_ops(ALL_ENCODING_OPS)
         assert (
             printer.print_operation(op, module)
-            == "%layout = encoding.layout.strided [%row_stride, 1] : encoding"
+            == "%layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>"
         )
 
 
@@ -1012,6 +1016,18 @@ class TestEncodingTypePrinting:
     def test_encoding_type(self) -> None:
         assert print_type(ENCODING_TYPE) == "encoding"
 
+    @pytest.mark.parametrize(
+        ("ir_type", "expected"),
+        [
+            (ENCODING_LAYOUT_TYPE, "encoding<layout>"),
+            (ENCODING_SCHEMA_TYPE, "encoding<schema>"),
+            (ENCODING_STORAGE_TYPE, "encoding<storage>"),
+            (ENCODING_TRANSFORM_TYPE, "encoding<transform>"),
+        ],
+    )
+    def test_encoding_role_type(self, ir_type: Type, expected: str) -> None:
+        assert print_type(ir_type) == expected
+
     def test_dynamic_encoding_with_context(self) -> None:
         """ShapedType with DynamicEncoding + encoding_binding prints %name."""
         module = Module(name="test")
@@ -1119,14 +1135,14 @@ class TestPrintEncodingAliases:
         source_text = (
             "#enc = #q8_0<block=32>\n"
             "func.def @f() -> () {\n"
-            "  %enc = encoding.define #enc : encoding\n"
+            "  %enc = encoding.define #enc : encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )
         expected_text = (
             "#enc = #q8_0<block=32>\n"
             "func.def @f() {\n"
-            "  %enc = encoding.define #enc : encoding\n"
+            "  %enc = encoding.define #enc : encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )

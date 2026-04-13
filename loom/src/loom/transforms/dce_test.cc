@@ -72,7 +72,7 @@ class DCETest : public ::testing::Test {
     iree_arena_initialize(&block_pool_, &pass_arena);
     loom_pass_t pass;
     memset(&pass, 0, sizeof(pass));
-    pass.info = &loom_dce_pass_info;
+    pass.info = loom_dce_pass_info();
     pass.arena = &pass_arena;
     iree_status_t status = loom_dce_run(&pass, module_, func_like_);
     iree_arena_deinitialize(&pass_arena);
@@ -134,6 +134,84 @@ TEST_F(DCETest, PreservesUsedOps) {
 
   IREE_ASSERT_OK(run_dce());
   EXPECT_EQ(count_live_ops(), 0);
+}
+
+TEST_F(DCETest, PreservesDynamicDimProducerForLiveTypeUse) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(
+      &builder_, loom_attr_i64(4), index_type, LOOM_LOCATION_UNKNOWN, &dim_op));
+  loom_value_id_t dim_id = loom_test_constant_result(dim_op);
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(dim_id), 0);
+  loom_op_t* vector_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0),
+                                          vector_type, LOOM_LOCATION_UNKNOWN,
+                                          &vector_op));
+  loom_value_id_t vector_id = loom_test_constant_result(vector_op);
+  loom_value_id_t values[] = {vector_id};
+  loom_op_t* use_op = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, values, IREE_ARRAYSIZE(values),
+                                     LOOM_LOCATION_UNKNOWN, &use_op));
+
+  IREE_ASSERT_OK(run_dce());
+  EXPECT_EQ(count_live_ops(), 3);
+  EXPECT_FALSE(dim_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_FALSE(vector_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_FALSE(use_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_TRUE(loom_module_value_has_type_uses(module_, dim_id));
+}
+
+TEST_F(DCETest, RemovesDynamicDimProducerAfterDeadCarrierErased) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(
+      &builder_, loom_attr_i64(4), index_type, LOOM_LOCATION_UNKNOWN, &dim_op));
+  loom_value_id_t dim_id = loom_test_constant_result(dim_op);
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(dim_id), 0);
+  loom_op_t* vector_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0),
+                                          vector_type, LOOM_LOCATION_UNKNOWN,
+                                          &vector_op));
+
+  IREE_ASSERT_OK(run_dce());
+  EXPECT_EQ(count_live_ops(), 0);
+  EXPECT_TRUE(dim_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_TRUE(vector_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_FALSE(loom_module_value_has_type_uses(module_, dim_id));
+}
+
+TEST_F(DCETest, PreservesLayoutProducerForLiveViewTypeUse) {
+  loom_type_t layout_type =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+
+  loom_op_t* layout_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0),
+                                          layout_type, LOOM_LOCATION_UNKNOWN,
+                                          &layout_op));
+  loom_value_id_t layout_id = loom_test_constant_result(layout_op);
+  loom_type_t view_type = loom_type_shaped_1d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  view_type.encoding_id = (uint16_t)layout_id;
+  view_type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  loom_op_t* view_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(
+      &builder_, loom_attr_i64(0), view_type, LOOM_LOCATION_UNKNOWN, &view_op));
+  loom_value_id_t view_id = loom_test_constant_result(view_op);
+  loom_value_id_t values[] = {view_id};
+  loom_op_t* use_op = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, values, IREE_ARRAYSIZE(values),
+                                     LOOM_LOCATION_UNKNOWN, &use_op));
+
+  IREE_ASSERT_OK(run_dce());
+  EXPECT_EQ(count_live_ops(), 3);
+  EXPECT_FALSE(layout_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_FALSE(view_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_FALSE(use_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_TRUE(loom_module_value_has_type_uses(module_, layout_id));
 }
 
 TEST_F(DCETest, RemovesChain) {
@@ -537,7 +615,7 @@ TEST_F(DCETest, NullFunctionBody) {
   iree_arena_initialize(&block_pool_, &pass_arena);
   loom_pass_t pass;
   memset(&pass, 0, sizeof(pass));
-  pass.info = &loom_dce_pass_info;
+  pass.info = loom_dce_pass_info();
   pass.arena = &pass_arena;
   IREE_EXPECT_OK(loom_dce_run(&pass, module_, empty_func));
   iree_arena_deinitialize(&pass_arena);

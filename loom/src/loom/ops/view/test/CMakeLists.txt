@@ -12,6 +12,39 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "hints_canonicalize"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hints_canonicalize.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hints_dce"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hints_dce.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "hints_strip"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hints_strip.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "roundtrip"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"

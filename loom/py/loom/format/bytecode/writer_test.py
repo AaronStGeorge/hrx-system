@@ -28,6 +28,10 @@ from loom.format.text.printer import Printer
 from loom.ir import (
     BF16,
     BUFFER_TYPE,
+    ENCODING_LAYOUT_TYPE,
+    ENCODING_SCHEMA_TYPE,
+    ENCODING_STORAGE_TYPE,
+    ENCODING_TRANSFORM_TYPE,
     F32,
     I8,
     I32,
@@ -444,6 +448,9 @@ class TestTypesSection:
     def test_vector_1d(self) -> None:
         self._roundtrip_type(ShapedType(TypeKind.VECTOR, F32, (StaticDim(16),)))
 
+    def test_vector_zero_extent(self) -> None:
+        self._roundtrip_type(ShapedType(TypeKind.VECTOR, F32, (StaticDim(0),)))
+
     def test_vector_dynamic(self) -> None:
         self._roundtrip_type(ShapedType(TypeKind.VECTOR, I32, (DynamicDim(),)))
 
@@ -519,6 +526,12 @@ class TestTypesSection:
         from loom.ir import ENCODING_TYPE
 
         self._roundtrip_type(ENCODING_TYPE)
+
+    def test_encoding_role_types(self) -> None:
+        self._roundtrip_type(ENCODING_LAYOUT_TYPE)
+        self._roundtrip_type(ENCODING_SCHEMA_TYPE)
+        self._roundtrip_type(ENCODING_STORAGE_TYPE)
+        self._roundtrip_type(ENCODING_TRANSFORM_TYPE)
 
 
 # ============================================================================
@@ -1046,14 +1059,16 @@ class TestCrossFormatRoundTrip:
         text = (
             "func.def @encoding_params(%group_size: index, %scale: f32) -> () {\n"
             "  %enc = encoding.define #q8_0<block=32> "
-            "{scale = %scale : f32, group_size = %group_size : index} : encoding\n"
+            "{scale = %scale : f32, group_size = %group_size : index} : "
+            "encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )
         expected = (
             "func.def @encoding_params(%group_size: index, %scale: f32) {\n"
             "  %enc = encoding.define #q8_0<block=32> "
-            "{group_size = %group_size : index, scale = %scale : f32} : encoding\n"
+            "{group_size = %group_size : index, scale = %scale : f32} : "
+            "encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )

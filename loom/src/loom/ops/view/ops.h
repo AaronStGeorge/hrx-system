@@ -19,8 +19,25 @@ extern "C" {
 
 enum {
   LOOM_OP_VIEW_SUBVIEW = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 0),
-  LOOM_OP_VIEW_COUNT_ = 1,
+  LOOM_OP_VIEW_PREFETCH = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 1),
+  LOOM_OP_VIEW_COUNT_ = 2,
 };
+
+// Intended future access kind for a prefetch hint.
+typedef enum loom_view_prefetch_intent_e {
+  LOOM_VIEW_PREFETCH_INTENT_READ = 0,
+  LOOM_VIEW_PREFETCH_INTENT_WRITE = 1,
+  LOOM_VIEW_PREFETCH_INTENT_COUNT_ = 2,
+} loom_view_prefetch_intent_t;
+
+// Target-independent prefetch locality hint.
+typedef enum loom_view_prefetch_locality_e {
+  LOOM_VIEW_PREFETCH_LOCALITY_NONE = 0,
+  LOOM_VIEW_PREFETCH_LOCALITY_L1 = 1,
+  LOOM_VIEW_PREFETCH_LOCALITY_L2 = 2,
+  LOOM_VIEW_PREFETCH_LOCALITY_L3 = 3,
+  LOOM_VIEW_PREFETCH_LOCALITY_COUNT_ = 4,
+} loom_view_prefetch_locality_t;
 
 // LOOM_OP_VIEW_SUBVIEW: Form a logical subview from an existing view. Offsets select the logical origin; result type dimensions provide the subview extents.
 // %sub = view.subview %source[%row, 0] : view<[%M]x[%N]xf32, %layout> -> view<16x[%N]xf32, %layout>
@@ -39,8 +56,30 @@ iree_status_t loom_view_subview_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_view_subview_vtable;
 iree_status_t loom_view_subview_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VIEW_PREFETCH: Compiler hint for a future access to a logical view origin. Prefetch has no semantic memory effects and may not fault semantically, but it is intentionally preserved by ordinary canonicalization/DCE until an explicit hint-stripping pass removes it.
+// view.prefetch %view[%row, %col] {intent = read, locality = l2} : view<[%M]x[%N]xf32, %layout>
+LOOM_DEFINE_ISA(loom_view_prefetch_isa, LOOM_OP_VIEW_PREFETCH)
+LOOM_DEFINE_OPERAND(loom_view_prefetch_view, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_prefetch_indices, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_view_prefetch_intent, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_prefetch_locality, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_prefetch_static_indices, 2)
+iree_status_t loom_view_prefetch_build(
+    loom_builder_t* builder,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    uint8_t intent,
+    uint8_t locality,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_view_prefetch_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

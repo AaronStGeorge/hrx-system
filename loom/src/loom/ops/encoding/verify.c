@@ -10,6 +10,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/params.h"
+#include "loom/ops/encoding/roles.h"
 
 static iree_status_t loom_encoding_emit(iree_diagnostic_emitter_t emitter,
                                         const loom_op_t* op,
@@ -33,6 +34,19 @@ static iree_status_t loom_encoding_define_emit_duplicate_static_dynamic_param(
       loom_param_string(param_name),
   };
   return loom_encoding_emit(emitter, op, &loom_err_encoding_006, params,
+                            IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_encoding_define_emit_result_role_error(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t encoding_name, loom_type_t actual_type,
+    loom_type_t expected_type) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(encoding_name),
+      loom_param_type(actual_type),
+      loom_param_type(expected_type),
+  };
+  return loom_encoding_emit(emitter, op, &loom_err_encoding_012, params,
                             IREE_ARRAYSIZE(params));
 }
 
@@ -93,6 +107,20 @@ iree_status_t loom_encoding_define_verify(const loom_module_t* module,
 
   iree_string_view_t encoding_name =
       module->strings.entries[params.spec->name_id];
+
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_encoding_define_result(op));
+  if (loom_type_is_encoding(result_type)) {
+    loom_encoding_role_t result_role = loom_type_encoding_role(result_type);
+    loom_encoding_role_t expected_role =
+        loom_encoding_static_role(module, params.spec);
+    if (result_role != expected_role) {
+      return loom_encoding_define_emit_result_role_error(
+          emitter, op, encoding_name, result_type,
+          loom_type_encoding_with_role(expected_role));
+    }
+  }
+
   const loom_encoding_vtable_t* vtable =
       loom_context_lookup_encoding_vtable(module->context, encoding_name);
   if (vtable && vtable->verify_define) {

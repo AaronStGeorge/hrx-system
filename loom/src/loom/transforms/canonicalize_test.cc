@@ -65,7 +65,7 @@ class CanonicalizeTest : public ::testing::Test {
     iree_arena_initialize(&block_pool_, &pass_arena);
     loom_pass_t pass;
     memset(&pass, 0, sizeof(pass));
-    pass.info = &loom_canonicalize_pass_info;
+    pass.info = loom_canonicalize_pass_info();
     pass.arena = &pass_arena;
     iree_status_t status = loom_canonicalize_run(&pass, module_, func_like_);
     iree_arena_deinitialize(&pass_arena);
@@ -365,7 +365,7 @@ TEST_F(CanonicalizeTest, NullFunctionBody) {
   iree_arena_initialize(&block_pool_, &pass_arena);
   loom_pass_t pass;
   memset(&pass, 0, sizeof(pass));
-  pass.info = &loom_canonicalize_pass_info;
+  pass.info = loom_canonicalize_pass_info();
   pass.arena = &pass_arena;
   IREE_EXPECT_OK(loom_canonicalize_run(&pass, module_, empty_func));
   iree_arena_deinitialize(&pass_arena);

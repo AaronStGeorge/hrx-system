@@ -251,9 +251,9 @@ typedef enum loom_keyword_id_e {
   LOOM_KW_COUNT_,
 } loom_keyword_id_t;
 
-// Keyword B-string table indexed by loom_keyword_id_t.
-// E.g., LOOM_KW_TO → "\x02to", LOOM_KW_STEP → "\x04step".
-extern const loom_bstring_t loom_keyword_bstrings[LOOM_KW_COUNT_];
+// Returns the B-string for |keyword_id|, or NULL if |keyword_id| is out of
+// range. E.g., LOOM_KW_TO -> "\x02to", LOOM_KW_STEP -> "\x04step".
+loom_bstring_t loom_keyword_bstring(loom_keyword_id_t keyword_id);
 
 //===----------------------------------------------------------------------===//
 // Type constraints, traits, and binding kinds
@@ -270,7 +270,7 @@ typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_INDEX = 5,
   LOOM_TYPE_CONSTRAINT_ANY = 6,
   LOOM_TYPE_CONSTRAINT_GROUP = 7,
-  LOOM_TYPE_CONSTRAINT_ENCODING = 8,
+  LOOM_TYPE_CONSTRAINT_ANY_ENCODING = 8,
   LOOM_TYPE_CONSTRAINT_POOL = 9,
   // Exactly i1. Used for comparison results and boolean predicates.
   // Unlike INTEGER (which accepts any integer width), this requires
@@ -285,6 +285,14 @@ typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT = 15,
   // Shaped type with element type i1.
   LOOM_TYPE_CONSTRAINT_I1_ELEMENT = 16,
+  // Encoding type with address-layout role.
+  LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT = 17,
+  // Encoding type with storage-schema role.
+  LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA = 18,
+  // Encoding type with physical-storage role.
+  LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE = 19,
+  // Encoding type with numeric-transform role.
+  LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM = 20,
   LOOM_TYPE_CONSTRAINT_COUNT_,
 } loom_type_constraint_t;
 
@@ -322,8 +330,22 @@ static inline bool loom_type_satisfies_constraint(
              loom_scalar_type_is_float(loom_type_element_type(type));
     case LOOM_TYPE_CONSTRAINT_GROUP:
       return loom_type_kind(type) == LOOM_TYPE_GROUP;
-    case LOOM_TYPE_CONSTRAINT_ENCODING:
+    case LOOM_TYPE_CONSTRAINT_ANY_ENCODING:
       return loom_type_is_encoding(type);
+    case LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT:
+      return loom_type_is_encoding(type) &&
+             loom_type_encoding_role(type) == LOOM_ENCODING_ROLE_ADDRESS_LAYOUT;
+    case LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA:
+      return loom_type_is_encoding(type) &&
+             loom_type_encoding_role(type) == LOOM_ENCODING_ROLE_STORAGE_SCHEMA;
+    case LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE:
+      return loom_type_is_encoding(type) &&
+             loom_type_encoding_role(type) ==
+                 LOOM_ENCODING_ROLE_PHYSICAL_STORAGE;
+    case LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM:
+      return loom_type_is_encoding(type) &&
+             loom_type_encoding_role(type) ==
+                 LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM;
     case LOOM_TYPE_CONSTRAINT_POOL:
       return loom_type_is_pool(type);
     case LOOM_TYPE_CONSTRAINT_I1:
@@ -614,7 +636,9 @@ loom_trait_flags_t loom_op_effective_traits(const loom_module_t* module,
 // Returns true if |op| may write to a resource or has unknown effects.
 bool loom_op_may_write(const loom_module_t* module, const loom_op_t* op);
 
-// Returns true if every result of |op| has zero uses.
+// Returns true if every result of |op| has zero operand uses and no external
+// value type references. Type references carried by another result of |op| do
+// not keep the whole op alive.
 bool loom_op_results_unused(const loom_module_t* module, const loom_op_t* op);
 
 // Returns true if |op| is trivially dead: it has results, does not
@@ -1143,10 +1167,11 @@ iree_status_t loom_builder_allocate_op(
     uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op);
 
 // Erases an op: removes all use records for the op's operands, verifies
-// that every result has use_count == 0 (caller must RAUW results first),
-// then marks the op dead. Dead ops are skipped by enumeration macros
-// and will not be serialized. The memory is not freed (arena-owned).
-// Returns IREE_STATUS_FAILED_PRECONDITION if any result still has uses.
+// that every result has no operand uses or external type uses (caller must
+// RAUW results first), drops type-use records carried by result types, then
+// marks the op dead. Dead ops are skipped by enumeration macros and will not
+// be serialized. The memory is not freed (arena-owned). Returns
+// IREE_STATUS_FAILED_PRECONDITION if any result still has uses.
 iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op);
 
 //===----------------------------------------------------------------------===//
@@ -1193,23 +1218,26 @@ iree_status_t loom_op_set_operand(loom_module_t* module, loom_op_t* op,
                                   uint16_t operand_index,
                                   loom_value_id_t new_value_id);
 
-// Replaces all uses of |old_id| with |new_id|. Walks old's use list,
-// patches each user op's operand slot, and bulk-transfers the use
-// entries to new's list. No-op if old_id == new_id.
+// Replaces all uses of |old_id| with |new_id|. Walks old's operand use list,
+// patches each user op's operand slot, bulk-transfers those use entries to
+// new's list, and rewrites SSA references embedded in value types. No-op if
+// old_id == new_id.
 iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
                                                loom_value_id_t old_id,
                                                loom_value_id_t new_id);
 
 // Same as replace_all_uses_with, but skips uses where the user op is
-// |except_op|. Used during pattern rewrites where the replacement op
-// also references the old value.
+// |except_op|. This filtered form only rewrites operand slots; embedded type
+// references have no user op to predicate against. Used during pattern rewrites
+// where the replacement op also references the old value.
 iree_status_t loom_value_replace_all_uses_except(loom_module_t* module,
                                                  loom_value_id_t old_id,
                                                  loom_value_id_t new_id,
                                                  const loom_op_t* except_op);
 
-// Predicate-based RAUW. Replaces uses of |old_id| with |new_id| only
-// where |predicate| returns true for the user op.
+// Predicate-based RAUW. Replaces operand uses of |old_id| with |new_id| only
+// where |predicate| returns true for the user op. Embedded type references are
+// intentionally not rewritten by this filtered form.
 typedef bool (*loom_use_predicate_fn)(const loom_op_t* user_op,
                                       void* user_data);
 iree_status_t loom_value_replace_uses_if(loom_module_t* module,

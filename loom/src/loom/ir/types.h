@@ -68,8 +68,11 @@
 // The encoding/layout attachment is metadata: it doesn't change the logical
 // shape or element type, but determines how bytes map to logical elements.
 // The first-class `encoding` type is an SSA value type used in attachment
-// position (`tile<4xf32, %enc>`, `view<[%N]xf32, %layout>`). It is parsed as a
-// built-in keyword rather than as a parameterized TypeDef registry entry.
+// position (`tile<4xf32, %enc>`, `view<[%N]xf32, %layout>`). Encoding values
+// may use role-qualified types (`encoding<layout>`, `encoding<schema>`,
+// `encoding<storage>`, `encoding<transform>`) so op signatures can declare the
+// exact role they consume. It is parsed as a built-in keyword rather than as a
+// parameterized TypeDef registry entry.
 // Static attachments use only attribute parameters:
 //
 //   tile<256xi8, #q8_0<block=32>>
@@ -77,7 +80,8 @@
 // Dynamic parameters are named operands on encoding.define, and the resulting
 // `%enc` value is attached to shaped types:
 //
-//   %enc = encoding.define #q8_0<block=32> {group_size = %g : index} : encoding
+//   %enc = encoding.define #q8_0<block=32> {group_size = %g : index}
+//       : encoding<schema>
 //   tile<256xi8, %enc>
 //
 // ==========================================================================
@@ -89,7 +93,7 @@
 // chases. Values store types by value, while each module also interns
 // canonical type entries for deduplication.
 //
-//   bytes 0-3:  packed header (kind, element_type, rank, flags)
+//   bytes 0-3:  packed header (kind, element_type/role, rank, flags)
 //   bytes 4-5:  encoding_id
 //   bytes 6-7:  encoding_flags
 //   bytes 8-23: dims (inline for rank <= 2, overflow pointer otherwise)
@@ -222,7 +226,7 @@ typedef enum loom_type_kind_e {
   LOOM_TYPE_GROUP = 4,     // group<scope>
   LOOM_TYPE_FUNCTION = 5,  // (types) -> (types)
   LOOM_TYPE_DIALECT = 6,   // hal.buffer, vm.ref<T>, etc.
-  LOOM_TYPE_ENCODING = 7,  // encoding (first-class SSA encoding value)
+  LOOM_TYPE_ENCODING = 7,  // encoding<role> (first-class SSA encoding value)
   LOOM_TYPE_POOL = 8,      // pool<[%block_size]> (block-managed memory)
   LOOM_TYPE_VECTOR = 9,    // vector<[%M]xf32> (register lane grid)
   LOOM_TYPE_VIEW = 10,     // view<[%M]xf32, %layout> (buffer projection)
@@ -252,6 +256,62 @@ static inline const char* loom_group_scope_name(loom_group_scope_t scope) {
   };
   if (scope < LOOM_GROUP_SCOPE_COUNT_) return names[scope];
   return NULL;
+}
+
+// Semantic encoding role. Stored in the element_type byte of the type header
+// for LOOM_TYPE_ENCODING.
+typedef enum loom_encoding_role_e {
+  // Role is intentionally unspecified.
+  LOOM_ENCODING_ROLE_UNKNOWN = 0,
+  // Address-layout mapping for view address arithmetic.
+  LOOM_ENCODING_ROLE_ADDRESS_LAYOUT = 1,
+  // Physical storage schema such as a packed quantized block format.
+  LOOM_ENCODING_ROLE_STORAGE_SCHEMA = 2,
+  // Composition of an address layout and storage schema.
+  LOOM_ENCODING_ROLE_PHYSICAL_STORAGE = 3,
+  // Numeric transform descriptor applied by explicit transform ops.
+  LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM = 4,
+  LOOM_ENCODING_ROLE_COUNT_,
+} loom_encoding_role_t;
+
+// Returns true if |role| names a real encoding role.
+static inline bool loom_encoding_role_is_valid(loom_encoding_role_t role) {
+  return (uint32_t)role < LOOM_ENCODING_ROLE_COUNT_;
+}
+
+// Returns the short text spelling for an encoding role, or NULL if invalid.
+static inline const char* loom_encoding_role_name(loom_encoding_role_t role) {
+  static const char* const names[] = {
+      [LOOM_ENCODING_ROLE_UNKNOWN] = "",
+      [LOOM_ENCODING_ROLE_ADDRESS_LAYOUT] = "layout",
+      [LOOM_ENCODING_ROLE_STORAGE_SCHEMA] = "schema",
+      [LOOM_ENCODING_ROLE_PHYSICAL_STORAGE] = "storage",
+      [LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM] = "transform",
+  };
+  if (loom_encoding_role_is_valid(role)) return names[role];
+  return NULL;
+}
+
+// Parses the short text spelling for an encoding role.
+static inline bool loom_encoding_role_parse(iree_string_view_t text,
+                                            loom_encoding_role_t* out_role) {
+  if (iree_string_view_equal(text, IREE_SV("layout"))) {
+    *out_role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("schema"))) {
+    *out_role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("storage"))) {
+    *out_role = LOOM_ENCODING_ROLE_PHYSICAL_STORAGE;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("transform"))) {
+    *out_role = LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM;
+    return true;
+  }
+  return false;
 }
 
 // Type flags (packed into header bits 20-23).
@@ -287,7 +347,8 @@ typedef uint16_t loom_encoding_flags_t;
 typedef struct loom_type_t {
   // Packed header:
   //   [0:7]   loom_type_kind_t
-  //   [8:15]  loom_scalar_type_t (shaped types) or loom_group_scope_t (group)
+  //   [8:15]  loom_scalar_type_t (shaped types), loom_group_scope_t (group),
+  //           or loom_encoding_role_t (encoding)
   //   [16:19] rank (0-15 for shaped types, 0 otherwise)
   //   [20:23] loom_type_flags_e (inline_dims, all_static)
   //   [24:31] reserved
@@ -360,6 +421,12 @@ static inline bool loom_type_is_all_static(loom_type_t type) {
 // The scope is stored in the element_type byte of the header.
 static inline loom_group_scope_t loom_type_group_scope(loom_type_t type) {
   return (loom_group_scope_t)((type.header >> 8) & 0xFF);
+}
+
+// Returns the role for an encoding type. Only valid when
+// kind == LOOM_TYPE_ENCODING.
+static inline loom_encoding_role_t loom_type_encoding_role(loom_type_t type) {
+  return (loom_encoding_role_t)((type.header >> 8) & 0xFF);
 }
 
 static inline uint32_t loom_type_make_header(loom_type_kind_t kind,
@@ -526,6 +593,16 @@ static inline bool loom_type_shape_equals(loom_type_t a, loom_type_t b) {
   return true;
 }
 
+// Returns true if |type| is shaped and one dimension is statically zero.
+// A static zero dimension makes the total element count zero even when other
+// dimensions are dynamic.
+bool loom_type_has_static_zero_extent(loom_type_t type);
+
+// Computes the total element count for an all-static shaped type. Returns false
+// for non-shaped types, dynamic shapes, and unrepresentable products.
+bool loom_type_static_element_count(loom_type_t type,
+                                    uint64_t* out_element_count);
+
 // Returns true if two types are structurally equal.
 //
 // Shaped/pool types compare kind, element type, rank, dimensions, and
@@ -539,6 +616,23 @@ bool loom_type_equal(loom_type_t a, loom_type_t b);
 // Guarantee: if loom_type_equal(a, b), then
 // loom_type_hash(a) == loom_type_hash(b).
 uint32_t loom_type_hash(loom_type_t type);
+
+// Callback invoked for each SSA value reference embedded in a type.
+typedef iree_status_t (*loom_type_value_ref_callback_t)(
+    loom_value_id_t value_id, void* user_data);
+
+// Walks SSA value references embedded in |type|.
+//
+// This includes dynamic shape dimensions, dynamic pool sizes, SSA
+// encoding/layout attachments, and references in nested function or dialect
+// type parameters. References are reported in structural order and are not
+// deduplicated: a type that mentions the same value twice emits two callbacks.
+iree_status_t loom_type_walk_value_refs(loom_type_t type,
+                                        loom_type_value_ref_callback_t callback,
+                                        void* user_data);
+
+// Returns true if |type| embeds a reference to |value_id|.
+bool loom_type_references_value(loom_type_t type, loom_value_id_t value_id);
 
 // Returns true if two types have the same encoding (same encoding_id
 // and encoding_flags). Both types having no encoding counts as equal.
@@ -579,13 +673,20 @@ static inline uint16_t loom_type_encoding_value_id(loom_type_t type) {
 // Type construction and encodings
 //===----------------------------------------------------------------------===//
 
-// Creates an encoding type (the type of encoding SSA values).
-// No shape, no element type, no dims — just the kind tag.
-static inline loom_type_t loom_type_encoding(void) {
+// Creates an encoding type (the type of encoding SSA values) with |role|.
+// No shape, no element type, no dims — just the kind tag and role byte.
+static inline loom_type_t loom_type_encoding_with_role(
+    loom_encoding_role_t role) {
   loom_type_t type = {0};
-  type.header = loom_type_make_header(LOOM_TYPE_ENCODING, (loom_scalar_type_t)0,
-                                      0, LOOM_TYPE_FLAG_INLINE_DIMS);
+  type.header =
+      loom_type_make_header(LOOM_TYPE_ENCODING, (loom_scalar_type_t)role, 0,
+                            LOOM_TYPE_FLAG_INLINE_DIMS);
   return type;
+}
+
+// Creates an encoding type with an unspecified role.
+static inline loom_type_t loom_type_encoding(void) {
+  return loom_type_encoding_with_role(LOOM_ENCODING_ROLE_UNKNOWN);
 }
 
 // Creates a buffer type used as an opaque storage identity for views.

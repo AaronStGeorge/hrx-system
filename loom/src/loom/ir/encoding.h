@@ -11,6 +11,9 @@
 //     with `LOOM_ENCODING_FLAG_SSA`, or
 //   - a 1-based index into a module-owned `loom_encoding_table_t`.
 // Vector types are shaped but intentionally cannot carry this attachment slot.
+// Encoding SSA values may use role-qualified types such as `encoding<layout>`
+// and `encoding<schema>` so producers and consumers declare the exact encoding
+// category they accept at the type boundary.
 //
 // Each static module encoding entry is identified by `(name_id, attributes)`.
 // `alias_id` is a display-only spelling hint used by the text printer and is
@@ -31,24 +34,6 @@ extern "C" {
 typedef struct loom_module_t loom_module_t;
 typedef struct loom_encoding_define_param_view_t
     loom_encoding_define_param_view_t;
-
-// Semantic role carried by an encoding value.
-//
-// The SSA type remains `encoding` for all roles so encodings can be composed,
-// passed as values, and attached to shaped types uniformly. Role checks are
-// semantic verifier contracts layered on top of that carrier type.
-typedef enum loom_encoding_role_e {
-  // Role is unknown from the current IR structure.
-  LOOM_ENCODING_ROLE_UNKNOWN = 0,
-  // Address-layout mapping for view address arithmetic.
-  LOOM_ENCODING_ROLE_ADDRESS_LAYOUT = 1,
-  // Physical storage schema such as a packed quantized block format.
-  LOOM_ENCODING_ROLE_STORAGE_SCHEMA = 2,
-  // Composition of an address layout and storage schema.
-  LOOM_ENCODING_ROLE_PHYSICAL_STORAGE = 3,
-  // Numeric transform descriptor applied by explicit transform ops.
-  LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM = 4,
-} loom_encoding_role_t;
 
 // A single static encoding instance, such as `#q8_0<block=32>`.
 //
@@ -90,8 +75,8 @@ typedef struct loom_encoding_vtable_t {
   // Encoding family name for lookup and printing, without a leading '#'.
   iree_string_view_t name;
 
-  // Semantic role for this family. Leave UNKNOWN for legacy or unconstrained
-  // families; role helpers still classify built-in family names.
+  // Semantic role for this family. Leave UNKNOWN for unconstrained families;
+  // role helpers still classify built-in family names.
   loom_encoding_role_t role;
 
   // Verifies that `encoding` carries a valid parameter set for this family.

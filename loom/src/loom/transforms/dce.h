@@ -13,7 +13,8 @@
 extern "C" {
 #endif
 
-extern const loom_pass_info_t loom_dce_pass_info;
+// Returns immutable metadata for the dead code elimination pass.
+const loom_pass_info_t* loom_dce_pass_info(void);
 
 // Dead code elimination pass.
 //

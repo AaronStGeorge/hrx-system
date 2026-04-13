@@ -28,6 +28,10 @@ from loom.format.text.tokenizer import ParseError
 from loom.ir import (
     BF16,
     BUFFER_TYPE,
+    ENCODING_LAYOUT_TYPE,
+    ENCODING_SCHEMA_TYPE,
+    ENCODING_STORAGE_TYPE,
+    ENCODING_TRANSFORM_TYPE,
     ENCODING_TYPE,
     F32,
     I8,
@@ -41,6 +45,7 @@ from loom.ir import (
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
+    EncodingRole,
     EncodingType,
     FunctionType,
     GroupScope,
@@ -221,6 +226,13 @@ class TestParseShapedStatic:
         assert result.type_kind == TypeKind.VECTOR
         assert result.element_type == F32
         assert result.dims == (StaticDim(16),)
+
+    def test_vector_zero_extent(self) -> None:
+        result = _parse_type("vector<0xf32>")
+        assert isinstance(result, ShapedType)
+        assert result.type_kind == TypeKind.VECTOR
+        assert result.element_type == F32
+        assert result.dims == (StaticDim(0),)
 
     def test_vector_2d(self) -> None:
         result = _parse_type("vector<4x16xf32>")
@@ -981,7 +993,7 @@ class TestParseEncodingAlias:
     def test_encoding_define_inline_spec_attr(self) -> None:
         module = self._parse_module(
             "func.def @f() -> () {\n"
-            "  %enc = encoding.define #q8_0<block=32> : encoding\n"
+            "  %enc = encoding.define #q8_0<block=32> : encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )
@@ -1003,7 +1015,7 @@ class TestParseEncodingAlias:
             "-> () {\n"
             "  %enc = encoding.define #q8_0<block=32> "
             "{scales = %scales : tensor<[%group_size]xf32>, "
-            "group_size = %group_size : index} : encoding\n"
+            "group_size = %group_size : index} : encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )
@@ -1013,7 +1025,7 @@ class TestParseEncodingAlias:
             "%scales: tensor<[%group_size]xf32>) {\n"
             "  %enc = encoding.define #q8_0<block=32> "
             "{group_size = %group_size : index, "
-            "scales = %scales : tensor<[%group_size]xf32>} : encoding\n"
+            "scales = %scales : tensor<[%group_size]xf32>} : encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )
@@ -1030,7 +1042,7 @@ class TestParseEncodingAlias:
             self._parse_module(
                 "func.def @f(%block: index) -> () {\n"
                 "  %enc = encoding.define #q8_0<block=32> "
-                "{block = %block : index} : encoding\n"
+                "{block = %block : index} : encoding<schema>\n"
                 "  test.yield\n"
                 "}\n"
             )
@@ -1039,7 +1051,7 @@ class TestParseEncodingAlias:
         with pytest.raises(ParseError, match="cannot use an SSA value"):
             self._parse_module(
                 "func.def @f(%group_size: index) -> () {\n"
-                "  %enc = encoding.define #q8_0<group_size=%group_size> : encoding\n"
+                "  %enc = encoding.define #q8_0<group_size=%group_size> : encoding<schema>\n"
                 "  test.yield\n"
                 "}\n"
             )
@@ -1048,7 +1060,7 @@ class TestParseEncodingAlias:
         module = self._parse_module(
             "#enc = #q8_0<block=32>\n"
             "func.def @f() -> () {\n"
-            "  %enc = encoding.define #enc : encoding\n"
+            "  %enc = encoding.define #enc : encoding<schema>\n"
             "  test.yield\n"
             "}\n"
         )
@@ -1450,6 +1462,28 @@ class TestParseEncodingType:
         result_type = _parse_type("encoding")
         assert isinstance(result_type, EncodingType)
         assert result_type == ENCODING_TYPE
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("encoding<layout>", ENCODING_LAYOUT_TYPE),
+            ("encoding<schema>", ENCODING_SCHEMA_TYPE),
+            ("encoding<storage>", ENCODING_STORAGE_TYPE),
+            ("encoding<transform>", ENCODING_TRANSFORM_TYPE),
+        ],
+    )
+    def test_encoding_role(self, text: str, expected: EncodingType) -> None:
+        result_type = _parse_type(text)
+        assert result_type == expected
+
+    def test_encoding_role_records_structural_role(self) -> None:
+        result_type = _parse_type("encoding<layout>")
+        assert isinstance(result_type, EncodingType)
+        assert result_type.role == EncodingRole.LAYOUT
+
+    def test_unknown_encoding_role_raises(self) -> None:
+        with pytest.raises(ParseError, match="unknown encoding role"):
+            _parse_type("encoding<address>")
 
 
 class TestParseDynamicEncoding:

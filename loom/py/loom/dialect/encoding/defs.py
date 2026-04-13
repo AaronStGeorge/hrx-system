@@ -18,13 +18,14 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    ANY_ENCODING,
     ATTR_TYPE_DICT,
     ATTR_TYPE_ENCODING,
     ATTR_TYPE_I64_ARRAY,
     ATTR_TYPE_STRING,
-    ENCODING,
+    ENCODING_LAYOUT,
+    I1,
     INDEX,
-    INTEGER,
     PURE,
     AttrDef,
     Dialect,
@@ -47,11 +48,11 @@ encoding_layout_dense = Op(
     name="encoding.layout.dense",
     group=encoding_ops,
     doc=("Construct a dense row-major address layout. The consuming view type provides the rank and logical extents."),
-    results=[Result("result", ENCODING, doc="Dense address-layout value.")],
+    results=[Result("result", ENCODING_LAYOUT, doc="Dense address-layout value.")],
     traits=[PURE],
     format=[COLON, ResultType("result")],
     examples=[
-        "%layout = encoding.layout.dense : encoding",
+        "%layout = encoding.layout.dense : encoding<layout>",
     ],
 )
 
@@ -64,7 +65,7 @@ encoding_layout_strided = Op(
     group=encoding_ops,
     doc=("Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list."),
     operands=[Operand("strides", INDEX, doc="Dynamic element strides.", variadic=True)],
-    results=[Result("result", ENCODING, doc="Strided address-layout value.")],
+    results=[Result("result", ENCODING_LAYOUT, doc="Strided address-layout value.")],
     attrs=[
         AttrDef(
             "static_strides",
@@ -80,8 +81,8 @@ encoding_layout_strided = Op(
         ResultType("result"),
     ],
     examples=[
-        "%layout = encoding.layout.strided [%row_stride, 1] : encoding",
-        "%layout = encoding.layout.strided [4096, 1] : encoding",
+        "%layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>",
+        "%layout = encoding.layout.strided [4096, 1] : encoding<layout>",
     ],
 )
 
@@ -96,7 +97,7 @@ encoding_define = Op(
     operands=[
         Operand("params", ANY, variadic=True),
     ],
-    results=[Result("result", ENCODING)],
+    results=[Result("result", ANY_ENCODING)],
     attrs=[
         AttrDef("spec", ATTR_TYPE_ENCODING, doc="Static encoding specification."),
         AttrDef(
@@ -115,8 +116,8 @@ encoding_define = Op(
         TypeOf("result"),
     ],
     examples=[
-        "%enc = encoding.define #q8_0<block=32> : encoding",
-        "%enc = encoding.define #q8_0<block=32> {group_size = %group_size : index} : encoding",
+        "%enc = encoding.define #q8_0<block=32> : encoding<schema>",
+        "%enc = encoding.define #q8_0<block=32> {group_size = %group_size : index} : encoding<schema>",
     ],
 )
 
@@ -128,8 +129,8 @@ encoding_isa = Op(
     name="encoding.isa",
     group=encoding_ops,
     doc="Test if an encoding belongs to a category.",
-    operands=[Operand("enc", ENCODING)],
-    results=[Result("result", INTEGER)],
+    operands=[Operand("enc", ANY_ENCODING)],
+    results=[Result("result", I1)],
     attrs=[AttrDef("category", ATTR_TYPE_STRING)],
     traits=[PURE],
     format=[Ref("enc"), COMMA, Attr("category"), COLON, TypeOf("result")],

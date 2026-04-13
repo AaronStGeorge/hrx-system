@@ -16,12 +16,14 @@ loom_cc_library(
     name = "encoding",
     srcs = [
         "builders.c",
+        "families.c",
         "roles.c",
         "storage.c",
         "tables.c",
         "verify.c",
     ],
     hdrs = [
+        "families.h",
         "ops.h",
         "params.h",
         "roles.h",

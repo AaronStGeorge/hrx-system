@@ -81,7 +81,6 @@ iree_status_t loom_func_def_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_func_def_vtable;
 
 // LOOM_OP_FUNC_DECL: External function declaration. Callable by name via func.call.
 // func.decl @extern_matmul(%a: tensor<[%M]xf32>, %b: tensor<[%K]xf32>) -> (tensor<[%M]xf32>)
@@ -120,7 +119,6 @@ iree_status_t loom_func_decl_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_func_decl_vtable;
 
 // LOOM_OP_FUNC_TEMPLATE: Constraint-matched visible implementation of an abstract op.
 // func.template<tile.contract> device @vnni_q8(%w: tensor<[%M]xi8>, %x: tensor<[%K]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)] {
@@ -159,7 +157,6 @@ iree_status_t loom_func_template_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_func_template_vtable;
 
 // LOOM_OP_FUNC_UKERNEL: Constraint-matched opaque implementation of an abstract op.
 // func.ukernel<tile.contract> device @vnni_q8_asm(%w: tensor<[%M]xi8>, %x: tensor<[%K]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)]
@@ -197,7 +194,6 @@ iree_status_t loom_func_ukernel_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_func_ukernel_vtable;
 
 // LOOM_OP_FUNC_CALL: Runtime function call. Target must be func.def or func.decl.
 // %r = func.call @add(%a, %b) : (f32, f32) -> (f32)
@@ -223,7 +219,6 @@ iree_status_t loom_func_call_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_func_call_vtable;
 iree_status_t loom_func_call_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 loom_trait_flags_t loom_func_call_effective_traits(const loom_op_t* op);
 
@@ -251,7 +246,6 @@ iree_status_t loom_func_apply_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_func_apply_vtable;
 iree_status_t loom_func_apply_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 loom_trait_flags_t loom_func_apply_effective_traits(const loom_op_t* op);
 
@@ -265,7 +259,6 @@ iree_status_t loom_func_return_build(
     iree_host_size_t operands_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_func_return_vtable;
 
 // Returns the vtable array for the func dialect.
 const loom_op_vtable_t* const* loom_func_dialect_vtables(

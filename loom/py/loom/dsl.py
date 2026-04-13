@@ -63,7 +63,11 @@ __all__ = [
     "INDEX",
     "ANY",
     "GROUP",
-    "ENCODING",
+    "ANY_ENCODING",
+    "ENCODING_LAYOUT",
+    "ENCODING_SCHEMA",
+    "ENCODING_STORAGE",
+    "ENCODING_TRANSFORM",
     "POOL",
     "I1",
     # Type constraint helpers.
@@ -105,6 +109,7 @@ __all__ = [
     "ISOLATED_FROM_ABOVE",
     "NON_DETERMINISTIC",
     "UNKNOWN_EFFECTS",
+    "HINT",
     # Trait constructors.
     "AllTypesMatch",
     "HasParent",
@@ -185,7 +190,11 @@ class TypeConstraint(Enum):
       INDEX    → ScalarType with kind=INDEX
       ANY      → any type
       GROUP    → GroupType
-      ENCODING → EncodingType
+      ANY_ENCODING → any EncodingType
+      ENCODING_LAYOUT → EncodingType with role=layout
+      ENCODING_SCHEMA → EncodingType with role=schema
+      ENCODING_STORAGE → EncodingType with role=storage
+      ENCODING_TRANSFORM → EncodingType with role=transform
       POOL     → PoolType
 
     Element-qualified constraints are shaped-only: tile, tensor, vector,
@@ -208,7 +217,11 @@ class TypeConstraint(Enum):
     INDEX = "index"
     ANY = "any"
     GROUP = "group"
-    ENCODING = "encoding"
+    ANY_ENCODING = "encoding"
+    ENCODING_LAYOUT = "encoding<layout>"
+    ENCODING_SCHEMA = "encoding<schema>"
+    ENCODING_STORAGE = "encoding<storage>"
+    ENCODING_TRANSFORM = "encoding<transform>"
     POOL = "pool"
     I1 = "i1"
 
@@ -228,7 +241,11 @@ SCALAR = TypeConstraint.SCALAR
 INDEX = TypeConstraint.INDEX
 ANY = TypeConstraint.ANY
 GROUP = TypeConstraint.GROUP
-ENCODING = TypeConstraint.ENCODING
+ANY_ENCODING = TypeConstraint.ANY_ENCODING
+ENCODING_LAYOUT = TypeConstraint.ENCODING_LAYOUT
+ENCODING_SCHEMA = TypeConstraint.ENCODING_SCHEMA
+ENCODING_STORAGE = TypeConstraint.ENCODING_STORAGE
+ENCODING_TRANSFORM = TypeConstraint.ENCODING_TRANSFORM
 POOL = TypeConstraint.POOL
 I1 = TypeConstraint.I1
 
@@ -519,6 +536,9 @@ UNKNOWN_EFFECTS = Trait("UnknownEffects")
 # automatically when any result has allocates=True, but can also be
 # declared explicitly.
 UNIQUE_IDENTITY = Trait("UniqueIdentity")
+# Compiler hint with no semantic memory effects. Hint ops are preserved by
+# canonicalization/DCE and removed only by an explicit hint-stripping pass.
+HINT = Trait("Hint")
 
 
 # ============================================================================
@@ -1483,6 +1503,12 @@ def _validate_effects(
             f"effects. If the effects are known, declare them; if unknown, "
             f"use UNKNOWN_EFFECTS alone."
         )
+    if "Hint" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both HINT and explicit effects. "
+            f"A hint is not a semantic memory effect; attach policy to the "
+            f"real memory op instead."
+        )
 
     for effect in effects:
         # Effect must reference an existing operand.
@@ -1527,6 +1553,22 @@ def _validate_no_effect_conflicts(
         raise ValueError(
             f"Op '{op_name}': declares both PURE and UNIQUE_IDENTITY. "
             f"A pure op can be CSE'd; a unique identity op cannot."
+        )
+    if "Hint" in trait_names and "Pure" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both HINT and PURE. "
+            f"Hints are semantically discardable but intentionally preserved "
+            f"until an explicit strip pass."
+        )
+    if "Hint" in trait_names and "UnknownEffects" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both HINT and UNKNOWN_EFFECTS. "
+            f"Hints are not semantic effects."
+        )
+    if "Hint" in trait_names and "NonDeterministic" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both HINT and NON_DETERMINISTIC. "
+            f"Hints do not produce observable values."
         )
 
 
@@ -1777,8 +1819,8 @@ class Op:
         """True if the op has no memory effects and is deterministic.
 
         An op is pure if it explicitly declares traits=[PURE], or if it
-        has no effects, no ALLOCATES results, and no NON_DETERMINISTIC,
-        UNKNOWN_EFFECTS, or UNIQUE_IDENTITY traits.
+        has no effects, no ALLOCATES results, and no HINT,
+        NON_DETERMINISTIC, UNKNOWN_EFFECTS, or UNIQUE_IDENTITY traits.
         """
         if self.has_trait("Pure"):
             return True
@@ -1787,6 +1829,8 @@ class Op:
         if any(r.allocates for r in self.results):
             return False
         if self.has_trait("UniqueIdentity"):
+            return False
+        if self.has_trait("Hint"):
             return False
         if self.has_trait("NonDeterministic") or self.has_trait("UnknownEffects"):
             return False

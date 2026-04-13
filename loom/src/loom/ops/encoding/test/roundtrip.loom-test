@@ -4,8 +4,8 @@
 
 // Dynamic encoding parameters are named SSA operands on encoding.define.
 func.def @dynamic_encoding_params(%group_size: index, %scale: f32) {
-  %enc = encoding.define #q8_0<block=32> {group_size = %group_size : index, scale = %scale : f32} : encoding
-  test.use %enc : encoding
+  %enc = encoding.define #q8_0<block=32> {group_size = %group_size : index, scale = %scale : f32} : encoding<schema>
+  test.use %enc : encoding<schema>
   func.return
 }
 
@@ -13,8 +13,23 @@ func.def @dynamic_encoding_params(%group_size: index, %scale: f32) {
 
 // The resulting encoding value is attached explicitly in shaped types.
 func.def @dynamic_encoding_attachment(%group_size: index) {
-  %enc = encoding.define #q8_0<block=32> {group_size = %group_size : index} : encoding
+  %enc = encoding.define #q8_0<block=32> {group_size = %group_size : index} : encoding<schema>
   %tile = test.constant 0 : tile<256xi8, %enc>
   test.use %tile : tile<256xi8, %enc>
+  func.return
+}
+
+// ====
+
+// TurboQuant-style KV storage schemas keep physical byte layout static while
+// table storage and transform descriptors remain ordinary SSA operands.
+func.def @turboquant_kv_schema(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+  %dense = encoding.layout.dense : encoding<layout>
+  %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
+  %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
+  test.use %schema : encoding<schema>
   func.return
 }

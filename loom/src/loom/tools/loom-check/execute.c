@@ -12,6 +12,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/encoding/families.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/global/ops.h"
@@ -26,6 +27,7 @@
 #include "loom/transforms/cse.h"
 #include "loom/transforms/dce.h"
 #include "loom/transforms/pass.h"
+#include "loom/transforms/strip_hints.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
@@ -179,6 +181,7 @@ iree_status_t loom_check_context_initialize(loom_context_t* context) {
                                                    loom_view_dialect_vtables));
   IREE_RETURN_IF_ERROR(loom_check_register_dialect(
       context, LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables));
+  IREE_RETURN_IF_ERROR(loom_context_register_builtin_encoding_vtables(context));
   return loom_context_finalize(context);
 }
 
@@ -256,16 +259,20 @@ static iree_status_t loom_check_run_pipeline(
     iree_status_t status = iree_ok_status();
     if (iree_string_view_equal(pass_name, IREE_SV("canonicalize"))) {
       status = loom_pass_manager_add_function_pass(
-          &manager, &loom_canonicalize_pass_info, loom_canonicalize_run, NULL,
+          &manager, loom_canonicalize_pass_info(), loom_canonicalize_run, NULL,
           NULL, iree_string_view_empty());
     } else if (iree_string_view_equal(pass_name, IREE_SV("dce"))) {
       status = loom_pass_manager_add_function_pass(
-          &manager, &loom_dce_pass_info, loom_dce_run, NULL, NULL,
+          &manager, loom_dce_pass_info(), loom_dce_run, NULL, NULL,
           iree_string_view_empty());
     } else if (iree_string_view_equal(pass_name, IREE_SV("cse"))) {
       status = loom_pass_manager_add_function_pass(
-          &manager, &loom_cse_pass_info, loom_cse_run, NULL, NULL,
+          &manager, loom_cse_pass_info(), loom_cse_run, NULL, NULL,
           iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name, IREE_SV("strip-hints"))) {
+      status = loom_pass_manager_add_function_pass(
+          &manager, loom_strip_hints_pass_info(), loom_strip_hints_run, NULL,
+          NULL, iree_string_view_empty());
     } else {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "unknown pass: '%.*s'",

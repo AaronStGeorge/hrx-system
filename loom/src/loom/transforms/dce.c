@@ -23,13 +23,17 @@ static const loom_pass_statistic_def_t kDCEStatistics[] = {
      IREE_SVL("Number of dead operations removed.")},
 };
 
-const loom_pass_info_t loom_dce_pass_info = {
+static const loom_pass_info_t loom_dce_pass_info_storage = {
     .name = IREE_SVL("dce"),
     .description = IREE_SVL("Remove operations with unused results."),
     .kind = LOOM_PASS_FUNCTION,
     .statistic_defs = kDCEStatistics,
     .statistic_count = 1,
 };
+
+const loom_pass_info_t* loom_dce_pass_info(void) {
+  return &loom_dce_pass_info_storage;
+}
 
 //===----------------------------------------------------------------------===//
 // Block collection

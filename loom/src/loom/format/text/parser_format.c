@@ -90,8 +90,8 @@ static iree_status_t loom_parse_format_assign_lhs_result_type(
                                                   (uint16_t)(result_index + 1),
                                                   parsed->result_count);
   }
-  parser->module->values.entries[parsed->result_ids[result_index]].type = type;
-  return iree_ok_status();
+  return loom_module_set_value_type(parser->module,
+                                    parsed->result_ids[result_index], type);
 }
 
 static iree_status_t loom_parse_format_append_symbol_result(
@@ -553,6 +553,34 @@ static iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
   return iree_ok_status();
 }
 
+static iree_status_t loom_parse_format_keyword_is_present(
+    loom_parser_t* parser, const loom_format_element_t* keyword_element,
+    bool* out_present) {
+  *out_present = false;
+  if (keyword_element->data >= LOOM_KW_COUNT_) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "format KEYWORD data %u out of range (max %u)",
+                            keyword_element->data, (uint16_t)LOOM_KW_COUNT_);
+  }
+  loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+  loom_token_kind_t expected_kind =
+      loom_keyword_token_kind(keyword_element->data);
+  if (expected_kind == LOOM_TOKEN_BARE_IDENT) {
+    loom_bstring_t keyword_bstring =
+        loom_keyword_bstring((loom_keyword_id_t)keyword_element->data);
+    if (!keyword_bstring) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "keyword id %u is out of range",
+                              keyword_element->data);
+    }
+    *out_present = peek.kind == LOOM_TOKEN_BARE_IDENT &&
+                   loom_bstring_equal(keyword_bstring, peek.text);
+  } else {
+    *out_present = peek.kind == expected_kind;
+  }
+  return iree_ok_status();
+}
+
 // Evaluates an optional group anchor and returns the number of
 // format elements to skip if the group is absent. When the group
 // is present, |*out_skip_count| is set to 0.
@@ -581,16 +609,8 @@ static iree_status_t loom_parse_format_optional_group(
               ? &vtable->format_elements[element_index + 1]
               : NULL;
       if (first_inner && first_inner->kind == LOOM_FORMAT_KIND_KEYWORD) {
-        loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-        loom_token_kind_t expected_kind =
-            loom_keyword_token_kind(first_inner->data);
-        if (expected_kind == LOOM_TOKEN_BARE_IDENT) {
-          present = (peek.kind == LOOM_TOKEN_BARE_IDENT &&
-                     loom_bstring_equal(
-                         loom_keyword_bstrings[first_inner->data], peek.text));
-        } else {
-          present = (peek.kind == expected_kind);
-        }
+        IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
+            parser, first_inner, &present));
       } else if (first_inner &&
                  first_inner->kind == LOOM_FORMAT_KIND_BINDING_LIST) {
         present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LPAREN);
@@ -617,17 +637,8 @@ static iree_status_t loom_parse_format_optional_group(
               ? &vtable->format_elements[element_index + 1]
               : NULL;
       if (first_inner && first_inner->kind == LOOM_FORMAT_KIND_KEYWORD) {
-        loom_token_kind_t expected_kind =
-            loom_keyword_token_kind(first_inner->data);
-        if (expected_kind == LOOM_TOKEN_BARE_IDENT) {
-          // Text keyword (import, where, etc.): match by text.
-          present = (peek.kind == LOOM_TOKEN_BARE_IDENT &&
-                     loom_bstring_equal(
-                         loom_keyword_bstrings[first_inner->data], peek.text));
-        } else {
-          // Punctuation keyword (comma, arrow, etc.): match by kind.
-          present = (peek.kind == expected_kind);
-        }
+        IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
+            parser, first_inner, &present));
       } else if (first_inner &&
                  first_inner->kind == LOOM_FORMAT_KIND_ATTR_VALUE &&
                  peek.kind == LOOM_TOKEN_BARE_IDENT) {

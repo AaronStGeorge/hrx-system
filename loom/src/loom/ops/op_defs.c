@@ -26,7 +26,7 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint) {
       [LOOM_TYPE_CONSTRAINT_INDEX] = "index",
       [LOOM_TYPE_CONSTRAINT_ANY] = "any",
       [LOOM_TYPE_CONSTRAINT_GROUP] = "group",
-      [LOOM_TYPE_CONSTRAINT_ENCODING] = "encoding",
+      [LOOM_TYPE_CONSTRAINT_ANY_ENCODING] = "encoding",
       [LOOM_TYPE_CONSTRAINT_POOL] = "pool",
       [LOOM_TYPE_CONSTRAINT_I1] = "i1",
       [LOOM_TYPE_CONSTRAINT_VECTOR] = "vector",
@@ -35,6 +35,10 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint) {
       [LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT] = "integer_element",
       [LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT] = "float_element",
       [LOOM_TYPE_CONSTRAINT_I1_ELEMENT] = "i1_element",
+      [LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT] = "encoding<layout>",
+      [LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA] = "encoding<schema>",
+      [LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE] = "encoding<storage>",
+      [LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM] = "encoding<transform>",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_TYPE_CONSTRAINT_COUNT_,
                 "constraint names out of sync with enum");
@@ -85,9 +89,14 @@ const char* loom_constraint_property_name(loom_constraint_property_t property) {
 //===----------------------------------------------------------------------===//
 
 // Generated from KEYWORD_MAP in c_tables.py — do not edit manually.
-const loom_bstring_t loom_keyword_bstrings[LOOM_KW_COUNT_] = {
+static const loom_bstring_t loom_keyword_bstrings[LOOM_KW_COUNT_] = {
 #include "loom/ops/keyword_table.inc"
 };
+
+loom_bstring_t loom_keyword_bstring(loom_keyword_id_t keyword_id) {
+  if (keyword_id >= LOOM_KW_COUNT_) return NULL;
+  return loom_keyword_bstrings[keyword_id];
+}
 
 //===----------------------------------------------------------------------===//
 // Effect query helpers
@@ -105,11 +114,32 @@ bool loom_op_may_write(const loom_module_t* module, const loom_op_t* op) {
   return loom_traits_may_write(loom_op_effective_traits(module, op));
 }
 
+static bool loom_value_has_type_uses_outside_op(const loom_module_t* module,
+                                                loom_value_id_t value_id,
+                                                const loom_op_t* op) {
+  if (value_id >= module->values.count ||
+      value_id >= module->type_uses.value_capacity) {
+    return false;
+  }
+  loom_type_use_id_t use_id =
+      module->type_uses.value_heads[value_id].first_incoming_use_id;
+  while (use_id != LOOM_TYPE_USE_ID_INVALID) {
+    const loom_type_use_t* type_use = &module->type_uses.records[use_id];
+    const loom_value_t* user_value =
+        loom_module_value(module, type_use->user_value_id);
+    if (loom_value_is_block_arg(user_value)) return true;
+    if (loom_value_def_op(user_value) != op) return true;
+    use_id = type_use->next_incoming_use_id;
+  }
+  return false;
+}
+
 bool loom_op_results_unused(const loom_module_t* module, const loom_op_t* op) {
   loom_value_id_t* results = loom_op_results((loom_op_t*)op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
-    if (results[i] != LOOM_VALUE_ID_INVALID &&
-        loom_module_value(module, results[i])->use_count > 0) {
+    if (results[i] == LOOM_VALUE_ID_INVALID) continue;
+    if (loom_module_value(module, results[i])->use_count > 0) return false;
+    if (loom_value_has_type_uses_outside_op(module, results[i], op)) {
       return false;
     }
   }
@@ -119,7 +149,9 @@ bool loom_op_results_unused(const loom_module_t* module, const loom_op_t* op) {
 bool loom_op_is_trivially_dead(const loom_module_t* module,
                                const loom_op_t* op) {
   if (op->result_count == 0) return false;
-  if (loom_op_may_write(module, op)) return false;
+  loom_trait_flags_t traits = loom_op_effective_traits(module, op);
+  if (iree_any_bit_set(traits, LOOM_TRAIT_HINT)) return false;
+  if (loom_traits_may_write(traits)) return false;
   return loom_op_results_unused(module, op);
 }
 
@@ -245,7 +277,7 @@ iree_status_t loom_builder_define_value(loom_builder_t* builder,
   if (builder->reserved_result_next < builder->reserved_result_count) {
     loom_value_id_t id =
         builder->reserved_result_ids[builder->reserved_result_next++];
-    builder->module->values.entries[id].type = type;
+    IREE_RETURN_IF_ERROR(loom_module_set_value_type(builder->module, id, type));
     *out_value_id = id;
     return iree_ok_status();
   }
@@ -459,6 +491,14 @@ iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op) {
           (int)op_name.size, op_name.data, (unsigned)results[i],
           (unsigned)module->values.entries[results[i]].use_count);
     }
+    if (results[i] != LOOM_VALUE_ID_INVALID &&
+        loom_value_has_type_uses_outside_op(module, results[i], op)) {
+      iree_string_view_t op_name = loom_op_name(module, op);
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "cannot erase %.*s: result %%%u still has type use(s)",
+          (int)op_name.size, op_name.data, (unsigned)results[i]);
+    }
   }
   // Remove all operand uses from the referenced values.
   loom_value_id_t* operands = loom_op_operands(op);
@@ -471,6 +511,7 @@ iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op) {
   // the pointers would dangle).
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] != LOOM_VALUE_ID_INVALID) {
+      loom_module_drop_value_type_uses(module, results[i]);
       module->values.entries[results[i]].def = loom_value_def_make_none();
     }
   }
@@ -613,6 +654,12 @@ iree_status_t loom_builder_finalize_op(loom_builder_t* builder, loom_op_t* op) {
           loom_value_def_make_op(op, i);
     }
   }
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (results[i] != LOOM_VALUE_ID_INVALID) {
+      IREE_RETURN_IF_ERROR(
+          loom_module_refresh_value_type_uses(builder->module, results[i]));
+    }
+  }
   // Wire the symbol table entry for symbol-defining ops so that
   // loom_func_like_cast can find the defining op without a scan.
   const loom_op_vtable_t* vtable = loom_op_vtable(builder->module, op);
@@ -687,29 +734,33 @@ iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
                                                loom_value_id_t new_id) {
   if (old_id == new_id) return iree_ok_status();
   loom_value_t* old_value = &module->values.entries[old_id];
-  if (old_value->use_count == 0) return iree_ok_status();
+  uint16_t old_use_count = old_value->use_count;
+
+  loom_value_t* new_value = &module->values.entries[new_id];
+  IREE_RETURN_IF_ERROR(
+      loom_value_ensure_use_capacity(module, new_value, old_use_count));
+
+  IREE_RETURN_IF_ERROR(
+      loom_module_replace_value_type_uses(module, old_id, new_id));
+  if (old_use_count == 0) return iree_ok_status();
 
   // Patch every user op's operand slot.
   const loom_use_t* old_uses = loom_value_uses(old_value);
-  for (uint16_t i = 0; i < old_value->use_count; ++i) {
+  for (uint16_t i = 0; i < old_use_count; ++i) {
     loom_op_t* user_op = loom_use_user_op(old_uses[i]);
     uint16_t operand_index = loom_use_operand_index(old_uses[i]);
     loom_op_operands(user_op)[operand_index] = new_id;
   }
 
   // Bulk-transfer use entries from old to new.
-  loom_value_t* new_value = &module->values.entries[new_id];
-  IREE_RETURN_IF_ERROR(
-      loom_value_ensure_use_capacity(module, new_value, old_value->use_count));
-
   // Append old's entries to new's list. The old_uses pointer (captured
   // above) is still valid: ensure_use_capacity only touches new_value,
   // and old_id != new_id is guarded at entry.
   loom_use_t* new_uses = loom_value_uses_mutable(new_value);
-  for (uint16_t i = 0; i < old_value->use_count; ++i) {
+  for (uint16_t i = 0; i < old_use_count; ++i) {
     new_uses[new_value->use_count + i] = old_uses[i];
   }
-  new_value->use_count += old_value->use_count;
+  new_value->use_count += old_use_count;
 
   // Clear old value's use list.
   old_value->use_count = 0;
@@ -874,5 +925,6 @@ iree_status_t loom_module_compute_uses(loom_module_t* module) {
            LOOM_VALUE_INLINE_USE_COUNT * sizeof(loom_use_t));
   }
   // Walk all ops and re-add uses, def pointers, and parent pointers.
-  return loom_region_compute_uses(module, module->body, NULL);
+  IREE_RETURN_IF_ERROR(loom_region_compute_uses(module, module->body, NULL));
+  return loom_module_recompute_type_uses(module);
 }

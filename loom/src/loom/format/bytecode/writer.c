@@ -426,10 +426,7 @@ static iree_status_t loom_bytecode_numbering_intern_string_view(
 static iree_host_size_t loom_bytecode_find_type_index(
     const loom_module_t* module, loom_type_t type) {
   for (iree_host_size_t i = 0; i < module->types.count; ++i) {
-    // Types are interned by value: compare header + encoding fields.
-    // For inline dims (rank <= 2), the 24-byte comparison works.
-    // For overflow dims, we compare header + encoding_id and dims pointer.
-    if (memcmp(&module->types.entries[i], &type, sizeof(loom_type_t)) == 0) {
+    if (loom_type_equal(module->types.entries[i], type)) {
       return i;
     }
   }
@@ -449,7 +446,11 @@ static iree_status_t loom_bytecode_numbering_intern_type(
       loom_bytecode_find_type_index(numbering->module, type);
   if (module_index == SIZE_MAX) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "type not found in module type table");
+                            "type not found in module type table (kind=%u, "
+                            "rank=%u, module types=%" PRIhsz ")",
+                            (unsigned)loom_type_kind(type),
+                            (unsigned)loom_type_rank(type),
+                            numbering->module->types.count);
   }
   if (numbering->type_map[module_index] != LOOM_WRITER_ID_NONE) {
     *out_writer_id = numbering->type_map[module_index];
@@ -899,6 +900,31 @@ static iree_status_t loom_bytecode_type_kind_byte(loom_type_kind_t kind,
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "unknown type kind %d",
                           (int)kind);
+}
+
+static iree_status_t loom_bytecode_encoding_role_byte(loom_encoding_role_t role,
+                                                      uint8_t* out_byte) {
+  switch (role) {
+    case LOOM_ENCODING_ROLE_UNKNOWN:
+      *out_byte = LOOM_BYTECODE_ENCODING_ROLE_UNKNOWN;
+      return iree_ok_status();
+    case LOOM_ENCODING_ROLE_ADDRESS_LAYOUT:
+      *out_byte = LOOM_BYTECODE_ENCODING_ROLE_LAYOUT;
+      return iree_ok_status();
+    case LOOM_ENCODING_ROLE_STORAGE_SCHEMA:
+      *out_byte = LOOM_BYTECODE_ENCODING_ROLE_SCHEMA;
+      return iree_ok_status();
+    case LOOM_ENCODING_ROLE_PHYSICAL_STORAGE:
+      *out_byte = LOOM_BYTECODE_ENCODING_ROLE_STORAGE;
+      return iree_ok_status();
+    case LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM:
+      *out_byte = LOOM_BYTECODE_ENCODING_ROLE_TRANSFORM;
+      return iree_ok_status();
+    case LOOM_ENCODING_ROLE_COUNT_:
+      break;
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown encoding role %d", (int)role);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1699,9 +1725,14 @@ static iree_status_t loom_bytecode_write_types_section(
         }
         break;
       }
-      case LOOM_TYPE_ENCODING:
-        // No additional data.
+      case LOOM_TYPE_ENCODING: {
+        uint8_t role_byte = 0;
+        IREE_RETURN_IF_ERROR(loom_bytecode_encoding_role_byte(
+            loom_type_encoding_role(type), &role_byte));
+        IREE_RETURN_IF_ERROR(
+            loom_bytecode_page_writer_write_u8(page_writer, role_byte));
         break;
+      }
       case LOOM_TYPE_BUFFER:
         // No additional data.
         break;

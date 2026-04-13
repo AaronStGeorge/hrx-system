@@ -52,6 +52,19 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "special_values",
+    srcs = ["special_values.c"],
+    hdrs = ["special_values.h"],
+    deps = [
+        ":op_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "type_registry",
     srcs = ["type_registry.c"],
     hdrs = ["type_registry.h"],

@@ -41,7 +41,6 @@ iree_status_t loom_pool_load_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_pool_load_vtable;
 
 // LOOM_OP_POOL_STORE: Write tile data into the pool at a page offset.
 // pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, index, i32, tile<[16, 128]xf16>
@@ -60,7 +59,6 @@ iree_status_t loom_pool_store_build(
     loom_value_id_t data,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_pool_store_vtable;
 
 // LOOM_OP_POOL_PIN: Atomically increment the pin count for a block.
 // pool.pin %pool, %bid : pool<[%BS]>, i32
@@ -73,7 +71,6 @@ iree_status_t loom_pool_pin_build(
     loom_value_id_t block_id,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_pool_pin_vtable;
 
 // LOOM_OP_POOL_UNPIN: Atomically decrement the pin count for a block.
 // pool.unpin %pool, %bid : pool<[%BS]>, i32
@@ -86,7 +83,6 @@ iree_status_t loom_pool_unpin_build(
     loom_value_id_t block_id,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_pool_unpin_vtable;
 
 // LOOM_OP_POOL_BUFFER: Extract the raw device buffer handle from a pool.
 // %buf = pool.buffer %pool : pool<[%BS]> -> hal.buffer
@@ -99,7 +95,6 @@ iree_status_t loom_pool_buffer_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_pool_buffer_vtable;
 
 // Returns the vtable array for the pool dialect.
 const loom_op_vtable_t* const* loom_pool_dialect_vtables(

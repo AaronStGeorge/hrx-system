@@ -14,12 +14,14 @@ loom_cc_library(
   NAME
     encoding
   HDRS
+    "families.h"
     "ops.h"
     "params.h"
     "roles.h"
     "storage.h"
   SRCS
     "builders.c"
+    "families.c"
     "roles.c"
     "storage.c"
     "tables.c"

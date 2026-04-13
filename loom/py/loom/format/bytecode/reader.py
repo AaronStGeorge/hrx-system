@@ -42,6 +42,8 @@ from loom.ir import (
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
+    EncodingRole,
+    EncodingType,
     FileLocation,
     FunctionType,
     FusedLocation,
@@ -449,7 +451,19 @@ class BytecodeReader:
                         params.append(self._types[type_idx])
                     ir_type = DialectType(self._strings[name_id], tuple(params))
                 case TypeKind.ENCODING:
-                    ir_type = ENCODING_TYPE
+                    role_byte = data[offset]
+                    offset += 1
+                    try:
+                        role = EncodingRole(role_byte)
+                    except ValueError as e:
+                        raise BytecodeError(
+                            f"unsupported encoding role byte: {role_byte}"
+                        ) from e
+                    ir_type = (
+                        ENCODING_TYPE
+                        if role == EncodingRole.UNKNOWN
+                        else EncodingType(role)
+                    )
                 case TypeKind.POOL:
                     is_dynamic = data[offset]
                     offset += 1

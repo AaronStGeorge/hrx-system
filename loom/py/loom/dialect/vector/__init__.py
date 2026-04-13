@@ -16,6 +16,8 @@ from loom.dialect.vector.defs import (
     CombiningKind,
     FloatAssumptionFlags,
     IntegerDot4Kind,
+    QuantizeNaN,
+    QuantizeTie,
     vector_ops,
 )
 
@@ -27,5 +29,7 @@ __all__ = [
     "CombiningKind",
     "FloatAssumptionFlags",
     "IntegerDot4Kind",
+    "QuantizeNaN",
+    "QuantizeTie",
     "ALL_VECTOR_OPS",
 ]

@@ -19,61 +19,68 @@ extern "C" {
 
 enum {
   LOOM_OP_VECTOR_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 0),
-  LOOM_OP_VECTOR_SPLAT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 1),
-  LOOM_OP_VECTOR_BROADCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 2),
-  LOOM_OP_VECTOR_FROM_ELEMENTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 3),
-  LOOM_OP_VECTOR_EXTRACT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 4),
-  LOOM_OP_VECTOR_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 5),
-  LOOM_OP_VECTOR_SLICE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 6),
-  LOOM_OP_VECTOR_CONCAT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 7),
-  LOOM_OP_VECTOR_TRANSPOSE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 8),
-  LOOM_OP_VECTOR_SHUFFLE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 9),
-  LOOM_OP_VECTOR_INTERLEAVE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 10),
-  LOOM_OP_VECTOR_DEINTERLEAVE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 11),
-  LOOM_OP_VECTOR_TABLE_LOOKUP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 12),
-  LOOM_OP_VECTOR_TRANSFORM = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 13),
-  LOOM_OP_VECTOR_LOAD = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 14),
-  LOOM_OP_VECTOR_STORE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 15),
-  LOOM_OP_VECTOR_LOAD_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 16),
-  LOOM_OP_VECTOR_STORE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 17),
-  LOOM_OP_VECTOR_LOAD_EXPAND = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 18),
-  LOOM_OP_VECTOR_STORE_COMPRESS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 19),
-  LOOM_OP_VECTOR_GATHER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 20),
-  LOOM_OP_VECTOR_SCATTER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 21),
-  LOOM_OP_VECTOR_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 22),
-  LOOM_OP_VECTOR_SCATTER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 23),
-  LOOM_OP_VECTOR_ATOMIC_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 24),
-  LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 25),
-  LOOM_OP_VECTOR_ATOMIC_RMW = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 26),
-  LOOM_OP_VECTOR_ATOMIC_RMW_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 27),
-  LOOM_OP_VECTOR_SELECT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 28),
-  LOOM_OP_VECTOR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 29),
-  LOOM_OP_VECTOR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 30),
-  LOOM_OP_VECTOR_ADDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 31),
-  LOOM_OP_VECTOR_MULF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 32),
-  LOOM_OP_VECTOR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 33),
-  LOOM_OP_VECTOR_ADDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 34),
-  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 35),
-  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 36),
-  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 37),
-  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 38),
-  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 39),
-  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 40),
-  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 41),
-  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 42),
-  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 43),
-  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 44),
-  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 45),
-  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 46),
-  LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 47),
-  LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 48),
-  LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 49),
-  LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 50),
-  LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 51),
-  LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 52),
-  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 53),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 54),
-  LOOM_OP_VECTOR_COUNT_ = 55,
+  LOOM_OP_VECTOR_POISON = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 1),
+  LOOM_OP_VECTOR_EMPTY = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 2),
+  LOOM_OP_VECTOR_SPLAT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 3),
+  LOOM_OP_VECTOR_BROADCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 4),
+  LOOM_OP_VECTOR_FROM_ELEMENTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 5),
+  LOOM_OP_VECTOR_EXTRACT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 6),
+  LOOM_OP_VECTOR_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 7),
+  LOOM_OP_VECTOR_SLICE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 8),
+  LOOM_OP_VECTOR_CONCAT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 9),
+  LOOM_OP_VECTOR_TRANSPOSE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 10),
+  LOOM_OP_VECTOR_SHUFFLE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 11),
+  LOOM_OP_VECTOR_INTERLEAVE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 12),
+  LOOM_OP_VECTOR_DEINTERLEAVE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 13),
+  LOOM_OP_VECTOR_TABLE_LOOKUP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 14),
+  LOOM_OP_VECTOR_TABLE_QUANTIZE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 15),
+  LOOM_OP_VECTOR_TRANSFORM = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 16),
+  LOOM_OP_VECTOR_LOAD = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 17),
+  LOOM_OP_VECTOR_STORE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 18),
+  LOOM_OP_VECTOR_LOAD_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 19),
+  LOOM_OP_VECTOR_STORE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 20),
+  LOOM_OP_VECTOR_LOAD_EXPAND = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 21),
+  LOOM_OP_VECTOR_STORE_COMPRESS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 22),
+  LOOM_OP_VECTOR_GATHER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 23),
+  LOOM_OP_VECTOR_SCATTER = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 24),
+  LOOM_OP_VECTOR_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 25),
+  LOOM_OP_VECTOR_SCATTER_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 26),
+  LOOM_OP_VECTOR_ATOMIC_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 27),
+  LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 28),
+  LOOM_OP_VECTOR_ATOMIC_RMW = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 29),
+  LOOM_OP_VECTOR_ATOMIC_RMW_MASK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 30),
+  LOOM_OP_VECTOR_SELECT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 31),
+  LOOM_OP_VECTOR_CMPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 32),
+  LOOM_OP_VECTOR_CMPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 33),
+  LOOM_OP_VECTOR_ADDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 34),
+  LOOM_OP_VECTOR_MULF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 35),
+  LOOM_OP_VECTOR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 36),
+  LOOM_OP_VECTOR_ADDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 37),
+  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 38),
+  LOOM_OP_VECTOR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 39),
+  LOOM_OP_VECTOR_ORI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 40),
+  LOOM_OP_VECTOR_XORI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 41),
+  LOOM_OP_VECTOR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 42),
+  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 43),
+  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 44),
+  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 45),
+  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 46),
+  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 47),
+  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 48),
+  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 49),
+  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 50),
+  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 51),
+  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 52),
+  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 53),
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 54),
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 55),
+  LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 56),
+  LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 57),
+  LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 58),
+  LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 59),
+  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 60),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 61),
+  LOOM_OP_VECTOR_COUNT_ = 62,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -125,6 +132,20 @@ typedef enum loom_vector_scope_e {
   LOOM_VECTOR_SCOPE_SYSTEM = 4,
   LOOM_VECTOR_SCOPE_COUNT_ = 5,
 } loom_vector_scope_t;
+
+// NaN handling policy for table-based scalar quantization.
+typedef enum loom_vector_table_quantize_nan_e {
+  LOOM_VECTOR_TABLE_QUANTIZE_NAN_ZERO = 0,
+  LOOM_VECTOR_TABLE_QUANTIZE_NAN_MAX = 1,
+  LOOM_VECTOR_TABLE_QUANTIZE_NAN_COUNT_ = 2,
+} loom_vector_table_quantize_nan_t;
+
+// Threshold equality policy for table-based scalar quantization.
+typedef enum loom_vector_table_quantize_tie_e {
+  LOOM_VECTOR_TABLE_QUANTIZE_TIE_LOWER = 0,
+  LOOM_VECTOR_TABLE_QUANTIZE_TIE_UPPER = 1,
+  LOOM_VECTOR_TABLE_QUANTIZE_TIE_COUNT_ = 2,
+} loom_vector_table_quantize_tie_t;
 
 // Integer comparison predicates.
 typedef enum loom_vector_cmpi_predicate_e {
@@ -200,8 +221,33 @@ iree_status_t loom_vector_constant_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_constant_vtable;
 iree_status_t loom_vector_constant_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_POISON: Materialize a typed Loom poison vector. Poison represents an invalid vector value and propagates through pure vector ops until dead-code elimination removes it or a boundary diagnoses it. A zero-lane vector such as vector<0xf32> is not poison: it is an empty aggregate whose pure lane-wise computation and zero-lane memory effects should canonicalize away. Poison is introduced when IR observes something that cannot exist, such as a lane extracted from a vector proven to have zero lanes.
+// %p = vector.poison : vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_poison_isa, LOOM_OP_VECTOR_POISON)
+LOOM_DEFINE_RESULT(loom_vector_poison_result, 0)
+iree_status_t loom_vector_poison_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_poison_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_EMPTY: Materialize the unique empty aggregate value for a static zero-lane vector type. Empty vectors are ordinary values, not poison, and pure zero-lane computation canonicalizes to this op.
+// %v = vector.empty : vector<0xf32>
+LOOM_DEFINE_ISA(loom_vector_empty_isa, LOOM_OP_VECTOR_EMPTY)
+LOOM_DEFINE_RESULT(loom_vector_empty_result, 0)
+iree_status_t loom_vector_empty_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_empty_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
@@ -216,7 +262,6 @@ iree_status_t loom_vector_splat_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_splat_vtable;
 
 // LOOM_OP_VECTOR_BROADCAST: Broadcast a vector value to a vector result with a compatible shape.
 // %wide = vector.broadcast %v : vector<4xf32> -> vector<16x4xf32>
@@ -229,7 +274,6 @@ iree_status_t loom_vector_broadcast_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_broadcast_vtable;
 iree_status_t loom_vector_broadcast_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -246,7 +290,6 @@ iree_status_t loom_vector_from_elements_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_from_elements_vtable;
 iree_status_t loom_vector_from_elements_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -268,7 +311,6 @@ iree_status_t loom_vector_extract_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_extract_vtable;
 iree_status_t loom_vector_extract_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -292,7 +334,6 @@ iree_status_t loom_vector_insert_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_insert_vtable;
 iree_status_t loom_vector_insert_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -314,7 +355,6 @@ iree_status_t loom_vector_slice_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_slice_vtable;
 iree_status_t loom_vector_slice_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -333,7 +373,6 @@ iree_status_t loom_vector_concat_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_concat_vtable;
 iree_status_t loom_vector_concat_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -352,7 +391,6 @@ iree_status_t loom_vector_transpose_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_transpose_vtable;
 iree_status_t loom_vector_transpose_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -371,7 +409,6 @@ iree_status_t loom_vector_shuffle_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_shuffle_vtable;
 iree_status_t loom_vector_shuffle_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -391,7 +428,6 @@ iree_status_t loom_vector_interleave_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_interleave_vtable;
 iree_status_t loom_vector_interleave_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -412,7 +448,6 @@ iree_status_t loom_vector_deinterleave_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_deinterleave_vtable;
 iree_status_t loom_vector_deinterleave_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -430,13 +465,33 @@ iree_status_t loom_vector_table_lookup_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_table_lookup_vtable;
 iree_status_t loom_vector_table_lookup_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
+// LOOM_OP_VECTOR_TABLE_QUANTIZE: Map floating-point lanes to unsigned integer ordinal code lanes by counting ordered rank-1 threshold table entries.
+// %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<32xf32>, vector<15xf32> -> vector<32xi8>
+LOOM_DEFINE_ISA(loom_vector_table_quantize_isa, LOOM_OP_VECTOR_TABLE_QUANTIZE)
+LOOM_DEFINE_OPERAND(loom_vector_table_quantize_input, 0)
+LOOM_DEFINE_OPERAND(loom_vector_table_quantize_thresholds, 1)
+LOOM_DEFINE_RESULT(loom_vector_table_quantize_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_table_quantize_nan, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_table_quantize_tie, 1)
+iree_status_t loom_vector_table_quantize_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t input,
+    loom_may_consume loom_value_id_t thresholds,
+    uint8_t nan,
+    uint8_t tie,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_table_quantize_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
 // LOOM_OP_VECTOR_TRANSFORM: Apply an explicit numeric transform descriptor to vector register lanes.
-// %r = vector.transform %v, %xf : vector<128xf32>, encoding -> vector<128xf32>
+// %r = vector.transform %v, %xf : vector<128xf32>, encoding<transform> -> vector<128xf32>
 LOOM_DEFINE_ISA(loom_vector_transform_isa, LOOM_OP_VECTOR_TRANSFORM)
 LOOM_DEFINE_OPERAND(loom_vector_transform_source, 0)
 LOOM_DEFINE_OPERAND(loom_vector_transform_transform, 1)
@@ -448,7 +503,6 @@ iree_status_t loom_vector_transform_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_transform_vtable;
 iree_status_t loom_vector_transform_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -470,7 +524,6 @@ iree_status_t loom_vector_load_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_load_vtable;
 iree_status_t loom_vector_load_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -492,7 +545,6 @@ iree_status_t loom_vector_store_build(
     iree_host_size_t static_indices_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_store_vtable;
 iree_status_t loom_vector_store_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -518,7 +570,6 @@ iree_status_t loom_vector_load_mask_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_load_mask_vtable;
 iree_status_t loom_vector_load_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -542,7 +593,6 @@ iree_status_t loom_vector_store_mask_build(
     loom_value_id_t mask,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_store_mask_vtable;
 iree_status_t loom_vector_store_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -568,7 +618,6 @@ iree_status_t loom_vector_load_expand_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_load_expand_vtable;
 iree_status_t loom_vector_load_expand_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -592,7 +641,6 @@ iree_status_t loom_vector_store_compress_build(
     loom_value_id_t mask,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_store_compress_vtable;
 iree_status_t loom_vector_store_compress_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -616,7 +664,6 @@ iree_status_t loom_vector_gather_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_gather_vtable;
 iree_status_t loom_vector_gather_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -640,7 +687,6 @@ iree_status_t loom_vector_scatter_build(
     loom_value_id_t offsets,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_scatter_vtable;
 iree_status_t loom_vector_scatter_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -668,7 +714,6 @@ iree_status_t loom_vector_gather_mask_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_gather_mask_vtable;
 iree_status_t loom_vector_gather_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -694,7 +739,6 @@ iree_status_t loom_vector_scatter_mask_build(
     loom_value_id_t mask,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_scatter_mask_vtable;
 iree_status_t loom_vector_scatter_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -724,7 +768,6 @@ iree_status_t loom_vector_atomic_reduce_build(
     uint8_t scope,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_atomic_reduce_vtable;
 iree_status_t loom_vector_atomic_reduce_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -756,7 +799,6 @@ iree_status_t loom_vector_atomic_reduce_mask_build(
     uint8_t scope,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_atomic_reduce_mask_vtable;
 iree_status_t loom_vector_atomic_reduce_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -788,7 +830,6 @@ iree_status_t loom_vector_atomic_rmw_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_atomic_rmw_vtable;
 iree_status_t loom_vector_atomic_rmw_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -824,7 +865,6 @@ iree_status_t loom_vector_atomic_rmw_mask_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_atomic_rmw_mask_vtable;
 iree_status_t loom_vector_atomic_rmw_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -844,7 +884,6 @@ iree_status_t loom_vector_select_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_select_vtable;
 
 // LOOM_OP_VECTOR_CMPI: Lanewise integer comparison producing an i1 mask vector.
 // %m = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
@@ -858,7 +897,6 @@ iree_status_t loom_vector_cmpi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_cmpi_vtable;
 
 // LOOM_OP_VECTOR_CMPF: Lanewise floating-point comparison producing an i1 mask vector.
 // %m = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
@@ -872,7 +910,6 @@ iree_status_t loom_vector_cmpf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_cmpf_vtable;
 
 // LOOM_OP_VECTOR_ADDF: Lanewise floating-point addition.
 // vector.addf
@@ -886,7 +923,6 @@ iree_status_t loom_vector_addf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_addf_vtable;
 
 // LOOM_OP_VECTOR_MULF: Lanewise floating-point multiplication.
 // vector.mulf
@@ -900,7 +936,6 @@ iree_status_t loom_vector_mulf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_mulf_vtable;
 
 // LOOM_OP_VECTOR_FMAF: Lanewise fused multiply-add: a*b + c with single rounding.
 // %r = vector.fmaf %a, %b, %c : vector<16xf32>
@@ -919,7 +954,6 @@ iree_status_t loom_vector_fmaf_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_fmaf_vtable;
 
 // LOOM_OP_VECTOR_ADDI: Lanewise integer addition.
 // vector.addi
@@ -933,7 +967,6 @@ iree_status_t loom_vector_addi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_addi_vtable;
 
 // LOOM_OP_VECTOR_MULI: Lanewise integer multiplication.
 // vector.muli
@@ -947,7 +980,49 @@ iree_status_t loom_vector_muli_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_muli_vtable;
+
+// LOOM_OP_VECTOR_ANDI: Lanewise bitwise AND.
+// vector.andi
+LOOM_DEFINE_ISA(loom_vector_andi_isa, LOOM_OP_VECTOR_ANDI)
+LOOM_DEFINE_OPERAND(loom_vector_andi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_andi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_andi_result, 0)
+iree_status_t loom_vector_andi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_ORI: Lanewise bitwise OR.
+// vector.ori
+LOOM_DEFINE_ISA(loom_vector_ori_isa, LOOM_OP_VECTOR_ORI)
+LOOM_DEFINE_OPERAND(loom_vector_ori_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_ori_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_ori_result, 0)
+iree_status_t loom_vector_ori_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_XORI: Lanewise bitwise XOR.
+// vector.xori
+LOOM_DEFINE_ISA(loom_vector_xori_isa, LOOM_OP_VECTOR_XORI)
+LOOM_DEFINE_OPERAND(loom_vector_xori_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_xori_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_xori_result, 0)
+iree_status_t loom_vector_xori_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_CTPOPI: Lanewise population count over integer lanes.
+// vector.ctpopi
+LOOM_DEFINE_ISA(loom_vector_ctpopi_isa, LOOM_OP_VECTOR_CTPOPI)
+LOOM_DEFINE_OPERAND(loom_vector_ctpopi_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_ctpopi_result, 0)
+iree_status_t loom_vector_ctpopi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
 
 // LOOM_OP_VECTOR_SQRTF: Lanewise square root.
 // vector.sqrtf
@@ -959,7 +1034,6 @@ iree_status_t loom_vector_sqrtf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_sqrtf_vtable;
 
 // LOOM_OP_VECTOR_EXTF: Lanewise floating-point precision extension.
 // vector.extf
@@ -970,7 +1044,6 @@ iree_status_t loom_vector_extf_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_extf_vtable;
 iree_status_t loom_vector_extf_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -984,7 +1057,6 @@ iree_status_t loom_vector_fptrunc_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_fptrunc_vtable;
 iree_status_t loom_vector_fptrunc_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -998,7 +1070,6 @@ iree_status_t loom_vector_extsi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_extsi_vtable;
 iree_status_t loom_vector_extsi_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1012,7 +1083,6 @@ iree_status_t loom_vector_extui_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_extui_vtable;
 iree_status_t loom_vector_extui_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1026,7 +1096,6 @@ iree_status_t loom_vector_trunci_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_trunci_vtable;
 iree_status_t loom_vector_trunci_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1040,7 +1109,6 @@ iree_status_t loom_vector_sitofp_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_sitofp_vtable;
 
 // LOOM_OP_VECTOR_UITOFP: Lanewise unsigned integer to floating-point conversion.
 // vector.uitofp
@@ -1051,7 +1119,6 @@ iree_status_t loom_vector_uitofp_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_uitofp_vtable;
 
 // LOOM_OP_VECTOR_FPTOSI: Lanewise floating-point to signed integer conversion.
 // vector.fptosi
@@ -1062,7 +1129,6 @@ iree_status_t loom_vector_fptosi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_fptosi_vtable;
 
 // LOOM_OP_VECTOR_FPTOUI: Lanewise floating-point to unsigned integer conversion.
 // vector.fptoui
@@ -1073,7 +1139,6 @@ iree_status_t loom_vector_fptoui_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_fptoui_vtable;
 
 // LOOM_OP_VECTOR_BITCAST: Bitwise reinterpretation between vector register types with the same total bit count.
 // %r = vector.bitcast %input : vector<16xf32> to vector<16xi32>
@@ -1084,7 +1149,6 @@ iree_status_t loom_vector_bitcast_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_bitcast_vtable;
 iree_status_t loom_vector_bitcast_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1104,7 +1168,6 @@ iree_status_t loom_vector_bitfield_extractu_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_bitfield_extractu_vtable;
 iree_status_t loom_vector_bitfield_extractu_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1124,7 +1187,6 @@ iree_status_t loom_vector_bitfield_extracts_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_bitfield_extracts_vtable;
 iree_status_t loom_vector_bitfield_extracts_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1146,7 +1208,6 @@ iree_status_t loom_vector_bitfield_insert_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_bitfield_insert_vtable;
 iree_status_t loom_vector_bitfield_insert_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1164,7 +1225,6 @@ iree_status_t loom_vector_bitpack_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_bitpack_vtable;
 iree_status_t loom_vector_bitpack_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1182,7 +1242,6 @@ iree_status_t loom_vector_bitunpacku_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_bitunpacku_vtable;
 iree_status_t loom_vector_bitunpacku_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1200,7 +1259,6 @@ iree_status_t loom_vector_bitunpacks_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_bitunpacks_vtable;
 iree_status_t loom_vector_bitunpacks_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1222,7 +1280,6 @@ iree_status_t loom_vector_dot4i_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_dot4i_vtable;
 iree_status_t loom_vector_dot4i_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1242,7 +1299,6 @@ iree_status_t loom_vector_reduce_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_vector_reduce_vtable;
 iree_status_t loom_vector_reduce_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);

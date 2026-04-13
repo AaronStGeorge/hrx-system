@@ -15,6 +15,16 @@
 namespace loom {
 namespace {
 
+static const loom_op_vtable_t* TestVtable(loom_op_kind_t kind) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = loom_test_dialect_vtables(&count);
+  uint8_t index = loom_op_dialect_index(kind);
+  if (loom_op_dialect_id(kind) != LOOM_DIALECT_TEST || index >= count) {
+    return nullptr;
+  }
+  return vtables[index];
+}
+
 //===----------------------------------------------------------------------===//
 // Struct sizes
 //===----------------------------------------------------------------------===//
@@ -63,75 +73,76 @@ TEST(OpKind, Count) { EXPECT_GT(LOOM_OP_TEST_COUNT_, 0); }
 //===----------------------------------------------------------------------===//
 
 TEST(Vtable, AddiName) {
-  iree_string_view_t name = loom_op_vtable_name(&loom_test_addi_vtable);
+  iree_string_view_t name = loom_op_vtable_name(TestVtable(LOOM_OP_TEST_ADDI));
   EXPECT_TRUE(iree_string_view_equal(name, IREE_SV("test.addi")));
 }
 
 TEST(Vtable, AddiShortName) {
-  iree_string_view_t name = loom_op_vtable_short_name(&loom_test_addi_vtable);
+  iree_string_view_t name =
+      loom_op_vtable_short_name(TestVtable(LOOM_OP_TEST_ADDI));
   EXPECT_TRUE(iree_string_view_equal(name, IREE_SV("addi")));
 }
 
 TEST(Vtable, AddiNamespace) {
-  iree_string_view_t ns = loom_op_vtable_namespace(&loom_test_addi_vtable);
+  iree_string_view_t ns =
+      loom_op_vtable_namespace(TestVtable(LOOM_OP_TEST_ADDI));
   EXPECT_TRUE(iree_string_view_equal(ns, IREE_SV("test")));
 }
 
 TEST(Vtable, AddiCounts) {
-  EXPECT_EQ(loom_test_addi_vtable.fixed_operand_count, 2);
-  EXPECT_EQ(loom_test_addi_vtable.fixed_result_count, 1);
-  EXPECT_EQ(loom_test_addi_vtable.attribute_count, 0);
-  EXPECT_EQ(loom_test_addi_vtable.region_count, 0);
-  EXPECT_FALSE(loom_test_addi_vtable.vtable_flags &
-               LOOM_OP_VTABLE_VARIADIC_OPERANDS);
-  EXPECT_FALSE(loom_test_addi_vtable.vtable_flags &
-               LOOM_OP_VTABLE_VARIADIC_RESULTS);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_ADDI);
+  EXPECT_EQ(vtable->fixed_operand_count, 2);
+  EXPECT_EQ(vtable->fixed_result_count, 1);
+  EXPECT_EQ(vtable->attribute_count, 0);
+  EXPECT_EQ(vtable->region_count, 0);
+  EXPECT_FALSE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS);
+  EXPECT_FALSE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS);
 }
 
 TEST(Vtable, AddiTraits) {
-  EXPECT_NE(loom_test_addi_vtable.traits & LOOM_TRAIT_PURE, 0u);
-  EXPECT_NE(loom_test_addi_vtable.traits & LOOM_TRAIT_COMMUTATIVE, 0u);
-  EXPECT_EQ(loom_test_addi_vtable.traits & LOOM_TRAIT_TERMINATOR, 0u);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_ADDI);
+  EXPECT_NE(vtable->traits & LOOM_TRAIT_PURE, 0u);
+  EXPECT_NE(vtable->traits & LOOM_TRAIT_COMMUTATIVE, 0u);
+  EXPECT_EQ(vtable->traits & LOOM_TRAIT_TERMINATOR, 0u);
 }
 
 TEST(Vtable, InvokeCounts) {
-  EXPECT_EQ(loom_test_invoke_vtable.fixed_operand_count, 0);
-  EXPECT_EQ(loom_test_invoke_vtable.fixed_result_count, 0);
-  EXPECT_EQ(loom_test_invoke_vtable.attribute_count, 1);
-  EXPECT_EQ(loom_test_invoke_vtable.region_count, 0);
-  EXPECT_TRUE(loom_test_invoke_vtable.vtable_flags &
-              LOOM_OP_VTABLE_VARIADIC_OPERANDS);
-  EXPECT_TRUE(loom_test_invoke_vtable.vtable_flags &
-              LOOM_OP_VTABLE_VARIADIC_RESULTS);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_INVOKE);
+  EXPECT_EQ(vtable->fixed_operand_count, 0);
+  EXPECT_EQ(vtable->fixed_result_count, 0);
+  EXPECT_EQ(vtable->attribute_count, 1);
+  EXPECT_EQ(vtable->region_count, 0);
+  EXPECT_TRUE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS);
+  EXPECT_TRUE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS);
 }
 
 TEST(Vtable, LoopCounts) {
-  EXPECT_EQ(loom_test_loop_vtable.fixed_operand_count, 3);
-  EXPECT_EQ(loom_test_loop_vtable.region_count, 1);
-  EXPECT_TRUE(loom_test_loop_vtable.vtable_flags &
-              LOOM_OP_VTABLE_VARIADIC_OPERANDS);
-  EXPECT_TRUE(loom_test_loop_vtable.vtable_flags &
-              LOOM_OP_VTABLE_VARIADIC_RESULTS);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_LOOP);
+  EXPECT_EQ(vtable->fixed_operand_count, 3);
+  EXPECT_EQ(vtable->region_count, 1);
+  EXPECT_TRUE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS);
+  EXPECT_TRUE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS);
 }
 
 TEST(Vtable, BranchRegions) {
-  EXPECT_EQ(loom_test_branch_vtable.region_count, 2);
+  EXPECT_EQ(TestVtable(LOOM_OP_TEST_BRANCH)->region_count, 2);
 }
 
 TEST(Vtable, YieldTraits) {
-  EXPECT_NE(loom_test_yield_vtable.traits & LOOM_TRAIT_TERMINATOR, 0u);
+  EXPECT_NE(TestVtable(LOOM_OP_TEST_YIELD)->traits & LOOM_TRAIT_TERMINATOR, 0u);
 }
 
 TEST(Vtable, MapTraits) {
-  EXPECT_NE(loom_test_map_vtable.traits & LOOM_TRAIT_PURE, 0u);
-  EXPECT_NE(loom_test_map_vtable.traits & LOOM_TRAIT_ELEMENTWISE, 0u);
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_MAP);
+  EXPECT_NE(vtable->traits & LOOM_TRAIT_PURE, 0u);
+  EXPECT_NE(vtable->traits & LOOM_TRAIT_ELEMENTWISE, 0u);
 }
 
 TEST(Vtable, FormatElementCount) {
   // test.addi: Ref, COMMA, Ref, COLON, TypeOf = 5 elements.
-  EXPECT_EQ(loom_test_addi_vtable.format_element_count, 5);
+  EXPECT_EQ(TestVtable(LOOM_OP_TEST_ADDI)->format_element_count, 5);
   // test.yield: OptionalGroup(Refs, COLON, TypesOf) = 4 elements.
-  EXPECT_EQ(loom_test_yield_vtable.format_element_count, 4);
+  EXPECT_EQ(TestVtable(LOOM_OP_TEST_YIELD)->format_element_count, 4);
 }
 
 //===----------------------------------------------------------------------===//
@@ -143,7 +154,8 @@ TEST(Registration, VtableCount) {
   const loom_op_vtable_t* const* vtables = loom_test_dialect_vtables(&count);
   EXPECT_GT(count, 0u);
   EXPECT_NE(vtables, nullptr);
-  EXPECT_EQ(vtables[0], &loom_test_addi_vtable);
+  EXPECT_TRUE(iree_string_view_equal(loom_op_vtable_name(vtables[0]),
+                                     IREE_SV("test.addi")));
 }
 
 //===----------------------------------------------------------------------===//
@@ -895,6 +907,28 @@ TEST_F(BuilderTest, ReplaceAllUsesWith) {
   EXPECT_EQ(loom_op_operands(neg)[0], d);
 }
 
+TEST_F(BuilderTest, ReplaceAllUsesWithUpdatesTypeUses) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_value_id_t old_dim = build_constant(&builder_, module_, index_type);
+  loom_value_id_t new_dim = build_constant(&builder_, module_, index_type);
+  loom_type_t vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(old_dim), 0);
+  loom_value_id_t vector = build_constant(&builder_, module_, vector_type);
+
+  EXPECT_EQ(loom_module_value(module_, old_dim)->use_count, 0);
+  EXPECT_TRUE(loom_module_value_has_type_uses(module_, old_dim));
+  EXPECT_FALSE(loom_module_value_has_type_uses(module_, new_dim));
+
+  IREE_ASSERT_OK(loom_value_replace_all_uses_with(module_, old_dim, new_dim));
+
+  loom_type_t replaced_type = loom_module_value_type(module_, vector);
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(replaced_type, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(replaced_type, 0), new_dim);
+  EXPECT_FALSE(loom_module_value_has_type_uses(module_, old_dim));
+  EXPECT_TRUE(loom_module_value_has_type_uses(module_, new_dim));
+}
+
 TEST_F(BuilderTest, ReplaceAllUsesExcept) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_value_id_t a = build_constant(&builder_, module_, i32);
@@ -988,13 +1022,29 @@ TEST_F(BuilderTest, EraseWithUsedResultFails) {
       loom_test_neg_build(&builder_, a, i32, LOOM_LOCATION_UNKNOWN, &neg));
 
   // Erasing the constant should fail because its result still has uses.
-  iree_status_t status = loom_op_erase(module_, const_op);
-  EXPECT_FALSE(iree_status_is_ok(status));
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_FAILED_PRECONDITION);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_op_erase(module_, const_op));
 
   // The op should NOT be dead (erase failed).
   EXPECT_EQ(const_op->flags & LOOM_OP_FLAG_DEAD, 0u);
+}
+
+TEST_F(BuilderTest, EraseWithTypeUsedResultFails) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* dim_op = NULL;
+  loom_value_id_t dim = build_constant(&builder_, module_, index_type, &dim_op);
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(dim), 0);
+  loom_value_id_t vector = build_constant(&builder_, module_, vector_type);
+
+  EXPECT_EQ(loom_module_value(module_, dim)->use_count, 0);
+  EXPECT_TRUE(loom_module_value_has_type_uses(module_, dim));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
+                        loom_op_erase(module_, dim_op));
+
+  EXPECT_EQ(dim_op->flags & LOOM_OP_FLAG_DEAD, 0u);
+  EXPECT_TRUE(
+      loom_type_references_value(loom_module_value_type(module_, vector), dim));
 }
 
 TEST_F(BuilderTest, ComputeUses) {

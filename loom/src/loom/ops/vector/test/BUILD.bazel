@@ -16,6 +16,7 @@ loom_check_test_suite(
     name = "test",
     srcs = [
         "block_quant_samples.loom-test",
+        "canonicalize.loom-test",
         "roundtrip.loom-test",
         "verify.loom-test",
     ],

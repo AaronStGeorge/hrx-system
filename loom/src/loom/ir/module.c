@@ -60,22 +60,19 @@ static iree_status_t loom_intern_table_allocate(iree_arena_allocator_t* arena,
                                                 loom_intern_table_t* table) {
   uint32_t* hashes = NULL;
   uint32_t* indices = NULL;
-  iree_status_t status = iree_arena_allocate_array(
-      arena, capacity, sizeof(uint32_t), (void**)&hashes);
-  if (iree_status_is_ok(status)) {
-    status = iree_arena_allocate_array(arena, capacity, sizeof(uint32_t),
-                                       (void**)&indices);
-  }
-  if (iree_status_is_ok(status)) {
-    iree_host_size_t byte_size = capacity * sizeof(uint32_t);
-    memset(hashes, 0, byte_size);
-    memset(indices, 0xFF, byte_size);
-    table->count = 0;
-    table->capacity = capacity;
-    table->hashes = hashes;
-    table->indices = indices;
-  }
-  return status;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, capacity, sizeof(uint32_t), (void**)&hashes));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, capacity, sizeof(uint32_t), (void**)&indices));
+
+  iree_host_size_t byte_size = capacity * sizeof(uint32_t);
+  memset(hashes, 0, byte_size);
+  memset(indices, 0xFF, byte_size);
+  table->count = 0;
+  table->capacity = capacity;
+  table->hashes = hashes;
+  table->indices = indices;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_intern_table_grow(iree_arena_allocator_t* arena,
@@ -254,6 +251,56 @@ static iree_status_t loom_location_table_ensure_capacity(
   return iree_ok_status();
 }
 
+static void loom_type_use_heads_initialize(loom_value_type_use_heads_t* heads,
+                                           iree_host_size_t count) {
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    heads[i].first_incoming_use_id = LOOM_TYPE_USE_ID_INVALID;
+    heads[i].first_outgoing_use_id = LOOM_TYPE_USE_ID_INVALID;
+  }
+}
+
+static iree_status_t loom_type_use_table_ensure_value_capacity(
+    iree_arena_allocator_t* arena, loom_type_use_table_t* table,
+    iree_host_size_t minimum_capacity) {
+  if (table->value_capacity >= minimum_capacity) return iree_ok_status();
+  iree_host_size_t old_capacity = table->value_capacity;
+  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+      arena, old_capacity, minimum_capacity,
+      sizeof(loom_value_type_use_heads_t), &table->value_capacity,
+      (void**)&table->value_heads));
+  loom_type_use_heads_initialize(table->value_heads + old_capacity,
+                                 table->value_capacity - old_capacity);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_type_use_table_ensure_record_capacity(
+    iree_arena_allocator_t* arena, loom_type_use_table_t* table,
+    iree_host_size_t additional_record_count) {
+  if (table->free_count >= additional_record_count) return iree_ok_status();
+  iree_host_size_t new_records_needed =
+      additional_record_count - table->free_count;
+  iree_host_size_t minimum_capacity = table->record_count + new_records_needed;
+  if (minimum_capacity <= table->record_capacity) return iree_ok_status();
+  if (minimum_capacity >= LOOM_TYPE_USE_ID_INVALID) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "type-use table needs %" PRIhsz " records, max id %u", minimum_capacity,
+        (unsigned)(LOOM_TYPE_USE_ID_INVALID - 1));
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+      arena, table->record_count, minimum_capacity, sizeof(loom_type_use_t),
+      &table->record_capacity, (void**)&table->records));
+  return iree_ok_status();
+}
+
+static void loom_type_use_table_reset(loom_type_use_table_t* table) {
+  loom_type_use_heads_initialize(table->value_heads, table->value_capacity);
+  table->record_count = 0;
+  table->active_count = 0;
+  table->free_count = 0;
+  table->first_free_use_id = LOOM_TYPE_USE_ID_INVALID;
+}
+
 static iree_status_t loom_block_ops_ensure_capacity(
     iree_arena_allocator_t* arena, loom_block_t* block) {
   if (block->op_count < block->op_capacity) return iree_ok_status();
@@ -334,69 +381,51 @@ static iree_status_t loom_module_initialize_tables(
     if (symbol_capacity < 4) symbol_capacity = 4;
   }
 
-  iree_status_t status = iree_ok_status();
-
   // Values: 64-byte aligned.
-  if (iree_status_is_ok(status)) {
-    status = iree_arena_allocate_array_aligned(arena, value_capacity,
-                                               sizeof(loom_value_t), 64,
-                                               (void**)&module->values.entries);
-    if (iree_status_is_ok(status)) {
-      module->values.capacity = value_capacity;
-      memset(module->values.entries, 0, value_capacity * sizeof(loom_value_t));
-    }
-  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array_aligned(
+      arena, value_capacity, sizeof(loom_value_t), 64,
+      (void**)&module->values.entries));
+  module->values.capacity = value_capacity;
+  memset(module->values.entries, 0, value_capacity * sizeof(loom_value_t));
+
+  // Type-use heads: dense side metadata indexed by value ID.
+  IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_value_capacity(
+      arena, &module->type_uses, value_capacity));
+  module->type_uses.first_free_use_id = LOOM_TYPE_USE_ID_INVALID;
 
   // Strings.
-  if (iree_status_is_ok(status)) {
-    status = iree_arena_allocate_array(arena, string_capacity,
-                                       sizeof(iree_string_view_t),
-                                       (void**)&module->strings.entries);
-    if (iree_status_is_ok(status)) {
-      module->strings.capacity = string_capacity;
-      memset(module->strings.entries, 0,
-             string_capacity * sizeof(iree_string_view_t));
-    }
-  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, string_capacity, sizeof(iree_string_view_t),
+      (void**)&module->strings.entries));
+  module->strings.capacity = string_capacity;
+  memset(module->strings.entries, 0,
+         string_capacity * sizeof(iree_string_view_t));
 
   // Types.
-  if (iree_status_is_ok(status)) {
-    status =
-        iree_arena_allocate_array(arena, type_capacity, sizeof(loom_type_t),
-                                  (void**)&module->types.entries);
-    if (iree_status_is_ok(status)) {
-      module->types.capacity = type_capacity;
-      memset(module->types.entries, 0, type_capacity * sizeof(loom_type_t));
-    }
-  }
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(arena, type_capacity, sizeof(loom_type_t),
+                                (void**)&module->types.entries));
+  module->types.capacity = type_capacity;
+  memset(module->types.entries, 0, type_capacity * sizeof(loom_type_t));
 
   // Symbols.
-  if (iree_status_is_ok(status)) {
-    status =
-        iree_arena_allocate_array(arena, symbol_capacity, sizeof(loom_symbol_t),
-                                  (void**)&module->symbols.entries);
-    if (iree_status_is_ok(status)) {
-      module->symbols.capacity = symbol_capacity;
-      memset(module->symbols.entries, 0,
-             symbol_capacity * sizeof(loom_symbol_t));
-    }
-  }
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(arena, symbol_capacity, sizeof(loom_symbol_t),
+                                (void**)&module->symbols.entries));
+  module->symbols.capacity = symbol_capacity;
+  memset(module->symbols.entries, 0, symbol_capacity * sizeof(loom_symbol_t));
 
   // Intern tables sized to match entry capacity.
-  if (iree_status_is_ok(status)) {
-    iree_host_size_t intern_capacity =
-        loom_intern_capacity_for_entries(string_capacity);
-    status = loom_intern_table_allocate(arena, intern_capacity,
-                                        &module->string_intern);
-  }
-  if (iree_status_is_ok(status)) {
-    iree_host_size_t intern_capacity =
-        loom_intern_capacity_for_entries(type_capacity);
-    status = loom_intern_table_allocate(arena, intern_capacity,
-                                        &module->type_intern);
-  }
+  iree_host_size_t string_intern_capacity =
+      loom_intern_capacity_for_entries(string_capacity);
+  IREE_RETURN_IF_ERROR(loom_intern_table_allocate(arena, string_intern_capacity,
+                                                  &module->string_intern));
+  iree_host_size_t type_intern_capacity =
+      loom_intern_capacity_for_entries(type_capacity);
+  IREE_RETURN_IF_ERROR(loom_intern_table_allocate(arena, type_intern_capacity,
+                                                  &module->type_intern));
 
-  return status;
+  return iree_ok_status();
 }
 
 iree_status_t loom_module_allocate(loom_context_t* context,
@@ -697,6 +726,159 @@ iree_status_t loom_module_attach_location_field_spans(
 // Value definition
 //===----------------------------------------------------------------------===//
 
+typedef struct loom_type_use_prepare_t {
+  loom_module_t* module;
+  iree_host_size_t reference_count;
+} loom_type_use_prepare_t;
+
+static iree_status_t loom_type_use_prepare_callback(loom_value_id_t value_id,
+                                                    void* user_data) {
+  loom_type_use_prepare_t* prepare = (loom_type_use_prepare_t*)user_data;
+  if (value_id >= prepare->module->values.count) return iree_ok_status();
+  ++prepare->reference_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_type_use_prepare_for_type(
+    loom_module_t* module, loom_type_t type,
+    iree_host_size_t* out_reference_count) {
+  loom_type_use_prepare_t prepare = {
+      .module = module,
+      .reference_count = 0,
+  };
+  IREE_RETURN_IF_ERROR(loom_type_walk_value_refs(
+      type, loom_type_use_prepare_callback, &prepare));
+  IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_record_capacity(
+      &module->arena, &module->type_uses, prepare.reference_count));
+  *out_reference_count = prepare.reference_count;
+  return iree_ok_status();
+}
+
+static loom_type_use_id_t loom_type_use_table_allocate_record(
+    loom_type_use_table_t* table) {
+  loom_type_use_id_t use_id = LOOM_TYPE_USE_ID_INVALID;
+  if (table->first_free_use_id != LOOM_TYPE_USE_ID_INVALID) {
+    use_id = table->first_free_use_id;
+    loom_type_use_t* record = &table->records[use_id];
+    table->first_free_use_id = record->next_incoming_use_id;
+    --table->free_count;
+  } else {
+    use_id = (loom_type_use_id_t)table->record_count++;
+  }
+  ++table->active_count;
+  return use_id;
+}
+
+static void loom_type_use_table_link_record(loom_type_use_table_t* table,
+                                            loom_type_use_id_t use_id,
+                                            loom_value_id_t referenced_value_id,
+                                            loom_value_id_t user_value_id) {
+  loom_type_use_t* record = &table->records[use_id];
+  *record = (loom_type_use_t){
+      .referenced_value_id = referenced_value_id,
+      .user_value_id = user_value_id,
+      .next_incoming_use_id =
+          table->value_heads[referenced_value_id].first_incoming_use_id,
+      .previous_incoming_use_id = LOOM_TYPE_USE_ID_INVALID,
+      .next_outgoing_use_id =
+          table->value_heads[user_value_id].first_outgoing_use_id,
+      .previous_outgoing_use_id = LOOM_TYPE_USE_ID_INVALID,
+  };
+  if (record->next_incoming_use_id != LOOM_TYPE_USE_ID_INVALID) {
+    table->records[record->next_incoming_use_id].previous_incoming_use_id =
+        use_id;
+  }
+  if (record->next_outgoing_use_id != LOOM_TYPE_USE_ID_INVALID) {
+    table->records[record->next_outgoing_use_id].previous_outgoing_use_id =
+        use_id;
+  }
+  table->value_heads[referenced_value_id].first_incoming_use_id = use_id;
+  table->value_heads[user_value_id].first_outgoing_use_id = use_id;
+}
+
+static void loom_type_use_table_unlink_record(loom_type_use_table_t* table,
+                                              loom_type_use_id_t use_id) {
+  loom_type_use_t* record = &table->records[use_id];
+  if (record->previous_incoming_use_id != LOOM_TYPE_USE_ID_INVALID) {
+    table->records[record->previous_incoming_use_id].next_incoming_use_id =
+        record->next_incoming_use_id;
+  } else {
+    table->value_heads[record->referenced_value_id].first_incoming_use_id =
+        record->next_incoming_use_id;
+  }
+  if (record->next_incoming_use_id != LOOM_TYPE_USE_ID_INVALID) {
+    table->records[record->next_incoming_use_id].previous_incoming_use_id =
+        record->previous_incoming_use_id;
+  }
+  if (record->previous_outgoing_use_id != LOOM_TYPE_USE_ID_INVALID) {
+    table->records[record->previous_outgoing_use_id].next_outgoing_use_id =
+        record->next_outgoing_use_id;
+  } else {
+    table->value_heads[record->user_value_id].first_outgoing_use_id =
+        record->next_outgoing_use_id;
+  }
+  if (record->next_outgoing_use_id != LOOM_TYPE_USE_ID_INVALID) {
+    table->records[record->next_outgoing_use_id].previous_outgoing_use_id =
+        record->previous_outgoing_use_id;
+  }
+}
+
+static void loom_type_use_table_release_record(loom_type_use_table_t* table,
+                                               loom_type_use_id_t use_id) {
+  loom_type_use_t* record = &table->records[use_id];
+  *record = (loom_type_use_t){
+      .referenced_value_id = LOOM_VALUE_ID_INVALID,
+      .user_value_id = LOOM_VALUE_ID_INVALID,
+      .next_incoming_use_id = table->first_free_use_id,
+      .previous_incoming_use_id = LOOM_TYPE_USE_ID_INVALID,
+      .next_outgoing_use_id = LOOM_TYPE_USE_ID_INVALID,
+      .previous_outgoing_use_id = LOOM_TYPE_USE_ID_INVALID,
+  };
+  table->first_free_use_id = use_id;
+  --table->active_count;
+  ++table->free_count;
+}
+
+static void loom_type_use_table_remove_outgoing_for_value(
+    loom_type_use_table_t* table, loom_value_id_t user_value_id) {
+  if (user_value_id >= table->value_capacity) return;
+  loom_type_use_id_t use_id =
+      table->value_heads[user_value_id].first_outgoing_use_id;
+  while (use_id != LOOM_TYPE_USE_ID_INVALID) {
+    loom_type_use_id_t next_use_id =
+        table->records[use_id].next_outgoing_use_id;
+    loom_type_use_table_unlink_record(table, use_id);
+    loom_type_use_table_release_record(table, use_id);
+    use_id = next_use_id;
+  }
+}
+
+typedef struct loom_type_use_add_t {
+  loom_module_t* module;
+  loom_type_use_table_t* table;
+  loom_value_id_t user_value_id;
+} loom_type_use_add_t;
+
+static iree_status_t loom_type_use_add_callback(loom_value_id_t value_id,
+                                                void* user_data) {
+  loom_type_use_add_t* add = (loom_type_use_add_t*)user_data;
+  if (value_id >= add->module->values.count) return iree_ok_status();
+  loom_type_use_id_t use_id = loom_type_use_table_allocate_record(add->table);
+  loom_type_use_table_link_record(add->table, use_id, value_id,
+                                  add->user_value_id);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_type_use_table_add_outgoing_for_value(
+    loom_module_t* module, loom_value_id_t user_value_id, loom_type_t type) {
+  loom_type_use_add_t add = {
+      .module = module,
+      .table = &module->type_uses,
+      .user_value_id = user_value_id,
+  };
+  return loom_type_walk_value_refs(type, loom_type_use_add_callback, &add);
+}
+
 iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
                                        loom_value_id_t* out_value_id) {
   // Value IDs are 32-bit and LOOM_VALUE_ID_INVALID is the null sentinel.
@@ -711,6 +893,11 @@ iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
 
   IREE_RETURN_IF_ERROR(
       loom_value_table_ensure_capacity(&module->arena, &module->values));
+  IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_value_capacity(
+      &module->arena, &module->type_uses, module->values.capacity));
+  iree_host_size_t reference_count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_type_use_prepare_for_type(module, type, &reference_count));
 
   loom_value_id_t id = (loom_value_id_t)module->values.count;
   loom_value_t* value = &module->values.entries[id];
@@ -719,8 +906,101 @@ iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
   value->def = loom_value_def_make_none();
   module->values.count++;
 
+  if (reference_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_type_use_table_add_outgoing_for_value(module, id, type));
+  }
+
   *out_value_id = id;
   return iree_ok_status();
+}
+
+iree_status_t loom_module_set_value_type(loom_module_t* module,
+                                         loom_value_id_t value_id,
+                                         loom_type_t type) {
+  if (value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value %%%u out of range (module has %" PRIhsz
+                            " values)",
+                            (unsigned)value_id, module->values.count);
+  }
+  loom_value_t* value = &module->values.entries[value_id];
+  if (loom_type_equal(value->type, type)) {
+    return loom_module_refresh_value_type_uses(module, value_id);
+  }
+
+  loom_type_use_table_remove_outgoing_for_value(&module->type_uses, value_id);
+  value->type = type;
+  return loom_module_refresh_value_type_uses(module, value_id);
+}
+
+iree_status_t loom_module_refresh_value_type_uses(loom_module_t* module,
+                                                  loom_value_id_t value_id) {
+  if (value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value %%%u out of range (module has %" PRIhsz
+                            " values)",
+                            (unsigned)value_id, module->values.count);
+  }
+  iree_host_size_t reference_count = 0;
+  loom_type_t type = module->values.entries[value_id].type;
+  IREE_RETURN_IF_ERROR(
+      loom_type_use_prepare_for_type(module, type, &reference_count));
+  loom_type_use_table_remove_outgoing_for_value(&module->type_uses, value_id);
+  if (reference_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_type_use_table_add_outgoing_for_value(module, value_id, type));
+  }
+  return iree_ok_status();
+}
+
+static bool loom_module_value_tracks_type_uses(const loom_value_t* value);
+
+iree_status_t loom_module_recompute_type_uses(loom_module_t* module) {
+  iree_host_size_t reference_count = 0;
+  // Rebuild in two passes so allocation failures leave the current table
+  // intact. This is a bulk recovery path after structural reconstruction, not
+  // the per-edit hot path.
+  for (iree_host_size_t i = 0; i < module->values.count; ++i) {
+    if (!loom_module_value_tracks_type_uses(&module->values.entries[i])) {
+      continue;
+    }
+    iree_host_size_t value_reference_count = 0;
+    IREE_RETURN_IF_ERROR(loom_type_use_prepare_for_type(
+        module, module->values.entries[i].type, &value_reference_count));
+    reference_count += value_reference_count;
+  }
+  IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_record_capacity(
+      &module->arena, &module->type_uses, reference_count));
+
+  loom_type_use_table_reset(&module->type_uses);
+  for (iree_host_size_t i = 0; i < module->values.count; ++i) {
+    if (!loom_module_value_tracks_type_uses(&module->values.entries[i])) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_type_use_table_add_outgoing_for_value(
+        module, (loom_value_id_t)i, module->values.entries[i].type));
+  }
+  return iree_ok_status();
+}
+
+bool loom_module_value_has_type_uses(const loom_module_t* module,
+                                     loom_value_id_t value_id) {
+  return value_id < module->values.count &&
+         value_id < module->type_uses.value_capacity &&
+         module->type_uses.value_heads[value_id].first_incoming_use_id !=
+             LOOM_TYPE_USE_ID_INVALID;
+}
+
+static bool loom_module_value_tracks_type_uses(const loom_value_t* value) {
+  if (loom_value_is_block_arg(value)) return true;
+  loom_op_t* def_op = loom_value_def_op(value);
+  return def_op && !iree_any_bit_set(def_op->flags, LOOM_OP_FLAG_DEAD);
+}
+
+void loom_module_drop_value_type_uses(loom_module_t* module,
+                                      loom_value_id_t value_id) {
+  loom_type_use_table_remove_outgoing_for_value(&module->type_uses, value_id);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1615,6 +1895,183 @@ iree_status_t loom_module_intern_function_type(loom_module_t* module,
 }
 
 //===----------------------------------------------------------------------===//
+// Type-use replacement
+//===----------------------------------------------------------------------===//
+
+static bool loom_module_type_has_replaceable_dims(loom_type_t type) {
+  return loom_type_is_shaped(type) || loom_type_is_pool(type);
+}
+
+static iree_status_t loom_module_replace_type_value_refs(
+    loom_module_t* module, loom_type_t type, loom_value_id_t old_id,
+    loom_value_id_t new_id, loom_type_t* out_type, bool* out_changed);
+
+static iree_status_t loom_module_replace_type_ref_sequence(
+    loom_module_t* module, const loom_type_t* types, uint16_t type_count,
+    loom_value_id_t old_id, loom_value_id_t new_id, loom_type_t** out_types,
+    bool* out_changed) {
+  *out_types = NULL;
+  *out_changed = false;
+  if (type_count == 0) return iree_ok_status();
+  if (!types) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type sequence has %u entries but a NULL payload",
+                            (unsigned)type_count);
+  }
+
+  loom_type_t* replaced_types = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, type_count,
+                                                 sizeof(loom_type_t),
+                                                 (void**)&replaced_types));
+  for (uint16_t i = 0; i < type_count; ++i) {
+    bool element_changed = false;
+    IREE_RETURN_IF_ERROR(loom_module_replace_type_value_refs(
+        module, types[i], old_id, new_id, &replaced_types[i],
+        &element_changed));
+    *out_changed = *out_changed || element_changed;
+  }
+  *out_types = replaced_types;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_replace_type_value_refs(
+    loom_module_t* module, loom_type_t type, loom_value_id_t old_id,
+    loom_value_id_t new_id, loom_type_t* out_type, bool* out_changed) {
+  *out_type = type;
+  *out_changed = false;
+
+  loom_type_kind_t kind = loom_type_kind(type);
+  if (!loom_type_kind_is_valid(kind)) return iree_ok_status();
+
+  switch (kind) {
+    case LOOM_TYPE_FUNCTION: {
+      const loom_func_type_data_t* data = loom_type_func_data(type);
+      if (!data) return iree_ok_status();
+      uint16_t type_count = (uint16_t)(data->arg_count + data->result_count);
+      loom_type_t* replaced_types = NULL;
+      IREE_RETURN_IF_ERROR(loom_module_replace_type_ref_sequence(
+          module, data->types, type_count, old_id, new_id, &replaced_types,
+          out_changed));
+      if (!*out_changed) return iree_ok_status();
+      return loom_module_intern_function_type(
+          module, replaced_types, data->arg_count,
+          replaced_types + data->arg_count, data->result_count, out_type);
+    }
+
+    case LOOM_TYPE_DIALECT: {
+      uint16_t param_count = loom_type_dialect_param_count(type);
+      loom_type_t* replaced_params = NULL;
+      IREE_RETURN_IF_ERROR(loom_module_replace_type_ref_sequence(
+          module, loom_type_dialect_params(type), param_count, old_id, new_id,
+          &replaced_params, out_changed));
+      if (!*out_changed) return iree_ok_status();
+      loom_type_t replaced_type = loom_type_dialect(
+          loom_type_dialect_name_id(type), param_count, replaced_params);
+      return loom_module_intern_type(module, replaced_type, out_type);
+    }
+
+    default:
+      break;
+  }
+
+  loom_type_t replaced_type = type;
+  if (loom_module_type_has_replaceable_dims(type)) {
+    uint8_t rank = loom_type_rank(type);
+    if (loom_type_has_inline_dims(type)) {
+      for (uint8_t i = 0; i < rank; ++i) {
+        if (!loom_dim_is_dynamic(replaced_type.dims[i])) continue;
+        if (loom_dim_value_id(replaced_type.dims[i]) != old_id) continue;
+        replaced_type.dims[i] = loom_dim_pack_dynamic(new_id);
+        *out_changed = true;
+      }
+    } else if (rank > 0) {
+      const loom_overflow_dim_t* old_dims =
+          (const loom_overflow_dim_t*)(uintptr_t)type.dims[0];
+      if (!old_dims) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "rank-%u type has a NULL overflow dim payload",
+                                rank);
+      }
+      bool dims_changed = false;
+      for (uint8_t i = 0; i < rank; ++i) {
+        if (!loom_dim_is_dynamic(old_dims[i])) continue;
+        if (loom_dim_value_id(old_dims[i]) == old_id) dims_changed = true;
+      }
+      if (dims_changed) {
+        loom_overflow_dim_t* new_dims = NULL;
+        IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+            &module->arena, rank, sizeof(loom_overflow_dim_t),
+            (void**)&new_dims));
+        for (uint8_t i = 0; i < rank; ++i) {
+          new_dims[i] = old_dims[i];
+          if (!loom_dim_is_dynamic(new_dims[i])) continue;
+          if (loom_dim_value_id(new_dims[i]) == old_id) {
+            new_dims[i] = loom_dim_pack_dynamic(new_id);
+          }
+        }
+        replaced_type.dims[0] = (uint64_t)(uintptr_t)new_dims;
+        replaced_type.dims[1] = 0;
+        *out_changed = true;
+      }
+    }
+  }
+
+  if (old_id <= UINT16_MAX && loom_type_has_ssa_encoding(type) &&
+      loom_type_encoding_value_id(type) == old_id) {
+    if (new_id > UINT16_MAX) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "cannot store value %%%u in a 16-bit SSA encoding reference",
+          (unsigned)new_id);
+    }
+    replaced_type.encoding_id = (uint16_t)new_id;
+    *out_changed = true;
+  }
+
+  if (!*out_changed) return iree_ok_status();
+  return loom_module_intern_type(module, replaced_type, out_type);
+}
+
+iree_status_t loom_module_replace_value_type_uses(loom_module_t* module,
+                                                  loom_value_id_t old_id,
+                                                  loom_value_id_t new_id) {
+  if (old_id == new_id) return iree_ok_status();
+  if (old_id >= module->values.count || new_id >= module->values.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "cannot replace type references from %%%u to %%%u in a module with "
+        "%" PRIhsz " values",
+        (unsigned)old_id, (unsigned)new_id, module->values.count);
+  }
+
+  // Each iteration rewrites one carrier value reached from the incoming-use
+  // head. The helper removes all outgoing type-use records for that carrier
+  // before inserting the replacement records, so the next head is always a
+  // still-unprocessed carrier without rescanning the table.
+  while (loom_module_value_has_type_uses(module, old_id)) {
+    loom_type_use_id_t use_id =
+        module->type_uses.value_heads[old_id].first_incoming_use_id;
+    loom_value_id_t user_value_id =
+        module->type_uses.records[use_id].user_value_id;
+    loom_type_t old_type = module->values.entries[user_value_id].type;
+    loom_type_t new_type = old_type;
+    bool changed = false;
+    IREE_RETURN_IF_ERROR(loom_module_replace_type_value_refs(
+        module, old_type, old_id, new_id, &new_type, &changed));
+    if (!changed) {
+      return iree_make_status(
+          IREE_STATUS_INTERNAL,
+          "type-use table says value %%%u references %%%u, but the type does "
+          "not contain that reference",
+          (unsigned)user_value_id, (unsigned)old_id);
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_module_set_value_type(module, user_value_id, new_type));
+  }
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
 // Block and region creation
 //===----------------------------------------------------------------------===//
 
@@ -1695,9 +2152,9 @@ iree_status_t loom_block_add_arg(loom_module_t* module, loom_block_t* block,
   }
   if (value_id >= module->values.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "value_id %u out of range (module has %" PRIhsz
+                            "value %%%u out of range (module has %" PRIhsz
                             " values)",
-                            value_id, module->values.count);
+                            (unsigned)value_id, module->values.count);
   }
   if (block->arg_count >= block->arg_capacity) {
     iree_host_size_t capacity = block->arg_capacity;

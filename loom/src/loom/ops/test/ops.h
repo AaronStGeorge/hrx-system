@@ -92,7 +92,6 @@ iree_status_t loom_test_addi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_addi_vtable;
 iree_status_t loom_test_addi_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 void loom_test_addi_fold(
     const loom_module_t* module, const loom_op_t* op,
@@ -108,7 +107,6 @@ iree_status_t loom_test_neg_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_neg_vtable;
 
 // LOOM_OP_TEST_CAST: Test cast op.
 // %result = test.cast %input : i32 to f32
@@ -119,7 +117,6 @@ iree_status_t loom_test_cast_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_cast_vtable;
 
 // LOOM_OP_TEST_CONSTANT: Test constant materialization.
 // %c42 = test.constant 42 : i32
@@ -132,7 +129,6 @@ iree_status_t loom_test_constant_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_constant_vtable;
 void loom_test_constant_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -151,7 +147,6 @@ iree_status_t loom_test_use_build(
     iree_host_size_t values_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_use_vtable;
 
 // LOOM_OP_TEST_CMP: Test comparison op.
 // %result = test.cmp lt, %lhs, %rhs : i32
@@ -165,7 +160,6 @@ iree_status_t loom_test_cmp_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_cmp_vtable;
 
 // LOOM_OP_TEST_MAP: Test region-capture elementwise op.
 // %result = test.map(%element = %input : tile<4xf32>) {
@@ -182,7 +176,6 @@ iree_status_t loom_test_map_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_map_vtable;
 
 // LOOM_OP_TEST_UPDATE: Test tied result with index list.
 // %result = test.update %tile, %tensor[%offset] : tile<4xf32> -> (%tensor as tensor<[%M]xf32>)
@@ -203,7 +196,6 @@ iree_status_t loom_test_update_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_update_vtable;
 
 // LOOM_OP_TEST_INVOKE: Test variadic call-like op with tied results. The verifier checks that the invoke signature matches the referenced function declaration or definition.
 // %output, %count = test.invoke @callee(%weights, %input) : (tile<4xf32>, index) -> (%weights as tile<4xf32>, index)
@@ -222,7 +214,6 @@ iree_status_t loom_test_invoke_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_invoke_vtable;
 iree_status_t loom_test_invoke_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -246,7 +237,6 @@ iree_status_t loom_test_slice_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_slice_vtable;
 
 // LOOM_OP_TEST_LOOP: Test for-loop with iter_args and tied results.
 // %result = test.loop %i = %c0 to %count step %c1 iter_args(%accumulator = %init : f32) -> (%init as f32) {
@@ -270,7 +260,6 @@ iree_status_t loom_test_loop_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_loop_vtable;
 
 // LOOM_OP_TEST_BRANCH: Test if/else with both regions always present.
 // %result = test.branch %condition -> (f32) {
@@ -288,7 +277,6 @@ iree_status_t loom_test_branch_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_branch_vtable;
 
 // LOOM_OP_TEST_IMPLICIT_YIELD: Dedicated zero-field implicit terminator synthesized for elidable test regions.
 // test.implicit_yield
@@ -297,7 +285,6 @@ iree_status_t loom_test_implicit_yield_build(
     loom_builder_t* builder,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_implicit_yield_vtable;
 
 // LOOM_OP_TEST_YIELD: Test yield terminator.
 // test.yield
@@ -309,7 +296,6 @@ iree_status_t loom_test_yield_build(
     iree_host_size_t values_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_yield_vtable;
 
 // LOOM_OP_TEST_FUNC: Test function definition with body always present.
 // test.func @identity(%input: f32) -> (f32) {
@@ -340,7 +326,6 @@ iree_status_t loom_test_func_build(
     iree_host_size_t predicates_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_func_vtable;
 
 // LOOM_OP_TEST_DECL: Test function declaration with no body and signature arguments stored as op operands.
 // test.decl @identity(%input: f32) -> (%input as f32)
@@ -368,7 +353,6 @@ iree_status_t loom_test_decl_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_decl_vtable;
 
 // LOOM_OP_TEST_ATTRS: Test op with attribute dictionary.
 // %result = test.attrs %input {axis = 0, label = "foo"} : f32
@@ -383,7 +367,6 @@ iree_status_t loom_test_attrs_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_attrs_vtable;
 
 // LOOM_OP_TEST_OPERAND_DICT: Test op with a keyed SSA operand dictionary.
 // %result = test.operand_dict %input {alpha = %a : i32, beta = %b : f32} : f32
@@ -400,7 +383,6 @@ iree_status_t loom_test_operand_dict_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_operand_dict_vtable;
 
 // LOOM_OP_TEST_DEFLATE: Test op with result type referencing a co-result dim.
 // %output, %length = test.deflate %input : tensor<[%M]xf32> -> (tensor<[%length]xf32>, index)
@@ -416,7 +398,6 @@ iree_status_t loom_test_deflate_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_deflate_vtable;
 
 // LOOM_OP_TEST_ASSUME: Test predicate-constrained identity (SSA assume).
 // %M2 = test.assume %M [mul(%M, 16)] : index
@@ -433,7 +414,6 @@ iree_status_t loom_test_assume_build(
     iree_host_size_t result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_assume_vtable;
 
 // LOOM_OP_TEST_CONVERT: Test op with bare result type (no parentheses).
 // %result = test.convert %input : i32 -> f32
@@ -444,7 +424,6 @@ iree_status_t loom_test_convert_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_convert_vtable;
 
 // LOOM_OP_TEST_REDUCE: Test variadic operands with SameType constraint across variadic and result.
 // %sum = test.reduce %a, %b, %c : i32
@@ -458,7 +437,6 @@ iree_status_t loom_test_reduce_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_reduce_vtable;
 
 // LOOM_OP_TEST_READ_RESOURCE: Test op that reads from a resource operand.
 // %tile = test.read_resource %pool : pool<[%BS]> -> tile<4xf32>
@@ -471,7 +449,6 @@ iree_status_t loom_test_read_resource_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_read_resource_vtable;
 
 // LOOM_OP_TEST_WRITE_RESOURCE: Test op that writes to a resource operand.
 // test.write_resource %pool, %tile : pool<[%BS]>, tile<4xf32>
@@ -484,7 +461,6 @@ iree_status_t loom_test_write_resource_build(
     loom_value_id_t data,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_write_resource_vtable;
 
 // LOOM_OP_TEST_MUTATE_RESOURCE: Test op that atomically reads and writes a resource operand.
 // %old = test.mutate_resource %pool, %delta : pool<[%BS]>, i32 -> i32
@@ -499,7 +475,6 @@ iree_status_t loom_test_mutate_resource_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_mutate_resource_vtable;
 
 // LOOM_OP_TEST_ALLOC: Test allocation op. Each execution produces a distinct identity even with identical operands. Prevents CSE but allows DCE when unused.
 // %pool = test.alloc %sz : index -> pool<[%BS]>
@@ -512,7 +487,6 @@ iree_status_t loom_test_alloc_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_alloc_vtable;
 
 // LOOM_OP_TEST_ISOLATED_REGION: Test op with an isolated single-block region. Values from the enclosing scope are not visible inside the body.
 // %r = test.isolated_region -> (i32) {
@@ -527,7 +501,6 @@ iree_status_t loom_test_isolated_region_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_isolated_region_vtable;
 
 // LOOM_OP_TEST_COUNTER: Test op for canonicalize multi-step and error path testing. Canonicalize: value < 0 returns error, value > 0 decrements, value == 0 is fixed point.
 // %c = test.counter 3 : i32
@@ -540,7 +513,6 @@ iree_status_t loom_test_counter_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_counter_vtable;
 iree_status_t loom_test_counter_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 
 // LOOM_OP_TEST_DIM: Test dimension query to exercise ATTR_IN_RANGE_RANK constraint.
@@ -556,7 +528,6 @@ iree_status_t loom_test_dim_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_dim_vtable;
 
 // LOOM_OP_TEST_FACT_RANGE_LO: Exposes the analysis range lower bound as an i64 constant.
 // %lo = test.fact_range_lo %x : index -> i64
@@ -569,7 +540,6 @@ iree_status_t loom_test_fact_range_lo_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_fact_range_lo_vtable;
 void loom_test_fact_range_lo_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -586,7 +556,6 @@ iree_status_t loom_test_fact_range_hi_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_fact_range_hi_vtable;
 void loom_test_fact_range_hi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -603,7 +572,6 @@ iree_status_t loom_test_fact_divisor_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_fact_divisor_vtable;
 void loom_test_fact_divisor_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -620,7 +588,6 @@ iree_status_t loom_test_fact_non_negative_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_fact_non_negative_vtable;
 void loom_test_fact_non_negative_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -637,7 +604,6 @@ iree_status_t loom_test_fact_non_zero_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_fact_non_zero_vtable;
 void loom_test_fact_non_zero_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -654,7 +620,6 @@ iree_status_t loom_test_fact_positive_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_fact_positive_vtable;
 void loom_test_fact_positive_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -671,7 +636,6 @@ iree_status_t loom_test_fact_power_of_two_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_test_fact_power_of_two_vtable;
 void loom_test_fact_power_of_two_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

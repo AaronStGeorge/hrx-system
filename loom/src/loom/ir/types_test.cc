@@ -105,6 +105,28 @@ TEST(TypesTest, VectorIsShapedButLayoutFree) {
   EXPECT_FALSE(loom_type_can_have_encoding(type));
 }
 
+TEST(TypesTest, StaticZeroExtentImpliesZeroElements) {
+  loom_type_t all_static =
+      loom_type_shaped_2d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(0), loom_dim_pack_static(16), 0);
+  uint64_t element_count = UINT64_MAX;
+  EXPECT_TRUE(loom_type_has_static_zero_extent(all_static));
+  EXPECT_TRUE(loom_type_static_element_count(all_static, &element_count));
+  EXPECT_EQ(element_count, 0u);
+
+  loom_type_t mixed_dynamic = loom_type_shaped_2d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(0),
+      loom_dim_pack_dynamic(42), 0);
+  element_count = UINT64_MAX;
+  EXPECT_TRUE(loom_type_has_static_zero_extent(mixed_dynamic));
+  EXPECT_FALSE(loom_type_static_element_count(mixed_dynamic, &element_count));
+  EXPECT_EQ(element_count, 0u);
+
+  loom_type_t dynamic_unknown = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(42), 0);
+  EXPECT_FALSE(loom_type_has_static_zero_extent(dynamic_unknown));
+}
+
 TEST(TypesTest, ViewCanCarryLayoutAttachment) {
   loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
                                          loom_dim_pack_static(256), 7);
@@ -123,6 +145,24 @@ TEST(TypesTest, BufferIsOpaqueStorageIdentity) {
   EXPECT_TRUE(loom_type_equal(type, loom_type_buffer()));
   EXPECT_EQ(loom_type_hash(type), loom_type_hash(loom_type_buffer()));
   EXPECT_TRUE(loom_type_is_all_static(loom_type_buffer()));
+}
+
+TEST(TypesTest, EncodingRoleIsStructural) {
+  loom_type_t unknown = loom_type_encoding();
+  loom_type_t layout =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+  loom_type_t duplicate_layout =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+  loom_type_t schema =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_STORAGE_SCHEMA);
+
+  EXPECT_TRUE(loom_type_is_encoding(layout));
+  EXPECT_EQ(loom_type_encoding_role(unknown), LOOM_ENCODING_ROLE_UNKNOWN);
+  EXPECT_EQ(loom_type_encoding_role(layout), LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+  EXPECT_TRUE(loom_type_equal(layout, duplicate_layout));
+  EXPECT_EQ(loom_type_hash(layout), loom_type_hash(duplicate_layout));
+  EXPECT_FALSE(loom_type_equal(unknown, layout));
+  EXPECT_FALSE(loom_type_equal(layout, schema));
 }
 
 TEST(TypesTest, InvalidKindEqualityAndHashDoNotInterpretPayload) {

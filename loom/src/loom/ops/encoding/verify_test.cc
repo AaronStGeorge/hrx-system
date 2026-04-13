@@ -14,9 +14,9 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/families.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/params.h"
-#include "loom/ops/encoding/storage.h"
 #include "loom/ops/func/ops.h"
 #include "loom/testing/diagnostic_matchers.h"
 
@@ -123,18 +123,6 @@ static iree_status_t VerifyRequiresLayoutDefine(
   return iree_ok_status();
 }
 
-static const loom_encoding_vtable_t kStaticOnlyEncodingVtable = {
-    .name = IREE_SV("q8_0"),
-};
-
-static const loom_encoding_vtable_t kDenseStaticLayoutEncodingVtable = {
-    .name = IREE_SV("dense"),
-};
-
-static const loom_encoding_vtable_t kGgmlQ4_0EncodingVtable = {
-    .name = IREE_SV("ggml_q4_0"),
-};
-
 static const loom_encoding_vtable_t kRequiresLayoutEncodingVtable = {
     .name = IREE_SV("requires_layout"),
     .verify_define = VerifyRequiresLayoutDefine,
@@ -148,14 +136,7 @@ class EncodingVerifyTest : public ::testing::Test {
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables);
-    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
-        &context_, &kStaticOnlyEncodingVtable));
-    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
-        &context_, &kDenseStaticLayoutEncodingVtable));
-    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
-        &context_, &kGgmlQ4_0EncodingVtable));
-    IREE_ASSERT_OK(loom_context_register_encoding_vtable(
-        &context_, &loom_encoding_physical_storage_vtable));
+    IREE_ASSERT_OK(loom_context_register_builtin_encoding_vtables(&context_));
     IREE_ASSERT_OK(loom_context_register_encoding_vtable(
         &context_, &kRequiresLayoutEncodingVtable));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
@@ -204,7 +185,7 @@ TEST_F(EncodingVerifyTest, StaticOnlyFamilyKeepsExistingBehavior) {
   loom_verify_result_t result;
   VerifySource(
       "func.def @ok() {\n"
-      "  %enc = encoding.define #q8_0<block=32> : encoding\n"
+      "  %enc = encoding.define #q8_0<block=32> : encoding<schema>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -213,12 +194,59 @@ TEST_F(EncodingVerifyTest, StaticOnlyFamilyKeepsExistingBehavior) {
   EXPECT_TRUE(capture.diagnostics.empty());
 }
 
+TEST_F(EncodingVerifyTest, DefineRejectsWrongResultRole) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result;
+  VerifySource(
+      "func.def @wrong_result_role() {\n"
+      "  %enc = encoding.define #q8_0<block=32> : encoding<transform>\n"
+      "  func.return\n"
+      "}\n",
+      &capture, &result);
+
+  ASSERT_EQ(result.error_count, 1u);
+  const testing::CapturedDiagnostic* diagnostic =
+      FindDiagnostic(capture, &loom_err_encoding_012);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, &loom_err_encoding_012, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "q8_0");
+  ExpectTypeParam(
+      *diagnostic, 1,
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM));
+  ExpectTypeParam(
+      *diagnostic, 2,
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_STORAGE_SCHEMA));
+}
+
+TEST_F(EncodingVerifyTest, DefineRejectsGenericResultRole) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result;
+  VerifySource(
+      "func.def @generic_result_role() {\n"
+      "  %enc = encoding.define #q8_0<block=32> : encoding\n"
+      "  func.return\n"
+      "}\n",
+      &capture, &result);
+
+  ASSERT_EQ(result.error_count, 1u);
+  const testing::CapturedDiagnostic* diagnostic =
+      FindDiagnostic(capture, &loom_err_encoding_012);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, &loom_err_encoding_012, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "q8_0");
+  ExpectTypeParam(*diagnostic, 1,
+                  loom_type_encoding_with_role(LOOM_ENCODING_ROLE_UNKNOWN));
+  ExpectTypeParam(
+      *diagnostic, 2,
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_STORAGE_SCHEMA));
+}
+
 TEST_F(EncodingVerifyTest, DynamicVerifierRejectsMissingParam) {
   DiagnosticCapture capture;
   loom_verify_result_t result;
   VerifySource(
       "func.def @missing() {\n"
-      "  %enc = encoding.define #requires_layout : encoding\n"
+      "  %enc = encoding.define #requires_layout : encoding<schema>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -238,7 +266,7 @@ TEST_F(EncodingVerifyTest, DynamicVerifierRejectsWrongParamType) {
   VerifySource(
       "func.def @wrong_type(%x: index) {\n"
       "  %enc = encoding.define #requires_layout "
-      "{layout = %x : index} : encoding\n"
+      "{layout = %x : index} : encoding<schema>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -258,9 +286,10 @@ TEST_F(EncodingVerifyTest, DynamicVerifierRejectsUnknownParam) {
   DiagnosticCapture capture;
   loom_verify_result_t result;
   VerifySource(
-      "func.def @unknown(%layout: encoding, %x: index) {\n"
+      "func.def @unknown(%layout: encoding<layout>, %x: index) {\n"
       "  %enc = encoding.define #requires_layout "
-      "{bogus = %x : index, layout = %layout : encoding} : encoding\n"
+      "{bogus = %x : index, layout = %layout : encoding<layout>} : "
+      "encoding<schema>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -279,11 +308,12 @@ TEST_F(EncodingVerifyTest, PhysicalStorageAcceptsDynamicLayoutAndSchema) {
   loom_verify_result_t result;
   VerifySource(
       "func.def @physical_storage_ok() {\n"
-      "  %layout = encoding.layout.dense : encoding\n"
+      "  %layout = encoding.layout.dense : encoding<layout>\n"
       "  %schema = encoding.define "
-      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding\n"
+      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>\n"
       "  %storage = encoding.define #physical_storage "
-      "{layout = %layout : encoding, schema = %schema : encoding} : encoding\n"
+      "{layout = %layout : encoding<layout>, "
+      "schema = %schema : encoding<schema>} : encoding<storage>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -299,7 +329,8 @@ TEST_F(EncodingVerifyTest, PhysicalStorageAcceptsStaticNestedParams) {
       "func.def @physical_storage_static_ok() {\n"
       "  %storage = encoding.define "
       "#physical_storage<layout=#dense, "
-      "schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : encoding\n"
+      "schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : "
+      "encoding<storage>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -313,9 +344,9 @@ TEST_F(EncodingVerifyTest, PhysicalStorageRejectsMissingSchema) {
   loom_verify_result_t result;
   VerifySource(
       "func.def @physical_storage_missing_schema() {\n"
-      "  %layout = encoding.layout.dense : encoding\n"
+      "  %layout = encoding.layout.dense : encoding<layout>\n"
       "  %storage = encoding.define #physical_storage "
-      "{layout = %layout : encoding} : encoding\n"
+      "{layout = %layout : encoding<layout>} : encoding<storage>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -335,9 +366,10 @@ TEST_F(EncodingVerifyTest, PhysicalStorageRejectsWrongOperandType) {
   VerifySource(
       "func.def @physical_storage_wrong_type(%x: index) {\n"
       "  %schema = encoding.define "
-      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding\n"
+      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>\n"
       "  %storage = encoding.define #physical_storage "
-      "{layout = %x : index, schema = %schema : encoding} : encoding\n"
+      "{layout = %x : index, schema = %schema : encoding<schema>} : "
+      "encoding<storage>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);
@@ -358,11 +390,12 @@ TEST_F(EncodingVerifyTest, PhysicalStorageRejectsRoleMismatch) {
   loom_verify_result_t result;
   VerifySource(
       "func.def @physical_storage_role_mismatch() {\n"
-      "  %layout = encoding.layout.dense : encoding\n"
+      "  %layout = encoding.layout.dense : encoding<layout>\n"
       "  %schema = encoding.define "
-      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding\n"
+      "#ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>\n"
       "  %storage = encoding.define #physical_storage "
-      "{layout = %schema : encoding, schema = %layout : encoding} : encoding\n"
+      "{layout = %schema : encoding<schema>, "
+      "schema = %layout : encoding<layout>} : encoding<storage>\n"
       "  func.return\n"
       "}\n",
       &capture, &result);

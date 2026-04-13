@@ -196,7 +196,7 @@ def print_type(
         case NoneType():
             return "none"
         case EncodingType():
-            return "encoding"
+            return repr(ir_type)
         case DialectType(name=_name, params=_params):
             return _print_dialect_type(ir_type, context, type_registry)
     raise ValueError(f"Unknown type: {ir_type}")

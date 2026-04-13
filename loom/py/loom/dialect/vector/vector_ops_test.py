@@ -14,8 +14,10 @@ from loom.dialect.vector import (
     AtomicScope,
     FloatAssumptionFlags,
     IntegerDot4Kind,
+    QuantizeNaN,
+    QuantizeTie,
 )
-from loom.dsl import ENCODING, FLOAT, I1, INTEGER, EffectKind, Op
+from loom.dsl import ENCODING_TRANSFORM, FLOAT, I1, INTEGER, SCALAR, VECTOR, EffectKind, Op
 
 
 def _op_by_name() -> dict[str, Op]:
@@ -29,9 +31,11 @@ def test_vector_seed_mirrors_scalar_spelling_for_lanewise_ops() -> None:
     mirrored_seed = {
         "addi",
         "addf",
+        "andi",
         "bitcast",
         "cmpf",
         "cmpi",
+        "ctpopi",
         "extf",
         "extsi",
         "extui",
@@ -41,16 +45,57 @@ def test_vector_seed_mirrors_scalar_spelling_for_lanewise_ops() -> None:
         "fptrunc",
         "muli",
         "mulf",
+        "ori",
+        "poison",
         "select",
         "sitofp",
         "sqrtf",
         "trunci",
         "uitofp",
+        "xori",
     }
     assert mirrored_seed <= scalar_names
     assert mirrored_seed <= vector_names
     assert "sqrt" not in vector_names
     assert "fpext" not in vector_names
+
+
+def test_poison_ops_are_pure_typed_sentinels_not_constants() -> None:
+    scalar_op = {op.name: op for op in ALL_SCALAR_OPS}["scalar.poison"]
+    vector_op = _op_by_name()["vector.poison"]
+
+    assert scalar_op.operands == ()
+    assert vector_op.operands == ()
+    assert scalar_op.results[0].type_constraint == SCALAR
+    assert vector_op.results[0].type_constraint == VECTOR
+    assert "Pure" in {trait.name for trait in scalar_op.traits}
+    assert "Pure" in {trait.name for trait in vector_op.traits}
+    assert "ConstantLike" not in {trait.name for trait in scalar_op.traits}
+    assert "ConstantLike" not in {trait.name for trait in vector_op.traits}
+    assert "zero-lane vector" in vector_op.doc
+
+
+def test_empty_vector_is_constant_like_empty_aggregate() -> None:
+    op = _op_by_name()["vector.empty"]
+
+    assert op.operands == ()
+    assert op.results[0].type_constraint == VECTOR
+    trait_names = {trait.name for trait in op.traits}
+    assert "Pure" in trait_names
+    assert "ConstantLike" in trait_names
+    assert "not poison" in op.doc
+
+
+def test_vector_ctpopi_is_lanewise_integer_popcount() -> None:
+    op = _op_by_name()["vector.ctpopi"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    trait_names = {trait.name for trait in op.traits}
+
+    assert ("HasIntegerElement", ("result",)) in constraints
+    assert ("SameType", ("input", "result")) in constraints
+    assert "Pure" in trait_names
+    assert "Elementwise" in trait_names
+    assert op.effects == ()
 
 
 def test_vector_fields_do_not_use_scalar_family_constraints() -> None:
@@ -178,6 +223,21 @@ def test_vector_table_lookup_is_pure_register_lookup() -> None:
     assert op.effects == ()
 
 
+def test_vector_table_quantize_is_explicit_register_encode() -> None:
+    op = _op_by_name()["vector.table.quantize"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+
+    assert [case.keyword for case in QuantizeNaN.cases] == ["zero", "max"]
+    assert [case.keyword for case in QuantizeTie.cases] == ["lower", "upper"]
+    assert ("HasFloatElement", ("input",)) in constraints
+    assert ("HasFloatElement", ("thresholds",)) in constraints
+    assert ("HasIntegerElement", ("result",)) in constraints
+    assert ("SameElementType", ("input", "thresholds")) in constraints
+    assert ("SameShape", ("input", "result")) in constraints
+    assert "Pure" in {trait.name for trait in op.traits}
+    assert op.effects == ()
+
+
 def test_vector_transform_is_pure_numeric_transform_boundary() -> None:
     op = _op_by_name()["vector.transform"]
     constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
@@ -185,7 +245,7 @@ def test_vector_transform_is_pure_numeric_transform_boundary() -> None:
     transform_operand = op.operand("transform")
 
     assert transform_operand is not None
-    assert transform_operand.type_constraint == ENCODING
+    assert transform_operand.type_constraint == ENCODING_TRANSFORM
     assert ("HasFloatElement", ("source",)) in constraints
     assert ("HasFloatElement", ("result",)) in constraints
     assert ("SameElementType", ("source", "result")) in constraints

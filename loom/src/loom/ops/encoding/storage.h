@@ -10,9 +10,9 @@
 // schema in the existing shaped-type encoding attachment slot:
 //
 //   %storage = encoding.define #physical_storage {
-//     layout = %layout : encoding,
-//     schema = %schema : encoding
-//   } : encoding
+//     layout = %layout : encoding<layout>,
+//     schema = %schema : encoding<schema>
+//   } : encoding<storage>
 //
 // Memory operations still see physical storage. These helpers recover the
 // address-layout part for address arithmetic without making loads/stores decode
@@ -27,9 +27,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Built-in encoding family verifier for `#physical_storage`.
-extern const loom_encoding_vtable_t loom_encoding_physical_storage_vtable;
 
 // Resolves |value_id| to the dynamic address-layout op that memory address
 // arithmetic should use. Direct `encoding.layout.*` values resolve to their

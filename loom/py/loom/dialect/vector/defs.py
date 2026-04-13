@@ -43,7 +43,7 @@ from loom.dsl import (
     COMMUTATIVE,
     CONSTANT_LIKE,
     ELEMENTWISE,
-    ENCODING,
+    ENCODING_TRANSFORM,
     FLOAT_ELEMENT,
     I1_ELEMENT,
     INDEX,
@@ -81,7 +81,13 @@ from loom.dsl import (
 vector_ops = Dialect(
     "vector",
     dialect_id=0x0E,
-    doc="Vector register-lane construction, lanewise computation, and reduction ops.",
+    doc=(
+        "Vector register-lane construction, lanewise computation, memory, and "
+        "reduction ops. Static zero-lane vector values are empty aggregates, "
+        "not poison; canonicalization erases their pure computation and "
+        "zero-lane memory effects. Typed vector poison represents invalid "
+        "observations that must be removed or diagnosed before target lowering."
+    ),
 )
 
 CombiningKind = EnumDef(
@@ -172,6 +178,24 @@ FloatAssumptionFlags = EnumDef(
         EnumCase("nsz", 4, doc="Assume no signed zeros."),
     ],
     doc="Floating-point value-domain assumptions for vector operations.",
+)
+
+QuantizeNaN = EnumDef(
+    "QuantizeNaN",
+    [
+        EnumCase("zero", 0, doc="Map NaN lanes to code 0."),
+        EnumCase("max", 1, doc="Map NaN lanes to the last code."),
+    ],
+    doc="NaN handling policy for table-based scalar quantization.",
+)
+
+QuantizeTie = EnumDef(
+    "QuantizeTie",
+    [
+        EnumCase("lower", 0, doc="Equal-to-threshold lanes remain in the lower bin."),
+        EnumCase("upper", 1, doc="Equal-to-threshold lanes advance to the upper bin."),
+    ],
+    doc="Threshold equality policy for table-based scalar quantization.",
 )
 
 
@@ -309,6 +333,39 @@ vector_constant = Op(
     traits=[PURE, CONSTANT_LIKE],
     format=[Attr("value"), COLON, ResultType("result")],
     examples=["%v = vector.constant 0.0 : vector<4xf32>"],
+)
+
+vector_poison = Op(
+    "vector.poison",
+    group=vector_ops,
+    doc=(
+        "Materialize a typed Loom poison vector. Poison represents an invalid "
+        "vector value and propagates through pure vector ops until dead-code "
+        "elimination removes it or a boundary diagnoses it. A zero-lane vector "
+        "such as vector<0xf32> is not poison: it is an empty aggregate whose "
+        "pure lane-wise computation and zero-lane memory effects should "
+        "canonicalize away. Poison is introduced when IR observes something "
+        "that cannot exist, such as a lane extracted from a vector proven to "
+        "have zero lanes."
+    ),
+    results=[Result("result", VECTOR)],
+    verify="loom_vector_poison_verify",
+    traits=[PURE],
+    format=[COLON, ResultType("result")],
+    examples=[
+        "%p = vector.poison : vector<4xf32>",
+    ],
+)
+
+vector_empty = Op(
+    "vector.empty",
+    group=vector_ops,
+    doc=("Materialize the unique empty aggregate value for a static zero-lane vector type. Empty vectors are ordinary values, not poison, and pure zero-lane computation canonicalizes to this op."),
+    results=[Result("result", VECTOR)],
+    verify="loom_vector_empty_verify",
+    traits=[PURE, CONSTANT_LIKE],
+    format=[COLON, ResultType("result")],
+    examples=["%v = vector.empty : vector<0xf32>"],
 )
 
 vector_splat = Op(
@@ -665,13 +722,52 @@ vector_table_lookup = Op(
     ],
 )
 
+vector_table_quantize = Op(
+    "vector.table.quantize",
+    group=vector_ops,
+    doc=("Map floating-point lanes to unsigned integer ordinal code lanes by counting ordered rank-1 threshold table entries."),
+    operands=[
+        Operand("input", VECTOR, doc="Floating-point lanes to quantize."),
+        Operand("thresholds", VECTOR, doc="Rank-1 ordered floating-point threshold table."),
+    ],
+    results=[Result("result", VECTOR, doc="Unsigned ordinal code lanes stored in integer elements.")],
+    attrs=[
+        AttrDef("nan", ATTR_TYPE_ENUM, enum_def=QuantizeNaN, doc="Required NaN handling policy."),
+        AttrDef("tie", ATTR_TYPE_ENUM, enum_def=QuantizeTie, doc="Required threshold equality policy."),
+    ],
+    constraints=[
+        HasFloatElement("input"),
+        HasFloatElement("thresholds"),
+        HasIntegerElement("result"),
+        SameElementType("input", "thresholds"),
+        SameShape("input", "result"),
+    ],
+    verify="loom_vector_table_quantize_verify",
+    traits=[PURE],
+    format=[
+        Ref("input"),
+        COMMA,
+        Ref("thresholds"),
+        AttrDict(),
+        COLON,
+        TypeOf("input"),
+        COMMA,
+        TypeOf("thresholds"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<32xf32>, vector<15xf32> -> vector<32xi8>",
+    ],
+)
+
 vector_transform = Op(
     "vector.transform",
     group=vector_ops,
     doc="Apply an explicit numeric transform descriptor to vector register lanes.",
     operands=[
         Operand("source", VECTOR, doc="Vector lanes to transform."),
-        Operand("transform", ENCODING, doc="Numeric transform descriptor."),
+        Operand("transform", ENCODING_TRANSFORM, doc="Numeric transform descriptor."),
     ],
     results=[Result("result", VECTOR, doc="Transformed vector lanes.")],
     constraints=[
@@ -693,8 +789,8 @@ vector_transform = Op(
         ResultType("result"),
     ],
     examples=[
-        "%r = vector.transform %v, %xf : vector<128xf32>, encoding -> vector<128xf32>",
-        "%sketch = vector.transform %v, %jl : vector<128xf32>, encoding -> vector<64xf32>",
+        "%r = vector.transform %v, %xf : vector<128xf32>, encoding<transform> -> vector<128xf32>",
+        "%sketch = vector.transform %v, %jl : vector<128xf32>, encoding<transform> -> vector<64xf32>",
     ],
 )
 
@@ -1519,6 +1615,33 @@ vector_muli = _lanewise_binary(
     flags=("overflow", IntOverflowFlags),
 )
 
+vector_andi = _lanewise_binary(
+    "vector.andi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise bitwise AND.",
+    commutative=True,
+)
+
+vector_ori = _lanewise_binary(
+    "vector.ori",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise bitwise OR.",
+    commutative=True,
+)
+
+vector_xori = _lanewise_binary(
+    "vector.xori",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise bitwise XOR.",
+    commutative=True,
+)
+
+vector_ctpopi = _lanewise_unary(
+    "vector.ctpopi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise population count over integer lanes.",
+)
+
 vector_sqrtf = _lanewise_unary(
     "vector.sqrtf",
     result_constraint=FLOAT_ELEMENT,
@@ -1918,6 +2041,8 @@ vector_reduce = Op(
 
 ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_constant,
+    vector_poison,
+    vector_empty,
     vector_splat,
     vector_broadcast,
     vector_from_elements,
@@ -1930,6 +2055,7 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_interleave,
     vector_deinterleave,
     vector_table_lookup,
+    vector_table_quantize,
     vector_transform,
     vector_load,
     vector_store,
@@ -1953,6 +2079,10 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_fmaf,
     vector_addi,
     vector_muli,
+    vector_andi,
+    vector_ori,
+    vector_xori,
+    vector_ctpopi,
     vector_sqrtf,
     vector_extf,
     vector_fptrunc,

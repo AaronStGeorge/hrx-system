@@ -19,5 +19,6 @@ loom_check_test_suite(
         "bitwisei.loom-test",
         "comparisoni.loom-test",
         "conversioni.loom-test",
+        "poison.loom-test",
     ],
 )

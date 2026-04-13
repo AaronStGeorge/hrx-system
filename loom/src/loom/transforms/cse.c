@@ -25,13 +25,17 @@ static const loom_pass_statistic_def_t kCSEStatistics[] = {
      IREE_SVL("Number of redundant expressions removed.")},
 };
 
-const loom_pass_info_t loom_cse_pass_info = {
+static const loom_pass_info_t loom_cse_pass_info_storage = {
     .name = IREE_SVL("cse"),
     .description = IREE_SVL("Eliminate common subexpressions."),
     .kind = LOOM_PASS_FUNCTION,
     .statistic_defs = kCSEStatistics,
     .statistic_count = 1,
 };
+
+const loom_pass_info_t* loom_cse_pass_info(void) {
+  return &loom_cse_pass_info_storage;
+}
 
 //===----------------------------------------------------------------------===//
 // Op hashing and equality

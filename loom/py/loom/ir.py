@@ -57,8 +57,14 @@ __all__ = [
     "FunctionType",
     "NoneType",
     "DialectType",
+    "EncodingRole",
+    "ENCODING_ROLE_BY_NAME",
     "EncodingType",
     "ENCODING_TYPE",
+    "ENCODING_LAYOUT_TYPE",
+    "ENCODING_SCHEMA_TYPE",
+    "ENCODING_STORAGE_TYPE",
+    "ENCODING_TRANSFORM_TYPE",
     "NONE_TYPE",
     "Type",
     "binding_element_type",
@@ -482,25 +488,68 @@ class DialectType:
         return self.name
 
 
+@unique
+class EncodingRole(IntEnum):
+    """Semantic role carried by an encoding SSA value type."""
+
+    UNKNOWN = 0
+    LAYOUT = 1
+    SCHEMA = 2
+    STORAGE = 3
+    TRANSFORM = 4
+
+    @property
+    def text(self) -> str:
+        match self:
+            case EncodingRole.UNKNOWN:
+                return ""
+            case EncodingRole.LAYOUT:
+                return "layout"
+            case EncodingRole.SCHEMA:
+                return "schema"
+            case EncodingRole.STORAGE:
+                return "storage"
+            case EncodingRole.TRANSFORM:
+                return "transform"
+        raise ValueError(f"unknown encoding role: {self!r}")
+
+
+ENCODING_ROLE_BY_NAME: dict[str, EncodingRole] = {
+    role.text: role for role in EncodingRole if role != EncodingRole.UNKNOWN
+}
+
+
 @dataclass(frozen=True, slots=True)
 class EncodingType:
     """The type of an encoding SSA value.
 
-    encoding.define produces a value of this type. Values of
-    EncodingType are referenced in encoding/layout attachment positions
-    such as tile<4xf32, %enc> and view<[%N]xf32, %layout>.
+    Encoding values may be role-qualified as encoding<layout>,
+    encoding<schema>, encoding<storage>, or encoding<transform>. Values of
+    EncodingType are referenced in encoding/layout attachment positions such as
+    tile<4xf32, %enc> and view<[%N]xf32, %layout>.
     """
+
+    role: EncodingRole = EncodingRole.UNKNOWN
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "role", EncodingRole(self.role))
 
     @property
     def type_kind(self) -> TypeKind:
         return TypeKind.ENCODING
 
     def __repr__(self) -> str:
+        if self.role != EncodingRole.UNKNOWN:
+            return f"encoding<{self.role.text}>"
         return "encoding"
 
 
-# Singleton for encoding type.
+# Singletons for encoding type variants.
 ENCODING_TYPE = EncodingType()
+ENCODING_LAYOUT_TYPE = EncodingType(EncodingRole.LAYOUT)
+ENCODING_SCHEMA_TYPE = EncodingType(EncodingRole.SCHEMA)
+ENCODING_STORAGE_TYPE = EncodingType(EncodingRole.STORAGE)
+ENCODING_TRANSFORM_TYPE = EncodingType(EncodingRole.TRANSFORM)
 
 
 @dataclass(frozen=True, slots=True)

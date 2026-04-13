@@ -104,7 +104,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 PRODUCER = "loom-py"
 
 
@@ -470,8 +470,9 @@ class BytecodeWriter:
                 buf.write_varint(len(params))
                 for param in params:
                     buf.write_varint(self._ctx.intern_type(param))
-            case EncodingType():
+            case EncodingType(role=role):
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.ENCODING])
+                buf.write_u8(role.value)
             case PoolType(block_size=block_size):
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.POOL])
                 match block_size:

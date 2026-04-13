@@ -565,6 +565,44 @@ TEST_F(WriterTest, CanonicalAttrDictInputOrderDoesNotAffectBytes) {
   loom_module_free(module_b);
 }
 
+TEST_F(WriterTest, ZeroExtentVectorTypeWrites) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32_type, &f32_type));
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(0), 0);
+  IREE_ASSERT_OK(loom_module_intern_type(module, vector_type, &vector_type));
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("empty"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, &vector_type, 1,
+      /*result_types=*/nullptr, 0, /*arg_names=*/nullptr, 0,
+      /*result_names=*/nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* arg_ids =
+      loom_func_like_arg_ids(func_like, &arg_count);
+  ASSERT_EQ(arg_count, 1);
+  ASSERT_EQ(module->types.count, 2u);
+  EXPECT_TRUE(
+      loom_type_equal(vector_type, module->values.entries[arg_ids[0]].type));
+
+  auto bytes = WriteModule(module);
+  EXPECT_GT(bytes.size(), 0u);
+
+  loom_module_free(module);
+}
+
 //===----------------------------------------------------------------------===//
 // Error handling
 //===----------------------------------------------------------------------===//
@@ -662,6 +700,43 @@ TEST_F(WriterTest, VectorEncodingAttachmentFails) {
   loom_op_t* func_op = nullptr;
   IREE_ASSERT_OK(loom_test_func_build(
       &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, &vector_type, 1,
+      /*result_types=*/nullptr, 0, /*arg_names=*/nullptr, 0,
+      /*result_names=*/nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  iree_io_stream_t* stream = nullptr;
+  IREE_ASSERT_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+          IREE_IO_STREAM_MODE_RESIZABLE,
+      4096, iree_allocator_system(), &stream));
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
+
+  iree_io_stream_release(stream);
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, InvalidEncodingRoleFails) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_type_t encoding_type =
+      loom_type_encoding_with_role((loom_encoding_role_t)99);
+  IREE_ASSERT_OK(
+      loom_module_intern_type(module, encoding_type, &encoding_type));
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("bad"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, &encoding_type, 1,
       /*result_types=*/nullptr, 0, /*arg_names=*/nullptr, 0,
       /*result_names=*/nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
 

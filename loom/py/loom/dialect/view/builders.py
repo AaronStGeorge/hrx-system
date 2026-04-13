@@ -39,3 +39,26 @@ class ViewBuilders:
                 _static.append(_idx)
         _attributes["static_offsets"] = _static
         return cast(ValueRef, self._b.build("view.subview", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def prefetch(self, *, view: ValueRef, indices: list[int | ValueRef], intent: str, locality: str) -> None:
+        """Compiler hint for a future access to a logical view origin. Prefetch has no semantic memory effects and may not fault semantically, but it is intentionally preserved by ordinary canonicalization/DCE until an explicit hint-stripping pass removes it.
+
+        Example::
+            view.prefetch %view[%row, %col] {intent = read, locality = l2} : view<[%M]x[%N]xf32, %layout>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["intent"] = intent
+        _attributes["locality"] = locality
+        _operands.append(view)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("view.prefetch", _operands, attributes=_attributes, regions=_regions)

@@ -230,7 +230,7 @@
 // Dynamic parameters are introduced explicitly by encoding.define:
 //
 //   %enc = encoding.define #q8_0<block=32> {group_size = %g : index}
-//       : encoding
+//       : encoding<schema>
 //
 // This enables library functions generic over encoding:
 //

@@ -275,6 +275,67 @@
     "fix_hint_template": "Construct a well-formed type before verification"
   },
   {
+    "error_id": "ERR_TYPE_011",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 11,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Integer code result type is too small.",
+    "message_template": "result '{result_name}' has type {actual_type}, but {threshold_count} thresholds require codes in [0, {max_code}]",
+    "params": [
+      {
+        "name": "result_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "threshold_count",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "max_code",
+        "kind": 1,
+        "kind_name": "I64"
+      }
+    ],
+    "fix_hint_template": "Use a result integer element type with enough bits for every code"
+  },
+  {
+    "error_id": "ERR_TYPE_012",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Poison value observed at boundary.",
+    "message_template": "poison value '{value_name}' cannot be used by {boundary_kind} '{op_name}'",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "boundary_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Canonicalize away dead poison or prevent the invalid observation before it reaches this boundary"
+  },
+  {
     "error_id": "ERR_SHAPE_001",
     "domain": 1,
     "domain_name": "SHAPE",
@@ -810,6 +871,67 @@
     "fix_hint_template": "Pass an encoding value with the role required by the family contract"
   },
   {
+    "error_id": "ERR_ENCODING_012",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding result has wrong role.",
+    "message_template": "encoding '{encoding_name}' result has type {actual_type}, expected {expected_type}",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Spell the encoding.define result type with the role produced by the family"
+  },
+  {
+    "error_id": "ERR_ENCODING_013",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 13,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding static parameter has unsupported value.",
+    "message_template": "encoding '{encoding_name}' parameter '{param_name}' has value '{actual_value}', expected {expected_values}",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_value",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_values",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use one of the static parameter values supported by the encoding family"
+  },
+  {
     "error_id": "ERR_STRUCTURE_001",
     "domain": 4,
     "domain_name": "STRUCTURE",
@@ -1158,6 +1280,62 @@
       }
     ],
     "fix_hint_template": "Choose an attribute value satisfying '{expected_constraint}'"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_015",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 15,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Static threshold table is not ordered.",
+    "message_template": "threshold table '{field_name}' is not ordered at entries {left_index} and {right_index}",
+    "params": [
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "left_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "right_index",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Provide static thresholds in nondecreasing order"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_016",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 16,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operation traits are mutually incompatible.",
+    "message_template": "'{op_name}' has incompatible traits {trait_a} and {trait_b}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "trait_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "trait_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Remove one of the incompatible traits from '{op_name}'"
   },
   {
     "error_id": "ERR_DOMINANCE_001",
@@ -1928,7 +2106,7 @@
         "kind_name": "STRING"
       }
     ],
-    "fix_hint_template": "Keep #family<...> parameters static; pass dynamic parameters with encoding.define #family<static attrs> {name = %value : type} : encoding"
+    "fix_hint_template": "Keep #family<...> parameters static; pass dynamic parameters with encoding.define #family<static attrs> {name = %value : type} : encoding<role>"
   },
   {
     "error_id": "ERR_PARSE_029",

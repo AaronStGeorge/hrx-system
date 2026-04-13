@@ -1,0 +1,56 @@
+// RUN: pass canonicalize
+
+// Poison scalar operands propagate through pure scalar ops.
+func.def @scalar_poison_add(%x: i32) -> (i32) {
+  %p = scalar.poison : i32
+  %r = scalar.addi %p, %x : i32
+  func.return %r : i32
+}
+// ----
+func.def @scalar_poison_add(%x: i32) -> (i32) {
+  %r = scalar.poison : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Poison vector operands propagate through pure vector ops.
+func.def @vector_poison_add(%x: vector<4xf32>) -> (vector<4xf32>) {
+  %p = vector.poison : vector<4xf32>
+  %r = vector.addf %p, %x : vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+// ----
+func.def @vector_poison_add(%x: vector<4xf32>) -> (vector<4xf32>) {
+  %r = vector.poison : vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+
+// ====
+
+// Poison propagation happens before algebraic canonicalization. In particular,
+// fmai(%poison, 0, c) must not fold to c and erase the invalid observation.
+func.def @poison_beats_fmai_zero_multiplier(%c: i32) -> (i32) {
+  %p = scalar.poison : i32
+  %zero = scalar.constant 0 : i32
+  %r = scalar.fmai %p, %zero, %c : i32
+  func.return %r : i32
+}
+// ----
+func.def @poison_beats_fmai_zero_multiplier(%c: i32) -> (i32) {
+  %r = scalar.poison : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Dead poison paths disappear before propagation is needed.
+func.def @dead_poison_path(%x: i32) -> (i32) {
+  %p = scalar.poison : i32
+  %dead = scalar.addi %p, %x : i32
+  func.return %x : i32
+}
+// ----
+func.def @dead_poison_path(%x: i32) -> (i32) {
+  func.return %x : i32
+}

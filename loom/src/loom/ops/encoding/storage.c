@@ -7,6 +7,7 @@
 #include "loom/ops/encoding/storage.h"
 
 #include "loom/error/error_defs.h"
+#include "loom/ir/context.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/params.h"
 #include "loom/ops/encoding/roles.h"
@@ -365,9 +366,15 @@ static iree_status_t loom_encoding_physical_storage_verify_static(
   return iree_ok_status();
 }
 
-const loom_encoding_vtable_t loom_encoding_physical_storage_vtable = {
+static const loom_encoding_vtable_t loom_encoding_physical_storage_vtable = {
     .name = IREE_SVL("physical_storage"),
     .role = LOOM_ENCODING_ROLE_PHYSICAL_STORAGE,
     .verify = loom_encoding_physical_storage_verify_static,
     .verify_define = loom_encoding_physical_storage_verify_define,
 };
+
+iree_status_t loom_encoding_register_physical_storage_family(
+    loom_context_t* context) {
+  return loom_context_register_encoding_vtable(
+      context, &loom_encoding_physical_storage_vtable);
+}

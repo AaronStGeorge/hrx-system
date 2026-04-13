@@ -23,13 +23,19 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    ANY_ENCODING,
     BUFFER,
     COMMUTATIVE,
     CONSTANT_LIKE,
     DECOMPOSABLE,
     ELEMENTWISE,
+    ENCODING_LAYOUT,
+    ENCODING_SCHEMA,
+    ENCODING_STORAGE,
+    ENCODING_TRANSFORM,
     FLOAT,
     FLOAT_ELEMENT,
+    HINT,
     I1,
     I1_ELEMENT,
     IDEMPOTENT,
@@ -120,12 +126,19 @@ class TestTypeConstraints:
         assert TILE == TypeConstraint.TILE
         assert INTEGER == TypeConstraint.INTEGER
         assert BUFFER == TypeConstraint.BUFFER
+        assert ANY_ENCODING == TypeConstraint.ANY_ENCODING
+        assert ENCODING_LAYOUT == TypeConstraint.ENCODING_LAYOUT
         assert INTEGER_ELEMENT == TypeConstraint.INTEGER_ELEMENT
         assert TILE != TENSOR
 
     def test_values(self) -> None:
         assert TILE.value == "tile"
         assert FLOAT.value == "float"
+        assert ANY_ENCODING.value == "encoding"
+        assert ENCODING_LAYOUT.value == "encoding<layout>"
+        assert ENCODING_SCHEMA.value == "encoding<schema>"
+        assert ENCODING_STORAGE.value == "encoding<storage>"
+        assert ENCODING_TRANSFORM.value == "encoding<transform>"
         assert FLOAT_ELEMENT.value == "float_element"
         assert I1_ELEMENT.value == "i1_element"
         assert INDEX.value == "index"
@@ -844,6 +857,31 @@ class TestEffects:
     def test_pure_with_unique_identity_raises(self) -> None:
         with pytest.raises(ValueError, match="PURE.*UNIQUE_IDENTITY"):
             Op("test.bad", traits=[PURE, UNIQUE_IDENTITY])
+
+    def test_hint_not_pure(self) -> None:
+        op = Op("test.hint", traits=[HINT])
+        assert not op.is_pure
+
+    def test_hint_with_explicit_effects_raises(self) -> None:
+        with pytest.raises(ValueError, match="HINT.*explicit effects"):
+            Op(
+                "test.bad",
+                operands=[Operand("pool", POOL)],
+                traits=[HINT],
+                effects=[Reads("pool")],
+            )
+
+    def test_hint_with_pure_raises(self) -> None:
+        with pytest.raises(ValueError, match="HINT.*PURE"):
+            Op("test.bad", traits=[HINT, PURE])
+
+    def test_hint_with_unknown_effects_raises(self) -> None:
+        with pytest.raises(ValueError, match="HINT.*UNKNOWN_EFFECTS"):
+            Op("test.bad", traits=[HINT, UNKNOWN_EFFECTS])
+
+    def test_hint_with_non_deterministic_raises(self) -> None:
+        with pytest.raises(ValueError, match="HINT.*NON_DETERMINISTIC"):
+            Op("test.bad", traits=[HINT, NON_DETERMINISTIC])
 
 
 # ============================================================================

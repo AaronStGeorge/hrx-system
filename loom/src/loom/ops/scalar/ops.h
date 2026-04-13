@@ -99,19 +99,20 @@ enum {
   LOOM_OP_SCALAR_INDEX_CAST = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 78),
   LOOM_OP_SCALAR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 79),
   LOOM_OP_SCALAR_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 80),
-  LOOM_OP_SCALAR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 81),
-  LOOM_OP_SCALAR_ORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 82),
-  LOOM_OP_SCALAR_XORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 83),
-  LOOM_OP_SCALAR_SHLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 84),
-  LOOM_OP_SCALAR_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 85),
-  LOOM_OP_SCALAR_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 86),
-  LOOM_OP_SCALAR_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 87),
-  LOOM_OP_SCALAR_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 88),
-  LOOM_OP_SCALAR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 89),
-  LOOM_OP_SCALAR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 90),
-  LOOM_OP_SCALAR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 91),
-  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 92),
-  LOOM_OP_SCALAR_COUNT_ = 93,
+  LOOM_OP_SCALAR_POISON = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 81),
+  LOOM_OP_SCALAR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 82),
+  LOOM_OP_SCALAR_ORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 83),
+  LOOM_OP_SCALAR_XORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 84),
+  LOOM_OP_SCALAR_SHLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 85),
+  LOOM_OP_SCALAR_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 86),
+  LOOM_OP_SCALAR_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 87),
+  LOOM_OP_SCALAR_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 88),
+  LOOM_OP_SCALAR_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 89),
+  LOOM_OP_SCALAR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 90),
+  LOOM_OP_SCALAR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 91),
+  LOOM_OP_SCALAR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 92),
+  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 93),
+  LOOM_OP_SCALAR_COUNT_ = 94,
 };
 
 // Integer overflow behavior flags.
@@ -174,7 +175,6 @@ iree_status_t loom_scalar_addi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_addi_vtable;
 void loom_scalar_addi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -192,7 +192,6 @@ iree_status_t loom_scalar_subi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_subi_vtable;
 void loom_scalar_subi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -210,7 +209,6 @@ iree_status_t loom_scalar_muli_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_muli_vtable;
 void loom_scalar_muli_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -226,7 +224,6 @@ iree_status_t loom_scalar_divsi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_divsi_vtable;
 void loom_scalar_divsi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -242,7 +239,6 @@ iree_status_t loom_scalar_divui_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_divui_vtable;
 void loom_scalar_divui_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -258,7 +254,6 @@ iree_status_t loom_scalar_remsi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_remsi_vtable;
 void loom_scalar_remsi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -274,7 +269,6 @@ iree_status_t loom_scalar_remui_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_remui_vtable;
 void loom_scalar_remui_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -290,7 +284,6 @@ iree_status_t loom_scalar_ceildivsi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_ceildivsi_vtable;
 
 // LOOM_OP_SCALAR_CEILDIVUI: Unsigned integer division, rounding toward positive infinity.
 // %result = scalar.ceildivui %lhs, %rhs : i32
@@ -302,7 +295,6 @@ iree_status_t loom_scalar_ceildivui_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_ceildivui_vtable;
 
 // LOOM_OP_SCALAR_FLOORDIVSI: Signed integer division, rounding toward negative infinity.
 // %result = scalar.floordivsi %lhs, %rhs : i32
@@ -314,7 +306,6 @@ iree_status_t loom_scalar_floordivsi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_floordivsi_vtable;
 
 // LOOM_OP_SCALAR_NEGI: Integer negation.
 // %result = scalar.negi %input : i32
@@ -325,7 +316,6 @@ iree_status_t loom_scalar_negi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_negi_vtable;
 void loom_scalar_negi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -340,7 +330,6 @@ iree_status_t loom_scalar_absi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_absi_vtable;
 void loom_scalar_absi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -356,7 +345,6 @@ iree_status_t loom_scalar_minsi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_minsi_vtable;
 void loom_scalar_minsi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -372,7 +360,6 @@ iree_status_t loom_scalar_maxsi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_maxsi_vtable;
 void loom_scalar_maxsi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -388,7 +375,6 @@ iree_status_t loom_scalar_minui_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_minui_vtable;
 void loom_scalar_minui_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -404,7 +390,6 @@ iree_status_t loom_scalar_maxui_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_maxui_vtable;
 void loom_scalar_maxui_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -427,7 +412,6 @@ iree_status_t loom_scalar_fmai_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_fmai_vtable;
 iree_status_t loom_scalar_fmai_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 void loom_scalar_fmai_fold(
     const loom_module_t* module, const loom_op_t* op,
@@ -446,7 +430,6 @@ iree_status_t loom_scalar_addf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_addf_vtable;
 void loom_scalar_addf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -464,7 +447,6 @@ iree_status_t loom_scalar_subf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_subf_vtable;
 void loom_scalar_subf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -482,7 +464,6 @@ iree_status_t loom_scalar_mulf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_mulf_vtable;
 void loom_scalar_mulf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -500,7 +481,6 @@ iree_status_t loom_scalar_divf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_divf_vtable;
 void loom_scalar_divf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -518,7 +498,6 @@ iree_status_t loom_scalar_remf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_remf_vtable;
 void loom_scalar_remf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -534,7 +513,6 @@ iree_status_t loom_scalar_negf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_negf_vtable;
 void loom_scalar_negf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -550,7 +528,6 @@ iree_status_t loom_scalar_absf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_absf_vtable;
 void loom_scalar_absf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -568,7 +545,6 @@ iree_status_t loom_scalar_minimumf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_minimumf_vtable;
 void loom_scalar_minimumf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -586,7 +562,6 @@ iree_status_t loom_scalar_maximumf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_maximumf_vtable;
 void loom_scalar_maximumf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -604,7 +579,6 @@ iree_status_t loom_scalar_minnumf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_minnumf_vtable;
 void loom_scalar_minnumf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -622,7 +596,6 @@ iree_status_t loom_scalar_maxnumf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_maxnumf_vtable;
 void loom_scalar_maxnumf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -638,7 +611,6 @@ iree_status_t loom_scalar_copysignf_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_copysignf_vtable;
 void loom_scalar_copysignf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -654,7 +626,6 @@ iree_status_t loom_scalar_expf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_expf_vtable;
 void loom_scalar_expf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -670,7 +641,6 @@ iree_status_t loom_scalar_exp2f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_exp2f_vtable;
 void loom_scalar_exp2f_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -686,7 +656,6 @@ iree_status_t loom_scalar_expm1f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_expm1f_vtable;
 void loom_scalar_expm1f_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -702,7 +671,6 @@ iree_status_t loom_scalar_logf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_logf_vtable;
 void loom_scalar_logf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -718,7 +686,6 @@ iree_status_t loom_scalar_log2f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_log2f_vtable;
 void loom_scalar_log2f_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -734,7 +701,6 @@ iree_status_t loom_scalar_log10f_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_log10f_vtable;
 void loom_scalar_log10f_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -750,7 +716,6 @@ iree_status_t loom_scalar_log1pf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_log1pf_vtable;
 void loom_scalar_log1pf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -768,7 +733,6 @@ iree_status_t loom_scalar_powf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_powf_vtable;
 void loom_scalar_powf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -784,7 +748,6 @@ iree_status_t loom_scalar_sqrtf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_sqrtf_vtable;
 void loom_scalar_sqrtf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -800,7 +763,6 @@ iree_status_t loom_scalar_rsqrtf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_rsqrtf_vtable;
 void loom_scalar_rsqrtf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -816,7 +778,6 @@ iree_status_t loom_scalar_cbrtf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_cbrtf_vtable;
 void loom_scalar_cbrtf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -832,7 +793,6 @@ iree_status_t loom_scalar_sinf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_sinf_vtable;
 void loom_scalar_sinf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -848,7 +808,6 @@ iree_status_t loom_scalar_cosf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_cosf_vtable;
 void loom_scalar_cosf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -864,7 +823,6 @@ iree_status_t loom_scalar_tanf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_tanf_vtable;
 void loom_scalar_tanf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -880,7 +838,6 @@ iree_status_t loom_scalar_asinf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_asinf_vtable;
 void loom_scalar_asinf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -896,7 +853,6 @@ iree_status_t loom_scalar_acosf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_acosf_vtable;
 void loom_scalar_acosf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -912,7 +868,6 @@ iree_status_t loom_scalar_atanf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_atanf_vtable;
 void loom_scalar_atanf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -930,7 +885,6 @@ iree_status_t loom_scalar_atan2f_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_atan2f_vtable;
 void loom_scalar_atan2f_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -946,7 +900,6 @@ iree_status_t loom_scalar_sinhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_sinhf_vtable;
 void loom_scalar_sinhf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -962,7 +915,6 @@ iree_status_t loom_scalar_coshf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_coshf_vtable;
 void loom_scalar_coshf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -978,7 +930,6 @@ iree_status_t loom_scalar_tanhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_tanhf_vtable;
 void loom_scalar_tanhf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -994,7 +945,6 @@ iree_status_t loom_scalar_asinhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_asinhf_vtable;
 void loom_scalar_asinhf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1010,7 +960,6 @@ iree_status_t loom_scalar_acoshf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_acoshf_vtable;
 void loom_scalar_acoshf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1026,7 +975,6 @@ iree_status_t loom_scalar_atanhf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_atanhf_vtable;
 void loom_scalar_atanhf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1042,7 +990,6 @@ iree_status_t loom_scalar_erff_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_erff_vtable;
 void loom_scalar_erff_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1058,7 +1005,6 @@ iree_status_t loom_scalar_erfcf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_erfcf_vtable;
 void loom_scalar_erfcf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1081,7 +1027,6 @@ iree_status_t loom_scalar_fmaf_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_fmaf_vtable;
 void loom_scalar_fmaf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1097,7 +1042,6 @@ iree_status_t loom_scalar_ceilf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_ceilf_vtable;
 void loom_scalar_ceilf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1113,7 +1057,6 @@ iree_status_t loom_scalar_floorf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_floorf_vtable;
 void loom_scalar_floorf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1129,7 +1072,6 @@ iree_status_t loom_scalar_roundf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_roundf_vtable;
 void loom_scalar_roundf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1145,7 +1087,6 @@ iree_status_t loom_scalar_roundevenf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_roundevenf_vtable;
 void loom_scalar_roundevenf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1161,7 +1102,6 @@ iree_status_t loom_scalar_truncf_build(
     loom_builder_t* builder, uint8_t instance_flags,
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_truncf_vtable;
 void loom_scalar_truncf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1179,7 +1119,6 @@ iree_status_t loom_scalar_cmpi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_cmpi_vtable;
 void loom_scalar_cmpi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1199,7 +1138,6 @@ iree_status_t loom_scalar_cmpf_build(
     loom_value_id_t rhs, loom_type_t operand_type,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_cmpf_vtable;
 void loom_scalar_cmpf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1220,7 +1158,6 @@ iree_status_t loom_scalar_select_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_select_vtable;
 void loom_scalar_select_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1235,7 +1172,6 @@ iree_status_t loom_scalar_isnanf_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_isnanf_vtable;
 void loom_scalar_isnanf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1250,7 +1186,6 @@ iree_status_t loom_scalar_isinff_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_isinff_vtable;
 void loom_scalar_isinff_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1265,7 +1200,6 @@ iree_status_t loom_scalar_isfinitef_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_isfinitef_vtable;
 void loom_scalar_isfinitef_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1280,7 +1214,6 @@ iree_status_t loom_scalar_signf_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_signf_vtable;
 void loom_scalar_signf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1295,7 +1228,6 @@ iree_status_t loom_scalar_signi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_signi_vtable;
 void loom_scalar_signi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1310,7 +1242,6 @@ iree_status_t loom_scalar_sitofp_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_sitofp_vtable;
 void loom_scalar_sitofp_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1325,7 +1256,6 @@ iree_status_t loom_scalar_uitofp_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_uitofp_vtable;
 void loom_scalar_uitofp_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1340,7 +1270,6 @@ iree_status_t loom_scalar_fptosi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_fptosi_vtable;
 void loom_scalar_fptosi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1355,7 +1284,6 @@ iree_status_t loom_scalar_fptoui_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_fptoui_vtable;
 void loom_scalar_fptoui_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1370,7 +1298,6 @@ iree_status_t loom_scalar_extf_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_extf_vtable;
 void loom_scalar_extf_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1385,7 +1312,6 @@ iree_status_t loom_scalar_fptrunc_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_fptrunc_vtable;
 void loom_scalar_fptrunc_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1400,7 +1326,6 @@ iree_status_t loom_scalar_extsi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_extsi_vtable;
 void loom_scalar_extsi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1415,7 +1340,6 @@ iree_status_t loom_scalar_extui_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_extui_vtable;
 void loom_scalar_extui_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1430,7 +1354,6 @@ iree_status_t loom_scalar_trunci_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_trunci_vtable;
 void loom_scalar_trunci_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1445,7 +1368,6 @@ iree_status_t loom_scalar_index_cast_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_index_cast_vtable;
 void loom_scalar_index_cast_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1460,7 +1382,6 @@ iree_status_t loom_scalar_bitcast_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_bitcast_vtable;
 void loom_scalar_bitcast_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1477,7 +1398,6 @@ iree_status_t loom_scalar_constant_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_constant_vtable;
 void loom_scalar_constant_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1485,6 +1405,16 @@ void loom_scalar_constant_fold(
 iree_status_t loom_scalar_constant_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_SCALAR_POISON: Materialize a typed Loom poison scalar. Poison represents an invalid scalar observation, such as extracting a lane proven not to exist. Pure scalar ops with any poison operand canonicalize to poison of the corresponding result type. Poison is not an LLVM poison value: it must be removed by dead-code elimination or diagnosed before it reaches a store, return, kernel boundary, or target-lowering boundary.
+// %p = scalar.poison : f32
+LOOM_DEFINE_ISA(loom_scalar_poison_isa, LOOM_OP_SCALAR_POISON)
+LOOM_DEFINE_RESULT(loom_scalar_poison_result, 0)
+iree_status_t loom_scalar_poison_build(
+    loom_builder_t* builder,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // LOOM_OP_SCALAR_ANDI: Bitwise AND.
 // %result = scalar.andi %lhs, %rhs : i32
@@ -1496,7 +1426,6 @@ iree_status_t loom_scalar_andi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_andi_vtable;
 void loom_scalar_andi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1512,7 +1441,6 @@ iree_status_t loom_scalar_ori_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_ori_vtable;
 void loom_scalar_ori_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1528,7 +1456,6 @@ iree_status_t loom_scalar_xori_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_xori_vtable;
 void loom_scalar_xori_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1546,7 +1473,6 @@ iree_status_t loom_scalar_shli_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_shli_vtable;
 void loom_scalar_shli_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1562,7 +1488,6 @@ iree_status_t loom_scalar_shrsi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_shrsi_vtable;
 void loom_scalar_shrsi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1578,7 +1503,6 @@ iree_status_t loom_scalar_shrui_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_shrui_vtable;
 void loom_scalar_shrui_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1594,7 +1518,6 @@ iree_status_t loom_scalar_rotli_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_rotli_vtable;
 void loom_scalar_rotli_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1610,7 +1533,6 @@ iree_status_t loom_scalar_rotri_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_rotri_vtable;
 void loom_scalar_rotri_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1625,7 +1547,6 @@ iree_status_t loom_scalar_ctlzi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_ctlzi_vtable;
 void loom_scalar_ctlzi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1640,7 +1561,6 @@ iree_status_t loom_scalar_cttzi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_cttzi_vtable;
 void loom_scalar_cttzi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1655,7 +1575,6 @@ iree_status_t loom_scalar_ctpopi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_ctpopi_vtable;
 void loom_scalar_ctpopi_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1676,7 +1595,6 @@ iree_status_t loom_scalar_assume_build(
     iree_host_size_t result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_scalar_assume_vtable;
 void loom_scalar_assume_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

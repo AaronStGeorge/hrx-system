@@ -9,6 +9,7 @@
 from loom.assembly import (
     COLON,
     Attr,
+    ResultType,
     TypeOf,
 )
 from loom.dialect.scalar import scalar_ops
@@ -166,6 +167,23 @@ scalar_constant = Op(
     ],
 )
 
+scalar_poison = Op(
+    "scalar.poison",
+    group=scalar_ops,
+    doc=(
+        "Materialize a typed Loom poison scalar. Poison represents an invalid "
+        "scalar observation, such as extracting a lane proven not to exist. "
+        "Pure scalar ops with any poison operand canonicalize to poison of the "
+        "corresponding result type. Poison is not an LLVM poison value: it must "
+        "be removed by dead-code elimination or diagnosed before it reaches a "
+        "store, return, kernel boundary, or target-lowering boundary."
+    ),
+    results=[Result("result", SCALAR)],
+    traits=[PURE],
+    format=[COLON, ResultType("result")],
+    examples=["%p = scalar.poison : f32"],
+)
+
 # ============================================================================
 # Registry
 # ============================================================================
@@ -183,4 +201,5 @@ ALL_CONVERSION_OPS: tuple[Op, ...] = (
     scalar_index_cast,
     scalar_bitcast,
     scalar_constant,
+    scalar_poison,
 )

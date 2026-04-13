@@ -97,6 +97,146 @@ bool loom_type_equal(loom_type_t a, loom_type_t b) {
 }
 
 //===----------------------------------------------------------------------===//
+// Shaped type queries
+//===----------------------------------------------------------------------===//
+
+bool loom_type_has_static_zero_extent(loom_type_t type) {
+  if (!loom_type_is_shaped(type)) return false;
+  for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
+    if (loom_type_dim_is_dynamic_at(type, i)) continue;
+    if (loom_type_dim_static_size_at(type, i) == 0) return true;
+  }
+  return false;
+}
+
+bool loom_type_static_element_count(loom_type_t type,
+                                    uint64_t* out_element_count) {
+  *out_element_count = 0;
+  if (!loom_type_is_shaped(type)) return false;
+  if (!loom_type_is_all_static(type)) return false;
+
+  uint64_t element_count = 1;
+  for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
+    int64_t dimension_size = loom_type_dim_static_size_at(type, i);
+    if (dimension_size == 0) {
+      *out_element_count = 0;
+      return true;
+    }
+    if (dimension_size < 0 ||
+        element_count > UINT64_MAX / (uint64_t)dimension_size) {
+      return false;
+    }
+    element_count *= (uint64_t)dimension_size;
+  }
+  *out_element_count = element_count;
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
+// Type SSA reference walking
+//===----------------------------------------------------------------------===//
+
+static bool loom_type_has_value_ref_dims(loom_type_t type) {
+  return loom_type_is_shaped(type) || loom_type_is_pool(type);
+}
+
+static iree_status_t loom_type_walk_value_ref_sequence(
+    const loom_type_t* types, uint16_t type_count,
+    loom_type_value_ref_callback_t callback, void* user_data) {
+  if (!types) return iree_ok_status();
+  for (uint16_t i = 0; i < type_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_type_walk_value_refs(types[i], callback, user_data));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_type_walk_value_refs(loom_type_t type,
+                                        loom_type_value_ref_callback_t callback,
+                                        void* user_data) {
+  if (!callback) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type value reference callback is NULL");
+  }
+
+  loom_type_kind_t kind = loom_type_kind(type);
+  if (!loom_type_kind_is_valid(kind)) return iree_ok_status();
+
+  switch (kind) {
+    case LOOM_TYPE_FUNCTION: {
+      const loom_func_type_data_t* data = loom_type_func_data(type);
+      if (!data) return iree_ok_status();
+      return loom_type_walk_value_ref_sequence(
+          data->types, (uint16_t)(data->arg_count + data->result_count),
+          callback, user_data);
+    }
+
+    case LOOM_TYPE_DIALECT:
+      return loom_type_walk_value_ref_sequence(
+          loom_type_dialect_params(type), loom_type_dialect_param_count(type),
+          callback, user_data);
+
+    default:
+      break;
+  }
+
+  if (loom_type_has_value_ref_dims(type)) {
+    for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
+      if (!loom_type_dim_is_dynamic_at(type, i)) continue;
+      IREE_RETURN_IF_ERROR(
+          callback(loom_type_dim_value_id_at(type, i), user_data));
+    }
+  }
+  if (loom_type_has_ssa_encoding(type)) {
+    IREE_RETURN_IF_ERROR(
+        callback(loom_type_encoding_value_id(type), user_data));
+  }
+  return iree_ok_status();
+}
+
+static bool loom_type_sequence_references_value(const loom_type_t* types,
+                                                uint16_t type_count,
+                                                loom_value_id_t value_id) {
+  if (!types) return false;
+  for (uint16_t i = 0; i < type_count; ++i) {
+    if (loom_type_references_value(types[i], value_id)) return true;
+  }
+  return false;
+}
+
+bool loom_type_references_value(loom_type_t type, loom_value_id_t value_id) {
+  loom_type_kind_t kind = loom_type_kind(type);
+  if (!loom_type_kind_is_valid(kind)) return false;
+
+  switch (kind) {
+    case LOOM_TYPE_FUNCTION: {
+      const loom_func_type_data_t* data = loom_type_func_data(type);
+      if (!data) return false;
+      return loom_type_sequence_references_value(
+          data->types, (uint16_t)(data->arg_count + data->result_count),
+          value_id);
+    }
+
+    case LOOM_TYPE_DIALECT:
+      return loom_type_sequence_references_value(
+          loom_type_dialect_params(type), loom_type_dialect_param_count(type),
+          value_id);
+
+    default:
+      break;
+  }
+
+  if (loom_type_has_value_ref_dims(type)) {
+    for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
+      if (!loom_type_dim_is_dynamic_at(type, i)) continue;
+      if (loom_type_dim_value_id_at(type, i) == value_id) return true;
+    }
+  }
+  return loom_type_has_ssa_encoding(type) &&
+         loom_type_encoding_value_id(type) == value_id;
+}
+
+//===----------------------------------------------------------------------===//
 // Type hashing
 //===----------------------------------------------------------------------===//
 

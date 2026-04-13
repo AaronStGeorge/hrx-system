@@ -80,3 +80,18 @@ iree_status_t loom_view_subview_verify(const loom_module_t* module,
   return loom_view_verify_static_index_count_matches_rank(
       module, op, emitter, IREE_SV("source"), static_offsets, source_type);
 }
+
+iree_status_t loom_view_prefetch_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  loom_attribute_t static_indices = loom_view_prefetch_static_indices(op);
+  IREE_RETURN_IF_ERROR(loom_view_verify_dynamic_index_count(
+      module, op, emitter, static_indices,
+      loom_view_prefetch_indices(op).count));
+
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_view_prefetch_view(op));
+  if (!loom_type_is_view(view_type)) return iree_ok_status();
+  return loom_view_verify_static_index_count_matches_rank(
+      module, op, emitter, IREE_SV("view"), static_indices, view_type);
+}

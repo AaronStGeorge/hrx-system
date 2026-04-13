@@ -2,6 +2,25 @@
 
 // ====
 
+// Dead poison computations are valid until their value reaches an observation
+// boundary.
+func.def @dead_poison_not_observed(%x: i32) {
+  %p = scalar.poison : i32
+  %dead = scalar.addi %p, %x : i32
+  func.return
+}
+
+// ====
+
+// Function returns observe poison escaping ordinary SSA propagation.
+func.def @return_poison() -> (i32) {
+  %p = scalar.poison : i32
+  // ERROR@+1: TYPE/012 "poison" "function return" "func.return"
+  func.return %p : i32
+}
+
+// ====
+
 // Integer constants require integer literal payloads.
 func.def @integer_constant_value_kind() -> (i32) {
   // ERROR@+1: TYPE/005 "value"

@@ -61,6 +61,11 @@ typedef iree_status_t (*loom_materialize_constant_fn_t)(
     loom_builder_t* builder, loom_value_facts_t facts, loom_type_t result_type,
     loom_location_id_t location, loom_value_id_t* out_value_id);
 
+// Callback to materialize a typed replacement value into IR.
+typedef iree_status_t (*loom_materialize_value_fn_t)(
+    loom_builder_t* builder, loom_type_t result_type,
+    loom_location_id_t location, loom_value_id_t* out_value_id);
+
 struct loom_rewriter_t {
   // Builder for creating new ops. The rewriter installs a finalize
   // callback that adds newly created ops to the worklist.
@@ -176,6 +181,12 @@ loom_op_t* loom_rewriter_pop(loom_rewriter_t* rewriter);
 iree_status_t loom_rewriter_replace_all_uses_and_erase(
     loom_rewriter_t* rewriter, loom_op_t* op,
     const loom_value_id_t* replacements, uint16_t count);
+
+// Materializes one replacement value per result using |materialize_value|,
+// preserves existing result names, replaces all uses, and erases |op|.
+iree_status_t loom_rewriter_replace_results_with_materialized_values_and_erase(
+    loom_rewriter_t* rewriter, loom_op_t* op,
+    loom_materialize_value_fn_t materialize_value);
 
 // Erases an op that has no remaining uses.
 iree_status_t loom_rewriter_erase(loom_rewriter_t* rewriter, loom_op_t* op);

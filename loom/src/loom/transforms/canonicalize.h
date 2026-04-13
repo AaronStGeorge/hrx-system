@@ -13,7 +13,8 @@
 extern "C" {
 #endif
 
-extern const loom_pass_info_t loom_canonicalize_pass_info;
+// Returns immutable metadata for the canonicalize pass.
+const loom_pass_info_t* loom_canonicalize_pass_info(void);
 
 // Canonicalize pass.
 //

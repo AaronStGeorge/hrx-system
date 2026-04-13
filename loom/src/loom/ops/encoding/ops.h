@@ -26,7 +26,7 @@ enum {
 };
 
 // LOOM_OP_ENCODING_LAYOUT_DENSE: Construct a dense row-major address layout. The consuming view type provides the rank and logical extents.
-// %layout = encoding.layout.dense : encoding
+// %layout = encoding.layout.dense : encoding<layout>
 LOOM_DEFINE_ISA(loom_encoding_layout_dense_isa, LOOM_OP_ENCODING_LAYOUT_DENSE)
 LOOM_DEFINE_RESULT(loom_encoding_layout_dense_result, 0)
 iree_status_t loom_encoding_layout_dense_build(
@@ -34,10 +34,9 @@ iree_status_t loom_encoding_layout_dense_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_encoding_layout_dense_vtable;
 
 // LOOM_OP_ENCODING_LAYOUT_STRIDED: Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list.
-// %layout = encoding.layout.strided [%row_stride, 1] : encoding
+// %layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>
 LOOM_DEFINE_ISA(loom_encoding_layout_strided_isa, LOOM_OP_ENCODING_LAYOUT_STRIDED)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_encoding_layout_strided_strides, 0)
 LOOM_DEFINE_RESULT(loom_encoding_layout_strided_result, 0)
@@ -51,13 +50,12 @@ iree_status_t loom_encoding_layout_strided_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_encoding_layout_strided_vtable;
 iree_status_t loom_encoding_layout_strided_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_ENCODING_DEFINE: Create an encoding value from a static encoding specification.
-// %enc = encoding.define #q8_0<block=32> : encoding
+// %enc = encoding.define #q8_0<block=32> : encoding<schema>
 LOOM_DEFINE_ISA(loom_encoding_define_isa, LOOM_OP_ENCODING_DEFINE)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_encoding_define_params, 0)
 LOOM_DEFINE_RESULT(loom_encoding_define_result, 0)
@@ -71,7 +69,6 @@ iree_status_t loom_encoding_define_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_encoding_define_vtable;
 iree_status_t loom_encoding_define_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -89,7 +86,6 @@ iree_status_t loom_encoding_isa_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-extern const loom_op_vtable_t loom_encoding_isa_vtable;
 
 // Returns the vtable array for the encoding dialect.
 const loom_op_vtable_t* const* loom_encoding_dialect_vtables(
