@@ -6,10 +6,10 @@
 
 """Index dialect definitions.
 
-The index dialect owns logical coordinate arithmetic and explicit conversion at
-the boundary between coordinates, physical byte offsets, and integer payloads.
-It intentionally keeps a small op surface so that agents can author address
-math without falling back to scalar integer syntax.
+The index dialect owns scalar address-domain values: logical coordinates
+(`index`), physical byte offsets (`offset`), and explicit conversion to or from
+fixed-width integer payloads. It intentionally keeps a small op surface so that
+agents can author address math without falling back to scalar integer syntax.
 """
 
 from loom.assembly import (
@@ -42,18 +42,18 @@ from loom.dsl import (
 
 __all__ = [
     "index_ops",
-    "IndexCmpPredicate",
+    "IndexPredicate",
     "ALL_INDEX_OPS",
 ]
 
 index_ops = Dialect(
     "index",
     dialect_id=0x0F,
-    doc=("Logical coordinate arithmetic and explicit casts between index, offset, and fixed-width integer payload values."),
+    doc=("Scalar address-domain operations over index, offset, and explicit integer boundary casts."),
 )
 
-IndexCmpPredicate = EnumDef(
-    "IndexCmpPredicate",
+IndexPredicate = EnumDef(
+    "IndexPredicate",
     [
         EnumCase("eq", 0, doc="Equal."),
         EnumCase("ne", 1, doc="Not equal."),
@@ -66,7 +66,7 @@ IndexCmpPredicate = EnumDef(
         EnumCase("ugt", 8, doc="Unsigned greater than."),
         EnumCase("uge", 9, doc="Unsigned greater or equal."),
     ],
-    doc="Index comparison predicates.",
+    doc="Address-domain comparison predicates.",
 )
 
 # ============================================================================
@@ -109,33 +109,39 @@ index_cast = cast_op(
 )
 
 # ============================================================================
-# Logical coordinate arithmetic
+# Address-domain arithmetic
 # ============================================================================
 
 index_add = binary_op(
     "index.add",
     group=index_ops,
-    type_constraint=INDEX,
-    doc="Logical coordinate addition.",
+    type_constraint=ADDRESS,
+    doc="Address-domain addition. Operands and result must all be index or all offset.",
     commutative=True,
     fold="loom_index_add_fold",
-    examples=["%r = index.add %lhs, %rhs : index"],
+    examples=[
+        "%r = index.add %lhs, %rhs : index",
+        "%bytes = index.add %base, %delta : offset",
+    ],
 )
 
 index_sub = binary_op(
     "index.sub",
     group=index_ops,
-    type_constraint=INDEX,
-    doc="Logical coordinate subtraction.",
+    type_constraint=ADDRESS,
+    doc="Address-domain subtraction. Operands and result must all be index or all offset.",
     fold="loom_index_sub_fold",
-    examples=["%r = index.sub %lhs, %rhs : index"],
+    examples=[
+        "%r = index.sub %lhs, %rhs : index",
+        "%delta = index.sub %end, %base : offset",
+    ],
 )
 
 index_mul = binary_op(
     "index.mul",
     group=index_ops,
     type_constraint=INDEX,
-    doc="Logical coordinate multiplication.",
+    doc="Logical coordinate multiplication. Offsets are physical byte counts and cannot be multiplied with this op.",
     commutative=True,
     fold="loom_index_mul_fold",
     examples=["%r = index.mul %lhs, %rhs : index"],
@@ -144,7 +150,7 @@ index_mul = binary_op(
 index_madd = Op(
     "index.madd",
     group=index_ops,
-    doc="Logical coordinate multiply-add: a*b + c.",
+    doc="Logical coordinate multiply-add: a*b + c. Offsets are physical byte counts and cannot be multiplied with this op.",
     operands=[
         Operand("a", INDEX),
         Operand("b", INDEX),
@@ -170,26 +176,29 @@ index_madd = Op(
 # Predicates and selection
 # ============================================================================
 
-index_cmpi = comparison_op(
-    "index.cmpi",
+index_cmp = comparison_op(
+    "index.cmp",
     group=index_ops,
-    type_constraint=INDEX,
-    predicates=IndexCmpPredicate,
-    doc="Logical coordinate comparison.",
-    fold="loom_index_cmpi_fold",
-    examples=["%p = index.cmpi slt, %i, %n : index"],
+    type_constraint=ADDRESS,
+    predicates=IndexPredicate,
+    doc="Address-domain comparison. Operands must both be index or both be offset.",
+    fold="loom_index_cmp_fold",
+    examples=[
+        "%p = index.cmp slt, %i, %n : index",
+        "%inside = index.cmp ule, %byte_offset, %limit : offset",
+    ],
 )
 
 index_select = Op(
     "index.select",
     group=index_ops,
-    doc="Select between two logical coordinates using an i1 condition.",
+    doc="Select between two same-typed address-domain values using an i1 condition.",
     operands=[
         Operand("condition", I1),
-        Operand("true_value", INDEX),
-        Operand("false_value", INDEX),
+        Operand("true_value", ADDRESS),
+        Operand("false_value", ADDRESS),
     ],
-    results=[Result("result", INDEX)],
+    results=[Result("result", ADDRESS)],
     constraints=[SameType("true_value", "false_value", "result")],
     traits=[PURE],
     format=[
@@ -202,7 +211,10 @@ index_select = Op(
         ResultType("result"),
     ],
     fold="loom_index_select_fold",
-    examples=["%r = index.select %cond, %t, %f : index"],
+    examples=[
+        "%r = index.select %cond, %t, %f : index",
+        "%bytes = index.select %cond, %base, %limit : offset",
+    ],
 )
 
 # ============================================================================
@@ -216,6 +228,6 @@ ALL_INDEX_OPS: tuple[Op, ...] = (
     index_sub,
     index_mul,
     index_madd,
-    index_cmpi,
+    index_cmp,
     index_select,
 )

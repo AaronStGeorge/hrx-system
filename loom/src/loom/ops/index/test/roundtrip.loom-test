@@ -7,7 +7,7 @@ func.def @index_arithmetic(%i: index, %j: index, %cond: i1) -> (index, i1, i64) 
   %add = index.add %i, %c4 : index
   %mul = index.mul %add, %j : index
   %madd = index.madd %i, %c4, %mul : index
-  %cmp = index.cmpi slt, %madd, %j : index
+  %cmp = index.cmp slt, %madd, %j : index
   %sel = index.select %cond, %madd, %j : index
   %payload = index.cast %sel : index to i64
   func.return %sel, %cmp, %payload : index, i1, i64
@@ -21,4 +21,14 @@ func.def @address_boundary(%raw: i64, %i: index, %byte_offset: offset) -> (index
   %bytes = index.cast %raw : i64 to offset
   %payload = index.cast %byte_offset : offset to i64
   func.return %from_raw, %bytes, %payload : index, offset, i64
+}
+
+// ====
+
+func.def @offset_address_ops(%base: offset, %delta: offset, %limit: offset, %cond: i1) -> (offset, i1) {
+  %sum = index.add %base, %delta : offset
+  %back = index.sub %sum, %delta : offset
+  %inside = index.cmp ule, %back, %limit : offset
+  %selected = index.select %cond, %back, %limit : offset
+  func.return %selected, %inside : offset, i1
 }

@@ -42,9 +42,9 @@ void loom_index_madd_fold(const loom_module_t* module, const loom_op_t* op,
                         &result_facts[0]);
 }
 
-void loom_index_cmpi_fold(const loom_module_t* module, const loom_op_t* op,
-                          const loom_value_facts_t* operand_facts,
-                          loom_value_facts_t* result_facts) {
+void loom_index_cmp_fold(const loom_module_t* module, const loom_op_t* op,
+                         const loom_value_facts_t* operand_facts,
+                         loom_value_facts_t* result_facts) {
   result_facts[0] = loom_value_facts_make(0, 1, 1);
 }
 

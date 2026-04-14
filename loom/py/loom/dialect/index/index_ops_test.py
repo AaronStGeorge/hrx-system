@@ -8,7 +8,7 @@
 
 from loom.dialect.index import (
     ALL_INDEX_OPS,
-    IndexCmpPredicate,
+    IndexPredicate,
     index_ops,
 )
 from loom.dsl import ADDRESS, I1, INDEX, SCALAR, Op
@@ -30,7 +30,7 @@ class TestIndexDialect:
             "index.sub",
             "index.mul",
             "index.madd",
-            "index.cmpi",
+            "index.cmp",
             "index.select",
         ]
 
@@ -44,8 +44,15 @@ class TestIndexDialect:
         assert op.results[0].type_constraint == SCALAR
         assert op.verify == "loom_index_cast_verify"
 
-    def test_coordinate_arithmetic_is_index_typed(self) -> None:
-        for name in ("index.add", "index.sub", "index.mul"):
+    def test_address_arithmetic_is_address_typed(self) -> None:
+        for name in ("index.add", "index.sub"):
+            op = _ops()[name]
+            assert op.operands[0].type_constraint == ADDRESS
+            assert op.operands[1].type_constraint == ADDRESS
+            assert op.results[0].type_constraint == ADDRESS
+
+    def test_multiply_arithmetic_is_index_typed(self) -> None:
+        for name in ("index.mul",):
             op = _ops()[name]
             assert op.operands[0].type_constraint == INDEX
             assert op.operands[1].type_constraint == INDEX
@@ -60,12 +67,12 @@ class TestIndexDialect:
         ]
         assert op.results[0].type_constraint == INDEX
 
-    def test_cmpi_uses_index_predicates(self) -> None:
-        op = _ops()["index.cmpi"]
-        assert op.operands[0].type_constraint == INDEX
-        assert op.operands[1].type_constraint == INDEX
+    def test_cmp_uses_index_predicates(self) -> None:
+        op = _ops()["index.cmp"]
+        assert op.operands[0].type_constraint == ADDRESS
+        assert op.operands[1].type_constraint == ADDRESS
         assert op.results[0].type_constraint == I1
-        assert [case.keyword for case in IndexCmpPredicate.cases] == [
+        assert [case.keyword for case in IndexPredicate.cases] == [
             "eq",
             "ne",
             "slt",
@@ -78,9 +85,9 @@ class TestIndexDialect:
             "uge",
         ]
 
-    def test_select_is_index_typed(self) -> None:
+    def test_select_is_address_typed(self) -> None:
         op = _ops()["index.select"]
         assert op.operands[0].type_constraint == I1
-        assert op.operands[1].type_constraint == INDEX
-        assert op.operands[2].type_constraint == INDEX
-        assert op.results[0].type_constraint == INDEX
+        assert op.operands[1].type_constraint == ADDRESS
+        assert op.operands[2].type_constraint == ADDRESS
+        assert op.results[0].type_constraint == ADDRESS

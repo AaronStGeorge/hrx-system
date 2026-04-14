@@ -48,3 +48,24 @@ func.def @add_rejects_integer_payload(%x: i64, %y: index) -> (index) {
   %r = index.add %x, %y : index
   func.return %r : index
 }
+
+// ====
+
+func.def @mul_rejects_offset(%x: offset, %y: offset) -> (offset) {
+  // ERROR@+3: TYPE/003 "operand 0"
+  // ERROR@+2: TYPE/003 "operand 1"
+  // ERROR@+1: TYPE/004 "result 0"
+  %r = index.mul %x, %y : offset
+  func.return %r : offset
+}
+
+// ====
+
+func.def @madd_rejects_offset(%x: offset, %y: offset, %z: offset) -> (offset) {
+  // ERROR@+4: TYPE/003 "operand 0"
+  // ERROR@+3: TYPE/003 "operand 1"
+  // ERROR@+2: TYPE/003 "operand 2"
+  // ERROR@+1: TYPE/004 "result 0"
+  %r = index.madd %x, %y, %z : offset
+  func.return %r : offset
+}

@@ -8,12 +8,12 @@
 
 from loom.dialect.index.defs import (
     ALL_INDEX_OPS,
-    IndexCmpPredicate,
+    IndexPredicate,
     index_ops,
 )
 
 __all__ = [
     "index_ops",
-    "IndexCmpPredicate",
+    "IndexPredicate",
     "ALL_INDEX_OPS",
 ]

@@ -44,7 +44,7 @@ class IndexBuilders:
         return cast(ValueRef, self._b.build("index.cast", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def add(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Logical coordinate addition.
+        """Address-domain addition. Operands and result must all be index or all offset.
 
         Example::
             %r = index.add %lhs, %rhs : index
@@ -57,7 +57,7 @@ class IndexBuilders:
         return cast(ValueRef, self._b.build("index.add", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def sub(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Logical coordinate subtraction.
+        """Address-domain subtraction. Operands and result must all be index or all offset.
 
         Example::
             %r = index.sub %lhs, %rhs : index
@@ -70,7 +70,7 @@ class IndexBuilders:
         return cast(ValueRef, self._b.build("index.sub", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def mul(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Logical coordinate multiplication.
+        """Logical coordinate multiplication. Offsets are physical byte counts and cannot be multiplied with this op.
 
         Example::
             %r = index.mul %lhs, %rhs : index
@@ -83,7 +83,7 @@ class IndexBuilders:
         return cast(ValueRef, self._b.build("index.mul", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def madd(self, *, a: ValueRef, b: ValueRef, c: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Logical coordinate multiply-add: a*b + c.
+        """Logical coordinate multiply-add: a*b + c. Offsets are physical byte counts and cannot be multiplied with this op.
 
         Example::
             %r = index.madd %a, %b, %c : index
@@ -96,11 +96,11 @@ class IndexBuilders:
         _operands.append(c)
         return cast(ValueRef, self._b.build("index.madd", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
-    def cmpi(self, *, predicate: str, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Logical coordinate comparison.
+    def cmp(self, *, predicate: str, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Address-domain comparison. Operands must both be index or both be offset.
 
         Example::
-            %p = index.cmpi slt, %i, %n : index
+            %p = index.cmp slt, %i, %n : index
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -108,10 +108,10 @@ class IndexBuilders:
         _attributes["predicate"] = predicate
         _operands.append(lhs)
         _operands.append(rhs)
-        return cast(ValueRef, self._b.build("index.cmpi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+        return cast(ValueRef, self._b.build("index.cmp", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def select(self, *, condition: ValueRef, true_value: ValueRef, false_value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Select between two logical coordinates using an i1 condition.
+        """Select between two same-typed address-domain values using an i1 condition.
 
         Example::
             %r = index.select %cond, %t, %f : index

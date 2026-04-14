@@ -24,25 +24,25 @@ enum {
   LOOM_OP_INDEX_SUB = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 3),
   LOOM_OP_INDEX_MUL = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 4),
   LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 5),
-  LOOM_OP_INDEX_CMPI = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
+  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
   LOOM_OP_INDEX_SELECT = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
   LOOM_OP_INDEX_COUNT_ = 8,
 };
 
-// Index comparison predicates.
-typedef enum loom_index_cmpi_predicate_e {
-  LOOM_INDEX_CMPI_PREDICATE_EQ = 0,
-  LOOM_INDEX_CMPI_PREDICATE_NE = 1,
-  LOOM_INDEX_CMPI_PREDICATE_SLT = 2,
-  LOOM_INDEX_CMPI_PREDICATE_SLE = 3,
-  LOOM_INDEX_CMPI_PREDICATE_SGT = 4,
-  LOOM_INDEX_CMPI_PREDICATE_SGE = 5,
-  LOOM_INDEX_CMPI_PREDICATE_ULT = 6,
-  LOOM_INDEX_CMPI_PREDICATE_ULE = 7,
-  LOOM_INDEX_CMPI_PREDICATE_UGT = 8,
-  LOOM_INDEX_CMPI_PREDICATE_UGE = 9,
-  LOOM_INDEX_CMPI_PREDICATE_COUNT_ = 10,
-} loom_index_cmpi_predicate_t;
+// Address-domain comparison predicates.
+typedef enum loom_index_cmp_predicate_e {
+  LOOM_INDEX_CMP_PREDICATE_EQ = 0,
+  LOOM_INDEX_CMP_PREDICATE_NE = 1,
+  LOOM_INDEX_CMP_PREDICATE_SLT = 2,
+  LOOM_INDEX_CMP_PREDICATE_SLE = 3,
+  LOOM_INDEX_CMP_PREDICATE_SGT = 4,
+  LOOM_INDEX_CMP_PREDICATE_SGE = 5,
+  LOOM_INDEX_CMP_PREDICATE_ULT = 6,
+  LOOM_INDEX_CMP_PREDICATE_ULE = 7,
+  LOOM_INDEX_CMP_PREDICATE_UGT = 8,
+  LOOM_INDEX_CMP_PREDICATE_UGE = 9,
+  LOOM_INDEX_CMP_PREDICATE_COUNT_ = 10,
+} loom_index_cmp_predicate_t;
 
 // LOOM_OP_INDEX_CONSTANT: Materialize a compile-time address-domain constant. The result type must be index for logical coordinates or offset for physical byte counts; fixed-width integer payload constants remain scalar.constant.
 // %c0 = index.constant 0 : index
@@ -80,7 +80,7 @@ iree_status_t loom_index_cast_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_INDEX_ADD: Logical coordinate addition.
+// LOOM_OP_INDEX_ADD: Address-domain addition. Operands and result must all be index or all offset.
 // %r = index.add %lhs, %rhs : index
 LOOM_DEFINE_ISA(loom_index_add_isa, LOOM_OP_INDEX_ADD)
 LOOM_DEFINE_OPERAND(loom_index_add_lhs, 0)
@@ -95,7 +95,7 @@ void loom_index_add_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_INDEX_SUB: Logical coordinate subtraction.
+// LOOM_OP_INDEX_SUB: Address-domain subtraction. Operands and result must all be index or all offset.
 // %r = index.sub %lhs, %rhs : index
 LOOM_DEFINE_ISA(loom_index_sub_isa, LOOM_OP_INDEX_SUB)
 LOOM_DEFINE_OPERAND(loom_index_sub_lhs, 0)
@@ -110,7 +110,7 @@ void loom_index_sub_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_INDEX_MUL: Logical coordinate multiplication.
+// LOOM_OP_INDEX_MUL: Logical coordinate multiplication. Offsets are physical byte counts and cannot be multiplied with this op.
 // %r = index.mul %lhs, %rhs : index
 LOOM_DEFINE_ISA(loom_index_mul_isa, LOOM_OP_INDEX_MUL)
 LOOM_DEFINE_OPERAND(loom_index_mul_lhs, 0)
@@ -125,7 +125,7 @@ void loom_index_mul_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_INDEX_MADD: Logical coordinate multiply-add: a*b + c.
+// LOOM_OP_INDEX_MADD: Logical coordinate multiply-add: a*b + c. Offsets are physical byte counts and cannot be multiplied with this op.
 // %r = index.madd %a, %b, %c : index
 LOOM_DEFINE_ISA(loom_index_madd_isa, LOOM_OP_INDEX_MADD)
 LOOM_DEFINE_OPERAND(loom_index_madd_a, 0)
@@ -145,24 +145,24 @@ void loom_index_madd_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_INDEX_CMPI: Logical coordinate comparison.
-// %p = index.cmpi slt, %i, %n : index
-LOOM_DEFINE_ISA(loom_index_cmpi_isa, LOOM_OP_INDEX_CMPI)
-LOOM_DEFINE_OPERAND(loom_index_cmpi_lhs, 0)
-LOOM_DEFINE_OPERAND(loom_index_cmpi_rhs, 1)
-LOOM_DEFINE_RESULT(loom_index_cmpi_result, 0)
-LOOM_DEFINE_ATTR_ENUM(loom_index_cmpi_predicate, 0)
-iree_status_t loom_index_cmpi_build(
+// LOOM_OP_INDEX_CMP: Address-domain comparison. Operands must both be index or both be offset.
+// %p = index.cmp slt, %i, %n : index
+LOOM_DEFINE_ISA(loom_index_cmp_isa, LOOM_OP_INDEX_CMP)
+LOOM_DEFINE_OPERAND(loom_index_cmp_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_cmp_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_cmp_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_index_cmp_predicate, 0)
+iree_status_t loom_index_cmp_build(
     loom_builder_t* builder, uint8_t predicate,
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-void loom_index_cmpi_fold(
+void loom_index_cmp_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_INDEX_SELECT: Select between two logical coordinates using an i1 condition.
+// LOOM_OP_INDEX_SELECT: Select between two same-typed address-domain values using an i1 condition.
 // %r = index.select %cond, %t, %f : index
 LOOM_DEFINE_ISA(loom_index_select_isa, LOOM_OP_INDEX_SELECT)
 LOOM_DEFINE_OPERAND(loom_index_select_condition, 0)
