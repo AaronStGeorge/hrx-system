@@ -84,7 +84,8 @@ TEST_F(ModuleTest, BodyBlock) {
   loom_block_t* block = loom_module_block(module);
   ASSERT_NE(block, nullptr);
   EXPECT_EQ(block->op_count, 0);
-  EXPECT_GT(block->op_capacity, 0);
+  EXPECT_EQ(block->first_op, nullptr);
+  EXPECT_EQ(block->last_op, nullptr);
   loom_module_free(module);
 }
 
@@ -123,7 +124,8 @@ TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   EXPECT_EQ(appended->label_id, LOOM_STRING_ID_INVALID);
   EXPECT_EQ(appended->arg_count, 0u);
   EXPECT_EQ(appended->op_count, 0u);
-  EXPECT_GT(appended->op_capacity, 0u);
+  EXPECT_EQ(appended->first_op, nullptr);
+  EXPECT_EQ(appended->last_op, nullptr);
 
   loom_block_t* entry = loom_region_entry_block(body);
   EXPECT_EQ(loom_value_def_block(&module->values.entries[arg_id]), entry);
@@ -1088,7 +1090,9 @@ TEST_F(ModuleTest, BlockAppendOp) {
 
   IREE_ASSERT_OK(loom_block_append_op(module, block, op));
   EXPECT_EQ(block->op_count, 1);
-  EXPECT_EQ(block->ops[0], op);
+  EXPECT_EQ(block->first_op, op);
+  EXPECT_EQ(block->last_op, op);
+  EXPECT_EQ(op->parent_block, block);
   loom_module_free(module);
 }
 
@@ -1108,9 +1112,17 @@ TEST_F(ModuleTest, BlockAppendOrdering) {
   }
 
   EXPECT_EQ(block->op_count, 3);
-  EXPECT_EQ(block->ops[0], ops[0]);
-  EXPECT_EQ(block->ops[1], ops[1]);
-  EXPECT_EQ(block->ops[2], ops[2]);
+  EXPECT_EQ(loom_block_op(block, 0), ops[0]);
+  EXPECT_EQ(loom_block_op(block, 1), ops[1]);
+  EXPECT_EQ(loom_block_op(block, 2), ops[2]);
+  EXPECT_EQ(block->first_op, ops[0]);
+  EXPECT_EQ(block->last_op, ops[2]);
+  EXPECT_EQ(ops[0]->next_op, ops[1]);
+  EXPECT_EQ(ops[1]->prev_op, ops[0]);
+  EXPECT_EQ(ops[1]->next_op, ops[2]);
+  EXPECT_EQ(ops[2]->prev_op, ops[1]);
+  EXPECT_LT(ops[0]->block_ordinal, ops[1]->block_ordinal);
+  EXPECT_LT(ops[1]->block_ordinal, ops[2]->block_ordinal);
   loom_module_free(module);
 }
 
@@ -1133,8 +1145,13 @@ TEST_F(ModuleTest, BlockInsertAtBeginning) {
   IREE_ASSERT_OK(loom_block_insert_op(module, block, 0, op_b));
 
   EXPECT_EQ(block->op_count, 2);
-  EXPECT_EQ(block->ops[0], op_b);
-  EXPECT_EQ(block->ops[1], op_a);
+  EXPECT_EQ(loom_block_op(block, 0), op_b);
+  EXPECT_EQ(loom_block_op(block, 1), op_a);
+  EXPECT_EQ(block->first_op, op_b);
+  EXPECT_EQ(block->last_op, op_a);
+  EXPECT_EQ(op_b->next_op, op_a);
+  EXPECT_EQ(op_a->prev_op, op_b);
+  EXPECT_LT(op_b->block_ordinal, op_a->block_ordinal);
   loom_module_free(module);
 }
 
@@ -1161,19 +1178,18 @@ TEST_F(ModuleTest, BlockFindOp) {
 
   // Not-found case.
   loom_op_t dummy = {0};
-  EXPECT_EQ(loom_block_find_op(block, &dummy), UINT16_MAX);
+  EXPECT_EQ(loom_block_find_op(block, &dummy), IREE_HOST_SIZE_MAX);
   loom_module_free(module);
 }
 
-TEST_F(ModuleTest, BlockGrowth) {
+TEST_F(ModuleTest, BlockAppendSupportsMoreThanUint16Ops) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
                                       NULL, iree_allocator_system(), &module));
   loom_block_t* block = loom_module_block(module);
-  uint16_t initial_capacity = block->op_capacity;
 
-  // Append enough ops to trigger growth.
-  for (int i = 0; i < initial_capacity + 10; ++i) {
+  constexpr uint32_t kOpCount = 70000;
+  for (uint32_t i = 0; i < kOpCount; ++i) {
     loom_op_t* op = NULL;
     IREE_ASSERT_OK(
         iree_arena_allocate(&module->arena, sizeof(loom_op_t), (void**)&op));
@@ -1182,13 +1198,17 @@ TEST_F(ModuleTest, BlockGrowth) {
     IREE_ASSERT_OK(loom_block_append_op(module, block, op));
   }
 
-  EXPECT_GT(block->op_capacity, initial_capacity);
-  EXPECT_EQ(block->op_count, initial_capacity + 10);
+  EXPECT_EQ(block->op_count, kOpCount);
 
-  // Verify ordering survived growth.
-  for (int i = 0; i < initial_capacity + 10; ++i) {
-    EXPECT_EQ(block->ops[i]->kind, (loom_op_kind_t)i);
+  uint32_t expected_kind = 0;
+  loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    EXPECT_EQ(op->kind, (loom_op_kind_t)expected_kind++);
+    if (op->next_op) {
+      EXPECT_LT(op->block_ordinal, op->next_op->block_ordinal);
+    }
   }
+  EXPECT_EQ(expected_kind, kOpCount);
   loom_module_free(module);
 }
 

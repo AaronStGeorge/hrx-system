@@ -301,27 +301,11 @@ static void loom_type_use_table_reset(loom_type_use_table_t* table) {
   table->first_free_use_id = LOOM_TYPE_USE_ID_INVALID;
 }
 
-static iree_status_t loom_block_ops_ensure_capacity(
-    iree_arena_allocator_t* arena, loom_block_t* block) {
-  if (block->op_count < block->op_capacity) return iree_ok_status();
-  iree_host_size_t capacity = block->op_capacity;
-  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-      arena, block->op_count, /*minimum_capacity=*/16, sizeof(loom_op_t*),
-      &capacity, (void**)&block->ops));
-  block->op_capacity = (uint16_t)capacity;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_module_initialize_block(loom_module_t* module,
                                                   loom_block_t* block) {
+  (void)module;
   memset(block, 0, sizeof(*block));
   block->label_id = LOOM_STRING_ID_INVALID;
-  block->op_capacity = 16;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(&module->arena, block->op_capacity,
-                                sizeof(loom_op_t*), (void**)&block->ops));
-  memset(block->ops, 0,
-         (iree_host_size_t)block->op_capacity * sizeof(loom_op_t*));
   return iree_ok_status();
 }
 
@@ -2176,37 +2160,172 @@ iree_status_t loom_block_add_arg(loom_module_t* module, loom_block_t* block,
 // Block op insertion
 //===----------------------------------------------------------------------===//
 
+#define LOOM_BLOCK_ORDINAL_STRIDE UINT64_C(0x100000000)
+
+static iree_status_t loom_block_renumber_ordinals(loom_block_t* block) {
+  uint64_t ordinal = LOOM_BLOCK_ORDINAL_STRIDE;
+  loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    op->block_ordinal = ordinal;
+    if (op->next_op && UINT64_MAX - ordinal < LOOM_BLOCK_ORDINAL_STRIDE) {
+      return iree_make_status(
+          IREE_STATUS_RESOURCE_EXHAUSTED,
+          "block has too many operations to assign sparse ordinals");
+    }
+    ordinal += LOOM_BLOCK_ORDINAL_STRIDE;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_block_append_ordinal(loom_block_t* block,
+                                               uint64_t* out_ordinal) {
+  if (!block->last_op) {
+    *out_ordinal = LOOM_BLOCK_ORDINAL_STRIDE;
+    return iree_ok_status();
+  }
+  if (UINT64_MAX - block->last_op->block_ordinal > LOOM_BLOCK_ORDINAL_STRIDE) {
+    *out_ordinal = block->last_op->block_ordinal + LOOM_BLOCK_ORDINAL_STRIDE;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_block_renumber_ordinals(block));
+  if (UINT64_MAX - block->last_op->block_ordinal <= LOOM_BLOCK_ORDINAL_STRIDE) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "block has too many operations to append another ordinal");
+  }
+  *out_ordinal = block->last_op->block_ordinal + LOOM_BLOCK_ORDINAL_STRIDE;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_block_insert_ordinal(loom_block_t* block,
+                                               loom_op_t* prev_op,
+                                               loom_op_t* next_op,
+                                               uint64_t* out_ordinal) {
+  if (!next_op) return loom_block_append_ordinal(block, out_ordinal);
+
+  uint64_t lower = prev_op ? prev_op->block_ordinal : 0;
+  uint64_t upper = next_op->block_ordinal;
+  if (lower + 1 < upper) {
+    *out_ordinal = prev_op ? lower + 1 : lower + (upper - lower) / 2;
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_block_renumber_ordinals(block));
+  lower = prev_op ? prev_op->block_ordinal : 0;
+  upper = next_op->block_ordinal;
+  if (lower + 1 >= upper) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "block has too many operations to assign an insertion ordinal");
+  }
+  *out_ordinal = prev_op ? lower + 1 : lower + (upper - lower) / 2;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_block_link_op_between(loom_module_t* module,
+                                                loom_block_t* block,
+                                                loom_op_t* prev_op,
+                                                loom_op_t* next_op,
+                                                loom_op_t* op) {
+  (void)module;
+  if (block->op_count == UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "block op count exceeds UINT32_MAX");
+  }
+  if (op->parent_block && op->parent_block != block) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "cannot insert op already owned by a different block");
+  }
+  if (op->prev_op || op->next_op || block->first_op == op ||
+      block->last_op == op) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "cannot insert op already linked into a block");
+  }
+
+  uint64_t ordinal = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_block_insert_ordinal(block, prev_op, next_op, &ordinal));
+
+  op->parent_block = block;
+  op->block_ordinal = ordinal;
+  op->prev_op = prev_op;
+  op->next_op = next_op;
+
+  if (prev_op) {
+    prev_op->next_op = op;
+  } else {
+    block->first_op = op;
+  }
+  if (next_op) {
+    next_op->prev_op = op;
+  } else {
+    block->last_op = op;
+  }
+  ++block->op_count;
+  return iree_ok_status();
+}
+
 iree_status_t loom_block_append_op(loom_module_t* module, loom_block_t* block,
                                    loom_op_t* op) {
-  if (block->op_count >= UINT16_MAX) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "block op count exceeds UINT16_MAX");
+  return loom_block_link_op_between(module, block, block->last_op, NULL, op);
+}
+
+iree_status_t loom_block_insert_before_op(loom_module_t* module,
+                                          loom_block_t* block,
+                                          loom_op_t* before_op, loom_op_t* op) {
+  if (!before_op) return loom_block_append_op(module, block, op);
+  if (before_op->parent_block != block ||
+      iree_any_bit_set(before_op->flags, LOOM_OP_FLAG_DEAD)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "cannot insert before op that is not live in the target block");
   }
-  IREE_RETURN_IF_ERROR(loom_block_ops_ensure_capacity(&module->arena, block));
-  block->ops[block->op_count++] = op;
-  return iree_ok_status();
+  return loom_block_link_op_between(module, block, before_op->prev_op,
+                                    before_op, op);
 }
 
 iree_status_t loom_block_insert_op(loom_module_t* module, loom_block_t* block,
-                                   uint16_t index, loom_op_t* op) {
+                                   iree_host_size_t index, loom_op_t* op) {
   if (index >= block->op_count) {
     return loom_block_append_op(module, block, op);
   }
-  if (block->op_count >= UINT16_MAX) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "block op count exceeds UINT16_MAX");
+  loom_op_t* before_op = block->first_op;
+  for (iree_host_size_t i = 0; i < index; ++i) {
+    before_op = before_op->next_op;
   }
-  IREE_RETURN_IF_ERROR(loom_block_ops_ensure_capacity(&module->arena, block));
-  memmove(&block->ops[index + 1], &block->ops[index],
-          (iree_host_size_t)(block->op_count - index) * sizeof(loom_op_t*));
-  block->ops[index] = op;
-  block->op_count++;
-  return iree_ok_status();
+  return loom_block_insert_before_op(module, block, before_op, op);
 }
 
-uint16_t loom_block_find_op(const loom_block_t* block, const loom_op_t* op) {
-  for (uint16_t i = 0; i < block->op_count; ++i) {
-    if (block->ops[i] == op) return i;
+void loom_block_unlink_op(loom_op_t* op) {
+  loom_block_t* block = op->parent_block;
+  if (!block || iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) return;
+
+  if (op->prev_op) {
+    op->prev_op->next_op = op->next_op;
+  } else if (block->first_op == op) {
+    block->first_op = op->next_op;
   }
-  return UINT16_MAX;
+
+  if (op->next_op) {
+    op->next_op->prev_op = op->prev_op;
+  } else if (block->last_op == op) {
+    block->last_op = op->prev_op;
+  }
+
+  op->prev_op = NULL;
+  op->next_op = NULL;
+  op->block_ordinal = 0;
+  if (block->op_count > 0) --block->op_count;
+}
+
+iree_host_size_t loom_block_find_op(const loom_block_t* block,
+                                    const loom_op_t* op) {
+  iree_host_size_t index = 0;
+  const loom_op_t* current = NULL;
+  loom_block_for_each_op(block, current) {
+    if (current == op) return index;
+    ++index;
+  }
+  return IREE_HOST_SIZE_MAX;
 }

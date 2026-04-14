@@ -76,11 +76,9 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
   // Self-dominance.
   if (a == b) return true;
 
-  // Same block: compare positions in the ops array.
+  // Same block: compare sparse block ordinals.
   if (a->parent_block == b->parent_block) {
-    uint16_t index_a = loom_block_find_op(a->parent_block, a);
-    uint16_t index_b = loom_block_find_op(b->parent_block, b);
-    return index_a < index_b;
+    return a->block_ordinal < b->block_ordinal;
   }
 
   // Same parent op, different blocks: entry block dominance.
@@ -132,12 +130,10 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
   // here a != b but a is b's ancestor.)
   if (a == b_at_a_depth) return true;
 
-  // Different ops at the same depth in the same block: compare positions.
+  // Different ops at the same depth in the same block: compare sparse block
+  // ordinals.
   if (a->parent_block == b_at_a_depth->parent_block) {
-    uint16_t index_a = loom_block_find_op(a->parent_block, a);
-    uint16_t index_b =
-        loom_block_find_op(b_at_a_depth->parent_block, b_at_a_depth);
-    return index_a < index_b;
+    return a->block_ordinal < b_at_a_depth->block_ordinal;
   }
 
   // Same parent op at the same depth, different blocks: entry block

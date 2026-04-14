@@ -610,9 +610,8 @@ static void loom_bytecode_value_numbering_assign_region(
       }
     }
     // Op results define values.
-    for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-      const loom_op_t* op = loom_block_const_op(block, op_index);
-      if (op->flags & LOOM_OP_FLAG_DEAD) continue;
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
       const loom_value_id_t* results = loom_op_const_results(op);
       for (uint16_t result_index = 0; result_index < op->result_count;
            ++result_index) {
@@ -790,9 +789,8 @@ static iree_status_t loom_bytecode_number_region(
     }
 
     // Operations.
-    for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-      const loom_op_t* op = loom_block_const_op(block, op_index);
-      if (op->flags & LOOM_OP_FLAG_DEAD) continue;
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
       IREE_RETURN_IF_ERROR(
           loom_bytecode_number_operation(numbering, op, depth));
     }
@@ -1279,19 +1277,10 @@ static iree_status_t loom_bytecode_write_block(
                                                        value_numbering, value));
   }
 
-  // Ops (skip dead ops, matching Python which checks is_dead).
-  uint16_t live_op_count = 0;
-  for (uint16_t i = 0; i < block->op_count; ++i) {
-    if (!iree_any_bit_set(loom_block_const_op(block, i)->flags,
-                          LOOM_OP_FLAG_DEAD)) {
-      ++live_op_count;
-    }
-  }
   IREE_RETURN_IF_ERROR(
-      loom_bytecode_page_writer_write_uvarint(writer, live_op_count));
-  for (uint16_t i = 0; i < block->op_count; ++i) {
-    const loom_op_t* op = loom_block_const_op(block, i);
-    if (op->flags & LOOM_OP_FLAG_DEAD) continue;
+      loom_bytecode_page_writer_write_uvarint(writer, block->op_count));
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
     IREE_RETURN_IF_ERROR(loom_bytecode_write_operation(
         writer, numbering, value_numbering, op, depth));
   }

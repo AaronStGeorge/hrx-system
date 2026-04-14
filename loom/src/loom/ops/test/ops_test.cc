@@ -742,14 +742,50 @@ TEST_F(BuilderTest, OpErase) {
   IREE_ASSERT_OK(loom_test_addi_build(&builder_, 1, 2, (loom_type_t){0},
                                       LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(op->flags & LOOM_OP_FLAG_DEAD, 0u);
+  loom_block_t* block = loom_module_block(module_);
+  EXPECT_EQ(block->op_count, 1u);
   IREE_ASSERT_OK(loom_op_erase(module_, op));
   EXPECT_NE(op->flags & LOOM_OP_FLAG_DEAD, 0u);
+  EXPECT_EQ(block->op_count, 0u);
+  EXPECT_EQ(block->first_op, nullptr);
+  EXPECT_EQ(block->last_op, nullptr);
+  EXPECT_EQ(op->prev_op, nullptr);
+  EXPECT_EQ(op->next_op, nullptr);
+  EXPECT_EQ(op->parent_block, block);
+}
+
+TEST_F(BuilderTest, SetBeforePreservesConsecutiveInsertionOrder) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* first = NULL;
+  loom_op_t* anchor = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32,
+                                          LOOM_LOCATION_UNKNOWN, &first));
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(4), i32,
+                                          LOOM_LOCATION_UNKNOWN, &anchor));
+
+  loom_builder_set_before(&builder_, anchor);
+  loom_op_t* inserted_a = NULL;
+  loom_op_t* inserted_b = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), i32,
+                                          LOOM_LOCATION_UNKNOWN, &inserted_a));
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(3), i32,
+                                          LOOM_LOCATION_UNKNOWN, &inserted_b));
+
+  loom_block_t* block = loom_module_block(module_);
+  ASSERT_EQ(block->op_count, 4u);
+  EXPECT_EQ(loom_block_op(block, 0), first);
+  EXPECT_EQ(loom_block_op(block, 1), inserted_a);
+  EXPECT_EQ(loom_block_op(block, 2), inserted_b);
+  EXPECT_EQ(loom_block_op(block, 3), anchor);
+  EXPECT_LT(first->block_ordinal, inserted_a->block_ordinal);
+  EXPECT_LT(inserted_a->block_ordinal, inserted_b->block_ordinal);
+  EXPECT_LT(inserted_b->block_ordinal, anchor->block_ordinal);
 }
 
 TEST_F(BuilderTest, SaveRestore) {
   loom_builder_ip_t saved = loom_builder_save(&builder_);
   EXPECT_EQ(saved.block, loom_module_block(module_));
-  EXPECT_EQ(saved.index, UINT16_MAX);
+  EXPECT_EQ(saved.before_op, nullptr);
 
   // Create a second block and switch to it.
   loom_block_t* other_block = NULL;

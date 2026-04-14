@@ -2832,13 +2832,7 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
 
 static const loom_op_t* loom_verify_block_last_live_op(
     const loom_block_t* block) {
-  for (uint16_t reverse_index = block->op_count; reverse_index > 0;
-       --reverse_index) {
-    const loom_op_t* op =
-        loom_block_const_op(block, (uint16_t)(reverse_index - 1));
-    if ((op->flags & LOOM_OP_FLAG_DEAD) == 0) return op;
-  }
-  return NULL;
+  return block->last_op;
 }
 
 static bool loom_verify_op_is_terminator(loom_verify_state_t* state,
@@ -2903,9 +2897,8 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
     for (uint16_t b = 0; b < region->block_count; ++b) {
       const loom_block_t* block = loom_region_const_block(region, b);
       const loom_op_t* terminator_op = NULL;
-      for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-        const loom_op_t* current_op = loom_block_const_op(block, op_index);
-        if (current_op->flags & LOOM_OP_FLAG_DEAD) continue;
+      const loom_op_t* current_op = NULL;
+      loom_block_for_each_op(block, current_op) {
         if (terminator_op) {
           const loom_op_vtable_t* current_vtable =
               loom_verify_lookup_vtable(state, current_op->kind);
@@ -2980,10 +2973,9 @@ static iree_status_t loom_verify_region(loom_verify_state_t* state,
       loom_verify_pop_scope(state);
       return diagnostic_status;
     }
-    for (uint16_t i = 0; i < block->op_count; ++i) {
+    loom_op_t* current = NULL;
+    loom_block_for_each_op(block, current) {
       if (loom_verify_at_error_limit(state)) break;
-      loom_op_t* current = loom_block_op(block, i);
-      if (current->flags & LOOM_OP_FLAG_DEAD) continue;
       IREE_RETURN_IF_ERROR(loom_verify_op(state, current));
     }
   }
@@ -3271,9 +3263,8 @@ iree_status_t loom_verify_module(const loom_module_t* module,
     // LOOM_TRAIT_SYMBOL_DEFINE belong inside function bodies.
     if (module->body->block_count > 0) {
       loom_block_t* entry = loom_region_entry_block(module->body);
-      for (uint16_t i = 0; i < entry->op_count; ++i) {
-        const loom_op_t* op = loom_block_const_op(entry, i);
-        if (op->flags & LOOM_OP_FLAG_DEAD) continue;
+      const loom_op_t* op = NULL;
+      loom_block_for_each_op(entry, op) {
         const loom_op_vtable_t* vtable =
             loom_verify_lookup_vtable(&state, op->kind);
         if (vtable &&

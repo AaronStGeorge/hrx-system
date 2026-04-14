@@ -1813,16 +1813,6 @@ static iree_status_t loom_print_op(loom_print_context_t* ctx,
   return status;
 }
 
-static uint16_t loom_print_block_last_live_op_index(const loom_block_t* block) {
-  for (uint16_t reverse_index = block->op_count; reverse_index > 0;
-       --reverse_index) {
-    uint16_t op_index = (uint16_t)(reverse_index - 1);
-    const loom_op_t* op = loom_block_const_op(block, op_index);
-    if ((op->flags & LOOM_OP_FLAG_DEAD) == 0) return op_index;
-  }
-  return UINT16_MAX;
-}
-
 static bool loom_print_should_elide_implicit_terminator(
     const loom_region_descriptor_t* region_descriptor, const loom_op_t* op) {
   IREE_ASSERT_ARGUMENT(region_descriptor);
@@ -1877,11 +1867,10 @@ static iree_status_t loom_print_region_body(
     }
 
     bool printed_any = false;
-    uint16_t last_live_op_index = loom_print_block_last_live_op_index(block);
-    for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-      const loom_op_t* current_op = loom_block_const_op(block, op_index);
-      if (current_op->flags & LOOM_OP_FLAG_DEAD) continue;
-      if (op_index == last_live_op_index &&
+    const loom_op_t* last_live_op = block->last_op;
+    const loom_op_t* current_op = NULL;
+    loom_block_for_each_op(block, current_op) {
+      if (current_op == last_live_op &&
           loom_print_should_elide_implicit_terminator(region_descriptor,
                                                       current_op)) {
         continue;
@@ -1944,9 +1933,8 @@ static iree_status_t loom_print_module_body(loom_print_context_t* ctx,
     }
 
     bool printed_any = false;
-    for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-      const loom_op_t* current_op = loom_block_const_op(block, op_index);
-      if (current_op->flags & LOOM_OP_FLAG_DEAD) continue;
+    const loom_op_t* current_op = NULL;
+    loom_block_for_each_op(block, current_op) {
       if (printed_any) {
         const loom_op_vtable_t* current_vtable =
             loom_op_vtable(ctx->module, current_op);

@@ -16,7 +16,7 @@ typedef struct loom_walk_frame_t {
   loom_block_t* block;
   loom_region_t* region;
   loom_op_t* parent_op;
-  uint16_t next_op_index;
+  loom_op_t* next_op;
   uint16_t depth;
   // For post-order: the op whose children have just been visited.
   // When non-NULL, the callback fires for this op before advancing
@@ -59,7 +59,7 @@ static void loom_walk_stack_push(loom_walk_stack_t* stack, loom_block_t* block,
       .block = block,
       .region = region,
       .parent_op = parent_op,
-      .next_op_index = 0,
+      .next_op = block->first_op,
       .depth = depth,
       .deferred_post_op = NULL,
   };
@@ -167,12 +167,13 @@ iree_status_t loom_walk_region(const loom_module_t* module,
     }
 
     // Block done — pop frame.
-    if (frame->next_op_index >= frame->block->op_count) {
+    if (!frame->next_op) {
       --stack.count;
       continue;
     }
 
-    loom_op_t* op = loom_block_op(frame->block, frame->next_op_index++);
+    loom_op_t* op = frame->next_op;
+    frame->next_op = op->next_op;
     if (op->flags & LOOM_OP_FLAG_DEAD) continue;
 
     loom_walk_context_t context = {

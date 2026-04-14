@@ -1033,9 +1033,8 @@ typedef struct loom_builder_ip_t {
   // Stamped onto every op created at this insertion point as
   // op->parent_op, giving O(depth) ancestry queries.
   loom_op_t* parent_op;
-  // Position within the block's ops array. Ops are inserted before
-  // this index. UINT16_MAX means append to the end of the block.
-  uint16_t index;
+  // Live op to insert before. NULL means append to the end of the block.
+  loom_op_t* before_op;
 } loom_builder_ip_t;
 
 // Callback invoked when an op is fully constructed (after finalize_op).

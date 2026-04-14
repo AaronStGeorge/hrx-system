@@ -210,7 +210,7 @@ void loom_builder_initialize(loom_module_t* module,
   out_builder->arena = arena;
   out_builder->ip.block = block;
   out_builder->ip.parent_op = NULL;
-  out_builder->ip.index = UINT16_MAX;  // Append mode.
+  out_builder->ip.before_op = NULL;
   out_builder->on_op_finalized.fn = NULL;
   out_builder->on_op_finalized.user_data = NULL;
   out_builder->reserved_result_ids = NULL;
@@ -220,7 +220,7 @@ void loom_builder_initialize(loom_module_t* module,
 
 void loom_builder_set_block(loom_builder_t* builder, loom_block_t* block) {
   builder->ip.block = block;
-  builder->ip.index = UINT16_MAX;  // Append mode.
+  builder->ip.before_op = NULL;
 }
 
 loom_builder_ip_t loom_builder_enter_region(loom_builder_t* builder,
@@ -229,20 +229,18 @@ loom_builder_ip_t loom_builder_enter_region(loom_builder_t* builder,
   loom_builder_ip_t saved = builder->ip;
   builder->ip.block = loom_region_entry_block(region);
   builder->ip.parent_op = parent_op;
-  builder->ip.index = UINT16_MAX;  // Append mode.
+  builder->ip.before_op = NULL;
   return saved;
 }
 
 void loom_builder_set_before(loom_builder_t* builder, const loom_op_t* op) {
   builder->ip.block = op->parent_block;
-  builder->ip.index = loom_block_find_op(builder->ip.block, op);
+  builder->ip.before_op = (loom_op_t*)op;
 }
 
 void loom_builder_set_after(loom_builder_t* builder, const loom_op_t* op) {
   builder->ip.block = op->parent_block;
-  uint16_t index = loom_block_find_op(builder->ip.block, op);
-  builder->ip.index =
-      (index != UINT16_MAX) ? (uint16_t)(index + 1) : UINT16_MAX;
+  builder->ip.before_op = op->next_op;
 }
 
 loom_builder_ip_t loom_builder_save(const loom_builder_t* builder) {
@@ -465,15 +463,13 @@ iree_status_t loom_builder_allocate_op(
   op->attribute_count = attribute_count;
   op->location = location;
   op->parent_op = builder->ip.parent_op;
-  op->parent_block = builder->ip.block;
 
-  if (builder->ip.index == UINT16_MAX) {
+  if (!builder->ip.before_op) {
     IREE_RETURN_IF_ERROR(
         loom_block_append_op(builder->module, builder->ip.block, op));
   } else {
-    IREE_RETURN_IF_ERROR(loom_block_insert_op(
-        builder->module, builder->ip.block, builder->ip.index, op));
-    ++builder->ip.index;
+    IREE_RETURN_IF_ERROR(loom_block_insert_before_op(
+        builder->module, builder->ip.block, builder->ip.before_op, op));
   }
 
   *out_op = op;
@@ -517,6 +513,7 @@ iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op) {
       module->values.entries[results[i]].def = loom_value_def_make_none();
     }
   }
+  loom_block_unlink_op(op);
   op->flags |= LOOM_OP_FLAG_DEAD;
   return iree_ok_status();
 }

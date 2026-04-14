@@ -295,7 +295,7 @@ static void loom_cse_scope_invalidate_reads(loom_cse_scope_t* scope) {
 //
 // Iterative DFS over the region tree using an explicit stack of frames.
 // Each frame represents a block being processed with a cursor into its
-// ops array. When an op has nested regions, child frames are pushed
+// ordered op list. When an op has nested regions, child frames are pushed
 // onto the stack and processed before the parent frame resumes.
 //
 // The stack is allocated from the pass arena (pass lifetime) and grows
@@ -304,7 +304,7 @@ static void loom_cse_scope_invalidate_reads(loom_cse_scope_t* scope) {
 
 typedef struct loom_cse_frame_t {
   loom_block_t* block;
-  uint16_t next_op_index;
+  loom_op_t* next_op;
   loom_cse_scope_t* scope;
 } loom_cse_frame_t;
 
@@ -341,7 +341,7 @@ static void loom_cse_stack_push(loom_cse_stack_t* stack, loom_block_t* block,
   IREE_ASSERT(stack->count < stack->capacity);
   stack->frames[stack->count++] = (loom_cse_frame_t){
       .block = block,
-      .next_op_index = 0,
+      .next_op = block->first_op,
       .scope = scope,
   };
 }
@@ -460,12 +460,13 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
       loom_cse_frame_t* frame = &stack.frames[stack.count - 1];
 
       // Block done — pop frame.
-      if (frame->next_op_index >= frame->block->op_count) {
+      if (!frame->next_op) {
         --stack.count;
         continue;
       }
 
-      loom_op_t* op = loom_block_op(frame->block, frame->next_op_index++);
+      loom_op_t* op = frame->next_op;
+      frame->next_op = op->next_op;
       if (op->flags & LOOM_OP_FLAG_DEAD) continue;
 
       const loom_op_vtable_t* vtable = loom_op_vtable(module, op);

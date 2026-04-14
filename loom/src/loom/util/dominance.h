@@ -11,7 +11,7 @@
 // precomputation required. Each query walks the ancestry of the two
 // ops to determine their relationship:
 //
-//   Same block:      a dominates b if a comes before b (array index).
+//   Same block:      a dominates b if a comes before b (op ordinal).
 //   Ancestor scope:  an op in an enclosing region dominates all ops
 //                    in nested regions, unless an isolated-from-above
 //                    boundary intervenes.
@@ -82,7 +82,7 @@ const loom_op_t* loom_op_ancestor_at_depth(const loom_op_t* op,
 // Dominance rules for structured IR:
 //   - Self-dominance: a dominates a.
 //   - Same block: a dominates b if a appears before b in the block's
-//     ops array.
+//     ordered op list.
 //   - Ancestor scope: a dominates b if a is in an enclosing scope
 //     (reachable via b's parent_op chain) and no isolated-from-above
 //     boundary is crossed.

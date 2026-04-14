@@ -1847,9 +1847,8 @@ static void loom_parser_set_region_parent_op(loom_region_t* region,
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     loom_block_t* block = loom_region_block(region, block_index);
-    for (uint16_t op_index = 0; op_index < block->op_count; ++op_index) {
-      loom_block_op(block, op_index)->parent_op = parent_op;
-    }
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) { op->parent_op = parent_op; }
   }
 }
 

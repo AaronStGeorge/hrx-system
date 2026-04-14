@@ -951,12 +951,19 @@ static inline iree_string_view_t loom_op_vtable_short_name(
 // Lifetime: arena-allocated, lives until module destruction. Erased
 // ops are flagged LOOM_OP_FLAG_DEAD but not freed.
 typedef struct loom_op_t {
+  // Encoded dialect/op identifier.
   loom_op_kind_t kind;
+  // Number of operand value IDs in trailing storage.
   uint16_t operand_count;
+  // Number of result value IDs in trailing storage.
   uint16_t result_count;
+  // Number of in-place result/operand ties in trailing storage.
   uint16_t tied_result_count;
+  // Number of child region pointers in trailing storage.
   uint8_t region_count;
+  // Number of attributes in trailing storage.
   uint8_t attribute_count;
+  // Per-op lifecycle/worklist flags.
   loom_op_flags_t flags;
   // Per-op-instance flags: fast-math flags for float ops, overflow
   // flags for integer ops. Declared via the Flags format element in
@@ -968,6 +975,10 @@ typedef struct loom_op_t {
   // Carries the full source range for diagnostics and debug info.
   // Value locations are derived: value -> def -> op -> location.
   loom_location_id_t location;
+  // Monotonic position key within parent_block. Live ops in a block have
+  // strictly increasing ordinals, enabling O(1) same-block order comparisons
+  // without carrying mutable array indices on every insertion.
+  uint64_t block_ordinal;
   // Op whose region contains this op's block. NULL for module-level
   // ops (direct children of the module body). Set during construction
   // by the builder and maintained by the rewriter on op movement.
@@ -977,6 +988,12 @@ typedef struct loom_op_t {
   // Set by loom_builder_allocate_op and maintained by the rewriter.
   // Enables O(1) same-block checks for canonicalization patterns.
   loom_block_t* parent_block;
+  // Previous live op in parent_block's ordered list. NULL for the first op.
+  struct loom_op_t* prev_op;
+  // Next live op in parent_block's ordered list. NULL for the last op.
+  struct loom_op_t* next_op;
+  // Reserved padding to keep the fixed op header at one cache line.
+  uint64_t reserved;
   // Variable-length trailing data (arena-allocated, accessed via helpers).
   // Pointer-sized fields first for natural alignment:
   //   loom_region_t*     regions[region_count]
@@ -987,7 +1004,7 @@ typedef struct loom_op_t {
   //   loom_attribute_t   attributes[attribute_count]
 } loom_op_t;
 
-static_assert(sizeof(loom_op_t) == 32, "loom_op_t must be 32 bytes");
+static_assert(sizeof(loom_op_t) == 64, "loom_op_t must be 64 bytes");
 
 //===----------------------------------------------------------------------===//
 // Op trailing data accessors
@@ -1055,18 +1072,27 @@ static inline loom_attribute_t* loom_op_attrs(const loom_op_t* op) {
 // carried values, branch target parameters). They are stored as
 // value IDs into the module's value table.
 typedef struct loom_block_t {
+  // Interned block label, or LOOM_STRING_ID_INVALID for anonymous blocks.
   loom_string_id_t label_id;
+  // Number of block argument value IDs in arg_ids.
   uint16_t arg_count;
+  // Allocated capacity of arg_ids.
   uint16_t arg_capacity;
-  uint16_t op_count;
-  uint16_t op_capacity;
+  // Number of live operations linked into this block.
+  uint32_t op_count;
+  // Per-block instance flags.
   uint16_t flags;
+  // Reserved for future flags while keeping pointer fields aligned.
   uint16_t reserved;
+  // Block argument value IDs.
   loom_value_id_t* arg_ids;
-  loom_op_t** ops;
+  // First live operation in block order.
+  loom_op_t* first_op;
+  // Last live operation in block order.
+  loom_op_t* last_op;
 } loom_block_t;
 
-static_assert(sizeof(loom_block_t) == 32, "loom_block_t must be 32 bytes");
+static_assert(sizeof(loom_block_t) == 40, "loom_block_t must be 40 bytes");
 
 // Returns the |arg_index|-th block argument value ID.
 static inline loom_value_id_t loom_block_arg_id(const loom_block_t* block,
@@ -1075,13 +1101,20 @@ static inline loom_value_id_t loom_block_arg_id(const loom_block_t* block,
   return block->arg_ids[arg_index];
 }
 
-// Returns the |op_index|-th operation in |block|.
+// Returns the |op_index|-th operation in |block| by walking the ordered list.
+// This is a cold helper for tests/diagnostics; hot paths should carry op
+// pointers or use loom_block_for_each_op.
 static inline const loom_op_t* loom_block_const_op(const loom_block_t* block,
-                                                   uint16_t op_index) {
+                                                   iree_host_size_t op_index) {
   IREE_ASSERT(op_index < block->op_count);
-  return block->ops[op_index];
+  const loom_op_t* op = block->first_op;
+  for (iree_host_size_t i = 0; i < op_index; ++i) {
+    op = op->next_op;
+  }
+  return op;
 }
-static inline loom_op_t* loom_block_op(loom_block_t* block, uint16_t op_index) {
+static inline loom_op_t* loom_block_op(loom_block_t* block,
+                                       iree_host_size_t op_index) {
   return (loom_op_t*)loom_block_const_op(block, op_index);
 }
 
@@ -1089,7 +1122,7 @@ static inline loom_op_t* loom_block_op(loom_block_t* block, uint16_t op_index) {
 static inline const loom_op_t* loom_block_const_last_op(
     const loom_block_t* block) {
   IREE_ASSERT(block->op_count > 0);
-  return loom_block_const_op(block, (uint16_t)(block->op_count - 1));
+  return block->last_op;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1124,16 +1157,23 @@ typedef uint16_t loom_region_instance_flags_t;
 // |blocks| table, so appending blocks does not relocate existing block
 // objects or invalidate loom_value_def_t / loom_op_t block pointers.
 typedef struct loom_region_t {
+  // Number of blocks in the region.
   uint16_t block_count;
+  // Allocated capacity of the blocks pointer table.
   uint16_t block_capacity;
+  // Per-region structural flags.
   loom_region_instance_flags_t flags;
+  // Reserved for future flags while keeping entry_block aligned.
   uint16_t reserved;
+  // Inline storage for the entry block.
   loom_block_t entry_block;
+  // Ordered block pointer table. Points at inline_blocks for one-block regions.
   loom_block_t** blocks;
+  // Inline block pointer table for the common single-block case.
   loom_block_t* inline_blocks[1];
 } loom_region_t;
 
-static_assert(sizeof(loom_region_t) == 56, "loom_region_t must be 56 bytes");
+static_assert(sizeof(loom_region_t) == 64, "loom_region_t must be 64 bytes");
 
 // Returns the block at |block_index| in |region|.
 static inline loom_block_t* loom_region_block(loom_region_t* region,
@@ -1460,11 +1500,9 @@ typedef struct loom_module_t {
 //     // Process user.
 //   }
 
-// Walk all live operations in a block (skips LOOM_OP_FLAG_DEAD).
-#define loom_block_for_each_op(block, op_var)                          \
-  for (iree_host_size_t _op_i = 0; _op_i < (block)->op_count; ++_op_i) \
-    if (((op_var) = (block)->ops[_op_i]) &&                            \
-        !iree_any_bit_set((op_var)->flags, LOOM_OP_FLAG_DEAD))
+// Walk all live operations in a block. Erased ops are unlinked from the list.
+#define loom_block_for_each_op(block, op_var) \
+  for ((op_var) = (block)->first_op; (op_var); (op_var) = (op_var)->next_op)
 
 // Walk all blocks in a region.
 #define loom_region_for_each_block(region, block_var)                         \

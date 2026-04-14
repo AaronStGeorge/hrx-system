@@ -282,18 +282,32 @@ iree_status_t loom_region_append_block(loom_module_t* module,
 iree_status_t loom_block_add_arg(loom_module_t* module, loom_block_t* block,
                                  loom_value_id_t value_id);
 
-// Appends an op to the end of a block, growing the op array if needed.
+// Appends an op to the end of a block.
 iree_status_t loom_block_append_op(loom_module_t* module, loom_block_t* block,
                                    loom_op_t* op);
 
-// Inserts an op at |index| in the block, shifting subsequent ops.
+// Inserts an op before |before_op| in |block|. |before_op| must be a live op
+// in the block. Passing NULL appends.
+iree_status_t loom_block_insert_before_op(loom_module_t* module,
+                                          loom_block_t* block,
+                                          loom_op_t* before_op, loom_op_t* op);
+
+// Inserts an op at |index| in the block. This is a cold indexed helper for
+// diagnostics and tests; hot mutation paths should carry an op pointer and use
+// loom_block_insert_before_op.
 // If index == block->op_count, equivalent to append.
 iree_status_t loom_block_insert_op(loom_module_t* module, loom_block_t* block,
-                                   uint16_t index, loom_op_t* op);
+                                   iree_host_size_t index, loom_op_t* op);
+
+// Unlinks a live op from its parent block while preserving the op object for
+// arena lifetime and diagnostics. The op's parent_block remains set so dead-op
+// diagnostics can still report where it came from.
+void loom_block_unlink_op(loom_op_t* op);
 
 // Finds the index of |op| in |block|'s op list by pointer comparison.
-// Returns UINT16_MAX if not found. O(n) scan.
-uint16_t loom_block_find_op(const loom_block_t* block, const loom_op_t* op);
+// Returns IREE_HOST_SIZE_MAX if not found. O(n) cold helper.
+iree_host_size_t loom_block_find_op(const loom_block_t* block,
+                                    const loom_op_t* op);
 
 #ifdef __cplusplus
 }

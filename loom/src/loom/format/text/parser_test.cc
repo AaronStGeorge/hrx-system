@@ -676,7 +676,7 @@ TEST_F(ParserTest, AttrDictEmptyArrayPayloadIsCanonical) {
   loom_block_t* body = loom_module_block(module);
   ASSERT_NE(body, nullptr);
   ASSERT_GE(body->op_count, 2u);
-  loom_op_t* attrs_op = body->ops[1];
+  loom_op_t* attrs_op = loom_block_op(body, 1);
   ASSERT_NE(attrs_op, nullptr);
   ASSERT_TRUE(loom_test_attrs_isa(attrs_op));
   ASSERT_GE(attrs_op->attribute_count, 1u);
@@ -713,14 +713,14 @@ TEST_F(ParserTest, OperandDictUnsortedKeysRoundTripInCanonicalOrder) {
   loom_block_t* body = loom_module_block(module);
   ASSERT_NE(body, nullptr);
   ASSERT_GE(body->op_count, 4u);
-  loom_op_t* operand_dict_op = body->ops[3];
+  loom_op_t* operand_dict_op = loom_block_op(body, 3);
   ASSERT_NE(operand_dict_op, nullptr);
   ASSERT_TRUE(loom_test_operand_dict_isa(operand_dict_op));
   ASSERT_EQ(operand_dict_op->operand_count, 3u);
   EXPECT_EQ(loom_op_operands(operand_dict_op)[1],
-            loom_op_results(body->ops[2])[0]);
+            loom_op_results(loom_block_op(body, 2))[0]);
   EXPECT_EQ(loom_op_operands(operand_dict_op)[2],
-            loom_op_results(body->ops[1])[0]);
+            loom_op_results(loom_block_op(body, 1))[0]);
   loom_module_free(module);
 }
 
@@ -741,7 +741,7 @@ TEST_F(ParserTest, EmptyPredicateListPayloadRoundTripsExplicitly) {
   loom_block_t* body = loom_module_block(module);
   ASSERT_NE(body, nullptr);
   ASSERT_GE(body->op_count, 2u);
-  loom_op_t* assume_op = body->ops[1];
+  loom_op_t* assume_op = loom_block_op(body, 1);
   ASSERT_NE(assume_op, nullptr);
   ASSERT_TRUE(loom_test_assume_isa(assume_op));
   ASSERT_GE(assume_op->attribute_count, 1u);
@@ -838,7 +838,8 @@ TEST_F(ParserTest, FuncDefResultTiedToEntryArg) {
   ASSERT_NE(entry, nullptr);
   ASSERT_EQ(entry->arg_count, 1u);
   ASSERT_EQ(entry->op_count, 1u);
-  EXPECT_EQ(loom_op_const_operands(entry->ops[0])[0], entry->arg_ids[0]);
+  EXPECT_EQ(loom_op_const_operands(loom_block_op(entry, 0))[0],
+            entry->arg_ids[0]);
   loom_module_free(module);
 }
 
@@ -1094,7 +1095,7 @@ TEST_F(ParserTest, LoopWithIterArgs) {
     ASSERT_NE(func_entry, nullptr);
     ASSERT_GE(func_entry->op_count, 2u);
 
-    loom_op_t* loop_op = func_entry->ops[0];
+    loom_op_t* loop_op = loom_block_op(func_entry, 0);
     ASSERT_NE(loop_op, nullptr);
     ASSERT_EQ(loop_op->operand_count, 4u);
     ASSERT_EQ(loop_op->region_count, 1u);
@@ -1108,7 +1109,7 @@ TEST_F(ParserTest, LoopWithIterArgs) {
     ASSERT_NE(loop_entry, nullptr);
     ASSERT_EQ(loop_entry->arg_count, 2u);
     ASSERT_EQ(loop_entry->op_count, 1u);
-    loom_op_t* yield_op = loop_entry->ops[0];
+    loom_op_t* yield_op = loom_block_op(loop_entry, 0);
     ASSERT_NE(yield_op, nullptr);
     ASSERT_EQ(yield_op->operand_count, 1u);
     EXPECT_EQ(loom_op_const_operands(yield_op)[0], loop_entry->arg_ids[1]);
@@ -1139,13 +1140,13 @@ TEST_F(ParserTest, LoopWithoutIterArgs) {
     ASSERT_NE(func_entry, nullptr);
     ASSERT_GE(func_entry->op_count, 1u);
 
-    loom_op_t* loop_op = func_entry->ops[0];
+    loom_op_t* loop_op = loom_block_op(func_entry, 0);
     ASSERT_NE(loop_op, nullptr);
     ASSERT_EQ(loop_op->region_count, 1u);
     loom_block_t* loop_entry = GetEntryBlock(loom_op_regions(loop_op)[0]);
     ASSERT_NE(loop_entry, nullptr);
     ASSERT_EQ(loop_entry->op_count, 1u);
-    loom_op_t* yield_op = loop_entry->ops[0];
+    loom_op_t* yield_op = loom_block_op(loop_entry, 0);
     ASSERT_NE(yield_op, nullptr);
     EXPECT_TRUE(loom_test_implicit_yield_isa(yield_op));
     EXPECT_EQ(yield_op->operand_count, 0u);
@@ -1176,12 +1177,12 @@ TEST_F(ParserTest, LoopExplicitImplicitYieldCanonicalized) {
     ASSERT_NE(func_entry, nullptr);
     ASSERT_GE(func_entry->op_count, 1u);
 
-    loom_op_t* loop_op = func_entry->ops[0];
+    loom_op_t* loop_op = loom_block_op(func_entry, 0);
     ASSERT_NE(loop_op, nullptr);
     loom_block_t* loop_entry = GetEntryBlock(loom_op_regions(loop_op)[0]);
     ASSERT_NE(loop_entry, nullptr);
     ASSERT_EQ(loop_entry->op_count, 1u);
-    loom_op_t* yield_op = loop_entry->ops[0];
+    loom_op_t* yield_op = loom_block_op(loop_entry, 0);
     ASSERT_NE(yield_op, nullptr);
     EXPECT_TRUE(loom_test_implicit_yield_isa(yield_op));
     EXPECT_EQ(yield_op->operand_count, 0u);
@@ -1209,12 +1210,12 @@ TEST_F(ParserTest, LoopExplicitEmptyYieldPreserved) {
     ASSERT_NE(func_entry, nullptr);
     ASSERT_GE(func_entry->op_count, 1u);
 
-    loom_op_t* loop_op = func_entry->ops[0];
+    loom_op_t* loop_op = loom_block_op(func_entry, 0);
     ASSERT_NE(loop_op, nullptr);
     loom_block_t* loop_entry = GetEntryBlock(loom_op_regions(loop_op)[0]);
     ASSERT_NE(loop_entry, nullptr);
     ASSERT_EQ(loop_entry->op_count, 1u);
-    loom_op_t* yield_op = loop_entry->ops[0];
+    loom_op_t* yield_op = loom_block_op(loop_entry, 0);
     ASSERT_NE(yield_op, nullptr);
     EXPECT_TRUE(loom_test_yield_isa(yield_op));
     EXPECT_EQ(yield_op->operand_count, 0u);
@@ -1422,19 +1423,19 @@ TEST_F(ParserTest, BindingListNameCanShadowOuterScopeName) {
     ASSERT_EQ(func_entry->arg_count, 1u);
     ASSERT_GE(func_entry->op_count, 3u);
 
-    loom_op_t* map_op = func_entry->ops[1];
+    loom_op_t* map_op = loom_block_op(func_entry, 1);
     ASSERT_NE(map_op, nullptr);
     ASSERT_EQ(map_op->region_count, 1u);
     loom_block_t* map_entry = GetEntryBlock(loom_op_regions(map_op)[0]);
     ASSERT_NE(map_entry, nullptr);
     ASSERT_EQ(map_entry->arg_count, 1u);
 
-    loom_op_t* yield_op = map_entry->ops[0];
+    loom_op_t* yield_op = loom_block_op(map_entry, 0);
     ASSERT_NE(yield_op, nullptr);
     ASSERT_EQ(yield_op->operand_count, 1u);
     EXPECT_EQ(loom_op_const_operands(yield_op)[0], map_entry->arg_ids[0]);
 
-    loom_op_t* neg_op = func_entry->ops[2];
+    loom_op_t* neg_op = loom_block_op(func_entry, 2);
     ASSERT_NE(neg_op, nullptr);
     ASSERT_EQ(neg_op->operand_count, 1u);
     EXPECT_EQ(loom_op_const_operands(neg_op)[0], func_entry->arg_ids[0]);
