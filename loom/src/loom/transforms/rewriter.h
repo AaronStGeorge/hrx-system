@@ -144,6 +144,26 @@ iree_status_t loom_rewriter_build_constant(loom_rewriter_t* rewriter,
 iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
                                      bool* out_folded);
 
+// Captures the current high-water mark of the module value table.
+//
+// Use before materializing replacement IR. Pass the returned checkpoint to
+// loom_rewriter_preserve_result_names_on_new_values so named result values
+// keep their human/agent-facing spelling without accidentally renaming an
+// existing operand or block argument used as a replacement.
+loom_value_id_t loom_rewriter_value_checkpoint(const loom_rewriter_t* rewriter);
+
+// Copies result names from |op| to replacement values created after
+// |value_checkpoint|. Existing replacement values, already-named replacements,
+// unnamed old results, and invalid result slots are left unchanged.
+//
+// This is intentionally separate from RAUW: many canonicalizations replace a
+// named result with a pre-existing operand, and mutating that operand's name
+// would make the IR less true, not more readable.
+iree_status_t loom_rewriter_preserve_result_names_on_new_values(
+    loom_rewriter_t* rewriter, const loom_op_t* op,
+    const loom_value_id_t* replacements, uint16_t count,
+    loom_value_id_t value_checkpoint);
+
 // Returns true if the op has no uses, no side effects, and is not a
 // terminator — safe to erase without affecting program semantics.
 bool loom_rewriter_is_trivially_dead(const loom_rewriter_t* rewriter,

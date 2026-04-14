@@ -53,6 +53,7 @@ loom_cc_library(
         "//loom/src/loom/transforms:dce",
         "//loom/src/loom/transforms:pass",
         "//loom/src/loom/transforms:strip_hints",
+        "//loom/src/loom/transforms:vector_to_scalar",
         "//loom/src/loom/transforms:verify",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",

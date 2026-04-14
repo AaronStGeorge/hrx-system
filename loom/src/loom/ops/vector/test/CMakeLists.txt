@@ -45,6 +45,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "vector_to_scalar"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "verify"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/verify.loom-test"

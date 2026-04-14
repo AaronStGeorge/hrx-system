@@ -154,6 +154,23 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "vector_to_scalar",
+    srcs = ["vector_to_scalar.c"],
+    hdrs = ["vector_to_scalar.h"],
+    deps = [
+        ":pass",
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/vector",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "verify",
     srcs = ["verify.c"],
     hdrs = ["verify.h"],

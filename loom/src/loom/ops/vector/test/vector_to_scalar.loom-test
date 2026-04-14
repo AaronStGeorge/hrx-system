@@ -1,0 +1,320 @@
+// RUN: pass vector-to-scalar
+
+// Static lanewise ops become scalar lane programs and an explicit aggregate
+// pack at the vector ABI boundary.
+func.def @static_add_select_cast(%a: vector<4xi32>, %b: vector<4xi32>, %mask: vector<4xi1>) -> (vector<4xf32>) {
+  %sum = vector.addi %a, %b : vector<4xi32>
+  %chosen = vector.select %mask, %sum, %a : vector<4xi32>
+  %r = vector.sitofp %chosen : vector<4xi32> to vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+
+// ----
+func.def @static_add_select_cast(%a: vector<4xi32>, %b: vector<4xi32>, %mask: vector<4xi1>) -> (vector<4xf32>) {
+  %7 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %8 = vector.extract %a[0] : vector<4xi32> -> i32
+  %9 = vector.extract %b[0] : vector<4xi32> -> i32
+  %10 = scalar.addi %8, %9 : i32
+  %11 = vector.extract %a[0] : vector<4xi32> -> i32
+  %12 = scalar.select %7, %10, %11 : i32
+  %13 = scalar.sitofp %12 : i32 to f32
+  %14 = vector.extract %mask[1] : vector<4xi1> -> i1
+  %15 = vector.extract %a[1] : vector<4xi32> -> i32
+  %16 = vector.extract %b[1] : vector<4xi32> -> i32
+  %17 = scalar.addi %15, %16 : i32
+  %18 = vector.extract %a[1] : vector<4xi32> -> i32
+  %19 = scalar.select %14, %17, %18 : i32
+  %20 = scalar.sitofp %19 : i32 to f32
+  %21 = vector.extract %mask[2] : vector<4xi1> -> i1
+  %22 = vector.extract %a[2] : vector<4xi32> -> i32
+  %23 = vector.extract %b[2] : vector<4xi32> -> i32
+  %24 = scalar.addi %22, %23 : i32
+  %25 = vector.extract %a[2] : vector<4xi32> -> i32
+  %26 = scalar.select %21, %24, %25 : i32
+  %27 = scalar.sitofp %26 : i32 to f32
+  %28 = vector.extract %mask[3] : vector<4xi1> -> i1
+  %29 = vector.extract %a[3] : vector<4xi32> -> i32
+  %30 = vector.extract %b[3] : vector<4xi32> -> i32
+  %31 = scalar.addi %29, %30 : i32
+  %32 = vector.extract %a[3] : vector<4xi32> -> i32
+  %33 = scalar.select %28, %31, %32 : i32
+  %34 = scalar.sitofp %33 : i32 to f32
+  %r = vector.from_elements %13, %20, %27, %34 : f32, f32, f32, f32 -> vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+
+// ====
+
+// Dynamic lanewise ops lower to an scf.for loop carrying the vector aggregate
+// because the number of scalar lanes is not statically known.
+func.def @dynamic_add(%n: index, %a: vector<[%n]xi32>, %b: vector<[%n]xi32>) -> (vector<[%n]xi32>) {
+  %r = vector.addi %a, %b : vector<[%n]xi32>
+  func.return %r : vector<[%n]xi32>
+}
+
+// ----
+func.def @dynamic_add(%n: index, %a: vector<[%n]xi32>, %b: vector<[%n]xi32>) -> (vector<[%n]xi32>) {
+  %5 = index.constant 0 : index
+  %6 = index.constant 1 : index
+  %r = scf.for %7 = [%5 to %n step %6](%8 = %a : vector<[%n]xi32>) -> (vector<[%n]xi32>) {
+    %10 = vector.extract %a[%7] : vector<[%n]xi32> -> i32
+    %11 = vector.extract %b[%7] : vector<[%n]xi32> -> i32
+    %12 = scalar.addi %10, %11 : i32
+    %13 = vector.insert %12 into %8[%7] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    scf.yield %13 : vector<[%n]xi32>
+  }
+  func.return %r : vector<[%n]xi32>
+}
+
+// ====
+
+// Multi-axis dynamic vectors become nested scf.for loops over the logical
+// row-major shape.
+func.def @dynamic_2d_add(%m: index, %n: index, %a: vector<[%m]x[%n]xi32>, %b: vector<[%m]x[%n]xi32>) -> (vector<[%m]x[%n]xi32>) {
+  %r = vector.addi %a, %b : vector<[%m]x[%n]xi32>
+  func.return %r : vector<[%m]x[%n]xi32>
+}
+
+// ----
+func.def @dynamic_2d_add(%m: index, %n: index, %a: vector<[%m]x[%n]xi32>, %b: vector<[%m]x[%n]xi32>) -> (vector<[%m]x[%n]xi32>) {
+  %6 = index.constant 0 : index
+  %7 = index.constant 1 : index
+  %r = scf.for %8 = [%6 to %m step %7](%9 = %a : vector<[%m]x[%n]xi32>) -> (vector<[%m]x[%n]xi32>) {
+    %11 = index.constant 0 : index
+    %12 = index.constant 1 : index
+    %15 = scf.for %13 = [%11 to %n step %12](%14 = %9 : vector<[%m]x[%n]xi32>) -> (vector<[%m]x[%n]xi32>) {
+      %16 = vector.extract %a[%8, %13] : vector<[%m]x[%n]xi32> -> i32
+      %17 = vector.extract %b[%8, %13] : vector<[%m]x[%n]xi32> -> i32
+      %18 = scalar.addi %16, %17 : i32
+      %19 = vector.insert %18 into %14[%8, %13] : i32, vector<[%m]x[%n]xi32> -> vector<[%m]x[%n]xi32>
+      scf.yield %19 : vector<[%m]x[%n]xi32>
+    }
+    scf.yield %15 : vector<[%m]x[%n]xi32>
+  }
+  func.return %r : vector<[%m]x[%n]xi32>
+}
+
+// ====
+
+// Dynamic splats use loops too; no dynamic number of scalar SSA values is
+// required.
+func.def @dynamic_2d_splat(%m: index, %n: index, %x: f32) -> (vector<[%m]x[%n]xf32>) {
+  %r = vector.splat %x : vector<[%m]x[%n]xf32>
+  func.return %r : vector<[%m]x[%n]xf32>
+}
+
+// ----
+func.def @dynamic_2d_splat(%m: index, %n: index, %x: f32) -> (vector<[%m]x[%n]xf32>) {
+  %5 = vector.constant 0.0 : vector<[%m]x[%n]xf32>
+  %6 = index.constant 0 : index
+  %7 = index.constant 1 : index
+  %r = scf.for %8 = [%6 to %m step %7](%9 = %5 : vector<[%m]x[%n]xf32>) -> (vector<[%m]x[%n]xf32>) {
+    %11 = index.constant 0 : index
+    %12 = index.constant 1 : index
+    %15 = scf.for %13 = [%11 to %n step %12](%14 = %9 : vector<[%m]x[%n]xf32>) -> (vector<[%m]x[%n]xf32>) {
+      %16 = vector.insert %x into %14[%8, %13] : f32, vector<[%m]x[%n]xf32> -> vector<[%m]x[%n]xf32>
+      scf.yield %16 : vector<[%m]x[%n]xf32>
+    }
+    scf.yield %15 : vector<[%m]x[%n]xf32>
+  }
+  func.return %r : vector<[%m]x[%n]xf32>
+}
+
+// ====
+
+// Reductions expose scalar accumulator order directly.
+func.def @static_reduce(%v: vector<4xf32>, %zero: f32) -> (f32) {
+  %r = vector.reduce<addf> %v, %zero : vector<4xf32> -> f32
+  func.return %r : f32
+}
+
+// ----
+func.def @static_reduce(%v: vector<4xf32>, %zero: f32) -> (f32) {
+  %4 = vector.extract %v[0] : vector<4xf32> -> f32
+  %5 = scalar.addf %zero, %4 : f32
+  %6 = vector.extract %v[1] : vector<4xf32> -> f32
+  %7 = scalar.addf %5, %6 : f32
+  %8 = vector.extract %v[2] : vector<4xf32> -> f32
+  %9 = scalar.addf %7, %8 : f32
+  %10 = vector.extract %v[3] : vector<4xf32> -> f32
+  %r = scalar.addf %9, %10 : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Producer lanes feeding reductions are materialized directly instead of
+// packing a temporary vector only to extract it again.
+func.def @producer_reduce(%a: vector<4xi32>, %b: vector<4xi32>, %zero: i32) -> (i32) {
+  %sum = vector.addi %a, %b : vector<4xi32>
+  %r = vector.reduce<addi> %sum, %zero : vector<4xi32> -> i32
+  func.return %r : i32
+}
+
+// ----
+func.def @producer_reduce(%a: vector<4xi32>, %b: vector<4xi32>, %zero: i32) -> (i32) {
+  %6 = vector.extract %a[0] : vector<4xi32> -> i32
+  %7 = vector.extract %b[0] : vector<4xi32> -> i32
+  %8 = scalar.addi %6, %7 : i32
+  %9 = scalar.addi %zero, %8 : i32
+  %10 = vector.extract %a[1] : vector<4xi32> -> i32
+  %11 = vector.extract %b[1] : vector<4xi32> -> i32
+  %12 = scalar.addi %10, %11 : i32
+  %13 = scalar.addi %9, %12 : i32
+  %14 = vector.extract %a[2] : vector<4xi32> -> i32
+  %15 = vector.extract %b[2] : vector<4xi32> -> i32
+  %16 = scalar.addi %14, %15 : i32
+  %17 = scalar.addi %13, %16 : i32
+  %18 = vector.extract %a[3] : vector<4xi32> -> i32
+  %19 = vector.extract %b[3] : vector<4xi32> -> i32
+  %20 = scalar.addi %18, %19 : i32
+  %r = scalar.addi %17, %20 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Replacing a named result with a pre-existing value must not rename that
+// replacement.
+func.def @empty_reduce_preserves_init_name(%v: vector<0xi32>, %zero: i32) -> (i32) {
+  %r = vector.reduce<addi> %v, %zero : vector<0xi32> -> i32
+  func.return %r : i32
+}
+
+// ----
+func.def @empty_reduce_preserves_init_name(%v: vector<0xi32>, %zero: i32) -> (i32) {
+  func.return %zero : i32
+}
+
+// ====
+
+// Dynamic reductions use scf.for with a scalar carried accumulator.
+func.def @dynamic_reduce(%n: index, %v: vector<[%n]xi32>, %zero: i32) -> (i32) {
+  %r = vector.reduce<addi> %v, %zero : vector<[%n]xi32> -> i32
+  func.return %r : i32
+}
+
+// ----
+func.def @dynamic_reduce(%n: index, %v: vector<[%n]xi32>, %zero: i32) -> (i32) {
+  %5 = index.constant 0 : index
+  %6 = index.constant 1 : index
+  %r = scf.for %7 = [%5 to %n step %6](%8 = %zero : i32) -> (i32) {
+    %10 = vector.extract %v[%7] : vector<[%n]xi32> -> i32
+    %11 = scalar.addi %8, %10 : i32
+    scf.yield %11 : i32
+  }
+  func.return %r : i32
+}
+
+// ====
+
+// vector.dotf lowers through scalar.fmaf so the fused dot semantics survive.
+func.def @dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32> -> f32
+  func.return %r : f32
+}
+
+// ----
+func.def @dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
+  %5 = vector.extract %lhs[0] : vector<4xf32> -> f32
+  %6 = vector.extract %rhs[0] : vector<4xf32> -> f32
+  %7 = scalar.fmaf %5, %6, %acc : f32
+  %8 = vector.extract %lhs[1] : vector<4xf32> -> f32
+  %9 = vector.extract %rhs[1] : vector<4xf32> -> f32
+  %10 = scalar.fmaf %8, %9, %7 : f32
+  %11 = vector.extract %lhs[2] : vector<4xf32> -> f32
+  %12 = vector.extract %rhs[2] : vector<4xf32> -> f32
+  %13 = scalar.fmaf %11, %12, %10 : f32
+  %14 = vector.extract %lhs[3] : vector<4xf32> -> f32
+  %15 = vector.extract %rhs[3] : vector<4xf32> -> f32
+  %r = scalar.fmaf %14, %15, %13 : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Coordinate constructors lower to explicit scalar/index arithmetic.
+func.def @coordinates(%n: index) -> (vector<4xindex>, vector<[%n]xi1>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %lanes = vector.iota %c0 step %c1 : vector<4xindex>
+  %mask = vector.mask.range [%c0 to %n step %c1] : index -> vector<[%n]xi1>
+  func.return %lanes, %mask : vector<4xindex>, vector<[%n]xi1>
+}
+
+// ----
+func.def @coordinates(%n: index) -> (vector<4xindex>, vector<[%n]xi1>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %17 = index.constant 0 : index
+  %18 = index.mul %17, %c1 : index
+  %19 = index.add %c0, %18 : index
+  %20 = index.constant 1 : index
+  %21 = index.mul %20, %c1 : index
+  %22 = index.add %c0, %21 : index
+  %23 = index.constant 2 : index
+  %24 = index.mul %23, %c1 : index
+  %25 = index.add %c0, %24 : index
+  %26 = index.constant 3 : index
+  %27 = index.mul %26, %c1 : index
+  %28 = index.add %c0, %27 : index
+  %lanes = vector.from_elements %19, %22, %25, %28 : index, index, index, index -> vector<4xindex>
+  %7 = vector.constant false : vector<[%n]xi1>
+  %8 = index.constant 0 : index
+  %9 = index.constant 1 : index
+  %mask = scf.for %10 = [%8 to %n step %9](%11 = %7 : vector<[%n]xi1>) -> (vector<[%n]xi1>) {
+    %13 = index.mul %10, %c1 : index
+    %14 = index.add %c0, %13 : index
+    %15 = index.cmp slt, %14, %n : index
+    %16 = vector.insert %15 into %11[%10] : i1, vector<[%n]xi1> -> vector<[%n]xi1>
+    scf.yield %16 : vector<[%n]xi1>
+  }
+  func.return %lanes, %mask : vector<4xindex>, vector<[%n]xi1>
+}
+
+// ====
+
+func.def @integer_coordinates(%limit: i32) -> (vector<4xi32>, vector<4xi1>) {
+  %c0 = scalar.constant 0 : i32
+  %c2 = scalar.constant 2 : i32
+  %lanes = vector.iota %c0 step %c2 : vector<4xi32>
+  %mask = vector.mask.range [%c0 to %limit step %c2] : i32 -> vector<4xi1>
+  func.return %lanes, %mask : vector<4xi32>, vector<4xi1>
+}
+
+// ----
+func.def @integer_coordinates(%limit: i32) -> (vector<4xi32>, vector<4xi1>) {
+  %c0 = scalar.constant 0 : i32
+  %c2 = scalar.constant 2 : i32
+  %24 = scalar.constant 0 : i32
+  %25 = scalar.muli %24, %c2 : i32
+  %26 = scalar.addi %c0, %25 : i32
+  %27 = scalar.constant 1 : i32
+  %28 = scalar.muli %27, %c2 : i32
+  %29 = scalar.addi %c0, %28 : i32
+  %30 = scalar.constant 2 : i32
+  %31 = scalar.muli %30, %c2 : i32
+  %32 = scalar.addi %c0, %31 : i32
+  %33 = scalar.constant 3 : i32
+  %34 = scalar.muli %33, %c2 : i32
+  %35 = scalar.addi %c0, %34 : i32
+  %lanes = vector.from_elements %26, %29, %32, %35 : i32, i32, i32, i32 -> vector<4xi32>
+  %7 = scalar.constant 0 : i32
+  %8 = scalar.muli %7, %c2 : i32
+  %9 = scalar.addi %c0, %8 : i32
+  %10 = scalar.cmpi slt, %9, %limit : i32
+  %11 = scalar.constant 1 : i32
+  %12 = scalar.muli %11, %c2 : i32
+  %13 = scalar.addi %c0, %12 : i32
+  %14 = scalar.cmpi slt, %13, %limit : i32
+  %15 = scalar.constant 2 : i32
+  %16 = scalar.muli %15, %c2 : i32
+  %17 = scalar.addi %c0, %16 : i32
+  %18 = scalar.cmpi slt, %17, %limit : i32
+  %19 = scalar.constant 3 : i32
+  %20 = scalar.muli %19, %c2 : i32
+  %21 = scalar.addi %c0, %20 : i32
+  %22 = scalar.cmpi slt, %21, %limit : i32
+  %mask = vector.from_elements %10, %14, %18, %22 : i1, i1, i1, i1 -> vector<4xi1>
+  func.return %lanes, %mask : vector<4xi32>, vector<4xi1>
+}

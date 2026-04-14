@@ -175,6 +175,26 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    vector_to_scalar
+  HDRS
+    "vector_to_scalar.h"
+  SRCS
+    "vector_to_scalar.c"
+  DEPS
+    ::pass
+    ::rewriter
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::index
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::vector
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     verify
   HDRS
     "verify.h"

@@ -29,6 +29,7 @@
 #include "loom/transforms/dce.h"
 #include "loom/transforms/pass.h"
 #include "loom/transforms/strip_hints.h"
+#include "loom/transforms/vector_to_scalar.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
@@ -276,6 +277,10 @@ static iree_status_t loom_check_run_pipeline(
       status = loom_pass_manager_add_function_pass(
           &manager, loom_strip_hints_pass_info(), loom_strip_hints_run, NULL,
           NULL, iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name, IREE_SV("vector-to-scalar"))) {
+      status = loom_pass_manager_add_function_pass(
+          &manager, loom_vector_to_scalar_pass_info(),
+          loom_vector_to_scalar_run, NULL, NULL, iree_string_view_empty());
     } else {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "unknown pass: '%.*s'",

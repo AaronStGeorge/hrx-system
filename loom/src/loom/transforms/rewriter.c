@@ -182,6 +182,7 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
   // handled by cascading DCE (erase adds providers to worklist,
   // worklist pop checks is_trivially_dead).
   loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
 
   loom_value_id_t* replacement_ids = NULL;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_value_id_scratch(
@@ -194,16 +195,55 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
         loom_module_value_type(rewriter->module, results[i]);
     IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
         rewriter, facts, result_type, op->location, &replacement_ids[i]));
-    loom_value_t* old_value = loom_module_value(rewriter->module, results[i]);
-    loom_value_t* new_value =
-        loom_module_value(rewriter->module, replacement_ids[i]);
-    new_value->name_id = old_value->name_id;
   }
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, replacement_ids, op->result_count, value_checkpoint));
 
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       rewriter, op, replacement_ids, op->result_count));
 
   *out_folded = true;
+  return iree_ok_status();
+}
+
+loom_value_id_t loom_rewriter_value_checkpoint(
+    const loom_rewriter_t* rewriter) {
+  iree_host_size_t value_count = rewriter->module->values.count;
+  return value_count <= UINT32_MAX ? (loom_value_id_t)value_count
+                                   : LOOM_VALUE_ID_INVALID;
+}
+
+iree_status_t loom_rewriter_preserve_result_names_on_new_values(
+    loom_rewriter_t* rewriter, const loom_op_t* op,
+    const loom_value_id_t* replacements, uint16_t count,
+    loom_value_id_t value_checkpoint) {
+  if (count > op->result_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "replacement count %u exceeds op result count %u",
+                            (unsigned)count, (unsigned)op->result_count);
+  }
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < count; ++i) {
+    loom_value_id_t old_result = results[i];
+    loom_value_id_t replacement = replacements[i];
+    if (old_result == LOOM_VALUE_ID_INVALID ||
+        replacement == LOOM_VALUE_ID_INVALID) {
+      continue;
+    }
+    if (replacement < value_checkpoint) continue;
+    if ((iree_host_size_t)replacement >= rewriter->module->values.count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "replacement value %%%u out of range",
+                              (unsigned)replacement);
+    }
+    loom_string_id_t old_name =
+        loom_module_value(rewriter->module, old_result)->name_id;
+    if (old_name == LOOM_STRING_ID_INVALID) continue;
+    loom_value_t* replacement_value =
+        loom_module_value(rewriter->module, replacement);
+    if (replacement_value->name_id != LOOM_STRING_ID_INVALID) continue;
+    replacement_value->name_id = old_name;
+  }
   return iree_ok_status();
 }
 
@@ -394,6 +434,7 @@ iree_status_t loom_rewriter_replace_results_with_materialized_values_and_erase(
   }
 
   loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
   const loom_value_id_t* results = loom_op_const_results(op);
   loom_value_id_t* replacement_ids = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -408,11 +449,9 @@ iree_status_t loom_rewriter_replace_results_with_materialized_values_and_erase(
         loom_module_value_type(rewriter->module, results[i]);
     IREE_RETURN_IF_ERROR(materialize_value(&rewriter->builder, result_type,
                                            op->location, &replacement_ids[i]));
-    loom_value_t* old_value = loom_module_value(rewriter->module, results[i]);
-    loom_value_t* new_value =
-        loom_module_value(rewriter->module, replacement_ids[i]);
-    new_value->name_id = old_value->name_id;
   }
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, replacement_ids, op->result_count, value_checkpoint));
 
   return loom_rewriter_replace_all_uses_and_erase(rewriter, op, replacement_ids,
                                                   op->result_count);
