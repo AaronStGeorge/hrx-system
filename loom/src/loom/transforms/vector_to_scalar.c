@@ -737,6 +737,80 @@ static iree_status_t loom_vector_to_scalar_build_term_binary(
   return iree_ok_status();
 }
 
+static bool loom_vector_to_scalar_terms_equal_static(
+    loom_vector_to_scalar_index_term_t lhs,
+    loom_vector_to_scalar_index_term_t rhs, bool* out_equal) {
+  if (lhs.is_dynamic || rhs.is_dynamic) return false;
+  *out_equal = lhs.static_value == rhs.static_value;
+  return true;
+}
+
+static bool loom_vector_to_scalar_index_predicate_static_result(
+    uint32_t predicate, int64_t lhs, int64_t rhs, bool* out_result) {
+  switch (predicate) {
+    case LOOM_INDEX_CMP_PREDICATE_EQ:
+      *out_result = lhs == rhs;
+      return true;
+    case LOOM_INDEX_CMP_PREDICATE_SLT:
+      *out_result = lhs < rhs;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_vector_to_scalar_build_index_term_cmp(
+    loom_vector_to_scalar_state_t* state, uint32_t predicate,
+    loom_vector_to_scalar_index_term_t lhs,
+    loom_vector_to_scalar_index_term_t rhs, loom_value_id_t* out_condition) {
+  if (!lhs.is_dynamic && !rhs.is_dynamic) {
+    bool result = false;
+    if (loom_vector_to_scalar_index_predicate_static_result(
+            predicate, lhs.static_value, rhs.static_value, &result)) {
+      return loom_vector_to_scalar_build_scalar_constant(
+          &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+          state->location, result ? 1 : 0, out_condition);
+    }
+  }
+
+  loom_value_id_t lhs_value = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_term_value(state, lhs, &lhs_value));
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_term_value(state, rhs, &rhs_value));
+  loom_op_t* cmp_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_cmp_build(
+      &state->rewriter->builder, predicate, lhs_value, rhs_value,
+      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location, &cmp_op));
+  *out_condition = loom_index_cmp_result(cmp_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_build_i1_and(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_value_id_t* out_result) {
+  loom_op_t* and_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_andi_build(
+      &state->rewriter->builder, lhs, rhs,
+      loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location, &and_op));
+  *out_result = loom_scalar_andi_result(and_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_build_scalar_select_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t condition,
+    loom_value_id_t true_lane, loom_value_id_t false_lane,
+    loom_value_id_t* out_lane) {
+  loom_op_t* select_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_select_build(
+      &state->rewriter->builder, condition, true_lane, false_lane,
+      state->result_scalar_type, state->location, &select_op));
+  *out_lane = loom_scalar_select_result(select_op);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_to_scalar_terms_to_index_list(
     loom_vector_to_scalar_state_t* state,
     const loom_vector_to_scalar_index_term_t* terms, uint8_t rank,
@@ -1066,13 +1140,6 @@ static iree_status_t loom_vector_to_scalar_build_extract_lane(
 static iree_status_t loom_vector_to_scalar_build_insert_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar cannot lower dynamic vector.insert lane selection "
-        "until index predicate composition is available");
-  }
-
   loom_vector_to_scalar_index_term_t* explicit_terms = NULL;
   uint8_t explicit_count = 0;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_from_explicit_indices(
@@ -1082,23 +1149,32 @@ static iree_status_t loom_vector_to_scalar_build_insert_lane(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "vector.insert index rank mismatch");
   }
-  for (uint8_t i = 0; i < explicit_count; ++i) {
-    if (explicit_terms[i].is_dynamic) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "vector-to-scalar cannot lower vector.insert with dynamic insertion "
-          "indices yet");
-    }
-  }
 
-  bool selects_inserted_value = true;
+  bool condition_is_statically_true = true;
+  loom_value_id_t dynamic_condition = LOOM_VALUE_ID_INVALID;
   for (uint8_t i = 0; i < explicit_count; ++i) {
-    selects_inserted_value &=
-        indices.static_indices[i] == explicit_terms[i].static_value;
-  }
-  if (!selects_inserted_value) {
-    return loom_vector_to_scalar_materialize_lane(
-        state, loom_vector_insert_dest(state->op), indices, out_lane);
+    loom_vector_to_scalar_index_term_t lane_term =
+        loom_vector_to_scalar_lane_term(indices, i);
+    bool equal = false;
+    if (loom_vector_to_scalar_terms_equal_static(lane_term, explicit_terms[i],
+                                                 &equal)) {
+      if (!equal) {
+        return loom_vector_to_scalar_materialize_lane(
+            state, loom_vector_insert_dest(state->op), indices, out_lane);
+      }
+      continue;
+    }
+    condition_is_statically_true = false;
+    loom_value_id_t axis_equal = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_term_cmp(
+        state, LOOM_INDEX_CMP_PREDICATE_EQ, lane_term, explicit_terms[i],
+        &axis_equal));
+    if (dynamic_condition == LOOM_VALUE_ID_INVALID) {
+      dynamic_condition = axis_equal;
+    } else {
+      IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_i1_and(
+          state, dynamic_condition, axis_equal, &dynamic_condition));
+    }
   }
 
   loom_vector_to_scalar_index_term_t* value_terms = NULL;
@@ -1109,14 +1185,25 @@ static iree_status_t loom_vector_to_scalar_build_insert_lane(
         sizeof(loom_vector_to_scalar_index_term_t), (void**)&value_terms));
   }
   for (uint8_t i = 0; i < value_rank; ++i) {
-    value_terms[i] = loom_vector_to_scalar_static_term(
-        indices.static_indices[explicit_count + i]);
+    value_terms[i] =
+        loom_vector_to_scalar_lane_term(indices, (uint8_t)(explicit_count + i));
   }
   loom_vector_to_scalar_index_list_t value_indices = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_to_index_list(
       state, value_terms, value_rank, &value_indices));
-  return loom_vector_to_scalar_materialize_lane(
-      state, loom_vector_insert_value(state->op), value_indices, out_lane);
+  loom_value_id_t value_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_insert_value(state->op), value_indices, &value_lane));
+  if (condition_is_statically_true) {
+    *out_lane = value_lane;
+    return iree_ok_status();
+  }
+
+  loom_value_id_t dest_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_insert_dest(state->op), indices, &dest_lane));
+  return loom_vector_to_scalar_build_scalar_select_lane(
+      state, dynamic_condition, value_lane, dest_lane, out_lane);
 }
 
 static iree_status_t loom_vector_to_scalar_build_slice_lane(
@@ -1150,15 +1237,99 @@ static iree_status_t loom_vector_to_scalar_build_slice_lane(
       state, loom_vector_slice_source(state->op), source_indices, out_lane);
 }
 
+static loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dim_bound_term(
+    loom_type_t vector_type, uint8_t axis) {
+  if (loom_type_dim_is_dynamic_at(vector_type, axis)) {
+    return loom_vector_to_scalar_dynamic_term(
+        loom_type_dim_value_id_at(vector_type, axis));
+  }
+  return loom_vector_to_scalar_static_term(
+      (int64_t)loom_type_dim_static_size_at(vector_type, axis));
+}
+
+static bool loom_vector_to_scalar_concat_axis_extents_are_static(
+    const loom_module_t* module, loom_value_slice_t inputs, uint8_t axis) {
+  for (uint16_t i = 0; i < inputs.count; ++i) {
+    loom_type_t input_type =
+        loom_module_value_type(module, loom_value_slice_get(inputs, i));
+    if (loom_type_dim_is_dynamic_at(input_type, axis)) return false;
+  }
+  return true;
+}
+
+static iree_status_t loom_vector_to_scalar_build_concat_dynamic_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_slice_t inputs,
+    uint16_t input_ordinal, loom_vector_to_scalar_index_term_t prefix,
+    uint8_t axis, loom_vector_to_scalar_index_list_t indices,
+    loom_value_id_t* out_lane) {
+  if (input_ordinal >= inputs.count) {
+    return loom_vector_to_scalar_build_poison_lane(state, out_lane);
+  }
+
+  loom_value_id_t input = loom_value_slice_get(inputs, input_ordinal);
+  loom_type_t input_type =
+      loom_module_value_type(state->rewriter->module, input);
+  loom_vector_to_scalar_index_term_t axis_index =
+      loom_vector_to_scalar_lane_term(indices, axis);
+  loom_vector_to_scalar_index_term_t extent =
+      loom_vector_to_scalar_dim_bound_term(input_type, axis);
+  loom_vector_to_scalar_index_term_t end = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_ADD, prefix, extent, &end));
+  loom_value_id_t within_input = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_term_cmp(
+      state, LOOM_INDEX_CMP_PREDICATE_SLT, axis_index, end, &within_input));
+
+  loom_vector_to_scalar_index_term_t source_axis = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_SUB, axis_index, prefix, &source_axis));
+  loom_vector_to_scalar_index_term_t* source_terms = NULL;
+  if (indices.rank > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->rewriter->arena, indices.rank,
+        sizeof(loom_vector_to_scalar_index_term_t), (void**)&source_terms));
+  }
+  for (uint8_t i = 0; i < indices.rank; ++i) {
+    source_terms[i] = loom_vector_to_scalar_lane_term(indices, i);
+  }
+  source_terms[axis] = source_axis;
+  loom_vector_to_scalar_index_list_t source_indices = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_to_index_list(
+      state, source_terms, indices.rank, &source_indices));
+
+  loom_op_t* if_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_if_build(
+      &state->rewriter->builder, within_input, &state->result_scalar_type, 1,
+      NULL, 0, state->location, &if_op));
+
+  loom_builder_ip_t saved = loom_builder_enter_region(
+      &state->rewriter->builder, if_op, loom_scf_if_then_region(if_op));
+  loom_value_id_t then_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, input, source_indices, &then_lane));
+  loom_op_t* then_yield = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(
+      &state->rewriter->builder, &then_lane, 1, state->location, &then_yield));
+  loom_builder_restore(&state->rewriter->builder, saved);
+
+  saved = loom_builder_enter_region(&state->rewriter->builder, if_op,
+                                    loom_scf_if_else_region(if_op));
+  loom_value_id_t else_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_concat_dynamic_lane(
+      state, inputs, (uint16_t)(input_ordinal + 1), end, axis, indices,
+      &else_lane));
+  loom_op_t* else_yield = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(
+      &state->rewriter->builder, &else_lane, 1, state->location, &else_yield));
+  loom_builder_restore(&state->rewriter->builder, saved);
+
+  *out_lane = loom_scf_if_results(if_op).values[0];
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_to_scalar_build_concat_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar cannot lower dynamic vector.concat lane selection "
-        "yet");
-  }
   int64_t axis = loom_vector_concat_axis(state->op);
   if (axis < 0 || axis >= indices.rank) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1166,6 +1337,14 @@ static iree_status_t loom_vector_to_scalar_build_concat_lane(
   }
   uint8_t axis_u8 = (uint8_t)axis;
   loom_value_slice_t inputs = loom_vector_concat_inputs(state->op);
+  if (loom_vector_to_scalar_indices_are_dynamic(indices) ||
+      !loom_vector_to_scalar_concat_axis_extents_are_static(
+          state->rewriter->module, inputs, axis_u8)) {
+    return loom_vector_to_scalar_build_concat_dynamic_lane(
+        state, inputs, 0, loom_vector_to_scalar_static_term(0), axis_u8,
+        indices, out_lane);
+  }
+
   int64_t axis_index = indices.static_indices[axis_u8];
   int64_t prefix = 0;
   for (uint16_t input_ordinal = 0; input_ordinal < inputs.count;
@@ -1325,12 +1504,8 @@ static iree_status_t loom_vector_to_scalar_build_interleave_lane(
       &state->rewriter->builder, LOOM_INDEX_CMP_PREDICATE_EQ, remainder_value,
       zero, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
       loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location, &is_even_op));
-  loom_op_t* select_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_select_build(
-      &state->rewriter->builder, loom_index_cmp_result(is_even_op), even_lane,
-      odd_lane, state->result_scalar_type, state->location, &select_op));
-  *out_lane = loom_scalar_select_result(select_op);
-  return iree_ok_status();
+  return loom_vector_to_scalar_build_scalar_select_lane(
+      state, loom_index_cmp_result(is_even_op), even_lane, odd_lane, out_lane);
 }
 
 static iree_status_t loom_vector_to_scalar_build_deinterleave_lane(

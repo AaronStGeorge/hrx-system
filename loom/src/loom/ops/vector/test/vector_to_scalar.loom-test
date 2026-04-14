@@ -819,3 +819,67 @@ func.def @dynamic_interleave(%full: index, %half: index, %even: vector<[%half]xi
   }
   func.return %r : vector<[%full]xi32>
 }
+
+// ====
+
+// Dynamic insert can participate in another lane program: each result lane
+// selects either the inserted scalar or the original destination lane.
+func.def @dynamic_insert_consumed(%n: index, %lane: index, %dest: vector<[%n]xi32>, %value: i32) -> (vector<[%n]xi32>) {
+  %updated = vector.insert %value into %dest[%lane] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+  %r = vector.negi %updated : vector<[%n]xi32>
+  func.return %r : vector<[%n]xi32>
+}
+
+// ----
+func.def @dynamic_insert_consumed(%n: index, %lane: index, %dest: vector<[%n]xi32>, %value: i32) -> (vector<[%n]xi32>) {
+  %7 = vector.constant 0 : vector<[%n]xi32>
+  %8 = index.constant 0 : index
+  %9 = index.constant 1 : index
+  %r = scf.for %10 = [%8 to %n step %9](%11 = %7 : vector<[%n]xi32>) -> (vector<[%n]xi32>) {
+    %13 = index.cmp eq, %10, %lane : index
+    %14 = vector.extract %dest[%10] : vector<[%n]xi32> -> i32
+    %15 = scalar.select %13, %value, %14 : i32
+    %16 = scalar.negi %15 : i32
+    %17 = vector.insert %16 into %11[%10] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    scf.yield %17 : vector<[%n]xi32>
+  }
+  func.return %r : vector<[%n]xi32>
+}
+
+// ====
+
+// Dynamic concat uses structured control flow so non-selected inputs are not
+// speculatively extracted with out-of-range coordinates.
+func.def @dynamic_concat(%full: index, %left_n: index, %right_n: index, %left: vector<[%left_n]xi32>, %right: vector<[%right_n]xi32>) -> (vector<[%full]xi32>) {
+  %r = vector.concat<0> %left, %right : vector<[%left_n]xi32>, vector<[%right_n]xi32> -> vector<[%full]xi32>
+  func.return %r : vector<[%full]xi32>
+}
+
+// ----
+func.def @dynamic_concat(%full: index, %left_n: index, %right_n: index, %left: vector<[%left_n]xi32>, %right: vector<[%right_n]xi32>) -> (vector<[%full]xi32>) {
+  %7 = vector.constant 0 : vector<[%full]xi32>
+  %8 = index.constant 0 : index
+  %9 = index.constant 1 : index
+  %r = scf.for %10 = [%8 to %full step %9](%11 = %7 : vector<[%full]xi32>) -> (vector<[%full]xi32>) {
+    %13 = index.cmp slt, %10, %left_n : index
+    %14 = scf.if %13 -> (i32) {
+      %15 = vector.extract %left[%10] : vector<[%left_n]xi32> -> i32
+      scf.yield %15 : i32
+    } else {
+      %16 = index.add %left_n, %right_n : index
+      %17 = index.cmp slt, %10, %16 : index
+      %18 = index.sub %10, %left_n : index
+      %19 = scf.if %17 -> (i32) {
+        %20 = vector.extract %right[%18] : vector<[%right_n]xi32> -> i32
+        scf.yield %20 : i32
+      } else {
+        %21 = scalar.poison : i32
+        scf.yield %21 : i32
+      }
+      scf.yield %19 : i32
+    }
+    %22 = vector.insert %14 into %11[%10] : i32, vector<[%full]xi32> -> vector<[%full]xi32>
+    scf.yield %22 : vector<[%full]xi32>
+  }
+  func.return %r : vector<[%full]xi32>
+}
