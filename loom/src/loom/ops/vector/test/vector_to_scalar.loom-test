@@ -883,3 +883,146 @@ func.def @dynamic_concat(%full: index, %left_n: index, %right_n: index, %left: v
   }
   func.return %r : vector<[%full]xi32>
 }
+
+// ====
+
+// Bitfield extract/insert lower to explicit scalar shift, mask, and merge
+// sequences so packed quantized registers have a target-independent oracle.
+func.def @static_bitfields(%bytes: vector<2xi8>, %zero: vector<2xi8>) -> (vector<2xi8>) {
+  %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<2xi8> -> vector<2xi8>
+  %hi = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<2xi8> -> vector<2xi32>
+  test.use %hi : vector<2xi32>
+  %r = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<2xi8>, vector<2xi8> -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ----
+func.def @static_bitfields(%bytes: vector<2xi8>, %zero: vector<2xi8>) -> (vector<2xi8>) {
+  %29 = vector.extract %bytes[0] : vector<2xi8> -> i8
+  %30 = scalar.constant 4 : i8
+  %31 = scalar.shrsi %29, %30 : i8
+  %32 = scalar.extsi %31 : i8 to i32
+  %33 = vector.extract %bytes[1] : vector<2xi8> -> i8
+  %34 = scalar.constant 4 : i8
+  %35 = scalar.shrsi %33, %34 : i8
+  %36 = scalar.extsi %35 : i8 to i32
+  %hi = vector.from_elements %32, %36 : i32, i32 -> vector<2xi32>
+  test.use %hi : vector<2xi32>
+  %6 = vector.extract %bytes[0] : vector<2xi8> -> i8
+  %7 = scalar.constant 15 : i8
+  %8 = scalar.andi %6, %7 : i8
+  %9 = vector.extract %zero[0] : vector<2xi8> -> i8
+  %10 = scalar.constant 15 : i8
+  %11 = scalar.andi %8, %10 : i8
+  %12 = scalar.constant 15 : i8
+  %13 = scalar.constant -1 : i8
+  %14 = scalar.xori %12, %13 : i8
+  %15 = scalar.andi %9, %14 : i8
+  %16 = scalar.ori %15, %11 : i8
+  %17 = vector.extract %bytes[1] : vector<2xi8> -> i8
+  %18 = scalar.constant 15 : i8
+  %19 = scalar.andi %17, %18 : i8
+  %20 = vector.extract %zero[1] : vector<2xi8> -> i8
+  %21 = scalar.constant 15 : i8
+  %22 = scalar.andi %19, %21 : i8
+  %23 = scalar.constant 15 : i8
+  %24 = scalar.constant -1 : i8
+  %25 = scalar.xori %23, %24 : i8
+  %26 = scalar.andi %20, %25 : i8
+  %27 = scalar.ori %26, %22 : i8
+  %r = vector.from_elements %16, %27 : i8, i8 -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ====
+
+// dot4i groups the last source axis into four-lane scalar multiply/add chains
+// while preserving the signedness template at each scalar extension.
+func.def @static_dot4i(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  %r = vector.dot4i<s8u8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  func.return %r : vector<1xi32>
+}
+
+// ----
+func.def @static_dot4i(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {
+  %5 = vector.extract %acc[0] : vector<1xi32> -> i32
+  %6 = vector.extract %lhs[0] : vector<4xi8> -> i8
+  %7 = vector.extract %rhs[0] : vector<4xi8> -> i8
+  %8 = scalar.extsi %6 : i8 to i32
+  %9 = scalar.extui %7 : i8 to i32
+  %10 = scalar.muli %8, %9 : i32
+  %11 = scalar.addi %5, %10 : i32
+  %12 = vector.extract %lhs[1] : vector<4xi8> -> i8
+  %13 = vector.extract %rhs[1] : vector<4xi8> -> i8
+  %14 = scalar.extsi %12 : i8 to i32
+  %15 = scalar.extui %13 : i8 to i32
+  %16 = scalar.muli %14, %15 : i32
+  %17 = scalar.addi %11, %16 : i32
+  %18 = vector.extract %lhs[2] : vector<4xi8> -> i8
+  %19 = vector.extract %rhs[2] : vector<4xi8> -> i8
+  %20 = scalar.extsi %18 : i8 to i32
+  %21 = scalar.extui %19 : i8 to i32
+  %22 = scalar.muli %20, %21 : i32
+  %23 = scalar.addi %17, %22 : i32
+  %24 = vector.extract %lhs[3] : vector<4xi8> -> i8
+  %25 = vector.extract %rhs[3] : vector<4xi8> -> i8
+  %26 = scalar.extsi %24 : i8 to i32
+  %27 = scalar.extui %25 : i8 to i32
+  %28 = scalar.muli %26, %27 : i32
+  %29 = scalar.addi %23, %28 : i32
+  %r = vector.from_elements %29 : i32 -> vector<1xi32>
+  func.return %r : vector<1xi32>
+}
+
+// ====
+
+// Dynamic dot4i uses index arithmetic to map each result lane to the four
+// source lanes in its group.
+func.def @dynamic_dot4i(%n: index, %m: index, %lhs: vector<[%n]xi8>, %rhs: vector<[%n]xi8>, %acc: vector<[%m]xi32>) -> (vector<[%m]xi32>) {
+  %r = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<[%n]xi8>, vector<[%n]xi8>, vector<[%m]xi32>
+  func.return %r : vector<[%m]xi32>
+}
+
+// ----
+func.def @dynamic_dot4i(%n: index, %m: index, %lhs: vector<[%n]xi8>, %rhs: vector<[%n]xi8>, %acc: vector<[%m]xi32>) -> (vector<[%m]xi32>) {
+  %7 = index.constant 0 : index
+  %8 = index.constant 1 : index
+  %r = scf.for %9 = [%7 to %m step %8](%10 = %acc : vector<[%m]xi32>) -> (vector<[%m]xi32>) {
+    %12 = vector.extract %acc[%9] : vector<[%m]xi32> -> i32
+    %13 = index.constant 4 : index
+    %14 = index.mul %9, %13 : index
+    %15 = vector.extract %lhs[%14] : vector<[%n]xi8> -> i8
+    %16 = vector.extract %rhs[%14] : vector<[%n]xi8> -> i8
+    %17 = scalar.extui %15 : i8 to i32
+    %18 = scalar.extsi %16 : i8 to i32
+    %19 = scalar.muli %17, %18 : i32
+    %20 = scalar.addi %12, %19 : i32
+    %21 = index.constant 1 : index
+    %22 = index.add %14, %21 : index
+    %23 = vector.extract %lhs[%22] : vector<[%n]xi8> -> i8
+    %24 = vector.extract %rhs[%22] : vector<[%n]xi8> -> i8
+    %25 = scalar.extui %23 : i8 to i32
+    %26 = scalar.extsi %24 : i8 to i32
+    %27 = scalar.muli %25, %26 : i32
+    %28 = scalar.addi %20, %27 : i32
+    %29 = index.constant 2 : index
+    %30 = index.add %14, %29 : index
+    %31 = vector.extract %lhs[%30] : vector<[%n]xi8> -> i8
+    %32 = vector.extract %rhs[%30] : vector<[%n]xi8> -> i8
+    %33 = scalar.extui %31 : i8 to i32
+    %34 = scalar.extsi %32 : i8 to i32
+    %35 = scalar.muli %33, %34 : i32
+    %36 = scalar.addi %28, %35 : i32
+    %37 = index.constant 3 : index
+    %38 = index.add %14, %37 : index
+    %39 = vector.extract %lhs[%38] : vector<[%n]xi8> -> i8
+    %40 = vector.extract %rhs[%38] : vector<[%n]xi8> -> i8
+    %41 = scalar.extui %39 : i8 to i32
+    %42 = scalar.extsi %40 : i8 to i32
+    %43 = scalar.muli %41, %42 : i32
+    %44 = scalar.addi %36, %43 : i32
+    %45 = vector.insert %44 into %10[%9] : i32, vector<[%m]xi32> -> vector<[%m]xi32>
+    scf.yield %45 : vector<[%m]xi32>
+  }
+  func.return %r : vector<[%m]xi32>
+}
