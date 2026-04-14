@@ -1,0 +1,6 @@
+// RUN: pass dce
+
+func.def @barrier_survives_dce() {
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
+  func.return
+}

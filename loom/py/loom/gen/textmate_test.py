@@ -19,6 +19,7 @@ from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.globals import ALL_GLOBAL_OPS
 from loom.dialect.hal import ALL_HAL_TYPES
 from loom.dialect.index import ALL_INDEX_OPS
+from loom.dialect.kernel import ALL_KERNEL_OPS
 from loom.dialect.pool import ALL_POOL_OPS
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scf import ALL_SCF_OPS
@@ -44,6 +45,7 @@ ALL_OPS = (
     *ALL_VIEW_OPS,
     *ALL_VECTOR_OPS,
     *ALL_INDEX_OPS,
+    *ALL_KERNEL_OPS,
 )
 
 ALL_TYPES = (

@@ -2868,6 +2868,7 @@ def main() -> None:
     from loom.dialect.globals import ALL_GLOBAL_OPS, global_ops
     from loom.dialect.hal import ALL_HAL_TYPES
     from loom.dialect.index import ALL_INDEX_OPS, index_ops
+    from loom.dialect.kernel import ALL_KERNEL_OPS, kernel_ops
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
@@ -2887,6 +2888,7 @@ def main() -> None:
         (view_ops, list(ALL_VIEW_OPS)),
         (vector_ops, list(ALL_VECTOR_OPS)),
         (index_ops, list(ALL_INDEX_OPS)),
+        (kernel_ops, list(ALL_KERNEL_OPS)),
     ]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"

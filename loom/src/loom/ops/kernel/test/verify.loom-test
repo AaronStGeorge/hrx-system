@@ -1,0 +1,25 @@
+// RUN: verify
+
+// ====
+
+func.def @barrier_rejects_global_memory_space() {
+  // ERROR@+1: STRUCTURE/014 "memory_space" "1" "workgroup memory space"
+  kernel.barrier {memory_space = global, ordering = acq_rel, scope = workgroup}
+  func.return
+}
+
+// ====
+
+func.def @barrier_rejects_acquire_ordering() {
+  // ERROR@+1: STRUCTURE/014 "ordering" "1" "acq_rel ordering"
+  kernel.barrier {memory_space = workgroup, ordering = acquire, scope = workgroup}
+  func.return
+}
+
+// ====
+
+func.def @barrier_rejects_subgroup_scope() {
+  // ERROR@+1: STRUCTURE/014 "scope" "1" "workgroup scope"
+  kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = subgroup}
+  func.return
+}
