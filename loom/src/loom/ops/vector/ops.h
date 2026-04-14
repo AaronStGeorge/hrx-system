@@ -786,7 +786,7 @@ iree_status_t loom_vector_store_compress_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_GATHER: Gather a vector from per-lane signed element offsets relative to a full-rank view origin. Each result lane reads origin + offsets[lane] in element units; the offset vector shape matches the result shape.
+// LOOM_OP_VECTOR_GATHER: Gather a vector from per-lane signed logical offsets added to the last view axis of a full-rank view origin. Each result lane reads origin with the final coordinate adjusted by offsets[lane]; the offset vector shape matches the result shape.
 // %v = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_gather_isa, LOOM_OP_VECTOR_GATHER)
 LOOM_DEFINE_OPERAND(loom_vector_gather_view, 0)
@@ -809,7 +809,7 @@ iree_status_t loom_vector_gather_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SCATTER: Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin. Each lane writes origin + offsets[lane] in element units, and active lane addresses must be distinct because no atomic conflict resolution is implied.
+// LOOM_OP_VECTOR_SCATTER: Non-atomic scatter of a vector to per-lane signed logical offsets added to the last view axis of a full-rank view origin. Each lane writes origin with the final coordinate adjusted by offsets[lane], and active lane addresses must be distinct because no atomic conflict resolution is implied.
 // vector.scatter %v, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
 LOOM_DEFINE_ISA(loom_vector_scatter_isa, LOOM_OP_VECTOR_SCATTER)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_value, 0)
@@ -832,7 +832,7 @@ iree_status_t loom_vector_scatter_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_GATHER_MASK: Masked vector gather from per-lane signed element offsets. True mask lanes read origin + offsets[lane], while false mask lanes do not access memory and take the corresponding passthrough lane.
+// LOOM_OP_VECTOR_GATHER_MASK: Masked vector gather from per-lane signed logical offsets added to the last view axis. True mask lanes read the adjusted coordinate, while false mask lanes do not access memory and take the corresponding passthrough lane.
 // %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_gather_mask_isa, LOOM_OP_VECTOR_GATHER_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_gather_mask_view, 0)
@@ -859,7 +859,7 @@ iree_status_t loom_vector_gather_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SCATTER_MASK: Masked non-atomic scatter. True mask lanes write origin + offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct.
+// LOOM_OP_VECTOR_SCATTER_MASK: Masked non-atomic scatter. True mask lanes write the full-rank origin with the last coordinate adjusted by offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct.
 // vector.scatter.mask %v, %view[%row, %col][%offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>
 LOOM_DEFINE_ISA(loom_vector_scatter_mask_isa, LOOM_OP_VECTOR_SCATTER_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_value, 0)

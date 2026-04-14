@@ -112,6 +112,79 @@ static iree_status_t loom_vector_to_scalar_replace_results(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_to_scalar_erase_lowered_op(
+    loom_vector_to_scalar_state_t* state) {
+  IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, state->op));
+  if (state->pass->statistics) {
+    loom_pass_statistic_add(state->pass, LOOM_VECTOR_TO_SCALAR_STAT_OPS_LOWERED,
+                            1);
+  }
+  return iree_ok_status();
+}
+
+static bool loom_vector_to_scalar_memory_store_isa(loom_op_t* op) {
+  return loom_vector_store_isa(op) || loom_vector_store_mask_isa(op) ||
+         loom_vector_scatter_isa(op) || loom_vector_scatter_mask_isa(op);
+}
+
+static loom_value_id_t loom_vector_to_scalar_memory_store_value(loom_op_t* op) {
+  switch (op->kind) {
+    case LOOM_OP_VECTOR_STORE:
+      return loom_vector_store_value(op);
+    case LOOM_OP_VECTOR_STORE_MASK:
+      return loom_vector_store_mask_value(op);
+    case LOOM_OP_VECTOR_SCATTER:
+      return loom_vector_scatter_value(op);
+    case LOOM_OP_VECTOR_SCATTER_MASK:
+      return loom_vector_scatter_mask_value(op);
+    default:
+      return LOOM_VALUE_ID_INVALID;
+  }
+}
+
+static iree_status_t loom_vector_to_scalar_lower_memory_store_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  loom_value_id_t value = loom_vector_to_scalar_memory_store_value(op);
+  loom_type_t vector_type = loom_module_value_type(rewriter->module, value);
+  if (!loom_type_is_vector(vector_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected vector value for memory store op");
+  }
+  loom_vector_to_scalar_state_t state = {
+      .pass = pass,
+      .rewriter = rewriter,
+      .op = op,
+      .value_checkpoint = loom_rewriter_value_checkpoint(rewriter),
+      .vector_type = vector_type,
+      .result_scalar_type = loom_vector_to_scalar_lane_type(vector_type),
+      .location = op->location,
+  };
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_lower_memory_store(&state));
+  return loom_vector_to_scalar_erase_lowered_op(&state);
+}
+
+static iree_status_t loom_vector_to_scalar_lower_store_compress_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  loom_value_id_t value = loom_vector_store_compress_value(op);
+  loom_type_t vector_type = loom_module_value_type(rewriter->module, value);
+  if (!loom_type_is_vector(vector_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected vector value for vector.store.compress");
+  }
+  loom_vector_to_scalar_state_t state = {
+      .pass = pass,
+      .rewriter = rewriter,
+      .op = op,
+      .value_checkpoint = loom_rewriter_value_checkpoint(rewriter),
+      .vector_type = vector_type,
+      .result_scalar_type = loom_vector_to_scalar_lane_type(vector_type),
+      .location = op->location,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_lower_memory_store_compress(&state));
+  return loom_vector_to_scalar_erase_lowered_op(&state);
+}
+
 static iree_status_t loom_vector_to_scalar_lower_scalar_extract(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
   loom_value_id_t result = loom_vector_extract_result(op);
@@ -259,6 +332,14 @@ static iree_status_t loom_vector_to_scalar_lower_op(loom_pass_t* pass,
 
   if (loom_vector_deinterleave_isa(op)) {
     return loom_vector_to_scalar_lower_deinterleave(pass, rewriter, op);
+  }
+
+  if (loom_vector_to_scalar_memory_store_isa(op)) {
+    return loom_vector_to_scalar_lower_memory_store_op(pass, rewriter, op);
+  }
+
+  if (loom_vector_store_compress_isa(op)) {
+    return loom_vector_to_scalar_lower_store_compress_op(pass, rewriter, op);
   }
 
   if (op->result_count != 1) return iree_ok_status();

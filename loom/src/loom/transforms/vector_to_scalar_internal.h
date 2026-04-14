@@ -55,6 +55,11 @@ typedef enum loom_vector_to_scalar_lane_kind_e {
   LOOM_VECTOR_TO_SCALAR_LANE_TABLE_LOOKUP = 20,
   LOOM_VECTOR_TO_SCALAR_LANE_TABLE_QUANTIZE = 21,
   LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM = 22,
+  LOOM_VECTOR_TO_SCALAR_LANE_LOAD = 23,
+  LOOM_VECTOR_TO_SCALAR_LANE_LOAD_MASK = 24,
+  LOOM_VECTOR_TO_SCALAR_LANE_GATHER = 25,
+  LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK = 26,
+  LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND = 27,
 } loom_vector_to_scalar_lane_kind_t;
 
 typedef struct loom_vector_to_scalar_descriptor_t {
@@ -163,6 +168,9 @@ iree_status_t loom_vector_to_scalar_build_index_binary(
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_static_term(
     int64_t value);
+
+loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dynamic_term(
+    loom_value_id_t value);
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_lane_term(
     loom_vector_to_scalar_index_list_t indices, uint8_t axis);
@@ -293,6 +301,32 @@ iree_status_t loom_vector_to_scalar_build_table_quantize_lane(
 iree_status_t loom_vector_to_scalar_build_transform_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_build_load_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_build_masked_load_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_build_gather_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_build_masked_gather_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_build_load_expand_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_lower_memory_store(
+    loom_vector_to_scalar_state_t* state);
+
+iree_status_t loom_vector_to_scalar_lower_memory_store_compress(
+    loom_vector_to_scalar_state_t* state);
 
 iree_status_t loom_vector_to_scalar_terms_from_explicit_indices(
     loom_vector_to_scalar_state_t* state, loom_attribute_t static_indices,

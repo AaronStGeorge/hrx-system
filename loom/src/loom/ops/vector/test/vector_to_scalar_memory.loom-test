@@ -1,0 +1,466 @@
+// RUN: pass vector-to-scalar
+
+func.def @static_memory_ops(%buffer: buffer, %byte_offset: offset, %mask: vector<4xi1>, %old: vector<4xf32>, %offsets: vector<4xindex>, %value: vector<4xf32>) -> (vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<32xf32, %layout>
+  %load = vector.load %view[0] : view<32xf32, %layout> -> vector<4xf32>
+  %masked = vector.load.mask %view[4], %mask, %old : view<32xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  %expanded = vector.load.expand %view[8], %mask, %old : view<32xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  %gathered = vector.gather %view[12][%offsets] : view<32xf32, %layout>, vector<4xindex> -> vector<4xf32>
+  vector.store %value, %view[16] : vector<4xf32>, view<32xf32, %layout>
+  vector.store.mask %value, %view[20], %mask : vector<4xf32>, view<32xf32, %layout>, vector<4xi1>
+  vector.store.compress %value, %view[24], %mask : vector<4xf32>, view<32xf32, %layout>, vector<4xi1>
+  vector.scatter %value, %view[28][%offsets] : vector<4xf32>, view<32xf32, %layout>, vector<4xindex>
+  vector.scatter.mask %value, %view[28][%offsets], %mask : vector<4xf32>, view<32xf32, %layout>, vector<4xindex>, vector<4xi1>
+  func.return %load, %masked, %expanded, %gathered : vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>
+}
+
+// ----
+func.def @static_memory_ops(%buffer: buffer, %byte_offset: offset, %mask: vector<4xi1>, %old: vector<4xf32>, %offsets: vector<4xindex>, %value: vector<4xf32>) -> (vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<32xf32, %layout>
+  %189 = view.load %view[0] : view<32xf32, %layout> -> f32
+  %190 = view.load %view[1] : view<32xf32, %layout> -> f32
+  %191 = view.load %view[2] : view<32xf32, %layout> -> f32
+  %192 = view.load %view[3] : view<32xf32, %layout> -> f32
+  %load = vector.from_elements %189, %190, %191, %192 : f32, f32, f32, f32 -> vector<4xf32>
+  %172 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %173 = scf.if %172 -> (f32) {
+    %174 = view.load %view[4] : view<32xf32, %layout> -> f32
+    scf.yield %174 : f32
+  } else {
+    %175 = vector.extract %old[0] : vector<4xf32> -> f32
+    scf.yield %175 : f32
+  }
+  %176 = vector.extract %mask[1] : vector<4xi1> -> i1
+  %177 = scf.if %176 -> (f32) {
+    %178 = view.load %view[5] : view<32xf32, %layout> -> f32
+    scf.yield %178 : f32
+  } else {
+    %179 = vector.extract %old[1] : vector<4xf32> -> f32
+    scf.yield %179 : f32
+  }
+  %180 = vector.extract %mask[2] : vector<4xi1> -> i1
+  %181 = scf.if %180 -> (f32) {
+    %182 = view.load %view[6] : view<32xf32, %layout> -> f32
+    scf.yield %182 : f32
+  } else {
+    %183 = vector.extract %old[2] : vector<4xf32> -> f32
+    scf.yield %183 : f32
+  }
+  %184 = vector.extract %mask[3] : vector<4xi1> -> i1
+  %185 = scf.if %184 -> (f32) {
+    %186 = view.load %view[7] : view<32xf32, %layout> -> f32
+    scf.yield %186 : f32
+  } else {
+    %187 = vector.extract %old[3] : vector<4xf32> -> f32
+    scf.yield %187 : f32
+  }
+  %masked = vector.from_elements %173, %177, %181, %185 : f32, f32, f32, f32 -> vector<4xf32>
+  %122 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %123 = scf.if %122 -> (f32) {
+    %124 = view.load %view[8] : view<32xf32, %layout> -> f32
+    scf.yield %124 : f32
+  } else {
+    %125 = vector.extract %old[0] : vector<4xf32> -> f32
+    scf.yield %125 : f32
+  }
+  %126 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %127 = index.constant 0 : index
+  %128 = index.constant 1 : index
+  %129 = scalar.select %126, %128, %127 : index
+  %130 = vector.extract %mask[1] : vector<4xi1> -> i1
+  %131 = scf.if %130 -> (f32) {
+    %132 = index.constant 8 : index
+    %133 = index.add %132, %129 : index
+    %134 = view.load %view[%133] : view<32xf32, %layout> -> f32
+    scf.yield %134 : f32
+  } else {
+    %135 = vector.extract %old[1] : vector<4xf32> -> f32
+    scf.yield %135 : f32
+  }
+  %136 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %137 = index.constant 0 : index
+  %138 = index.constant 1 : index
+  %139 = scalar.select %136, %138, %137 : index
+  %140 = vector.extract %mask[1] : vector<4xi1> -> i1
+  %141 = index.constant 0 : index
+  %142 = index.constant 1 : index
+  %143 = scalar.select %140, %142, %141 : index
+  %144 = index.add %139, %143 : index
+  %145 = vector.extract %mask[2] : vector<4xi1> -> i1
+  %146 = scf.if %145 -> (f32) {
+    %147 = index.constant 8 : index
+    %148 = index.add %147, %144 : index
+    %149 = view.load %view[%148] : view<32xf32, %layout> -> f32
+    scf.yield %149 : f32
+  } else {
+    %150 = vector.extract %old[2] : vector<4xf32> -> f32
+    scf.yield %150 : f32
+  }
+  %151 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %152 = index.constant 0 : index
+  %153 = index.constant 1 : index
+  %154 = scalar.select %151, %153, %152 : index
+  %155 = vector.extract %mask[1] : vector<4xi1> -> i1
+  %156 = index.constant 0 : index
+  %157 = index.constant 1 : index
+  %158 = scalar.select %155, %157, %156 : index
+  %159 = index.add %154, %158 : index
+  %160 = vector.extract %mask[2] : vector<4xi1> -> i1
+  %161 = index.constant 0 : index
+  %162 = index.constant 1 : index
+  %163 = scalar.select %160, %162, %161 : index
+  %164 = index.add %159, %163 : index
+  %165 = vector.extract %mask[3] : vector<4xi1> -> i1
+  %166 = scf.if %165 -> (f32) {
+    %167 = index.constant 8 : index
+    %168 = index.add %167, %164 : index
+    %169 = view.load %view[%168] : view<32xf32, %layout> -> f32
+    scf.yield %169 : f32
+  } else {
+    %170 = vector.extract %old[3] : vector<4xf32> -> f32
+    scf.yield %170 : f32
+  }
+  %expanded = vector.from_elements %123, %131, %146, %166 : f32, f32, f32, f32 -> vector<4xf32>
+  %105 = vector.extract %offsets[0] : vector<4xindex> -> index
+  %106 = index.constant 12 : index
+  %107 = index.add %106, %105 : index
+  %108 = view.load %view[%107] : view<32xf32, %layout> -> f32
+  %109 = vector.extract %offsets[1] : vector<4xindex> -> index
+  %110 = index.constant 12 : index
+  %111 = index.add %110, %109 : index
+  %112 = view.load %view[%111] : view<32xf32, %layout> -> f32
+  %113 = vector.extract %offsets[2] : vector<4xindex> -> index
+  %114 = index.constant 12 : index
+  %115 = index.add %114, %113 : index
+  %116 = view.load %view[%115] : view<32xf32, %layout> -> f32
+  %117 = vector.extract %offsets[3] : vector<4xindex> -> index
+  %118 = index.constant 12 : index
+  %119 = index.add %118, %117 : index
+  %120 = view.load %view[%119] : view<32xf32, %layout> -> f32
+  %gathered = vector.from_elements %108, %112, %116, %120 : f32, f32, f32, f32 -> vector<4xf32>
+  %101 = vector.extract %value[0] : vector<4xf32> -> f32
+  view.store %101, %view[16] : f32, view<32xf32, %layout>
+  %102 = vector.extract %value[1] : vector<4xf32> -> f32
+  view.store %102, %view[17] : f32, view<32xf32, %layout>
+  %103 = vector.extract %value[2] : vector<4xf32> -> f32
+  view.store %103, %view[18] : f32, view<32xf32, %layout>
+  %104 = vector.extract %value[3] : vector<4xf32> -> f32
+  view.store %104, %view[19] : f32, view<32xf32, %layout>
+  %93 = vector.extract %mask[0] : vector<4xi1> -> i1
+  scf.if %93 {
+    %94 = vector.extract %value[0] : vector<4xf32> -> f32
+    view.store %94, %view[20] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %95 = vector.extract %mask[1] : vector<4xi1> -> i1
+  scf.if %95 {
+    %96 = vector.extract %value[1] : vector<4xf32> -> f32
+    view.store %96, %view[21] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %97 = vector.extract %mask[2] : vector<4xi1> -> i1
+  scf.if %97 {
+    %98 = vector.extract %value[2] : vector<4xf32> -> f32
+    view.store %98, %view[22] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %99 = vector.extract %mask[3] : vector<4xi1> -> i1
+  scf.if %99 {
+    %100 = vector.extract %value[3] : vector<4xf32> -> f32
+    view.store %100, %view[23] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %52 = vector.extract %mask[0] : vector<4xi1> -> i1
+  scf.if %52 {
+    %53 = vector.extract %value[0] : vector<4xf32> -> f32
+    view.store %53, %view[24] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %54 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %55 = index.constant 0 : index
+  %56 = index.constant 1 : index
+  %57 = scalar.select %54, %56, %55 : index
+  %58 = vector.extract %mask[1] : vector<4xi1> -> i1
+  scf.if %58 {
+    %59 = vector.extract %value[1] : vector<4xf32> -> f32
+    %60 = index.constant 24 : index
+    %61 = index.add %60, %57 : index
+    view.store %59, %view[%61] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %62 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %63 = index.constant 0 : index
+  %64 = index.constant 1 : index
+  %65 = scalar.select %62, %64, %63 : index
+  %66 = vector.extract %mask[1] : vector<4xi1> -> i1
+  %67 = index.constant 0 : index
+  %68 = index.constant 1 : index
+  %69 = scalar.select %66, %68, %67 : index
+  %70 = index.add %65, %69 : index
+  %71 = vector.extract %mask[2] : vector<4xi1> -> i1
+  scf.if %71 {
+    %72 = vector.extract %value[2] : vector<4xf32> -> f32
+    %73 = index.constant 24 : index
+    %74 = index.add %73, %70 : index
+    view.store %72, %view[%74] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %75 = vector.extract %mask[0] : vector<4xi1> -> i1
+  %76 = index.constant 0 : index
+  %77 = index.constant 1 : index
+  %78 = scalar.select %75, %77, %76 : index
+  %79 = vector.extract %mask[1] : vector<4xi1> -> i1
+  %80 = index.constant 0 : index
+  %81 = index.constant 1 : index
+  %82 = scalar.select %79, %81, %80 : index
+  %83 = index.add %78, %82 : index
+  %84 = vector.extract %mask[2] : vector<4xi1> -> i1
+  %85 = index.constant 0 : index
+  %86 = index.constant 1 : index
+  %87 = scalar.select %84, %86, %85 : index
+  %88 = index.add %83, %87 : index
+  %89 = vector.extract %mask[3] : vector<4xi1> -> i1
+  scf.if %89 {
+    %90 = vector.extract %value[3] : vector<4xf32> -> f32
+    %91 = index.constant 24 : index
+    %92 = index.add %91, %88 : index
+    view.store %90, %view[%92] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %36 = vector.extract %value[0] : vector<4xf32> -> f32
+  %37 = vector.extract %offsets[0] : vector<4xindex> -> index
+  %38 = index.constant 28 : index
+  %39 = index.add %38, %37 : index
+  view.store %36, %view[%39] : f32, view<32xf32, %layout>
+  %40 = vector.extract %value[1] : vector<4xf32> -> f32
+  %41 = vector.extract %offsets[1] : vector<4xindex> -> index
+  %42 = index.constant 28 : index
+  %43 = index.add %42, %41 : index
+  view.store %40, %view[%43] : f32, view<32xf32, %layout>
+  %44 = vector.extract %value[2] : vector<4xf32> -> f32
+  %45 = vector.extract %offsets[2] : vector<4xindex> -> index
+  %46 = index.constant 28 : index
+  %47 = index.add %46, %45 : index
+  view.store %44, %view[%47] : f32, view<32xf32, %layout>
+  %48 = vector.extract %value[3] : vector<4xf32> -> f32
+  %49 = vector.extract %offsets[3] : vector<4xindex> -> index
+  %50 = index.constant 28 : index
+  %51 = index.add %50, %49 : index
+  view.store %48, %view[%51] : f32, view<32xf32, %layout>
+  %16 = vector.extract %mask[0] : vector<4xi1> -> i1
+  scf.if %16 {
+    %17 = vector.extract %value[0] : vector<4xf32> -> f32
+    %18 = vector.extract %offsets[0] : vector<4xindex> -> index
+    %19 = index.constant 28 : index
+    %20 = index.add %19, %18 : index
+    view.store %17, %view[%20] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %21 = vector.extract %mask[1] : vector<4xi1> -> i1
+  scf.if %21 {
+    %22 = vector.extract %value[1] : vector<4xf32> -> f32
+    %23 = vector.extract %offsets[1] : vector<4xindex> -> index
+    %24 = index.constant 28 : index
+    %25 = index.add %24, %23 : index
+    view.store %22, %view[%25] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %26 = vector.extract %mask[2] : vector<4xi1> -> i1
+  scf.if %26 {
+    %27 = vector.extract %value[2] : vector<4xf32> -> f32
+    %28 = vector.extract %offsets[2] : vector<4xindex> -> index
+    %29 = index.constant 28 : index
+    %30 = index.add %29, %28 : index
+    view.store %27, %view[%30] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  %31 = vector.extract %mask[3] : vector<4xi1> -> i1
+  scf.if %31 {
+    %32 = vector.extract %value[3] : vector<4xf32> -> f32
+    %33 = vector.extract %offsets[3] : vector<4xindex> -> index
+    %34 = index.constant 28 : index
+    %35 = index.add %34, %33 : index
+    view.store %32, %view[%35] : f32, view<32xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return %load, %masked, %expanded, %gathered : vector<4xf32>, vector<4xf32>, vector<4xf32>, vector<4xf32>
+}
+
+// ====
+
+func.def @dynamic_memory_ops(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index, %mask: vector<[%n]xi1>, %old: vector<[%n]xf32>, %offsets: vector<[%n]xindex>, %value: vector<[%n]xf32>) -> (vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xf32, %layout>
+  %load = vector.load %view[%origin] : view<[%n]xf32, %layout> -> vector<[%n]xf32>
+  %masked = vector.load.mask %view[%origin], %mask, %old : view<[%n]xf32, %layout>, vector<[%n]xi1>, vector<[%n]xf32> -> vector<[%n]xf32>
+  %expanded = vector.load.expand %view[%origin], %mask, %old : view<[%n]xf32, %layout>, vector<[%n]xi1>, vector<[%n]xf32> -> vector<[%n]xf32>
+  %gathered = vector.gather %view[%origin][%offsets] : view<[%n]xf32, %layout>, vector<[%n]xindex> -> vector<[%n]xf32>
+  vector.store %value, %view[%origin] : vector<[%n]xf32>, view<[%n]xf32, %layout>
+  vector.store.mask %value, %view[%origin], %mask : vector<[%n]xf32>, view<[%n]xf32, %layout>, vector<[%n]xi1>
+  vector.store.compress %value, %view[%origin], %mask : vector<[%n]xf32>, view<[%n]xf32, %layout>, vector<[%n]xi1>
+  vector.scatter %value, %view[%origin][%offsets] : vector<[%n]xf32>, view<[%n]xf32, %layout>, vector<[%n]xindex>
+  vector.scatter.mask %value, %view[%origin][%offsets], %mask : vector<[%n]xf32>, view<[%n]xf32, %layout>, vector<[%n]xindex>, vector<[%n]xi1>
+  func.return %load, %masked, %expanded, %gathered : vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>
+}
+
+// ----
+func.def @dynamic_memory_ops(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index, %mask: vector<[%n]xi1>, %old: vector<[%n]xf32>, %offsets: vector<[%n]xindex>, %value: vector<[%n]xf32>) -> (vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xf32, %layout>
+  %100 = vector.constant 0.0 : vector<[%n]xf32>
+  %101 = index.constant 0 : index
+  %102 = index.constant 1 : index
+  %load = scf.for %103 = [%101 to %n step %102](%104 = %100 : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+    %106 = index.add %origin, %103 : index
+    %107 = view.load %view[%106] : view<[%n]xf32, %layout> -> f32
+    %108 = vector.insert %107 into %104[%103] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    scf.yield %108 : vector<[%n]xf32>
+  }
+  %89 = index.constant 0 : index
+  %90 = index.constant 1 : index
+  %masked = scf.for %91 = [%89 to %n step %90](%92 = %old : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+    %94 = vector.extract %mask[%91] : vector<[%n]xi1> -> i1
+    %95 = scf.if %94 -> (f32) {
+      %96 = index.add %origin, %91 : index
+      %97 = view.load %view[%96] : view<[%n]xf32, %layout> -> f32
+      scf.yield %97 : f32
+    } else {
+      %98 = vector.extract %old[%91] : vector<[%n]xf32> -> f32
+      scf.yield %98 : f32
+    }
+    %99 = vector.insert %95 into %92[%91] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    scf.yield %99 : vector<[%n]xf32>
+  }
+  %68 = index.constant 0 : index
+  %69 = index.constant 1 : index
+  %expanded = scf.for %70 = [%68 to %n step %69](%71 = %old : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+    %73 = index.constant 0 : index
+    %74 = index.constant 1 : index
+    %77 = scf.for %75 = [%73 to %70 step %74](%76 = %73 : index) -> (index) {
+      %78 = vector.extract %mask[%75] : vector<[%n]xi1> -> i1
+      %79 = index.constant 0 : index
+      %80 = index.constant 1 : index
+      %81 = scalar.select %78, %80, %79 : index
+      %82 = index.add %76, %81 : index
+      scf.yield %82 : index
+    }
+    %83 = vector.extract %mask[%70] : vector<[%n]xi1> -> i1
+    %84 = scf.if %83 -> (f32) {
+      %85 = index.add %origin, %77 : index
+      %86 = view.load %view[%85] : view<[%n]xf32, %layout> -> f32
+      scf.yield %86 : f32
+    } else {
+      %87 = vector.extract %old[%70] : vector<[%n]xf32> -> f32
+      scf.yield %87 : f32
+    }
+    %88 = vector.insert %84 into %71[%70] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    scf.yield %88 : vector<[%n]xf32>
+  }
+  %58 = vector.constant 0.0 : vector<[%n]xf32>
+  %59 = index.constant 0 : index
+  %60 = index.constant 1 : index
+  %gathered = scf.for %61 = [%59 to %n step %60](%62 = %58 : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+    %64 = vector.extract %offsets[%61] : vector<[%n]xindex> -> index
+    %65 = index.add %origin, %64 : index
+    %66 = view.load %view[%65] : view<[%n]xf32, %layout> -> f32
+    %67 = vector.insert %66 into %62[%61] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    scf.yield %67 : vector<[%n]xf32>
+  }
+  %53 = index.constant 0 : index
+  %54 = index.constant 1 : index
+  scf.for %55 = [%53 to %n step %54] {
+    %56 = vector.extract %value[%55] : vector<[%n]xf32> -> f32
+    %57 = index.add %origin, %55 : index
+    view.store %56, %view[%57] : f32, view<[%n]xf32, %layout>
+    scf.yield
+  }
+  %47 = index.constant 0 : index
+  %48 = index.constant 1 : index
+  scf.for %49 = [%47 to %n step %48] {
+    %50 = vector.extract %mask[%49] : vector<[%n]xi1> -> i1
+    scf.if %50 {
+      %51 = vector.extract %value[%49] : vector<[%n]xf32> -> f32
+      %52 = index.add %origin, %49 : index
+      view.store %51, %view[%52] : f32, view<[%n]xf32, %layout>
+      scf.yield
+    } else {
+      scf.yield
+    }
+    scf.yield
+  }
+  %31 = index.constant 0 : index
+  %32 = index.constant 1 : index
+  scf.for %33 = [%31 to %n step %32] {
+    %34 = index.constant 0 : index
+    %35 = index.constant 1 : index
+    %38 = scf.for %36 = [%34 to %33 step %35](%37 = %34 : index) -> (index) {
+      %39 = vector.extract %mask[%36] : vector<[%n]xi1> -> i1
+      %40 = index.constant 0 : index
+      %41 = index.constant 1 : index
+      %42 = scalar.select %39, %41, %40 : index
+      %43 = index.add %37, %42 : index
+      scf.yield %43 : index
+    }
+    %44 = vector.extract %mask[%33] : vector<[%n]xi1> -> i1
+    scf.if %44 {
+      %45 = vector.extract %value[%33] : vector<[%n]xf32> -> f32
+      %46 = index.add %origin, %38 : index
+      view.store %45, %view[%46] : f32, view<[%n]xf32, %layout>
+      scf.yield
+    } else {
+      scf.yield
+    }
+    scf.yield
+  }
+  %25 = index.constant 0 : index
+  %26 = index.constant 1 : index
+  scf.for %27 = [%25 to %n step %26] {
+    %28 = vector.extract %value[%27] : vector<[%n]xf32> -> f32
+    %29 = vector.extract %offsets[%27] : vector<[%n]xindex> -> index
+    %30 = index.add %origin, %29 : index
+    view.store %28, %view[%30] : f32, view<[%n]xf32, %layout>
+    scf.yield
+  }
+  %18 = index.constant 0 : index
+  %19 = index.constant 1 : index
+  scf.for %20 = [%18 to %n step %19] {
+    %21 = vector.extract %mask[%20] : vector<[%n]xi1> -> i1
+    scf.if %21 {
+      %22 = vector.extract %value[%20] : vector<[%n]xf32> -> f32
+      %23 = vector.extract %offsets[%20] : vector<[%n]xindex> -> index
+      %24 = index.add %origin, %23 : index
+      view.store %22, %view[%24] : f32, view<[%n]xf32, %layout>
+      scf.yield
+    } else {
+      scf.yield
+    }
+    scf.yield
+  }
+  func.return %load, %masked, %expanded, %gathered : vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>, vector<[%n]xf32>
+}

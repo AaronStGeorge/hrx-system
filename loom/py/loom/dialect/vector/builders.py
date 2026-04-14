@@ -423,7 +423,7 @@ class VectorBuilders:
         self._b.build("vector.store.compress", _operands, attributes=_attributes, regions=_regions)
 
     def gather(self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Gather a vector from per-lane signed element offsets relative to a full-rank view origin. Each result lane reads origin + offsets[lane] in element units; the offset vector shape matches the result shape.
+        """Gather a vector from per-lane signed logical offsets added to the last view axis of a full-rank view origin. Each result lane reads origin with the final coordinate adjusted by offsets[lane]; the offset vector shape matches the result shape.
 
         Example::
             %v = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
@@ -445,7 +445,7 @@ class VectorBuilders:
         return cast(ValueRef, self._b.build("vector.gather", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def scatter(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef) -> None:
-        """Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin. Each lane writes origin + offsets[lane] in element units, and active lane addresses must be distinct because no atomic conflict resolution is implied.
+        """Non-atomic scatter of a vector to per-lane signed logical offsets added to the last view axis of a full-rank view origin. Each lane writes origin with the final coordinate adjusted by offsets[lane], and active lane addresses must be distinct because no atomic conflict resolution is implied.
 
         Example::
             vector.scatter %v, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
@@ -468,7 +468,7 @@ class VectorBuilders:
         self._b.build("vector.scatter", _operands, attributes=_attributes, regions=_regions)
 
     def gather_mask(self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef, passthrough: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Masked vector gather from per-lane signed element offsets. True mask lanes read origin + offsets[lane], while false mask lanes do not access memory and take the corresponding passthrough lane.
+        """Masked vector gather from per-lane signed logical offsets added to the last view axis. True mask lanes read the adjusted coordinate, while false mask lanes do not access memory and take the corresponding passthrough lane.
 
         Example::
             %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
@@ -492,7 +492,7 @@ class VectorBuilders:
         return cast(ValueRef, self._b.build("vector.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def scatter_mask(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef) -> None:
-        """Masked non-atomic scatter. True mask lanes write origin + offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct.
+        """Masked non-atomic scatter. True mask lanes write the full-rank origin with the last coordinate adjusted by offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct.
 
         Example::
             vector.scatter.mask %v, %view[%row, %col][%offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>

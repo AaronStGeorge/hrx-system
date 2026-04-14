@@ -1262,9 +1262,10 @@ vector_gather = Op(
     "vector.gather",
     group=vector_ops,
     doc=(
-        "Gather a vector from per-lane signed element offsets relative to a "
-        "full-rank view origin. Each result lane reads origin + offsets[lane] "
-        "in element units; the offset vector shape matches the result shape."
+        "Gather a vector from per-lane signed logical offsets added to the "
+        "last view axis of a full-rank view origin. Each result lane reads "
+        "origin with the final coordinate adjusted by offsets[lane]; the "
+        "offset vector shape matches the result shape."
     ),
     operands=[
         Operand("view", VIEW, doc="Typed source view."),
@@ -1308,10 +1309,11 @@ vector_scatter = Op(
     "vector.scatter",
     group=vector_ops,
     doc=(
-        "Non-atomic scatter of a vector to per-lane signed element offsets "
-        "relative to a full-rank view origin. Each lane writes origin + "
-        "offsets[lane] in element units, and active lane addresses must be "
-        "distinct because no atomic conflict resolution is implied."
+        "Non-atomic scatter of a vector to per-lane signed logical offsets "
+        "added to the last view axis of a full-rank view origin. Each lane "
+        "writes origin with the final coordinate adjusted by offsets[lane], "
+        "and active lane addresses must be distinct because no atomic "
+        "conflict resolution is implied."
     ),
     operands=[
         Operand("value", VECTOR, doc="Vector value to store."),
@@ -1357,9 +1359,10 @@ vector_gather_mask = Op(
     "vector.gather.mask",
     group=vector_ops,
     doc=(
-        "Masked vector gather from per-lane signed element offsets. True mask "
-        "lanes read origin + offsets[lane], while false mask lanes do not "
-        "access memory and take the corresponding passthrough lane."
+        "Masked vector gather from per-lane signed logical offsets added to "
+        "the last view axis. True mask lanes read the adjusted coordinate, "
+        "while false mask lanes do not access memory and take the "
+        "corresponding passthrough lane."
     ),
     operands=[
         Operand("view", VIEW, doc="Typed source view."),
@@ -1414,7 +1417,9 @@ vector_gather_mask = Op(
 vector_scatter_mask = Op(
     "vector.scatter.mask",
     group=vector_ops,
-    doc=("Masked non-atomic scatter. True mask lanes write origin + offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct."),
+    doc=(
+        "Masked non-atomic scatter. True mask lanes write the full-rank origin with the last coordinate adjusted by offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct."
+    ),
     operands=[
         Operand("value", VECTOR, doc="Vector value to store."),
         Operand("view", VIEW, doc="Typed destination view."),

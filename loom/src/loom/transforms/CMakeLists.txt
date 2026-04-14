@@ -185,6 +185,7 @@ loom_cc_library(
     "vector_to_scalar_aggregates.c"
     "vector_to_scalar_descriptors.c"
     "vector_to_scalar_lanes.c"
+    "vector_to_scalar_memory.c"
     "vector_to_scalar_quantized.c"
     "vector_to_scalar_reductions.c"
     "vector_to_scalar_structural.c"
@@ -201,6 +202,7 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
+    loom::src::loom::ops::view
     loom::src::loom::util::math
   PUBLIC
 )

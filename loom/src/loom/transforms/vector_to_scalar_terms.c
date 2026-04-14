@@ -76,7 +76,7 @@ loom_vector_to_scalar_index_term_t loom_vector_to_scalar_static_term(
   };
 }
 
-static loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dynamic_term(
+loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dynamic_term(
     loom_value_id_t value) {
   return (loom_vector_to_scalar_index_term_t){
       .dynamic_value = value,

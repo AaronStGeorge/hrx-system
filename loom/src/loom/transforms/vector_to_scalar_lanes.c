@@ -417,6 +417,19 @@ iree_status_t loom_vector_to_scalar_build_lane(
     case LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM:
       return loom_vector_to_scalar_build_transform_lane(state, indices,
                                                         out_lane);
+    case LOOM_VECTOR_TO_SCALAR_LANE_LOAD:
+      return loom_vector_to_scalar_build_load_lane(state, indices, out_lane);
+    case LOOM_VECTOR_TO_SCALAR_LANE_LOAD_MASK:
+      return loom_vector_to_scalar_build_masked_load_lane(state, indices,
+                                                          out_lane);
+    case LOOM_VECTOR_TO_SCALAR_LANE_GATHER:
+      return loom_vector_to_scalar_build_gather_lane(state, indices, out_lane);
+    case LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK:
+      return loom_vector_to_scalar_build_masked_gather_lane(state, indices,
+                                                            out_lane);
+    case LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND:
+      return loom_vector_to_scalar_build_load_expand_lane(state, indices,
+                                                          out_lane);
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown vector-to-scalar lane kind %u",

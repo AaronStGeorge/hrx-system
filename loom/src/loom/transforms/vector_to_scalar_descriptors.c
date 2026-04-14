@@ -246,6 +246,16 @@ static const loom_vector_to_scalar_descriptor_t kVectorToScalarDescriptors[] = {
     {LOOM_OP_VECTOR_TRANSFORM, LOOM_OP_KIND_UNKNOWN,
      LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM, 0, 0, false, false, false,
      UINT8_MAX},
+    {LOOM_OP_VECTOR_LOAD, LOOM_OP_KIND_UNKNOWN, LOOM_VECTOR_TO_SCALAR_LANE_LOAD,
+     0, 0, false, false, false, UINT8_MAX},
+    {LOOM_OP_VECTOR_LOAD_MASK, LOOM_OP_KIND_UNKNOWN,
+     LOOM_VECTOR_TO_SCALAR_LANE_LOAD_MASK, 0, 0, false, false, false, 2},
+    {LOOM_OP_VECTOR_LOAD_EXPAND, LOOM_OP_KIND_UNKNOWN,
+     LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND, 0, 0, false, false, false, 2},
+    {LOOM_OP_VECTOR_GATHER, LOOM_OP_KIND_UNKNOWN,
+     LOOM_VECTOR_TO_SCALAR_LANE_GATHER, 0, 0, false, false, false, UINT8_MAX},
+    {LOOM_OP_VECTOR_GATHER_MASK, LOOM_OP_KIND_UNKNOWN,
+     LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK, 0, 0, false, false, false, 3},
 };
 
 const loom_vector_to_scalar_descriptor_t* loom_vector_to_scalar_find_descriptor(
