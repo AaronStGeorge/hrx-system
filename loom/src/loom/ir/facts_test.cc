@@ -541,6 +541,15 @@ TEST(RemuiTransfer, ExactDivisible) {
   EXPECT_EQ(out.range_lo, 0);
 }
 
+TEST(RemuiTransfer, ExactNonDivisible) {
+  loom_value_facts_t a = loom_value_facts_exact_i64(18);
+  loom_value_facts_t b = loom_value_facts_exact_i64(5);
+  loom_value_facts_t out;
+  loom_value_facts_remui(&a, &b, &out);
+  EXPECT_TRUE(loom_value_facts_is_exact(out));
+  EXPECT_EQ(out.range_lo, 3);
+}
+
 TEST(RemuiTransfer, DivisibleByDivisor) {
   // Range with divisor 64, mod by 16 → always 0.
   loom_value_facts_t a = loom_value_facts_make(64, 1024, 64);

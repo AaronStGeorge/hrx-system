@@ -280,6 +280,39 @@ def _lanewise_unary(
     )
 
 
+def _lanewise_unary_shape_change(
+    name: str,
+    *,
+    source_constraint: Callable[[str], Constraint],
+    result_constraint: TypeConstraint,
+    doc: str,
+    facts: str = "",
+) -> Op:
+    result_element_constraint = _element_constraint_for(result_constraint)
+    return Op(
+        name,
+        group=vector_ops,
+        doc=doc,
+        operands=[Operand("input", VECTOR)],
+        results=[Result("result", VECTOR)],
+        constraints=[
+            source_constraint("input"),
+            result_element_constraint("result"),
+            SameKind("input", "result"),
+            SameShape("input", "result"),
+        ],
+        traits=[PURE, ELEMENTWISE],
+        facts=facts,
+        format=[
+            Ref("input"),
+            COLON,
+            TypeOf("input"),
+            ARROW,
+            ResultType("result"),
+        ],
+    )
+
+
 def _vector_cast(
     name: str,
     *,
@@ -1907,6 +1940,14 @@ vector_addi = _lanewise_binary(
     facts="loom_vector_addi_facts",
 )
 
+vector_subi = _lanewise_binary(
+    "vector.subi",
+    result_constraint=INTEGER_ELEMENT,
+    doc=("Lanewise integer subtraction of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
+    flags=("overflow", IntOverflowFlags),
+    facts="loom_vector_subi_facts",
+)
+
 vector_muli = _lanewise_binary(
     "vector.muli",
     result_constraint=INTEGER_ELEMENT,
@@ -1914,6 +1955,130 @@ vector_muli = _lanewise_binary(
     commutative=True,
     flags=("overflow", IntOverflowFlags),
     facts="loom_vector_muli_facts",
+)
+
+vector_divsi = _lanewise_binary(
+    "vector.divsi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise signed integer division of same-typed vector operands; each lane rounds toward zero.",
+    facts="loom_vector_divsi_facts",
+)
+
+vector_divui = _lanewise_binary(
+    "vector.divui",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise unsigned integer division of same-typed vector operands.",
+    facts="loom_vector_divui_facts",
+)
+
+vector_remsi = _lanewise_binary(
+    "vector.remsi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise signed integer remainder of same-typed vector operands.",
+    facts="loom_vector_remsi_facts",
+)
+
+vector_remui = _lanewise_binary(
+    "vector.remui",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise unsigned integer remainder of same-typed vector operands.",
+    facts="loom_vector_remui_facts",
+)
+
+vector_ceildivsi = _lanewise_binary(
+    "vector.ceildivsi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise signed integer division rounding toward positive infinity.",
+)
+
+vector_ceildivui = _lanewise_binary(
+    "vector.ceildivui",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise unsigned integer division rounding toward positive infinity.",
+)
+
+vector_floordivsi = _lanewise_binary(
+    "vector.floordivsi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise signed integer division rounding toward negative infinity.",
+)
+
+vector_negi = _lanewise_unary(
+    "vector.negi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise integer negation of a same-typed vector operand.",
+    traits=[INVOLUTION],
+    facts="loom_vector_negi_facts",
+)
+
+vector_absi = _lanewise_unary(
+    "vector.absi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise integer absolute value of a same-typed vector operand.",
+    traits=[IDEMPOTENT],
+    facts="loom_vector_absi_facts",
+)
+
+vector_minsi = _lanewise_binary(
+    "vector.minsi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise signed integer minimum of same-typed vector operands.",
+    commutative=True,
+    facts="loom_vector_minsi_facts",
+)
+
+vector_maxsi = _lanewise_binary(
+    "vector.maxsi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise signed integer maximum of same-typed vector operands.",
+    commutative=True,
+    facts="loom_vector_maxsi_facts",
+)
+
+vector_minui = _lanewise_binary(
+    "vector.minui",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise unsigned integer minimum of same-typed vector operands.",
+    commutative=True,
+    facts="loom_vector_minui_facts",
+)
+
+vector_maxui = _lanewise_binary(
+    "vector.maxui",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise unsigned integer maximum of same-typed vector operands.",
+    commutative=True,
+    facts="loom_vector_maxui_facts",
+)
+
+vector_fmai = Op(
+    "vector.fmai",
+    group=vector_ops,
+    doc=("Lanewise fused integer multiply-add a*b + c over same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
+    operands=[
+        Operand("a", VECTOR),
+        Operand("b", VECTOR),
+        Operand("c", VECTOR),
+    ],
+    results=[Result("result", VECTOR)],
+    attrs=[AttrDef("overflow", ATTR_TYPE_FLAGS, optional=True, enum_def=IntOverflowFlags)],
+    constraints=[
+        HasIntegerElement("result"),
+        SameType("a", "b", "c", "result"),
+    ],
+    traits=[PURE, ELEMENTWISE],
+    facts="loom_vector_fmai_facts",
+    format=[
+        Flags("overflow"),
+        Ref("a"),
+        COMMA,
+        Ref("b"),
+        COMMA,
+        Ref("c"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=["%r = vector.fmai %a, %b, %c : vector<16xi32>"],
 )
 
 vector_andi = _lanewise_binary(
@@ -1940,10 +2105,59 @@ vector_xori = _lanewise_binary(
     facts="loom_vector_xori_facts",
 )
 
+vector_shli = _lanewise_binary(
+    "vector.shli",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise left shift of same-typed integer vector operands.",
+    flags=("overflow", IntOverflowFlags),
+    facts="loom_vector_shli_facts",
+)
+
+vector_shrsi = _lanewise_binary(
+    "vector.shrsi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise arithmetic right shift of same-typed integer vector operands.",
+    facts="loom_vector_shrsi_facts",
+)
+
+vector_shrui = _lanewise_binary(
+    "vector.shrui",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise logical right shift of same-typed integer vector operands.",
+    facts="loom_vector_shrui_facts",
+)
+
+vector_rotli = _lanewise_binary(
+    "vector.rotli",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise left rotate of same-typed integer vector operands.",
+)
+
+vector_rotri = _lanewise_binary(
+    "vector.rotri",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise right rotate of same-typed integer vector operands.",
+)
+
+vector_ctlzi = _lanewise_unary(
+    "vector.ctlzi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise count leading zeros over integer lanes.",
+    facts="loom_vector_ctlzi_facts",
+)
+
+vector_cttzi = _lanewise_unary(
+    "vector.cttzi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise count trailing zeros over integer lanes.",
+    facts="loom_vector_cttzi_facts",
+)
+
 vector_ctpopi = _lanewise_unary(
     "vector.ctpopi",
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input."),
+    facts="loom_vector_ctpopi_facts",
 )
 
 vector_expf = _lanewise_unary(
@@ -2197,6 +2411,44 @@ vector_truncf = _lanewise_unary(
     traits=[IDEMPOTENT],
     flags=_VF,
     facts="loom_vector_truncf_facts",
+)
+
+vector_isnanf = _lanewise_unary_shape_change(
+    "vector.isnanf",
+    source_constraint=HasFloatElement,
+    result_constraint=I1_ELEMENT,
+    doc="Lanewise floating-point NaN test producing an i1 mask vector.",
+    facts="loom_vector_isnanf_facts",
+)
+
+vector_isinff = _lanewise_unary_shape_change(
+    "vector.isinff",
+    source_constraint=HasFloatElement,
+    result_constraint=I1_ELEMENT,
+    doc="Lanewise floating-point infinity test producing an i1 mask vector.",
+    facts="loom_vector_isinff_facts",
+)
+
+vector_isfinitef = _lanewise_unary_shape_change(
+    "vector.isfinitef",
+    source_constraint=HasFloatElement,
+    result_constraint=I1_ELEMENT,
+    doc="Lanewise floating-point finite test producing an i1 mask vector.",
+    facts="loom_vector_isfinitef_facts",
+)
+
+vector_signf = _lanewise_unary(
+    "vector.signf",
+    result_constraint=FLOAT_ELEMENT,
+    doc="Lanewise floating-point sign, returning -1.0, 0.0, or 1.0 per lane.",
+    facts="loom_vector_signf_facts",
+)
+
+vector_signi = _lanewise_unary(
+    "vector.signi",
+    result_constraint=INTEGER_ELEMENT,
+    doc="Lanewise integer sign, returning -1, 0, or 1 per lane.",
+    facts="loom_vector_signi_facts",
 )
 
 
@@ -2700,10 +2952,32 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_copysignf,
     vector_fmaf,
     vector_addi,
+    vector_subi,
     vector_muli,
+    vector_divsi,
+    vector_divui,
+    vector_remsi,
+    vector_remui,
+    vector_ceildivsi,
+    vector_ceildivui,
+    vector_floordivsi,
+    vector_negi,
+    vector_absi,
+    vector_minsi,
+    vector_maxsi,
+    vector_minui,
+    vector_maxui,
+    vector_fmai,
     vector_andi,
     vector_ori,
     vector_xori,
+    vector_shli,
+    vector_shrsi,
+    vector_shrui,
+    vector_rotli,
+    vector_rotri,
+    vector_ctlzi,
+    vector_cttzi,
     vector_ctpopi,
     vector_expf,
     vector_exp2f,
@@ -2736,6 +3010,11 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_roundf,
     vector_roundevenf,
     vector_truncf,
+    vector_isnanf,
+    vector_isinff,
+    vector_isfinitef,
+    vector_signf,
+    vector_signi,
     vector_extf,
     vector_fptrunc,
     vector_extsi,

@@ -141,6 +141,41 @@ static inline bool loom_lcm_i64(int64_t a, int64_t b, int64_t* out) {
 // Bit operations
 //===----------------------------------------------------------------------===//
 
+// Masks a raw unsigned value to the low |bitwidth| bits. A bitwidth of 64 keeps
+// the value unchanged.
+static inline uint64_t loom_mask_to_bitwidth_u64(uint64_t value,
+                                                 int32_t bitwidth) {
+  if (bitwidth <= 0) return 0;
+  if (bitwidth >= 64) return value;
+  return value & ((((uint64_t)1) << bitwidth) - 1);
+}
+
+// Counts leading zeros in the low |bitwidth| bits of |value|.
+static inline int64_t loom_count_leading_zeros_u64_width(uint64_t value,
+                                                         int32_t bitwidth) {
+  if (bitwidth > 64) bitwidth = 64;
+  value = loom_mask_to_bitwidth_u64(value, bitwidth);
+  if (value == 0) return bitwidth > 0 ? bitwidth : 0;
+  if (bitwidth >= 64) return iree_math_count_leading_zeros_u64(value);
+  return iree_math_count_leading_zeros_u64(value) - (64 - bitwidth);
+}
+
+// Counts trailing zeros in the low |bitwidth| bits of |value|.
+static inline int64_t loom_count_trailing_zeros_u64_width(uint64_t value,
+                                                          int32_t bitwidth) {
+  if (bitwidth > 64) bitwidth = 64;
+  value = loom_mask_to_bitwidth_u64(value, bitwidth);
+  if (value == 0) return bitwidth > 0 ? bitwidth : 0;
+  return iree_math_count_trailing_zeros_u64(value);
+}
+
+// Counts set bits in the low |bitwidth| bits of |value|.
+static inline int64_t loom_count_ones_u64_width(uint64_t value,
+                                                int32_t bitwidth) {
+  if (bitwidth > 64) bitwidth = 64;
+  return iree_math_count_ones_u64(loom_mask_to_bitwidth_u64(value, bitwidth));
+}
+
 // Floor of log base 2. Undefined for value <= 0.
 static inline int32_t loom_ilog2_i64(int64_t value) {
   return 63 - iree_math_count_leading_zeros_u64((uint64_t)value);

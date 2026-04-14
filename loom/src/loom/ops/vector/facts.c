@@ -20,12 +20,20 @@
 #include "loom/ir/module.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
+#include "loom/util/math.h"
 
 #define LOOM_VECTOR_FACT_STATIC_LOOP_LIMIT 1024
 
+typedef void (*loom_vector_unary_transfer_fn_t)(const loom_value_facts_t* input,
+                                                loom_value_facts_t* out);
 typedef void (*loom_vector_integer_binary_transfer_fn_t)(
     const loom_value_facts_t* lhs, const loom_value_facts_t* rhs,
     loom_value_facts_t* out);
+typedef void (*loom_vector_ternary_transfer_fn_t)(const loom_value_facts_t* a,
+                                                  const loom_value_facts_t* b,
+                                                  const loom_value_facts_t* c,
+                                                  loom_value_facts_t* out);
+typedef int64_t (*loom_vector_bit_count_fn_t)(uint64_t value, int32_t bitwidth);
 
 typedef double (*loom_vector_float_unary_transfer_fn_t)(double input);
 typedef double (*loom_vector_float_binary_transfer_fn_t)(double lhs,
@@ -171,6 +179,65 @@ static double loom_vector_minnum_f64(double lhs, double rhs) {
 
 static double loom_vector_maxnum_f64(double lhs, double rhs) {
   return fmax(lhs, rhs);
+}
+
+static void loom_vector_isnanf_transfer(const loom_value_facts_t* input,
+                                        loom_value_facts_t* out) {
+  double value = 0.0;
+  if (!loom_vector_facts_query_exact_f64(*input, &value)) {
+    *out = loom_value_facts_make(0, 1, 1);
+    return;
+  }
+  *out = loom_value_facts_exact_i64(isnan(value) ? 1 : 0);
+}
+
+static void loom_vector_isinff_transfer(const loom_value_facts_t* input,
+                                        loom_value_facts_t* out) {
+  double value = 0.0;
+  if (!loom_vector_facts_query_exact_f64(*input, &value)) {
+    *out = loom_value_facts_make(0, 1, 1);
+    return;
+  }
+  *out = loom_value_facts_exact_i64(isinf(value) ? 1 : 0);
+}
+
+static void loom_vector_isfinitef_transfer(const loom_value_facts_t* input,
+                                           loom_value_facts_t* out) {
+  double value = 0.0;
+  if (!loom_vector_facts_query_exact_f64(*input, &value)) {
+    *out = loom_value_facts_make(0, 1, 1);
+    return;
+  }
+  *out = loom_value_facts_exact_i64(isfinite(value) ? 1 : 0);
+}
+
+static void loom_vector_signf_transfer(const loom_value_facts_t* input,
+                                       loom_value_facts_t* out) {
+  double value = 0.0;
+  if (!loom_vector_facts_query_exact_f64(*input, &value)) {
+    *out = loom_value_facts_unknown();
+    return;
+  }
+  *out = loom_value_facts_exact_f64((value > 0.0)   ? 1.0
+                                    : (value < 0.0) ? -1.0
+                                                    : 0.0);
+}
+
+static void loom_vector_signi_transfer(const loom_value_facts_t* input,
+                                       loom_value_facts_t* out) {
+  if (!loom_value_facts_is_exact(*input)) {
+    *out = loom_value_facts_unknown();
+    return;
+  }
+  int64_t value = input->range_lo;
+  *out = loom_value_facts_exact_i64((value > 0) ? 1 : (value < 0) ? -1 : 0);
+}
+
+static void loom_vector_fmai_transfer(const loom_value_facts_t* a,
+                                      const loom_value_facts_t* b,
+                                      const loom_value_facts_t* c,
+                                      loom_value_facts_t* out) {
+  loom_value_facts_fmai(a, b, c, out);
 }
 
 //===----------------------------------------------------------------------===//
@@ -341,6 +408,84 @@ static iree_status_t loom_vector_integer_binary_summary_facts(
                                                   &result_facts[0]);
 }
 
+static iree_status_t loom_vector_unary_summary_facts(
+    loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts, loom_vector_unary_transfer_fn_t fn) {
+  loom_value_facts_t input = {0};
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &input)) {
+    loom_value_facts_t element = loom_value_facts_unknown();
+    fn(&input, &element);
+    return loom_value_facts_make_uniform_element(context, element,
+                                                 &result_facts[0]);
+  }
+
+  loom_value_fact_small_static_lanes_t input_lanes = {0};
+  if (!loom_vector_facts_query_small_lanes(context, operand_facts[0],
+                                           &input_lanes)) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < input_lanes.count; ++i) {
+    fn(&input_lanes.lanes[i], &lanes[i]);
+  }
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = input_lanes.count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
+}
+
+static void loom_vector_bit_count_element_facts(const loom_value_facts_t* input,
+                                                int32_t bitwidth,
+                                                loom_vector_bit_count_fn_t fn,
+                                                loom_value_facts_t* out) {
+  if (!loom_value_facts_is_exact(*input)) {
+    *out = loom_value_facts_unknown();
+    return;
+  }
+  *out = loom_value_facts_exact_i64(fn((uint64_t)input->range_lo, bitwidth));
+}
+
+static iree_status_t loom_vector_bit_count_summary_facts(
+    loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts, int32_t bitwidth,
+    loom_vector_bit_count_fn_t fn) {
+  if (bitwidth <= 0) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+
+  loom_value_facts_t input = {0};
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &input)) {
+    loom_value_facts_t element = loom_value_facts_unknown();
+    loom_vector_bit_count_element_facts(&input, bitwidth, fn, &element);
+    return loom_value_facts_make_uniform_element(context, element,
+                                                 &result_facts[0]);
+  }
+
+  loom_value_fact_small_static_lanes_t input_lanes = {0};
+  if (!loom_vector_facts_query_small_lanes(context, operand_facts[0],
+                                           &input_lanes)) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < input_lanes.count; ++i) {
+    loom_vector_bit_count_element_facts(&input_lanes.lanes[i], bitwidth, fn,
+                                        &lanes[i]);
+  }
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = input_lanes.count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
+}
+
 static iree_status_t loom_vector_float_unary_summary_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts,
@@ -429,6 +574,46 @@ static iree_status_t loom_vector_float_binary_summary_facts(
                                                   &result_facts[0]);
 }
 
+static iree_status_t loom_vector_ternary_summary_facts(
+    loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts, loom_vector_ternary_transfer_fn_t fn) {
+  loom_value_facts_t a = {0};
+  loom_value_facts_t b = {0};
+  loom_value_facts_t c = {0};
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0], &a) &&
+      loom_vector_facts_query_uniform_element(context, operand_facts[1], &b) &&
+      loom_vector_facts_query_uniform_element(context, operand_facts[2], &c)) {
+    loom_value_facts_t element = loom_value_facts_unknown();
+    fn(&a, &b, &c, &element);
+    return loom_value_facts_make_uniform_element(context, element,
+                                                 &result_facts[0]);
+  }
+
+  iree_host_size_t lane_count = 0;
+  if (!loom_vector_facts_query_ternary_lane_count(
+          context, operand_facts[0], operand_facts[1], operand_facts[2],
+          &lane_count)) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < lane_count; ++i) {
+    if (!loom_vector_facts_query_lane(context, operand_facts[0], i, &a) ||
+        !loom_vector_facts_query_lane(context, operand_facts[1], i, &b) ||
+        !loom_vector_facts_query_lane(context, operand_facts[2], i, &c)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    fn(&a, &b, &c, &lanes[i]);
+  }
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = lane_count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
+}
+
 #define LOOM_VECTOR_INTEGER_BINARY_FACTS(name, transfer_fn)            \
   iree_status_t name(loom_fact_context_t* context,                     \
                      const loom_module_t* module, const loom_op_t* op, \
@@ -456,6 +641,28 @@ static iree_status_t loom_vector_float_binary_summary_facts(
                                                  result_facts, fn);      \
   }
 
+#define LOOM_VECTOR_UNARY_FACTS(name, fn)                              \
+  iree_status_t name(loom_fact_context_t* context,                     \
+                     const loom_module_t* module, const loom_op_t* op, \
+                     const loom_value_facts_t* operand_facts,          \
+                     loom_value_facts_t* result_facts) {               \
+    return loom_vector_unary_summary_facts(context, operand_facts,     \
+                                           result_facts, fn);          \
+  }
+
+#define LOOM_VECTOR_BIT_COUNT_FACTS(name, result_accessor, fn)              \
+  iree_status_t name(loom_fact_context_t* context,                          \
+                     const loom_module_t* module, const loom_op_t* op,      \
+                     const loom_value_facts_t* operand_facts,               \
+                     loom_value_facts_t* result_facts) {                    \
+    loom_type_t result_type =                                               \
+        loom_module_value_type(module, result_accessor(op));                \
+    int32_t bitwidth =                                                      \
+        loom_scalar_type_bitwidth(loom_type_element_type(result_type));     \
+    return loom_vector_bit_count_summary_facts(context, operand_facts,      \
+                                               result_facts, bitwidth, fn); \
+  }
+
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_addf_facts, loom_vector_add_f64)
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_subf_facts, loom_vector_sub_f64)
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_mulf_facts, loom_vector_mul_f64)
@@ -473,10 +680,40 @@ LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_maxnumf_facts,
                                loom_vector_maxnum_f64)
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_copysignf_facts, copysign)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_addi_facts, loom_value_facts_addi)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_subi_facts, loom_value_facts_subi)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_muli_facts, loom_value_facts_muli)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_divsi_facts,
+                                 loom_value_facts_divsi)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_divui_facts,
+                                 loom_value_facts_divui)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_remsi_facts,
+                                 loom_value_facts_remsi)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_remui_facts,
+                                 loom_value_facts_remui)
+LOOM_VECTOR_UNARY_FACTS(loom_vector_negi_facts, loom_value_facts_negi)
+LOOM_VECTOR_UNARY_FACTS(loom_vector_absi_facts, loom_value_facts_absi)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_minsi_facts,
+                                 loom_value_facts_minsi)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_maxsi_facts,
+                                 loom_value_facts_maxsi)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_minui_facts,
+                                 loom_value_facts_minui)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_maxui_facts,
+                                 loom_value_facts_maxui)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_andi_facts, loom_value_facts_andi)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_ori_facts, loom_value_facts_ori)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_xori_facts, loom_value_facts_xori)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_shli_facts, loom_value_facts_shli)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_shrsi_facts,
+                                 loom_value_facts_shrsi)
+LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_shrui_facts,
+                                 loom_value_facts_shrui)
+LOOM_VECTOR_BIT_COUNT_FACTS(loom_vector_ctlzi_facts, loom_vector_ctlzi_result,
+                            loom_count_leading_zeros_u64_width)
+LOOM_VECTOR_BIT_COUNT_FACTS(loom_vector_cttzi_facts, loom_vector_cttzi_result,
+                            loom_count_trailing_zeros_u64_width)
+LOOM_VECTOR_BIT_COUNT_FACTS(loom_vector_ctpopi_facts, loom_vector_ctpopi_result,
+                            loom_count_ones_u64_width)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expf_facts, exp)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_exp2f_facts, exp2)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_expm1f_facts, expm1)
@@ -509,6 +746,21 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundf_facts, round)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_roundevenf_facts,
                               loom_vector_roundeven_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_truncf_facts, trunc)
+LOOM_VECTOR_UNARY_FACTS(loom_vector_isnanf_facts, loom_vector_isnanf_transfer)
+LOOM_VECTOR_UNARY_FACTS(loom_vector_isinff_facts, loom_vector_isinff_transfer)
+LOOM_VECTOR_UNARY_FACTS(loom_vector_isfinitef_facts,
+                        loom_vector_isfinitef_transfer)
+LOOM_VECTOR_UNARY_FACTS(loom_vector_signf_facts, loom_vector_signf_transfer)
+LOOM_VECTOR_UNARY_FACTS(loom_vector_signi_facts, loom_vector_signi_transfer)
+
+iree_status_t loom_vector_fmai_facts(loom_fact_context_t* context,
+                                     const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     const loom_value_facts_t* operand_facts,
+                                     loom_value_facts_t* result_facts) {
+  return loom_vector_ternary_summary_facts(context, operand_facts, result_facts,
+                                           loom_vector_fmai_transfer);
+}
 
 iree_status_t loom_vector_fmaf_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
@@ -907,4 +1159,6 @@ iree_status_t loom_vector_dotf_facts(loom_fact_context_t* context,
 
 #undef LOOM_VECTOR_FLOAT_BINARY_FACTS
 #undef LOOM_VECTOR_FLOAT_UNARY_FACTS
+#undef LOOM_VECTOR_BIT_COUNT_FACTS
 #undef LOOM_VECTOR_INTEGER_BINARY_FACTS
+#undef LOOM_VECTOR_UNARY_FACTS

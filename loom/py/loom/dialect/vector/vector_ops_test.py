@@ -48,8 +48,12 @@ def test_vector_seed_mirrors_scalar_spelling_for_lanewise_ops() -> None:
         "bitcast",
         "cmpf",
         "cmpi",
+        "ctlzi",
         "ctpopi",
+        "cttzi",
         "divf",
+        "divsi",
+        "divui",
         "erfcf",
         "erff",
         "exp2f",
@@ -59,34 +63,56 @@ def test_vector_seed_mirrors_scalar_spelling_for_lanewise_ops() -> None:
         "extsi",
         "extui",
         "floorf",
+        "floordivsi",
+        "ceildivsi",
+        "ceildivui",
+        "fmai",
         "fmaf",
         "fptosi",
         "fptoui",
         "fptrunc",
+        "isfinitef",
+        "isinff",
+        "isnanf",
         "log10f",
         "log1pf",
         "log2f",
         "logf",
         "maximumf",
+        "maxsi",
         "maxnumf",
+        "maxui",
         "minimumf",
+        "minsi",
         "minnumf",
+        "minui",
         "muli",
         "mulf",
+        "negi",
         "negf",
         "ori",
         "powf",
         "remf",
+        "remsi",
+        "remui",
         "roundevenf",
         "roundf",
         "rsqrtf",
         "poison",
+        "rotli",
+        "rotri",
         "select",
+        "shli",
+        "shrsi",
+        "shrui",
+        "signf",
+        "signi",
         "sinf",
         "sinhf",
         "sitofp",
         "sqrtf",
         "subf",
+        "subi",
         "tanf",
         "tanhf",
         "truncf",
@@ -254,6 +280,89 @@ def test_vector_wave1_float_math_ops_are_lanewise_and_assumption_flagged() -> No
         assert "Pure" in {trait.name for trait in op.traits}
         assert "Elementwise" in {trait.name for trait in op.traits}
         assert op.attrs[0].name == "assumptions"
+
+
+def test_vector_wave2_integer_ops_are_lanewise_and_flagged() -> None:
+    ops = _op_by_name()
+    for name in (
+        "vector.addi",
+        "vector.subi",
+        "vector.muli",
+        "vector.shli",
+    ):
+        op = ops[name]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+        assert ("HasIntegerElement", ("result",)) in constraints
+        assert ("SameType", ("lhs", "rhs", "result")) in constraints
+        assert "Pure" in {trait.name for trait in op.traits}
+        assert "Elementwise" in {trait.name for trait in op.traits}
+        assert op.attrs[0].name == "overflow"
+
+    for name in (
+        "vector.divsi",
+        "vector.divui",
+        "vector.remsi",
+        "vector.remui",
+        "vector.ceildivsi",
+        "vector.ceildivui",
+        "vector.floordivsi",
+        "vector.minsi",
+        "vector.maxsi",
+        "vector.minui",
+        "vector.maxui",
+        "vector.andi",
+        "vector.ori",
+        "vector.xori",
+        "vector.shrsi",
+        "vector.shrui",
+        "vector.rotli",
+        "vector.rotri",
+    ):
+        op = ops[name]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+        assert ("HasIntegerElement", ("result",)) in constraints
+        assert ("SameType", ("lhs", "rhs", "result")) in constraints
+        assert "Pure" in {trait.name for trait in op.traits}
+        assert "Elementwise" in {trait.name for trait in op.traits}
+
+    for name in (
+        "vector.negi",
+        "vector.absi",
+        "vector.ctlzi",
+        "vector.cttzi",
+        "vector.ctpopi",
+        "vector.signi",
+    ):
+        op = ops[name]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+        assert ("HasIntegerElement", ("result",)) in constraints
+        assert ("SameType", ("input", "result")) in constraints
+        assert "Pure" in {trait.name for trait in op.traits}
+        assert "Elementwise" in {trait.name for trait in op.traits}
+
+    fmai = ops["vector.fmai"]
+    constraints = {(constraint.name, constraint.args) for constraint in fmai.constraints}
+    assert ("HasIntegerElement", ("result",)) in constraints
+    assert ("SameType", ("a", "b", "c", "result")) in constraints
+    assert fmai.attrs[0].name == "overflow"
+
+
+def test_vector_wave2_predicate_ops_preserve_shape_and_return_masks() -> None:
+    ops = _op_by_name()
+    for name in ("vector.isnanf", "vector.isinff", "vector.isfinitef"):
+        op = ops[name]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+        assert ("HasFloatElement", ("input",)) in constraints
+        assert ("HasI1Element", ("result",)) in constraints
+        assert ("SameKind", ("input", "result")) in constraints
+        assert ("SameShape", ("input", "result")) in constraints
+        assert "Pure" in {trait.name for trait in op.traits}
+        assert "Elementwise" in {trait.name for trait in op.traits}
+
+    signf = ops["vector.signf"]
+    constraints = {(constraint.name, constraint.args) for constraint in signf.constraints}
+    assert ("HasFloatElement", ("result",)) in constraints
+    assert ("SameType", ("input", "result")) in constraints
 
 
 def test_vector_atomic_attrs_are_explicit_enums() -> None:

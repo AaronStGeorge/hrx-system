@@ -135,6 +135,48 @@ func.def @shli_zero() -> (i32) {
 
 // ====
 
+// ctlzi counts within the declared integer width, not a widened i64 fact slot.
+func.def @ctlzi_i32_width() -> (i32) {
+  %a = scalar.constant 1 : i32
+  %r = scalar.ctlzi %a : i32
+  func.return %r : i32
+}
+// ----
+func.def @ctlzi_i32_width() -> (i32) {
+  %r = scalar.constant 31 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// cttzi of zero returns the declared integer width.
+func.def @cttzi_i32_zero_width() -> (i32) {
+  %a = scalar.constant 0 : i32
+  %r = scalar.cttzi %a : i32
+  func.return %r : i32
+}
+// ----
+func.def @cttzi_i32_zero_width() -> (i32) {
+  %r = scalar.constant 32 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// ctpopi masks exact negative facts to the declared integer width.
+func.def @ctpopi_i32_negative_width() -> (i32) {
+  %a = scalar.constant -1 : i32
+  %r = scalar.ctpopi %a : i32
+  func.return %r : i32
+}
+// ----
+func.def @ctpopi_i32_negative_width() -> (i32) {
+  %r = scalar.constant 32 : i32
+  func.return %r : i32
+}
+
+// ====
+
 // Dynamic operands: no fold.
 func.def @no_fold(%x: i32, %y: i32) -> (i32) {
   %r = scalar.andi %x, %y : i32

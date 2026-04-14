@@ -834,6 +834,17 @@ class VectorBuilders:
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("vector.addi", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def subi(self, *, overflow: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise integer subtraction of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if overflow is not None:
+            _attributes["overflow"] = overflow
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.subi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def muli(self, *, overflow: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise integer multiplication of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."""
         _operands: list[ValueRef | int] = []
@@ -844,6 +855,137 @@ class VectorBuilders:
         _operands.append(lhs)
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("vector.muli", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def divsi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise signed integer division of same-typed vector operands; each lane rounds toward zero."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.divsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def divui(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise unsigned integer division of same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.divui", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def remsi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise signed integer remainder of same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.remsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def remui(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise unsigned integer remainder of same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.remui", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def ceildivsi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise signed integer division rounding toward positive infinity."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.ceildivsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def ceildivui(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise unsigned integer division rounding toward positive infinity."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.ceildivui", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def floordivsi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise signed integer division rounding toward negative infinity."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.floordivsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def negi(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise integer negation of a same-typed vector operand."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.negi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def absi(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise integer absolute value of a same-typed vector operand."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.absi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def minsi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise signed integer minimum of same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.minsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def maxsi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise signed integer maximum of same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.maxsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def minui(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise unsigned integer minimum of same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.minui", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def maxui(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise unsigned integer maximum of same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.maxui", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def fmai(self, *, overflow: str | None = None, a: ValueRef, b: ValueRef, c: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise fused integer multiply-add a*b + c over same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
+
+        Example::
+            %r = vector.fmai %a, %b, %c : vector<16xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if overflow is not None:
+            _attributes["overflow"] = overflow
+        _operands.append(a)
+        _operands.append(b)
+        _operands.append(c)
+        return cast(ValueRef, self._b.build("vector.fmai", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def andi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise bitwise AND of same-typed integer vector operands."""
@@ -871,6 +1013,69 @@ class VectorBuilders:
         _operands.append(lhs)
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("vector.xori", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def shli(self, *, overflow: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise left shift of same-typed integer vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if overflow is not None:
+            _attributes["overflow"] = overflow
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.shli", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def shrsi(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise arithmetic right shift of same-typed integer vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.shrsi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def shrui(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise logical right shift of same-typed integer vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.shrui", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def rotli(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise left rotate of same-typed integer vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.rotli", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def rotri(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise right rotate of same-typed integer vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.rotri", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def ctlzi(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise count leading zeros over integer lanes."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.ctlzi", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def cttzi(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise count trailing zeros over integer lanes."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.cttzi", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def ctpopi(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input."""
@@ -1191,6 +1396,46 @@ class VectorBuilders:
             _attributes["assumptions"] = assumptions
         _operands.append(input)
         return cast(ValueRef, self._b.build("vector.truncf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def isnanf(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Lanewise floating-point NaN test producing an i1 mask vector."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.isnanf", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def isinff(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Lanewise floating-point infinity test producing an i1 mask vector."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.isinff", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def isfinitef(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Lanewise floating-point finite test producing an i1 mask vector."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.isfinitef", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def signf(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise floating-point sign, returning -1.0, 0.0, or 1.0 per lane."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.signf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def signi(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise integer sign, returning -1, 0, or 1 per lane."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.signi", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def extf(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise floating-point precision extension. Source and result shapes match exactly; only the floating-point element type widens."""

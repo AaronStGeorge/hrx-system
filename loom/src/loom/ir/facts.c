@@ -299,6 +299,12 @@ void loom_value_facts_remui(const loom_value_facts_t* lhs,
     *out = loom_value_facts_unknown();
     return;
   }
+  // Both exact: fold directly. Non-negative int64 facts are a subset of the
+  // unsigned domain and the result remains representable as int64.
+  if (lhs->range_lo == lhs->range_hi && rhs_lo == rhs_hi) {
+    *out = loom_value_facts_exact_i64(lhs_lo % rhs_lo);
+    return;
+  }
   // If exact divisor and numerator divisible: remainder is zero.
   if (rhs_lo == rhs_hi && lhs_divisor % rhs_lo == 0) {
     *out = loom_value_facts_exact_i64(0);

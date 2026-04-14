@@ -47,13 +47,40 @@ func.def @lanewise(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>, %
   %signed = vector.copysignf %minnum, %maxnum : vector<16xf32>
   %fma = vector.fmaf %a, %b, %signed : vector<16xf32>
   %isum = vector.addi<nuw> %i, %j : vector<16xi32>
-  %iprod = vector.muli %isum, %j : vector<16xi32>
-  %and = vector.andi %iprod, %j : vector<16xi32>
+  %idiff = vector.subi<nsw> %isum, %j : vector<16xi32>
+  %iprod = vector.muli %idiff, %j : vector<16xi32>
+  %idivsi = vector.divsi %iprod, %j : vector<16xi32>
+  %idivui = vector.divui %iprod, %j : vector<16xi32>
+  %iremsi = vector.remsi %iprod, %j : vector<16xi32>
+  %iremui = vector.remui %iprod, %j : vector<16xi32>
+  %iceilsi = vector.ceildivsi %iprod, %j : vector<16xi32>
+  %iceilui = vector.ceildivui %iprod, %j : vector<16xi32>
+  %ifloorsi = vector.floordivsi %iprod, %j : vector<16xi32>
+  %ineg = vector.negi %ifloorsi : vector<16xi32>
+  %iabs = vector.absi %ineg : vector<16xi32>
+  %iminsi = vector.minsi %iabs, %iremsi : vector<16xi32>
+  %imaxsi = vector.maxsi %iabs, %iremsi : vector<16xi32>
+  %iminui = vector.minui %imaxsi, %iremui : vector<16xi32>
+  %imaxui = vector.maxui %iminsi, %idivui : vector<16xi32>
+  %ifmai = vector.fmai<nuw> %iminui, %imaxui, %idivsi : vector<16xi32>
+  %and = vector.andi %ifmai, %j : vector<16xi32>
   %or = vector.ori %and, %i : vector<16xi32>
   %xor = vector.xori %or, %j : vector<16xi32>
+  %shl = vector.shli<nuw> %xor, %j : vector<16xi32>
+  %shrs = vector.shrsi %shl, %j : vector<16xi32>
+  %shru = vector.shrui %shl, %j : vector<16xi32>
+  %rotl = vector.rotli %shrs, %j : vector<16xi32>
+  %rotr = vector.rotri %shru, %j : vector<16xi32>
+  %clz = vector.ctlzi %rotl : vector<16xi32>
+  %ctz = vector.cttzi %rotr : vector<16xi32>
   %pop = vector.ctpopi %xor : vector<16xi32>
+  %fsign = vector.signf %signed : vector<16xf32>
+  %isign = vector.signi %xor : vector<16xi32>
+  %isnan = vector.isnanf %a : vector<16xf32> -> vector<16xi1>
+  %isinf = vector.isinff %b : vector<16xf32> -> vector<16xi1>
+  %isfinite = vector.isfinitef %c : vector<16xf32> -> vector<16xi1>
   %root = vector.sqrtf %prod : vector<16xf32>
-  test.use %fma, %pop, %root : vector<16xf32>, vector<16xi32>, vector<16xf32>
+  test.use %fma, %idivsi, %idivui, %iceilsi, %iceilui, %iminsi, %imaxui, %ifmai, %clz, %ctz, %pop, %fsign, %isign, %isnan, %isinf, %isfinite, %root : vector<16xf32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xf32>, vector<16xi32>, vector<16xi1>, vector<16xi1>, vector<16xi1>, vector<16xf32>
   func.return
 }
 

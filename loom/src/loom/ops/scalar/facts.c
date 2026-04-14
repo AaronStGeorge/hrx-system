@@ -14,10 +14,10 @@
 
 #include <math.h>
 
-#include "iree/base/internal/math.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//
 // Macros for mechanical fact inference functions
@@ -251,38 +251,37 @@ iree_status_t loom_scalar_rotri_facts(loom_fact_context_t* context,
   return iree_ok_status();
 }
 
-// Bit counting: exact-only.
-static int64_t clz64(uint64_t x) {
-  return x == 0 ? 64 : (int64_t)iree_math_count_leading_zeros_u64(x);
-}
-static int64_t ctz64(uint64_t x) {
-  return x == 0 ? 64 : (int64_t)iree_math_count_trailing_zeros_u64(x);
-}
-static int64_t popcount64(uint64_t x) {
-  x = x - ((x >> 1) & 0x5555555555555555ULL);
-  x = (x & 0x3333333333333333ULL) + ((x >> 2) & 0x3333333333333333ULL);
-  return (int64_t)(((x + (x >> 4)) & 0x0F0F0F0F0F0F0F0FULL) *
-                       0x0101010101010101ULL >>
-                   56);
-}
-
-#define EXACT_UNARY_I64_FACTS(name, fn)                                      \
-  iree_status_t name(loom_fact_context_t* context,                           \
-                     const loom_module_t* module, const loom_op_t* op,       \
-                     const loom_value_facts_t* operand_facts,                \
-                     loom_value_facts_t* result_facts) {                     \
-    if (!loom_value_facts_is_exact(operand_facts[0])) {                      \
-      result_facts[0] = loom_value_facts_unknown();                          \
-      return iree_ok_status();                                               \
-    }                                                                        \
-    result_facts[0] =                                                        \
-        loom_value_facts_exact_i64(fn((uint64_t)operand_facts[0].range_lo)); \
-    return iree_ok_status();                                                 \
+// Bit counting: exact-only over the declared integer width.
+#define BIT_COUNT_FACTS(name, result_accessor, fn)                      \
+  iree_status_t name(loom_fact_context_t* context,                      \
+                     const loom_module_t* module, const loom_op_t* op,  \
+                     const loom_value_facts_t* operand_facts,           \
+                     loom_value_facts_t* result_facts) {                \
+    if (!loom_value_facts_is_exact(operand_facts[0])) {                 \
+      result_facts[0] = loom_value_facts_unknown();                     \
+      return iree_ok_status();                                          \
+    }                                                                   \
+    loom_type_t result_type =                                           \
+        loom_module_value_type(module, result_accessor(op));            \
+    int32_t bitwidth =                                                  \
+        loom_scalar_type_bitwidth(loom_type_element_type(result_type)); \
+    if (bitwidth <= 0) {                                                \
+      result_facts[0] = loom_value_facts_unknown();                     \
+      return iree_ok_status();                                          \
+    }                                                                   \
+    result_facts[0] = loom_value_facts_exact_i64(                       \
+        fn((uint64_t)operand_facts[0].range_lo, bitwidth));             \
+    return iree_ok_status();                                            \
   }
 
-EXACT_UNARY_I64_FACTS(loom_scalar_ctlzi_facts, clz64)
-EXACT_UNARY_I64_FACTS(loom_scalar_cttzi_facts, ctz64)
-EXACT_UNARY_I64_FACTS(loom_scalar_ctpopi_facts, popcount64)
+BIT_COUNT_FACTS(loom_scalar_ctlzi_facts, loom_scalar_ctlzi_result,
+                loom_count_leading_zeros_u64_width)
+BIT_COUNT_FACTS(loom_scalar_cttzi_facts, loom_scalar_cttzi_result,
+                loom_count_trailing_zeros_u64_width)
+BIT_COUNT_FACTS(loom_scalar_ctpopi_facts, loom_scalar_ctpopi_result,
+                loom_count_ones_u64_width)
+
+#undef BIT_COUNT_FACTS
 
 //===----------------------------------------------------------------------===//
 // Comparison

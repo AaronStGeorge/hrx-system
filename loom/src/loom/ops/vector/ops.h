@@ -68,62 +68,89 @@ enum {
   LOOM_OP_VECTOR_COPYSIGNF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 47),
   LOOM_OP_VECTOR_FMAF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 48),
   LOOM_OP_VECTOR_ADDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 49),
-  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 50),
-  LOOM_OP_VECTOR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 51),
-  LOOM_OP_VECTOR_ORI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 52),
-  LOOM_OP_VECTOR_XORI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 53),
-  LOOM_OP_VECTOR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 54),
-  LOOM_OP_VECTOR_EXPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 55),
-  LOOM_OP_VECTOR_EXP2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 56),
-  LOOM_OP_VECTOR_EXPM1F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 57),
-  LOOM_OP_VECTOR_LOGF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 58),
-  LOOM_OP_VECTOR_LOG2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 59),
-  LOOM_OP_VECTOR_LOG10F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 60),
-  LOOM_OP_VECTOR_LOG1PF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 61),
-  LOOM_OP_VECTOR_POWF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 62),
-  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 63),
-  LOOM_OP_VECTOR_RSQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 64),
-  LOOM_OP_VECTOR_CBRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 65),
-  LOOM_OP_VECTOR_SINF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 66),
-  LOOM_OP_VECTOR_COSF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 67),
-  LOOM_OP_VECTOR_TANF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 68),
-  LOOM_OP_VECTOR_ASINF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 69),
-  LOOM_OP_VECTOR_ACOSF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 70),
-  LOOM_OP_VECTOR_ATANF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 71),
-  LOOM_OP_VECTOR_ATAN2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 72),
-  LOOM_OP_VECTOR_SINHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 73),
-  LOOM_OP_VECTOR_COSHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 74),
-  LOOM_OP_VECTOR_TANHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 75),
-  LOOM_OP_VECTOR_ASINHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 76),
-  LOOM_OP_VECTOR_ACOSHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 77),
-  LOOM_OP_VECTOR_ATANHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 78),
-  LOOM_OP_VECTOR_ERFF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 79),
-  LOOM_OP_VECTOR_ERFCF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 80),
-  LOOM_OP_VECTOR_CEILF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 81),
-  LOOM_OP_VECTOR_FLOORF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 82),
-  LOOM_OP_VECTOR_ROUNDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 83),
-  LOOM_OP_VECTOR_ROUNDEVENF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 84),
-  LOOM_OP_VECTOR_TRUNCF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 85),
-  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 86),
-  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 87),
-  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 88),
-  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 89),
-  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 90),
-  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 91),
-  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 92),
-  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 93),
-  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 94),
-  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 95),
-  LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 96),
-  LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 97),
-  LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 98),
-  LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 99),
-  LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 100),
-  LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 101),
-  LOOM_OP_VECTOR_DOTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 102),
-  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 103),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 104),
-  LOOM_OP_VECTOR_COUNT_ = 105,
+  LOOM_OP_VECTOR_SUBI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 50),
+  LOOM_OP_VECTOR_MULI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 51),
+  LOOM_OP_VECTOR_DIVSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 52),
+  LOOM_OP_VECTOR_DIVUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 53),
+  LOOM_OP_VECTOR_REMSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 54),
+  LOOM_OP_VECTOR_REMUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 55),
+  LOOM_OP_VECTOR_CEILDIVSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 56),
+  LOOM_OP_VECTOR_CEILDIVUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 57),
+  LOOM_OP_VECTOR_FLOORDIVSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 58),
+  LOOM_OP_VECTOR_NEGI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 59),
+  LOOM_OP_VECTOR_ABSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 60),
+  LOOM_OP_VECTOR_MINSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 61),
+  LOOM_OP_VECTOR_MAXSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 62),
+  LOOM_OP_VECTOR_MINUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 63),
+  LOOM_OP_VECTOR_MAXUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 64),
+  LOOM_OP_VECTOR_FMAI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 65),
+  LOOM_OP_VECTOR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 66),
+  LOOM_OP_VECTOR_ORI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 67),
+  LOOM_OP_VECTOR_XORI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 68),
+  LOOM_OP_VECTOR_SHLI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 69),
+  LOOM_OP_VECTOR_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 70),
+  LOOM_OP_VECTOR_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 71),
+  LOOM_OP_VECTOR_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 72),
+  LOOM_OP_VECTOR_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 73),
+  LOOM_OP_VECTOR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 74),
+  LOOM_OP_VECTOR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 75),
+  LOOM_OP_VECTOR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 76),
+  LOOM_OP_VECTOR_EXPF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 77),
+  LOOM_OP_VECTOR_EXP2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 78),
+  LOOM_OP_VECTOR_EXPM1F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 79),
+  LOOM_OP_VECTOR_LOGF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 80),
+  LOOM_OP_VECTOR_LOG2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 81),
+  LOOM_OP_VECTOR_LOG10F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 82),
+  LOOM_OP_VECTOR_LOG1PF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 83),
+  LOOM_OP_VECTOR_POWF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 84),
+  LOOM_OP_VECTOR_SQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 85),
+  LOOM_OP_VECTOR_RSQRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 86),
+  LOOM_OP_VECTOR_CBRTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 87),
+  LOOM_OP_VECTOR_SINF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 88),
+  LOOM_OP_VECTOR_COSF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 89),
+  LOOM_OP_VECTOR_TANF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 90),
+  LOOM_OP_VECTOR_ASINF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 91),
+  LOOM_OP_VECTOR_ACOSF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 92),
+  LOOM_OP_VECTOR_ATANF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 93),
+  LOOM_OP_VECTOR_ATAN2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 94),
+  LOOM_OP_VECTOR_SINHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 95),
+  LOOM_OP_VECTOR_COSHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 96),
+  LOOM_OP_VECTOR_TANHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 97),
+  LOOM_OP_VECTOR_ASINHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 98),
+  LOOM_OP_VECTOR_ACOSHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 99),
+  LOOM_OP_VECTOR_ATANHF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 100),
+  LOOM_OP_VECTOR_ERFF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 101),
+  LOOM_OP_VECTOR_ERFCF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 102),
+  LOOM_OP_VECTOR_CEILF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 103),
+  LOOM_OP_VECTOR_FLOORF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 104),
+  LOOM_OP_VECTOR_ROUNDF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 105),
+  LOOM_OP_VECTOR_ROUNDEVENF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 106),
+  LOOM_OP_VECTOR_TRUNCF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 107),
+  LOOM_OP_VECTOR_ISNANF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 108),
+  LOOM_OP_VECTOR_ISINFF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 109),
+  LOOM_OP_VECTOR_ISFINITEF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 110),
+  LOOM_OP_VECTOR_SIGNF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 111),
+  LOOM_OP_VECTOR_SIGNI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 112),
+  LOOM_OP_VECTOR_EXTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 113),
+  LOOM_OP_VECTOR_FPTRUNC = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 114),
+  LOOM_OP_VECTOR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 115),
+  LOOM_OP_VECTOR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 116),
+  LOOM_OP_VECTOR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 117),
+  LOOM_OP_VECTOR_SITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 118),
+  LOOM_OP_VECTOR_UITOFP = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 119),
+  LOOM_OP_VECTOR_FPTOSI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 120),
+  LOOM_OP_VECTOR_FPTOUI = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 121),
+  LOOM_OP_VECTOR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 122),
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 123),
+  LOOM_OP_VECTOR_BITFIELD_EXTRACTS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 124),
+  LOOM_OP_VECTOR_BITFIELD_INSERT = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 125),
+  LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 126),
+  LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 127),
+  LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 128),
+  LOOM_OP_VECTOR_DOTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 129),
+  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 130),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 131),
+  LOOM_OP_VECTOR_COUNT_ = 132,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -1283,6 +1310,24 @@ iree_status_t loom_vector_addi_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
+// LOOM_OP_VECTOR_SUBI: Lanewise integer subtraction of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
+// vector.subi
+LOOM_DEFINE_ISA(loom_vector_subi_isa, LOOM_OP_VECTOR_SUBI)
+LOOM_DEFINE_OPERAND(loom_vector_subi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_subi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_subi_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_subi_overflow)
+iree_status_t loom_vector_subi_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t lhs, loom_value_id_t rhs,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_subi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
 // LOOM_OP_VECTOR_MULI: Lanewise integer multiplication of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
 // vector.muli
 LOOM_DEFINE_ISA(loom_vector_muli_isa, LOOM_OP_VECTOR_MULI)
@@ -1296,6 +1341,220 @@ iree_status_t loom_vector_muli_build(
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_muli_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_DIVSI: Lanewise signed integer division of same-typed vector operands; each lane rounds toward zero.
+// vector.divsi
+LOOM_DEFINE_ISA(loom_vector_divsi_isa, LOOM_OP_VECTOR_DIVSI)
+LOOM_DEFINE_OPERAND(loom_vector_divsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_divsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_divsi_result, 0)
+iree_status_t loom_vector_divsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_divsi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_DIVUI: Lanewise unsigned integer division of same-typed vector operands.
+// vector.divui
+LOOM_DEFINE_ISA(loom_vector_divui_isa, LOOM_OP_VECTOR_DIVUI)
+LOOM_DEFINE_OPERAND(loom_vector_divui_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_divui_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_divui_result, 0)
+iree_status_t loom_vector_divui_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_divui_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_REMSI: Lanewise signed integer remainder of same-typed vector operands.
+// vector.remsi
+LOOM_DEFINE_ISA(loom_vector_remsi_isa, LOOM_OP_VECTOR_REMSI)
+LOOM_DEFINE_OPERAND(loom_vector_remsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_remsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_remsi_result, 0)
+iree_status_t loom_vector_remsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_remsi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_REMUI: Lanewise unsigned integer remainder of same-typed vector operands.
+// vector.remui
+LOOM_DEFINE_ISA(loom_vector_remui_isa, LOOM_OP_VECTOR_REMUI)
+LOOM_DEFINE_OPERAND(loom_vector_remui_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_remui_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_remui_result, 0)
+iree_status_t loom_vector_remui_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_remui_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_CEILDIVSI: Lanewise signed integer division rounding toward positive infinity.
+// vector.ceildivsi
+LOOM_DEFINE_ISA(loom_vector_ceildivsi_isa, LOOM_OP_VECTOR_CEILDIVSI)
+LOOM_DEFINE_OPERAND(loom_vector_ceildivsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_ceildivsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_ceildivsi_result, 0)
+iree_status_t loom_vector_ceildivsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_CEILDIVUI: Lanewise unsigned integer division rounding toward positive infinity.
+// vector.ceildivui
+LOOM_DEFINE_ISA(loom_vector_ceildivui_isa, LOOM_OP_VECTOR_CEILDIVUI)
+LOOM_DEFINE_OPERAND(loom_vector_ceildivui_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_ceildivui_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_ceildivui_result, 0)
+iree_status_t loom_vector_ceildivui_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_FLOORDIVSI: Lanewise signed integer division rounding toward negative infinity.
+// vector.floordivsi
+LOOM_DEFINE_ISA(loom_vector_floordivsi_isa, LOOM_OP_VECTOR_FLOORDIVSI)
+LOOM_DEFINE_OPERAND(loom_vector_floordivsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_floordivsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_floordivsi_result, 0)
+iree_status_t loom_vector_floordivsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_NEGI: Lanewise integer negation of a same-typed vector operand.
+// vector.negi
+LOOM_DEFINE_ISA(loom_vector_negi_isa, LOOM_OP_VECTOR_NEGI)
+LOOM_DEFINE_OPERAND(loom_vector_negi_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_negi_result, 0)
+iree_status_t loom_vector_negi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_negi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_ABSI: Lanewise integer absolute value of a same-typed vector operand.
+// vector.absi
+LOOM_DEFINE_ISA(loom_vector_absi_isa, LOOM_OP_VECTOR_ABSI)
+LOOM_DEFINE_OPERAND(loom_vector_absi_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_absi_result, 0)
+iree_status_t loom_vector_absi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_absi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_MINSI: Lanewise signed integer minimum of same-typed vector operands.
+// vector.minsi
+LOOM_DEFINE_ISA(loom_vector_minsi_isa, LOOM_OP_VECTOR_MINSI)
+LOOM_DEFINE_OPERAND(loom_vector_minsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_minsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_minsi_result, 0)
+iree_status_t loom_vector_minsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_minsi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_MAXSI: Lanewise signed integer maximum of same-typed vector operands.
+// vector.maxsi
+LOOM_DEFINE_ISA(loom_vector_maxsi_isa, LOOM_OP_VECTOR_MAXSI)
+LOOM_DEFINE_OPERAND(loom_vector_maxsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_maxsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_maxsi_result, 0)
+iree_status_t loom_vector_maxsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_maxsi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_MINUI: Lanewise unsigned integer minimum of same-typed vector operands.
+// vector.minui
+LOOM_DEFINE_ISA(loom_vector_minui_isa, LOOM_OP_VECTOR_MINUI)
+LOOM_DEFINE_OPERAND(loom_vector_minui_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_minui_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_minui_result, 0)
+iree_status_t loom_vector_minui_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_minui_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_MAXUI: Lanewise unsigned integer maximum of same-typed vector operands.
+// vector.maxui
+LOOM_DEFINE_ISA(loom_vector_maxui_isa, LOOM_OP_VECTOR_MAXUI)
+LOOM_DEFINE_OPERAND(loom_vector_maxui_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_maxui_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_maxui_result, 0)
+iree_status_t loom_vector_maxui_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_maxui_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_FMAI: Lanewise fused integer multiply-add a*b + c over same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
+// %r = vector.fmai %a, %b, %c : vector<16xi32>
+LOOM_DEFINE_ISA(loom_vector_fmai_isa, LOOM_OP_VECTOR_FMAI)
+LOOM_DEFINE_OPERAND(loom_vector_fmai_a, 0)
+LOOM_DEFINE_OPERAND(loom_vector_fmai_b, 1)
+LOOM_DEFINE_OPERAND(loom_vector_fmai_c, 2)
+LOOM_DEFINE_RESULT(loom_vector_fmai_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_fmai_overflow)
+iree_status_t loom_vector_fmai_build(
+    loom_builder_t* builder,
+    uint8_t instance_flags,
+    loom_value_id_t a,
+    loom_value_id_t b,
+    loom_value_id_t c,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_fmai_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
@@ -1349,6 +1608,108 @@ iree_status_t loom_vector_xori_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
+// LOOM_OP_VECTOR_SHLI: Lanewise left shift of same-typed integer vector operands.
+// vector.shli
+LOOM_DEFINE_ISA(loom_vector_shli_isa, LOOM_OP_VECTOR_SHLI)
+LOOM_DEFINE_OPERAND(loom_vector_shli_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_shli_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_shli_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_shli_overflow)
+iree_status_t loom_vector_shli_build(
+    loom_builder_t* builder, uint8_t instance_flags,
+    loom_value_id_t lhs, loom_value_id_t rhs,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_shli_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_SHRSI: Lanewise arithmetic right shift of same-typed integer vector operands.
+// vector.shrsi
+LOOM_DEFINE_ISA(loom_vector_shrsi_isa, LOOM_OP_VECTOR_SHRSI)
+LOOM_DEFINE_OPERAND(loom_vector_shrsi_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_shrsi_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_shrsi_result, 0)
+iree_status_t loom_vector_shrsi_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_shrsi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_SHRUI: Lanewise logical right shift of same-typed integer vector operands.
+// vector.shrui
+LOOM_DEFINE_ISA(loom_vector_shrui_isa, LOOM_OP_VECTOR_SHRUI)
+LOOM_DEFINE_OPERAND(loom_vector_shrui_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_shrui_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_shrui_result, 0)
+iree_status_t loom_vector_shrui_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_shrui_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_ROTLI: Lanewise left rotate of same-typed integer vector operands.
+// vector.rotli
+LOOM_DEFINE_ISA(loom_vector_rotli_isa, LOOM_OP_VECTOR_ROTLI)
+LOOM_DEFINE_OPERAND(loom_vector_rotli_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_rotli_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_rotli_result, 0)
+iree_status_t loom_vector_rotli_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_ROTRI: Lanewise right rotate of same-typed integer vector operands.
+// vector.rotri
+LOOM_DEFINE_ISA(loom_vector_rotri_isa, LOOM_OP_VECTOR_ROTRI)
+LOOM_DEFINE_OPERAND(loom_vector_rotri_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_rotri_rhs, 1)
+LOOM_DEFINE_RESULT(loom_vector_rotri_result, 0)
+iree_status_t loom_vector_rotri_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_CTLZI: Lanewise count leading zeros over integer lanes.
+// vector.ctlzi
+LOOM_DEFINE_ISA(loom_vector_ctlzi_isa, LOOM_OP_VECTOR_CTLZI)
+LOOM_DEFINE_OPERAND(loom_vector_ctlzi_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_ctlzi_result, 0)
+iree_status_t loom_vector_ctlzi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_ctlzi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_CTTZI: Lanewise count trailing zeros over integer lanes.
+// vector.cttzi
+LOOM_DEFINE_ISA(loom_vector_cttzi_isa, LOOM_OP_VECTOR_CTTZI)
+LOOM_DEFINE_OPERAND(loom_vector_cttzi_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_cttzi_result, 0)
+iree_status_t loom_vector_cttzi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_cttzi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
 // LOOM_OP_VECTOR_CTPOPI: Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input.
 // vector.ctpopi
 LOOM_DEFINE_ISA(loom_vector_ctpopi_isa, LOOM_OP_VECTOR_CTPOPI)
@@ -1358,6 +1719,11 @@ iree_status_t loom_vector_ctpopi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_ctpopi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_EXPF: Lanewise natural exponential e^x.
 // vector.expf
@@ -1854,6 +2220,81 @@ iree_status_t loom_vector_truncf_build(
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 iree_status_t loom_vector_truncf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_ISNANF: Lanewise floating-point NaN test producing an i1 mask vector.
+// vector.isnanf
+LOOM_DEFINE_ISA(loom_vector_isnanf_isa, LOOM_OP_VECTOR_ISNANF)
+LOOM_DEFINE_OPERAND(loom_vector_isnanf_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_isnanf_result, 0)
+iree_status_t loom_vector_isnanf_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_isnanf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_ISINFF: Lanewise floating-point infinity test producing an i1 mask vector.
+// vector.isinff
+LOOM_DEFINE_ISA(loom_vector_isinff_isa, LOOM_OP_VECTOR_ISINFF)
+LOOM_DEFINE_OPERAND(loom_vector_isinff_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_isinff_result, 0)
+iree_status_t loom_vector_isinff_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_isinff_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_ISFINITEF: Lanewise floating-point finite test producing an i1 mask vector.
+// vector.isfinitef
+LOOM_DEFINE_ISA(loom_vector_isfinitef_isa, LOOM_OP_VECTOR_ISFINITEF)
+LOOM_DEFINE_OPERAND(loom_vector_isfinitef_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_isfinitef_result, 0)
+iree_status_t loom_vector_isfinitef_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_isfinitef_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_SIGNF: Lanewise floating-point sign, returning -1.0, 0.0, or 1.0 per lane.
+// vector.signf
+LOOM_DEFINE_ISA(loom_vector_signf_isa, LOOM_OP_VECTOR_SIGNF)
+LOOM_DEFINE_OPERAND(loom_vector_signf_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_signf_result, 0)
+iree_status_t loom_vector_signf_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_signf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_SIGNI: Lanewise integer sign, returning -1, 0, or 1 per lane.
+// vector.signi
+LOOM_DEFINE_ISA(loom_vector_signi_isa, LOOM_OP_VECTOR_SIGNI)
+LOOM_DEFINE_OPERAND(loom_vector_signi_input, 0)
+LOOM_DEFINE_RESULT(loom_vector_signi_result, 0)
+iree_status_t loom_vector_signi_build(
+    loom_builder_t* builder, loom_value_id_t input,
+    loom_type_t result_type, loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_signi_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

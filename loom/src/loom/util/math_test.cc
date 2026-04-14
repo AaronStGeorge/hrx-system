@@ -250,6 +250,26 @@ TEST(Ilog2I64, NonPowers) {
 }
 
 //===----------------------------------------------------------------------===//
+// Bit-width-limited counts
+//===----------------------------------------------------------------------===//
+
+TEST(CountLeadingZerosU64Width, UsesDeclaredWidth) {
+  EXPECT_EQ(loom_count_leading_zeros_u64_width(1, 32), 31);
+  EXPECT_EQ(loom_count_leading_zeros_u64_width(1, 8), 7);
+  EXPECT_EQ(loom_count_leading_zeros_u64_width(0, 32), 32);
+}
+
+TEST(CountTrailingZerosU64Width, UsesDeclaredWidth) {
+  EXPECT_EQ(loom_count_trailing_zeros_u64_width(8, 32), 3);
+  EXPECT_EQ(loom_count_trailing_zeros_u64_width(0, 8), 8);
+}
+
+TEST(CountOnesU64Width, MasksToDeclaredWidth) {
+  EXPECT_EQ(loom_count_ones_u64_width(UINT64_MAX, 32), 32);
+  EXPECT_EQ(loom_count_ones_u64_width(UINT64_MAX, 8), 8);
+}
+
+//===----------------------------------------------------------------------===//
 // loom_is_power_of_two_i64
 //===----------------------------------------------------------------------===//
 
