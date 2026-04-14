@@ -2,6 +2,63 @@
 
 // ====
 
+func.def @buffer_alloca_rejects_index_size(%size: index) {
+  // ERROR@+1: TYPE/003 "operand 0" "index" "offset"
+  %scratch = buffer.alloca %size {base_alignment = 64, memory_space = workgroup} : buffer
+  func.return
+}
+
+// ====
+
+func.def @buffer_alloca_rejects_zero_alignment(%size: offset) {
+  // ERROR@+1: STRUCTURE/014 "base_alignment" "0" "positive power-of-two byte alignment"
+  %scratch = buffer.alloca %size {base_alignment = 0, memory_space = workgroup} : buffer
+  func.return
+}
+
+// ====
+
+func.def @buffer_alloca_rejects_non_power_of_two_alignment(%size: offset) {
+  // ERROR@+1: STRUCTURE/014 "base_alignment" "96" "positive power-of-two byte alignment"
+  %scratch = buffer.alloca %size {base_alignment = 96, memory_space = workgroup} : buffer
+  func.return
+}
+
+// ====
+
+func.def @buffer_alloca_rejects_unknown_memory_space(%size: offset) {
+  // ERROR@+1: STRUCTURE/014 "memory_space" "0" "workgroup or private memory space"
+  %scratch = buffer.alloca %size {base_alignment = 64, memory_space = unknown} : buffer
+  func.return
+}
+
+// ====
+
+func.def @buffer_alloca_rejects_global_memory_space(%size: offset) {
+  // ERROR@+1: STRUCTURE/014 "memory_space" "1" "workgroup or private memory space"
+  %scratch = buffer.alloca %size {base_alignment = 64, memory_space = global} : buffer
+  func.return
+}
+
+// ====
+
+func.def @buffer_assume_rejects_unknown_memory_space(%buffer: buffer) {
+  // ERROR@+1: STRUCTURE/014 "memory_space" "0" "concrete memory space"
+  %scratch = buffer.assume.memory_space %buffer {memory_space = unknown} : buffer
+  func.return
+}
+
+// ====
+
+func.def @buffer_assume_rejects_contradictory_memory_space(%size: offset) {
+  %scratch = buffer.alloca %size {base_alignment = 64, memory_space = workgroup} : buffer
+  // ERROR@+1: STRUCTURE/014 "memory_space" "3" "existing memory-space fact 2"
+  %private = buffer.assume.memory_space %scratch {memory_space = private} : buffer
+  func.return
+}
+
+// ====
+
 // buffer.view consumes a physical byte offset, not a logical index. Logical
 // coordinates only appear inside the view's index list consumers.
 func.def @buffer_view_rejects_index_offset(%buffer: buffer, %index: index) {

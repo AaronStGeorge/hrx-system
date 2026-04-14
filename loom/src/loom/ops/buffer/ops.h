@@ -18,9 +18,69 @@ extern "C" {
 #endif
 
 enum {
-  LOOM_OP_BUFFER_VIEW = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 0),
-  LOOM_OP_BUFFER_COUNT_ = 1,
+  LOOM_OP_BUFFER_ALLOCA = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 0),
+  LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 1),
+  LOOM_OP_BUFFER_VIEW = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 2),
+  LOOM_OP_BUFFER_COUNT_ = 3,
 };
+
+// Target-independent memory space for buffer roots and derived views.
+typedef enum loom_buffer_memory_space_e {
+  LOOM_BUFFER_MEMORY_SPACE_UNKNOWN = 0,
+  LOOM_BUFFER_MEMORY_SPACE_GLOBAL = 1,
+  LOOM_BUFFER_MEMORY_SPACE_WORKGROUP = 2,
+  LOOM_BUFFER_MEMORY_SPACE_PRIVATE = 3,
+  LOOM_BUFFER_MEMORY_SPACE_CONSTANT = 4,
+  LOOM_BUFFER_MEMORY_SPACE_HOST = 5,
+  LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR = 6,
+  LOOM_BUFFER_MEMORY_SPACE_COUNT_ = 7,
+} loom_buffer_memory_space_t;
+
+// LOOM_OP_BUFFER_ALLOCA: Create a fixed-frame scratch buffer root in workgroup or private memory. Each execution produces a distinct storage identity; identical allocas must not be commoned. The byte length is a physical byte count, and base_alignment is the minimum byte alignment of the root storage base.
+// %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
+LOOM_DEFINE_ISA(loom_buffer_alloca_isa, LOOM_OP_BUFFER_ALLOCA)
+LOOM_DEFINE_OPERAND(loom_buffer_alloca_byte_length, 0)
+LOOM_DEFINE_RESULT(loom_buffer_alloca_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_buffer_alloca_base_alignment, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_buffer_alloca_memory_space, 1)
+iree_status_t loom_buffer_alloca_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t byte_length,
+    int64_t base_alignment,
+    uint8_t memory_space,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_buffer_alloca_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_buffer_alloca_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE: Refine an existing buffer root with a concrete target-independent memory-space fact while preserving the same storage identity, extent, alignment, and nullability facts.
+// %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+LOOM_DEFINE_ISA(loom_buffer_assume_memory_space_isa, LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE)
+LOOM_DEFINE_OPERAND(loom_buffer_assume_memory_space_buffer, 0)
+LOOM_DEFINE_RESULT(loom_buffer_assume_memory_space_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_buffer_assume_memory_space_memory_space, 0)
+iree_status_t loom_buffer_assume_memory_space_build(
+    loom_builder_t* builder,
+    loom_value_id_t buffer,
+    uint8_t memory_space,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_buffer_assume_memory_space_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_buffer_assume_memory_space_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_BUFFER_VIEW: Form a typed non-owning view from an opaque buffer root and base byte offset. The result view type carries the address layout.
 // %view = buffer.view %buffer[%offset] : buffer -> view<[%M]xf32, %layout>

@@ -614,6 +614,30 @@ class TestBuilders:
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_is_view_reference", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def fact_buffer_memory_space(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes a buffer-reference memory-space enum value as an i64 constant, or -1 when unknown.
+
+        Example::
+            %space = test.fact_buffer_memory_space %buffer : buffer -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_buffer_memory_space", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_memory_space(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes a view-reference memory-space enum value as an i64 constant, or -1 when unknown.
+
+        Example::
+            %space = test.fact_view_memory_space %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_memory_space", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def fact_view_root_matches(self, *, view: ValueRef, root: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Returns 1 if a view reference and another reference share the same root identity.
 
@@ -686,6 +710,30 @@ class TestBuilders:
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_view_min_alignment", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_buffer_min_alignment(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes the minimum provable buffer root byte alignment as an i64 constant.
+
+        Example::
+            %align = test.fact_buffer_min_alignment %buffer : buffer -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_buffer_min_alignment", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_root_min_alignment(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes the minimum provable view root byte alignment as an i64 constant.
+
+        Example::
+            %align = test.fact_view_root_min_alignment %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_root_min_alignment", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def fact_view_element_bytes(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Exposes the static addressed element byte count, or -1 when unknown.

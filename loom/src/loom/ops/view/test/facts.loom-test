@@ -13,6 +13,75 @@ func.def @buffer_arg_reference(%buffer: buffer) -> (i1) {
 
 // ====
 
+// Scratch buffer roots seed extent, base alignment, memory-space, and non-null
+// facts. Views derived from them keep the root facts while computing their own
+// typed byte footprint.
+func.def @workgroup_alloca_reference() -> (i64, i64, i64, i64, i64) {
+  %bytes = index.constant 256 : offset
+  %zero = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero] : buffer -> view<16xf32, %layout>
+  %buffer_space = test.fact_buffer_memory_space %scratch : buffer -> i64
+  %buffer_align = test.fact_buffer_min_alignment %scratch : buffer -> i64
+  %view_space = test.fact_view_memory_space %view : view<16xf32, %layout> -> i64
+  %view_root_align = test.fact_view_root_min_alignment %view : view<16xf32, %layout> -> i64
+  %view_length = test.fact_view_byte_length_hi %view : view<16xf32, %layout> -> i64
+  func.return %buffer_space, %buffer_align, %view_space, %view_root_align, %view_length : i64, i64, i64, i64, i64
+}
+// ----
+func.def @workgroup_alloca_reference() -> (i64, i64, i64, i64, i64) {
+  %buffer_space = scalar.constant 2 : i64
+  %buffer_align = scalar.constant 64 : i64
+  %view_space = scalar.constant 2 : i64
+  %view_root_align = scalar.constant 64 : i64
+  %view_length = scalar.constant 64 : i64
+  func.return %buffer_space, %buffer_align, %view_space, %view_root_align, %view_length : i64, i64, i64, i64, i64
+}
+
+// ====
+
+// Explicit memory-space assumptions refine buffer arguments and propagate
+// through later view construction.
+func.def @assume_memory_space_feeds_view(%buffer: buffer, %offset: offset) -> (i64, i64) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %view = buffer.view %global[%offset] : buffer -> view<4xf32, %layout>
+  %buffer_space = test.fact_buffer_memory_space %global : buffer -> i64
+  %view_space = test.fact_view_memory_space %view : view<4xf32, %layout> -> i64
+  func.return %buffer_space, %view_space : i64, i64
+}
+// ----
+func.def @assume_memory_space_feeds_view(%buffer: buffer, %offset: offset) -> (i64, i64) {
+  %buffer_space = scalar.constant 1 : i64
+  %view_space = scalar.constant 1 : i64
+  func.return %buffer_space, %view_space : i64, i64
+}
+
+// ====
+
+// Subview/refine preserve the underlying root memory-space facts.
+func.def @subview_refine_preserves_memory_space() -> (i64, i64) {
+  %bytes = index.constant 256 : offset
+  %zero = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 128, memory_space = workgroup} : buffer
+  %source = buffer.view %scratch[%zero] : buffer -> view<16xf32, %layout>
+  %sub = view.subview %source[4] : view<16xf32, %layout> -> view<8xf32, %layout>
+  %refined = view.refine %sub : view<8xf32, %layout> -> view<4xf32, %layout>
+  %space = test.fact_view_memory_space %refined : view<4xf32, %layout> -> i64
+  %root_align = test.fact_view_root_min_alignment %refined : view<4xf32, %layout> -> i64
+  func.return %space, %root_align : i64, i64
+}
+// ----
+func.def @subview_refine_preserves_memory_space() -> (i64, i64) {
+  %space = scalar.constant 2 : i64
+  %root_align = scalar.constant 128 : i64
+  func.return %space, %root_align : i64, i64
+}
+
+// ====
+
 // Dense static views compute exact base, footprint, alignment, and element
 // byte facts.
 func.def @dense_static_view_facts(%buffer: buffer) -> (i64, i64, i64, i64, i64, i64) {

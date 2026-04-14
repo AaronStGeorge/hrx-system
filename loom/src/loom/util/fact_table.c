@@ -142,6 +142,7 @@ static uint32_t loom_value_fact_hash_buffer_reference(
     loom_value_fact_buffer_reference_t reference, uint32_t hash) {
   hash = loom_value_fact_hash_facts(reference.maximum_byte_extent, hash);
   hash = loom_value_fact_hash_u64(reference.minimum_alignment, hash);
+  hash = loom_value_fact_hash_u32((uint32_t)reference.memory_space, hash);
   hash = loom_value_fact_hash_u32(reference.root_value_id, hash);
   return loom_value_fact_hash_u32(reference.nullability, hash);
 }
@@ -151,7 +152,9 @@ static uint32_t loom_value_fact_hash_view_reference(
   hash = loom_value_fact_hash_facts(reference.base_byte_offset, hash);
   hash = loom_value_fact_hash_facts(reference.footprint_byte_length, hash);
   hash = loom_value_fact_hash_u64(reference.minimum_alignment, hash);
+  hash = loom_value_fact_hash_u64(reference.root_minimum_alignment, hash);
   hash = loom_value_fact_hash_i64(reference.static_element_byte_count, hash);
+  hash = loom_value_fact_hash_u32((uint32_t)reference.memory_space, hash);
   hash = loom_value_fact_hash_u32(reference.root_value_id, hash);
   return loom_value_fact_hash_u32(reference.nullability, hash);
 }
@@ -162,6 +165,7 @@ static bool loom_value_fact_buffer_reference_equal(
   return loom_value_facts_equal(lhs.maximum_byte_extent,
                                 rhs.maximum_byte_extent) &&
          lhs.minimum_alignment == rhs.minimum_alignment &&
+         lhs.memory_space == rhs.memory_space &&
          lhs.root_value_id == rhs.root_value_id &&
          lhs.nullability == rhs.nullability;
 }
@@ -173,7 +177,9 @@ static bool loom_value_fact_view_reference_equal(
          loom_value_facts_equal(lhs.footprint_byte_length,
                                 rhs.footprint_byte_length) &&
          lhs.minimum_alignment == rhs.minimum_alignment &&
+         lhs.root_minimum_alignment == rhs.root_minimum_alignment &&
          lhs.static_element_byte_count == rhs.static_element_byte_count &&
+         lhs.memory_space == rhs.memory_space &&
          lhs.root_value_id == rhs.root_value_id &&
          lhs.nullability == rhs.nullability;
 }
@@ -723,6 +729,7 @@ static iree_status_t loom_value_fact_table_seed_buffer_arg(
   loom_value_fact_buffer_reference_t reference = {
       .maximum_byte_extent = loom_value_facts_make(0, INT64_MAX, 1),
       .minimum_alignment = 1,
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = value_id,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
@@ -739,8 +746,10 @@ static iree_status_t loom_value_fact_table_seed_view_arg(
       .base_byte_offset = loom_value_facts_exact_i64(0),
       .footprint_byte_length = loom_value_facts_make(0, INT64_MAX, 1),
       .minimum_alignment = 1,
+      .root_minimum_alignment = 1,
       .static_element_byte_count =
           loom_value_fact_static_element_byte_count(type),
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = value_id,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };

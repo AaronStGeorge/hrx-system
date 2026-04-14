@@ -12,16 +12,22 @@ from loom.assembly import (
     GLUE,
     LBRACKET,
     RBRACKET,
+    AttrDict,
     Ref,
     ResultType,
     TypeOf,
 )
 from loom.dsl import (
+    ATTR_TYPE_ENUM,
+    ATTR_TYPE_I64,
     BUFFER,
     OFFSET,
     PURE,
     VIEW,
+    AttrDef,
     Dialect,
+    EnumCase,
+    EnumDef,
     Op,
     Operand,
     Result,
@@ -35,6 +41,108 @@ buffer_ops = Dialect(
     "buffer",
     dialect_id=0x0C,
     doc="Opaque storage roots and typed view construction.",
+)
+
+# ============================================================================
+# Shared attrs
+# ============================================================================
+
+MemorySpace = EnumDef(
+    "MemorySpace",
+    [
+        EnumCase("unknown", 0, doc="No target-independent memory space is known."),
+        EnumCase("global", 1, doc="Device-visible global storage."),
+        EnumCase("workgroup", 2, doc="Workgroup/shared storage."),
+        EnumCase("private", 3, doc="Invocation-private storage."),
+        EnumCase("constant", 4, doc="Read-only constant storage."),
+        EnumCase("host", 5, doc="Host-visible storage."),
+        EnumCase("descriptor", 6, doc="Descriptor-backed storage identity."),
+    ],
+    doc="Target-independent memory space for buffer roots and derived views.",
+)
+
+# ============================================================================
+# buffer.alloca — fixed-frame scratch allocation root
+# ============================================================================
+
+buffer_alloca = Op(
+    name="buffer.alloca",
+    group=buffer_ops,
+    doc=(
+        "Create a fixed-frame scratch buffer root in workgroup or private memory. "
+        "Each execution produces a distinct storage identity; identical allocas "
+        "must not be commoned. The byte length is a physical byte count, and "
+        "base_alignment is the minimum byte alignment of the root storage base."
+    ),
+    operands=[
+        Operand("byte_length", OFFSET, doc="Physical byte length of the scratch root."),
+    ],
+    results=[
+        Result(
+            "result",
+            BUFFER,
+            doc="Fresh opaque scratch storage root.",
+            allocates=True,
+        ),
+    ],
+    attrs=[
+        AttrDef(
+            "base_alignment",
+            ATTR_TYPE_I64,
+            doc="Minimum byte alignment of the root storage base.",
+        ),
+        AttrDef(
+            "memory_space",
+            ATTR_TYPE_ENUM,
+            enum_def=MemorySpace,
+            doc="Scratch memory space for the root; must be workgroup or private.",
+        ),
+    ],
+    verify="loom_buffer_alloca_verify",
+    facts="loom_buffer_alloca_facts",
+    format=[
+        Ref("byte_length"),
+        AttrDict(),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer",
+    ],
+)
+
+# ============================================================================
+# buffer.assume.memory_space — refine a buffer root memory-space fact
+# ============================================================================
+
+buffer_assume_memory_space = Op(
+    name="buffer.assume.memory_space",
+    group=buffer_ops,
+    doc=("Refine an existing buffer root with a concrete target-independent memory-space fact while preserving the same storage identity, extent, alignment, and nullability facts."),
+    operands=[Operand("buffer", BUFFER, doc="Buffer root to refine.")],
+    results=[
+        Result("result", BUFFER, doc="Same buffer root with refined memory-space facts."),
+    ],
+    attrs=[
+        AttrDef(
+            "memory_space",
+            ATTR_TYPE_ENUM,
+            enum_def=MemorySpace,
+            doc="Concrete memory space to assume.",
+        ),
+    ],
+    traits=[PURE],
+    verify="loom_buffer_assume_memory_space_verify",
+    facts="loom_buffer_assume_memory_space_facts",
+    format=[
+        Ref("buffer"),
+        AttrDict(),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%global = buffer.assume.memory_space %buffer {memory_space = global} : buffer",
+    ],
 )
 
 # ============================================================================
@@ -73,4 +181,8 @@ buffer_view = Op(
 # Registry
 # ============================================================================
 
-ALL_BUFFER_OPS: tuple[Op, ...] = (buffer_view,)
+ALL_BUFFER_OPS: tuple[Op, ...] = (
+    buffer_alloca,
+    buffer_assume_memory_space,
+    buffer_view,
+)

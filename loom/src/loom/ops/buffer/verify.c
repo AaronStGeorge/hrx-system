@@ -10,6 +10,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/util/fact_table.h"
+#include "loom/util/math.h"
 
 static iree_status_t loom_buffer_emit(iree_diagnostic_emitter_t emitter,
                                       const loom_op_t* op,
@@ -52,6 +53,104 @@ static iree_status_t loom_buffer_verify_strided_layout_rank(
   };
   return loom_buffer_emit(emitter, op, &loom_err_shape_001, params,
                           IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_buffer_emit_attribute_value_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t attr_name, int64_t actual_value,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(attr_name),
+      loom_param_i64(actual_value),
+      loom_param_string(expected_constraint),
+  };
+  return loom_buffer_emit(emitter, op, &loom_err_structure_014, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_buffer_verify_concrete_memory_space(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t attr_name, uint8_t value) {
+  if (value != LOOM_BUFFER_MEMORY_SPACE_UNKNOWN) return iree_ok_status();
+  return loom_buffer_emit_attribute_value_constraint(
+      emitter, op, attr_name, value, IREE_SV("concrete memory space"));
+}
+
+static iree_status_t loom_buffer_verify_scratch_memory_space(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint8_t value) {
+  if (value == LOOM_BUFFER_MEMORY_SPACE_WORKGROUP ||
+      value == LOOM_BUFFER_MEMORY_SPACE_PRIVATE) {
+    return iree_ok_status();
+  }
+  return loom_buffer_emit_attribute_value_constraint(
+      emitter, op, IREE_SV("memory_space"), value,
+      IREE_SV("workgroup or private memory space"));
+}
+
+static bool loom_buffer_try_get_local_memory_space_fact(
+    const loom_module_t* module, loom_value_id_t value_id,
+    uint8_t* out_memory_space) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) return false;
+
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op) return false;
+
+  if (loom_buffer_alloca_isa(defining_op)) {
+    *out_memory_space = loom_buffer_alloca_memory_space(defining_op);
+    return true;
+  }
+  if (loom_buffer_assume_memory_space_isa(defining_op)) {
+    *out_memory_space =
+        loom_buffer_assume_memory_space_memory_space(defining_op);
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_buffer_verify_memory_space_refinement(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, uint8_t value) {
+  uint8_t existing_memory_space = LOOM_BUFFER_MEMORY_SPACE_UNKNOWN;
+  if (!loom_buffer_try_get_local_memory_space_fact(
+          module, loom_buffer_assume_memory_space_buffer(op),
+          &existing_memory_space)) {
+    return iree_ok_status();
+  }
+  if (existing_memory_space == LOOM_BUFFER_MEMORY_SPACE_UNKNOWN) {
+    return iree_ok_status();
+  }
+  if (existing_memory_space == value) return iree_ok_status();
+
+  char expected[64] = {0};
+  iree_snprintf(expected, sizeof(expected), "existing memory-space fact %u",
+                (unsigned)existing_memory_space);
+  return loom_buffer_emit_attribute_value_constraint(
+      emitter, op, IREE_SV("memory_space"), value,
+      iree_make_cstring_view(expected));
+}
+
+iree_status_t loom_buffer_alloca_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  int64_t base_alignment = loom_buffer_alloca_base_alignment(op);
+  if (!loom_is_power_of_two_i64(base_alignment)) {
+    return loom_buffer_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("base_alignment"), base_alignment,
+        IREE_SV("positive power-of-two byte alignment"));
+  }
+  return loom_buffer_verify_scratch_memory_space(
+      emitter, op, loom_buffer_alloca_memory_space(op));
+}
+
+iree_status_t loom_buffer_assume_memory_space_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  uint8_t memory_space = loom_buffer_assume_memory_space_memory_space(op);
+  IREE_RETURN_IF_ERROR(loom_buffer_verify_concrete_memory_space(
+      emitter, op, IREE_SV("memory_space"), memory_space));
+  return loom_buffer_verify_memory_space_refinement(module, emitter, op,
+                                                    memory_space);
 }
 
 iree_status_t loom_buffer_view_verify(const loom_module_t* module,

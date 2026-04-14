@@ -385,6 +385,30 @@ test_fact_is_view_reference = Op(
     examples=["%is = test.fact_is_view_reference %view : view<4xf32, %layout> -> i1"],
 )
 
+test_fact_buffer_memory_space = Op(
+    "test.fact_buffer_memory_space",
+    group=test_ops,
+    doc="Exposes a buffer-reference memory-space enum value as an i64 constant, or -1 when unknown.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_buffer_memory_space_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%space = test.fact_buffer_memory_space %buffer : buffer -> i64"],
+)
+
+test_fact_view_memory_space = Op(
+    "test.fact_view_memory_space",
+    group=test_ops,
+    doc="Exposes a view-reference memory-space enum value as an i64 constant, or -1 when unknown.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_memory_space_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%space = test.fact_view_memory_space %view : view<4xf32, %layout> -> i64"],
+)
+
 test_fact_view_root_matches = Op(
     "test.fact_view_root_matches",
     group=test_ops,
@@ -467,6 +491,30 @@ test_fact_view_min_alignment = Op(
     facts="loom_test_fact_view_min_alignment_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%align = test.fact_view_min_alignment %view : view<4xf32, %layout> -> i64"],
+)
+
+test_fact_buffer_min_alignment = Op(
+    "test.fact_buffer_min_alignment",
+    group=test_ops,
+    doc="Exposes the minimum provable buffer root byte alignment as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_buffer_min_alignment_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%align = test.fact_buffer_min_alignment %buffer : buffer -> i64"],
+)
+
+test_fact_view_root_min_alignment = Op(
+    "test.fact_view_root_min_alignment",
+    group=test_ops,
+    doc="Exposes the minimum provable view root byte alignment as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_root_min_alignment_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%align = test.fact_view_root_min_alignment %view : view<4xf32, %layout> -> i64"],
 )
 
 test_fact_view_element_bytes = Op(
@@ -1194,11 +1242,15 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_encoding_layout_stride_hi,
     test_fact_is_buffer_reference,
     test_fact_is_view_reference,
+    test_fact_buffer_memory_space,
+    test_fact_view_memory_space,
     test_fact_view_root_matches,
     test_fact_view_byte_offset_lo,
     test_fact_view_byte_offset_hi,
     test_fact_view_byte_length_lo,
     test_fact_view_byte_length_hi,
     test_fact_view_min_alignment,
+    test_fact_buffer_min_alignment,
+    test_fact_view_root_min_alignment,
     test_fact_view_element_bytes,
 )

@@ -200,6 +200,42 @@ iree_status_t loom_test_fact_is_view_reference_facts(
   return iree_ok_status();
 }
 
+static int64_t loom_test_memory_space_or_unknown(
+    loom_value_fact_memory_space_t memory_space) {
+  if (memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN) return -1;
+  return (int64_t)memory_space;
+}
+
+iree_status_t loom_test_fact_buffer_memory_space_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_buffer_reference_t reference = {0};
+  if (!loom_value_facts_query_buffer_reference(context, operand_facts[0],
+                                               &reference)) {
+    result_facts[0] = loom_value_facts_exact_i64(-1);
+    return iree_ok_status();
+  }
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_test_memory_space_or_unknown(reference.memory_space));
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_memory_space_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference = {0};
+  if (!loom_value_facts_query_view_reference(context, operand_facts[0],
+                                             &reference)) {
+    result_facts[0] = loom_value_facts_exact_i64(-1);
+    return iree_ok_status();
+  }
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_test_memory_space_or_unknown(reference.memory_space));
+  return iree_ok_status();
+}
+
 iree_status_t loom_test_fact_view_root_matches_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
@@ -233,7 +269,9 @@ static loom_value_fact_view_reference_t loom_test_view_reference_or_empty(
       .base_byte_offset = loom_value_facts_exact_i64(INT64_MIN),
       .footprint_byte_length = loom_value_facts_exact_i64(INT64_MIN),
       .minimum_alignment = 0,
+      .root_minimum_alignment = 0,
       .static_element_byte_count = -1,
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = LOOM_VALUE_ID_INVALID,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
@@ -285,6 +323,24 @@ iree_status_t loom_test_fact_view_byte_length_hi_facts(
   return iree_ok_status();
 }
 
+iree_status_t loom_test_fact_buffer_min_alignment_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_buffer_reference_t reference = {
+      .maximum_byte_extent = loom_value_facts_exact_i64(INT64_MIN),
+      .minimum_alignment = 0,
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
+      .root_value_id = LOOM_VALUE_ID_INVALID,
+      .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
+  };
+  (void)loom_value_facts_query_buffer_reference(context, operand_facts[0],
+                                                &reference);
+  result_facts[0] =
+      loom_value_facts_exact_i64((int64_t)reference.minimum_alignment);
+  return iree_ok_status();
+}
+
 iree_status_t loom_test_fact_view_min_alignment_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
@@ -293,6 +349,17 @@ iree_status_t loom_test_fact_view_min_alignment_facts(
       loom_test_view_reference_or_empty(context, operand_facts[0]);
   result_facts[0] =
       loom_value_facts_exact_i64((int64_t)reference.minimum_alignment);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_root_min_alignment_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference =
+      loom_test_view_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64((int64_t)reference.root_minimum_alignment);
   return iree_ok_status();
 }
 

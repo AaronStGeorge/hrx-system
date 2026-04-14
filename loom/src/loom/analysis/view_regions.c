@@ -529,8 +529,10 @@ static loom_value_fact_view_reference_t loom_view_region_default_reference(
       .base_byte_offset = loom_value_facts_exact_i64(0),
       .footprint_byte_length = loom_value_facts_make(0, INT64_MAX, 1),
       .minimum_alignment = 1,
+      .root_minimum_alignment = 1,
       .static_element_byte_count =
           loom_view_region_static_element_byte_count(view_type),
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = value_id,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
@@ -561,7 +563,9 @@ static iree_status_t loom_view_region_build_default(
       .byte_length = length,
       .end_byte_offset = end,
       .minimum_alignment = reference.minimum_alignment,
+      .root_minimum_alignment = reference.root_minimum_alignment,
       .static_element_byte_count = reference.static_element_byte_count,
+      .memory_space = reference.memory_space,
       .access_flags = 0,
       .precision_flags = 0,
   };

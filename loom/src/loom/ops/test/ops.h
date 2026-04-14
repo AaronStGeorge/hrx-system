@@ -60,14 +60,18 @@ enum {
   LOOM_OP_TEST_FACT_ENCODING_LAYOUT_STRIDE_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 39),
   LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 40),
   LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 41),
-  LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 42),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 43),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 44),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 45),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 46),
-  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 47),
-  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 48),
-  LOOM_OP_TEST_COUNT_ = 49,
+  LOOM_OP_TEST_FACT_BUFFER_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 42),
+  LOOM_OP_TEST_FACT_VIEW_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 43),
+  LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 44),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 45),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 46),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 47),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 48),
+  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 49),
+  LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 50),
+  LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 51),
+  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 52),
+  LOOM_OP_TEST_COUNT_ = 53,
 };
 
 // Function visibility. Absent (0) means private.
@@ -767,6 +771,40 @@ iree_status_t loom_test_fact_is_view_reference_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
+// LOOM_OP_TEST_FACT_BUFFER_MEMORY_SPACE: Exposes a buffer-reference memory-space enum value as an i64 constant, or -1 when unknown.
+// %space = test.fact_buffer_memory_space %buffer : buffer -> i64
+LOOM_DEFINE_ISA(loom_test_fact_buffer_memory_space_isa, LOOM_OP_TEST_FACT_BUFFER_MEMORY_SPACE)
+LOOM_DEFINE_OPERAND(loom_test_fact_buffer_memory_space_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_buffer_memory_space_result, 0)
+iree_status_t loom_test_fact_buffer_memory_space_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_buffer_memory_space_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_MEMORY_SPACE: Exposes a view-reference memory-space enum value as an i64 constant, or -1 when unknown.
+// %space = test.fact_view_memory_space %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_memory_space_isa, LOOM_OP_TEST_FACT_VIEW_MEMORY_SPACE)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_memory_space_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_memory_space_result, 0)
+iree_status_t loom_test_fact_view_memory_space_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_memory_space_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
 // LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES: Returns 1 if a view reference and another reference share the same root identity.
 // %same = test.fact_view_root_matches %view, %buffer : view<4xf32, %layout>, buffer -> i1
 LOOM_DEFINE_ISA(loom_test_fact_view_root_matches_isa, LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES)
@@ -866,6 +904,40 @@ iree_status_t loom_test_fact_view_min_alignment_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_test_fact_view_min_alignment_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT: Exposes the minimum provable buffer root byte alignment as an i64 constant.
+// %align = test.fact_buffer_min_alignment %buffer : buffer -> i64
+LOOM_DEFINE_ISA(loom_test_fact_buffer_min_alignment_isa, LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT)
+LOOM_DEFINE_OPERAND(loom_test_fact_buffer_min_alignment_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_buffer_min_alignment_result, 0)
+iree_status_t loom_test_fact_buffer_min_alignment_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_buffer_min_alignment_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT: Exposes the minimum provable view root byte alignment as an i64 constant.
+// %align = test.fact_view_root_min_alignment %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_root_min_alignment_isa, LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_root_min_alignment_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_root_min_alignment_result, 0)
+iree_status_t loom_test_fact_view_root_min_alignment_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_root_min_alignment_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

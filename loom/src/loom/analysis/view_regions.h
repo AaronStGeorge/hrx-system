@@ -83,8 +83,14 @@ typedef struct loom_view_region_t {
   // Minimum provable alignment of begin_byte_offset relative to root_value_id.
   uint64_t minimum_alignment;
 
+  // Minimum provable byte alignment of the root storage base.
+  uint64_t root_minimum_alignment;
+
   // Static addressed element byte count, or -1 for sub-byte/unknown elements.
   int64_t static_element_byte_count;
+
+  // Target-independent memory space for the underlying storage root.
+  loom_value_fact_memory_space_t memory_space;
 
   // Derived memory access bits for this particular SSA view value.
   loom_view_access_flags_t access_flags;

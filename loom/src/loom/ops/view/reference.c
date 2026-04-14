@@ -341,6 +341,7 @@ static loom_value_fact_buffer_reference_t loom_view_default_buffer_reference(
   return (loom_value_fact_buffer_reference_t){
       .maximum_byte_extent = loom_view_nonnegative_unknown_facts(),
       .minimum_alignment = 1,
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = buffer_value_id,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
@@ -352,8 +353,10 @@ static loom_value_fact_view_reference_t loom_view_default_view_reference(
       .base_byte_offset = loom_value_facts_exact_i64(0),
       .footprint_byte_length = loom_view_nonnegative_unknown_facts(),
       .minimum_alignment = 1,
+      .root_minimum_alignment = 1,
       .static_element_byte_count =
           loom_view_static_element_byte_count(source_type),
+      .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = source_value_id,
       .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
   };
@@ -378,6 +381,8 @@ iree_status_t loom_view_reference_make_buffer_view(
       context, module, result_type, view_reference.static_element_byte_count);
   view_reference.minimum_alignment =
       loom_view_alignment_from_offset_facts(view_reference.base_byte_offset);
+  view_reference.root_minimum_alignment = buffer_reference.minimum_alignment;
+  view_reference.memory_space = buffer_reference.memory_space;
   view_reference.root_value_id = buffer_reference.root_value_id;
   view_reference.nullability = buffer_reference.nullability;
   return loom_value_facts_make_view_reference(context, view_reference, out);
@@ -408,6 +413,9 @@ iree_status_t loom_view_reference_make_subview(
       context, module, result_type, view_reference.static_element_byte_count);
   view_reference.minimum_alignment =
       loom_view_alignment_from_offset_facts(view_reference.base_byte_offset);
+  view_reference.root_minimum_alignment =
+      source_reference.root_minimum_alignment;
+  view_reference.memory_space = source_reference.memory_space;
   view_reference.root_value_id = source_reference.root_value_id;
   view_reference.nullability = source_reference.nullability;
   return loom_value_facts_make_view_reference(context, view_reference, out);

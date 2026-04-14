@@ -12,6 +12,30 @@ func.def @dense_view(%buffer: buffer, %offset: offset, %m: index) {
 
 // ====
 
+// Scratch roots carry explicit memory-space and root-alignment facts.
+func.def @workgroup_scratch_view(%bytes: offset) {
+  %zero = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
+  %view = buffer.view %scratch[%zero] : buffer -> view<16xf32, %layout>
+  test.use %view : view<16xf32, %layout>
+  func.return
+}
+
+// ====
+
+// Buffer arguments can be explicitly refined when ABI or kernel-boundary facts
+// establish a concrete memory space.
+func.def @global_arg_view(%buffer: buffer, %offset: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %view = buffer.view %global[%offset] : buffer -> view<16xf32, %layout>
+  test.use %view : view<16xf32, %layout>
+  func.return
+}
+
+// ====
+
 // Strided view and logical subview share the same explicit layout value.
 func.def @strided_subview(%buffer: buffer, %offset: offset, %row_stride: index, %row: index, %m: index, %n: index) {
   %layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>

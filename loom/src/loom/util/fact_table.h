@@ -123,6 +123,24 @@ typedef struct loom_value_fact_encoding_summary_t {
   loom_value_fact_address_layout_t address_layout;
 } loom_value_fact_encoding_summary_t;
 
+// Target-independent storage space for buffer/view reference facts.
+typedef enum loom_value_fact_memory_space_e {
+  // No usable memory-space fact is known.
+  LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN = 0,
+  // Device-visible global storage.
+  LOOM_VALUE_FACT_MEMORY_SPACE_GLOBAL = 1,
+  // Workgroup/shared storage.
+  LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP = 2,
+  // Invocation-private storage.
+  LOOM_VALUE_FACT_MEMORY_SPACE_PRIVATE = 3,
+  // Read-only constant storage.
+  LOOM_VALUE_FACT_MEMORY_SPACE_CONSTANT = 4,
+  // Host-visible storage.
+  LOOM_VALUE_FACT_MEMORY_SPACE_HOST = 5,
+  // Descriptor-backed storage identity.
+  LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR = 6,
+} loom_value_fact_memory_space_t;
+
 // Known reference nullability for storage-like values.
 typedef uint32_t loom_value_fact_reference_nullability_t;
 #define LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN \
@@ -140,6 +158,9 @@ typedef struct loom_value_fact_buffer_reference_t {
   // Minimum provable byte alignment of the root storage base. One means
   // unknown beyond byte alignment.
   uint64_t minimum_alignment;
+
+  // Target-independent memory space for the storage root.
+  loom_value_fact_memory_space_t memory_space;
 
   // SSA value that represents the root storage identity.
   loom_value_id_t root_value_id;
@@ -160,8 +181,15 @@ typedef struct loom_value_fact_view_reference_t {
   // The root's own absolute pointer alignment is tracked separately.
   uint64_t minimum_alignment;
 
+  // Minimum provable byte alignment of the root storage base. One means
+  // unknown beyond byte alignment.
+  uint64_t root_minimum_alignment;
+
   // Static addressed element byte count, or -1 for sub-byte/unknown elements.
   int64_t static_element_byte_count;
+
+  // Target-independent memory space for the underlying storage root.
+  loom_value_fact_memory_space_t memory_space;
 
   // SSA value that represents the root storage identity.
   loom_value_id_t root_value_id;
