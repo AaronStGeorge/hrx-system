@@ -224,6 +224,11 @@ iree_status_t loom_vector_constant_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_constant_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_constant_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -265,6 +270,11 @@ iree_status_t loom_vector_splat_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_splat_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_IOTA: Construct a vector of lane-coordinate values. Lane order is the logical row-major order of the result shape; result lane ordinal i contains base + i * step. The result element type must be index or a non-i1 integer payload, and base/step must be scalar values with the same element type. Dynamic result extents are allowed: the result type supplies the lane count symbolically and later specialization fixes the concrete number of produced coordinates.
 // %lanes = vector.iota %c0 step %c1 : vector<16xindex>
@@ -279,6 +289,11 @@ iree_status_t loom_vector_iota_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_iota_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_iota_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -298,6 +313,11 @@ iree_status_t loom_vector_mask_range_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_mask_range_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_mask_range_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -923,6 +943,11 @@ iree_status_t loom_vector_select_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_select_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_CMPI: Lanewise integer comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpi predicate names and applies independently to each lane.
 // %m = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
@@ -962,6 +987,11 @@ iree_status_t loom_vector_addf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_addf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_MULF: Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations.
 // vector.mulf
@@ -975,6 +1005,11 @@ iree_status_t loom_vector_mulf_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_mulf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_FMAF: Lanewise fused multiply-add of same-typed floating-point vectors. Each result lane computes a*b + c with one final rounding; use separate vector.mulf/vector.addf when unfused rounding is required.
 // %r = vector.fmaf %a, %b, %c : vector<16xf32>
@@ -993,6 +1028,11 @@ iree_status_t loom_vector_fmaf_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_fmaf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_ADDI: Lanewise integer addition of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
 // vector.addi
@@ -1006,6 +1046,11 @@ iree_status_t loom_vector_addi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_addi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_MULI: Lanewise integer multiplication of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
 // vector.muli
@@ -1019,6 +1064,11 @@ iree_status_t loom_vector_muli_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_muli_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_ANDI: Lanewise bitwise AND of same-typed integer vector operands.
 // vector.andi
@@ -1030,6 +1080,11 @@ iree_status_t loom_vector_andi_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_andi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_ORI: Lanewise bitwise OR of same-typed integer vector operands.
 // vector.ori
@@ -1041,6 +1096,11 @@ iree_status_t loom_vector_ori_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_ori_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_XORI: Lanewise bitwise XOR of same-typed integer vector operands.
 // vector.xori
@@ -1052,6 +1112,11 @@ iree_status_t loom_vector_xori_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_xori_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_CTPOPI: Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input.
 // vector.ctpopi
@@ -1317,6 +1382,11 @@ iree_status_t loom_vector_dotf_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_dotf_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_VECTOR_DOT4I: Group adjacent four-lane i8 products along the last axis and add each four-product sum into an i32 accumulator lane. The signedness template chooses how lhs and rhs i8 lanes are interpreted, matching dp4a/VNNI-style hardware operations.
 // %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
@@ -1354,6 +1424,11 @@ iree_status_t loom_vector_reduce_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_reduce_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_vector_reduce_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);

@@ -45,6 +45,32 @@ extern "C" {
 //===----------------------------------------------------------------------===//
 
 typedef struct loom_value_fact_table_t loom_value_fact_table_t;
+typedef struct loom_value_fact_extension_entry_t
+    loom_value_fact_extension_entry_t;
+
+// All lanes of a vector value share the same element facts.
+typedef struct loom_value_fact_uniform_element_t {
+  // Scalar facts that apply to every lane.
+  loom_value_facts_t element;
+} loom_value_fact_uniform_element_t;
+
+// Vector value is a lane-coordinate sequence: base + lane_ordinal * step.
+typedef struct loom_value_fact_vector_iota_t {
+  // Facts for the first produced coordinate.
+  loom_value_facts_t base;
+  // Facts for the logical lane-ordinal delta.
+  loom_value_facts_t step;
+} loom_value_fact_vector_iota_t;
+
+// Vector value is a prefix mask produced by vector.mask.range.
+typedef struct loom_value_fact_vector_prefix_mask_t {
+  // Facts for the first tested coordinate.
+  loom_value_facts_t lower_bound;
+  // Facts for the exclusive coordinate bound.
+  loom_value_facts_t upper_bound;
+  // Facts for the coordinate delta between adjacent logical lanes.
+  loom_value_facts_t step;
+} loom_value_fact_vector_prefix_mask_t;
 
 // Per-analysis context passed to op fact inference callbacks.
 struct loom_fact_context_t {
@@ -65,6 +91,22 @@ struct loom_value_fact_table_t {
   iree_host_size_t capacity;
   // Context object passed to op-specific fact inference callbacks.
   loom_fact_context_t context;
+
+  // Interned fact extension payloads. Extension IDs stored in
+  // loom_value_facts_t are one-based indexes into entries and are only valid
+  // for this table/context.
+  struct {
+    // Extension entries indexed by one-based extension ID minus one.
+    loom_value_fact_extension_entry_t* entries;
+    // Allocated extension entry count.
+    iree_host_size_t capacity;
+    // Defined extension entry count.
+    iree_host_size_t count;
+    // Hash buckets storing one-based extension IDs, or zero for empty buckets.
+    loom_value_fact_extension_id_t* buckets;
+    // Allocated hash bucket count.
+    iree_host_size_t bucket_count;
+  } extensions;
 
   // Reusable scratch buffers for fact inference calls. Allocated on first use,
   // grown only when an op needs more slots. Never shrinks. Old buffers are
@@ -137,6 +179,39 @@ iree_status_t loom_value_fact_table_facts_scratch(
 iree_status_t loom_value_fact_table_value_id_scratch(
     loom_value_fact_table_t* table, iree_host_size_t count,
     loom_value_id_t** out);
+
+// Creates facts for a vector whose every lane has |element| facts.
+iree_status_t loom_value_facts_make_uniform_element(
+    loom_fact_context_t* context, loom_value_facts_t element,
+    loom_value_facts_t* out);
+
+// Returns true and populates |out| when |facts| is a uniform-element vector
+// extension in |context|.
+bool loom_value_facts_query_uniform_element(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_uniform_element_t* out);
+
+// Creates facts for a vector.iota-style lane-coordinate sequence.
+iree_status_t loom_value_facts_make_vector_iota(
+    loom_fact_context_t* context, loom_value_fact_vector_iota_t iota,
+    loom_value_facts_t* out);
+
+// Returns true and populates |out| when |facts| is a vector.iota extension in
+// |context|.
+bool loom_value_facts_query_vector_iota(const loom_fact_context_t* context,
+                                        loom_value_facts_t facts,
+                                        loom_value_fact_vector_iota_t* out);
+
+// Creates facts for a vector.mask.range-style prefix mask.
+iree_status_t loom_value_facts_make_vector_prefix_mask(
+    loom_fact_context_t* context, loom_value_fact_vector_prefix_mask_t mask,
+    loom_value_facts_t* out);
+
+// Returns true and populates |out| when |facts| is a vector.mask.range
+// extension in |context|.
+bool loom_value_facts_query_vector_prefix_mask(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_vector_prefix_mask_t* out);
 
 #ifdef __cplusplus
 }

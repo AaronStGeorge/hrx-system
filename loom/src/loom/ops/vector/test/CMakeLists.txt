@@ -34,6 +34,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "facts"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/facts.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "roundtrip"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/roundtrip.loom-test"

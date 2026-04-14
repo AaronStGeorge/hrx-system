@@ -174,5 +174,99 @@ TEST_F(FactTableTest, OutOfRangeIsUnknown) {
   EXPECT_TRUE(loom_value_facts_is_unknown(result));
 }
 
+//===----------------------------------------------------------------------===//
+// Extensions
+//===----------------------------------------------------------------------===//
+
+TEST_F(FactTableTest, UniformElementExtensionRoundTrips) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(42), &facts));
+
+  EXPECT_NE(facts.extension_id, LOOM_VALUE_FACT_EXTENSION_ID_NONE);
+  EXPECT_FALSE(loom_value_facts_is_unknown(facts));
+
+  loom_value_fact_uniform_element_t uniform = {0};
+  EXPECT_TRUE(
+      loom_value_facts_query_uniform_element(&table.context, facts, &uniform));
+  EXPECT_TRUE(loom_value_facts_is_exact(uniform.element));
+  EXPECT_EQ(uniform.element.range_lo, 42);
+}
+
+TEST_F(FactTableTest, IdenticalExtensionsInternToSameId) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t lhs = loom_value_facts_unknown();
+  loom_value_facts_t rhs = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(7), &lhs));
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(7), &rhs));
+
+  EXPECT_EQ(lhs.extension_id, rhs.extension_id);
+  EXPECT_TRUE(loom_value_facts_equal(lhs, rhs));
+}
+
+TEST_F(FactTableTest, DifferentExtensionsDoNotAlias) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t lhs = loom_value_facts_unknown();
+  loom_value_facts_t rhs = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(7), &lhs));
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &table.context, loom_value_facts_exact_i64(8), &rhs));
+
+  EXPECT_NE(lhs.extension_id, rhs.extension_id);
+  EXPECT_FALSE(loom_value_facts_equal(lhs, rhs));
+}
+
+TEST_F(FactTableTest, VectorIotaExtensionRoundTrips) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_fact_vector_iota_t iota = {
+      .base = loom_value_facts_exact_i64(2),
+      .step = loom_value_facts_exact_i64(3),
+  };
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(
+      loom_value_facts_make_vector_iota(&table.context, iota, &facts));
+
+  EXPECT_FALSE(
+      loom_value_facts_query_uniform_element(&table.context, facts, NULL));
+  loom_value_fact_vector_iota_t result = {};
+  EXPECT_TRUE(
+      loom_value_facts_query_vector_iota(&table.context, facts, &result));
+  EXPECT_EQ(result.base.range_lo, 2);
+  EXPECT_EQ(result.step.range_lo, 3);
+}
+
+TEST_F(FactTableTest, VectorPrefixMaskExtensionRoundTrips) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_fact_vector_prefix_mask_t mask = {
+      .lower_bound = loom_value_facts_exact_i64(0),
+      .upper_bound = loom_value_facts_make(0, 16, 1),
+      .step = loom_value_facts_exact_i64(1),
+  };
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(
+      loom_value_facts_make_vector_prefix_mask(&table.context, mask, &facts));
+
+  loom_value_fact_vector_prefix_mask_t result = {};
+  EXPECT_TRUE(loom_value_facts_query_vector_prefix_mask(&table.context, facts,
+                                                        &result));
+  EXPECT_EQ(result.lower_bound.range_lo, 0);
+  EXPECT_EQ(result.upper_bound.range_hi, 16);
+  EXPECT_EQ(result.step.range_lo, 1);
+}
+
 }  // namespace
 }  // namespace loom

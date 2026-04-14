@@ -6,6 +6,7 @@
 
 #include "loom/util/fact_table.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "loom/ir/context.h"
@@ -16,13 +17,43 @@
 // Capacity management
 //===----------------------------------------------------------------------===//
 
+typedef enum loom_value_fact_extension_kind_e {
+  LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT = 1,
+  LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA = 2,
+  LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK = 3,
+} loom_value_fact_extension_kind_t;
+
+struct loom_value_fact_extension_entry_t {
+  // Content hash for the extension kind and payload.
+  uint32_t content_hash;
+  // Collision-chain next extension ID, or zero for the end of the chain.
+  loom_value_fact_extension_id_t next_id;
+  // Extension payload kind.
+  loom_value_fact_extension_kind_t kind;
+  // Reserved for alignment and future flags. Always zero.
+  uint32_t reserved;
+
+  // Payload selected by kind.
+  union {
+    // Uniform-element vector payload.
+    loom_value_fact_uniform_element_t uniform_element;
+    // Vector iota payload.
+    loom_value_fact_vector_iota_t vector_iota;
+    // Vector prefix-mask payload.
+    loom_value_fact_vector_prefix_mask_t vector_prefix_mask;
+  } payload;
+};
+
 static iree_status_t loom_value_fact_table_ensure_capacity(
     loom_value_fact_table_t* table, iree_host_size_t minimum_count) {
   if (minimum_count <= table->capacity) return iree_ok_status();
 
-  iree_host_size_t new_capacity =
-      table->capacity > 0 ? table->capacity * 2 : 256;
+  iree_host_size_t new_capacity = table->capacity > 0 ? table->capacity : 256;
   while (new_capacity < minimum_count) {
+    if (new_capacity > SIZE_MAX / 2) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "fact table capacity overflow");
+    }
     new_capacity *= 2;
   }
 
@@ -41,6 +72,207 @@ static iree_status_t loom_value_fact_table_ensure_capacity(
   table->entries = new_entries;
   table->capacity = new_capacity;
   return iree_ok_status();
+}
+
+static uint32_t loom_value_fact_hash_bytes(const void* data,
+                                           iree_host_size_t length,
+                                           uint32_t hash) {
+  const uint8_t* bytes = (const uint8_t*)data;
+  for (iree_host_size_t i = 0; i < length; ++i) {
+    hash ^= bytes[i];
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+static uint32_t loom_value_fact_hash_u32(uint32_t value, uint32_t hash) {
+  return loom_value_fact_hash_bytes(&value, sizeof(value), hash);
+}
+
+static iree_host_size_t loom_value_fact_extension_payload_size(
+    loom_value_fact_extension_kind_t kind) {
+  switch (kind) {
+    case LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT:
+      return sizeof(loom_value_fact_uniform_element_t);
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA:
+      return sizeof(loom_value_fact_vector_iota_t);
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK:
+      return sizeof(loom_value_fact_vector_prefix_mask_t);
+    default:
+      return 0;
+  }
+}
+
+static uint32_t loom_value_fact_extension_hash(
+    const loom_value_fact_extension_entry_t* entry) {
+  uint32_t hash = 2166136261u;
+  hash = loom_value_fact_hash_u32((uint32_t)entry->kind, hash);
+  return loom_value_fact_hash_bytes(
+      &entry->payload, loom_value_fact_extension_payload_size(entry->kind),
+      hash);
+}
+
+static bool loom_value_fact_extension_content_equal(
+    const loom_value_fact_extension_entry_t* lhs,
+    const loom_value_fact_extension_entry_t* rhs) {
+  if (lhs->kind != rhs->kind) return false;
+  iree_host_size_t payload_size =
+      loom_value_fact_extension_payload_size(lhs->kind);
+  if (payload_size == 0) return false;
+  return memcmp(&lhs->payload, &rhs->payload, payload_size) == 0;
+}
+
+static iree_status_t loom_value_fact_table_ensure_extension_capacity(
+    loom_value_fact_table_t* table, iree_host_size_t minimum_count) {
+  if (minimum_count <= table->extensions.capacity) return iree_ok_status();
+
+  iree_host_size_t new_capacity =
+      table->extensions.capacity > 0 ? table->extensions.capacity * 2 : 64;
+  while (new_capacity < minimum_count) {
+    if (new_capacity > SIZE_MAX / 2) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "fact extension capacity overflow");
+    }
+    new_capacity *= 2;
+  }
+
+  loom_value_fact_extension_entry_t* new_entries = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      table->arena, new_capacity, sizeof(loom_value_fact_extension_entry_t),
+      (void**)&new_entries));
+  memset(new_entries, 0,
+         new_capacity * sizeof(loom_value_fact_extension_entry_t));
+  if (table->extensions.count > 0) {
+    memcpy(new_entries, table->extensions.entries,
+           table->extensions.count * sizeof(loom_value_fact_extension_entry_t));
+  }
+  table->extensions.entries = new_entries;
+  table->extensions.capacity = new_capacity;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_value_fact_table_rehash_extensions(
+    loom_value_fact_table_t* table, iree_host_size_t new_bucket_count) {
+  loom_value_fact_extension_id_t* new_buckets = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      table->arena, new_bucket_count, sizeof(loom_value_fact_extension_id_t),
+      (void**)&new_buckets));
+  memset(new_buckets, 0,
+         new_bucket_count * sizeof(loom_value_fact_extension_id_t));
+  for (iree_host_size_t i = 0; i < table->extensions.count; ++i) {
+    loom_value_fact_extension_entry_t* entry = &table->extensions.entries[i];
+    loom_value_fact_extension_id_t id = (loom_value_fact_extension_id_t)(i + 1);
+    iree_host_size_t bucket_index =
+        (iree_host_size_t)entry->content_hash & (new_bucket_count - 1);
+    entry->next_id = new_buckets[bucket_index];
+    new_buckets[bucket_index] = id;
+  }
+  table->extensions.buckets = new_buckets;
+  table->extensions.bucket_count = new_bucket_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_value_fact_table_ensure_extension_buckets(
+    loom_value_fact_table_t* table, iree_host_size_t minimum_count) {
+  iree_host_size_t new_bucket_count = table->extensions.bucket_count;
+  if (new_bucket_count == 0) new_bucket_count = 64;
+  while (minimum_count > new_bucket_count - new_bucket_count / 4) {
+    if (new_bucket_count > SIZE_MAX / 2) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "fact extension bucket capacity overflow");
+    }
+    new_bucket_count *= 2;
+  }
+  if (new_bucket_count == table->extensions.bucket_count) {
+    return iree_ok_status();
+  }
+  return loom_value_fact_table_rehash_extensions(table, new_bucket_count);
+}
+
+static iree_status_t loom_value_fact_context_require_table(
+    loom_fact_context_t* context, loom_value_fact_table_t** out_table) {
+  if (!context || !context->table || !context->table->arena) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "initialized fact context required");
+  }
+  *out_table = context->table;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_value_fact_table_intern_extension(
+    loom_value_fact_table_t* table,
+    const loom_value_fact_extension_entry_t* candidate,
+    loom_value_fact_extension_id_t* out_id) {
+  loom_value_fact_extension_entry_t entry = *candidate;
+  entry.content_hash = loom_value_fact_extension_hash(&entry);
+  entry.next_id = LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_extension_buckets(
+      table, table->extensions.count));
+  iree_host_size_t bucket_index = (iree_host_size_t)entry.content_hash &
+                                  (table->extensions.bucket_count - 1);
+  for (loom_value_fact_extension_id_t id =
+           table->extensions.buckets[bucket_index];
+       id != LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+       id = table->extensions.entries[id - 1].next_id) {
+    const loom_value_fact_extension_entry_t* existing =
+        &table->extensions.entries[id - 1];
+    if (existing->content_hash == entry.content_hash &&
+        loom_value_fact_extension_content_equal(existing, &entry)) {
+      *out_id = id;
+      return iree_ok_status();
+    }
+  }
+
+  iree_host_size_t new_count = table->extensions.count + 1;
+  if (new_count > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "fact extension ID capacity exceeded");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_value_fact_table_ensure_extension_capacity(table, new_count));
+  IREE_RETURN_IF_ERROR(
+      loom_value_fact_table_ensure_extension_buckets(table, new_count));
+  bucket_index = (iree_host_size_t)entry.content_hash &
+                 (table->extensions.bucket_count - 1);
+  loom_value_fact_extension_id_t id = (loom_value_fact_extension_id_t)new_count;
+  entry.next_id = table->extensions.buckets[bucket_index];
+  table->extensions.entries[table->extensions.count] = entry;
+  table->extensions.buckets[bucket_index] = id;
+  table->extensions.count = new_count;
+  *out_id = id;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_value_facts_make_extension(
+    loom_fact_context_t* context,
+    const loom_value_fact_extension_entry_t* candidate,
+    loom_value_facts_t* out) {
+  if (!out) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "output fact pointer required");
+  }
+  loom_value_fact_table_t* table = NULL;
+  IREE_RETURN_IF_ERROR(loom_value_fact_context_require_table(context, &table));
+  loom_value_fact_extension_id_t extension_id =
+      LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+  IREE_RETURN_IF_ERROR(
+      loom_value_fact_table_intern_extension(table, candidate, &extension_id));
+  *out = loom_value_facts_unknown();
+  out->extension_id = extension_id;
+  return iree_ok_status();
+}
+
+static const loom_value_fact_extension_entry_t*
+loom_value_facts_lookup_extension(const loom_fact_context_t* context,
+                                  loom_value_facts_t facts) {
+  if (!context || !context->table ||
+      facts.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE) {
+    return NULL;
+  }
+  const loom_value_fact_table_t* table = context->table;
+  if (facts.extension_id > table->extensions.count) return NULL;
+  return &table->extensions.entries[facts.extension_id - 1];
 }
 
 //===----------------------------------------------------------------------===//
@@ -77,6 +309,73 @@ iree_status_t loom_value_fact_table_value_id_scratch(
   table->scratch.value_ids.capacity = count;
   *out = new_scratch;
   return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Fact extensions
+//===----------------------------------------------------------------------===//
+
+iree_status_t loom_value_facts_make_uniform_element(
+    loom_fact_context_t* context, loom_value_facts_t element,
+    loom_value_facts_t* out) {
+  loom_value_fact_extension_entry_t entry = {0};
+  entry.kind = LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT;
+  entry.payload.uniform_element.element = element;
+  return loom_value_facts_make_extension(context, &entry, out);
+}
+
+bool loom_value_facts_query_uniform_element(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_uniform_element_t* out) {
+  const loom_value_fact_extension_entry_t* entry =
+      loom_value_facts_lookup_extension(context, facts);
+  if (!entry || entry->kind != LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT) {
+    return false;
+  }
+  if (out) *out = entry->payload.uniform_element;
+  return true;
+}
+
+iree_status_t loom_value_facts_make_vector_iota(
+    loom_fact_context_t* context, loom_value_fact_vector_iota_t iota,
+    loom_value_facts_t* out) {
+  loom_value_fact_extension_entry_t entry = {0};
+  entry.kind = LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA;
+  entry.payload.vector_iota = iota;
+  return loom_value_facts_make_extension(context, &entry, out);
+}
+
+bool loom_value_facts_query_vector_iota(const loom_fact_context_t* context,
+                                        loom_value_facts_t facts,
+                                        loom_value_fact_vector_iota_t* out) {
+  const loom_value_fact_extension_entry_t* entry =
+      loom_value_facts_lookup_extension(context, facts);
+  if (!entry || entry->kind != LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA) {
+    return false;
+  }
+  if (out) *out = entry->payload.vector_iota;
+  return true;
+}
+
+iree_status_t loom_value_facts_make_vector_prefix_mask(
+    loom_fact_context_t* context, loom_value_fact_vector_prefix_mask_t mask,
+    loom_value_facts_t* out) {
+  loom_value_fact_extension_entry_t entry = {0};
+  entry.kind = LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK;
+  entry.payload.vector_prefix_mask = mask;
+  return loom_value_facts_make_extension(context, &entry, out);
+}
+
+bool loom_value_facts_query_vector_prefix_mask(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_vector_prefix_mask_t* out) {
+  const loom_value_fact_extension_entry_t* entry =
+      loom_value_facts_lookup_extension(context, facts);
+  if (!entry || entry->kind != LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK) {
+    return false;
+  }
+  if (out) *out = entry->payload.vector_prefix_mask;
+  return true;
 }
 
 //===----------------------------------------------------------------------===//

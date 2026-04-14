@@ -80,6 +80,10 @@ enum loom_value_fact_flag_bits_e {
 };
 typedef uint32_t loom_value_fact_flags_t;
 
+// Context-local extension payload ID. Zero means the fact has no extension.
+typedef uint32_t loom_value_fact_extension_id_t;
+#define LOOM_VALUE_FACT_EXTENSION_ID_NONE ((loom_value_fact_extension_id_t)0)
+
 //===----------------------------------------------------------------------===//
 // Struct
 //===----------------------------------------------------------------------===//
@@ -103,9 +107,10 @@ typedef struct loom_value_facts_t {
   // to test (single bit check vs. integer comparison).
   uint32_t flags;
 
-  // Reserved/padding field. Constructors zero-initialize it so bytewise
-  // equality over the whole struct stays stable.
-  uint32_t reserved;
+  // One-based ID into the current fact context extension table. Zero means no
+  // extension. Extension IDs are context-local and must only be interpreted by
+  // APIs that receive the context that produced the facts.
+  loom_value_fact_extension_id_t extension_id;
 } loom_value_facts_t;
 
 static_assert(sizeof(loom_value_facts_t) == 32,
@@ -185,7 +190,8 @@ static inline bool loom_value_facts_divisible_by(loom_value_facts_t facts,
 // divisor, no flags).
 static inline bool loom_value_facts_is_unknown(loom_value_facts_t facts) {
   return facts.range_lo == INT64_MIN && facts.range_hi == INT64_MAX &&
-         facts.known_divisor == 1 && facts.flags == 0;
+         facts.known_divisor == 1 && facts.flags == 0 &&
+         facts.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE;
 }
 
 //===----------------------------------------------------------------------===//

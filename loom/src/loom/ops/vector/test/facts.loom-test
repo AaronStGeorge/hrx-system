@@ -1,0 +1,85 @@
+// RUN: pass canonicalize
+
+// Uniform vector.constant facts let reductions fold to scalar constants without
+// materializing vector constants.
+func.def @reduce_uniform_constant_addi() -> (i32) {
+  %v = vector.constant 2 : vector<4xi32>
+  %init = scalar.constant 7 : i32
+  %r = vector.reduce<addi> %v, %init : vector<4xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @reduce_uniform_constant_addi() -> (i32) {
+  %r = scalar.constant 15 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Uniform facts survive vector.splat and mechanical lanewise integer ops.
+func.def @reduce_uniform_splat_addi() -> (i32) {
+  %a = scalar.constant 3 : i32
+  %b = scalar.constant 4 : i32
+  %va = vector.splat %a : vector<4xi32>
+  %vb = vector.splat %b : vector<4xi32>
+  %sum = vector.addi %va, %vb : vector<4xi32>
+  %init = scalar.constant 1 : i32
+  %r = vector.reduce<addi> %sum, %init : vector<4xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @reduce_uniform_splat_addi() -> (i32) {
+  %r = scalar.constant 29 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Identity elements can fold reductions over dynamic extents when the explicit
+// accumulator is itself exact.
+func.def @reduce_dynamic_zero_splat_addi(%n: index) -> (i32) {
+  %zero = scalar.constant 0 : i32
+  %init = scalar.constant 5 : i32
+  %v = vector.splat %zero : vector<[%n]xi32>
+  %r = vector.reduce<addi> %v, %init : vector<[%n]xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @reduce_dynamic_zero_splat_addi(%n: index) -> (i32) {
+  %r = scalar.constant 5 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Uniform floating-point dot products fold through fused multiply-add facts.
+func.def @dotf_uniform_constants() -> (f32) {
+  %lhs = vector.constant 2.0 : vector<4xf32>
+  %rhs = vector.constant 3.0 : vector<4xf32>
+  %init = scalar.constant 1.0 : f32
+  %r = vector.dotf %lhs, %rhs, %init : vector<4xf32>, vector<4xf32> -> f32
+  func.return %r : f32
+}
+// ----
+func.def @dotf_uniform_constants() -> (f32) {
+  %r = scalar.constant 25.0 : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Uniform mask facts let vector.select choose a whole vector fact summary.
+func.def @select_uniform_true_then_reduce() -> (i32) {
+  %mask = vector.constant true : vector<4xi1>
+  %a = vector.constant 5 : vector<4xi32>
+  %b = vector.constant 9 : vector<4xi32>
+  %selected = vector.select %mask, %a, %b : vector<4xi32>
+  %zero = scalar.constant 0 : i32
+  %r = vector.reduce<addi> %selected, %zero : vector<4xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @select_uniform_true_then_reduce() -> (i32) {
+  %r = scalar.constant 20 : i32
+  func.return %r : i32
+}

@@ -18,6 +18,7 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
+    "facts.c"
     "memory.c"
     "tables.c"
     "verify.c"
@@ -29,6 +30,7 @@ loom_cc_library(
     loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 

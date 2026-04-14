@@ -206,6 +206,7 @@ def _lanewise_binary(
     doc: str,
     commutative: bool = False,
     flags: tuple[str, EnumDef] | None = None,
+    facts: str = "",
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     attrs: list[AttrDef] = []
@@ -234,6 +235,7 @@ def _lanewise_binary(
             SameType("lhs", "rhs", "result"),
         ],
         traits=traits,
+        facts=facts,
         format=fmt,
     )
 
@@ -334,6 +336,7 @@ vector_constant = Op(
     results=[Result("result", VECTOR)],
     attrs=[AttrDef("value", ATTR_TYPE_ANY, doc="The constant payload.")],
     verify="loom_vector_constant_verify",
+    facts="loom_vector_constant_facts",
     traits=[PURE, CONSTANT_LIKE],
     format=[Attr("value"), COLON, ResultType("result")],
     examples=["%v = vector.constant 0.0 : vector<4xf32>"],
@@ -384,6 +387,7 @@ vector_splat = Op(
     operands=[Operand("scalar", SCALAR)],
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("scalar", "result")],
+    facts="loom_vector_splat_facts",
     traits=[PURE],
     format=[Ref("scalar"), COLON, ResultType("result")],
     examples=[
@@ -414,6 +418,7 @@ vector_iota = Op(
         SameElementType("base", "step", "result"),
     ],
     verify="loom_vector_iota_verify",
+    facts="loom_vector_iota_facts",
     traits=[PURE],
     format=[
         Ref("base"),
@@ -452,6 +457,7 @@ vector_mask_range = Op(
         SameType("lower_bound", "upper_bound", "step"),
     ],
     verify="loom_vector_mask_range_verify",
+    facts="loom_vector_mask_range_facts",
     traits=[PURE],
     format=[
         LBRACKET,
@@ -1655,6 +1661,7 @@ vector_select = Op(
         SameShape("condition", "true_value", "false_value", "result"),
         SameType("true_value", "false_value", "result"),
     ],
+    facts="loom_vector_select_facts",
     traits=[PURE, ELEMENTWISE],
     format=[
         Ref("condition"),
@@ -1743,6 +1750,7 @@ vector_addf = _lanewise_binary(
     doc=("Lanewise floating-point addition of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
     commutative=True,
     flags=("assumptions", FloatAssumptionFlags),
+    facts="loom_vector_addf_facts",
 )
 
 vector_mulf = _lanewise_binary(
@@ -1751,6 +1759,7 @@ vector_mulf = _lanewise_binary(
     doc=("Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations."),
     commutative=True,
     flags=("assumptions", FloatAssumptionFlags),
+    facts="loom_vector_mulf_facts",
 )
 
 vector_fmaf = Op(
@@ -1779,6 +1788,7 @@ vector_fmaf = Op(
         HasFloatElement("result"),
         SameType("a", "b", "c", "result"),
     ],
+    facts="loom_vector_fmaf_facts",
     traits=[PURE, ELEMENTWISE],
     format=[
         Flags("assumptions"),
@@ -1799,6 +1809,7 @@ vector_addi = _lanewise_binary(
     doc=("Lanewise integer addition of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     commutative=True,
     flags=("overflow", IntOverflowFlags),
+    facts="loom_vector_addi_facts",
 )
 
 vector_muli = _lanewise_binary(
@@ -1807,6 +1818,7 @@ vector_muli = _lanewise_binary(
     doc=("Lanewise integer multiplication of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     commutative=True,
     flags=("overflow", IntOverflowFlags),
+    facts="loom_vector_muli_facts",
 )
 
 vector_andi = _lanewise_binary(
@@ -1814,6 +1826,7 @@ vector_andi = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise bitwise AND of same-typed integer vector operands.",
     commutative=True,
+    facts="loom_vector_andi_facts",
 )
 
 vector_ori = _lanewise_binary(
@@ -1821,6 +1834,7 @@ vector_ori = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise bitwise OR of same-typed integer vector operands.",
     commutative=True,
+    facts="loom_vector_ori_facts",
 )
 
 vector_xori = _lanewise_binary(
@@ -1828,6 +1842,7 @@ vector_xori = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise bitwise XOR of same-typed integer vector operands.",
     commutative=True,
+    facts="loom_vector_xori_facts",
 )
 
 vector_ctpopi = _lanewise_unary(
@@ -2183,6 +2198,7 @@ vector_dotf = Op(
         SameType("init", "result"),
         SameElementType("lhs", "rhs", "init"),
     ],
+    facts="loom_vector_dotf_facts",
     traits=[PURE],
     format=[
         Ref("lhs"),
@@ -2272,6 +2288,7 @@ vector_reduce = Op(
         SameElementType("input", "init", "result"),
     ],
     verify="loom_vector_reduce_verify",
+    facts="loom_vector_reduce_facts",
     traits=[PURE],
     format=[
         TemplateParam("kind"),
