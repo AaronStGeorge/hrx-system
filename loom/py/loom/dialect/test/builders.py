@@ -540,3 +540,27 @@ class TestBuilders:
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_power_of_two", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_is_vector_iota(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Returns 1 if the input has a vector.iota analysis summary, 0 otherwise.
+
+        Example::
+            %is = test.fact_is_vector_iota %x : vector<[%n]xindex> -> i1
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_is_vector_iota", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_is_vector_prefix_mask(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Returns 1 if the input has a vector.mask.range analysis summary, 0 otherwise.
+
+        Example::
+            %is = test.fact_is_vector_prefix_mask %x : vector<[%n]xi1> -> i1
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_is_vector_prefix_mask", _operands, results=results, attributes=_attributes, regions=_regions))

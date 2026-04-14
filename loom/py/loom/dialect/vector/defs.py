@@ -504,6 +504,7 @@ vector_from_elements = Op(
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("elements", "result")],
     verify="loom_vector_from_elements_verify",
+    facts="loom_vector_from_elements_facts",
     traits=[PURE],
     format=[
         Refs("elements"),
@@ -543,6 +544,7 @@ vector_extract = Op(
     ],
     constraints=[SameElementType("source", "result")],
     verify="loom_vector_extract_verify",
+    facts="loom_vector_extract_facts",
     traits=[PURE],
     format=[
         Ref("source"),
@@ -729,6 +731,7 @@ vector_shuffle = Op(
     ],
     constraints=[SameType("source", "result")],
     verify="loom_vector_shuffle_verify",
+    facts="loom_vector_shuffle_facts",
     traits=[PURE],
     format=[
         TemplateParam("source_lanes"),

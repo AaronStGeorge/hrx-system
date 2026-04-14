@@ -226,6 +226,51 @@ TEST_F(FactTableTest, DifferentExtensionsDoNotAlias) {
   EXPECT_FALSE(loom_value_facts_equal(lhs, rhs));
 }
 
+TEST_F(FactTableTest, SmallStaticLanesExtensionRoundTrips) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t lanes[] = {
+      loom_value_facts_exact_i64(1),
+      loom_value_facts_make(2, 4, 2),
+      loom_value_facts_unknown(),
+  };
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = IREE_ARRAYSIZE(lanes),
+  };
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_small_static_lanes(&table.context,
+                                                          lane_slice, &facts));
+
+  loom_value_fact_small_static_lanes_t result = {};
+  EXPECT_TRUE(loom_value_facts_query_small_static_lanes(&table.context, facts,
+                                                        &result));
+  EXPECT_EQ(result.count, IREE_ARRAYSIZE(lanes));
+  EXPECT_NE(result.lanes, lanes);
+  EXPECT_EQ(result.lanes[0].range_lo, 1);
+  EXPECT_EQ(result.lanes[1].range_hi, 4);
+  EXPECT_TRUE(loom_value_facts_is_unknown(result.lanes[2]));
+}
+
+TEST_F(FactTableTest, OversizedSmallStaticLanesDegradesToUnknown) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT + 1] = {};
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = IREE_ARRAYSIZE(lanes),
+  };
+  loom_value_facts_t facts = loom_value_facts_exact_i64(123);
+  IREE_ASSERT_OK(loom_value_facts_make_small_static_lanes(&table.context,
+                                                          lane_slice, &facts));
+
+  EXPECT_TRUE(loom_value_facts_is_unknown(facts));
+  EXPECT_FALSE(
+      loom_value_facts_query_small_static_lanes(&table.context, facts, NULL));
+}
+
 TEST_F(FactTableTest, VectorIotaExtensionRoundTrips) {
   loom_value_fact_table_t table = {0};
   IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));

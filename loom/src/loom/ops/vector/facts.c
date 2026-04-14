@@ -42,6 +42,75 @@ static bool loom_vector_facts_query_uniform_element(
   return true;
 }
 
+static bool loom_vector_facts_query_small_lanes(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_small_static_lanes_t* out_lanes) {
+  return loom_value_facts_query_small_static_lanes(context, facts, out_lanes);
+}
+
+static bool loom_vector_facts_query_lane(const loom_fact_context_t* context,
+                                         loom_value_facts_t facts,
+                                         iree_host_size_t lane,
+                                         loom_value_facts_t* out_element) {
+  if (loom_vector_facts_query_uniform_element(context, facts, out_element)) {
+    return true;
+  }
+  loom_value_fact_small_static_lanes_t lanes = {0};
+  if (!loom_vector_facts_query_small_lanes(context, facts, &lanes) ||
+      lane >= lanes.count) {
+    return false;
+  }
+  *out_element = lanes.lanes[lane];
+  return true;
+}
+
+static bool loom_vector_facts_query_binary_lane_count(
+    const loom_fact_context_t* context, loom_value_facts_t lhs,
+    loom_value_facts_t rhs, iree_host_size_t* out_lane_count) {
+  loom_value_fact_small_static_lanes_t lhs_lanes = {0};
+  loom_value_fact_small_static_lanes_t rhs_lanes = {0};
+  bool lhs_is_small =
+      loom_vector_facts_query_small_lanes(context, lhs, &lhs_lanes);
+  bool rhs_is_small =
+      loom_vector_facts_query_small_lanes(context, rhs, &rhs_lanes);
+  if (lhs_is_small && rhs_is_small) {
+    if (lhs_lanes.count != rhs_lanes.count) return false;
+    *out_lane_count = lhs_lanes.count;
+    return true;
+  }
+  if (lhs_is_small) {
+    *out_lane_count = lhs_lanes.count;
+    return true;
+  }
+  if (rhs_is_small) {
+    *out_lane_count = rhs_lanes.count;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_vector_facts_query_ternary_lane_count(
+    const loom_fact_context_t* context, loom_value_facts_t a,
+    loom_value_facts_t b, loom_value_facts_t c,
+    iree_host_size_t* out_lane_count) {
+  loom_value_fact_small_static_lanes_t lane_sets[3] = {{0}};
+  loom_value_facts_t facts[3] = {a, b, c};
+  bool found_count = false;
+  iree_host_size_t lane_count = 0;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(facts); ++i) {
+    if (!loom_vector_facts_query_small_lanes(context, facts[i],
+                                             &lane_sets[i])) {
+      continue;
+    }
+    if (found_count && lane_sets[i].count != lane_count) return false;
+    lane_count = lane_sets[i].count;
+    found_count = true;
+  }
+  if (!found_count) return false;
+  *out_lane_count = lane_count;
+  return true;
+}
+
 static loom_value_facts_t loom_vector_attr_element_facts(
     loom_attribute_t attr, loom_scalar_type_t element_type) {
   if (loom_scalar_type_is_float(element_type)) {
@@ -105,6 +174,40 @@ iree_status_t loom_vector_splat_facts(loom_fact_context_t* context,
                                                &result_facts[0]);
 }
 
+iree_status_t loom_vector_from_elements_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_small_static_lanes_t lanes = {
+      .lanes = operand_facts,
+      .count = op->operand_count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lanes,
+                                                  &result_facts[0]);
+}
+
+iree_status_t loom_vector_extract_facts(loom_fact_context_t* context,
+                                        const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        const loom_value_facts_t* operand_facts,
+                                        loom_value_facts_t* result_facts) {
+  loom_value_id_t result_id = loom_vector_extract_result(op);
+  loom_type_t result_type = loom_module_value_type(module, result_id);
+  loom_attribute_t static_indices = loom_vector_extract_static_indices(op);
+  if (!loom_type_is_scalar(result_type) || static_indices.count != 1 ||
+      static_indices.i64_array[0] == INT64_MIN ||
+      static_indices.i64_array[0] < 0) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  iree_host_size_t lane = (iree_host_size_t)static_indices.i64_array[0];
+  if (!loom_vector_facts_query_lane(context, operand_facts[0], lane,
+                                    &result_facts[0])) {
+    result_facts[0] = loom_value_facts_unknown();
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_vector_iota_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
                                      const loom_op_t* op,
@@ -136,50 +239,131 @@ iree_status_t loom_vector_mask_range_facts(
                                                   &result_facts[0]);
 }
 
+iree_status_t loom_vector_shuffle_facts(loom_fact_context_t* context,
+                                        const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        const loom_value_facts_t* operand_facts,
+                                        loom_value_facts_t* result_facts) {
+  loom_value_facts_t uniform = {0};
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &uniform)) {
+    return loom_value_facts_make_uniform_element(context, uniform,
+                                                 &result_facts[0]);
+  }
+
+  loom_attribute_t source_lanes = loom_vector_shuffle_source_lanes(op);
+  if (source_lanes.count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (uint16_t i = 0; i < source_lanes.count; ++i) {
+    int64_t source_lane = source_lanes.i64_array[i];
+    if (source_lane < 0 || !loom_vector_facts_query_lane(
+                               context, operand_facts[0],
+                               (iree_host_size_t)source_lane, &lanes[i])) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+  }
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = source_lanes.count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
+}
+
 //===----------------------------------------------------------------------===//
-// Lanewise uniform propagation
+// Lanewise summary propagation
 //===----------------------------------------------------------------------===//
 
-static iree_status_t loom_vector_integer_binary_uniform_facts(
+static iree_status_t loom_vector_integer_binary_summary_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts,
     loom_vector_integer_binary_transfer_fn_t transfer_fn) {
   loom_value_facts_t lhs = {0};
   loom_value_facts_t rhs = {0};
-  if (!loom_vector_facts_query_uniform_element(context, operand_facts[0],
-                                               &lhs) ||
-      !loom_vector_facts_query_uniform_element(context, operand_facts[1],
-                                               &rhs)) {
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &lhs) &&
+      loom_vector_facts_query_uniform_element(context, operand_facts[1],
+                                              &rhs)) {
+    loom_value_facts_t element = loom_value_facts_unknown();
+    transfer_fn(&lhs, &rhs, &element);
+    return loom_value_facts_make_uniform_element(context, element,
+                                                 &result_facts[0]);
+  }
+
+  iree_host_size_t lane_count = 0;
+  if (!loom_vector_facts_query_binary_lane_count(
+          context, operand_facts[0], operand_facts[1], &lane_count)) {
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
   }
-  loom_value_facts_t element = loom_value_facts_unknown();
-  transfer_fn(&lhs, &rhs, &element);
-  return loom_value_facts_make_uniform_element(context, element,
-                                               &result_facts[0]);
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < lane_count; ++i) {
+    if (!loom_vector_facts_query_lane(context, operand_facts[0], i, &lhs) ||
+        !loom_vector_facts_query_lane(context, operand_facts[1], i, &rhs)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    transfer_fn(&lhs, &rhs, &lanes[i]);
+  }
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = lane_count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
 }
 
-static iree_status_t loom_vector_float_binary_uniform_facts(
+static iree_status_t loom_vector_float_binary_summary_facts(
     loom_fact_context_t* context, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts, double (*fn)(double, double)) {
   loom_value_facts_t lhs = {0};
   loom_value_facts_t rhs = {0};
-  if (!loom_vector_facts_query_uniform_element(context, operand_facts[0],
-                                               &lhs) ||
-      !loom_vector_facts_query_uniform_element(context, operand_facts[1],
-                                               &rhs)) {
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &lhs) &&
+      loom_vector_facts_query_uniform_element(context, operand_facts[1],
+                                              &rhs)) {
+    double lhs_value = 0.0;
+    double rhs_value = 0.0;
+    loom_value_facts_t element = loom_value_facts_unknown();
+    if (loom_vector_facts_query_exact_f64(lhs, &lhs_value) &&
+        loom_vector_facts_query_exact_f64(rhs, &rhs_value)) {
+      element = loom_value_facts_exact_f64(fn(lhs_value, rhs_value));
+    }
+    return loom_value_facts_make_uniform_element(context, element,
+                                                 &result_facts[0]);
+  }
+
+  iree_host_size_t lane_count = 0;
+  if (!loom_vector_facts_query_binary_lane_count(
+          context, operand_facts[0], operand_facts[1], &lane_count)) {
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
   }
-  double lhs_value = 0.0;
-  double rhs_value = 0.0;
-  loom_value_facts_t element = loom_value_facts_unknown();
-  if (loom_vector_facts_query_exact_f64(lhs, &lhs_value) &&
-      loom_vector_facts_query_exact_f64(rhs, &rhs_value)) {
-    element = loom_value_facts_exact_f64(fn(lhs_value, rhs_value));
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < lane_count; ++i) {
+    if (!loom_vector_facts_query_lane(context, operand_facts[0], i, &lhs) ||
+        !loom_vector_facts_query_lane(context, operand_facts[1], i, &rhs)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    double lhs_value = 0.0;
+    double rhs_value = 0.0;
+    lanes[i] = loom_value_facts_unknown();
+    if (loom_vector_facts_query_exact_f64(lhs, &lhs_value) &&
+        loom_vector_facts_query_exact_f64(rhs, &rhs_value)) {
+      lanes[i] = loom_value_facts_exact_f64(fn(lhs_value, rhs_value));
+    }
   }
-  return loom_value_facts_make_uniform_element(context, element,
-                                               &result_facts[0]);
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = lane_count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
 }
 
 #define LOOM_VECTOR_INTEGER_BINARY_FACTS(name, transfer_fn)            \
@@ -187,7 +371,7 @@ static iree_status_t loom_vector_float_binary_uniform_facts(
                      const loom_module_t* module, const loom_op_t* op, \
                      const loom_value_facts_t* operand_facts,          \
                      loom_value_facts_t* result_facts) {               \
-    return loom_vector_integer_binary_uniform_facts(                   \
+    return loom_vector_integer_binary_summary_facts(                   \
         context, operand_facts, result_facts, transfer_fn);            \
   }
 
@@ -196,7 +380,7 @@ static iree_status_t loom_vector_float_binary_uniform_facts(
                      const loom_module_t* module, const loom_op_t* op,    \
                      const loom_value_facts_t* operand_facts,             \
                      loom_value_facts_t* result_facts) {                  \
-    return loom_vector_float_binary_uniform_facts(context, operand_facts, \
+    return loom_vector_float_binary_summary_facts(context, operand_facts, \
                                                   result_facts, fn);      \
   }
 
@@ -216,23 +400,54 @@ iree_status_t loom_vector_fmaf_facts(loom_fact_context_t* context,
   loom_value_facts_t a = {0};
   loom_value_facts_t b = {0};
   loom_value_facts_t c = {0};
-  if (!loom_vector_facts_query_uniform_element(context, operand_facts[0], &a) ||
-      !loom_vector_facts_query_uniform_element(context, operand_facts[1], &b) ||
-      !loom_vector_facts_query_uniform_element(context, operand_facts[2], &c)) {
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0], &a) &&
+      loom_vector_facts_query_uniform_element(context, operand_facts[1], &b) &&
+      loom_vector_facts_query_uniform_element(context, operand_facts[2], &c)) {
+    double a_value = 0.0;
+    double b_value = 0.0;
+    double c_value = 0.0;
+    loom_value_facts_t element = loom_value_facts_unknown();
+    if (loom_vector_facts_query_exact_f64(a, &a_value) &&
+        loom_vector_facts_query_exact_f64(b, &b_value) &&
+        loom_vector_facts_query_exact_f64(c, &c_value)) {
+      element = loom_value_facts_exact_f64(fma(a_value, b_value, c_value));
+    }
+    return loom_value_facts_make_uniform_element(context, element,
+                                                 &result_facts[0]);
+  }
+
+  iree_host_size_t lane_count = 0;
+  if (!loom_vector_facts_query_ternary_lane_count(
+          context, operand_facts[0], operand_facts[1], operand_facts[2],
+          &lane_count)) {
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
   }
-  double a_value = 0.0;
-  double b_value = 0.0;
-  double c_value = 0.0;
-  loom_value_facts_t element = loom_value_facts_unknown();
-  if (loom_vector_facts_query_exact_f64(a, &a_value) &&
-      loom_vector_facts_query_exact_f64(b, &b_value) &&
-      loom_vector_facts_query_exact_f64(c, &c_value)) {
-    element = loom_value_facts_exact_f64(fma(a_value, b_value, c_value));
+
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < lane_count; ++i) {
+    if (!loom_vector_facts_query_lane(context, operand_facts[0], i, &a) ||
+        !loom_vector_facts_query_lane(context, operand_facts[1], i, &b) ||
+        !loom_vector_facts_query_lane(context, operand_facts[2], i, &c)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    double a_value = 0.0;
+    double b_value = 0.0;
+    double c_value = 0.0;
+    lanes[i] = loom_value_facts_unknown();
+    if (loom_vector_facts_query_exact_f64(a, &a_value) &&
+        loom_vector_facts_query_exact_f64(b, &b_value) &&
+        loom_vector_facts_query_exact_f64(c, &c_value)) {
+      lanes[i] = loom_value_facts_exact_f64(fma(a_value, b_value, c_value));
+    }
   }
-  return loom_value_facts_make_uniform_element(context, element,
-                                               &result_facts[0]);
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = lane_count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
 }
 
 iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
@@ -245,14 +460,52 @@ iree_status_t loom_vector_select_facts(loom_fact_context_t* context,
     return iree_ok_status();
   }
   loom_value_facts_t condition = {0};
-  if (!loom_vector_facts_query_uniform_element(context, operand_facts[0],
-                                               &condition) ||
-      !loom_value_facts_is_exact(condition)) {
+  if (loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &condition)) {
+    if (!loom_value_facts_is_exact(condition)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    result_facts[0] = condition.range_lo ? operand_facts[1] : operand_facts[2];
+    return iree_ok_status();
+  }
+
+  loom_value_fact_small_static_lanes_t condition_lanes = {0};
+  if (!loom_vector_facts_query_small_lanes(context, operand_facts[0],
+                                           &condition_lanes)) {
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
   }
-  result_facts[0] = condition.range_lo ? operand_facts[1] : operand_facts[2];
-  return iree_ok_status();
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  for (iree_host_size_t i = 0; i < condition_lanes.count; ++i) {
+    condition = condition_lanes.lanes[i];
+    if (!loom_value_facts_is_exact(condition)) {
+      loom_value_facts_t true_lane = {0};
+      loom_value_facts_t false_lane = {0};
+      if (loom_vector_facts_query_lane(context, operand_facts[1], i,
+                                       &true_lane) &&
+          loom_vector_facts_query_lane(context, operand_facts[2], i,
+                                       &false_lane) &&
+          loom_value_facts_equal(true_lane, false_lane)) {
+        lanes[i] = true_lane;
+      } else {
+        lanes[i] = loom_value_facts_unknown();
+      }
+      continue;
+    }
+    if (!loom_vector_facts_query_lane(
+            context, condition.range_lo ? operand_facts[1] : operand_facts[2],
+            i, &lanes[i])) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+  }
+  loom_value_fact_small_static_lanes_t lane_slice = {
+      .lanes = lanes,
+      .count = condition_lanes.count,
+  };
+  return loom_value_facts_make_small_static_lanes(context, lane_slice,
+                                                  &result_facts[0]);
 }
 
 //===----------------------------------------------------------------------===//
@@ -381,6 +634,41 @@ static bool loom_vector_reduce_static_uniform(uint8_t kind,
   return true;
 }
 
+static bool loom_vector_reduce_small_static_lanes(
+    uint8_t kind, loom_value_fact_small_static_lanes_t lanes,
+    loom_value_facts_t init, loom_value_facts_t* out) {
+  if (lanes.count == 0) {
+    *out = init;
+    return true;
+  }
+
+  double float_accumulator = 0.0;
+  if (loom_vector_facts_query_exact_f64(init, &float_accumulator)) {
+    for (iree_host_size_t i = 0; i < lanes.count; ++i) {
+      double element = 0.0;
+      if (!loom_vector_facts_query_exact_f64(lanes.lanes[i], &element) ||
+          !loom_vector_reduce_apply_float(kind, float_accumulator, element,
+                                          &float_accumulator)) {
+        return false;
+      }
+    }
+    *out = loom_value_facts_exact_f64(float_accumulator);
+    return true;
+  }
+
+  loom_value_facts_t accumulator = init;
+  for (iree_host_size_t i = 0; i < lanes.count; ++i) {
+    loom_value_facts_t next = loom_value_facts_unknown();
+    if (!loom_vector_reduce_apply_integer(kind, &accumulator, &lanes.lanes[i],
+                                          &next)) {
+      return false;
+    }
+    accumulator = next;
+  }
+  *out = accumulator;
+  return true;
+}
+
 iree_status_t loom_vector_reduce_facts(loom_fact_context_t* context,
                                        const loom_module_t* module,
                                        const loom_op_t* op,
@@ -395,6 +683,17 @@ iree_status_t loom_vector_reduce_facts(loom_fact_context_t* context,
     return iree_ok_status();
   }
 
+  uint8_t kind = loom_vector_reduce_kind(op);
+  loom_value_fact_small_static_lanes_t lanes = {0};
+  if (loom_vector_facts_query_small_lanes(context, operand_facts[0], &lanes)) {
+    if (loom_vector_reduce_small_static_lanes(kind, lanes, operand_facts[1],
+                                              &result_facts[0])) {
+      return iree_ok_status();
+    }
+    result_facts[0] = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+
   loom_value_facts_t element = {0};
   if (!loom_vector_facts_query_uniform_element(context, operand_facts[0],
                                                &element)) {
@@ -402,7 +701,6 @@ iree_status_t loom_vector_reduce_facts(loom_fact_context_t* context,
     return iree_ok_status();
   }
 
-  uint8_t kind = loom_vector_reduce_kind(op);
   if (loom_type_static_element_count(input_type, &element_count)) {
     if (loom_vector_reduce_static_uniform(kind, element_count, element,
                                           operand_facts[1], &result_facts[0])) {
@@ -430,6 +728,33 @@ iree_status_t loom_vector_dotf_facts(loom_fact_context_t* context,
     result_facts[0] = operand_facts[2];
     return iree_ok_status();
   }
+
+  iree_host_size_t lane_count = 0;
+  if (loom_vector_facts_query_binary_lane_count(
+          context, operand_facts[0], operand_facts[1], &lane_count)) {
+    double accumulator = 0.0;
+    if (!loom_vector_facts_query_exact_f64(operand_facts[2], &accumulator)) {
+      result_facts[0] = loom_value_facts_unknown();
+      return iree_ok_status();
+    }
+    for (iree_host_size_t i = 0; i < lane_count; ++i) {
+      loom_value_facts_t lhs = {0};
+      loom_value_facts_t rhs = {0};
+      double lhs_value = 0.0;
+      double rhs_value = 0.0;
+      if (!loom_vector_facts_query_lane(context, operand_facts[0], i, &lhs) ||
+          !loom_vector_facts_query_lane(context, operand_facts[1], i, &rhs) ||
+          !loom_vector_facts_query_exact_f64(lhs, &lhs_value) ||
+          !loom_vector_facts_query_exact_f64(rhs, &rhs_value)) {
+        result_facts[0] = loom_value_facts_unknown();
+        return iree_ok_status();
+      }
+      accumulator = fma(lhs_value, rhs_value, accumulator);
+    }
+    result_facts[0] = loom_value_facts_exact_f64(accumulator);
+    return iree_ok_status();
+  }
+
   if (!loom_type_static_element_count(lhs_type, &element_count) ||
       element_count > LOOM_VECTOR_FACT_STATIC_LOOP_LIMIT) {
     result_facts[0] = loom_value_facts_unknown();

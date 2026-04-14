@@ -48,11 +48,24 @@ typedef struct loom_value_fact_table_t loom_value_fact_table_t;
 typedef struct loom_value_fact_extension_entry_t
     loom_value_fact_extension_entry_t;
 
+// Maximum lane facts stored in a small static vector extension. Larger static
+// vectors degrade to unknown facts instead of allocating per-lane analysis
+// payloads.
+#define LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT 16
+
 // All lanes of a vector value share the same element facts.
 typedef struct loom_value_fact_uniform_element_t {
   // Scalar facts that apply to every lane.
   loom_value_facts_t element;
 } loom_value_fact_uniform_element_t;
+
+// Per-lane facts for a small all-static vector, in logical lane order.
+typedef struct loom_value_fact_small_static_lanes_t {
+  // Borrowed lane facts. Query results point into the owning fact table.
+  const loom_value_facts_t* lanes;
+  // Number of lane facts in the slice.
+  iree_host_size_t count;
+} loom_value_fact_small_static_lanes_t;
 
 // Vector value is a lane-coordinate sequence: base + lane_ordinal * step.
 typedef struct loom_value_fact_vector_iota_t {
@@ -190,6 +203,19 @@ iree_status_t loom_value_facts_make_uniform_element(
 bool loom_value_facts_query_uniform_element(
     const loom_fact_context_t* context, loom_value_facts_t facts,
     loom_value_fact_uniform_element_t* out);
+
+// Creates facts for a small all-static vector with explicit per-lane facts.
+// Vectors with more than LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT lanes degrade
+// to unknown facts.
+iree_status_t loom_value_facts_make_small_static_lanes(
+    loom_fact_context_t* context, loom_value_fact_small_static_lanes_t lanes,
+    loom_value_facts_t* out);
+
+// Returns true and populates |out| when |facts| is a small-static-lanes vector
+// extension in |context|.
+bool loom_value_facts_query_small_static_lanes(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_small_static_lanes_t* out);
 
 // Creates facts for a vector.iota-style lane-coordinate sequence.
 iree_status_t loom_value_facts_make_vector_iota(

@@ -54,7 +54,9 @@ enum {
   LOOM_OP_TEST_FACT_NON_ZERO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 33),
   LOOM_OP_TEST_FACT_POSITIVE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 34),
   LOOM_OP_TEST_FACT_POWER_OF_TWO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 35),
-  LOOM_OP_TEST_COUNT_ = 36,
+  LOOM_OP_TEST_FACT_IS_VECTOR_IOTA = LOOM_OP_KIND(LOOM_DIALECT_TEST, 36),
+  LOOM_OP_TEST_FACT_IS_VECTOR_PREFIX_MASK = LOOM_OP_KIND(LOOM_DIALECT_TEST, 37),
+  LOOM_OP_TEST_COUNT_ = 38,
 };
 
 // Function visibility. Absent (0) means private.
@@ -645,6 +647,40 @@ iree_status_t loom_test_fact_power_of_two_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_test_fact_power_of_two_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_IS_VECTOR_IOTA: Returns 1 if the input has a vector.iota analysis summary, 0 otherwise.
+// %is = test.fact_is_vector_iota %x : vector<[%n]xindex> -> i1
+LOOM_DEFINE_ISA(loom_test_fact_is_vector_iota_isa, LOOM_OP_TEST_FACT_IS_VECTOR_IOTA)
+LOOM_DEFINE_OPERAND(loom_test_fact_is_vector_iota_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_is_vector_iota_result, 0)
+iree_status_t loom_test_fact_is_vector_iota_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_is_vector_iota_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_IS_VECTOR_PREFIX_MASK: Returns 1 if the input has a vector.mask.range analysis summary, 0 otherwise.
+// %is = test.fact_is_vector_prefix_mask %x : vector<[%n]xi1> -> i1
+LOOM_DEFINE_ISA(loom_test_fact_is_vector_prefix_mask_isa, LOOM_OP_TEST_FACT_IS_VECTOR_PREFIX_MASK)
+LOOM_DEFINE_OPERAND(loom_test_fact_is_vector_prefix_mask_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_is_vector_prefix_mask_result, 0)
+iree_status_t loom_test_fact_is_vector_prefix_mask_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_is_vector_prefix_mask_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

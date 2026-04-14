@@ -21,6 +21,7 @@ typedef enum loom_value_fact_extension_kind_e {
   LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT = 1,
   LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA = 2,
   LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK = 3,
+  LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES = 4,
 } loom_value_fact_extension_kind_t;
 
 struct loom_value_fact_extension_entry_t {
@@ -37,6 +38,8 @@ struct loom_value_fact_extension_entry_t {
   union {
     // Uniform-element vector payload.
     loom_value_fact_uniform_element_t uniform_element;
+    // Small static vector lane payload.
+    loom_value_fact_small_static_lanes_t small_static_lanes;
     // Vector iota payload.
     loom_value_fact_vector_iota_t vector_iota;
     // Vector prefix-mask payload.
@@ -89,37 +92,88 @@ static uint32_t loom_value_fact_hash_u32(uint32_t value, uint32_t hash) {
   return loom_value_fact_hash_bytes(&value, sizeof(value), hash);
 }
 
-static iree_host_size_t loom_value_fact_extension_payload_size(
-    loom_value_fact_extension_kind_t kind) {
-  switch (kind) {
-    case LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT:
-      return sizeof(loom_value_fact_uniform_element_t);
-    case LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA:
-      return sizeof(loom_value_fact_vector_iota_t);
-    case LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK:
-      return sizeof(loom_value_fact_vector_prefix_mask_t);
-    default:
-      return 0;
-  }
+static uint32_t loom_value_fact_hash_host_size(iree_host_size_t value,
+                                               uint32_t hash) {
+  return loom_value_fact_hash_bytes(&value, sizeof(value), hash);
 }
 
 static uint32_t loom_value_fact_extension_hash(
     const loom_value_fact_extension_entry_t* entry) {
   uint32_t hash = 2166136261u;
   hash = loom_value_fact_hash_u32((uint32_t)entry->kind, hash);
-  return loom_value_fact_hash_bytes(
-      &entry->payload, loom_value_fact_extension_payload_size(entry->kind),
-      hash);
+  switch (entry->kind) {
+    case LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT:
+      return loom_value_fact_hash_bytes(&entry->payload.uniform_element,
+                                        sizeof(entry->payload.uniform_element),
+                                        hash);
+    case LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES:
+      hash = loom_value_fact_hash_host_size(
+          entry->payload.small_static_lanes.count, hash);
+      return loom_value_fact_hash_bytes(
+          entry->payload.small_static_lanes.lanes,
+          entry->payload.small_static_lanes.count * sizeof(loom_value_facts_t),
+          hash);
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA:
+      return loom_value_fact_hash_bytes(&entry->payload.vector_iota,
+                                        sizeof(entry->payload.vector_iota),
+                                        hash);
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK:
+      return loom_value_fact_hash_bytes(
+          &entry->payload.vector_prefix_mask,
+          sizeof(entry->payload.vector_prefix_mask), hash);
+    default:
+      return hash;
+  }
 }
 
 static bool loom_value_fact_extension_content_equal(
     const loom_value_fact_extension_entry_t* lhs,
     const loom_value_fact_extension_entry_t* rhs) {
   if (lhs->kind != rhs->kind) return false;
-  iree_host_size_t payload_size =
-      loom_value_fact_extension_payload_size(lhs->kind);
-  if (payload_size == 0) return false;
-  return memcmp(&lhs->payload, &rhs->payload, payload_size) == 0;
+  switch (lhs->kind) {
+    case LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT:
+      return memcmp(&lhs->payload.uniform_element,
+                    &rhs->payload.uniform_element,
+                    sizeof(lhs->payload.uniform_element)) == 0;
+    case LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES:
+      if (lhs->payload.small_static_lanes.count !=
+          rhs->payload.small_static_lanes.count) {
+        return false;
+      }
+      if (lhs->payload.small_static_lanes.count == 0) return true;
+      return memcmp(lhs->payload.small_static_lanes.lanes,
+                    rhs->payload.small_static_lanes.lanes,
+                    lhs->payload.small_static_lanes.count *
+                        sizeof(loom_value_facts_t)) == 0;
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA:
+      return memcmp(&lhs->payload.vector_iota, &rhs->payload.vector_iota,
+                    sizeof(lhs->payload.vector_iota)) == 0;
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK:
+      return memcmp(&lhs->payload.vector_prefix_mask,
+                    &rhs->payload.vector_prefix_mask,
+                    sizeof(lhs->payload.vector_prefix_mask)) == 0;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_value_fact_table_materialize_extension_payload(
+    loom_value_fact_table_t* table, loom_value_fact_extension_entry_t* entry) {
+  if (entry->kind != LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES) {
+    return iree_ok_status();
+  }
+  iree_host_size_t lane_count = entry->payload.small_static_lanes.count;
+  if (lane_count == 0) {
+    entry->payload.small_static_lanes.lanes = NULL;
+    return iree_ok_status();
+  }
+  loom_value_facts_t* lanes = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      table->arena, lane_count, sizeof(loom_value_facts_t), (void**)&lanes));
+  memcpy(lanes, entry->payload.small_static_lanes.lanes,
+         lane_count * sizeof(loom_value_facts_t));
+  entry->payload.small_static_lanes.lanes = lanes;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_value_fact_table_ensure_extension_capacity(
@@ -236,6 +290,8 @@ static iree_status_t loom_value_fact_table_intern_extension(
   bucket_index = (iree_host_size_t)entry.content_hash &
                  (table->extensions.bucket_count - 1);
   loom_value_fact_extension_id_t id = (loom_value_fact_extension_id_t)new_count;
+  IREE_RETURN_IF_ERROR(
+      loom_value_fact_table_materialize_extension_payload(table, &entry));
   entry.next_id = table->extensions.buckets[bucket_index];
   table->extensions.entries[table->extensions.count] = entry;
   table->extensions.buckets[bucket_index] = id;
@@ -333,6 +389,39 @@ bool loom_value_facts_query_uniform_element(
     return false;
   }
   if (out) *out = entry->payload.uniform_element;
+  return true;
+}
+
+iree_status_t loom_value_facts_make_small_static_lanes(
+    loom_fact_context_t* context, loom_value_fact_small_static_lanes_t lanes,
+    loom_value_facts_t* out) {
+  if (!out) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "output fact pointer required");
+  }
+  if (lanes.count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
+    *out = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  if (lanes.count > 0 && !lanes.lanes) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "lane fact pointer required");
+  }
+  loom_value_fact_extension_entry_t entry = {0};
+  entry.kind = LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES;
+  entry.payload.small_static_lanes = lanes;
+  return loom_value_facts_make_extension(context, &entry, out);
+}
+
+bool loom_value_facts_query_small_static_lanes(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_small_static_lanes_t* out) {
+  const loom_value_fact_extension_entry_t* entry =
+      loom_value_facts_lookup_extension(context, facts);
+  if (!entry || entry->kind != LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES) {
+    return false;
+  }
+  if (out) *out = entry->payload.small_static_lanes;
   return true;
 }
 

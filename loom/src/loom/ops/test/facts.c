@@ -17,6 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
+#include "loom/util/fact_table.h"
 
 //===----------------------------------------------------------------------===//
 // test.addi
@@ -117,5 +118,26 @@ iree_status_t loom_test_fact_power_of_two_facts(
     loom_value_facts_t* result_facts) {
   result_facts[0] = loom_value_facts_exact_i64(
       loom_value_facts_is_power_of_two(operand_facts[0]) ? 1 : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_is_vector_iota_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_query_vector_iota(context, operand_facts[0], NULL) ? 1
+                                                                          : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_is_vector_prefix_mask_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_query_vector_prefix_mask(context, operand_facts[0], NULL)
+          ? 1
+          : 0);
   return iree_ok_status();
 }

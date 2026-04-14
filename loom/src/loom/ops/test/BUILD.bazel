@@ -29,6 +29,7 @@ loom_cc_library(
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/transforms:rewriter",
+        "//loom/src/loom/util:fact_table",
     ],
 )
 

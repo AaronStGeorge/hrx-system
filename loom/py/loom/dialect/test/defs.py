@@ -300,6 +300,30 @@ test_fact_power_of_two = Op(
     examples=["%p2 = test.fact_power_of_two %x : index -> i1"],
 )
 
+test_fact_is_vector_iota = Op(
+    "test.fact_is_vector_iota",
+    group=test_ops,
+    doc="Returns 1 if the input has a vector.iota analysis summary, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_is_vector_iota_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%is = test.fact_is_vector_iota %x : vector<[%n]xindex> -> i1"],
+)
+
+test_fact_is_vector_prefix_mask = Op(
+    "test.fact_is_vector_prefix_mask",
+    group=test_ops,
+    doc="Returns 1 if the input has a vector.mask.range analysis summary, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_is_vector_prefix_mask_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%is = test.fact_is_vector_prefix_mask %x : vector<[%n]xi1> -> i1"],
+)
+
 # ============================================================================
 # test.cmp — comparison with enum predicate
 # ============================================================================
@@ -1007,4 +1031,6 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_non_zero,
     test_fact_positive,
     test_fact_power_of_two,
+    test_fact_is_vector_iota,
+    test_fact_is_vector_prefix_mask,
 )
