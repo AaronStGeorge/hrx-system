@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.vector import (
     ALL_VECTOR_OPS,
@@ -19,111 +21,101 @@ from loom.dialect.vector import (
 )
 from loom.dsl import ENCODING_TRANSFORM, FLOAT, I1, INTEGER, SCALAR, VECTOR, EffectKind, Op
 
+_REPO_ROOT = Path(__file__).resolve().parents[5]
+
+
+SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS = {
+    "assume": "scalar.assume refines scalar predicate facts, not vector lanes.",
+}
+
+
+VECTOR_TO_SCALAR_DESCRIPTOR_EXCLUSIONS = {
+    **SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS,
+    "bitcast": ("vector.bitcast is a whole-register reinterpretation and needs a dedicated scalarization rule, not a lanewise scalar.bitcast descriptor."),
+    "constant": "vector.constant is an aggregate producer, not a lane op.",
+    "poison": "vector.poison is a boundary sentinel, not a lane op.",
+}
+
 
 def _op_by_name() -> dict[str, Op]:
     return {op.name: op for op in ALL_VECTOR_OPS}
 
 
-def test_vector_seed_mirrors_scalar_spelling_for_lanewise_ops() -> None:
-    scalar_names = {op.name.removeprefix("scalar.") for op in ALL_SCALAR_OPS}
-    vector_names = {op.name.removeprefix("vector.") for op in ALL_VECTOR_OPS}
+def _op_suffix(op: Op) -> str:
+    return op.name.split(".", 1)[1]
 
-    mirrored_seed = {
-        "addi",
-        "addf",
-        "absf",
-        "acosf",
-        "acoshf",
-        "asinf",
-        "asinhf",
-        "atan2f",
-        "atanf",
-        "atanhf",
-        "cbrtf",
-        "ceilf",
-        "copysignf",
-        "cosf",
-        "coshf",
-        "andi",
-        "bitcast",
-        "cmpf",
-        "cmpi",
-        "ctlzi",
-        "ctpopi",
-        "cttzi",
-        "divf",
-        "divsi",
-        "divui",
-        "erfcf",
-        "erff",
-        "exp2f",
-        "expf",
-        "expm1f",
-        "extf",
-        "extsi",
-        "extui",
-        "floorf",
-        "floordivsi",
-        "ceildivsi",
-        "ceildivui",
-        "fmai",
-        "fmaf",
-        "fptosi",
-        "fptoui",
-        "fptrunc",
-        "isfinitef",
-        "isinff",
-        "isnanf",
-        "log10f",
-        "log1pf",
-        "log2f",
-        "logf",
-        "maximumf",
-        "maxsi",
-        "maxnumf",
-        "maxui",
-        "minimumf",
-        "minsi",
-        "minnumf",
-        "minui",
-        "muli",
-        "mulf",
-        "negi",
-        "negf",
-        "ori",
-        "powf",
-        "remf",
-        "remsi",
-        "remui",
-        "roundevenf",
-        "roundf",
-        "rsqrtf",
-        "poison",
-        "rotli",
-        "rotri",
-        "select",
-        "shli",
-        "shrsi",
-        "shrui",
-        "signf",
-        "signi",
-        "sinf",
-        "sinhf",
-        "sitofp",
-        "sqrtf",
-        "subf",
-        "subi",
-        "tanf",
-        "tanhf",
-        "truncf",
-        "trunci",
-        "uitofp",
-        "xori",
-    }
-    assert mirrored_seed <= scalar_names
-    assert mirrored_seed <= vector_names
+
+def _enum_name(op_name: str) -> str:
+    return "LOOM_OP_" + op_name.upper().replace(".", "_")
+
+
+def _read_repo_file(path: str) -> str:
+    return (_REPO_ROOT / path).read_text()
+
+
+def _vector_to_scalar_descriptor_table_source() -> str:
+    source = _read_repo_file("loom/src/loom/transforms/vector_to_scalar.c")
+    table_start = source.index("kVectorToScalarDescriptors[]")
+    table_end = source.index("\n};", table_start)
+    return source[table_start:table_end]
+
+
+def test_vector_seed_mirrors_scalar_spelling_for_lanewise_ops() -> None:
+    scalar_names = {_op_suffix(op) for op in ALL_SCALAR_OPS}
+    vector_names = {_op_suffix(op) for op in ALL_VECTOR_OPS}
+
+    missing = sorted(scalar_names - vector_names - set(SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS))
+    unknown_exclusions = sorted(set(SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS) - scalar_names)
+    stale_exclusions = sorted(set(SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS) & vector_names)
+
+    assert not missing, f"scalar ops missing vector mirrors: {missing}"
+    assert not unknown_exclusions, f"unknown scalar/vector exclusions: {unknown_exclusions}"
+    assert not stale_exclusions, f"stale scalar/vector exclusions: {stale_exclusions}"
     assert "sqrt" not in vector_names
     assert "fpext" not in vector_names
+
+
+def test_scalar_vector_mirrors_have_authoring_docs_and_formats() -> None:
+    scalar_names = {_op_suffix(op) for op in ALL_SCALAR_OPS}
+    vector_ops = _op_by_name()
+    vector_names = {_op_suffix(op) for op in ALL_VECTOR_OPS}
+
+    mirror_names = sorted((scalar_names & vector_names) - set(SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS))
+    missing_docs = [f"vector.{name}" for name in mirror_names if not vector_ops[f"vector.{name}"].doc.strip()]
+    missing_formats = [f"vector.{name}" for name in mirror_names if not vector_ops[f"vector.{name}"].format]
+
+    assert not missing_docs, f"vector mirrors missing docs: {missing_docs}"
+    assert not missing_formats, f"vector mirrors missing formats: {missing_formats}"
+
+
+def test_vector_registry_matches_generated_c_header() -> None:
+    header = _read_repo_file("loom/src/loom/ops/vector/ops.h")
+    missing_enums = [op.name for op in ALL_VECTOR_OPS if _enum_name(op.name) not in header]
+
+    assert not missing_enums, f"vector ops missing generated C enums: {missing_enums}"
+
+
+def test_vector_roundtrip_file_covers_every_vector_op() -> None:
+    source = _read_repo_file("loom/src/loom/ops/vector/test/roundtrip.loom-test")
+    body = "\n".join(line for line in source.splitlines() if not line.lstrip().startswith("//"))
+    missing_ops = [op.name for op in ALL_VECTOR_OPS if op.name not in body]
+
+    assert not missing_ops, f"vector ops missing text round-trip coverage: {missing_ops}"
+
+
+def test_scalar_vector_lanewise_mirrors_have_scalarization_descriptors() -> None:
+    scalar_names = {_op_suffix(op) for op in ALL_SCALAR_OPS}
+    vector_names = {_op_suffix(op) for op in ALL_VECTOR_OPS}
+    descriptor_source = _vector_to_scalar_descriptor_table_source()
+
+    expected = sorted((scalar_names & vector_names) - set(VECTOR_TO_SCALAR_DESCRIPTOR_EXCLUSIONS))
+    missing_descriptors = [f"vector.{name}" for name in expected if _enum_name(f"vector.{name}") not in descriptor_source]
+    unknown_exclusions = sorted(set(VECTOR_TO_SCALAR_DESCRIPTOR_EXCLUSIONS) - scalar_names)
+    stale_exclusions = [f"vector.{name}" for name in sorted(set(VECTOR_TO_SCALAR_DESCRIPTOR_EXCLUSIONS) & vector_names) if _enum_name(f"vector.{name}") in descriptor_source]
+
+    assert not missing_descriptors, f"vector mirrors missing vector-to-scalar descriptors: {missing_descriptors}"
+    assert not unknown_exclusions, f"unknown vector-to-scalar descriptor exclusions: {unknown_exclusions}"
+    assert not stale_exclusions, f"vector-to-scalar descriptor exclusions now have descriptors and should be removed: {stale_exclusions}"
 
 
 def test_poison_ops_are_pure_typed_sentinels_not_constants() -> None:
