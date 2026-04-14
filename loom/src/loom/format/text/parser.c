@@ -7,6 +7,7 @@
 #include "loom/format/text/parser.h"
 
 #include <inttypes.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -42,6 +43,40 @@ static void loom_parser_scope_reset(loom_parser_scope_t* scope,
   if (had_entries && scope->capacity > 0) {
     loom_parser_scope_initialize_entries(scope->entries, scope->capacity);
   }
+}
+
+static bool loom_parse_special_f64_spelling(iree_string_view_t text,
+                                            double* out_value) {
+  if (iree_string_view_equal(text, IREE_SV("nan")) ||
+      iree_string_view_equal(text, IREE_SV("-nan"))) {
+    *out_value = NAN;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("inf"))) {
+    *out_value = INFINITY;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("-inf"))) {
+    *out_value = -INFINITY;
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_parse_f64_token(loom_parser_t* parser,
+                                          loom_token_t token,
+                                          double* out_value) {
+  if (loom_parse_special_f64_spelling(token.text, out_value)) {
+    return iree_ok_status();
+  }
+  if (!iree_string_view_atod(token.text, out_value)) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(token.text),
+    };
+    return loom_parser_emit(parser, &loom_err_parse_016, params,
+                            IREE_ARRAYSIZE(params), token);
+  }
+  return iree_ok_status();
 }
 
 // Ensures the scope's hash table is allocated and has room for at
@@ -1301,16 +1336,20 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
       return iree_ok_status();
     }
     case LOOM_ATTR_F64: {
-      loom_token_t token = loom_token_none();
-      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_FLOAT, &token);
-      double value = 0.0;
-      if (!iree_string_view_atod(token.text, &value)) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(token.text),
-        };
-        return loom_parser_emit(parser, &loom_err_parse_016, params,
-                                IREE_ARRAYSIZE(params), token);
+      loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+      if (token.kind == LOOM_TOKEN_BARE_IDENT) {
+        double special_value = 0.0;
+        if (!loom_parse_special_f64_spelling(token.text, &special_value)) {
+          return loom_parser_emit_unexpected_token(parser, token,
+                                                   IREE_SV("FLOAT"));
+        }
+      } else if (token.kind != LOOM_TOKEN_FLOAT) {
+        return loom_parser_emit_unexpected_token(parser, token,
+                                                 IREE_SV("FLOAT"));
       }
+      token = loom_tokenizer_next(&parser->tokenizer);
+      double value = 0.0;
+      IREE_RETURN_IF_ERROR(loom_parse_f64_token(parser, token, &value));
       *out_attr = loom_attr_f64(value);
       return iree_ok_status();
     }
@@ -1600,13 +1639,8 @@ iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
     case LOOM_TOKEN_FLOAT: {
       loom_tokenizer_next(&parser->tokenizer);
       double float_value = 0.0;
-      if (!iree_string_view_atod(value_token.text, &float_value)) {
-        loom_diagnostic_param_t params[] = {
-            loom_param_string(value_token.text),
-        };
-        return loom_parser_emit(parser, &loom_err_parse_016, params,
-                                IREE_ARRAYSIZE(params), value_token);
-      }
+      IREE_RETURN_IF_ERROR(
+          loom_parse_f64_token(parser, value_token, &float_value));
       *out_attr = loom_attr_f64(float_value);
       return iree_ok_status();
     }
@@ -1618,7 +1652,13 @@ iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
       *out_attr = loom_attr_string(string_id);
       return iree_ok_status();
     }
-    case LOOM_TOKEN_BARE_IDENT:
+    case LOOM_TOKEN_BARE_IDENT: {
+      double special_value = 0.0;
+      if (loom_parse_special_f64_spelling(value_token.text, &special_value)) {
+        loom_tokenizer_next(&parser->tokenizer);
+        *out_attr = loom_attr_f64(special_value);
+        return iree_ok_status();
+      }
       if (iree_string_view_equal(value_token.text, IREE_SV("true"))) {
         loom_tokenizer_next(&parser->tokenizer);
         *out_attr = loom_attr_bool(true);
@@ -1635,6 +1675,7 @@ iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
           parser->module, value_token.text, &ident_id));
       *out_attr = loom_attr_string(ident_id);
       return iree_ok_status();
+    }
     case LOOM_TOKEN_LBRACKET:
       return loom_parse_i64_array_attr(parser, out_attr);
     case LOOM_TOKEN_HASH_ATTR: {

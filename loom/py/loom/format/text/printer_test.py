@@ -6,6 +6,8 @@
 
 """Tests for the format-driven text printer."""
 
+import math
+
 import pytest
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
@@ -374,6 +376,45 @@ class TestPrintConstantOp:
         text = _printer().print_operation(op, module)
         assert text.startswith("%pi = test.constant 3.14")
         assert text.endswith(" : f32")
+
+    def test_special_float_values(self) -> None:
+        module, [nan_value, inf_value, negative_inf_value] = _module_with(
+            ("nan", F32), ("inf", F32), ("ninf", F32)
+        )
+        printer = _printer()
+        assert (
+            printer.print_operation(
+                Operation(
+                    name="test.constant",
+                    results=[nan_value],
+                    attributes={"value": math.nan},
+                ),
+                module,
+            )
+            == "%nan = test.constant nan : f32"
+        )
+        assert (
+            printer.print_operation(
+                Operation(
+                    name="test.constant",
+                    results=[inf_value],
+                    attributes={"value": math.inf},
+                ),
+                module,
+            )
+            == "%inf = test.constant inf : f32"
+        )
+        assert (
+            printer.print_operation(
+                Operation(
+                    name="test.constant",
+                    results=[negative_inf_value],
+                    attributes={"value": -math.inf},
+                ),
+                module,
+            )
+            == "%ninf = test.constant -inf : f32"
+        )
 
 
 class TestPrintComparisonOp:

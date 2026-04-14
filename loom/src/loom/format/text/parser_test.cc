@@ -696,6 +696,17 @@ TEST_F(ParserTest, AttrDictEmptyArrayPayloadIsCanonical) {
   loom_module_free(module);
 }
 
+TEST_F(ParserTest, AttrDictSpecialFloatValuesRoundTrip) {
+  std::string text = RoundTrip(
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c {nan_value = nan, pos_inf = inf, neg_inf = -inf} : "
+      "f32\n");
+  EXPECT_NE(text.find("test.attrs %c {nan_value = nan, neg_inf = -inf, "
+                      "pos_inf = inf} : f32"),
+            std::string::npos)
+      << "special float values should round-trip canonically: " << text;
+}
+
 TEST_F(ParserTest, OperandDictUnsortedKeysRoundTripInCanonicalOrder) {
   std::string text = RoundTrip(
       "%input = test.constant 0 : f32\n"

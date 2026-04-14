@@ -122,6 +122,60 @@ func.def @dynamic_2d_splat(%m: index, %n: index, %x: f32) -> (vector<[%m]x[%n]xf
 
 // ====
 
+// New float/math lanewise ops use the same generic lane-program path as the
+// original seed ops.
+func.def @static_float_math(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf32>) {
+  %diff = vector.subf %a, %b : vector<2xf32>
+  %exp = vector.expf %diff : vector<2xf32>
+  %r = vector.maxnumf %exp, %a : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @static_float_math(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf32>) {
+  %6 = vector.extract %a[0] : vector<2xf32> -> f32
+  %7 = vector.extract %b[0] : vector<2xf32> -> f32
+  %8 = scalar.subf %6, %7 : f32
+  %9 = scalar.expf %8 : f32
+  %10 = vector.extract %a[0] : vector<2xf32> -> f32
+  %11 = scalar.maxnumf %9, %10 : f32
+  %12 = vector.extract %a[1] : vector<2xf32> -> f32
+  %13 = vector.extract %b[1] : vector<2xf32> -> f32
+  %14 = scalar.subf %12, %13 : f32
+  %15 = scalar.expf %14 : f32
+  %16 = vector.extract %a[1] : vector<2xf32> -> f32
+  %17 = scalar.maxnumf %15, %16 : f32
+  %r = vector.from_elements %11, %17 : f32, f32 -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+
+// Dynamic float/math ops lower to scalar work inside the aggregate loop.
+func.def @dynamic_float_math(%n: index, %a: vector<[%n]xf32>, %b: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+  %quotient = vector.divf %a, %b : vector<[%n]xf32>
+  %r = vector.sqrtf %quotient : vector<[%n]xf32>
+  func.return %r : vector<[%n]xf32>
+}
+
+// ----
+func.def @dynamic_float_math(%n: index, %a: vector<[%n]xf32>, %b: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+  %6 = vector.constant 0.0 : vector<[%n]xf32>
+  %7 = index.constant 0 : index
+  %8 = index.constant 1 : index
+  %r = scf.for %9 = [%7 to %n step %8](%10 = %6 : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+    %12 = vector.extract %a[%9] : vector<[%n]xf32> -> f32
+    %13 = vector.extract %b[%9] : vector<[%n]xf32> -> f32
+    %14 = scalar.divf %12, %13 : f32
+    %15 = scalar.sqrtf %14 : f32
+    %16 = vector.insert %15 into %10[%9] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    scf.yield %16 : vector<[%n]xf32>
+  }
+  func.return %r : vector<[%n]xf32>
+}
+
+// ====
+
 // Reductions expose scalar accumulator order directly.
 func.def @static_reduce(%v: vector<4xf32>, %zero: f32) -> (f32) {
   %r = vector.reduce<addf> %v, %zero : vector<4xf32> -> f32

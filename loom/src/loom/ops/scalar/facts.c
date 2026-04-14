@@ -93,6 +93,12 @@ static double div_f64(double a, double b) { return a / b; }
 static double negate_f64(double a) { return -a; }
 static double rsqrt_f64(double x) { return 1.0 / sqrt(x); }
 static double roundeven_f64(double x) { return nearbyint(x); }
+static double minimum_f64(double a, double b) {
+  return (isnan(a) || isnan(b)) ? NAN : fmin(a, b);
+}
+static double maximum_f64(double a, double b) {
+  return (isnan(a) || isnan(b)) ? NAN : fmax(a, b);
+}
 
 //===----------------------------------------------------------------------===//
 // scalar.constant
@@ -153,8 +159,8 @@ FLOAT_BINARY_FACTS(loom_scalar_divf_facts, div_f64)
 FLOAT_BINARY_FACTS(loom_scalar_remf_facts, fmod)
 FLOAT_UNARY_FACTS(loom_scalar_negf_facts, negate_f64)
 FLOAT_UNARY_FACTS(loom_scalar_absf_facts, fabs)
-FLOAT_BINARY_FACTS(loom_scalar_minimumf_facts, fmin)
-FLOAT_BINARY_FACTS(loom_scalar_maximumf_facts, fmax)
+FLOAT_BINARY_FACTS(loom_scalar_minimumf_facts, minimum_f64)
+FLOAT_BINARY_FACTS(loom_scalar_maximumf_facts, maximum_f64)
 FLOAT_BINARY_FACTS(loom_scalar_minnumf_facts, fmin)
 FLOAT_BINARY_FACTS(loom_scalar_maxnumf_facts, fmax)
 FLOAT_BINARY_FACTS(loom_scalar_copysignf_facts, copysign)

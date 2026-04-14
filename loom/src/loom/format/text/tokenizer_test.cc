@@ -186,6 +186,16 @@ TEST(Tokenizer, NegativeFloat) {
   EXPECT_TRUE(iree_string_view_equal(token.text, IREE_SV("-0.5")));
 }
 
+TEST(Tokenizer, NegativeSpecialFloat) {
+  ScopedTokenizer t("-inf -nan");
+  loom_token_t inf_token = t.next();
+  EXPECT_EQ(inf_token.kind, LOOM_TOKEN_FLOAT);
+  EXPECT_TRUE(iree_string_view_equal(inf_token.text, IREE_SV("-inf")));
+  loom_token_t nan_token = t.next();
+  EXPECT_EQ(nan_token.kind, LOOM_TOKEN_FLOAT);
+  EXPECT_TRUE(iree_string_view_equal(nan_token.text, IREE_SV("-nan")));
+}
+
 TEST(Tokenizer, NegativeArrowDisambiguation) {
   ScopedTokenizer t("-> -1");
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_ARROW);

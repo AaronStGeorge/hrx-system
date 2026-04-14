@@ -7,6 +7,7 @@
 #include "loom/format/text/printer.h"
 
 #include <inttypes.h>
+#include <math.h>
 #include <string.h>
 
 #include "iree/base/internal/unicode.h"
@@ -592,6 +593,13 @@ static iree_status_t loom_print_attr(loom_output_stream_t* stream,
     case LOOM_ATTR_I64:
       return loom_output_stream_write_format(stream, "%" PRId64, attr->i64);
     case LOOM_ATTR_F64: {
+      if (isnan(attr->f64)) {
+        return loom_output_stream_write_cstring(stream, "nan");
+      }
+      if (isinf(attr->f64)) {
+        return loom_output_stream_write_cstring(
+            stream, attr->f64 < 0.0 ? "-inf" : "inf");
+      }
       char buffer[32];
       int length = iree_snprintf(buffer, sizeof(buffer), "%.17g", attr->f64);
       bool has_dot = false;

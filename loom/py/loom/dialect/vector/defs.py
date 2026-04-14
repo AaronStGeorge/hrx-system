@@ -46,8 +46,10 @@ from loom.dsl import (
     ENCODING_TRANSFORM,
     FLOAT_ELEMENT,
     I1_ELEMENT,
+    IDEMPOTENT,
     INDEX,
     INTEGER_ELEMENT,
+    INVOLUTION,
     PURE,
     SCALAR,
     VECTOR,
@@ -247,6 +249,7 @@ def _lanewise_unary(
     doc: str,
     traits: list[Trait] | None = None,
     flags: tuple[str, EnumDef] | None = None,
+    facts: str = "",
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     attrs: list[AttrDef] = []
@@ -272,6 +275,7 @@ def _lanewise_unary(
             SameType("input", "result"),
         ],
         traits=op_traits,
+        facts=facts,
         format=fmt,
     )
 
@@ -1747,13 +1751,23 @@ vector_cmpf = Op(
 # Lanewise arithmetic and math
 # ============================================================================
 
+_VF = ("assumptions", FloatAssumptionFlags)
+
 vector_addf = _lanewise_binary(
     "vector.addf",
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point addition of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
     commutative=True,
-    flags=("assumptions", FloatAssumptionFlags),
+    flags=_VF,
     facts="loom_vector_addf_facts",
+)
+
+vector_subf = _lanewise_binary(
+    "vector.subf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise floating-point subtraction of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
+    flags=_VF,
+    facts="loom_vector_subf_facts",
 )
 
 vector_mulf = _lanewise_binary(
@@ -1761,8 +1775,86 @@ vector_mulf = _lanewise_binary(
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations."),
     commutative=True,
-    flags=("assumptions", FloatAssumptionFlags),
+    flags=_VF,
     facts="loom_vector_mulf_facts",
+)
+
+vector_divf = _lanewise_binary(
+    "vector.divf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise floating-point division of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change division-by-zero or NaN semantics."),
+    flags=_VF,
+    facts="loom_vector_divf_facts",
+)
+
+vector_remf = _lanewise_binary(
+    "vector.remf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise floating-point remainder with C fmod semantics over same-typed vector operands."),
+    flags=_VF,
+    facts="loom_vector_remf_facts",
+)
+
+vector_negf = _lanewise_unary(
+    "vector.negf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise floating-point negation of a same-typed vector operand."),
+    traits=[INVOLUTION],
+    flags=_VF,
+    facts="loom_vector_negf_facts",
+)
+
+vector_absf = _lanewise_unary(
+    "vector.absf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise floating-point absolute value of a same-typed vector operand."),
+    traits=[IDEMPOTENT],
+    flags=_VF,
+    facts="loom_vector_absf_facts",
+)
+
+vector_minimumf = _lanewise_binary(
+    "vector.minimumf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise IEEE 754 floating-point minimum of same-typed vector operands; NaN lanes propagate."),
+    commutative=True,
+    flags=_VF,
+    facts="loom_vector_minimumf_facts",
+)
+
+vector_maximumf = _lanewise_binary(
+    "vector.maximumf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise IEEE 754 floating-point maximum of same-typed vector operands; NaN lanes propagate."),
+    commutative=True,
+    flags=_VF,
+    facts="loom_vector_maximumf_facts",
+)
+
+vector_minnumf = _lanewise_binary(
+    "vector.minnumf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise C99 fmin-style floating-point minimum of same-typed vector operands; NaN lanes select the non-NaN operand."),
+    commutative=True,
+    flags=_VF,
+    facts="loom_vector_minnumf_facts",
+)
+
+vector_maxnumf = _lanewise_binary(
+    "vector.maxnumf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise C99 fmax-style floating-point maximum of same-typed vector operands; NaN lanes select the non-NaN operand."),
+    commutative=True,
+    flags=_VF,
+    facts="loom_vector_maxnumf_facts",
+)
+
+vector_copysignf = _lanewise_binary(
+    "vector.copysignf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise copy sign of rhs lanes onto lhs lane magnitudes."),
+    flags=_VF,
+    facts="loom_vector_copysignf_facts",
 )
 
 vector_fmaf = Op(
@@ -1854,11 +1946,257 @@ vector_ctpopi = _lanewise_unary(
     doc=("Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input."),
 )
 
+vector_expf = _lanewise_unary(
+    "vector.expf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise natural exponential e^x."),
+    flags=_VF,
+    facts="loom_vector_expf_facts",
+)
+
+vector_exp2f = _lanewise_unary(
+    "vector.exp2f",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise base-2 exponential 2^x."),
+    flags=_VF,
+    facts="loom_vector_exp2f_facts",
+)
+
+vector_expm1f = _lanewise_unary(
+    "vector.expm1f",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise exp(x)-1, preserving the scalar operation's near-zero numerical semantics."),
+    flags=_VF,
+    facts="loom_vector_expm1f_facts",
+)
+
+vector_logf = _lanewise_unary(
+    "vector.logf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise natural logarithm ln(x)."),
+    flags=_VF,
+    facts="loom_vector_logf_facts",
+)
+
+vector_log2f = _lanewise_unary(
+    "vector.log2f",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise base-2 logarithm."),
+    flags=_VF,
+    facts="loom_vector_log2f_facts",
+)
+
+vector_log10f = _lanewise_unary(
+    "vector.log10f",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise base-10 logarithm."),
+    flags=_VF,
+    facts="loom_vector_log10f_facts",
+)
+
+vector_log1pf = _lanewise_unary(
+    "vector.log1pf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise log(1+x), preserving the scalar operation's near-zero numerical semantics."),
+    flags=_VF,
+    facts="loom_vector_log1pf_facts",
+)
+
+vector_powf = _lanewise_binary(
+    "vector.powf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise floating-point power lhs^rhs over same-typed vector operands."),
+    flags=_VF,
+    facts="loom_vector_powf_facts",
+)
+
 vector_sqrtf = _lanewise_unary(
     "vector.sqrtf",
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point square root. Optional assumptions flags constrain lane value domains for optimization and lowering."),
-    flags=("assumptions", FloatAssumptionFlags),
+    flags=_VF,
+    facts="loom_vector_sqrtf_facts",
+)
+
+vector_rsqrtf = _lanewise_unary(
+    "vector.rsqrtf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise reciprocal square root 1/sqrt(x)."),
+    flags=_VF,
+    facts="loom_vector_rsqrtf_facts",
+)
+
+vector_cbrtf = _lanewise_unary(
+    "vector.cbrtf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise cube root."),
+    flags=_VF,
+    facts="loom_vector_cbrtf_facts",
+)
+
+vector_sinf = _lanewise_unary(
+    "vector.sinf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise sine."),
+    flags=_VF,
+    facts="loom_vector_sinf_facts",
+)
+
+vector_cosf = _lanewise_unary(
+    "vector.cosf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise cosine."),
+    flags=_VF,
+    facts="loom_vector_cosf_facts",
+)
+
+vector_tanf = _lanewise_unary(
+    "vector.tanf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise tangent."),
+    flags=_VF,
+    facts="loom_vector_tanf_facts",
+)
+
+vector_asinf = _lanewise_unary(
+    "vector.asinf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise arcsine."),
+    flags=_VF,
+    facts="loom_vector_asinf_facts",
+)
+
+vector_acosf = _lanewise_unary(
+    "vector.acosf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise arccosine."),
+    flags=_VF,
+    facts="loom_vector_acosf_facts",
+)
+
+vector_atanf = _lanewise_unary(
+    "vector.atanf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise arctangent."),
+    flags=_VF,
+    facts="loom_vector_atanf_facts",
+)
+
+vector_atan2f = _lanewise_binary(
+    "vector.atan2f",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise two-argument arctangent atan2(lhs, rhs) over same-typed vector operands."),
+    flags=_VF,
+    facts="loom_vector_atan2f_facts",
+)
+
+vector_sinhf = _lanewise_unary(
+    "vector.sinhf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise hyperbolic sine."),
+    flags=_VF,
+    facts="loom_vector_sinhf_facts",
+)
+
+vector_coshf = _lanewise_unary(
+    "vector.coshf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise hyperbolic cosine."),
+    flags=_VF,
+    facts="loom_vector_coshf_facts",
+)
+
+vector_tanhf = _lanewise_unary(
+    "vector.tanhf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise hyperbolic tangent."),
+    flags=_VF,
+    facts="loom_vector_tanhf_facts",
+)
+
+vector_asinhf = _lanewise_unary(
+    "vector.asinhf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise inverse hyperbolic sine."),
+    flags=_VF,
+    facts="loom_vector_asinhf_facts",
+)
+
+vector_acoshf = _lanewise_unary(
+    "vector.acoshf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise inverse hyperbolic cosine."),
+    flags=_VF,
+    facts="loom_vector_acoshf_facts",
+)
+
+vector_atanhf = _lanewise_unary(
+    "vector.atanhf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise inverse hyperbolic tangent."),
+    flags=_VF,
+    facts="loom_vector_atanhf_facts",
+)
+
+vector_erff = _lanewise_unary(
+    "vector.erff",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise error function, used by GeLU-style activations."),
+    flags=_VF,
+    facts="loom_vector_erff_facts",
+)
+
+vector_erfcf = _lanewise_unary(
+    "vector.erfcf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise complementary error function 1-erf(x)."),
+    flags=_VF,
+    facts="loom_vector_erfcf_facts",
+)
+
+vector_ceilf = _lanewise_unary(
+    "vector.ceilf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise round toward positive infinity."),
+    traits=[IDEMPOTENT],
+    flags=_VF,
+    facts="loom_vector_ceilf_facts",
+)
+
+vector_floorf = _lanewise_unary(
+    "vector.floorf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise round toward negative infinity."),
+    traits=[IDEMPOTENT],
+    flags=_VF,
+    facts="loom_vector_floorf_facts",
+)
+
+vector_roundf = _lanewise_unary(
+    "vector.roundf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise round to nearest, ties away from zero."),
+    traits=[IDEMPOTENT],
+    flags=_VF,
+    facts="loom_vector_roundf_facts",
+)
+
+vector_roundevenf = _lanewise_unary(
+    "vector.roundevenf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise round to nearest, ties to even."),
+    traits=[IDEMPOTENT],
+    flags=_VF,
+    facts="loom_vector_roundevenf_facts",
+)
+
+vector_truncf = _lanewise_unary(
+    "vector.truncf",
+    result_constraint=FLOAT_ELEMENT,
+    doc=("Lanewise round toward zero."),
+    traits=[IDEMPOTENT],
+    flags=_VF,
+    facts="loom_vector_truncf_facts",
 )
 
 
@@ -2349,7 +2687,17 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_cmpi,
     vector_cmpf,
     vector_addf,
+    vector_subf,
     vector_mulf,
+    vector_divf,
+    vector_remf,
+    vector_negf,
+    vector_absf,
+    vector_minimumf,
+    vector_maximumf,
+    vector_minnumf,
+    vector_maxnumf,
+    vector_copysignf,
     vector_fmaf,
     vector_addi,
     vector_muli,
@@ -2357,7 +2705,37 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_ori,
     vector_xori,
     vector_ctpopi,
+    vector_expf,
+    vector_exp2f,
+    vector_expm1f,
+    vector_logf,
+    vector_log2f,
+    vector_log10f,
+    vector_log1pf,
+    vector_powf,
     vector_sqrtf,
+    vector_rsqrtf,
+    vector_cbrtf,
+    vector_sinf,
+    vector_cosf,
+    vector_tanf,
+    vector_asinf,
+    vector_acosf,
+    vector_atanf,
+    vector_atan2f,
+    vector_sinhf,
+    vector_coshf,
+    vector_tanhf,
+    vector_asinhf,
+    vector_acoshf,
+    vector_atanhf,
+    vector_erff,
+    vector_erfcf,
+    vector_ceilf,
+    vector_floorf,
+    vector_roundf,
+    vector_roundevenf,
+    vector_truncf,
     vector_extf,
     vector_fptrunc,
     vector_extsi,

@@ -693,6 +693,13 @@ class TestEdgeCases:
         with pytest.raises(ParseError, match="unexpected character"):
             _tokens("4 . x")
 
+    def test_negative_special_float(self) -> None:
+        tokens = _tokens("-inf -nan")
+        assert [(token.kind, token.text) for token in tokens] == [
+            (TokenKind.FLOAT, "-inf"),
+            (TokenKind.FLOAT, "-nan"),
+        ]
+
     def test_empty_input(self) -> None:
         tokens = _tokens("")
         assert tokens == []

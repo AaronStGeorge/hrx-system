@@ -34,8 +34,18 @@ func.def @construction(%x: f32, %i: i32, %n: index) {
 // Lanewise arithmetic follows scalar spelling and keeps vector/vector operands.
 func.def @lanewise(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>, %i: vector<16xi32>, %j: vector<16xi32>) {
   %sum = vector.addf %a, %b : vector<16xf32>
-  %prod = vector.mulf<nnan> %sum, %c : vector<16xf32>
-  %fma = vector.fmaf %a, %b, %prod : vector<16xf32>
+  %diff = vector.subf %sum, %c : vector<16xf32>
+  %prod = vector.mulf<nnan> %diff, %c : vector<16xf32>
+  %quot = vector.divf %prod, %c : vector<16xf32>
+  %rem = vector.remf %prod, %c : vector<16xf32>
+  %neg = vector.negf %rem : vector<16xf32>
+  %abs = vector.absf %neg : vector<16xf32>
+  %min = vector.minimumf %abs, %quot : vector<16xf32>
+  %max = vector.maximumf %abs, %quot : vector<16xf32>
+  %minnum = vector.minnumf %min, %max : vector<16xf32>
+  %maxnum = vector.maxnumf %min, %max : vector<16xf32>
+  %signed = vector.copysignf %minnum, %maxnum : vector<16xf32>
+  %fma = vector.fmaf %a, %b, %signed : vector<16xf32>
   %isum = vector.addi<nuw> %i, %j : vector<16xi32>
   %iprod = vector.muli %isum, %j : vector<16xi32>
   %and = vector.andi %iprod, %j : vector<16xi32>
@@ -44,6 +54,46 @@ func.def @lanewise(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>, %
   %pop = vector.ctpopi %xor : vector<16xi32>
   %root = vector.sqrtf %prod : vector<16xf32>
   test.use %fma, %pop, %root : vector<16xf32>, vector<16xi32>, vector<16xf32>
+  func.return
+}
+
+// ====
+
+// Lanewise math mirrors scalar spelling so agents can author vectorized
+// activations, softmax, normalization, and special-function reference paths.
+func.def @lanewise_math(%a: vector<16xf32>, %b: vector<16xf32>) {
+  %exp = vector.expf %a : vector<16xf32>
+  %exp2 = vector.exp2f %a : vector<16xf32>
+  %expm1 = vector.expm1f %a : vector<16xf32>
+  %log = vector.logf %exp : vector<16xf32>
+  %log2 = vector.log2f %exp2 : vector<16xf32>
+  %log10 = vector.log10f %exp : vector<16xf32>
+  %log1p = vector.log1pf %expm1 : vector<16xf32>
+  %pow = vector.powf %a, %b : vector<16xf32>
+  %sqrt = vector.sqrtf %pow : vector<16xf32>
+  %rsqrt = vector.rsqrtf %pow : vector<16xf32>
+  %cbrt = vector.cbrtf %pow : vector<16xf32>
+  %sin = vector.sinf %a : vector<16xf32>
+  %cos = vector.cosf %a : vector<16xf32>
+  %tan = vector.tanf %a : vector<16xf32>
+  %asin = vector.asinf %a : vector<16xf32>
+  %acos = vector.acosf %a : vector<16xf32>
+  %atan = vector.atanf %a : vector<16xf32>
+  %atan2 = vector.atan2f %a, %b : vector<16xf32>
+  %sinh = vector.sinhf %a : vector<16xf32>
+  %cosh = vector.coshf %a : vector<16xf32>
+  %tanh = vector.tanhf %a : vector<16xf32>
+  %asinh = vector.asinhf %a : vector<16xf32>
+  %acosh = vector.acoshf %a : vector<16xf32>
+  %atanh = vector.atanhf %a : vector<16xf32>
+  %erf = vector.erff %a : vector<16xf32>
+  %erfc = vector.erfcf %a : vector<16xf32>
+  %ceil = vector.ceilf %a : vector<16xf32>
+  %floor = vector.floorf %a : vector<16xf32>
+  %round = vector.roundf %a : vector<16xf32>
+  %roundeven = vector.roundevenf %a : vector<16xf32>
+  %trunc = vector.truncf %a : vector<16xf32>
+  test.use %log, %log2, %log10, %log1p, %sqrt, %rsqrt, %cbrt, %sin, %cos, %tan, %asin, %acos, %atan, %atan2, %sinh, %cosh, %tanh, %asinh, %acosh, %atanh, %erf, %erfc, %ceil, %floor, %round, %roundeven, %trunc : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
   func.return
 }
 

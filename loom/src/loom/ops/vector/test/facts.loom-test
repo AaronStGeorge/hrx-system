@@ -35,6 +35,80 @@ func.def @reduce_uniform_splat_addi() -> (i32) {
 
 // ====
 
+// Representative lanewise float facts preserve uniform summaries through the
+// expanded math surface.
+func.def @reduce_uniform_float_math() -> (f32) {
+  %nine = vector.constant 9.0 : vector<4xf32>
+  %four = vector.constant 4.0 : vector<4xf32>
+  %rem = vector.remf %nine, %four : vector<4xf32>
+  %root = vector.sqrtf %nine : vector<4xf32>
+  %sum = vector.addf %rem, %root : vector<4xf32>
+  %init = scalar.constant 1.0 : f32
+  %r = vector.reduce<addf> %sum, %init : vector<4xf32> -> f32
+  func.return %r : f32
+}
+// ----
+func.def @reduce_uniform_float_math() -> (f32) {
+  %r = scalar.constant 17.0 : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Small per-lane float facts compose through new lanewise unary and binary ops.
+func.def @small_static_float_math_extract() -> (f32) {
+  %one = scalar.constant 1.0 : f32
+  %four = scalar.constant 4.0 : f32
+  %v = vector.from_elements %one, %four : f32, f32 -> vector<2xf32>
+  %root = vector.sqrtf %v : vector<2xf32>
+  %max = vector.maximumf %v, %root : vector<2xf32>
+  %r = vector.extract %max[1] : vector<2xf32> -> f32
+  func.return %r : f32
+}
+// ----
+func.def @small_static_float_math_extract() -> (f32) {
+  %r = scalar.constant 4.0 : f32
+  func.return %r : f32
+}
+
+// ====
+
+// Vector minimumf mirrors scalar IEEE NaN propagation instead of minnumf.
+func.def @vector_minimumf_propagates_uniform_nan() -> (i1) {
+  %neg = vector.constant -1.0 : vector<4xf32>
+  %nan = vector.logf %neg : vector<4xf32>
+  %three = vector.constant 3.0 : vector<4xf32>
+  %min = vector.minimumf %nan, %three : vector<4xf32>
+  %lane = vector.extract %min[0] : vector<4xf32> -> f32
+  %r = scalar.isnanf %lane : f32
+  func.return %r : i1
+}
+// ----
+func.def @vector_minimumf_propagates_uniform_nan() -> (i1) {
+  %r = scalar.constant 1 : i1
+  func.return %r : i1
+}
+
+// ====
+
+// Vector minnumf keeps the explicit NaN-skipping behavior.
+func.def @vector_minnumf_skips_uniform_nan() -> (i1) {
+  %neg = vector.constant -1.0 : vector<4xf32>
+  %nan = vector.logf %neg : vector<4xf32>
+  %three = vector.constant 3.0 : vector<4xf32>
+  %min = vector.minnumf %nan, %three : vector<4xf32>
+  %lane = vector.extract %min[0] : vector<4xf32> -> f32
+  %r = scalar.isnanf %lane : f32
+  func.return %r : i1
+}
+// ----
+func.def @vector_minnumf_skips_uniform_nan() -> (i1) {
+  %r = scalar.constant 0 : i1
+  func.return %r : i1
+}
+
+// ====
+
 // Identity elements can fold reductions over dynamic extents when the explicit
 // accumulator is itself exact.
 func.def @reduce_dynamic_zero_splat_addi(%n: index) -> (i32) {

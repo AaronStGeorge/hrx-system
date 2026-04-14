@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "arithmeticf"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/arithmeticf.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "arithmetici"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici.loom-test"

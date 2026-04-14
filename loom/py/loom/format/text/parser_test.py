@@ -6,6 +6,7 @@
 
 """Tests for the format-driven parser — name scope, type parsing, round-trip."""
 
+import math
 from typing import Any
 
 import pytest
@@ -676,6 +677,14 @@ class TestParseConstantOp:
     def test_float(self) -> None:
         op = _parse_op("%pi = test.constant 3.14 : f32")
         assert abs(op.attributes["value"] - 3.14) < 1e-10
+
+    def test_special_float_values(self) -> None:
+        nan_op = _parse_op("%nan = test.constant nan : f32")
+        assert math.isnan(nan_op.attributes["value"])
+        inf_op = _parse_op("%inf = test.constant inf : f32")
+        assert inf_op.attributes["value"] == math.inf
+        negative_inf_op = _parse_op("%ninf = test.constant -inf : f32")
+        assert negative_inf_op.attributes["value"] == -math.inf
 
 
 class TestParseComparisonOp:

@@ -29,6 +29,7 @@ Value naming:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -479,6 +480,10 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
 
 def _format_float(value: float) -> str:
     """Format a float with enough precision to round-trip."""
+    if math.isnan(value):
+        return "nan"
+    if math.isinf(value):
+        return "-inf" if value < 0.0 else "inf"
     text = f"{value:.17g}"
     if "." not in text and "e" not in text and "E" not in text:
         text += ".0"

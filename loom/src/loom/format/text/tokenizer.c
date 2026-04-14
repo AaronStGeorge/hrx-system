@@ -60,6 +60,15 @@ static inline bool loom_is_hex_digit(char c) {
   return loom_is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
+static bool loom_tokenizer_has_delimited_prefix(loom_tokenizer_t* t,
+                                                iree_string_view_t prefix) {
+  if (t->source.size - t->position < prefix.size) return false;
+  if (memcmp(t->source.data + t->position, prefix.data, prefix.size) != 0) {
+    return false;
+  }
+  return !loom_is_ident_continue(loom_tokenizer_char_at(t, prefix.size));
+}
+
 static inline int32_t loom_hex_digit_value(char c) {
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -1010,6 +1019,16 @@ static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
   // Negative number: '-' followed by digit.
   if (c == '-' && loom_is_digit(loom_tokenizer_char_at(t, 1))) {
     *out_token = loom_tokenizer_scan_number(t);
+    return iree_ok_status();
+  }
+
+  if (loom_tokenizer_has_delimited_prefix(t, IREE_SV("-inf")) ||
+      loom_tokenizer_has_delimited_prefix(t, IREE_SV("-nan"))) {
+    iree_host_size_t length = 4;
+    t->position += length;
+    t->column += (uint32_t)length;
+    *out_token = loom_tokenizer_make_verbatim_token(t, LOOM_TOKEN_FLOAT, start,
+                                                    start_line, start_column);
     return iree_ok_status();
   }
 

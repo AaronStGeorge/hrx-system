@@ -15,6 +15,7 @@ package(
 loom_check_test_suite(
     name = "facts",
     srcs = [
+        "arithmeticf.loom-test",
         "arithmetici.loom-test",
         "bitwisei.loom-test",
     ],

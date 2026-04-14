@@ -6,6 +6,7 @@
 
 #include "loom/format/text/printer.h"
 
+#include <math.h>
 #include <string.h>
 
 #include <string>
@@ -528,6 +529,29 @@ TEST_F(PrintOpTest, ConstantZero) {
       &builder_, loom_attr_i64(0), index_type, LOOM_LOCATION_UNKNOWN, &op));
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
             "%0 = test.constant 0 : index\n");
+}
+
+TEST_F(PrintOpTest, ConstantSpecialFloatValues) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_op_t* nan_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_f64(NAN), f32,
+                                          LOOM_LOCATION_UNKNOWN, &nan_op));
+  EXPECT_EQ(print_op(nan_op, LOOM_TEXT_PRINT_DEFAULT),
+            "%0 = test.constant nan : f32\n");
+
+  loom_op_t* inf_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_f64(INFINITY),
+                                          f32, LOOM_LOCATION_UNKNOWN, &inf_op));
+  EXPECT_EQ(print_op(inf_op, LOOM_TEXT_PRINT_DEFAULT),
+            "%1 = test.constant inf : f32\n");
+
+  loom_op_t* negative_inf_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_f64(-INFINITY),
+                                          f32, LOOM_LOCATION_UNKNOWN,
+                                          &negative_inf_op));
+  EXPECT_EQ(print_op(negative_inf_op, LOOM_TEXT_PRINT_DEFAULT),
+            "%2 = test.constant -inf : f32\n");
 }
 
 TEST_F(PrintOpTest, ComparisonOp) {

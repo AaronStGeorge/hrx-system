@@ -403,6 +403,22 @@ class Tokenizer:
                 return self._make_token(TokenKind.ARROW, "->", location)
             if self._peek_char().isdigit():
                 return self._scan_number(location)
+            if self._source.startswith(
+                "-inf", self._position
+            ) and not _is_ident_continue(self._peek_char(4)):
+                self._advance()
+                self._advance()
+                self._advance()
+                self._advance()
+                return self._make_token(TokenKind.FLOAT, "-inf", location)
+            if self._source.startswith(
+                "-nan", self._position
+            ) and not _is_ident_continue(self._peek_char(4)):
+                self._advance()
+                self._advance()
+                self._advance()
+                self._advance()
+                return self._make_token(TokenKind.FLOAT, "-nan", location)
             raise ParseError(
                 "unexpected '-' (not followed by '>' or digit)",
                 location,

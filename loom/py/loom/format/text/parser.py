@@ -128,6 +128,18 @@ _CURRENT_KNOWN_ENCODINGS: set[str] | None = None
 _ATTR_DICT_MAX_NESTING_DEPTH = 16
 
 
+def _parse_special_float(text: str) -> float | None:
+    match text:
+        case "nan" | "-nan":
+            return float("nan")
+        case "inf":
+            return float("inf")
+        case "-inf":
+            return float("-inf")
+        case _:
+            return None
+
+
 def _parse_generic_attr_value_from_tokens(
     tokenizer: Tokenizer,
     module: Module,
@@ -144,6 +156,9 @@ def _parse_generic_attr_value_from_tokens(
         return tokenizer.next().text
     if tokenizer.at(TokenKind.BARE_IDENT):
         text = tokenizer.next().text
+        special_float = _parse_special_float(text)
+        if special_float is not None:
+            return special_float
         if text == "true":
             return True
         if text == "false":
@@ -1763,6 +1778,12 @@ class Parser:
             case "f64":
                 if tok.at(TokenKind.FLOAT):
                     return float(tok.next().text)
+                if tok.at(TokenKind.BARE_IDENT):
+                    text = tok.peek().text
+                    special_float = _parse_special_float(text)
+                    if special_float is not None:
+                        tok.next()
+                        return special_float
                 return float(tok.expect(TokenKind.INTEGER).text)
             case "string":
                 return tok.expect(TokenKind.STRING).text

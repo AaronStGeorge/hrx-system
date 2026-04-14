@@ -1,0 +1,50 @@
+// RUN: pass canonicalize
+
+// IEEE minimumf propagates NaN instead of selecting the non-NaN operand.
+func.def @minimumf_propagates_nan() -> (i1) {
+  %neg = scalar.constant -1.0 : f32
+  %nan = scalar.logf %neg : f32
+  %three = scalar.constant 3.0 : f32
+  %min = scalar.minimumf %nan, %three : f32
+  %r = scalar.isnanf %min : f32
+  func.return %r : i1
+}
+// ----
+func.def @minimumf_propagates_nan() -> (i1) {
+  %r = scalar.constant 1 : i1
+  func.return %r : i1
+}
+
+// ====
+
+// IEEE maximumf propagates NaN instead of selecting the non-NaN operand.
+func.def @maximumf_propagates_nan() -> (i1) {
+  %neg = scalar.constant -1.0 : f32
+  %nan = scalar.logf %neg : f32
+  %three = scalar.constant 3.0 : f32
+  %max = scalar.maximumf %three, %nan : f32
+  %r = scalar.isnanf %max : f32
+  func.return %r : i1
+}
+// ----
+func.def @maximumf_propagates_nan() -> (i1) {
+  %r = scalar.constant 1 : i1
+  func.return %r : i1
+}
+
+// ====
+
+// minnumf intentionally has C fmin-style NaN-skipping behavior.
+func.def @minnumf_skips_nan() -> (i1) {
+  %neg = scalar.constant -1.0 : f32
+  %nan = scalar.logf %neg : f32
+  %three = scalar.constant 3.0 : f32
+  %min = scalar.minnumf %nan, %three : f32
+  %r = scalar.isnanf %min : f32
+  func.return %r : i1
+}
+// ----
+func.def @minnumf_skips_nan() -> (i1) {
+  %r = scalar.constant 0 : i1
+  func.return %r : i1
+}

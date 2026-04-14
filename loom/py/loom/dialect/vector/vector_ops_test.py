@@ -31,25 +31,65 @@ def test_vector_seed_mirrors_scalar_spelling_for_lanewise_ops() -> None:
     mirrored_seed = {
         "addi",
         "addf",
+        "absf",
+        "acosf",
+        "acoshf",
+        "asinf",
+        "asinhf",
+        "atan2f",
+        "atanf",
+        "atanhf",
+        "cbrtf",
+        "ceilf",
+        "copysignf",
+        "cosf",
+        "coshf",
         "andi",
         "bitcast",
         "cmpf",
         "cmpi",
         "ctpopi",
+        "divf",
+        "erfcf",
+        "erff",
+        "exp2f",
+        "expf",
+        "expm1f",
         "extf",
         "extsi",
         "extui",
+        "floorf",
         "fmaf",
         "fptosi",
         "fptoui",
         "fptrunc",
+        "log10f",
+        "log1pf",
+        "log2f",
+        "logf",
+        "maximumf",
+        "maxnumf",
+        "minimumf",
+        "minnumf",
         "muli",
         "mulf",
+        "negf",
         "ori",
+        "powf",
+        "remf",
+        "roundevenf",
+        "roundf",
+        "rsqrtf",
         "poison",
         "select",
+        "sinf",
+        "sinhf",
         "sitofp",
         "sqrtf",
+        "subf",
+        "tanf",
+        "tanhf",
+        "truncf",
         "trunci",
         "uitofp",
         "xori",
@@ -148,6 +188,72 @@ def test_vector_float_flags_are_assumptions_not_fastmath() -> None:
         "ninf",
         "nsz",
     ]
+
+
+def test_vector_wave1_float_math_ops_are_lanewise_and_assumption_flagged() -> None:
+    ops = _op_by_name()
+    for name in (
+        "vector.addf",
+        "vector.subf",
+        "vector.mulf",
+        "vector.divf",
+        "vector.remf",
+        "vector.minimumf",
+        "vector.maximumf",
+        "vector.minnumf",
+        "vector.maxnumf",
+        "vector.copysignf",
+        "vector.powf",
+        "vector.atan2f",
+    ):
+        op = ops[name]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+        assert ("HasFloatElement", ("result",)) in constraints
+        assert ("SameType", ("lhs", "rhs", "result")) in constraints
+        assert "Pure" in {trait.name for trait in op.traits}
+        assert "Elementwise" in {trait.name for trait in op.traits}
+        assert op.attrs[0].name == "assumptions"
+
+    for name in (
+        "vector.negf",
+        "vector.absf",
+        "vector.expf",
+        "vector.exp2f",
+        "vector.expm1f",
+        "vector.logf",
+        "vector.log2f",
+        "vector.log10f",
+        "vector.log1pf",
+        "vector.sqrtf",
+        "vector.rsqrtf",
+        "vector.cbrtf",
+        "vector.sinf",
+        "vector.cosf",
+        "vector.tanf",
+        "vector.asinf",
+        "vector.acosf",
+        "vector.atanf",
+        "vector.sinhf",
+        "vector.coshf",
+        "vector.tanhf",
+        "vector.asinhf",
+        "vector.acoshf",
+        "vector.atanhf",
+        "vector.erff",
+        "vector.erfcf",
+        "vector.ceilf",
+        "vector.floorf",
+        "vector.roundf",
+        "vector.roundevenf",
+        "vector.truncf",
+    ):
+        op = ops[name]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+        assert ("HasFloatElement", ("result",)) in constraints
+        assert ("SameType", ("input", "result")) in constraints
+        assert "Pure" in {trait.name for trait in op.traits}
+        assert "Elementwise" in {trait.name for trait in op.traits}
+        assert op.attrs[0].name == "assumptions"
 
 
 def test_vector_atomic_attrs_are_explicit_enums() -> None:

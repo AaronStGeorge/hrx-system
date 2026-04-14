@@ -688,6 +688,17 @@ class VectorBuilders:
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("vector.addf", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def subf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise floating-point subtraction of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.subf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def mulf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations."""
         _operands: list[ValueRef | int] = []
@@ -698,6 +709,103 @@ class VectorBuilders:
         _operands.append(lhs)
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("vector.mulf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def divf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise floating-point division of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change division-by-zero or NaN semantics."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.divf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def remf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise floating-point remainder with C fmod semantics over same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.remf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def negf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise floating-point negation of a same-typed vector operand."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.negf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def absf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise floating-point absolute value of a same-typed vector operand."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.absf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def minimumf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise IEEE 754 floating-point minimum of same-typed vector operands; NaN lanes propagate."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.minimumf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def maximumf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise IEEE 754 floating-point maximum of same-typed vector operands; NaN lanes propagate."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.maximumf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def minnumf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise C99 fmin-style floating-point minimum of same-typed vector operands; NaN lanes select the non-NaN operand."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.minnumf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def maxnumf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise C99 fmax-style floating-point maximum of same-typed vector operands; NaN lanes select the non-NaN operand."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.maxnumf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def copysignf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise copy sign of rhs lanes onto lhs lane magnitudes."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.copysignf", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def fmaf(self, *, assumptions: str | None = None, a: ValueRef, b: ValueRef, c: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise fused multiply-add of same-typed floating-point vectors. Each result lane computes a*b + c with one final rounding; use separate vector.mulf/vector.addf when unfused rounding is required.
@@ -772,6 +880,87 @@ class VectorBuilders:
         _operands.append(input)
         return cast(ValueRef, self._b.build("vector.ctpopi", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def expf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise natural exponential e^x."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.expf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def exp2f(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise base-2 exponential 2^x."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.exp2f", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def expm1f(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise exp(x)-1, preserving the scalar operation's near-zero numerical semantics."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.expm1f", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def logf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise natural logarithm ln(x)."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.logf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def log2f(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise base-2 logarithm."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.log2f", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def log10f(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise base-10 logarithm."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.log10f", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def log1pf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise log(1+x), preserving the scalar operation's near-zero numerical semantics."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.log1pf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def powf(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise floating-point power lhs^rhs over same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.powf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def sqrtf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise floating-point square root. Optional assumptions flags constrain lane value domains for optimization and lowering."""
         _operands: list[ValueRef | int] = []
@@ -781,6 +970,227 @@ class VectorBuilders:
             _attributes["assumptions"] = assumptions
         _operands.append(input)
         return cast(ValueRef, self._b.build("vector.sqrtf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def rsqrtf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise reciprocal square root 1/sqrt(x)."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.rsqrtf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def cbrtf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise cube root."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.cbrtf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def sinf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise sine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.sinf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def cosf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise cosine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.cosf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def tanf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise tangent."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.tanf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def asinf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise arcsine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.asinf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def acosf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise arccosine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.acosf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def atanf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise arctangent."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.atanf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def atan2f(self, *, assumptions: str | None = None, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise two-argument arctangent atan2(lhs, rhs) over same-typed vector operands."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("vector.atan2f", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def sinhf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise hyperbolic sine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.sinhf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def coshf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise hyperbolic cosine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.coshf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def tanhf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise hyperbolic tangent."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.tanhf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def asinhf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise inverse hyperbolic sine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.asinhf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def acoshf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise inverse hyperbolic cosine."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.acoshf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def atanhf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise inverse hyperbolic tangent."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.atanhf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def erff(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise error function, used by GeLU-style activations."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.erff", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def erfcf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise complementary error function 1-erf(x)."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.erfcf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def ceilf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise round toward positive infinity."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.ceilf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def floorf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise round toward negative infinity."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.floorf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def roundf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise round to nearest, ties away from zero."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.roundf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def roundevenf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise round to nearest, ties to even."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.roundevenf", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def truncf(self, *, assumptions: str | None = None, input: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Lanewise round toward zero."""
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if assumptions is not None:
+            _attributes["assumptions"] = assumptions
+        _operands.append(input)
+        return cast(ValueRef, self._b.build("vector.truncf", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def extf(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Lanewise floating-point precision extension. Source and result shapes match exactly; only the floating-point element type widens."""
