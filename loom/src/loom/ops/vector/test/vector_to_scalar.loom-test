@@ -602,3 +602,190 @@ func.def @integer_coordinates(%limit: i32) -> (vector<4xi32>, vector<4xi1>) {
   %mask = vector.from_elements %10, %14, %18, %22 : i1, i1, i1, i1 -> vector<4xi1>
   func.return %lanes, %mask : vector<4xi32>, vector<4xi1>
 }
+
+// ====
+
+// Static aggregate constructors expose lanes but keep vector.from_elements as
+// the explicit vector ABI boundary.
+func.def @static_constant_poison() -> (vector<2xi32>, vector<2xf32>) {
+  %c = vector.constant 7 : vector<2xi32>
+  %p = vector.poison : vector<2xf32>
+  func.return %c, %p : vector<2xi32>, vector<2xf32>
+}
+
+// ----
+func.def @static_constant_poison() -> (vector<2xi32>, vector<2xf32>) {
+  %7 = scalar.constant 7 : i32
+  %8 = scalar.constant 7 : i32
+  %c = vector.from_elements %7, %8 : i32, i32 -> vector<2xi32>
+  %4 = scalar.poison : f32
+  %5 = scalar.poison : f32
+  %p = vector.from_elements %4, %5 : f32, f32 -> vector<2xf32>
+  func.return %c, %p : vector<2xi32>, vector<2xf32>
+}
+
+// ====
+
+// Empty vectors are already the canonical zero-lane aggregate boundary.
+func.def @empty_boundary() -> (vector<0xf32>) {
+  %r = vector.empty : vector<0xf32>
+  func.return %r : vector<0xf32>
+}
+
+// ====
+
+// Static register rearrangements become direct scalar lane selections.
+func.def @static_rearrange(%a: vector<4xi32>, %b: vector<4xi32>, %x: i32) -> (vector<4xi32>) {
+  %wide = vector.concat<0> %a, %b : vector<4xi32>, vector<4xi32> -> vector<8xi32>
+  %slice = vector.slice %wide[2] : vector<8xi32> -> vector<4xi32>
+  %shuffle = vector.shuffle<[3, 2, 1, 0]> %slice : vector<4xi32>
+  %r = vector.insert %x into %shuffle[1] : i32, vector<4xi32> -> vector<4xi32>
+  func.return %r : vector<4xi32>
+}
+
+// ----
+func.def @static_rearrange(%a: vector<4xi32>, %b: vector<4xi32>, %x: i32) -> (vector<4xi32>) {
+  %8 = vector.extract %b[1] : vector<4xi32> -> i32
+  %9 = vector.extract %a[3] : vector<4xi32> -> i32
+  %10 = vector.extract %a[2] : vector<4xi32> -> i32
+  %r = vector.from_elements %8, %x, %9, %10 : i32, i32, i32, i32 -> vector<4xi32>
+  func.return %r : vector<4xi32>
+}
+
+// ====
+
+// Broadcast, transpose, and lane-compatible bitcast compose through the same
+// lane-program path.
+func.def @static_broadcast_transpose_bitcast(%v: vector<2xi32>) -> (vector<2x2xf32>) {
+  %wide = vector.broadcast %v : vector<2xi32> -> vector<2x2xi32>
+  %t = vector.transpose<[1, 0]> %wide : vector<2x2xi32> -> vector<2x2xi32>
+  %r = vector.bitcast %t : vector<2x2xi32> to vector<2x2xf32>
+  func.return %r : vector<2x2xf32>
+}
+
+// ----
+func.def @static_broadcast_transpose_bitcast(%v: vector<2xi32>) -> (vector<2x2xf32>) {
+  %5 = vector.extract %v[0] : vector<2xi32> -> i32
+  %6 = scalar.bitcast %5 : i32 to f32
+  %7 = vector.extract %v[0] : vector<2xi32> -> i32
+  %8 = scalar.bitcast %7 : i32 to f32
+  %9 = vector.extract %v[1] : vector<2xi32> -> i32
+  %10 = scalar.bitcast %9 : i32 to f32
+  %11 = vector.extract %v[1] : vector<2xi32> -> i32
+  %12 = scalar.bitcast %11 : i32 to f32
+  %r = vector.from_elements %6, %8, %10, %12 : f32, f32, f32, f32 -> vector<2x2xf32>
+  func.return %r : vector<2x2xf32>
+}
+
+// ====
+
+// Multi-result deinterleave lowers each result independently and can see
+// through a static interleave producer.
+func.def @static_interleave_deinterleave(%a: vector<2xi8>, %b: vector<2xi8>) -> (vector<4xi8>, vector<2xi8>, vector<2xi8>) {
+  %paired = vector.interleave<0> %a, %b : vector<2xi8>, vector<2xi8> -> vector<4xi8>
+  %even, %odd = vector.deinterleave<0> %paired : vector<4xi8> -> vector<2xi8>, vector<2xi8>
+  func.return %paired, %even, %odd : vector<4xi8>, vector<2xi8>, vector<2xi8>
+}
+
+// ----
+func.def @static_interleave_deinterleave(%a: vector<2xi8>, %b: vector<2xi8>) -> (vector<4xi8>, vector<2xi8>, vector<2xi8>) {
+  %14 = vector.extract %a[0] : vector<2xi8> -> i8
+  %15 = vector.extract %b[0] : vector<2xi8> -> i8
+  %16 = vector.extract %a[1] : vector<2xi8> -> i8
+  %17 = vector.extract %b[1] : vector<2xi8> -> i8
+  %paired = vector.from_elements %14, %15, %16, %17 : i8, i8, i8, i8 -> vector<4xi8>
+  %8 = vector.extract %a[0] : vector<2xi8> -> i8
+  %9 = vector.extract %a[1] : vector<2xi8> -> i8
+  %even = vector.from_elements %8, %9 : i8, i8 -> vector<2xi8>
+  %11 = vector.extract %b[0] : vector<2xi8> -> i8
+  %12 = vector.extract %b[1] : vector<2xi8> -> i8
+  %odd = vector.from_elements %11, %12 : i8, i8 -> vector<2xi8>
+  func.return %paired, %even, %odd : vector<4xi8>, vector<2xi8>, vector<2xi8>
+}
+
+// ====
+
+// Dynamic slice offsets lower to index arithmetic feeding scalar lane extracts.
+func.def @dynamic_slice(%n: index, %offset: index, %v: vector<[%n]xi32>) -> (vector<4xi32>) {
+  %r = vector.slice %v[%offset] : vector<[%n]xi32> -> vector<4xi32>
+  func.return %r : vector<4xi32>
+}
+
+// ----
+func.def @dynamic_slice(%n: index, %offset: index, %v: vector<[%n]xi32>) -> (vector<4xi32>) {
+  %5 = vector.extract %v[%offset] : vector<[%n]xi32> -> i32
+  %6 = index.constant 1 : index
+  %7 = index.add %offset, %6 : index
+  %8 = vector.extract %v[%7] : vector<[%n]xi32> -> i32
+  %9 = index.constant 2 : index
+  %10 = index.add %offset, %9 : index
+  %11 = vector.extract %v[%10] : vector<[%n]xi32> -> i32
+  %12 = index.constant 3 : index
+  %13 = index.add %offset, %12 : index
+  %14 = vector.extract %v[%13] : vector<[%n]xi32> -> i32
+  %r = vector.from_elements %5, %8, %11, %14 : i32, i32, i32, i32 -> vector<4xi32>
+  func.return %r : vector<4xi32>
+}
+
+// ====
+
+// Dynamic transpose uses loops over the result shape and swaps the source
+// coordinates explicitly.
+func.def @dynamic_transpose(%m: index, %n: index, %v: vector<[%m]x[%n]xi32>) -> (vector<[%n]x[%m]xi32>) {
+  %r = vector.transpose<[1, 0]> %v : vector<[%m]x[%n]xi32> -> vector<[%n]x[%m]xi32>
+  func.return %r : vector<[%n]x[%m]xi32>
+}
+
+// ----
+func.def @dynamic_transpose(%m: index, %n: index, %v: vector<[%m]x[%n]xi32>) -> (vector<[%n]x[%m]xi32>) {
+  %5 = vector.constant 0 : vector<[%n]x[%m]xi32>
+  %6 = index.constant 0 : index
+  %7 = index.constant 1 : index
+  %r = scf.for %8 = [%6 to %n step %7](%9 = %5 : vector<[%n]x[%m]xi32>) -> (vector<[%n]x[%m]xi32>) {
+    %11 = index.constant 0 : index
+    %12 = index.constant 1 : index
+    %15 = scf.for %13 = [%11 to %m step %12](%14 = %9 : vector<[%n]x[%m]xi32>) -> (vector<[%n]x[%m]xi32>) {
+      %16 = vector.extract %v[%13, %8] : vector<[%m]x[%n]xi32> -> i32
+      %17 = vector.insert %16 into %14[%8, %13] : i32, vector<[%n]x[%m]xi32> -> vector<[%n]x[%m]xi32>
+      scf.yield %17 : vector<[%n]x[%m]xi32>
+    }
+    scf.yield %15 : vector<[%n]x[%m]xi32>
+  }
+  func.return %r : vector<[%n]x[%m]xi32>
+}
+
+// ====
+
+// Dynamic deinterleave only needs index multiply/add to map result coordinates
+// to even and odd source coordinates.
+func.def @dynamic_deinterleave(%full: index, %half: index, %v: vector<[%full]xi32>) -> (vector<[%half]xi32>, vector<[%half]xi32>) {
+  %even, %odd = vector.deinterleave<0> %v : vector<[%full]xi32> -> vector<[%half]xi32>, vector<[%half]xi32>
+  func.return %even, %odd : vector<[%half]xi32>, vector<[%half]xi32>
+}
+
+// ----
+func.def @dynamic_deinterleave(%full: index, %half: index, %v: vector<[%full]xi32>) -> (vector<[%half]xi32>, vector<[%half]xi32>) {
+  %7 = vector.constant 0 : vector<[%half]xi32>
+  %8 = index.constant 0 : index
+  %9 = index.constant 1 : index
+  %even = scf.for %10 = [%8 to %half step %9](%11 = %7 : vector<[%half]xi32>) -> (vector<[%half]xi32>) {
+    %13 = index.constant 2 : index
+    %14 = index.mul %10, %13 : index
+    %15 = vector.extract %v[%14] : vector<[%full]xi32> -> i32
+    %16 = vector.insert %15 into %11[%10] : i32, vector<[%half]xi32> -> vector<[%half]xi32>
+    scf.yield %16 : vector<[%half]xi32>
+  }
+  %17 = vector.constant 0 : vector<[%half]xi32>
+  %18 = index.constant 0 : index
+  %19 = index.constant 1 : index
+  %odd = scf.for %20 = [%18 to %half step %19](%21 = %17 : vector<[%half]xi32>) -> (vector<[%half]xi32>) {
+    %23 = index.constant 2 : index
+    %24 = index.mul %20, %23 : index
+    %25 = index.constant 1 : index
+    %26 = index.add %24, %25 : index
+    %27 = vector.extract %v[%26] : vector<[%full]xi32> -> i32
+    %28 = vector.insert %27 into %21[%20] : i32, vector<[%half]xi32> -> vector<[%half]xi32>
+    scf.yield %28 : vector<[%half]xi32>
+  }
+  func.return %even, %odd : vector<[%half]xi32>, vector<[%half]xi32>
+}

@@ -31,9 +31,26 @@ SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS = {
 
 VECTOR_TO_SCALAR_DESCRIPTOR_EXCLUSIONS = {
     **SCALAR_TO_VECTOR_SUFFIX_EXCLUSIONS,
-    "bitcast": ("vector.bitcast is a whole-register reinterpretation and needs a dedicated scalarization rule, not a lanewise scalar.bitcast descriptor."),
     "constant": "vector.constant is an aggregate producer, not a lane op.",
     "poison": "vector.poison is a boundary sentinel, not a lane op.",
+}
+
+
+VECTOR_TO_SCALAR_REGISTER_AGGREGATE_MARKERS = {
+    "vector.constant": "loom_vector_to_scalar_lower_static_constant",
+    "vector.poison": "loom_vector_to_scalar_lower_static_poison",
+    "vector.empty": "loom_vector_empty_isa",
+    "vector.broadcast": "LOOM_OP_VECTOR_BROADCAST",
+    "vector.from_elements": "loom_vector_to_scalar_try_from_elements_lane",
+    "vector.extract": "LOOM_OP_VECTOR_EXTRACT",
+    "vector.insert": "LOOM_OP_VECTOR_INSERT",
+    "vector.slice": "LOOM_OP_VECTOR_SLICE",
+    "vector.concat": "LOOM_OP_VECTOR_CONCAT",
+    "vector.transpose": "LOOM_OP_VECTOR_TRANSPOSE",
+    "vector.shuffle": "LOOM_OP_VECTOR_SHUFFLE",
+    "vector.interleave": "LOOM_OP_VECTOR_INTERLEAVE",
+    "vector.deinterleave": "LOOM_OP_VECTOR_DEINTERLEAVE",
+    "vector.bitcast": "LOOM_OP_VECTOR_BITCAST",
 }
 
 
@@ -116,6 +133,17 @@ def test_scalar_vector_lanewise_mirrors_have_scalarization_descriptors() -> None
     assert not missing_descriptors, f"vector mirrors missing vector-to-scalar descriptors: {missing_descriptors}"
     assert not unknown_exclusions, f"unknown vector-to-scalar descriptor exclusions: {unknown_exclusions}"
     assert not stale_exclusions, f"vector-to-scalar descriptor exclusions now have descriptors and should be removed: {stale_exclusions}"
+
+
+def test_register_aggregate_ops_have_vector_to_scalar_coverage() -> None:
+    source = _read_repo_file("loom/src/loom/transforms/vector_to_scalar.c")
+    vector_names = {op.name for op in ALL_VECTOR_OPS}
+
+    unknown = sorted(set(VECTOR_TO_SCALAR_REGISTER_AGGREGATE_MARKERS) - vector_names)
+    missing = [op_name for op_name, marker in sorted(VECTOR_TO_SCALAR_REGISTER_AGGREGATE_MARKERS.items()) if marker not in source]
+
+    assert not unknown, f"unknown vector aggregate scalarization coverage entries: {unknown}"
+    assert not missing, f"vector aggregate ops missing vector-to-scalar coverage: {missing}"
 
 
 def test_poison_ops_are_pure_typed_sentinels_not_constants() -> None:
