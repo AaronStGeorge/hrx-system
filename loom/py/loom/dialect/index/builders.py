@@ -95,6 +95,32 @@ class IndexBuilders:
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("index.mul", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def div(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Logical coordinate quotient for non-negative index values with a positive divisor. Offsets are physical byte counts and cannot be divided with this op; use an explicit layout or storage mapping before deriving physical address pieces.
+
+        Example::
+            %q = index.div %lane, %group_size : index
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("index.div", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def rem(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Logical coordinate remainder for non-negative index values with a positive divisor. Offsets are physical byte counts and cannot use remainder with this op; use an explicit layout or storage mapping before deriving physical address pieces.
+
+        Example::
+            %r = index.rem %lane, %group_size : index
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        return cast(ValueRef, self._b.build("index.rem", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def madd(self, *, a: ValueRef, b: ValueRef, c: ValueRef, result_types: list[Type]) -> ValueRef:
         """Logical coordinate multiply-add: a*b + c. Offsets are physical byte counts and cannot be multiplied with this op.
 

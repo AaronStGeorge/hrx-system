@@ -61,6 +61,26 @@ func.def @mul_rejects_offset(%x: offset, %y: offset) -> (offset) {
 
 // ====
 
+func.def @div_rejects_offset(%x: offset, %y: offset) -> (offset) {
+  // ERROR@+3: TYPE/003 "operand 0"
+  // ERROR@+2: TYPE/003 "operand 1"
+  // ERROR@+1: TYPE/004 "result 0"
+  %r = index.div %x, %y : offset
+  func.return %r : offset
+}
+
+// ====
+
+func.def @rem_rejects_offset(%x: offset, %y: offset) -> (offset) {
+  // ERROR@+3: TYPE/003 "operand 0"
+  // ERROR@+2: TYPE/003 "operand 1"
+  // ERROR@+1: TYPE/004 "result 0"
+  %r = index.rem %x, %y : offset
+  func.return %r : offset
+}
+
+// ====
+
 func.def @madd_rejects_offset(%x: offset, %y: offset, %z: offset) -> (offset) {
   // ERROR@+4: TYPE/003 "operand 0"
   // ERROR@+3: TYPE/003 "operand 1"

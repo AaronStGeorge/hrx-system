@@ -565,6 +565,22 @@ static iree_status_t loom_vector_to_scalar_build_index_binary(
       *out_result = loom_index_mul_result(op);
       return iree_ok_status();
     }
+    case LOOM_OP_INDEX_DIV: {
+      loom_op_t* op = NULL;
+      IREE_RETURN_IF_ERROR(loom_index_div_build(
+          &state->rewriter->builder, lhs, rhs,
+          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
+      *out_result = loom_index_div_result(op);
+      return iree_ok_status();
+    }
+    case LOOM_OP_INDEX_REM: {
+      loom_op_t* op = NULL;
+      IREE_RETURN_IF_ERROR(loom_index_rem_build(
+          &state->rewriter->builder, lhs, rhs,
+          loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &op));
+      *out_result = loom_index_rem_result(op);
+      return iree_ok_status();
+    }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unsupported index binary op kind %u",
@@ -644,6 +660,26 @@ static iree_status_t loom_vector_to_scalar_build_term_binary(
         }
         *out_term = loom_vector_to_scalar_static_term(result);
         return iree_ok_status();
+      case LOOM_OP_INDEX_DIV:
+        if (lhs.static_value < 0 || rhs.static_value <= 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "static index division requires non-negative dividend and "
+              "positive divisor");
+        }
+        *out_term = loom_vector_to_scalar_static_term(lhs.static_value /
+                                                      rhs.static_value);
+        return iree_ok_status();
+      case LOOM_OP_INDEX_REM:
+        if (lhs.static_value < 0 || rhs.static_value <= 0) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "static index remainder requires non-negative dividend and "
+              "positive divisor");
+        }
+        *out_term = loom_vector_to_scalar_static_term(lhs.static_value %
+                                                      rhs.static_value);
+        return iree_ok_status();
       default:
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "unsupported static index term op kind %u",
@@ -673,6 +709,12 @@ static iree_status_t loom_vector_to_scalar_build_term_binary(
         *out_term = rhs;
         return iree_ok_status();
       }
+      if (loom_vector_to_scalar_term_is_static_value(rhs, 1)) {
+        *out_term = lhs;
+        return iree_ok_status();
+      }
+      break;
+    case LOOM_OP_INDEX_DIV:
       if (loom_vector_to_scalar_term_is_static_value(rhs, 1)) {
         *out_term = lhs;
         return iree_ok_status();
@@ -1224,22 +1266,12 @@ static iree_status_t loom_vector_to_scalar_build_shuffle_lane(
 static iree_status_t loom_vector_to_scalar_build_interleave_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar cannot lower dynamic vector.interleave lane "
-        "selection until index div/rem operations are available");
-  }
   int64_t axis = loom_vector_interleave_axis(state->op);
   if (axis < 0 || axis >= indices.rank) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "vector.interleave axis out of range");
   }
   uint8_t axis_u8 = (uint8_t)axis;
-  int64_t axis_index = indices.static_indices[axis_u8];
-  loom_value_id_t source = (axis_index & 1) == 0
-                               ? loom_vector_interleave_even(state->op)
-                               : loom_vector_interleave_odd(state->op);
   loom_vector_to_scalar_index_term_t* source_terms = NULL;
   if (indices.rank > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -1247,16 +1279,58 @@ static iree_status_t loom_vector_to_scalar_build_interleave_lane(
         sizeof(loom_vector_to_scalar_index_term_t), (void**)&source_terms));
   }
   for (uint8_t i = 0; i < indices.rank; ++i) {
-    source_terms[i] =
-        loom_vector_to_scalar_static_term(indices.static_indices[i]);
+    source_terms[i] = loom_vector_to_scalar_lane_term(indices, i);
   }
-  source_terms[axis_u8] = loom_vector_to_scalar_static_term(axis_index / 2);
+
+  loom_vector_to_scalar_index_term_t axis_index = source_terms[axis_u8];
+  loom_vector_to_scalar_index_term_t source_axis_index = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_DIV, axis_index,
+      loom_vector_to_scalar_static_term(2), &source_axis_index));
+  source_terms[axis_u8] = source_axis_index;
 
   loom_vector_to_scalar_index_list_t source_indices = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_to_index_list(
       state, source_terms, indices.rank, &source_indices));
-  return loom_vector_to_scalar_materialize_lane(state, source, source_indices,
-                                                out_lane);
+
+  if (!loom_vector_to_scalar_indices_are_dynamic(indices)) {
+    loom_value_id_t source = (indices.static_indices[axis_u8] & 1) == 0
+                                 ? loom_vector_interleave_even(state->op)
+                                 : loom_vector_interleave_odd(state->op);
+    return loom_vector_to_scalar_materialize_lane(state, source, source_indices,
+                                                  out_lane);
+  }
+
+  loom_value_id_t even_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_interleave_even(state->op), source_indices,
+      &even_lane));
+  loom_value_id_t odd_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_interleave_odd(state->op), source_indices, &odd_lane));
+
+  loom_vector_to_scalar_index_term_t remainder = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_REM, axis_index,
+      loom_vector_to_scalar_static_term(2), &remainder));
+  loom_value_id_t remainder_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_term_value(state, remainder, &remainder_value));
+  loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 0, &zero));
+  loom_op_t* is_even_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_cmp_build(
+      &state->rewriter->builder, LOOM_INDEX_CMP_PREDICATE_EQ, remainder_value,
+      zero, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location, &is_even_op));
+  loom_op_t* select_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_select_build(
+      &state->rewriter->builder, loom_index_cmp_result(is_even_op), even_lane,
+      odd_lane, state->result_scalar_type, state->location, &select_op));
+  *out_lane = loom_scalar_select_result(select_op);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_vector_to_scalar_build_deinterleave_lane(

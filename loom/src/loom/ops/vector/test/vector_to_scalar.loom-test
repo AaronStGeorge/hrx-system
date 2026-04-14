@@ -789,3 +789,33 @@ func.def @dynamic_deinterleave(%full: index, %half: index, %v: vector<[%full]xi3
   }
   func.return %even, %odd : vector<[%half]xi32>, vector<[%half]xi32>
 }
+
+// ====
+
+// Dynamic interleave uses quotient/remainder index ops to select the source
+// vector and source lane for each result lane.
+func.def @dynamic_interleave(%full: index, %half: index, %even: vector<[%half]xi32>, %odd: vector<[%half]xi32>) -> (vector<[%full]xi32>) {
+  %r = vector.interleave<0> %even, %odd : vector<[%half]xi32>, vector<[%half]xi32> -> vector<[%full]xi32>
+  func.return %r : vector<[%full]xi32>
+}
+
+// ----
+func.def @dynamic_interleave(%full: index, %half: index, %even: vector<[%half]xi32>, %odd: vector<[%half]xi32>) -> (vector<[%full]xi32>) {
+  %6 = vector.constant 0 : vector<[%full]xi32>
+  %7 = index.constant 0 : index
+  %8 = index.constant 1 : index
+  %r = scf.for %9 = [%7 to %full step %8](%10 = %6 : vector<[%full]xi32>) -> (vector<[%full]xi32>) {
+    %12 = index.constant 2 : index
+    %13 = index.div %9, %12 : index
+    %14 = vector.extract %even[%13] : vector<[%half]xi32> -> i32
+    %15 = vector.extract %odd[%13] : vector<[%half]xi32> -> i32
+    %16 = index.constant 2 : index
+    %17 = index.rem %9, %16 : index
+    %18 = index.constant 0 : index
+    %19 = index.cmp eq, %17, %18 : index
+    %20 = scalar.select %19, %14, %15 : i32
+    %21 = vector.insert %20 into %10[%9] : i32, vector<[%full]xi32> -> vector<[%full]xi32>
+    scf.yield %21 : vector<[%full]xi32>
+  }
+  func.return %r : vector<[%full]xi32>
+}

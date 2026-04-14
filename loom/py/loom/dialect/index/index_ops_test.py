@@ -30,6 +30,8 @@ class TestIndexDialect:
             "index.add",
             "index.sub",
             "index.mul",
+            "index.div",
+            "index.rem",
             "index.madd",
             "index.cmp",
             "index.select",
@@ -62,7 +64,7 @@ class TestIndexDialect:
             assert op.results[0].type_constraint == ADDRESS
 
     def test_multiply_arithmetic_is_index_typed(self) -> None:
-        for name in ("index.mul",):
+        for name in ("index.mul", "index.div", "index.rem"):
             op = _ops()[name]
             assert op.operands[0].type_constraint == INDEX
             assert op.operands[1].type_constraint == INDEX

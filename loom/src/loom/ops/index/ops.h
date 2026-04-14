@@ -24,10 +24,12 @@ enum {
   LOOM_OP_INDEX_ADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 3),
   LOOM_OP_INDEX_SUB = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 4),
   LOOM_OP_INDEX_MUL = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 5),
-  LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
-  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
-  LOOM_OP_INDEX_SELECT = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 8),
-  LOOM_OP_INDEX_COUNT_ = 9,
+  LOOM_OP_INDEX_DIV = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
+  LOOM_OP_INDEX_REM = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
+  LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 8),
+  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 9),
+  LOOM_OP_INDEX_SELECT = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 10),
+  LOOM_OP_INDEX_COUNT_ = 11,
 };
 
 // Address-domain comparison predicates.
@@ -150,6 +152,38 @@ iree_status_t loom_index_mul_build(
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 iree_status_t loom_index_mul_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_DIV: Logical coordinate quotient for non-negative index values with a positive divisor. Offsets are physical byte counts and cannot be divided with this op; use an explicit layout or storage mapping before deriving physical address pieces.
+// %q = index.div %lane, %group_size : index
+LOOM_DEFINE_ISA(loom_index_div_isa, LOOM_OP_INDEX_DIV)
+LOOM_DEFINE_OPERAND(loom_index_div_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_div_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_div_result, 0)
+iree_status_t loom_index_div_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_div_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_INDEX_REM: Logical coordinate remainder for non-negative index values with a positive divisor. Offsets are physical byte counts and cannot use remainder with this op; use an explicit layout or storage mapping before deriving physical address pieces.
+// %r = index.rem %lane, %group_size : index
+LOOM_DEFINE_ISA(loom_index_rem_isa, LOOM_OP_INDEX_REM)
+LOOM_DEFINE_OPERAND(loom_index_rem_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_index_rem_rhs, 1)
+LOOM_DEFINE_RESULT(loom_index_rem_result, 0)
+iree_status_t loom_index_rem_build(
+    loom_builder_t* builder, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_rem_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

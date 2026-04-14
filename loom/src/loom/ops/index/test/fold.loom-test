@@ -104,6 +104,44 @@ func.def @madd_divisibility(%x: index, %y: index) -> (i64) {
 
 // ====
 
+// index.div by an exact positive constant scales known divisibility down.
+func.def @div_divisibility(%x: index) -> (i64) {
+  %c64 = index.constant 64 : index
+  %c8 = index.constant 8 : index
+  %aligned = index.mul %x, %c64 : index
+  %q = index.div %aligned, %c8 : index
+  %div = test.fact_divisor %q : index -> i64
+  func.return %div : i64
+}
+// ----
+func.def @div_divisibility(%x: index) -> (i64) {
+  %div = scalar.constant 8 : i64
+  func.return %div : i64
+}
+
+// ====
+
+// index.rem by an exact positive divisor folds to zero when the dividend is
+// known divisible by that divisor.
+func.def @rem_exact_zero(%x: index) -> (i64, i64) {
+  %c64 = index.constant 64 : index
+  %c8 = index.constant 8 : index
+  %x2 = index.assume %x [range(%x, 0, 4096)] : index
+  %aligned = index.mul %x2, %c64 : index
+  %r = index.rem %aligned, %c8 : index
+  %lo = test.fact_range_lo %r : index -> i64
+  %hi = test.fact_range_hi %r : index -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @rem_exact_zero(%x: index) -> (i64, i64) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 0 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
 // index.cast preserves facts across address/integer boundaries.
 func.def @cast_preserves_exact() -> (i64) {
   %a = index.constant 100 : index

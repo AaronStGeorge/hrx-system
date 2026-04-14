@@ -177,6 +177,34 @@ index_mul = binary_op(
     examples=["%r = index.mul %lhs, %rhs : index"],
 )
 
+index_div = binary_op(
+    "index.div",
+    group=index_ops,
+    type_constraint=INDEX,
+    doc=(
+        "Logical coordinate quotient for non-negative index values with a "
+        "positive divisor. Offsets are physical byte counts and cannot be "
+        "divided with this op; use an explicit layout or storage mapping "
+        "before deriving physical address pieces."
+    ),
+    facts="loom_index_div_facts",
+    examples=["%q = index.div %lane, %group_size : index"],
+)
+
+index_rem = binary_op(
+    "index.rem",
+    group=index_ops,
+    type_constraint=INDEX,
+    doc=(
+        "Logical coordinate remainder for non-negative index values with a "
+        "positive divisor. Offsets are physical byte counts and cannot use "
+        "remainder with this op; use an explicit layout or storage mapping "
+        "before deriving physical address pieces."
+    ),
+    facts="loom_index_rem_facts",
+    examples=["%r = index.rem %lane, %group_size : index"],
+)
+
 index_madd = Op(
     "index.madd",
     group=index_ops,
@@ -258,6 +286,8 @@ ALL_INDEX_OPS: tuple[Op, ...] = (
     index_add,
     index_sub,
     index_mul,
+    index_div,
+    index_rem,
     index_madd,
     index_cmp,
     index_select,
