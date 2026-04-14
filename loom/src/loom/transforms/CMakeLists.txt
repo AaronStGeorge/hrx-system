@@ -189,6 +189,7 @@ loom_cc_library(
     "vector_to_scalar_reductions.c"
     "vector_to_scalar_structural.c"
     "vector_to_scalar_tables.c"
+    "vector_to_scalar_terms.c"
   DEPS
     ::pass
     ::rewriter

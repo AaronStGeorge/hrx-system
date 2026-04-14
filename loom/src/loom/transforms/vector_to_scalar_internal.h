@@ -157,6 +157,10 @@ iree_status_t loom_vector_to_scalar_dim_bound(
     loom_vector_to_scalar_state_t* state, loom_type_t vector_type, uint8_t axis,
     loom_value_id_t* out_bound);
 
+iree_status_t loom_vector_to_scalar_build_index_binary(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t lhs, loom_value_id_t rhs, loom_value_id_t* out_result);
+
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_static_term(
     int64_t value);
 
@@ -198,6 +202,11 @@ iree_status_t loom_vector_to_scalar_linear_ordinal_term(
 iree_status_t loom_vector_to_scalar_term_value(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_term_t term, loom_value_id_t* out_value);
+
+iree_status_t loom_vector_to_scalar_ordinal_for_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_type_t result_type,
+    loom_value_id_t* out_ordinal);
 
 int64_t loom_vector_to_scalar_linear_ordinal_static(loom_type_t vector_type,
                                                     const int64_t* indices);

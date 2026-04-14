@@ -13,18 +13,6 @@
 // Static aggregate lowering
 //===----------------------------------------------------------------------===//
 
-void loom_vector_to_scalar_indices_from_ordinal(loom_type_t vector_type,
-                                                iree_host_size_t ordinal,
-                                                int64_t* indices) {
-  uint8_t rank = loom_type_rank(vector_type);
-  for (uint8_t reverse_axis = 0; reverse_axis < rank; ++reverse_axis) {
-    uint8_t axis = (uint8_t)(rank - reverse_axis - 1);
-    uint64_t dim = loom_type_dim_static_size_at(vector_type, axis);
-    indices[axis] = dim == 0 ? 0 : (int64_t)(ordinal % dim);
-    if (dim != 0) ordinal /= dim;
-  }
-}
-
 static iree_status_t loom_vector_to_scalar_lower_static_aggregate(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
   iree_host_size_t element_count = 0;
