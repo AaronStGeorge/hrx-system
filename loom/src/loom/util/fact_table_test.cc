@@ -313,5 +313,67 @@ TEST_F(FactTableTest, VectorPrefixMaskExtensionRoundTrips) {
   EXPECT_EQ(result.step.range_lo, 1);
 }
 
+TEST_F(FactTableTest, EncodingSummaryDenseLayoutRoundTrips) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_fact_encoding_summary_t summary = {
+      .role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
+      .static_spec_encoding_id = 0,
+      .address_layout =
+          {
+              .kind = LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE,
+              .rank = 0,
+              .strides = nullptr,
+          },
+  };
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(
+      loom_value_facts_make_encoding_summary(&table.context, summary, &facts));
+
+  loom_value_fact_encoding_summary_t result = {};
+  EXPECT_TRUE(
+      loom_value_facts_query_encoding_summary(&table.context, facts, &result));
+  EXPECT_EQ(result.role, LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+  EXPECT_EQ(result.address_layout.kind, LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE);
+}
+
+TEST_F(FactTableTest, EncodingSummaryStridedLayoutInternsStrideFacts) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 0));
+
+  loom_value_facts_t strides[] = {
+      loom_value_facts_make(8, 16, 8),
+      loom_value_facts_exact_i64(1),
+  };
+  loom_value_fact_encoding_summary_t summary = {
+      .role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
+      .static_spec_encoding_id = 0,
+      .address_layout =
+          {
+              .kind = LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED,
+              .rank = IREE_ARRAYSIZE(strides),
+              .strides = strides,
+          },
+  };
+  loom_value_facts_t lhs = loom_value_facts_unknown();
+  loom_value_facts_t rhs = loom_value_facts_unknown();
+  IREE_ASSERT_OK(
+      loom_value_facts_make_encoding_summary(&table.context, summary, &lhs));
+  IREE_ASSERT_OK(
+      loom_value_facts_make_encoding_summary(&table.context, summary, &rhs));
+
+  EXPECT_EQ(lhs.extension_id, rhs.extension_id);
+  loom_value_fact_encoding_summary_t result = {};
+  EXPECT_TRUE(
+      loom_value_facts_query_encoding_summary(&table.context, lhs, &result));
+  EXPECT_EQ(result.address_layout.kind, LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED);
+  EXPECT_EQ(result.address_layout.rank, IREE_ARRAYSIZE(strides));
+  EXPECT_NE(result.address_layout.strides, strides);
+  EXPECT_EQ(result.address_layout.strides[0].range_lo, 8);
+  EXPECT_EQ(result.address_layout.strides[0].range_hi, 16);
+  EXPECT_EQ(result.address_layout.strides[1].range_lo, 1);
+}
+
 }  // namespace
 }  // namespace loom

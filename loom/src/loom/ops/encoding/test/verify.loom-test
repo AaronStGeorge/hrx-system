@@ -40,6 +40,22 @@ func.def @encoding_isa_result_must_be_i1(%enc: encoding<schema>) {
 
 // ====
 
+func.def @layout_assume_strided_rejects_negative_rank(%layout: encoding<layout>) {
+  // ERROR@+1: STRUCTURE/014 "rank" "-1" "rank in [0, 255]"
+  %strided = encoding.layout.assume.strided %layout {rank = -1} : encoding<layout>
+  func.return
+}
+
+// ====
+
+func.def @assume_spec_rejects_role_mismatch(%schema: encoding<schema>) {
+  // ERROR@+1: ENCODING/012 "dense" "encoding<schema>" "encoding<layout>"
+  %bad = encoding.assume.spec %schema, #dense : encoding<schema>
+  func.return
+}
+
+// ====
+
 // Numeric transform descriptors are verified when declared, even before a
 // vector.transform use site sees them.
 func.def @numeric_transform_unknown_family_define_only() {

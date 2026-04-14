@@ -22,7 +22,10 @@ enum {
   LOOM_OP_ENCODING_LAYOUT_STRIDED = LOOM_OP_KIND(LOOM_DIALECT_ENCODING, 1),
   LOOM_OP_ENCODING_DEFINE = LOOM_OP_KIND(LOOM_DIALECT_ENCODING, 2),
   LOOM_OP_ENCODING_ISA = LOOM_OP_KIND(LOOM_DIALECT_ENCODING, 3),
-  LOOM_OP_ENCODING_COUNT_ = 4,
+  LOOM_OP_ENCODING_LAYOUT_ASSUME_DENSE = LOOM_OP_KIND(LOOM_DIALECT_ENCODING, 4),
+  LOOM_OP_ENCODING_LAYOUT_ASSUME_STRIDED = LOOM_OP_KIND(LOOM_DIALECT_ENCODING, 5),
+  LOOM_OP_ENCODING_ASSUME_SPEC = LOOM_OP_KIND(LOOM_DIALECT_ENCODING, 6),
+  LOOM_OP_ENCODING_COUNT_ = 7,
 };
 
 // LOOM_OP_ENCODING_LAYOUT_DENSE: Construct a dense row-major address layout. The consuming view type provides the rank and logical extents.
@@ -34,6 +37,11 @@ iree_status_t loom_encoding_layout_dense_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_encoding_layout_dense_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // LOOM_OP_ENCODING_LAYOUT_STRIDED: Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list.
 // %layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>
@@ -50,6 +58,11 @@ iree_status_t loom_encoding_layout_strided_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_encoding_layout_strided_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_encoding_layout_strided_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -69,6 +82,11 @@ iree_status_t loom_encoding_define_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_encoding_define_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 iree_status_t loom_encoding_define_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -86,6 +104,67 @@ iree_status_t loom_encoding_isa_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+
+// LOOM_OP_ENCODING_LAYOUT_ASSUME_DENSE: Refine an existing address-layout encoding value with the fact that it is dense row-major. The result is the same encoding value in SSA form with stronger local facts.
+// %dense = encoding.layout.assume.dense %layout : encoding<layout>
+LOOM_DEFINE_ISA(loom_encoding_layout_assume_dense_isa, LOOM_OP_ENCODING_LAYOUT_ASSUME_DENSE)
+LOOM_DEFINE_OPERAND(loom_encoding_layout_assume_dense_layout, 0)
+LOOM_DEFINE_RESULT(loom_encoding_layout_assume_dense_result, 0)
+iree_status_t loom_encoding_layout_assume_dense_build(
+    loom_builder_t* builder,
+    loom_value_id_t layout,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_encoding_layout_assume_dense_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_ENCODING_LAYOUT_ASSUME_STRIDED: Refine an existing address-layout encoding value with the fact that it is strided and has the given rank. Per-axis stride values remain unknown unless a concrete encoding.layout.strided value is available.
+// %strided = encoding.layout.assume.strided %layout {rank = 2} : encoding<layout>
+LOOM_DEFINE_ISA(loom_encoding_layout_assume_strided_isa, LOOM_OP_ENCODING_LAYOUT_ASSUME_STRIDED)
+LOOM_DEFINE_OPERAND(loom_encoding_layout_assume_strided_layout, 0)
+LOOM_DEFINE_RESULT(loom_encoding_layout_assume_strided_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_encoding_layout_assume_strided_rank, 0)
+iree_status_t loom_encoding_layout_assume_strided_build(
+    loom_builder_t* builder,
+    loom_value_id_t layout,
+    int64_t rank,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_encoding_layout_assume_strided_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_encoding_layout_assume_strided_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_ENCODING_ASSUME_SPEC: Refine an existing encoding value with an exact static encoding specification. Dynamic values remain ordinary SSA operands elsewhere; this op only states the selected static family and static parameters.
+// %schema2 = encoding.assume.spec %schema, #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+LOOM_DEFINE_ISA(loom_encoding_assume_spec_isa, LOOM_OP_ENCODING_ASSUME_SPEC)
+LOOM_DEFINE_OPERAND(loom_encoding_assume_spec_enc, 0)
+LOOM_DEFINE_RESULT(loom_encoding_assume_spec_result, 0)
+LOOM_DEFINE_ATTR_ENCODING(loom_encoding_assume_spec_spec, 0)
+iree_status_t loom_encoding_assume_spec_build(
+    loom_builder_t* builder,
+    loom_value_id_t enc,
+    uint16_t spec,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_encoding_assume_spec_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_encoding_assume_spec_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the encoding dialect.
 const loom_op_vtable_t* const* loom_encoding_dialect_vtables(

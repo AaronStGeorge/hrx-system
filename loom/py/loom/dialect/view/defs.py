@@ -106,6 +106,40 @@ view_subview = Op(
 )
 
 # ============================================================================
+# view.refine — type/fact refinement for an existing view
+# ============================================================================
+
+view_refine = Op(
+    name="view.refine",
+    group=view_ops,
+    doc=(
+        "Refine the static type information attached to an existing view while "
+        "preserving the same storage root and byte base. This is an explicit "
+        "SSA assertion point for layout, shape, and encoding facts discovered "
+        "or required by earlier analysis."
+    ),
+    operands=[Operand("source", VIEW, doc="Source view to refine.")],
+    results=[Result("result", VIEW, doc="Same view with refined type information.")],
+    constraints=[
+        SameElementType("source", "result"),
+        RanksMatch("source", "result"),
+    ],
+    traits=[PURE],
+    verify="loom_view_refine_verify",
+    facts="loom_view_refine_facts",
+    format=[
+        Ref("source"),
+        COLON,
+        TypeOf("source"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%refined = view.refine %view : view<[%M]xf32, %layout> -> view<16xf32, #dense>",
+    ],
+)
+
+# ============================================================================
 # view.prefetch — discardable compiler hint for a future view access
 # ============================================================================
 
@@ -149,4 +183,4 @@ view_prefetch = Op(
 # Registry
 # ============================================================================
 
-ALL_VIEW_OPS: tuple[Op, ...] = (view_subview, view_prefetch)
+ALL_VIEW_OPS: tuple[Op, ...] = (view_subview, view_prefetch, view_refine)

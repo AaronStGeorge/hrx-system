@@ -62,3 +62,15 @@ class ViewBuilders:
                 _static.append(_idx)
         _attributes["static_indices"] = _static
         self._b.build("view.prefetch", _operands, attributes=_attributes, regions=_regions)
+
+    def refine(self, *, source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Refine the static type information attached to an existing view while preserving the same storage root and byte base. This is an explicit SSA assertion point for layout, shape, and encoding facts discovered or required by earlier analysis.
+
+        Example::
+            %refined = view.refine %view : view<[%M]xf32, %layout> -> view<16xf32, #dense>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("view.refine", _operands, results=results, attributes=_attributes, regions=_regions))

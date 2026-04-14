@@ -19,7 +19,7 @@ class EncodingBuilders:
     def __init__(self, builder: IRBuilder) -> None:
         self._b = builder
 
-    def dense(self, *, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def layout_dense(self, *, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Construct a dense row-major address layout. The consuming view type provides the rank and logical extents.
 
         Example::
@@ -30,7 +30,7 @@ class EncodingBuilders:
         _regions: list[Region] = []
         return cast(ValueRef, self._b.build("encoding.layout.dense", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def strided(self, *, strides: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+    def layout_strided(self, *, strides: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
         """Construct an address layout from per-dimension element strides. Static and dynamic stride values are interleaved in one bracket list.
 
         Example::
@@ -80,3 +80,41 @@ class EncodingBuilders:
         _attributes["category"] = category
         _operands.append(enc)
         return cast(ValueRef, self._b.build("encoding.isa", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def layout_assume_dense(self, *, layout: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Refine an existing address-layout encoding value with the fact that it is dense row-major. The result is the same encoding value in SSA form with stronger local facts.
+
+        Example::
+            %dense = encoding.layout.assume.dense %layout : encoding<layout>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(layout)
+        return cast(ValueRef, self._b.build("encoding.layout.assume.dense", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def layout_assume_strided(self, *, layout: ValueRef, rank: int, result_types: list[Type]) -> ValueRef:
+        """Refine an existing address-layout encoding value with the fact that it is strided and has the given rank. Per-axis stride values remain unknown unless a concrete encoding.layout.strided value is available.
+
+        Example::
+            %strided = encoding.layout.assume.strided %layout {rank = 2} : encoding<layout>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["rank"] = rank
+        _operands.append(layout)
+        return cast(ValueRef, self._b.build("encoding.layout.assume.strided", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def spec(self, *, enc: ValueRef, spec: Any, result_types: list[Type]) -> ValueRef:
+        """Refine an existing encoding value with an exact static encoding specification. Dynamic values remain ordinary SSA operands elsewhere; this op only states the selected static family and static parameters.
+
+        Example::
+            %schema2 = encoding.assume.spec %schema, #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["spec"] = spec
+        _operands.append(enc)
+        return cast(ValueRef, self._b.build("encoding.assume.spec", _operands, results=result_types, attributes=_attributes, regions=_regions))

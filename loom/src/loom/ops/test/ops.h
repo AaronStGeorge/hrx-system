@@ -56,16 +56,18 @@ enum {
   LOOM_OP_TEST_FACT_POWER_OF_TWO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 35),
   LOOM_OP_TEST_FACT_IS_VECTOR_IOTA = LOOM_OP_KIND(LOOM_DIALECT_TEST, 36),
   LOOM_OP_TEST_FACT_IS_VECTOR_PREFIX_MASK = LOOM_OP_KIND(LOOM_DIALECT_TEST, 37),
-  LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 38),
-  LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 39),
-  LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 40),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 41),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 42),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 43),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 44),
-  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 45),
-  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 46),
-  LOOM_OP_TEST_COUNT_ = 47,
+  LOOM_OP_TEST_FACT_ENCODING_LAYOUT_KIND = LOOM_OP_KIND(LOOM_DIALECT_TEST, 38),
+  LOOM_OP_TEST_FACT_ENCODING_LAYOUT_STRIDE_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 39),
+  LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 40),
+  LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 41),
+  LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 42),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 43),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 44),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 45),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 46),
+  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 47),
+  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 48),
+  LOOM_OP_TEST_COUNT_ = 49,
 };
 
 // Function visibility. Absent (0) means private.
@@ -690,6 +692,42 @@ iree_status_t loom_test_fact_is_vector_prefix_mask_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_test_fact_is_vector_prefix_mask_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_ENCODING_LAYOUT_KIND: Exposes an encoding-summary address-layout kind as an i64 constant.
+// %kind = test.fact_encoding_layout_kind %layout : encoding<layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_encoding_layout_kind_isa, LOOM_OP_TEST_FACT_ENCODING_LAYOUT_KIND)
+LOOM_DEFINE_OPERAND(loom_test_fact_encoding_layout_kind_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_encoding_layout_kind_result, 0)
+iree_status_t loom_test_fact_encoding_layout_kind_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_encoding_layout_kind_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_ENCODING_LAYOUT_STRIDE_HI: Exposes an encoding-summary strided-layout stride upper bound as an i64 constant.
+// %hi = test.fact_encoding_layout_stride_hi %layout[0] : encoding<layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_encoding_layout_stride_hi_isa, LOOM_OP_TEST_FACT_ENCODING_LAYOUT_STRIDE_HI)
+LOOM_DEFINE_OPERAND(loom_test_fact_encoding_layout_stride_hi_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_encoding_layout_stride_hi_result, 0)
+LOOM_DEFINE_ATTR_I64(loom_test_fact_encoding_layout_stride_hi_axis, 0)
+iree_status_t loom_test_fact_encoding_layout_stride_hi_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    int64_t axis,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_encoding_layout_stride_hi_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

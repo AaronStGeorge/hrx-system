@@ -28,14 +28,48 @@
 extern "C" {
 #endif
 
-// Resolves |value_id| to the dynamic address-layout op that memory address
-// arithmetic should use. Direct `encoding.layout.*` values resolve to their
-// defining op. `#physical_storage` values resolve through their `layout`
-// parameter. Returns false when the value is not a known dynamic address layout
-// or has only a static nested layout.
-bool loom_encoding_resolve_address_layout_op(const loom_module_t* module,
-                                             loom_value_id_t value_id,
-                                             const loom_op_t** out_layout_op);
+typedef struct loom_fact_context_t loom_fact_context_t;
+typedef struct loom_value_facts_t loom_value_facts_t;
+typedef struct loom_value_fact_address_layout_t
+    loom_value_fact_address_layout_t;
+
+// Maximum static layout rank decoded into caller-provided stride storage.
+// Shaped type ranks are packed in four header bits, so no well-formed consumer
+// can use more than 15 layout strides.
+#define LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK 15
+
+// Decodes a static address-layout encoding into a summary. Strided layouts
+// write per-axis facts into caller-owned |stride_storage| and point
+// |out_layout->strides| at that storage. Returns false when |encoding_id| is
+// not a known address-layout encoding, recursion exceeds the safety bound, or
+// the caller did not provide enough stride storage.
+bool loom_encoding_query_static_address_layout(
+    const loom_module_t* module, uint16_t encoding_id,
+    loom_value_facts_t* stride_storage, iree_host_size_t stride_capacity,
+    loom_value_fact_address_layout_t* out_layout);
+
+// Resolves a local SSA encoding value to an address-layout summary by walking
+// through defining encoding ops. This recognizes direct layout ops, local
+// layout assumptions, physical-storage composition, and exact static-spec
+// assumptions. It deliberately does not inspect callers or global use sites;
+// block arguments require analysis facts queried by
+// loom_encoding_query_type_address_layout().
+bool loom_encoding_query_value_address_layout(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_value_facts_t* stride_storage, iree_host_size_t stride_capacity,
+    loom_value_fact_address_layout_t* out_layout);
+
+// Queries a shaped type's address-layout summary from static encodings or
+// context-owned SSA encoding facts. This does not walk call graphs or inspect
+// callers; block-argument encodings only resolve when a previous analysis has
+// seeded facts for them in |context|. Strided static layouts use caller-owned
+// |stride_storage| with the same lifetime rules as
+// loom_encoding_query_static_address_layout().
+bool loom_encoding_query_type_address_layout(
+    const loom_fact_context_t* context, const loom_module_t* module,
+    loom_type_t type, loom_value_facts_t* stride_storage,
+    iree_host_size_t stride_capacity,
+    loom_value_fact_address_layout_t* out_layout);
 
 #ifdef __cplusplus
 }

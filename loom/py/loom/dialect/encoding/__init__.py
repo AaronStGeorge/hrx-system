@@ -18,8 +18,11 @@ reference %enc rather than #q8_0<block=32>.
 
 from loom.dialect.encoding.defs import (
     ALL_ENCODING_OPS,
+    encoding_assume_spec,
     encoding_define,
     encoding_isa,
+    encoding_layout_assume_dense,
+    encoding_layout_assume_strided,
     encoding_layout_dense,
     encoding_layout_strided,
     encoding_ops,
@@ -30,6 +33,9 @@ __all__ = [
     "ALL_ENCODING_OPS",
     "encoding_layout_dense",
     "encoding_layout_strided",
+    "encoding_layout_assume_dense",
+    "encoding_layout_assume_strided",
     "encoding_define",
     "encoding_isa",
+    "encoding_assume_spec",
 ]

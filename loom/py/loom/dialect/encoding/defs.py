@@ -10,6 +10,7 @@ from loom.assembly import (
     COLON,
     COMMA,
     Attr,
+    AttrDict,
     IndexList,
     OperandDict,
     Ref,
@@ -21,6 +22,7 @@ from loom.dsl import (
     ANY_ENCODING,
     ATTR_TYPE_DICT,
     ATTR_TYPE_ENCODING,
+    ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
     ATTR_TYPE_STRING,
     ENCODING_LAYOUT,
@@ -32,6 +34,7 @@ from loom.dsl import (
     Op,
     Operand,
     Result,
+    SameType,
 )
 
 # ============================================================================
@@ -50,6 +53,7 @@ encoding_layout_dense = Op(
     doc=("Construct a dense row-major address layout. The consuming view type provides the rank and logical extents."),
     results=[Result("result", ENCODING_LAYOUT, doc="Dense address-layout value.")],
     traits=[PURE],
+    facts="loom_encoding_layout_dense_facts",
     format=[COLON, ResultType("result")],
     examples=[
         "%layout = encoding.layout.dense : encoding<layout>",
@@ -75,6 +79,7 @@ encoding_layout_strided = Op(
     ],
     traits=[PURE],
     verify="loom_encoding_layout_strided_verify",
+    facts="loom_encoding_layout_strided_facts",
     format=[
         IndexList("strides", "static_strides"),
         COLON,
@@ -83,6 +88,55 @@ encoding_layout_strided = Op(
     examples=[
         "%layout = encoding.layout.strided [%row_stride, 1] : encoding<layout>",
         "%layout = encoding.layout.strided [4096, 1] : encoding<layout>",
+    ],
+)
+
+# ============================================================================
+# encoding.layout.assume.* — local layout fact refinement
+# ============================================================================
+
+encoding_layout_assume_dense = Op(
+    name="encoding.layout.assume.dense",
+    group=encoding_ops,
+    doc=("Refine an existing address-layout encoding value with the fact that it is dense row-major. The result is the same encoding value in SSA form with stronger local facts."),
+    operands=[Operand("layout", ENCODING_LAYOUT, doc="Address-layout value to refine.")],
+    results=[Result("result", ENCODING_LAYOUT, doc="Layout value with dense-layout facts.")],
+    constraints=[SameType("layout", "result")],
+    traits=[PURE],
+    facts="loom_encoding_layout_assume_dense_facts",
+    format=[
+        Ref("layout"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%dense = encoding.layout.assume.dense %layout : encoding<layout>",
+    ],
+)
+
+encoding_layout_assume_strided = Op(
+    name="encoding.layout.assume.strided",
+    group=encoding_ops,
+    doc=(
+        "Refine an existing address-layout encoding value with the fact that "
+        "it is strided and has the given rank. Per-axis stride values remain "
+        "unknown unless a concrete encoding.layout.strided value is available."
+    ),
+    operands=[Operand("layout", ENCODING_LAYOUT, doc="Address-layout value to refine.")],
+    results=[Result("result", ENCODING_LAYOUT, doc="Layout value with strided-layout facts.")],
+    attrs=[AttrDef("rank", ATTR_TYPE_I64, doc="Required strided layout rank.")],
+    constraints=[SameType("layout", "result")],
+    traits=[PURE],
+    verify="loom_encoding_layout_assume_strided_verify",
+    facts="loom_encoding_layout_assume_strided_facts",
+    format=[
+        Ref("layout"),
+        AttrDict(),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%strided = encoding.layout.assume.strided %layout {rank = 2} : encoding<layout>",
     ],
 )
 
@@ -109,6 +163,7 @@ encoding_define = Op(
     ],
     traits=[PURE],
     verify="loom_encoding_define_verify",
+    facts="loom_encoding_define_facts",
     format=[
         Attr("spec"),
         OperandDict("params", "param_names"),
@@ -118,6 +173,37 @@ encoding_define = Op(
     examples=[
         "%enc = encoding.define #q8_0<block=32> : encoding<schema>",
         "%enc = encoding.define #q8_0<block=32> {group_size = %group_size : index} : encoding<schema>",
+    ],
+)
+
+# ============================================================================
+# encoding.assume.spec — local exact static encoding refinement
+# ============================================================================
+
+encoding_assume_spec = Op(
+    name="encoding.assume.spec",
+    group=encoding_ops,
+    doc=(
+        "Refine an existing encoding value with an exact static encoding "
+        "specification. Dynamic values remain ordinary SSA operands elsewhere; "
+        "this op only states the selected static family and static parameters."
+    ),
+    operands=[Operand("enc", ANY_ENCODING, doc="Encoding value to refine.")],
+    results=[Result("result", ANY_ENCODING, doc="Encoding value with exact static-spec facts.")],
+    attrs=[AttrDef("spec", ATTR_TYPE_ENCODING, doc="Exact static encoding specification.")],
+    constraints=[SameType("enc", "result")],
+    traits=[PURE],
+    verify="loom_encoding_assume_spec_verify",
+    facts="loom_encoding_assume_spec_facts",
+    format=[
+        Ref("enc"),
+        COMMA,
+        Attr("spec"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%schema2 = encoding.assume.spec %schema, #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>",
     ],
 )
 
@@ -148,4 +234,7 @@ ALL_ENCODING_OPS: tuple[Op, ...] = (
     encoding_layout_strided,
     encoding_define,
     encoding_isa,
+    encoding_layout_assume_dense,
+    encoding_layout_assume_strided,
+    encoding_assume_spec,
 )

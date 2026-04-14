@@ -20,7 +20,8 @@ extern "C" {
 enum {
   LOOM_OP_VIEW_SUBVIEW = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 0),
   LOOM_OP_VIEW_PREFETCH = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 1),
-  LOOM_OP_VIEW_COUNT_ = 2,
+  LOOM_OP_VIEW_REFINE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 2),
+  LOOM_OP_VIEW_COUNT_ = 3,
 };
 
 // Intended future access kind for a prefetch hint.
@@ -85,6 +86,26 @@ iree_status_t loom_view_prefetch_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_view_prefetch_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VIEW_REFINE: Refine the static type information attached to an existing view while preserving the same storage root and byte base. This is an explicit SSA assertion point for layout, shape, and encoding facts discovered or required by earlier analysis.
+// %refined = view.refine %view : view<[%M]xf32, %layout> -> view<16xf32, #dense>
+LOOM_DEFINE_ISA(loom_view_refine_isa, LOOM_OP_VIEW_REFINE)
+LOOM_DEFINE_OPERAND(loom_view_refine_source, 0)
+LOOM_DEFINE_RESULT(loom_view_refine_result, 0)
+iree_status_t loom_view_refine_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_view_refine_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_view_refine_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

@@ -48,6 +48,7 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    ANY_ENCODING,
     CONSTANT_LIKE,
     ELEMENTWISE,
     FLOAT,
@@ -322,6 +323,42 @@ test_fact_is_vector_prefix_mask = Op(
     facts="loom_test_fact_is_vector_prefix_mask_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%is = test.fact_is_vector_prefix_mask %x : vector<[%n]xi1> -> i1"],
+)
+
+test_fact_encoding_layout_kind = Op(
+    "test.fact_encoding_layout_kind",
+    group=test_ops,
+    doc="Exposes an encoding-summary address-layout kind as an i64 constant.",
+    operands=[Operand("value", ANY_ENCODING)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_encoding_layout_kind_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%kind = test.fact_encoding_layout_kind %layout : encoding<layout> -> i64"],
+)
+
+test_fact_encoding_layout_stride_hi = Op(
+    "test.fact_encoding_layout_stride_hi",
+    group=test_ops,
+    doc="Exposes an encoding-summary strided-layout stride upper bound as an i64 constant.",
+    operands=[Operand("value", ANY_ENCODING)],
+    attrs=[AttrDef("axis", "i64", doc="Stride axis to inspect.")],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_encoding_layout_stride_hi_facts",
+    format=[
+        Ref("value"),
+        LBRACKET,
+        Attr("axis"),
+        RBRACKET,
+        COLON,
+        TypeOf("value"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%hi = test.fact_encoding_layout_stride_hi %layout[0] : encoding<layout> -> i64",
+    ],
 )
 
 test_fact_is_buffer_reference = Op(
@@ -1153,6 +1190,8 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_power_of_two,
     test_fact_is_vector_iota,
     test_fact_is_vector_prefix_mask,
+    test_fact_encoding_layout_kind,
+    test_fact_encoding_layout_stride_hi,
     test_fact_is_buffer_reference,
     test_fact_is_view_reference,
     test_fact_view_root_matches,

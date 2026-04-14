@@ -1,0 +1,144 @@
+// RUN: pass canonicalize
+
+// Dense layout ops seed address-layout summary facts.
+func.def @dense_layout_summary() -> (i64) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %kind = test.fact_encoding_layout_kind %layout : encoding<layout> -> i64
+  func.return %kind : i64
+}
+// ----
+func.def @dense_layout_summary() -> (i64) {
+  %kind = scalar.constant 1 : i64
+  func.return %kind : i64
+}
+
+// ====
+
+// Dynamic strided layout ops preserve stride facts in axis order.
+func.def @strided_layout_summary(%stride: index) -> (i64, i64) {
+  %stride2 = index.assume %stride [range(%stride, 8, 16), mul(%stride, 8)] : index
+  %layout = encoding.layout.strided [%stride2, 1] : encoding<layout>
+  %kind = test.fact_encoding_layout_kind %layout : encoding<layout> -> i64
+  %stride_hi = test.fact_encoding_layout_stride_hi %layout[0] : encoding<layout> -> i64
+  func.return %kind, %stride_hi : i64, i64
+}
+// ----
+func.def @strided_layout_summary(%stride: index) -> (i64, i64) {
+  %kind = scalar.constant 2 : i64
+  %stride_hi = scalar.constant 16 : i64
+  func.return %kind, %stride_hi : i64, i64
+}
+
+// ====
+
+// Layout assumptions seed facts for layout values that arrive as arguments
+// instead of being constructed locally.
+func.def @assume_dense_layout_summary(%layout: encoding<layout>) -> (i64) {
+  %dense = encoding.layout.assume.dense %layout : encoding<layout>
+  %kind = test.fact_encoding_layout_kind %dense : encoding<layout> -> i64
+  func.return %kind : i64
+}
+// ----
+func.def @assume_dense_layout_summary(%layout: encoding<layout>) -> (i64) {
+  %kind = scalar.constant 1 : i64
+  func.return %kind : i64
+}
+
+// ====
+
+// Strided layout assumptions carry rank and unknown nonnegative stride facts.
+func.def @assume_strided_layout_summary(%layout: encoding<layout>) -> (i64, i64) {
+  %strided = encoding.layout.assume.strided %layout {rank = 2} : encoding<layout>
+  %kind = test.fact_encoding_layout_kind %strided : encoding<layout> -> i64
+  %stride_hi = test.fact_encoding_layout_stride_hi %strided[0] : encoding<layout> -> i64
+  func.return %kind, %stride_hi : i64, i64
+}
+// ----
+func.def @assume_strided_layout_summary(%layout: encoding<layout>) -> (i64, i64) {
+  %kind = scalar.constant 2 : i64
+  %stride_hi = scalar.constant 9223372036854775807 : i64
+  func.return %kind, %stride_hi : i64, i64
+}
+
+// ====
+
+// Exact static-spec assumptions expose static physical-storage layout facts
+// for schema/storage arguments selected by a specialization thunk.
+func.def @assume_spec_physical_storage_layout_summary(%storage: encoding<storage>) -> (i64) {
+  %storage2 = encoding.assume.spec %storage, #physical_storage<layout=#dense, schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : encoding<storage>
+  %kind = test.fact_encoding_layout_kind %storage2 : encoding<storage> -> i64
+  func.return %kind : i64
+}
+// ----
+func.def @assume_spec_physical_storage_layout_summary(%storage: encoding<storage>) -> (i64) {
+  %kind = scalar.constant 1 : i64
+  func.return %kind : i64
+}
+
+// ====
+
+// Static strided specs expose exact per-axis stride facts through the shared
+// static layout decoder.
+func.def @assume_spec_static_strided_layout_summary(%layout: encoding<layout>) -> (i64, i64) {
+  %layout2 = encoding.assume.spec %layout, #strided<stride=64> : encoding<layout>
+  %kind = test.fact_encoding_layout_kind %layout2 : encoding<layout> -> i64
+  %stride_hi = test.fact_encoding_layout_stride_hi %layout2[0] : encoding<layout> -> i64
+  func.return %kind, %stride_hi : i64, i64
+}
+// ----
+func.def @assume_spec_static_strided_layout_summary(%layout: encoding<layout>) -> (i64, i64) {
+  %kind = scalar.constant 2 : i64
+  %stride_hi = scalar.constant 64 : i64
+  func.return %kind, %stride_hi : i64, i64
+}
+
+// ====
+
+// Physical-storage encodings carry the nested address-layout summary through
+// the storage value.
+func.def @physical_storage_layout_summary(%stride: index) -> (i64, i64) {
+  %stride2 = index.assume %stride [range(%stride, 8, 16), mul(%stride, 8)] : index
+  %layout = encoding.layout.strided [%stride2, 1] : encoding<layout>
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  %storage = encoding.define #physical_storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
+  %kind = test.fact_encoding_layout_kind %storage : encoding<storage> -> i64
+  %stride_hi = test.fact_encoding_layout_stride_hi %storage[0] : encoding<storage> -> i64
+  func.return %kind, %stride_hi : i64, i64
+}
+// ----
+func.def @physical_storage_layout_summary(%stride: index) -> (i64, i64) {
+  %kind = scalar.constant 2 : i64
+  %stride_hi = scalar.constant 16 : i64
+  func.return %kind, %stride_hi : i64, i64
+}
+
+// ====
+
+// Static physical-storage parameters can seed the same summary when their
+// nested layout is static.
+func.def @static_physical_storage_layout_summary() -> (i64) {
+  %storage = encoding.define #physical_storage<layout=#dense, schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : encoding<storage>
+  %kind = test.fact_encoding_layout_kind %storage : encoding<storage> -> i64
+  func.return %kind : i64
+}
+// ----
+func.def @static_physical_storage_layout_summary() -> (i64) {
+  %kind = scalar.constant 1 : i64
+  func.return %kind : i64
+}
+
+// ====
+
+// Static physical-storage summaries recurse through static strided layouts too.
+func.def @static_strided_physical_storage_layout_summary() -> (i64, i64) {
+  %storage = encoding.define #physical_storage<layout=#strided<stride=64>, schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : encoding<storage>
+  %kind = test.fact_encoding_layout_kind %storage : encoding<storage> -> i64
+  %stride_hi = test.fact_encoding_layout_stride_hi %storage[0] : encoding<storage> -> i64
+  func.return %kind, %stride_hi : i64, i64
+}
+// ----
+func.def @static_strided_physical_storage_layout_summary() -> (i64, i64) {
+  %kind = scalar.constant 2 : i64
+  %stride_hi = scalar.constant 64 : i64
+  func.return %kind, %stride_hi : i64, i64
+}

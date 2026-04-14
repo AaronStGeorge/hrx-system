@@ -38,6 +38,12 @@ iree_status_t loom_view_reference_make_subview(
     loom_attribute_t static_offsets, loom_value_slice_t dynamic_offsets,
     loom_type_t source_type, loom_type_t result_type, loom_value_facts_t* out);
 
+// Constructs view-reference facts for `view.refine`.
+iree_status_t loom_view_reference_make_refine(
+    loom_fact_context_t* context, const loom_module_t* module,
+    loom_value_id_t source_value_id, loom_value_facts_t source_facts,
+    loom_type_t source_type, loom_type_t result_type, loom_value_facts_t* out);
+
 #ifdef __cplusplus
 }
 #endif

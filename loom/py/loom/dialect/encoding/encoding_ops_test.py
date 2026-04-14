@@ -8,8 +8,11 @@
 
 from loom.dialect.encoding import (
     ALL_ENCODING_OPS,
+    encoding_assume_spec,
     encoding_define,
     encoding_isa,
+    encoding_layout_assume_dense,
+    encoding_layout_assume_strided,
     encoding_layout_dense,
     encoding_layout_strided,
     encoding_ops,
@@ -18,6 +21,7 @@ from loom.dsl import (
     ANY_ENCODING,
     ATTR_TYPE_DICT,
     ATTR_TYPE_ENCODING,
+    ATTR_TYPE_I64,
     ATTR_TYPE_I64_ARRAY,
     ENCODING_LAYOUT,
     I1,
@@ -27,7 +31,27 @@ from loom.dsl import (
 
 class TestAllOpsRegistered:
     def test_count(self) -> None:
-        assert len(ALL_ENCODING_OPS) == 4
+        assert len(ALL_ENCODING_OPS) == 7
+
+    def test_expected_ops_registered_in_order(self) -> None:
+        assert [op.name for op in ALL_ENCODING_OPS] == [
+            "encoding.layout.dense",
+            "encoding.layout.strided",
+            "encoding.define",
+            "encoding.isa",
+            "encoding.layout.assume.dense",
+            "encoding.layout.assume.strided",
+            "encoding.assume.spec",
+        ]
+
+    def test_public_exports_match_registry(self) -> None:
+        assert encoding_layout_dense in ALL_ENCODING_OPS
+        assert encoding_layout_strided in ALL_ENCODING_OPS
+        assert encoding_define in ALL_ENCODING_OPS
+        assert encoding_isa in ALL_ENCODING_OPS
+        assert encoding_layout_assume_dense in ALL_ENCODING_OPS
+        assert encoding_layout_assume_strided in ALL_ENCODING_OPS
+        assert encoding_assume_spec in ALL_ENCODING_OPS
 
     def test_unique_names(self) -> None:
         names = [op.name for op in ALL_ENCODING_OPS]
@@ -89,6 +113,39 @@ class TestEncodingLayoutStrided:
         assert encoding_layout_strided.is_pure
 
 
+class TestEncodingLayoutAssumeDense:
+    def test_name(self) -> None:
+        assert encoding_layout_assume_dense.name == "encoding.layout.assume.dense"
+
+    def test_operand_and_result_are_layout_encodings(self) -> None:
+        assert len(encoding_layout_assume_dense.operands) == 1
+        assert len(encoding_layout_assume_dense.results) == 1
+        assert encoding_layout_assume_dense.operands[0].type_constraint == ENCODING_LAYOUT
+        assert encoding_layout_assume_dense.results[0].type_constraint == ENCODING_LAYOUT
+
+    def test_is_pure(self) -> None:
+        assert encoding_layout_assume_dense.is_pure
+
+
+class TestEncodingLayoutAssumeStrided:
+    def test_name(self) -> None:
+        assert encoding_layout_assume_strided.name == "encoding.layout.assume.strided"
+
+    def test_operand_and_result_are_layout_encodings(self) -> None:
+        assert len(encoding_layout_assume_strided.operands) == 1
+        assert len(encoding_layout_assume_strided.results) == 1
+        assert encoding_layout_assume_strided.operands[0].type_constraint == ENCODING_LAYOUT
+        assert encoding_layout_assume_strided.results[0].type_constraint == ENCODING_LAYOUT
+
+    def test_has_rank_attr(self) -> None:
+        attr = encoding_layout_assume_strided.attr("rank")
+        assert attr is not None
+        assert attr.attr_type == ATTR_TYPE_I64
+
+    def test_is_pure(self) -> None:
+        assert encoding_layout_assume_strided.is_pure
+
+
 class TestEncodingDefine:
     def test_name(self) -> None:
         assert encoding_define.name == "encoding.define"
@@ -136,3 +193,22 @@ class TestEncodingIsa:
 
     def test_is_pure(self) -> None:
         assert encoding_isa.is_pure
+
+
+class TestEncodingAssumeSpec:
+    def test_name(self) -> None:
+        assert encoding_assume_spec.name == "encoding.assume.spec"
+
+    def test_operand_and_result_are_encodings(self) -> None:
+        assert len(encoding_assume_spec.operands) == 1
+        assert len(encoding_assume_spec.results) == 1
+        assert encoding_assume_spec.operands[0].type_constraint == ANY_ENCODING
+        assert encoding_assume_spec.results[0].type_constraint == ANY_ENCODING
+
+    def test_has_spec_attr(self) -> None:
+        attr = encoding_assume_spec.attr("spec")
+        assert attr is not None
+        assert attr.attr_type == ATTR_TYPE_ENCODING
+
+    def test_is_pure(self) -> None:
+        assert encoding_assume_spec.is_pure

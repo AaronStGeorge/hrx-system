@@ -85,6 +85,44 @@ typedef struct loom_value_fact_vector_prefix_mask_t {
   loom_value_facts_t step;
 } loom_value_fact_vector_prefix_mask_t;
 
+// Address-layout summary kind carried by encoding facts.
+typedef enum loom_value_fact_address_layout_kind_e {
+  // No usable address-layout summary is known.
+  LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN = 0,
+  // Dense row-major layout. The consuming shaped type supplies rank/extents.
+  LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE = 1,
+  // Explicit per-axis element strides.
+  LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED = 2,
+} loom_value_fact_address_layout_kind_t;
+
+// Summary of an address-layout encoding's logical-to-physical map.
+typedef struct loom_value_fact_address_layout_t {
+  // Known address-layout category.
+  loom_value_fact_address_layout_kind_t kind;
+
+  // Number of stride facts in strides for strided layouts. Dense layouts leave
+  // this zero because rank comes from the consuming shaped type.
+  uint8_t rank;
+
+  // Borrowed per-axis element-stride facts for strided layouts. Query results
+  // point into the owning fact table.
+  const loom_value_facts_t* strides;
+} loom_value_fact_address_layout_t;
+
+// Summary of an SSA encoding value.
+typedef struct loom_value_fact_encoding_summary_t {
+  // Known semantic role from the value type or encoding family.
+  loom_encoding_role_t role;
+
+  // One-based static encoding spec ID when the value came from
+  // encoding.define. Zero means no exact static spec is known.
+  uint16_t static_spec_encoding_id;
+
+  // Address-layout facts when this encoding directly is a layout or composes a
+  // physical storage encoding with a known layout.
+  loom_value_fact_address_layout_t address_layout;
+} loom_value_fact_encoding_summary_t;
+
 // Known reference nullability for storage-like values.
 typedef uint32_t loom_value_fact_reference_nullability_t;
 #define LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN \
@@ -285,6 +323,17 @@ iree_status_t loom_value_facts_make_vector_prefix_mask(
 bool loom_value_facts_query_vector_prefix_mask(
     const loom_fact_context_t* context, loom_value_facts_t facts,
     loom_value_fact_vector_prefix_mask_t* out);
+
+// Creates facts for an SSA encoding summary.
+iree_status_t loom_value_facts_make_encoding_summary(
+    loom_fact_context_t* context, loom_value_fact_encoding_summary_t summary,
+    loom_value_facts_t* out);
+
+// Returns true and populates |out| when |facts| is an encoding-summary
+// extension in |context|.
+bool loom_value_facts_query_encoding_summary(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_encoding_summary_t* out);
 
 // Creates facts for a buffer storage root.
 iree_status_t loom_value_facts_make_buffer_reference(

@@ -6,7 +6,6 @@
 
 #include "loom/ops/view/reference.h"
 
-#include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/util/math.h"
 
@@ -102,18 +101,29 @@ static loom_value_facts_t loom_view_element_count_facts(
   return element_count;
 }
 
-static const loom_op_t* loom_view_layout_op(const loom_module_t* module,
-                                            loom_type_t view_type) {
-  if (!module || !loom_type_has_ssa_encoding(view_type)) return NULL;
-  loom_value_id_t layout_value_id =
-      (loom_value_id_t)loom_type_encoding_value_id(view_type);
-  if (layout_value_id >= module->values.count) return NULL;
-  const loom_op_t* layout_op = NULL;
-  if (!loom_encoding_resolve_address_layout_op(module, layout_value_id,
-                                               &layout_op)) {
-    return NULL;
+typedef struct loom_view_address_layout_t {
+  // Fact summary for static encodings or SSA encodings with analysis facts.
+  loom_value_fact_address_layout_t summary;
+
+  // Caller-owned stride facts used when decoding static strided encodings.
+  loom_value_facts_t static_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];
+} loom_view_address_layout_t;
+
+static bool loom_view_address_layout(const loom_fact_context_t* context,
+                                     const loom_module_t* module,
+                                     loom_type_t view_type,
+                                     loom_view_address_layout_t* out_layout) {
+  *out_layout = (loom_view_address_layout_t){0};
+  if (loom_encoding_query_type_address_layout(
+          context, module, view_type, out_layout->static_strides,
+          IREE_ARRAYSIZE(out_layout->static_strides), &out_layout->summary)) {
+    return true;
   }
-  return layout_op;
+  if (!loom_type_has_ssa_encoding(view_type)) return false;
+  return loom_encoding_query_value_address_layout(
+      module, (loom_value_id_t)loom_type_encoding_value_id(view_type),
+      out_layout->static_strides, IREE_ARRAYSIZE(out_layout->static_strides),
+      &out_layout->summary);
 }
 
 static bool loom_view_dense_axis_stride_facts(
@@ -131,57 +141,32 @@ static bool loom_view_dense_axis_stride_facts(
   return true;
 }
 
-static bool loom_view_strided_axis_stride_facts(
-    const loom_fact_context_t* context, const loom_op_t* layout_op,
-    uint8_t axis, loom_value_facts_t* out_stride) {
-  loom_attribute_t static_strides =
-      loom_encoding_layout_strided_static_strides(layout_op);
-  if (static_strides.kind != LOOM_ATTR_I64_ARRAY ||
-      axis >= static_strides.count) {
+static bool loom_view_strided_summary_axis_stride_facts(
+    loom_value_fact_address_layout_t layout, uint8_t axis,
+    loom_value_facts_t* out_stride) {
+  if (layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED ||
+      axis >= layout.rank || !layout.strides) {
     return false;
   }
-
-  uint16_t dynamic_ordinal = 0;
-  for (uint8_t i = 0; i <= axis; ++i) {
-    int64_t static_stride = static_strides.i64_array[i];
-    if (static_stride != INT64_MIN) {
-      if (i == axis) {
-        if (static_stride < 0) return false;
-        *out_stride = loom_value_facts_exact_i64(static_stride);
-        return true;
-      }
-      continue;
-    }
-    if (i == axis) {
-      loom_value_slice_t dynamic_strides =
-          loom_encoding_layout_strided_strides(layout_op);
-      if (dynamic_ordinal >= dynamic_strides.count || !context ||
-          !context->table) {
-        return false;
-      }
-      loom_value_id_t stride_value_id = dynamic_strides.values[dynamic_ordinal];
-      *out_stride = loom_view_clamp_nonnegative(
-          loom_value_fact_table_lookup(context->table, stride_value_id));
-      return true;
-    }
-    ++dynamic_ordinal;
-  }
-  return false;
+  *out_stride = loom_view_clamp_nonnegative(layout.strides[axis]);
+  return true;
 }
 
 static bool loom_view_axis_stride_facts(const loom_fact_context_t* context,
                                         const loom_module_t* module,
                                         loom_type_t view_type, uint8_t axis,
                                         loom_value_facts_t* out_stride) {
-  const loom_op_t* layout_op = loom_view_layout_op(module, view_type);
-  if (!layout_op) return false;
-  if (loom_encoding_layout_dense_isa(layout_op)) {
+  loom_view_address_layout_t layout = {0};
+  if (!loom_view_address_layout(context, module, view_type, &layout)) {
+    return false;
+  }
+  if (layout.summary.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE) {
     return loom_view_dense_axis_stride_facts(context, view_type, axis,
                                              out_stride);
   }
-  if (loom_encoding_layout_strided_isa(layout_op)) {
-    return loom_view_strided_axis_stride_facts(context, layout_op, axis,
-                                               out_stride);
+  if (layout.summary.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) {
+    return loom_view_strided_summary_axis_stride_facts(layout.summary, axis,
+                                                       out_stride);
   }
   return false;
 }
@@ -205,7 +190,7 @@ static loom_value_facts_t loom_view_extent_max_index_facts(
 }
 
 static loom_value_facts_t loom_view_strided_footprint_facts(
-    const loom_fact_context_t* context, const loom_op_t* layout_op,
+    const loom_fact_context_t* context, const loom_module_t* module,
     loom_type_t view_type, int64_t static_element_byte_count) {
   if (static_element_byte_count < 0)
     return loom_view_nonnegative_unknown_facts();
@@ -221,8 +206,8 @@ static loom_value_facts_t loom_view_strided_footprint_facts(
     if (extent.range_lo == 0) may_be_empty = true;
 
     loom_value_facts_t stride = loom_value_facts_unknown();
-    if (!loom_view_strided_axis_stride_facts(context, layout_op, axis,
-                                             &stride)) {
+    if (!loom_view_axis_stride_facts(context, module, view_type, axis,
+                                     &stride)) {
       return loom_view_nonnegative_unknown_facts();
     }
     loom_value_facts_t contribution = loom_view_muli_nonnegative(
@@ -245,14 +230,16 @@ static loom_value_facts_t loom_view_strided_footprint_facts(
 static loom_value_facts_t loom_view_footprint_facts(
     const loom_fact_context_t* context, const loom_module_t* module,
     loom_type_t view_type, int64_t static_element_byte_count) {
-  const loom_op_t* layout_op = loom_view_layout_op(module, view_type);
-  if (!layout_op) return loom_view_nonnegative_unknown_facts();
-  if (loom_encoding_layout_dense_isa(layout_op)) {
+  loom_view_address_layout_t layout = {0};
+  if (!loom_view_address_layout(context, module, view_type, &layout)) {
+    return loom_view_nonnegative_unknown_facts();
+  }
+  if (layout.summary.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE) {
     return loom_view_dense_footprint_facts(context, view_type,
                                            static_element_byte_count);
   }
-  if (loom_encoding_layout_strided_isa(layout_op)) {
-    return loom_view_strided_footprint_facts(context, layout_op, view_type,
+  if (layout.summary.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) {
+    return loom_view_strided_footprint_facts(context, module, view_type,
                                              static_element_byte_count);
   }
   return loom_view_nonnegative_unknown_facts();
@@ -423,5 +410,22 @@ iree_status_t loom_view_reference_make_subview(
       loom_view_alignment_from_offset_facts(view_reference.base_byte_offset);
   view_reference.root_value_id = source_reference.root_value_id;
   view_reference.nullability = source_reference.nullability;
+  return loom_value_facts_make_view_reference(context, view_reference, out);
+}
+
+iree_status_t loom_view_reference_make_refine(
+    loom_fact_context_t* context, const loom_module_t* module,
+    loom_value_id_t source_value_id, loom_value_facts_t source_facts,
+    loom_type_t source_type, loom_type_t result_type, loom_value_facts_t* out) {
+  loom_value_fact_view_reference_t source_reference =
+      loom_view_default_view_reference(source_value_id, source_type);
+  (void)loom_value_facts_query_view_reference(context, source_facts,
+                                              &source_reference);
+
+  loom_value_fact_view_reference_t view_reference = source_reference;
+  view_reference.static_element_byte_count =
+      loom_view_static_element_byte_count(result_type);
+  view_reference.footprint_byte_length = loom_view_footprint_facts(
+      context, module, result_type, view_reference.static_element_byte_count);
   return loom_value_facts_make_view_reference(context, view_reference, out);
 }

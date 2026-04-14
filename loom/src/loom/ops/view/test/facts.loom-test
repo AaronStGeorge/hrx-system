@@ -75,6 +75,112 @@ func.def @physical_storage_resolves_layout(%buffer: buffer) -> (i64) {
 
 // ====
 
+// Static shaped-type layouts are layout facts too; they should not require a
+// local SSA layout op just to recover dense footprints.
+func.def @static_dense_type_layout_facts(%buffer: buffer) -> (i64) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #dense>
+  %length_hi = test.fact_view_byte_length_hi %view : view<4xf32, #dense> -> i64
+  func.return %length_hi : i64
+}
+// ----
+func.def @static_dense_type_layout_facts(%buffer: buffer) -> (i64) {
+  %length_hi = scalar.constant 16 : i64
+  func.return %length_hi : i64
+}
+
+// ====
+
+// Static strided type layouts feed the same footprint logic as dynamic layout
+// values.
+func.def @static_strided_type_layout_facts(%buffer: buffer) -> (i64) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #strided<stride=8>>
+  %length_hi = test.fact_view_byte_length_hi %view : view<4xf32, #strided<stride=8>> -> i64
+  func.return %length_hi : i64
+}
+// ----
+func.def @static_strided_type_layout_facts(%buffer: buffer) -> (i64) {
+  %length_hi = scalar.constant 100 : i64
+  func.return %length_hi : i64
+}
+
+// ====
+
+// Static physical-storage encodings expose their nested address layout through
+// encoding facts even when the local op resolver has no dynamic layout operand
+// to chase.
+func.def @static_physical_storage_resolves_layout(%buffer: buffer) -> (i64) {
+  %offset = index.constant 0 : offset
+  %storage = encoding.define #physical_storage<layout=#dense, schema=#ggml_q4_0<block_elems=32, storage_bytes=18>> : encoding<storage>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %storage>
+  %length_hi = test.fact_view_byte_length_hi %view : view<4xf32, %storage> -> i64
+  func.return %length_hi : i64
+}
+// ----
+func.def @static_physical_storage_resolves_layout(%buffer: buffer) -> (i64) {
+  %length_hi = scalar.constant 16 : i64
+  func.return %length_hi : i64
+}
+
+// ====
+
+// Refinement preserves the source storage identity and byte base while letting
+// the result type provide a narrower, fact-bearing footprint.
+func.def @refine_preserves_root_and_refines_footprint(%buffer: buffer, %m: index) -> (i1, i64) {
+  %offset = index.constant 64 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %source = buffer.view %buffer[%offset] : buffer -> view<[%m]xf32, %layout>
+  %refined = view.refine %source : view<[%m]xf32, %layout> -> view<16xf32, %layout>
+  %same = test.fact_view_root_matches %refined, %buffer : view<16xf32, %layout>, buffer -> i1
+  %length_hi = test.fact_view_byte_length_hi %refined : view<16xf32, %layout> -> i64
+  func.return %same, %length_hi : i1, i64
+}
+// ----
+func.def @refine_preserves_root_and_refines_footprint(%buffer: buffer, %m: index) -> (i1, i64) {
+  %same = scalar.constant 1 : i1
+  %length_hi = scalar.constant 64 : i64
+  func.return %same, %length_hi : i1, i64
+}
+
+// ====
+
+// Argument layouts can be locally refined before being attached to a view type;
+// later fact consumers only need the refined SSA value.
+func.def @argument_layout_assume_dense_feeds_view_facts(%buffer: buffer, %layout: encoding<layout>) -> (i64) {
+  %offset = index.constant 0 : offset
+  %dense = encoding.layout.assume.dense %layout : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %dense>
+  %length_hi = test.fact_view_byte_length_hi %view : view<4xf32, %dense> -> i64
+  func.return %length_hi : i64
+}
+// ----
+func.def @argument_layout_assume_dense_feeds_view_facts(%buffer: buffer, %layout: encoding<layout>) -> (i64) {
+  %length_hi = scalar.constant 16 : i64
+  func.return %length_hi : i64
+}
+
+// ====
+
+// Strided layout assumptions preserve the view-reference summary but leave
+// exact footprint bounds unknown when stride values are not available.
+func.def @argument_layout_assume_strided_degrades_footprint(%buffer: buffer, %layout: encoding<layout>) -> (i1, i64) {
+  %offset = index.constant 0 : offset
+  %strided = encoding.layout.assume.strided %layout {rank = 2} : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %strided>
+  %is = test.fact_is_view_reference %view : view<4x4xf32, %strided> -> i1
+  %length_hi = test.fact_view_byte_length_hi %view : view<4x4xf32, %strided> -> i64
+  func.return %is, %length_hi : i1, i64
+}
+// ----
+func.def @argument_layout_assume_strided_degrades_footprint(%buffer: buffer, %layout: encoding<layout>) -> (i1, i64) {
+  %is = scalar.constant 1 : i1
+  %length_hi = scalar.constant 9223372036854775807 : i64
+  func.return %is, %length_hi : i1, i64
+}
+
+// ====
+
 // Subviews compose byte-base facts with the source layout and keep the same
 // storage root.
 func.def @subview_composes_base_and_root(%buffer: buffer) -> (i1, i64, i64, i64) {

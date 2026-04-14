@@ -24,6 +24,7 @@ typedef enum loom_value_fact_extension_kind_e {
   LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES = 4,
   LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE = 5,
   LOOM_VALUE_FACT_EXTENSION_VIEW_REFERENCE = 6,
+  LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY = 7,
 } loom_value_fact_extension_kind_t;
 
 struct loom_value_fact_extension_entry_t {
@@ -46,6 +47,8 @@ struct loom_value_fact_extension_entry_t {
     loom_value_fact_vector_iota_t vector_iota;
     // Vector prefix-mask payload.
     loom_value_fact_vector_prefix_mask_t vector_prefix_mask;
+    // SSA encoding summary payload.
+    loom_value_fact_encoding_summary_t encoding_summary;
     // Buffer storage-root payload.
     loom_value_fact_buffer_reference_t buffer_reference;
     // Typed view projection payload.
@@ -116,6 +119,25 @@ static uint32_t loom_value_fact_hash_facts(loom_value_facts_t facts,
   return loom_value_fact_hash_bytes(&facts, sizeof(facts), hash);
 }
 
+static uint32_t loom_value_fact_hash_address_layout(
+    loom_value_fact_address_layout_t layout, uint32_t hash) {
+  hash = loom_value_fact_hash_u32((uint32_t)layout.kind, hash);
+  hash = loom_value_fact_hash_u32(layout.rank, hash);
+  if (layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED &&
+      layout.rank > 0 && layout.strides) {
+    hash = loom_value_fact_hash_bytes(
+        layout.strides, layout.rank * sizeof(loom_value_facts_t), hash);
+  }
+  return hash;
+}
+
+static uint32_t loom_value_fact_hash_encoding_summary(
+    loom_value_fact_encoding_summary_t summary, uint32_t hash) {
+  hash = loom_value_fact_hash_u32((uint32_t)summary.role, hash);
+  hash = loom_value_fact_hash_u32(summary.static_spec_encoding_id, hash);
+  return loom_value_fact_hash_address_layout(summary.address_layout, hash);
+}
+
 static uint32_t loom_value_fact_hash_buffer_reference(
     loom_value_fact_buffer_reference_t reference, uint32_t hash) {
   hash = loom_value_fact_hash_facts(reference.maximum_byte_extent, hash);
@@ -156,6 +178,26 @@ static bool loom_value_fact_view_reference_equal(
          lhs.nullability == rhs.nullability;
 }
 
+static bool loom_value_fact_address_layout_equal(
+    loom_value_fact_address_layout_t lhs,
+    loom_value_fact_address_layout_t rhs) {
+  if (lhs.kind != rhs.kind || lhs.rank != rhs.rank) return false;
+  if (lhs.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) return true;
+  if (lhs.rank == 0) return true;
+  if (!lhs.strides || !rhs.strides) return lhs.strides == rhs.strides;
+  return memcmp(lhs.strides, rhs.strides,
+                lhs.rank * sizeof(loom_value_facts_t)) == 0;
+}
+
+static bool loom_value_fact_encoding_summary_equal(
+    loom_value_fact_encoding_summary_t lhs,
+    loom_value_fact_encoding_summary_t rhs) {
+  return lhs.role == rhs.role &&
+         lhs.static_spec_encoding_id == rhs.static_spec_encoding_id &&
+         loom_value_fact_address_layout_equal(lhs.address_layout,
+                                              rhs.address_layout);
+}
+
 static uint32_t loom_value_fact_extension_hash(
     const loom_value_fact_extension_entry_t* entry) {
   uint32_t hash = 2166136261u;
@@ -180,6 +222,9 @@ static uint32_t loom_value_fact_extension_hash(
       return loom_value_fact_hash_bytes(
           &entry->payload.vector_prefix_mask,
           sizeof(entry->payload.vector_prefix_mask), hash);
+    case LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY:
+      return loom_value_fact_hash_encoding_summary(
+          entry->payload.encoding_summary, hash);
     case LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE:
       return loom_value_fact_hash_buffer_reference(
           entry->payload.buffer_reference, hash);
@@ -217,6 +262,9 @@ static bool loom_value_fact_extension_content_equal(
       return memcmp(&lhs->payload.vector_prefix_mask,
                     &rhs->payload.vector_prefix_mask,
                     sizeof(lhs->payload.vector_prefix_mask)) == 0;
+    case LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY:
+      return loom_value_fact_encoding_summary_equal(
+          lhs->payload.encoding_summary, rhs->payload.encoding_summary);
     case LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE:
       return loom_value_fact_buffer_reference_equal(
           lhs->payload.buffer_reference, rhs->payload.buffer_reference);
@@ -228,22 +276,44 @@ static bool loom_value_fact_extension_content_equal(
   }
 }
 
+static iree_status_t loom_value_fact_table_clone_fact_array(
+    loom_value_fact_table_t* table, const loom_value_facts_t* facts,
+    iree_host_size_t count, const loom_value_facts_t** out_facts) {
+  *out_facts = NULL;
+  if (count == 0) return iree_ok_status();
+  if (!facts) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "fact array pointer required");
+  }
+  loom_value_facts_t* cloned_facts = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      table->arena, count, sizeof(loom_value_facts_t), (void**)&cloned_facts));
+  memcpy(cloned_facts, facts, count * sizeof(loom_value_facts_t));
+  *out_facts = cloned_facts;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_value_fact_table_materialize_extension_payload(
     loom_value_fact_table_t* table, loom_value_fact_extension_entry_t* entry) {
-  if (entry->kind != LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES) {
+  if (entry->kind == LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES) {
+    const loom_value_facts_t* lanes = NULL;
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact_array(
+        table, entry->payload.small_static_lanes.lanes,
+        entry->payload.small_static_lanes.count, &lanes));
+    entry->payload.small_static_lanes.lanes = lanes;
     return iree_ok_status();
   }
-  iree_host_size_t lane_count = entry->payload.small_static_lanes.count;
-  if (lane_count == 0) {
-    entry->payload.small_static_lanes.lanes = NULL;
+  if (entry->kind == LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY &&
+      entry->payload.encoding_summary.address_layout.kind ==
+          LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) {
+    loom_value_fact_address_layout_t* layout =
+        &entry->payload.encoding_summary.address_layout;
+    const loom_value_facts_t* strides = NULL;
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact_array(
+        table, layout->strides, layout->rank, &strides));
+    layout->strides = strides;
     return iree_ok_status();
   }
-  loom_value_facts_t* lanes = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      table->arena, lane_count, sizeof(loom_value_facts_t), (void**)&lanes));
-  memcpy(lanes, entry->payload.small_static_lanes.lanes,
-         lane_count * sizeof(loom_value_facts_t));
-  entry->payload.small_static_lanes.lanes = lanes;
   return iree_ok_status();
 }
 
@@ -535,6 +605,42 @@ bool loom_value_facts_query_vector_prefix_mask(
     return false;
   }
   if (out) *out = entry->payload.vector_prefix_mask;
+  return true;
+}
+
+iree_status_t loom_value_facts_make_encoding_summary(
+    loom_fact_context_t* context, loom_value_fact_encoding_summary_t summary,
+    loom_value_facts_t* out) {
+  if (!out) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "output fact pointer required");
+  }
+  if (summary.role == LOOM_ENCODING_ROLE_UNKNOWN &&
+      summary.static_spec_encoding_id == 0 &&
+      summary.address_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN) {
+    *out = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+  if (summary.address_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED &&
+      summary.address_layout.rank > 0 && !summary.address_layout.strides) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "strided layout fact pointer required");
+  }
+  loom_value_fact_extension_entry_t entry = {0};
+  entry.kind = LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY;
+  entry.payload.encoding_summary = summary;
+  return loom_value_facts_make_extension(context, &entry, out);
+}
+
+bool loom_value_facts_query_encoding_summary(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_encoding_summary_t* out) {
+  const loom_value_fact_extension_entry_t* entry =
+      loom_value_facts_lookup_extension(context, facts);
+  if (!entry || entry->kind != LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY) {
+    return false;
+  }
+  if (out) *out = entry->payload.encoding_summary;
   return true;
 }
 

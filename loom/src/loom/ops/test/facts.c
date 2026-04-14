@@ -142,6 +142,42 @@ iree_status_t loom_test_fact_is_vector_prefix_mask_facts(
   return iree_ok_status();
 }
 
+static loom_value_fact_encoding_summary_t loom_test_encoding_summary_or_empty(
+    const loom_fact_context_t* context, loom_value_facts_t facts) {
+  loom_value_fact_encoding_summary_t summary = {0};
+  (void)loom_value_facts_query_encoding_summary(context, facts, &summary);
+  return summary;
+}
+
+iree_status_t loom_test_fact_encoding_layout_kind_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_encoding_summary_t summary =
+      loom_test_encoding_summary_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64((int64_t)summary.address_layout.kind);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_encoding_layout_stride_hi_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_encoding_summary_t summary =
+      loom_test_encoding_summary_or_empty(context, operand_facts[0]);
+  int64_t axis = loom_attr_as_i64(loom_op_attrs(op)[0]);
+  if (summary.address_layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED ||
+      axis < 0 || axis >= summary.address_layout.rank ||
+      !summary.address_layout.strides) {
+    result_facts[0] = loom_value_facts_exact_i64(INT64_MIN);
+    return iree_ok_status();
+  }
+  result_facts[0] =
+      loom_value_facts_exact_i64(summary.address_layout.strides[axis].range_hi);
+  return iree_ok_status();
+}
+
 iree_status_t loom_test_fact_is_buffer_reference_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,

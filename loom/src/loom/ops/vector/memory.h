@@ -18,6 +18,8 @@
 #include "iree/base/api.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/storage.h"
+#include "loom/util/fact_table.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,11 +58,15 @@ typedef struct loom_vector_memory_access_t {
   // byte-aligned or the element type is malformed.
   int64_t static_element_byte_count;
 
-  // Resolved layout kind when the view type carries an SSA layout op.
+  // Resolved address-layout kind for the view type.
   loom_vector_memory_layout_kind_t layout_kind;
 
-  // Defining layout op when layout_kind is dense or strided; NULL otherwise.
-  const loom_op_t* layout_op;
+  // Address-layout summary decoded from static encodings or local SSA
+  // encoding definitions.
+  loom_value_fact_address_layout_t layout_summary;
+
+  // Inline stride fact storage backing layout_summary.
+  loom_value_facts_t layout_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];
 } loom_vector_memory_access_t;
 
 // Describes a view/vector access. Returns false when the types are not a view

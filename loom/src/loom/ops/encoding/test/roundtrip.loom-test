@@ -21,6 +21,28 @@ func.def @dynamic_encoding_attachment(%group_size: index) {
 
 // ====
 
+// Layout assumptions are explicit SSA refinements for block/function argument
+// layout values whose concrete layout was not locally constructed.
+func.def @layout_assumptions(%layout: encoding<layout>) {
+  %dense = encoding.layout.assume.dense %layout : encoding<layout>
+  %strided = encoding.layout.assume.strided %layout {rank = 2} : encoding<layout>
+  test.use %dense : encoding<layout>
+  test.use %strided : encoding<layout>
+  func.return
+}
+
+// ====
+
+// Exact static-spec assumptions let dispatch thunks specialize schema/storage
+// arguments without changing the original ABI value.
+func.def @static_spec_assumption(%schema: encoding<schema>) {
+  %schema2 = encoding.assume.spec %schema, #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  test.use %schema2 : encoding<schema>
+  func.return
+}
+
+// ====
+
 // TurboQuant-style KV storage schemas keep physical byte layout static while
 // table storage and transform descriptors remain ordinary SSA operands.
 func.def @turboquant_kv_schema(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {

@@ -7,35 +7,35 @@
 #include "loom/ops/vector/memory.h"
 
 #include "loom/ir/scalar_type.h"
-#include "loom/ops/encoding/ops.h"
-#include "loom/ops/encoding/storage.h"
-
-static const loom_op_t* loom_vector_memory_layout_op(
-    const loom_module_t* module, loom_type_t view_type) {
-  if (!module || !loom_type_has_ssa_encoding(view_type)) return NULL;
-
-  loom_value_id_t layout_value_id =
-      (loom_value_id_t)loom_type_encoding_value_id(view_type);
-  if (layout_value_id >= module->values.count) return NULL;
-
-  const loom_op_t* layout_op = NULL;
-  if (!loom_encoding_resolve_address_layout_op(module, layout_value_id,
-                                               &layout_op)) {
-    return NULL;
-  }
-  return layout_op;
-}
+#include "loom/util/fact_table.h"
 
 static loom_vector_memory_layout_kind_t loom_vector_memory_layout_kind(
-    const loom_op_t* layout_op) {
-  if (!layout_op) return LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN;
-  if (loom_encoding_layout_dense_isa(layout_op)) {
-    return LOOM_VECTOR_MEMORY_LAYOUT_DENSE;
-  }
-  if (loom_encoding_layout_strided_isa(layout_op)) {
-    return LOOM_VECTOR_MEMORY_LAYOUT_STRIDED;
+    loom_value_fact_address_layout_t layout) {
+  switch (layout.kind) {
+    case LOOM_VALUE_FACT_ADDRESS_LAYOUT_DENSE:
+      return LOOM_VECTOR_MEMORY_LAYOUT_DENSE;
+    case LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED:
+      return LOOM_VECTOR_MEMORY_LAYOUT_STRIDED;
+    case LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN:
+      return LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN;
   }
   return LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN;
+}
+
+static bool loom_vector_memory_query_layout(
+    const loom_module_t* module, loom_type_t view_type,
+    loom_value_facts_t* stride_storage, iree_host_size_t stride_capacity,
+    loom_value_fact_address_layout_t* out_layout) {
+  if (!module || !loom_type_has_encoding(view_type)) return false;
+  if (loom_type_has_static_encoding(view_type)) {
+    return loom_encoding_query_static_address_layout(
+        module, view_type.encoding_id, stride_storage, stride_capacity,
+        out_layout);
+  }
+  if (!loom_type_has_ssa_encoding(view_type)) return false;
+  return loom_encoding_query_value_address_layout(
+      module, (loom_value_id_t)loom_type_encoding_value_id(view_type),
+      stride_storage, stride_capacity, out_layout);
 }
 
 bool loom_vector_memory_access_describe(
@@ -59,7 +59,12 @@ bool loom_vector_memory_access_describe(
     static_element_byte_count = element_bit_count / 8;
   }
 
-  const loom_op_t* layout_op = loom_vector_memory_layout_op(module, view_type);
+  loom_value_facts_t layout_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {
+      0};
+  loom_value_fact_address_layout_t layout_summary = {0};
+  (void)loom_vector_memory_query_layout(module, view_type, layout_strides,
+                                        IREE_ARRAYSIZE(layout_strides),
+                                        &layout_summary);
   *out_access = (loom_vector_memory_access_t){
       .view_type = view_type,
       .vector_type = vector_type,
@@ -68,9 +73,15 @@ bool loom_vector_memory_access_describe(
       .first_vector_axis = (uint8_t)(view_rank - vector_rank),
       .element_bit_count = element_bit_count,
       .static_element_byte_count = static_element_byte_count,
-      .layout_kind = loom_vector_memory_layout_kind(layout_op),
-      .layout_op = layout_op,
+      .layout_kind = loom_vector_memory_layout_kind(layout_summary),
+      .layout_summary = layout_summary,
   };
+  if (layout_summary.strides == layout_strides) {
+    for (uint8_t i = 0; i < layout_summary.rank; ++i) {
+      out_access->layout_strides[i] = layout_summary.strides[i];
+    }
+    out_access->layout_summary.strides = out_access->layout_strides;
+  }
   return true;
 }
 
@@ -121,15 +132,17 @@ bool loom_vector_memory_access_static_axis_stride(
       return loom_vector_memory_access_static_dense_axis_stride(
           access, view_axis, out_stride);
     case LOOM_VECTOR_MEMORY_LAYOUT_STRIDED: {
-      loom_attribute_t static_strides =
-          loom_encoding_layout_strided_static_strides(access->layout_op);
-      if (static_strides.kind != LOOM_ATTR_I64_ARRAY ||
-          view_axis >= static_strides.count) {
+      loom_value_fact_address_layout_t layout = access->layout_summary;
+      if (layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED ||
+          view_axis >= layout.rank || !layout.strides) {
         return false;
       }
-      int64_t stride = static_strides.i64_array[view_axis];
-      if (stride == INT64_MIN) return false;
-      *out_stride = stride;
+      loom_value_facts_t stride = layout.strides[view_axis];
+      if (!loom_value_facts_is_exact(stride) ||
+          loom_value_facts_is_float(stride)) {
+        return false;
+      }
+      *out_stride = stride.range_lo;
       return true;
     }
     case LOOM_VECTOR_MEMORY_LAYOUT_UNKNOWN:

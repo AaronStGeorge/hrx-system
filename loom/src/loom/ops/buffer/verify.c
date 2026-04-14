@@ -8,8 +8,8 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
-#include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/storage.h"
+#include "loom/util/fact_table.h"
 
 static iree_status_t loom_buffer_emit(iree_diagnostic_emitter_t emitter,
                                       const loom_op_t* op,
@@ -29,24 +29,26 @@ static iree_status_t loom_buffer_verify_strided_layout_rank(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter, loom_type_t result_type,
     loom_value_id_t layout_id) {
-  const loom_op_t* layout_op = NULL;
-  if (!loom_encoding_resolve_address_layout_op(module, layout_id, &layout_op)) {
+  loom_value_facts_t static_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {
+      0};
+  loom_value_fact_address_layout_t layout = {0};
+  if (!loom_encoding_query_value_address_layout(
+          module, layout_id, static_strides, IREE_ARRAYSIZE(static_strides),
+          &layout)) {
     return iree_ok_status();
   }
-  if (!layout_op || !loom_encoding_layout_strided_isa(layout_op)) {
+  if (layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) {
     return iree_ok_status();
   }
 
-  loom_attribute_t static_strides =
-      loom_encoding_layout_strided_static_strides(layout_op);
   uint8_t result_rank = loom_type_rank(result_type);
-  if (static_strides.count == result_rank) return iree_ok_status();
+  if (layout.rank == result_rank) return iree_ok_status();
 
   loom_diagnostic_param_t params[] = {
       loom_param_string(IREE_SV("result type")),
       loom_param_i64(result_rank),
       loom_param_string(IREE_SV("layout stride list")),
-      loom_param_i64(static_strides.count),
+      loom_param_i64(layout.rank),
   };
   return loom_buffer_emit(emitter, op, &loom_err_shape_001, params,
                           IREE_ARRAYSIZE(params));

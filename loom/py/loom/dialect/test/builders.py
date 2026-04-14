@@ -565,6 +565,31 @@ class TestBuilders:
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_is_vector_prefix_mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def fact_encoding_layout_kind(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes an encoding-summary address-layout kind as an i64 constant.
+
+        Example::
+            %kind = test.fact_encoding_layout_kind %layout : encoding<layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_encoding_layout_kind", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_encoding_layout_stride_hi(self, *, value: ValueRef, axis: int, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes an encoding-summary strided-layout stride upper bound as an i64 constant.
+
+        Example::
+            %hi = test.fact_encoding_layout_stride_hi %layout[0] : encoding<layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["axis"] = axis
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_encoding_layout_stride_hi", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def fact_is_buffer_reference(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Returns 1 if the input has a buffer-reference analysis summary, 0 otherwise.
 

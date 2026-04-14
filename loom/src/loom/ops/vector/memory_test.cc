@@ -99,6 +99,41 @@ class VectorMemoryTest : public ::testing::Test {
                        (uint8_t)IREE_ARRAYSIZE(attributes));
   }
 
+  uint16_t AddStaticStridedLayout(int64_t stride) {
+    loom_string_id_t stride_name = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_module_intern_string(module_, IREE_SV("stride"), &stride_name));
+    loom_named_attr_t attributes[] = {
+        {
+            .name_id = stride_name,
+            .value = loom_attr_i64(stride),
+        },
+    };
+    return AddEncoding(IREE_SV("strided"), attributes,
+                       (uint8_t)IREE_ARRAYSIZE(attributes));
+  }
+
+  uint16_t AddStaticPhysicalStorage(uint16_t layout, uint16_t schema) {
+    loom_string_id_t layout_name = LOOM_STRING_ID_INVALID;
+    loom_string_id_t schema_name = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_module_intern_string(module_, IREE_SV("layout"), &layout_name));
+    IREE_CHECK_OK(
+        loom_module_intern_string(module_, IREE_SV("schema"), &schema_name));
+    loom_named_attr_t attributes[] = {
+        {
+            .name_id = layout_name,
+            .value = loom_attr_encoding(layout),
+        },
+        {
+            .name_id = schema_name,
+            .value = loom_attr_encoding(schema),
+        },
+    };
+    return AddEncoding(IREE_SV("physical_storage"), attributes,
+                       (uint8_t)IREE_ARRAYSIZE(attributes));
+  }
+
   void BuildGgmlQ4_0Schema(loom_value_id_t* out_schema) {
     uint16_t spec = AddGgmlQ4_0Schema();
     loom_op_t* schema = nullptr;
@@ -140,6 +175,13 @@ class VectorMemoryTest : public ::testing::Test {
                                     loom_value_id_t layout_id) {
     view_type.encoding_id = (uint16_t)layout_id;
     view_type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+    return view_type;
+  }
+
+  static loom_type_t ViewWithStaticEncoding(loom_type_t view_type,
+                                            uint16_t encoding_id) {
+    view_type.encoding_id = encoding_id;
+    view_type.encoding_flags = 0;
     return view_type;
   }
 
@@ -265,6 +307,74 @@ TEST_F(VectorMemoryTest, PhysicalStorageCompositionUsesAddressLayout) {
       loom_vector_memory_access_static_axis_stride(&access, 1, &byte_stride));
   EXPECT_EQ(row_stride, 64);
   EXPECT_EQ(byte_stride, 1);
+}
+
+TEST_F(VectorMemoryTest, StaticStridedLayoutComputesLaneOffsets) {
+  uint16_t layout = AddStaticStridedLayout(8);
+  loom_type_t view_type = ViewWithStaticEncoding(
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(16), /*encoding_id=*/0),
+      layout);
+  loom_type_t vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(4), /*encoding_id=*/0);
+
+  loom_vector_memory_access_t access;
+  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
+                                                 vector_type, &access));
+  EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
+
+  int64_t stride = 0;
+  EXPECT_TRUE(
+      loom_vector_memory_access_static_axis_stride(&access, 0, &stride));
+  EXPECT_EQ(stride, 8);
+
+  int64_t static_indices[] = {2};
+  loom_attribute_t static_index_attr = loom_attr_i64_array(
+      static_indices, (uint16_t)IREE_ARRAYSIZE(static_indices));
+  int64_t lane_indices[] = {1};
+  int64_t element_offset = 0;
+  int64_t byte_offset = 0;
+  EXPECT_TRUE(loom_vector_memory_access_static_lane_element_offset(
+      &access, static_index_attr, lane_indices,
+      (uint8_t)IREE_ARRAYSIZE(lane_indices), &element_offset));
+  EXPECT_TRUE(loom_vector_memory_access_static_lane_byte_offset(
+      &access, static_index_attr, lane_indices,
+      (uint8_t)IREE_ARRAYSIZE(lane_indices), &byte_offset));
+  EXPECT_EQ(element_offset, 24);
+  EXPECT_EQ(byte_offset, 96);
+}
+
+TEST_F(VectorMemoryTest, AssumeSpecPhysicalStorageUsesStaticAddressLayout) {
+  loom_value_id_t storage_arg = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_define_block_arg(&builder_, loom_module_block(module_),
+                                    loom_type_encoding(), &storage_arg));
+  uint16_t layout = AddStaticStridedLayout(64);
+  uint16_t schema = AddGgmlQ4_0Schema();
+  uint16_t storage_spec = AddStaticPhysicalStorage(layout, schema);
+  loom_op_t* assume = nullptr;
+  IREE_ASSERT_OK(loom_encoding_assume_spec_build(
+      &builder_, storage_arg, storage_spec, loom_type_encoding(),
+      LOOM_LOCATION_UNKNOWN, &assume));
+
+  loom_type_t view_type = ViewWithLayout(
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I8,
+                          loom_dim_pack_static(18), /*encoding_id=*/0),
+      loom_encoding_assume_spec_result(assume));
+  loom_type_t vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
+                          loom_dim_pack_static(4), /*encoding_id=*/0);
+
+  loom_vector_memory_access_t access;
+  ASSERT_TRUE(loom_vector_memory_access_describe(module_, view_type,
+                                                 vector_type, &access));
+  EXPECT_EQ(access.layout_kind, LOOM_VECTOR_MEMORY_LAYOUT_STRIDED);
+
+  int64_t stride = 0;
+  EXPECT_TRUE(
+      loom_vector_memory_access_static_axis_stride(&access, 0, &stride));
+  EXPECT_EQ(stride, 64);
 }
 
 TEST_F(VectorMemoryTest, DenseLayoutReportsUnknownStaticSuffixStride) {

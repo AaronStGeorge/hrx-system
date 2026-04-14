@@ -66,6 +66,46 @@ static iree_status_t loom_view_verify_static_index_count_matches_rank(
                         IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_view_verify_type_has_encoding(
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
+    iree_string_view_t field_name, loom_type_t type) {
+  if (!loom_type_is_view(type) || loom_type_has_encoding(type)) {
+    return iree_ok_status();
+  }
+
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(field_name),
+      loom_param_string(IREE_SV("view type")),
+  };
+  return loom_view_emit(emitter, op, &loom_err_encoding_001, params,
+                        IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_view_refine_verify_static_dimensions(
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter,
+    loom_type_t source_type, loom_type_t result_type) {
+  uint8_t rank = loom_type_rank(source_type);
+  for (uint8_t axis = 0; axis < rank; ++axis) {
+    if (loom_type_dim_is_dynamic_at(source_type, axis) ||
+        loom_type_dim_is_dynamic_at(result_type, axis)) {
+      continue;
+    }
+    int64_t source_size = loom_type_dim_static_size_at(source_type, axis);
+    int64_t result_size = loom_type_dim_static_size_at(result_type, axis);
+    if (source_size == result_size) continue;
+
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("source static dimension")),
+        loom_param_i64(source_size),
+        loom_param_string(IREE_SV("result static dimension")),
+        loom_param_i64(result_size),
+    };
+    return loom_view_emit(emitter, op, &loom_err_shape_001, params,
+                          IREE_ARRAYSIZE(params));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_view_subview_verify(const loom_module_t* module,
                                        const loom_op_t* op,
                                        iree_diagnostic_emitter_t emitter) {
@@ -79,6 +119,27 @@ iree_status_t loom_view_subview_verify(const loom_module_t* module,
   if (!loom_type_is_view(source_type)) return iree_ok_status();
   return loom_view_verify_static_index_count_matches_rank(
       module, op, emitter, IREE_SV("source"), static_offsets, source_type);
+}
+
+iree_status_t loom_view_refine_verify(const loom_module_t* module,
+                                      const loom_op_t* op,
+                                      iree_diagnostic_emitter_t emitter) {
+  loom_type_t source_type =
+      loom_module_value_type(module, loom_view_refine_source(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_view_refine_result(op));
+
+  IREE_RETURN_IF_ERROR(loom_view_verify_type_has_encoding(
+      op, emitter, IREE_SV("source type layout"), source_type));
+  IREE_RETURN_IF_ERROR(loom_view_verify_type_has_encoding(
+      op, emitter, IREE_SV("result type layout"), result_type));
+
+  if (!loom_type_is_view(source_type) || !loom_type_is_view(result_type) ||
+      !loom_type_rank_equals(source_type, result_type)) {
+    return iree_ok_status();
+  }
+  return loom_view_refine_verify_static_dimensions(op, emitter, source_type,
+                                                   result_type);
 }
 
 iree_status_t loom_view_prefetch_verify(const loom_module_t* module,
