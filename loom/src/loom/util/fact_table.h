@@ -85,6 +85,53 @@ typedef struct loom_value_fact_vector_prefix_mask_t {
   loom_value_facts_t step;
 } loom_value_fact_vector_prefix_mask_t;
 
+// Known reference nullability for storage-like values.
+typedef uint32_t loom_value_fact_reference_nullability_t;
+#define LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN \
+  ((loom_value_fact_reference_nullability_t)0)
+#define LOOM_VALUE_FACT_REFERENCE_NULLABILITY_NULL \
+  ((loom_value_fact_reference_nullability_t)1)
+#define LOOM_VALUE_FACT_REFERENCE_NULLABILITY_NON_NULL \
+  ((loom_value_fact_reference_nullability_t)2)
+
+// Buffer value is an opaque storage root.
+typedef struct loom_value_fact_buffer_reference_t {
+  // Conservative byte extent facts for the root storage allocation.
+  loom_value_facts_t maximum_byte_extent;
+
+  // Minimum provable byte alignment of the root storage base. One means
+  // unknown beyond byte alignment.
+  uint64_t minimum_alignment;
+
+  // SSA value that represents the root storage identity.
+  loom_value_id_t root_value_id;
+
+  // Known nullability for the storage root.
+  loom_value_fact_reference_nullability_t nullability;
+} loom_value_fact_buffer_reference_t;
+
+// View value is a typed projection over a storage root.
+typedef struct loom_value_fact_view_reference_t {
+  // Byte offset facts for the view base relative to root_value_id.
+  loom_value_facts_t base_byte_offset;
+
+  // Conservative byte length facts for the whole-view footprint envelope.
+  loom_value_facts_t footprint_byte_length;
+
+  // Minimum provable alignment of base_byte_offset relative to root_value_id.
+  // The root's own absolute pointer alignment is tracked separately.
+  uint64_t minimum_alignment;
+
+  // Static addressed element byte count, or -1 for sub-byte/unknown elements.
+  int64_t static_element_byte_count;
+
+  // SSA value that represents the root storage identity.
+  loom_value_id_t root_value_id;
+
+  // Known nullability for the underlying storage root.
+  loom_value_fact_reference_nullability_t nullability;
+} loom_value_fact_view_reference_t;
+
 // Per-analysis context passed to op fact inference callbacks.
 struct loom_fact_context_t {
   // Table that owns the dense facts and any extension payloads allocated by
@@ -238,6 +285,28 @@ iree_status_t loom_value_facts_make_vector_prefix_mask(
 bool loom_value_facts_query_vector_prefix_mask(
     const loom_fact_context_t* context, loom_value_facts_t facts,
     loom_value_fact_vector_prefix_mask_t* out);
+
+// Creates facts for a buffer storage root.
+iree_status_t loom_value_facts_make_buffer_reference(
+    loom_fact_context_t* context, loom_value_fact_buffer_reference_t reference,
+    loom_value_facts_t* out);
+
+// Returns true and populates |out| when |facts| is a buffer-reference
+// extension in |context|.
+bool loom_value_facts_query_buffer_reference(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_buffer_reference_t* out);
+
+// Creates facts for a typed view projection.
+iree_status_t loom_value_facts_make_view_reference(
+    loom_fact_context_t* context, loom_value_fact_view_reference_t reference,
+    loom_value_facts_t* out);
+
+// Returns true and populates |out| when |facts| is a view-reference extension
+// in |context|.
+bool loom_value_facts_query_view_reference(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_view_reference_t* out);
 
 #ifdef __cplusplus
 }

@@ -15,15 +15,21 @@ loom_cc_library(
     view
   HDRS
     "ops.h"
+    "reference.h"
   SRCS
     "builders.c"
+    "facts.c"
+    "reference.c"
     "tables.c"
     "verify.c"
   DEPS
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
+    loom::src::loom::util::fact_table
+    loom::src::loom::util::math
   PUBLIC
 )
 

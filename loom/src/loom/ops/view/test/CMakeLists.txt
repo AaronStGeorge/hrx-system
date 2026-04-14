@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "facts"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/facts.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "hints_canonicalize"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/hints_canonicalize.loom-test"

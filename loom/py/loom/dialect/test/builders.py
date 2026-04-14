@@ -564,3 +564,112 @@ class TestBuilders:
         _regions: list[Region] = []
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_is_vector_prefix_mask", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_is_buffer_reference(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Returns 1 if the input has a buffer-reference analysis summary, 0 otherwise.
+
+        Example::
+            %is = test.fact_is_buffer_reference %buffer : buffer -> i1
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_is_buffer_reference", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_is_view_reference(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Returns 1 if the input has a view-reference analysis summary, 0 otherwise.
+
+        Example::
+            %is = test.fact_is_view_reference %view : view<4xf32, %layout> -> i1
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_is_view_reference", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_root_matches(self, *, view: ValueRef, root: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Returns 1 if a view reference and another reference share the same root identity.
+
+        Example::
+            %same = test.fact_view_root_matches %view, %buffer : view<4xf32, %layout>, buffer -> i1
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(view)
+        _operands.append(root)
+        return cast(ValueRef, self._b.build("test.fact_view_root_matches", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_byte_offset_lo(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes a view-reference byte-offset lower bound as an i64 constant.
+
+        Example::
+            %lo = test.fact_view_byte_offset_lo %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_byte_offset_lo", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_byte_offset_hi(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes a view-reference byte-offset upper bound as an i64 constant.
+
+        Example::
+            %hi = test.fact_view_byte_offset_hi %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_byte_offset_hi", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_byte_length_lo(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes a view-reference footprint byte-length lower bound as an i64 constant.
+
+        Example::
+            %lo = test.fact_view_byte_length_lo %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_byte_length_lo", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_byte_length_hi(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes a view-reference footprint byte-length upper bound as an i64 constant.
+
+        Example::
+            %hi = test.fact_view_byte_length_hi %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_byte_length_hi", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_min_alignment(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes the minimum provable view byte-offset alignment as an i64 constant.
+
+        Example::
+            %align = test.fact_view_min_alignment %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_min_alignment", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def fact_view_element_bytes(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes the static addressed element byte count, or -1 when unknown.
+
+        Example::
+            %bytes = test.fact_view_element_bytes %view : view<4xf32, %layout> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_view_element_bytes", _operands, results=results, attributes=_attributes, regions=_regions))

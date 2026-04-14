@@ -56,7 +56,16 @@ enum {
   LOOM_OP_TEST_FACT_POWER_OF_TWO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 35),
   LOOM_OP_TEST_FACT_IS_VECTOR_IOTA = LOOM_OP_KIND(LOOM_DIALECT_TEST, 36),
   LOOM_OP_TEST_FACT_IS_VECTOR_PREFIX_MASK = LOOM_OP_KIND(LOOM_DIALECT_TEST, 37),
-  LOOM_OP_TEST_COUNT_ = 38,
+  LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 38),
+  LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 39),
+  LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 40),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 41),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 42),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 43),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 44),
+  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 45),
+  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 46),
+  LOOM_OP_TEST_COUNT_ = 47,
 };
 
 // Function visibility. Absent (0) means private.
@@ -681,6 +690,161 @@ iree_status_t loom_test_fact_is_vector_prefix_mask_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_test_fact_is_vector_prefix_mask_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE: Returns 1 if the input has a buffer-reference analysis summary, 0 otherwise.
+// %is = test.fact_is_buffer_reference %buffer : buffer -> i1
+LOOM_DEFINE_ISA(loom_test_fact_is_buffer_reference_isa, LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE)
+LOOM_DEFINE_OPERAND(loom_test_fact_is_buffer_reference_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_is_buffer_reference_result, 0)
+iree_status_t loom_test_fact_is_buffer_reference_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_is_buffer_reference_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE: Returns 1 if the input has a view-reference analysis summary, 0 otherwise.
+// %is = test.fact_is_view_reference %view : view<4xf32, %layout> -> i1
+LOOM_DEFINE_ISA(loom_test_fact_is_view_reference_isa, LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE)
+LOOM_DEFINE_OPERAND(loom_test_fact_is_view_reference_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_is_view_reference_result, 0)
+iree_status_t loom_test_fact_is_view_reference_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_is_view_reference_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES: Returns 1 if a view reference and another reference share the same root identity.
+// %same = test.fact_view_root_matches %view, %buffer : view<4xf32, %layout>, buffer -> i1
+LOOM_DEFINE_ISA(loom_test_fact_view_root_matches_isa, LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_root_matches_view, 0)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_root_matches_root, 1)
+LOOM_DEFINE_RESULT(loom_test_fact_view_root_matches_result, 0)
+iree_status_t loom_test_fact_view_root_matches_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t view,
+    loom_may_consume loom_value_id_t root,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_root_matches_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO: Exposes a view-reference byte-offset lower bound as an i64 constant.
+// %lo = test.fact_view_byte_offset_lo %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_byte_offset_lo_isa, LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_byte_offset_lo_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_byte_offset_lo_result, 0)
+iree_status_t loom_test_fact_view_byte_offset_lo_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_byte_offset_lo_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI: Exposes a view-reference byte-offset upper bound as an i64 constant.
+// %hi = test.fact_view_byte_offset_hi %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_byte_offset_hi_isa, LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_byte_offset_hi_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_byte_offset_hi_result, 0)
+iree_status_t loom_test_fact_view_byte_offset_hi_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_byte_offset_hi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO: Exposes a view-reference footprint byte-length lower bound as an i64 constant.
+// %lo = test.fact_view_byte_length_lo %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_byte_length_lo_isa, LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_byte_length_lo_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_byte_length_lo_result, 0)
+iree_status_t loom_test_fact_view_byte_length_lo_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_byte_length_lo_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI: Exposes a view-reference footprint byte-length upper bound as an i64 constant.
+// %hi = test.fact_view_byte_length_hi %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_byte_length_hi_isa, LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_byte_length_hi_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_byte_length_hi_result, 0)
+iree_status_t loom_test_fact_view_byte_length_hi_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_byte_length_hi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT: Exposes the minimum provable view byte-offset alignment as an i64 constant.
+// %align = test.fact_view_min_alignment %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_min_alignment_isa, LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_min_alignment_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_min_alignment_result, 0)
+iree_status_t loom_test_fact_view_min_alignment_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_min_alignment_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES: Exposes the static addressed element byte count, or -1 when unknown.
+// %bytes = test.fact_view_element_bytes %view : view<4xf32, %layout> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_view_element_bytes_isa, LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES)
+LOOM_DEFINE_OPERAND(loom_test_fact_view_element_bytes_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_view_element_bytes_result, 0)
+iree_status_t loom_test_fact_view_element_bytes_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_view_element_bytes_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

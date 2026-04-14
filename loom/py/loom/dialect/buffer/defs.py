@@ -52,6 +52,7 @@ buffer_view = Op(
     results=[Result("result", VIEW, doc="Typed logical view over the buffer.")],
     traits=[PURE],
     verify="loom_buffer_view_verify",
+    facts="loom_buffer_view_facts",
     format=[
         Ref("buffer"),
         GLUE,

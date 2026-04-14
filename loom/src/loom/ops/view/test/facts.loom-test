@@ -1,0 +1,137 @@
+// RUN: pass canonicalize
+
+// Buffer entry arguments seed storage-root facts.
+func.def @buffer_arg_reference(%buffer: buffer) -> (i1) {
+  %is = test.fact_is_buffer_reference %buffer : buffer -> i1
+  func.return %is : i1
+}
+// ----
+func.def @buffer_arg_reference(%buffer: buffer) -> (i1) {
+  %is = scalar.constant 1 : i1
+  func.return %is : i1
+}
+
+// ====
+
+// Dense static views compute exact base, footprint, alignment, and element
+// byte facts.
+func.def @dense_static_view_facts(%buffer: buffer) -> (i64, i64, i64, i64, i64, i64) {
+  %offset = index.constant 64 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
+  %offset_lo = test.fact_view_byte_offset_lo %view : view<4xf32, %layout> -> i64
+  %offset_hi = test.fact_view_byte_offset_hi %view : view<4xf32, %layout> -> i64
+  %length_lo = test.fact_view_byte_length_lo %view : view<4xf32, %layout> -> i64
+  %length_hi = test.fact_view_byte_length_hi %view : view<4xf32, %layout> -> i64
+  %align = test.fact_view_min_alignment %view : view<4xf32, %layout> -> i64
+  %bytes = test.fact_view_element_bytes %view : view<4xf32, %layout> -> i64
+  func.return %offset_lo, %offset_hi, %length_lo, %length_hi, %align, %bytes : i64, i64, i64, i64, i64, i64
+}
+// ----
+func.def @dense_static_view_facts(%buffer: buffer) -> (i64, i64, i64, i64, i64, i64) {
+  %offset_lo = scalar.constant 64 : i64
+  %offset_hi = scalar.constant 64 : i64
+  %length_lo = scalar.constant 16 : i64
+  %length_hi = scalar.constant 16 : i64
+  %align = scalar.constant 64 : i64
+  %bytes = scalar.constant 4 : i64
+  func.return %offset_lo, %offset_hi, %length_lo, %length_hi, %align, %bytes : i64, i64, i64, i64, i64, i64
+}
+
+// ====
+
+// Strided layouts compute a conservative byte envelope including padding gaps.
+func.def @strided_static_footprint(%buffer: buffer) -> (i64) {
+  %offset = index.constant 0 : offset
+  %layout = encoding.layout.strided [8, 1] : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %layout>
+  %length_hi = test.fact_view_byte_length_hi %view : view<4x4xf32, %layout> -> i64
+  func.return %length_hi : i64
+}
+// ----
+func.def @strided_static_footprint(%buffer: buffer) -> (i64) {
+  %length_hi = scalar.constant 112 : i64
+  func.return %length_hi : i64
+}
+
+// ====
+
+// Physical-storage encodings resolve through their nested layout parameter
+// instead of forcing fact consumers to special-case storage schemas.
+func.def @physical_storage_resolves_layout(%buffer: buffer) -> (i64) {
+  %offset = index.constant 0 : offset
+  %layout = encoding.layout.strided [8, 1] : encoding<layout>
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  %storage = encoding.define #physical_storage {layout = %layout : encoding<layout>, schema = %schema : encoding<schema>} : encoding<storage>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %storage>
+  %length_hi = test.fact_view_byte_length_hi %view : view<4x4xf32, %storage> -> i64
+  func.return %length_hi : i64
+}
+// ----
+func.def @physical_storage_resolves_layout(%buffer: buffer) -> (i64) {
+  %length_hi = scalar.constant 112 : i64
+  func.return %length_hi : i64
+}
+
+// ====
+
+// Subviews compose byte-base facts with the source layout and keep the same
+// storage root.
+func.def @subview_composes_base_and_root(%buffer: buffer) -> (i1, i64, i64, i64) {
+  %offset = index.constant 64 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %source = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %sub = view.subview %source[4] : view<16xf32, %layout> -> view<4xf32, %layout>
+  %same = test.fact_view_root_matches %sub, %buffer : view<4xf32, %layout>, buffer -> i1
+  %offset_hi = test.fact_view_byte_offset_hi %sub : view<4xf32, %layout> -> i64
+  %length_hi = test.fact_view_byte_length_hi %sub : view<4xf32, %layout> -> i64
+  %align = test.fact_view_min_alignment %sub : view<4xf32, %layout> -> i64
+  func.return %same, %offset_hi, %length_hi, %align : i1, i64, i64, i64
+}
+// ----
+func.def @subview_composes_base_and_root(%buffer: buffer) -> (i1, i64, i64, i64) {
+  %same = scalar.constant 1 : i1
+  %offset_hi = scalar.constant 80 : i64
+  %length_hi = scalar.constant 16 : i64
+  %align = scalar.constant 16 : i64
+  func.return %same, %offset_hi, %length_hi, %align : i1, i64, i64, i64
+}
+
+// ====
+
+// Offset predicates survive into view facts, preserving range and divisibility.
+func.def @dynamic_offset_facts(%buffer: buffer, %base: offset) -> (i64, i64, i64) {
+  %base2 = index.assume %base [range(%base, 0, 4096), mul(%base, 64)] : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%base2] : buffer -> view<4xf32, %layout>
+  %offset_lo = test.fact_view_byte_offset_lo %view : view<4xf32, %layout> -> i64
+  %offset_hi = test.fact_view_byte_offset_hi %view : view<4xf32, %layout> -> i64
+  %align = test.fact_view_min_alignment %view : view<4xf32, %layout> -> i64
+  func.return %offset_lo, %offset_hi, %align : i64, i64, i64
+}
+// ----
+func.def @dynamic_offset_facts(%buffer: buffer, %base: offset) -> (i64, i64, i64) {
+  %offset_lo = scalar.constant 0 : i64
+  %offset_hi = scalar.constant 4096 : i64
+  %align = scalar.constant 64 : i64
+  func.return %offset_lo, %offset_hi, %align : i64, i64, i64
+}
+
+// ====
+
+// Unknown dynamic strides degrade the footprint envelope without losing the
+// view-reference summary itself.
+func.def @unknown_dynamic_stride_degrades_footprint(%buffer: buffer, %stride: index) -> (i1, i64) {
+  %offset = index.constant 0 : offset
+  %layout = encoding.layout.strided [%stride, 1] : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %layout>
+  %is = test.fact_is_view_reference %view : view<4x4xf32, %layout> -> i1
+  %length_hi = test.fact_view_byte_length_hi %view : view<4x4xf32, %layout> -> i64
+  func.return %is, %length_hi : i1, i64
+}
+// ----
+func.def @unknown_dynamic_stride_degrades_footprint(%buffer: buffer, %stride: index) -> (i1, i64) {
+  %is = scalar.constant 1 : i1
+  %length_hi = scalar.constant 9223372036854775807 : i64
+  func.return %is, %length_hi : i1, i64
+}

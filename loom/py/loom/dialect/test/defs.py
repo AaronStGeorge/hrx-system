@@ -324,6 +324,126 @@ test_fact_is_vector_prefix_mask = Op(
     examples=["%is = test.fact_is_vector_prefix_mask %x : vector<[%n]xi1> -> i1"],
 )
 
+test_fact_is_buffer_reference = Op(
+    "test.fact_is_buffer_reference",
+    group=test_ops,
+    doc="Returns 1 if the input has a buffer-reference analysis summary, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_is_buffer_reference_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%is = test.fact_is_buffer_reference %buffer : buffer -> i1"],
+)
+
+test_fact_is_view_reference = Op(
+    "test.fact_is_view_reference",
+    group=test_ops,
+    doc="Returns 1 if the input has a view-reference analysis summary, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_is_view_reference_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%is = test.fact_is_view_reference %view : view<4xf32, %layout> -> i1"],
+)
+
+test_fact_view_root_matches = Op(
+    "test.fact_view_root_matches",
+    group=test_ops,
+    doc="Returns 1 if a view reference and another reference share the same root identity.",
+    operands=[Operand("view", ANY), Operand("root", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_view_root_matches_facts",
+    format=[
+        Ref("view"),
+        COMMA,
+        Ref("root"),
+        COLON,
+        TypeOf("view"),
+        COMMA,
+        TypeOf("root"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%same = test.fact_view_root_matches %view, %buffer : view<4xf32, %layout>, buffer -> i1",
+    ],
+)
+
+test_fact_view_byte_offset_lo = Op(
+    "test.fact_view_byte_offset_lo",
+    group=test_ops,
+    doc="Exposes a view-reference byte-offset lower bound as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_byte_offset_lo_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%lo = test.fact_view_byte_offset_lo %view : view<4xf32, %layout> -> i64"],
+)
+
+test_fact_view_byte_offset_hi = Op(
+    "test.fact_view_byte_offset_hi",
+    group=test_ops,
+    doc="Exposes a view-reference byte-offset upper bound as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_byte_offset_hi_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%hi = test.fact_view_byte_offset_hi %view : view<4xf32, %layout> -> i64"],
+)
+
+test_fact_view_byte_length_lo = Op(
+    "test.fact_view_byte_length_lo",
+    group=test_ops,
+    doc="Exposes a view-reference footprint byte-length lower bound as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_byte_length_lo_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%lo = test.fact_view_byte_length_lo %view : view<4xf32, %layout> -> i64"],
+)
+
+test_fact_view_byte_length_hi = Op(
+    "test.fact_view_byte_length_hi",
+    group=test_ops,
+    doc="Exposes a view-reference footprint byte-length upper bound as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_byte_length_hi_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%hi = test.fact_view_byte_length_hi %view : view<4xf32, %layout> -> i64"],
+)
+
+test_fact_view_min_alignment = Op(
+    "test.fact_view_min_alignment",
+    group=test_ops,
+    doc="Exposes the minimum provable view byte-offset alignment as an i64 constant.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_min_alignment_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%align = test.fact_view_min_alignment %view : view<4xf32, %layout> -> i64"],
+)
+
+test_fact_view_element_bytes = Op(
+    "test.fact_view_element_bytes",
+    group=test_ops,
+    doc="Exposes the static addressed element byte count, or -1 when unknown.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_view_element_bytes_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%bytes = test.fact_view_element_bytes %view : view<4xf32, %layout> -> i64"],
+)
+
 # ============================================================================
 # test.cmp — comparison with enum predicate
 # ============================================================================
@@ -1033,4 +1153,13 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_power_of_two,
     test_fact_is_vector_iota,
     test_fact_is_vector_prefix_mask,
+    test_fact_is_buffer_reference,
+    test_fact_is_view_reference,
+    test_fact_view_root_matches,
+    test_fact_view_byte_offset_lo,
+    test_fact_view_byte_offset_hi,
+    test_fact_view_byte_length_lo,
+    test_fact_view_byte_length_hi,
+    test_fact_view_min_alignment,
+    test_fact_view_element_bytes,
 )

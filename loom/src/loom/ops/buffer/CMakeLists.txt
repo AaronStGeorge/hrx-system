@@ -17,6 +17,7 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
+    "facts.c"
     "tables.c"
     "verify.c"
   DEPS
@@ -25,6 +26,8 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::view
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 

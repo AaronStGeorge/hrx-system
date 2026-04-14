@@ -141,3 +141,132 @@ iree_status_t loom_test_fact_is_vector_prefix_mask_facts(
           : 0);
   return iree_ok_status();
 }
+
+iree_status_t loom_test_fact_is_buffer_reference_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_query_buffer_reference(context, operand_facts[0], NULL)
+          ? 1
+          : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_is_view_reference_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_query_view_reference(context, operand_facts[0], NULL)
+          ? 1
+          : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_root_matches_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t view_reference = {0};
+  if (!loom_value_facts_query_view_reference(context, operand_facts[0],
+                                             &view_reference)) {
+    result_facts[0] = loom_value_facts_exact_i64(0);
+    return iree_ok_status();
+  }
+
+  loom_value_id_t root_value_id = loom_op_const_operands(op)[1];
+  loom_value_fact_buffer_reference_t buffer_reference = {0};
+  loom_value_fact_view_reference_t other_view_reference = {0};
+  if (loom_value_facts_query_buffer_reference(context, operand_facts[1],
+                                              &buffer_reference)) {
+    root_value_id = buffer_reference.root_value_id;
+  } else if (loom_value_facts_query_view_reference(context, operand_facts[1],
+                                                   &other_view_reference)) {
+    root_value_id = other_view_reference.root_value_id;
+  }
+
+  result_facts[0] = loom_value_facts_exact_i64(
+      view_reference.root_value_id == root_value_id ? 1 : 0);
+  return iree_ok_status();
+}
+
+static loom_value_fact_view_reference_t loom_test_view_reference_or_empty(
+    const loom_fact_context_t* context, loom_value_facts_t facts) {
+  loom_value_fact_view_reference_t reference = {
+      .base_byte_offset = loom_value_facts_exact_i64(INT64_MIN),
+      .footprint_byte_length = loom_value_facts_exact_i64(INT64_MIN),
+      .minimum_alignment = 0,
+      .static_element_byte_count = -1,
+      .root_value_id = LOOM_VALUE_ID_INVALID,
+      .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
+  };
+  (void)loom_value_facts_query_view_reference(context, facts, &reference);
+  return reference;
+}
+
+iree_status_t loom_test_fact_view_byte_offset_lo_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference =
+      loom_test_view_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.base_byte_offset.range_lo);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_byte_offset_hi_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference =
+      loom_test_view_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.base_byte_offset.range_hi);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_byte_length_lo_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference =
+      loom_test_view_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.footprint_byte_length.range_lo);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_byte_length_hi_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference =
+      loom_test_view_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.footprint_byte_length.range_hi);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_min_alignment_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference =
+      loom_test_view_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64((int64_t)reference.minimum_alignment);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_view_element_bytes_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_view_reference_t reference =
+      loom_test_view_reference_or_empty(context, operand_facts[0]);
+  result_facts[0] =
+      loom_value_facts_exact_i64(reference.static_element_byte_count);
+  return iree_ok_status();
+}

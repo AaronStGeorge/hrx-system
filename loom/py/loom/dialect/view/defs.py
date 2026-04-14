@@ -91,6 +91,7 @@ view_subview = Op(
     ],
     traits=[PURE],
     verify="loom_view_subview_verify",
+    facts="loom_view_subview_facts",
     format=[
         Ref("source"),
         IndexList("offsets", "static_offsets"),

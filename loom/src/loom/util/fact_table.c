@@ -22,6 +22,8 @@ typedef enum loom_value_fact_extension_kind_e {
   LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA = 2,
   LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK = 3,
   LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES = 4,
+  LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE = 5,
+  LOOM_VALUE_FACT_EXTENSION_VIEW_REFERENCE = 6,
 } loom_value_fact_extension_kind_t;
 
 struct loom_value_fact_extension_entry_t {
@@ -44,6 +46,10 @@ struct loom_value_fact_extension_entry_t {
     loom_value_fact_vector_iota_t vector_iota;
     // Vector prefix-mask payload.
     loom_value_fact_vector_prefix_mask_t vector_prefix_mask;
+    // Buffer storage-root payload.
+    loom_value_fact_buffer_reference_t buffer_reference;
+    // Typed view projection payload.
+    loom_value_fact_view_reference_t view_reference;
   } payload;
 };
 
@@ -97,6 +103,59 @@ static uint32_t loom_value_fact_hash_host_size(iree_host_size_t value,
   return loom_value_fact_hash_bytes(&value, sizeof(value), hash);
 }
 
+static uint32_t loom_value_fact_hash_i64(int64_t value, uint32_t hash) {
+  return loom_value_fact_hash_bytes(&value, sizeof(value), hash);
+}
+
+static uint32_t loom_value_fact_hash_u64(uint64_t value, uint32_t hash) {
+  return loom_value_fact_hash_bytes(&value, sizeof(value), hash);
+}
+
+static uint32_t loom_value_fact_hash_facts(loom_value_facts_t facts,
+                                           uint32_t hash) {
+  return loom_value_fact_hash_bytes(&facts, sizeof(facts), hash);
+}
+
+static uint32_t loom_value_fact_hash_buffer_reference(
+    loom_value_fact_buffer_reference_t reference, uint32_t hash) {
+  hash = loom_value_fact_hash_facts(reference.maximum_byte_extent, hash);
+  hash = loom_value_fact_hash_u64(reference.minimum_alignment, hash);
+  hash = loom_value_fact_hash_u32(reference.root_value_id, hash);
+  return loom_value_fact_hash_u32(reference.nullability, hash);
+}
+
+static uint32_t loom_value_fact_hash_view_reference(
+    loom_value_fact_view_reference_t reference, uint32_t hash) {
+  hash = loom_value_fact_hash_facts(reference.base_byte_offset, hash);
+  hash = loom_value_fact_hash_facts(reference.footprint_byte_length, hash);
+  hash = loom_value_fact_hash_u64(reference.minimum_alignment, hash);
+  hash = loom_value_fact_hash_i64(reference.static_element_byte_count, hash);
+  hash = loom_value_fact_hash_u32(reference.root_value_id, hash);
+  return loom_value_fact_hash_u32(reference.nullability, hash);
+}
+
+static bool loom_value_fact_buffer_reference_equal(
+    loom_value_fact_buffer_reference_t lhs,
+    loom_value_fact_buffer_reference_t rhs) {
+  return loom_value_facts_equal(lhs.maximum_byte_extent,
+                                rhs.maximum_byte_extent) &&
+         lhs.minimum_alignment == rhs.minimum_alignment &&
+         lhs.root_value_id == rhs.root_value_id &&
+         lhs.nullability == rhs.nullability;
+}
+
+static bool loom_value_fact_view_reference_equal(
+    loom_value_fact_view_reference_t lhs,
+    loom_value_fact_view_reference_t rhs) {
+  return loom_value_facts_equal(lhs.base_byte_offset, rhs.base_byte_offset) &&
+         loom_value_facts_equal(lhs.footprint_byte_length,
+                                rhs.footprint_byte_length) &&
+         lhs.minimum_alignment == rhs.minimum_alignment &&
+         lhs.static_element_byte_count == rhs.static_element_byte_count &&
+         lhs.root_value_id == rhs.root_value_id &&
+         lhs.nullability == rhs.nullability;
+}
+
 static uint32_t loom_value_fact_extension_hash(
     const loom_value_fact_extension_entry_t* entry) {
   uint32_t hash = 2166136261u;
@@ -121,6 +180,12 @@ static uint32_t loom_value_fact_extension_hash(
       return loom_value_fact_hash_bytes(
           &entry->payload.vector_prefix_mask,
           sizeof(entry->payload.vector_prefix_mask), hash);
+    case LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE:
+      return loom_value_fact_hash_buffer_reference(
+          entry->payload.buffer_reference, hash);
+    case LOOM_VALUE_FACT_EXTENSION_VIEW_REFERENCE:
+      return loom_value_fact_hash_view_reference(entry->payload.view_reference,
+                                                 hash);
     default:
       return hash;
   }
@@ -152,6 +217,12 @@ static bool loom_value_fact_extension_content_equal(
       return memcmp(&lhs->payload.vector_prefix_mask,
                     &rhs->payload.vector_prefix_mask,
                     sizeof(lhs->payload.vector_prefix_mask)) == 0;
+    case LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE:
+      return loom_value_fact_buffer_reference_equal(
+          lhs->payload.buffer_reference, rhs->payload.buffer_reference);
+    case LOOM_VALUE_FACT_EXTENSION_VIEW_REFERENCE:
+      return loom_value_fact_view_reference_equal(lhs->payload.view_reference,
+                                                  rhs->payload.view_reference);
     default:
       return false;
   }
@@ -467,6 +538,48 @@ bool loom_value_facts_query_vector_prefix_mask(
   return true;
 }
 
+iree_status_t loom_value_facts_make_buffer_reference(
+    loom_fact_context_t* context, loom_value_fact_buffer_reference_t reference,
+    loom_value_facts_t* out) {
+  loom_value_fact_extension_entry_t entry = {0};
+  entry.kind = LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE;
+  entry.payload.buffer_reference = reference;
+  return loom_value_facts_make_extension(context, &entry, out);
+}
+
+bool loom_value_facts_query_buffer_reference(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_buffer_reference_t* out) {
+  const loom_value_fact_extension_entry_t* entry =
+      loom_value_facts_lookup_extension(context, facts);
+  if (!entry || entry->kind != LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE) {
+    return false;
+  }
+  if (out) *out = entry->payload.buffer_reference;
+  return true;
+}
+
+iree_status_t loom_value_facts_make_view_reference(
+    loom_fact_context_t* context, loom_value_fact_view_reference_t reference,
+    loom_value_facts_t* out) {
+  loom_value_fact_extension_entry_t entry = {0};
+  entry.kind = LOOM_VALUE_FACT_EXTENSION_VIEW_REFERENCE;
+  entry.payload.view_reference = reference;
+  return loom_value_facts_make_extension(context, &entry, out);
+}
+
+bool loom_value_facts_query_view_reference(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    loom_value_fact_view_reference_t* out) {
+  const loom_value_fact_extension_entry_t* entry =
+      loom_value_facts_lookup_extension(context, facts);
+  if (!entry || entry->kind != LOOM_VALUE_FACT_EXTENSION_VIEW_REFERENCE) {
+    return false;
+  }
+  if (out) *out = entry->payload.view_reference;
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Public API
 //===----------------------------------------------------------------------===//
@@ -489,6 +602,62 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
   table->entries[value_id] = facts;
   if ((iree_host_size_t)value_id + 1 > table->count) {
     table->count = (iree_host_size_t)value_id + 1;
+  }
+  return iree_ok_status();
+}
+
+static int64_t loom_value_fact_static_element_byte_count(loom_type_t type) {
+  int32_t bit_count = loom_scalar_type_bitwidth(loom_type_element_type(type));
+  if (bit_count <= 0 || (bit_count % 8) != 0) return -1;
+  return bit_count / 8;
+}
+
+static iree_status_t loom_value_fact_table_seed_buffer_arg(
+    loom_value_fact_table_t* table, loom_value_id_t value_id) {
+  loom_value_fact_buffer_reference_t reference = {
+      .maximum_byte_extent = loom_value_facts_make(0, INT64_MAX, 1),
+      .minimum_alignment = 1,
+      .root_value_id = value_id,
+      .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
+  };
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_RETURN_IF_ERROR(loom_value_facts_make_buffer_reference(
+      &table->context, reference, &facts));
+  return loom_value_fact_table_define(table, value_id, facts);
+}
+
+static iree_status_t loom_value_fact_table_seed_view_arg(
+    loom_value_fact_table_t* table, loom_value_id_t value_id,
+    loom_type_t type) {
+  loom_value_fact_view_reference_t reference = {
+      .base_byte_offset = loom_value_facts_exact_i64(0),
+      .footprint_byte_length = loom_value_facts_make(0, INT64_MAX, 1),
+      .minimum_alignment = 1,
+      .static_element_byte_count =
+          loom_value_fact_static_element_byte_count(type),
+      .root_value_id = value_id,
+      .nullability = LOOM_VALUE_FACT_REFERENCE_NULLABILITY_UNKNOWN,
+  };
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  IREE_RETURN_IF_ERROR(
+      loom_value_facts_make_view_reference(&table->context, reference, &facts));
+  return loom_value_fact_table_define(table, value_id, facts);
+}
+
+static iree_status_t loom_value_fact_table_seed_block_args(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_block_t* block) {
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    loom_value_id_t value_id = loom_block_arg_id(block, i);
+    if (value_id >= module->values.count) continue;
+    loom_type_t type = loom_module_value_type(module, value_id);
+    if (loom_type_is_buffer(type)) {
+      IREE_RETURN_IF_ERROR(
+          loom_value_fact_table_seed_buffer_arg(table, value_id));
+    } else if (loom_type_is_view(type)) {
+      IREE_RETURN_IF_ERROR(
+          loom_value_fact_table_seed_view_arg(table, value_id, type));
+    }
   }
   return iree_ok_status();
 }
@@ -557,6 +726,8 @@ iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
     loom_region_t* region = region_stack[--stack_count];
     loom_block_t* block = NULL;
     loom_region_for_each_block(region, block) {
+      IREE_RETURN_IF_ERROR(
+          loom_value_fact_table_seed_block_args(table, module, block));
       loom_op_t* op = NULL;
       loom_block_for_each_op(block, op) {
         IREE_RETURN_IF_ERROR(
