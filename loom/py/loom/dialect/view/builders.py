@@ -40,6 +40,61 @@ class ViewBuilders:
         _attributes["static_offsets"] = _static
         return cast(ValueRef, self._b.build("view.subview", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def refine(self, *, source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Refine the static type information attached to an existing view while preserving the same storage root and byte base. This is an explicit SSA assertion point for layout, shape, and encoding facts discovered or required by earlier analysis.
+
+        Example::
+            %refined = view.refine %view : view<[%M]xf32, %layout> -> view<16xf32, #dense>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(source)
+        return cast(ValueRef, self._b.build("view.refine", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def load(self, *, view: ValueRef, indices: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Load one scalar element from a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis.
+
+        Example::
+            %x = view.load %view[%row, %col] : view<[%M]x[%N]xf32, %layout> -> f32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(view)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("view.load", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def store(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef]) -> None:
+        """Store one scalar element into a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis.
+
+        Example::
+            view.store %x, %view[%row, %col] : f32, view<[%M]x[%N]xf32, %layout>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(value)
+        _operands.append(view)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("view.store", _operands, attributes=_attributes, regions=_regions)
+
     def prefetch(self, *, view: ValueRef, indices: list[int | ValueRef], intent: str, locality: str) -> None:
         """Compiler hint for a future access to a logical view origin. Prefetch has no semantic memory effects and may not fault semantically, but it is intentionally preserved by ordinary canonicalization/DCE until an explicit hint-stripping pass removes it.
 
@@ -62,15 +117,3 @@ class ViewBuilders:
                 _static.append(_idx)
         _attributes["static_indices"] = _static
         self._b.build("view.prefetch", _operands, attributes=_attributes, regions=_regions)
-
-    def refine(self, *, source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Refine the static type information attached to an existing view while preserving the same storage root and byte base. This is an explicit SSA assertion point for layout, shape, and encoding facts discovered or required by earlier analysis.
-
-        Example::
-            %refined = view.refine %view : view<[%M]xf32, %layout> -> view<16xf32, #dense>
-        """
-        _operands: list[ValueRef | int] = []
-        _attributes: builtins.dict[str, Any] = {}
-        _regions: list[Region] = []
-        _operands.append(source)
-        return cast(ValueRef, self._b.build("view.refine", _operands, results=results, attributes=_attributes, regions=_regions))

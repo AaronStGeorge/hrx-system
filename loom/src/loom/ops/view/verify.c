@@ -81,6 +81,70 @@ static iree_status_t loom_view_verify_type_has_encoding(
                         IREE_ARRAYSIZE(params));
 }
 
+static bool loom_view_static_index_in_bounds(loom_type_t view_type,
+                                             uint8_t axis,
+                                             int64_t static_index) {
+  if (static_index < 0) return false;
+  if (loom_type_dim_is_dynamic_at(view_type, axis)) return true;
+  return static_index < loom_type_dim_static_size_at(view_type, axis);
+}
+
+static bool loom_view_find_static_index_out_of_bounds(
+    loom_attribute_t static_indices, loom_type_t view_type, uint16_t* out_axis,
+    int64_t* out_static_index, int64_t* out_bound) {
+  for (uint16_t i = 0; i < static_indices.count; ++i) {
+    uint8_t axis = (uint8_t)i;
+    int64_t static_index = static_indices.i64_array[i];
+    if (static_index == INT64_MIN) continue;
+    if (loom_view_static_index_in_bounds(view_type, axis, static_index)) {
+      continue;
+    }
+    *out_axis = i;
+    *out_static_index = static_index;
+    *out_bound = loom_type_dim_is_dynamic_at(view_type, axis)
+                     ? -1
+                     : loom_type_dim_static_size_at(view_type, axis);
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_view_emit_static_index_out_of_bounds(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint16_t axis,
+    int64_t static_index, int64_t bound) {
+  int64_t total = static_index == INT64_MAX ? INT64_MAX : static_index + 1;
+  loom_diagnostic_param_t params[] = {
+      loom_param_i64(axis),  loom_param_i64(static_index), loom_param_i64(1),
+      loom_param_i64(total), loom_param_i64(bound),
+  };
+  return loom_view_emit(emitter, op, &loom_err_subrange_004, params,
+                        IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_view_verify_element_access(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t view_field_name,
+    loom_type_t view_type, loom_attribute_t static_indices,
+    uint16_t dynamic_index_count) {
+  IREE_RETURN_IF_ERROR(loom_view_verify_dynamic_index_count(
+      module, op, emitter, static_indices, dynamic_index_count));
+  if (!loom_type_is_view(view_type)) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_view_verify_static_index_count_matches_rank(
+      module, op, emitter, view_field_name, static_indices, view_type));
+
+  uint16_t out_of_bounds_axis = 0;
+  int64_t out_of_bounds_index = 0;
+  int64_t out_of_bounds_bound = 0;
+  if (loom_view_find_static_index_out_of_bounds(
+          static_indices, view_type, &out_of_bounds_axis, &out_of_bounds_index,
+          &out_of_bounds_bound)) {
+    return loom_view_emit_static_index_out_of_bounds(
+        emitter, op, out_of_bounds_axis, out_of_bounds_index,
+        out_of_bounds_bound);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_view_refine_verify_static_dimensions(
     const loom_op_t* op, iree_diagnostic_emitter_t emitter,
     loom_type_t source_type, loom_type_t result_type) {
@@ -140,6 +204,26 @@ iree_status_t loom_view_refine_verify(const loom_module_t* module,
   }
   return loom_view_refine_verify_static_dimensions(op, emitter, source_type,
                                                    result_type);
+}
+
+iree_status_t loom_view_load_verify(const loom_module_t* module,
+                                    const loom_op_t* op,
+                                    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_view_load_view(op));
+  return loom_view_verify_element_access(
+      module, op, emitter, IREE_SV("view"), view_type,
+      loom_view_load_static_indices(op), loom_view_load_indices(op).count);
+}
+
+iree_status_t loom_view_store_verify(const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_view_store_view(op));
+  return loom_view_verify_element_access(
+      module, op, emitter, IREE_SV("view"), view_type,
+      loom_view_store_static_indices(op), loom_view_store_indices(op).count);
 }
 
 iree_status_t loom_view_prefetch_verify(const loom_module_t* module,

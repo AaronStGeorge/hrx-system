@@ -19,9 +19,11 @@ extern "C" {
 
 enum {
   LOOM_OP_VIEW_SUBVIEW = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 0),
-  LOOM_OP_VIEW_PREFETCH = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 1),
-  LOOM_OP_VIEW_REFINE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 2),
-  LOOM_OP_VIEW_COUNT_ = 3,
+  LOOM_OP_VIEW_REFINE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 1),
+  LOOM_OP_VIEW_LOAD = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 2),
+  LOOM_OP_VIEW_STORE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 3),
+  LOOM_OP_VIEW_PREFETCH = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 4),
+  LOOM_OP_VIEW_COUNT_ = 5,
 };
 
 // Intended future access kind for a prefetch hint.
@@ -66,6 +68,68 @@ iree_status_t loom_view_subview_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
+// LOOM_OP_VIEW_REFINE: Refine the static type information attached to an existing view while preserving the same storage root and byte base. This is an explicit SSA assertion point for layout, shape, and encoding facts discovered or required by earlier analysis.
+// %refined = view.refine %view : view<[%M]xf32, %layout> -> view<16xf32, #dense>
+LOOM_DEFINE_ISA(loom_view_refine_isa, LOOM_OP_VIEW_REFINE)
+LOOM_DEFINE_OPERAND(loom_view_refine_source, 0)
+LOOM_DEFINE_RESULT(loom_view_refine_result, 0)
+iree_status_t loom_view_refine_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_view_refine_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_view_refine_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VIEW_LOAD: Load one scalar element from a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis.
+// %x = view.load %view[%row, %col] : view<[%M]x[%N]xf32, %layout> -> f32
+LOOM_DEFINE_ISA(loom_view_load_isa, LOOM_OP_VIEW_LOAD)
+LOOM_DEFINE_OPERAND(loom_view_load_view, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_load_indices, 1)
+LOOM_DEFINE_RESULT(loom_view_load_result, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_load_static_indices, 0)
+iree_status_t loom_view_load_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_view_load_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VIEW_STORE: Store one scalar element into a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis.
+// view.store %x, %view[%row, %col] : f32, view<[%M]x[%N]xf32, %layout>
+LOOM_DEFINE_ISA(loom_view_store_isa, LOOM_OP_VIEW_STORE)
+LOOM_DEFINE_OPERAND(loom_view_store_value, 0)
+LOOM_DEFINE_OPERAND(loom_view_store_view, 1)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_store_indices, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_store_static_indices, 0)
+iree_status_t loom_view_store_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_view_store_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
 // LOOM_OP_VIEW_PREFETCH: Compiler hint for a future access to a logical view origin. Prefetch has no semantic memory effects and may not fault semantically, but it is intentionally preserved by ordinary canonicalization/DCE until an explicit hint-stripping pass removes it.
 // view.prefetch %view[%row, %col] {intent = read, locality = l2} : view<[%M]x[%N]xf32, %layout>
 LOOM_DEFINE_ISA(loom_view_prefetch_isa, LOOM_OP_VIEW_PREFETCH)
@@ -86,26 +150,6 @@ iree_status_t loom_view_prefetch_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_view_prefetch_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
-
-// LOOM_OP_VIEW_REFINE: Refine the static type information attached to an existing view while preserving the same storage root and byte base. This is an explicit SSA assertion point for layout, shape, and encoding facts discovered or required by earlier analysis.
-// %refined = view.refine %view : view<[%M]xf32, %layout> -> view<16xf32, #dense>
-LOOM_DEFINE_ISA(loom_view_refine_isa, LOOM_OP_VIEW_REFINE)
-LOOM_DEFINE_OPERAND(loom_view_refine_source, 0)
-LOOM_DEFINE_RESULT(loom_view_refine_result, 0)
-iree_status_t loom_view_refine_build(
-    loom_builder_t* builder,
-    loom_may_consume loom_value_id_t source,
-    loom_type_t result_type,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_view_refine_facts(
-    loom_fact_context_t* context,
-    const loom_module_t* module, const loom_op_t* op,
-    const loom_value_facts_t* operand_facts,
-    loom_value_facts_t* result_facts);
-iree_status_t loom_view_refine_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

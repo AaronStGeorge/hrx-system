@@ -9,6 +9,7 @@
 from loom.assembly import (
     ARROW,
     COLON,
+    COMMA,
     AttrDict,
     IndexList,
     Ref,
@@ -21,6 +22,7 @@ from loom.dsl import (
     HINT,
     INDEX,
     PURE,
+    SCALAR,
     VIEW,
     AttrDef,
     Dialect,
@@ -29,9 +31,11 @@ from loom.dsl import (
     Op,
     Operand,
     RanksMatch,
+    Reads,
     Result,
     SameElementType,
     SameEncoding,
+    Writes,
 )
 
 # ============================================================================
@@ -140,6 +144,76 @@ view_refine = Op(
 )
 
 # ============================================================================
+# view.load/view.store — scalar logical memory access
+# ============================================================================
+
+view_load = Op(
+    name="view.load",
+    group=view_ops,
+    doc=("Load one scalar element from a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis."),
+    operands=[
+        Operand("view", VIEW, doc="Typed source view."),
+        Operand("indices", INDEX, doc="Dynamic logical element indices.", variadic=True),
+    ],
+    results=[Result("result", SCALAR, doc="Loaded scalar element.")],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[SameElementType("view", "result")],
+    effects=[Reads("view")],
+    verify="loom_view_load_verify",
+    format=[
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        COLON,
+        TypeOf("view"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%x = view.load %view[%row, %col] : view<[%M]x[%N]xf32, %layout> -> f32",
+    ],
+)
+
+view_store = Op(
+    name="view.store",
+    group=view_ops,
+    doc=("Store one scalar element into a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis."),
+    operands=[
+        Operand("value", SCALAR, doc="Scalar element to store."),
+        Operand("view", VIEW, doc="Typed destination view."),
+        Operand("indices", INDEX, doc="Dynamic logical element indices.", variadic=True),
+    ],
+    attrs=[
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ],
+    constraints=[SameElementType("value", "view")],
+    effects=[Writes("view")],
+    verify="loom_view_store_verify",
+    format=[
+        Ref("value"),
+        COMMA,
+        Ref("view"),
+        IndexList("indices", "static_indices"),
+        COLON,
+        TypeOf("value"),
+        COMMA,
+        TypeOf("view"),
+    ],
+    examples=[
+        "view.store %x, %view[%row, %col] : f32, view<[%M]x[%N]xf32, %layout>",
+    ],
+)
+
+# ============================================================================
 # view.prefetch — discardable compiler hint for a future view access
 # ============================================================================
 
@@ -183,4 +257,10 @@ view_prefetch = Op(
 # Registry
 # ============================================================================
 
-ALL_VIEW_OPS: tuple[Op, ...] = (view_subview, view_prefetch, view_refine)
+ALL_VIEW_OPS: tuple[Op, ...] = (
+    view_subview,
+    view_refine,
+    view_load,
+    view_store,
+    view_prefetch,
+)

@@ -8,7 +8,11 @@
 
 from loom.dialect.view.defs import (
     ALL_VIEW_OPS,
+    view_load,
     view_ops,
+    view_prefetch,
+    view_refine,
+    view_store,
     view_subview,
 )
 
@@ -16,4 +20,8 @@ __all__ = [
     "view_ops",
     "ALL_VIEW_OPS",
     "view_subview",
+    "view_refine",
+    "view_load",
+    "view_store",
+    "view_prefetch",
 ]

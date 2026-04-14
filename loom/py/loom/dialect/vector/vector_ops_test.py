@@ -53,6 +53,18 @@ VECTOR_TO_SCALAR_REGISTER_AGGREGATE_MARKERS = {
     "vector.bitcast": "LOOM_OP_VECTOR_BITCAST",
 }
 
+VECTOR_TO_SCALAR_SOURCE_FILES = (
+    "loom/src/loom/transforms/vector_to_scalar.c",
+    "loom/src/loom/transforms/vector_to_scalar_aggregates.c",
+    "loom/src/loom/transforms/vector_to_scalar_descriptors.c",
+    "loom/src/loom/transforms/vector_to_scalar_lanes.c",
+    "loom/src/loom/transforms/vector_to_scalar_quantized.c",
+    "loom/src/loom/transforms/vector_to_scalar_reductions.c",
+    "loom/src/loom/transforms/vector_to_scalar_structural.c",
+    "loom/src/loom/transforms/vector_to_scalar_tables.c",
+    "loom/src/loom/transforms/vector_to_scalar_terms.c",
+)
+
 
 def _op_by_name() -> dict[str, Op]:
     return {op.name: op for op in ALL_VECTOR_OPS}
@@ -70,8 +82,12 @@ def _read_repo_file(path: str) -> str:
     return (_REPO_ROOT / path).read_text()
 
 
+def _vector_to_scalar_all_sources() -> str:
+    return "\n".join(_read_repo_file(path) for path in VECTOR_TO_SCALAR_SOURCE_FILES)
+
+
 def _vector_to_scalar_descriptor_table_source() -> str:
-    source = _read_repo_file("loom/src/loom/transforms/vector_to_scalar.c")
+    source = _read_repo_file("loom/src/loom/transforms/vector_to_scalar_descriptors.c")
     table_start = source.index("kVectorToScalarDescriptors[]")
     table_end = source.index("\n};", table_start)
     return source[table_start:table_end]
@@ -136,7 +152,7 @@ def test_scalar_vector_lanewise_mirrors_have_scalarization_descriptors() -> None
 
 
 def test_register_aggregate_ops_have_vector_to_scalar_coverage() -> None:
-    source = _read_repo_file("loom/src/loom/transforms/vector_to_scalar.c")
+    source = _vector_to_scalar_all_sources()
     vector_names = {op.name for op in ALL_VECTOR_OPS}
 
     unknown = sorted(set(VECTOR_TO_SCALAR_REGISTER_AGGREGATE_MARKERS) - vector_names)
