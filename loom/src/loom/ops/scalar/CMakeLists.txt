@@ -18,7 +18,7 @@ loom_cc_library(
   SRCS
     "builders.c"
     "canonicalize.c"
-    "fold.c"
+    "facts.c"
     "tables.c"
     "verify.c"
   DEPS

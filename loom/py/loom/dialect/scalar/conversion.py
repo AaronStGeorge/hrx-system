@@ -37,7 +37,7 @@ scalar_sitofp = cast_op(
     from_constraint=INTEGER,
     to_constraint=FLOAT,
     doc="Signed integer to floating-point.",
-    fold="loom_scalar_sitofp_fold",
+    facts="loom_scalar_sitofp_facts",
     examples=["%result = scalar.sitofp %input : i32 to f32"],
 )
 scalar_uitofp = cast_op(
@@ -46,7 +46,7 @@ scalar_uitofp = cast_op(
     from_constraint=INTEGER,
     to_constraint=FLOAT,
     doc="Unsigned integer to floating-point.",
-    fold="loom_scalar_uitofp_fold",
+    facts="loom_scalar_uitofp_facts",
     examples=["%result = scalar.uitofp %input : i32 to f32"],
 )
 scalar_fptosi = cast_op(
@@ -55,7 +55,7 @@ scalar_fptosi = cast_op(
     from_constraint=FLOAT,
     to_constraint=INTEGER,
     doc="Floating-point to signed integer (rounds toward zero).",
-    fold="loom_scalar_fptosi_fold",
+    facts="loom_scalar_fptosi_facts",
     examples=["%result = scalar.fptosi %input : f32 to i32"],
 )
 scalar_fptoui = cast_op(
@@ -64,7 +64,7 @@ scalar_fptoui = cast_op(
     from_constraint=FLOAT,
     to_constraint=INTEGER,
     doc="Floating-point to unsigned integer (rounds toward zero).",
-    fold="loom_scalar_fptoui_fold",
+    facts="loom_scalar_fptoui_facts",
     examples=["%result = scalar.fptoui %input : f32 to i32"],
 )
 
@@ -78,7 +78,7 @@ scalar_extf = cast_op(
     from_constraint=FLOAT,
     to_constraint=FLOAT,
     doc="Float precision extension (widen): e.g. f16 to f32.",
-    fold="loom_scalar_extf_fold",
+    facts="loom_scalar_extf_facts",
     examples=["%result = scalar.extf %input : f16 to f32"],
 )
 scalar_fptrunc = cast_op(
@@ -87,7 +87,7 @@ scalar_fptrunc = cast_op(
     from_constraint=FLOAT,
     to_constraint=FLOAT,
     doc="Float precision truncation (narrow): e.g. f32 to f16.",
-    fold="loom_scalar_fptrunc_fold",
+    facts="loom_scalar_fptrunc_facts",
     examples=["%result = scalar.fptrunc %input : f32 to f16"],
 )
 
@@ -101,7 +101,7 @@ scalar_extsi = cast_op(
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Signed integer extension (sign-extend): e.g. i8 to i32.",
-    fold="loom_scalar_extsi_fold",
+    facts="loom_scalar_extsi_facts",
     examples=["%result = scalar.extsi %input : i8 to i32"],
 )
 scalar_extui = cast_op(
@@ -110,7 +110,7 @@ scalar_extui = cast_op(
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Unsigned integer extension (zero-extend): e.g. i8 to i32.",
-    fold="loom_scalar_extui_fold",
+    facts="loom_scalar_extui_facts",
     examples=["%result = scalar.extui %input : i8 to i32"],
 )
 scalar_trunci = cast_op(
@@ -119,7 +119,7 @@ scalar_trunci = cast_op(
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Integer truncation (narrow): e.g. i32 to i8.",
-    fold="loom_scalar_trunci_fold",
+    facts="loom_scalar_trunci_facts",
     examples=["%result = scalar.trunci %input : i32 to i8"],
 )
 
@@ -133,7 +133,7 @@ scalar_bitcast = cast_op(
     from_constraint=SCALAR,
     to_constraint=SCALAR,
     doc="Bitwise reinterpretation: same bits, different type. No conversion.",
-    fold="loom_scalar_bitcast_fold",
+    facts="loom_scalar_bitcast_facts",
     examples=["%result = scalar.bitcast %input : f32 to i32"],
 )
 
@@ -148,7 +148,7 @@ scalar_constant = Op(
     results=[Result("result", SCALAR)],
     attrs=[AttrDef("value", "any", doc="The constant value.")],
     traits=[PURE, CONSTANT_LIKE],
-    fold="loom_scalar_constant_fold",
+    facts="loom_scalar_constant_facts",
     verify="loom_scalar_constant_verify",
     format=[Attr("value"), COLON, TypeOf("result")],
     examples=[

@@ -42,7 +42,7 @@ scalar_expf = unary_op(
     type_constraint=FLOAT,
     doc="Exponential: e^x.",
     flags=_FM,
-    fold="loom_scalar_expf_fold",
+    facts="loom_scalar_expf_facts",
     examples=["%result = scalar.expf %input : f32"],
 )
 scalar_exp2f = unary_op(
@@ -51,7 +51,7 @@ scalar_exp2f = unary_op(
     type_constraint=FLOAT,
     doc="Base-2 exponential: 2^x.",
     flags=_FM,
-    fold="loom_scalar_exp2f_fold",
+    facts="loom_scalar_exp2f_facts",
     examples=["%result = scalar.exp2f %input : f32"],
 )
 scalar_expm1f = unary_op(
@@ -60,7 +60,7 @@ scalar_expm1f = unary_op(
     type_constraint=FLOAT,
     doc="Exponential minus one: e^x - 1 (numerically stable near 0).",
     flags=_FM,
-    fold="loom_scalar_expm1f_fold",
+    facts="loom_scalar_expm1f_facts",
     examples=["%result = scalar.expm1f %input : f32"],
 )
 scalar_logf = unary_op(
@@ -69,7 +69,7 @@ scalar_logf = unary_op(
     type_constraint=FLOAT,
     doc="Natural logarithm: ln(x).",
     flags=_FM,
-    fold="loom_scalar_logf_fold",
+    facts="loom_scalar_logf_facts",
     examples=["%result = scalar.logf %input : f32"],
 )
 scalar_log2f = unary_op(
@@ -78,7 +78,7 @@ scalar_log2f = unary_op(
     type_constraint=FLOAT,
     doc="Base-2 logarithm.",
     flags=_FM,
-    fold="loom_scalar_log2f_fold",
+    facts="loom_scalar_log2f_facts",
     examples=["%result = scalar.log2f %input : f32"],
 )
 scalar_log10f = unary_op(
@@ -87,7 +87,7 @@ scalar_log10f = unary_op(
     type_constraint=FLOAT,
     doc="Base-10 logarithm.",
     flags=_FM,
-    fold="loom_scalar_log10f_fold",
+    facts="loom_scalar_log10f_facts",
     examples=["%result = scalar.log10f %input : f32"],
 )
 scalar_log1pf = unary_op(
@@ -96,7 +96,7 @@ scalar_log1pf = unary_op(
     type_constraint=FLOAT,
     doc="Natural logarithm of 1+x: ln(1+x) (numerically stable near 0).",
     flags=_FM,
-    fold="loom_scalar_log1pf_fold",
+    facts="loom_scalar_log1pf_facts",
     examples=["%result = scalar.log1pf %input : f32"],
 )
 
@@ -110,7 +110,7 @@ scalar_powf = binary_op(
     type_constraint=FLOAT,
     doc="Power: x^y.",
     flags=_FM,
-    fold="loom_scalar_powf_fold",
+    facts="loom_scalar_powf_facts",
     examples=["%result = scalar.powf %lhs, %rhs : f32"],
 )
 scalar_sqrtf = unary_op(
@@ -119,7 +119,7 @@ scalar_sqrtf = unary_op(
     type_constraint=FLOAT,
     doc="Square root.",
     flags=_FM,
-    fold="loom_scalar_sqrtf_fold",
+    facts="loom_scalar_sqrtf_facts",
     examples=["%result = scalar.sqrtf %input : f32"],
 )
 scalar_rsqrtf = unary_op(
@@ -128,7 +128,7 @@ scalar_rsqrtf = unary_op(
     type_constraint=FLOAT,
     doc="Reciprocal square root: 1/sqrt(x).",
     flags=_FM,
-    fold="loom_scalar_rsqrtf_fold",
+    facts="loom_scalar_rsqrtf_facts",
     examples=["%result = scalar.rsqrtf %input : f32"],
 )
 scalar_cbrtf = unary_op(
@@ -137,7 +137,7 @@ scalar_cbrtf = unary_op(
     type_constraint=FLOAT,
     doc="Cube root.",
     flags=_FM,
-    fold="loom_scalar_cbrtf_fold",
+    facts="loom_scalar_cbrtf_facts",
     examples=["%result = scalar.cbrtf %input : f32"],
 )
 
@@ -151,7 +151,7 @@ scalar_sinf = unary_op(
     type_constraint=FLOAT,
     doc="Sine.",
     flags=_FM,
-    fold="loom_scalar_sinf_fold",
+    facts="loom_scalar_sinf_facts",
     examples=["%result = scalar.sinf %input : f32"],
 )
 scalar_cosf = unary_op(
@@ -160,7 +160,7 @@ scalar_cosf = unary_op(
     type_constraint=FLOAT,
     doc="Cosine.",
     flags=_FM,
-    fold="loom_scalar_cosf_fold",
+    facts="loom_scalar_cosf_facts",
     examples=["%result = scalar.cosf %input : f32"],
 )
 scalar_tanf = unary_op(
@@ -169,7 +169,7 @@ scalar_tanf = unary_op(
     type_constraint=FLOAT,
     doc="Tangent.",
     flags=_FM,
-    fold="loom_scalar_tanf_fold",
+    facts="loom_scalar_tanf_facts",
     examples=["%result = scalar.tanf %input : f32"],
 )
 scalar_asinf = unary_op(
@@ -178,7 +178,7 @@ scalar_asinf = unary_op(
     type_constraint=FLOAT,
     doc="Arcsine.",
     flags=_FM,
-    fold="loom_scalar_asinf_fold",
+    facts="loom_scalar_asinf_facts",
     examples=["%result = scalar.asinf %input : f32"],
 )
 scalar_acosf = unary_op(
@@ -187,7 +187,7 @@ scalar_acosf = unary_op(
     type_constraint=FLOAT,
     doc="Arccosine.",
     flags=_FM,
-    fold="loom_scalar_acosf_fold",
+    facts="loom_scalar_acosf_facts",
     examples=["%result = scalar.acosf %input : f32"],
 )
 scalar_atanf = unary_op(
@@ -196,7 +196,7 @@ scalar_atanf = unary_op(
     type_constraint=FLOAT,
     doc="Arctangent.",
     flags=_FM,
-    fold="loom_scalar_atanf_fold",
+    facts="loom_scalar_atanf_facts",
     examples=["%result = scalar.atanf %input : f32"],
 )
 scalar_atan2f = binary_op(
@@ -205,7 +205,7 @@ scalar_atan2f = binary_op(
     type_constraint=FLOAT,
     doc="Two-argument arctangent: atan2(y, x).",
     flags=_FM,
-    fold="loom_scalar_atan2f_fold",
+    facts="loom_scalar_atan2f_facts",
     examples=["%result = scalar.atan2f %lhs, %rhs : f32"],
 )
 
@@ -219,7 +219,7 @@ scalar_sinhf = unary_op(
     type_constraint=FLOAT,
     doc="Hyperbolic sine.",
     flags=_FM,
-    fold="loom_scalar_sinhf_fold",
+    facts="loom_scalar_sinhf_facts",
     examples=["%result = scalar.sinhf %input : f32"],
 )
 scalar_coshf = unary_op(
@@ -228,7 +228,7 @@ scalar_coshf = unary_op(
     type_constraint=FLOAT,
     doc="Hyperbolic cosine.",
     flags=_FM,
-    fold="loom_scalar_coshf_fold",
+    facts="loom_scalar_coshf_facts",
     examples=["%result = scalar.coshf %input : f32"],
 )
 scalar_tanhf = unary_op(
@@ -237,7 +237,7 @@ scalar_tanhf = unary_op(
     type_constraint=FLOAT,
     doc="Hyperbolic tangent.",
     flags=_FM,
-    fold="loom_scalar_tanhf_fold",
+    facts="loom_scalar_tanhf_facts",
     examples=["%result = scalar.tanhf %input : f32"],
 )
 scalar_asinhf = unary_op(
@@ -246,7 +246,7 @@ scalar_asinhf = unary_op(
     type_constraint=FLOAT,
     doc="Inverse hyperbolic sine.",
     flags=_FM,
-    fold="loom_scalar_asinhf_fold",
+    facts="loom_scalar_asinhf_facts",
     examples=["%result = scalar.asinhf %input : f32"],
 )
 scalar_acoshf = unary_op(
@@ -255,7 +255,7 @@ scalar_acoshf = unary_op(
     type_constraint=FLOAT,
     doc="Inverse hyperbolic cosine.",
     flags=_FM,
-    fold="loom_scalar_acoshf_fold",
+    facts="loom_scalar_acoshf_facts",
     examples=["%result = scalar.acoshf %input : f32"],
 )
 scalar_atanhf = unary_op(
@@ -264,7 +264,7 @@ scalar_atanhf = unary_op(
     type_constraint=FLOAT,
     doc="Inverse hyperbolic tangent.",
     flags=_FM,
-    fold="loom_scalar_atanhf_fold",
+    facts="loom_scalar_atanhf_facts",
     examples=["%result = scalar.atanhf %input : f32"],
 )
 
@@ -278,7 +278,7 @@ scalar_erff = unary_op(
     type_constraint=FLOAT,
     doc="Error function (used in GeLU activation).",
     flags=_FM,
-    fold="loom_scalar_erff_fold",
+    facts="loom_scalar_erff_facts",
     examples=["%result = scalar.erff %input : f32"],
 )
 scalar_erfcf = unary_op(
@@ -287,7 +287,7 @@ scalar_erfcf = unary_op(
     type_constraint=FLOAT,
     doc="Complementary error function: 1 - erf(x).",
     flags=_FM,
-    fold="loom_scalar_erfcf_fold",
+    facts="loom_scalar_erfcf_facts",
     examples=["%result = scalar.erfcf %input : f32"],
 )
 
@@ -314,7 +314,7 @@ scalar_fmaf = Op(
         COLON,
         TypeOf("result"),
     ],
-    fold="loom_scalar_fmaf_fold",
+    facts="loom_scalar_fmaf_facts",
     examples=["%result = scalar.fmaf %a, %b, %c : f32"],
 )
 
@@ -329,7 +329,7 @@ scalar_ceilf = unary_op(
     doc="Round toward positive infinity.",
     traits=[IDEMPOTENT],
     flags=_FM,
-    fold="loom_scalar_ceilf_fold",
+    facts="loom_scalar_ceilf_facts",
     examples=["%result = scalar.ceilf %input : f32"],
 )
 scalar_floorf = unary_op(
@@ -339,7 +339,7 @@ scalar_floorf = unary_op(
     doc="Round toward negative infinity.",
     traits=[IDEMPOTENT],
     flags=_FM,
-    fold="loom_scalar_floorf_fold",
+    facts="loom_scalar_floorf_facts",
     examples=["%result = scalar.floorf %input : f32"],
 )
 scalar_roundf = unary_op(
@@ -349,7 +349,7 @@ scalar_roundf = unary_op(
     doc="Round to nearest, ties away from zero.",
     traits=[IDEMPOTENT],
     flags=_FM,
-    fold="loom_scalar_roundf_fold",
+    facts="loom_scalar_roundf_facts",
     examples=["%result = scalar.roundf %input : f32"],
 )
 scalar_roundevenf = unary_op(
@@ -359,7 +359,7 @@ scalar_roundevenf = unary_op(
     doc="Round to nearest, ties to even (IEEE 754 default rounding).",
     traits=[IDEMPOTENT],
     flags=_FM,
-    fold="loom_scalar_roundevenf_fold",
+    facts="loom_scalar_roundevenf_facts",
     examples=["%result = scalar.roundevenf %input : f32"],
 )
 scalar_truncf = unary_op(
@@ -369,7 +369,7 @@ scalar_truncf = unary_op(
     doc="Round toward zero (C trunc).",
     traits=[IDEMPOTENT],
     flags=_FM,
-    fold="loom_scalar_truncf_fold",
+    facts="loom_scalar_truncf_facts",
     examples=["%result = scalar.truncf %input : f32"],
 )
 

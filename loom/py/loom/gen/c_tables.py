@@ -2042,9 +2042,10 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
         if op.effective_traits:
             lines.append(f"loom_trait_flags_t {op.effective_traits}(const loom_op_t* op);")
 
-        # Fold function declaration (hand-written, linked in).
-        if op.fold:
-            lines.append(f"void {op.fold}(")
+        # Fact inference function declaration (hand-written, linked in).
+        if op.facts:
+            lines.append(f"iree_status_t {op.facts}(")
+            lines.append("    loom_fact_context_t* context,")
             lines.append("    const loom_module_t* module, const loom_op_t* op,")
             lines.append("    const loom_value_facts_t* operand_facts,")
             lines.append("    loom_value_facts_t* result_facts);")
@@ -2338,7 +2339,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         sym_kind = _symbol_kind(op)
         constraint_count = len(op.constraints) if op.constraints else 0
         canon = op.canonicalize or "NULL"
-        fold_fn = op.fold or "NULL"
+        infer_facts_fn = op.facts or "NULL"
         verify_fn = op.verify or "NULL"
         eff_traits = op.effective_traits or "NULL"
         interface_ptrs = {spec.vtable_field: _interface_vtable_ptr(op, spec) for spec in _INTERFACES}
@@ -2361,7 +2362,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         lines.append(f"    .symbol_kind = {sym_kind},")
         lines.append(f"    .constraint_count = {constraint_count},")
         lines.append(f"    .canonicalize = {canon},")
-        lines.append(f"    .fold = {fold_fn},")
+        lines.append(f"    .infer_facts = {infer_facts_fn},")
         lines.append(f"    .effective_traits = {eff_traits},")
         lines.append(f"    .attr_descriptors = {attr_desc_ptr},")
         lines.append(f"    .operand_descriptors = {operand_desc_ptr},")

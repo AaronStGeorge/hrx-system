@@ -17,7 +17,7 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
-    "fold.c"
+    "facts.c"
     "tables.c"
     "verify.c"
   DEPS

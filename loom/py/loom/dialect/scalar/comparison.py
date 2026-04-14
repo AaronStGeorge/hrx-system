@@ -86,7 +86,7 @@ scalar_cmpi = comparison_op(
     type_constraint=INTEGER,
     predicates=CmpIPredicate,
     doc="Integer comparison.",
-    fold="loom_scalar_cmpi_fold",
+    facts="loom_scalar_cmpi_facts",
     examples=["%result = scalar.cmpi eq, %lhs, %rhs : i32"],
 )
 
@@ -97,7 +97,7 @@ scalar_cmpf = comparison_op(
     predicates=CmpFPredicate,
     doc="Floating-point comparison.",
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_cmpf_fold",
+    facts="loom_scalar_cmpf_facts",
     examples=["%result = scalar.cmpf olt, %lhs, %rhs : f32"],
 )
 
@@ -122,7 +122,7 @@ scalar_select = Op(
         COLON,
         TypeOf("result"),
     ],
-    fold="loom_scalar_select_fold",
+    facts="loom_scalar_select_facts",
     examples=["%result = scalar.select %cond, %t, %f : f32"],
 )
 
@@ -134,7 +134,7 @@ scalar_isnanf = Op(
     results=[Result("result", I1)],
     traits=[PURE],
     format=[Ref("input"), COLON, TypeOf("input")],
-    fold="loom_scalar_isnanf_fold",
+    facts="loom_scalar_isnanf_facts",
     examples=["%result = scalar.isnanf %input : f32"],
 )
 
@@ -146,7 +146,7 @@ scalar_isinff = Op(
     results=[Result("result", I1)],
     traits=[PURE],
     format=[Ref("input"), COLON, TypeOf("input")],
-    fold="loom_scalar_isinff_fold",
+    facts="loom_scalar_isinff_facts",
     examples=["%result = scalar.isinff %input : f32"],
 )
 
@@ -158,7 +158,7 @@ scalar_isfinitef = Op(
     results=[Result("result", I1)],
     traits=[PURE],
     format=[Ref("input"), COLON, TypeOf("input")],
-    fold="loom_scalar_isfinitef_fold",
+    facts="loom_scalar_isfinitef_facts",
     examples=["%result = scalar.isfinitef %input : f32"],
 )
 
@@ -171,7 +171,7 @@ scalar_signf = Op(
     constraints=[SameType("input", "result")],
     traits=[PURE],
     format=[Ref("input"), COLON, TypeOf("result")],
-    fold="loom_scalar_signf_fold",
+    facts="loom_scalar_signf_facts",
     examples=["%result = scalar.signf %input : f32"],
 )
 
@@ -184,7 +184,7 @@ scalar_signi = Op(
     constraints=[SameType("input", "result")],
     traits=[PURE],
     format=[Ref("input"), COLON, TypeOf("result")],
-    fold="loom_scalar_signi_fold",
+    facts="loom_scalar_signi_facts",
     examples=["%result = scalar.signi %input : i32"],
 )
 

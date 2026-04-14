@@ -93,7 +93,8 @@ iree_status_t loom_test_addi_build(
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 iree_status_t loom_test_addi_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
-void loom_test_addi_fold(
+iree_status_t loom_test_addi_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -129,7 +130,8 @@ iree_status_t loom_test_constant_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_constant_fold(
+iree_status_t loom_test_constant_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -540,7 +542,8 @@ iree_status_t loom_test_fact_range_lo_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_fact_range_lo_fold(
+iree_status_t loom_test_fact_range_lo_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -556,7 +559,8 @@ iree_status_t loom_test_fact_range_hi_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_fact_range_hi_fold(
+iree_status_t loom_test_fact_range_hi_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -572,7 +576,8 @@ iree_status_t loom_test_fact_divisor_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_fact_divisor_fold(
+iree_status_t loom_test_fact_divisor_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -588,7 +593,8 @@ iree_status_t loom_test_fact_non_negative_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_fact_non_negative_fold(
+iree_status_t loom_test_fact_non_negative_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -604,7 +610,8 @@ iree_status_t loom_test_fact_non_zero_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_fact_non_zero_fold(
+iree_status_t loom_test_fact_non_zero_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -620,7 +627,8 @@ iree_status_t loom_test_fact_positive_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_fact_positive_fold(
+iree_status_t loom_test_fact_positive_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
@@ -636,7 +644,8 @@ iree_status_t loom_test_fact_power_of_two_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-void loom_test_fact_power_of_two_fold(
+iree_status_t loom_test_fact_power_of_two_facts(
+    loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);

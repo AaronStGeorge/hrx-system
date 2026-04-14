@@ -16,7 +16,7 @@ loom_cc_library(
     name = "index",
     srcs = [
         "builders.c",
-        "fold.c",
+        "facts.c",
         "tables.c",
         "verify.c",
     ],

@@ -33,7 +33,7 @@ scalar_assume = Op(
     results=[Result("results", INTEGER, variadic=True)],
     attrs=[AttrDef("predicates", "predicate_list")],
     traits=[PURE],
-    fold="loom_scalar_assume_fold",
+    facts="loom_scalar_assume_facts",
     verify="loom_scalar_assume_verify",
     format=[
         Refs("values"),

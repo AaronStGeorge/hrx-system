@@ -87,7 +87,7 @@ index_constant = Op(
     results=[Result("result", ADDRESS)],
     attrs=[AttrDef("value", "any", doc="The constant integer value.")],
     traits=[PURE, CONSTANT_LIKE],
-    fold="loom_index_constant_fold",
+    facts="loom_index_constant_facts",
     verify="loom_index_constant_verify",
     format=[Attr("value"), COLON, TypeOf("result")],
     examples=[
@@ -102,7 +102,7 @@ index_cast = cast_op(
     from_constraint=SCALAR,
     to_constraint=SCALAR,
     doc=("Explicit conversion at an address boundary. At least one side must be index or offset; pure integer width changes use scalar.extsi, scalar.extui, or scalar.trunci."),
-    fold="loom_index_cast_fold",
+    facts="loom_index_cast_facts",
     verify="loom_index_cast_verify",
     examples=[
         "%i = index.cast %n : i64 to index",
@@ -123,7 +123,7 @@ index_assume = Op(
     results=[Result("results", ADDRESS, variadic=True)],
     attrs=[AttrDef("predicates", "predicate_list")],
     traits=[PURE],
-    fold="loom_index_assume_fold",
+    facts="loom_index_assume_facts",
     verify="loom_index_assume_verify",
     format=[
         Refs("values"),
@@ -148,7 +148,7 @@ index_add = binary_op(
     type_constraint=ADDRESS,
     doc="Address-domain addition. Operands and result must all be index or all offset.",
     commutative=True,
-    fold="loom_index_add_fold",
+    facts="loom_index_add_facts",
     examples=[
         "%r = index.add %lhs, %rhs : index",
         "%bytes = index.add %base, %delta : offset",
@@ -160,7 +160,7 @@ index_sub = binary_op(
     group=index_ops,
     type_constraint=ADDRESS,
     doc="Address-domain subtraction. Operands and result must all be index or all offset.",
-    fold="loom_index_sub_fold",
+    facts="loom_index_sub_facts",
     examples=[
         "%r = index.sub %lhs, %rhs : index",
         "%delta = index.sub %end, %base : offset",
@@ -173,7 +173,7 @@ index_mul = binary_op(
     type_constraint=INDEX,
     doc="Logical coordinate multiplication. Offsets are physical byte counts and cannot be multiplied with this op.",
     commutative=True,
-    fold="loom_index_mul_fold",
+    facts="loom_index_mul_facts",
     examples=["%r = index.mul %lhs, %rhs : index"],
 )
 
@@ -198,7 +198,7 @@ index_madd = Op(
         COLON,
         TypeOf("result"),
     ],
-    fold="loom_index_madd_fold",
+    facts="loom_index_madd_facts",
     examples=["%r = index.madd %a, %b, %c : index"],
 )
 
@@ -212,7 +212,7 @@ index_cmp = comparison_op(
     type_constraint=ADDRESS,
     predicates=IndexPredicate,
     doc="Address-domain comparison. Operands must both be index or both be offset.",
-    fold="loom_index_cmp_fold",
+    facts="loom_index_cmp_facts",
     examples=[
         "%p = index.cmp slt, %i, %n : index",
         "%inside = index.cmp ule, %byte_offset, %limit : offset",
@@ -240,7 +240,7 @@ index_select = Op(
         COLON,
         ResultType("result"),
     ],
-    fold="loom_index_select_fold",
+    facts="loom_index_select_facts",
     examples=[
         "%r = index.select %cond, %t, %f : index",
         "%bytes = index.select %cond, %base, %limit : offset",

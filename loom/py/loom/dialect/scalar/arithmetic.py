@@ -45,7 +45,7 @@ scalar_addi = binary_op(
     doc="Integer addition.",
     commutative=True,
     flags=("overflow", IntOverflowFlags),
-    fold="loom_scalar_addi_fold",
+    facts="loom_scalar_addi_facts",
     examples=[
         "%result = scalar.addi %lhs, %rhs : i32",
         "%result = scalar.addi<nuw> %lhs, %rhs : i32",
@@ -58,7 +58,7 @@ scalar_subi = binary_op(
     type_constraint=INTEGER,
     doc="Integer subtraction.",
     flags=("overflow", IntOverflowFlags),
-    fold="loom_scalar_subi_fold",
+    facts="loom_scalar_subi_facts",
     examples=["%result = scalar.subi %lhs, %rhs : i32"],
 )
 
@@ -69,7 +69,7 @@ scalar_muli = binary_op(
     doc="Integer multiplication.",
     commutative=True,
     flags=("overflow", IntOverflowFlags),
-    fold="loom_scalar_muli_fold",
+    facts="loom_scalar_muli_facts",
     examples=["%result = scalar.muli %lhs, %rhs : i32"],
 )
 
@@ -78,7 +78,7 @@ scalar_divsi = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Signed integer division (rounds toward zero).",
-    fold="loom_scalar_divsi_fold",
+    facts="loom_scalar_divsi_facts",
     examples=["%result = scalar.divsi %lhs, %rhs : i32"],
 )
 
@@ -87,7 +87,7 @@ scalar_divui = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Unsigned integer division.",
-    fold="loom_scalar_divui_fold",
+    facts="loom_scalar_divui_facts",
     examples=["%result = scalar.divui %lhs, %rhs : i32"],
 )
 
@@ -96,7 +96,7 @@ scalar_remsi = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Signed integer remainder.",
-    fold="loom_scalar_remsi_fold",
+    facts="loom_scalar_remsi_facts",
     examples=["%result = scalar.remsi %lhs, %rhs : i32"],
 )
 
@@ -105,7 +105,7 @@ scalar_remui = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Unsigned integer remainder.",
-    fold="loom_scalar_remui_fold",
+    facts="loom_scalar_remui_facts",
     examples=["%result = scalar.remui %lhs, %rhs : i32"],
 )
 
@@ -139,7 +139,7 @@ scalar_negi = unary_op(
     type_constraint=INTEGER,
     doc="Integer negation.",
     traits=[INVOLUTION],
-    fold="loom_scalar_negi_fold",
+    facts="loom_scalar_negi_facts",
     examples=["%result = scalar.negi %input : i32"],
 )
 
@@ -149,7 +149,7 @@ scalar_absi = unary_op(
     type_constraint=INTEGER,
     doc="Integer absolute value.",
     traits=[IDEMPOTENT],
-    fold="loom_scalar_absi_fold",
+    facts="loom_scalar_absi_facts",
     examples=["%result = scalar.absi %input : i32"],
 )
 
@@ -159,7 +159,7 @@ scalar_minsi = binary_op(
     type_constraint=INTEGER,
     doc="Signed integer minimum.",
     commutative=True,
-    fold="loom_scalar_minsi_fold",
+    facts="loom_scalar_minsi_facts",
     examples=["%result = scalar.minsi %lhs, %rhs : i32"],
 )
 
@@ -169,7 +169,7 @@ scalar_maxsi = binary_op(
     type_constraint=INTEGER,
     doc="Signed integer maximum.",
     commutative=True,
-    fold="loom_scalar_maxsi_fold",
+    facts="loom_scalar_maxsi_facts",
     examples=["%result = scalar.maxsi %lhs, %rhs : i32"],
 )
 
@@ -179,7 +179,7 @@ scalar_minui = binary_op(
     type_constraint=INTEGER,
     doc="Unsigned integer minimum.",
     commutative=True,
-    fold="loom_scalar_minui_fold",
+    facts="loom_scalar_minui_facts",
     examples=["%result = scalar.minui %lhs, %rhs : i32"],
 )
 
@@ -189,7 +189,7 @@ scalar_maxui = binary_op(
     type_constraint=INTEGER,
     doc="Unsigned integer maximum.",
     commutative=True,
-    fold="loom_scalar_maxui_fold",
+    facts="loom_scalar_maxui_facts",
     examples=["%result = scalar.maxui %lhs, %rhs : i32"],
 )
 
@@ -220,7 +220,7 @@ scalar_fmai = Op(
         COLON,
         TypeOf("result"),
     ],
-    fold="loom_scalar_fmai_fold",
+    facts="loom_scalar_fmai_facts",
     canonicalize="loom_scalar_fmai_canonicalize",
     examples=["%result = scalar.fmai %a, %b, %c : i64"],
 )
@@ -236,7 +236,7 @@ scalar_addf = binary_op(
     doc="Floating-point addition.",
     commutative=True,
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_addf_fold",
+    facts="loom_scalar_addf_facts",
     examples=[
         "%result = scalar.addf %lhs, %rhs : f32",
         "%result = scalar.addf<fast> %lhs, %rhs : f32",
@@ -249,7 +249,7 @@ scalar_subf = binary_op(
     type_constraint=FLOAT,
     doc="Floating-point subtraction.",
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_subf_fold",
+    facts="loom_scalar_subf_facts",
     examples=["%result = scalar.subf %lhs, %rhs : f32"],
 )
 
@@ -260,7 +260,7 @@ scalar_mulf = binary_op(
     doc="Floating-point multiplication.",
     commutative=True,
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_mulf_fold",
+    facts="loom_scalar_mulf_facts",
     examples=["%result = scalar.mulf %lhs, %rhs : f32"],
 )
 
@@ -270,7 +270,7 @@ scalar_divf = binary_op(
     type_constraint=FLOAT,
     doc="Floating-point division.",
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_divf_fold",
+    facts="loom_scalar_divf_facts",
     examples=["%result = scalar.divf %lhs, %rhs : f32"],
 )
 
@@ -280,7 +280,7 @@ scalar_remf = binary_op(
     type_constraint=FLOAT,
     doc="Floating-point remainder (C fmod semantics).",
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_remf_fold",
+    facts="loom_scalar_remf_facts",
     examples=["%result = scalar.remf %lhs, %rhs : f32"],
 )
 
@@ -291,7 +291,7 @@ scalar_negf = unary_op(
     doc="Floating-point negation.",
     traits=[INVOLUTION],
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_negf_fold",
+    facts="loom_scalar_negf_facts",
     examples=["%result = scalar.negf %input : f32"],
 )
 
@@ -302,7 +302,7 @@ scalar_absf = unary_op(
     doc="Floating-point absolute value.",
     traits=[IDEMPOTENT],
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_absf_fold",
+    facts="loom_scalar_absf_facts",
     examples=["%result = scalar.absf %input : f32"],
 )
 
@@ -313,7 +313,7 @@ scalar_minimumf = binary_op(
     doc="IEEE 754 minimum (NaN propagates).",
     commutative=True,
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_minimumf_fold",
+    facts="loom_scalar_minimumf_facts",
     examples=["%result = scalar.minimumf %lhs, %rhs : f32"],
 )
 
@@ -324,7 +324,7 @@ scalar_maximumf = binary_op(
     doc="IEEE 754 maximum (NaN propagates).",
     commutative=True,
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_maximumf_fold",
+    facts="loom_scalar_maximumf_facts",
     examples=["%result = scalar.maximumf %lhs, %rhs : f32"],
 )
 
@@ -335,7 +335,7 @@ scalar_minnumf = binary_op(
     doc="C99 fmin (NaN ignored, returns the non-NaN operand).",
     commutative=True,
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_minnumf_fold",
+    facts="loom_scalar_minnumf_facts",
     examples=["%result = scalar.minnumf %lhs, %rhs : f32"],
 )
 
@@ -346,7 +346,7 @@ scalar_maxnumf = binary_op(
     doc="C99 fmax (NaN ignored, returns the non-NaN operand).",
     commutative=True,
     flags=("fastmath", FastMathFlags),
-    fold="loom_scalar_maxnumf_fold",
+    facts="loom_scalar_maxnumf_facts",
     examples=["%result = scalar.maxnumf %lhs, %rhs : f32"],
 )
 
@@ -355,7 +355,7 @@ scalar_copysignf = binary_op(
     group=scalar_ops,
     type_constraint=FLOAT,
     doc="Copy sign of rhs onto magnitude of lhs.",
-    fold="loom_scalar_copysignf_fold",
+    facts="loom_scalar_copysignf_facts",
     examples=["%result = scalar.copysignf %lhs, %rhs : f32"],
 )
 

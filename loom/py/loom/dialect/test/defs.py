@@ -138,7 +138,7 @@ test_addi = binary_op(
     type_constraint=INTEGER,
     doc="Test binary integer op.",
     commutative=True,
-    fold="loom_test_addi_fold",
+    facts="loom_test_addi_facts",
     canonicalize="loom_test_addi_canonicalize",
     examples=["%result = test.addi %lhs, %rhs : i32"],
 )
@@ -180,7 +180,7 @@ test_constant = Op(
     results=[Result("result", ANY)],
     attrs=[AttrDef("value", "any", doc="The constant value.")],
     traits=[PURE, CONSTANT_LIKE],
-    fold="loom_test_constant_fold",
+    facts="loom_test_constant_facts",
     verify="loom_test_constant_verify",
     format=[Attr("value"), COLON, TypeOf("result")],
     examples=[
@@ -212,7 +212,7 @@ test_use = Op(
 #
 # Each op reads one property from the analysis facts of its input and
 # exposes it as a result. During canonicalization with facts enabled,
-# the fold function returns exact facts, which the rewriter materializes
+# the fact inference function returns exact facts, which the rewriter materializes
 # as scalar.constant ops. This makes internal analysis state observable
 # in .loom-test files.
 
@@ -223,7 +223,7 @@ test_fact_range_lo = Op(
     operands=[Operand("value", ANY)],
     results=[Result("result", INTEGER)],
     traits=[PURE],
-    fold="loom_test_fact_range_lo_fold",
+    facts="loom_test_fact_range_lo_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%lo = test.fact_range_lo %x : index -> i64"],
 )
@@ -235,7 +235,7 @@ test_fact_range_hi = Op(
     operands=[Operand("value", ANY)],
     results=[Result("result", INTEGER)],
     traits=[PURE],
-    fold="loom_test_fact_range_hi_fold",
+    facts="loom_test_fact_range_hi_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%hi = test.fact_range_hi %x : index -> i64"],
 )
@@ -247,7 +247,7 @@ test_fact_divisor = Op(
     operands=[Operand("value", ANY)],
     results=[Result("result", INTEGER)],
     traits=[PURE],
-    fold="loom_test_fact_divisor_fold",
+    facts="loom_test_fact_divisor_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%div = test.fact_divisor %x : index -> i64"],
 )
@@ -259,7 +259,7 @@ test_fact_non_negative = Op(
     operands=[Operand("value", ANY)],
     results=[Result("result", I1)],
     traits=[PURE],
-    fold="loom_test_fact_non_negative_fold",
+    facts="loom_test_fact_non_negative_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%nn = test.fact_non_negative %x : index -> i1"],
 )
@@ -271,7 +271,7 @@ test_fact_non_zero = Op(
     operands=[Operand("value", ANY)],
     results=[Result("result", I1)],
     traits=[PURE],
-    fold="loom_test_fact_non_zero_fold",
+    facts="loom_test_fact_non_zero_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%nz = test.fact_non_zero %x : index -> i1"],
 )
@@ -283,7 +283,7 @@ test_fact_positive = Op(
     operands=[Operand("value", ANY)],
     results=[Result("result", I1)],
     traits=[PURE],
-    fold="loom_test_fact_positive_fold",
+    facts="loom_test_fact_positive_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%pos = test.fact_positive %x : index -> i1"],
 )
@@ -295,7 +295,7 @@ test_fact_power_of_two = Op(
     operands=[Operand("value", ANY)],
     results=[Result("result", I1)],
     traits=[PURE],
-    fold="loom_test_fact_power_of_two_fold",
+    facts="loom_test_fact_power_of_two_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
     examples=["%p2 = test.fact_power_of_two %x : index -> i1"],
 )

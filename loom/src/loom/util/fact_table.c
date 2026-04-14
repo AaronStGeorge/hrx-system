@@ -88,6 +88,7 @@ iree_status_t loom_value_fact_table_initialize(
     iree_host_size_t initial_capacity) {
   memset(table, 0, sizeof(*table));
   table->arena = arena;
+  table->context.table = table;
   if (initial_capacity == 0) return iree_ok_status();
   return loom_value_fact_table_ensure_capacity(table, initial_capacity);
 }
@@ -112,7 +113,7 @@ iree_status_t loom_value_fact_table_compute_op(loom_value_fact_table_t* table,
                                                const loom_module_t* module,
                                                const loom_op_t* op) {
   const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-  if (!vtable || !vtable->fold) return iree_ok_status();
+  if (!vtable || !vtable->infer_facts) return iree_ok_status();
 
   // Get scratch for operand + result facts.
   iree_host_size_t total =
@@ -129,8 +130,9 @@ iree_status_t loom_value_fact_table_compute_op(loom_value_fact_table_t* table,
     operand_facts[i] = loom_value_fact_table_lookup(table, operands[i]);
   }
 
-  // Call the fold function.
-  vtable->fold(module, op, operand_facts, result_facts);
+  // Call the fact inference function.
+  IREE_RETURN_IF_ERROR(vtable->infer_facts(&table->context, module, op,
+                                           operand_facts, result_facts));
 
   // Store result facts.
   const loom_value_id_t* results = loom_op_const_results(op);

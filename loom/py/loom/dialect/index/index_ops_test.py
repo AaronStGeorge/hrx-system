@@ -52,7 +52,7 @@ class TestIndexDialect:
         assert op.results[0].type_constraint == ADDRESS
         assert op.results[0].variadic is True
         assert op.verify == "loom_index_assume_verify"
-        assert op.fold == "loom_index_assume_fold"
+        assert op.facts == "loom_index_assume_facts"
 
     def test_address_arithmetic_is_address_typed(self) -> None:
         for name in ("index.add", "index.sub"):

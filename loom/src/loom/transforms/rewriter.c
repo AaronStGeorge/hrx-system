@@ -151,7 +151,7 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
   *out_folded = false;
   if (!rewriter->fact_table.entries) return iree_ok_status();
   const loom_op_vtable_t* vtable = loom_op_vtable(rewriter->module, op);
-  if (!vtable || !vtable->fold) return iree_ok_status();
+  if (!vtable || !vtable->infer_facts) return iree_ok_status();
 
   // Compute facts for this op (updates the table, reuses table scratch).
   IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op(&rewriter->fact_table,

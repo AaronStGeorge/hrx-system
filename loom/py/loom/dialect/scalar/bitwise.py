@@ -26,7 +26,7 @@ scalar_andi = binary_op(
     type_constraint=INTEGER,
     doc="Bitwise AND.",
     commutative=True,
-    fold="loom_scalar_andi_fold",
+    facts="loom_scalar_andi_facts",
     examples=["%result = scalar.andi %lhs, %rhs : i32"],
 )
 scalar_ori = binary_op(
@@ -35,7 +35,7 @@ scalar_ori = binary_op(
     type_constraint=INTEGER,
     doc="Bitwise OR.",
     commutative=True,
-    fold="loom_scalar_ori_fold",
+    facts="loom_scalar_ori_facts",
     examples=["%result = scalar.ori %lhs, %rhs : i32"],
 )
 scalar_xori = binary_op(
@@ -44,7 +44,7 @@ scalar_xori = binary_op(
     type_constraint=INTEGER,
     doc="Bitwise XOR.",
     commutative=True,
-    fold="loom_scalar_xori_fold",
+    facts="loom_scalar_xori_facts",
     examples=["%result = scalar.xori %lhs, %rhs : i32"],
 )
 
@@ -58,7 +58,7 @@ scalar_shli = binary_op(
     type_constraint=INTEGER,
     doc="Left shift.",
     flags=("overflow", IntOverflowFlags),
-    fold="loom_scalar_shli_fold",
+    facts="loom_scalar_shli_facts",
     examples=["%result = scalar.shli %lhs, %rhs : i32"],
 )
 scalar_shrsi = binary_op(
@@ -66,7 +66,7 @@ scalar_shrsi = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Arithmetic right shift (sign-extending).",
-    fold="loom_scalar_shrsi_fold",
+    facts="loom_scalar_shrsi_facts",
     examples=["%result = scalar.shrsi %lhs, %rhs : i32"],
 )
 scalar_shrui = binary_op(
@@ -74,7 +74,7 @@ scalar_shrui = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Logical right shift (zero-extending).",
-    fold="loom_scalar_shrui_fold",
+    facts="loom_scalar_shrui_facts",
     examples=["%result = scalar.shrui %lhs, %rhs : i32"],
 )
 
@@ -87,7 +87,7 @@ scalar_rotli = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Left rotate.",
-    fold="loom_scalar_rotli_fold",
+    facts="loom_scalar_rotli_facts",
     examples=["%result = scalar.rotli %lhs, %rhs : i32"],
 )
 scalar_rotri = binary_op(
@@ -95,7 +95,7 @@ scalar_rotri = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Right rotate.",
-    fold="loom_scalar_rotri_fold",
+    facts="loom_scalar_rotri_facts",
     examples=["%result = scalar.rotri %lhs, %rhs : i32"],
 )
 
@@ -108,7 +108,7 @@ scalar_ctlzi = unary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Count leading zeros.",
-    fold="loom_scalar_ctlzi_fold",
+    facts="loom_scalar_ctlzi_facts",
     examples=["%result = scalar.ctlzi %input : i32"],
 )
 scalar_cttzi = unary_op(
@@ -116,7 +116,7 @@ scalar_cttzi = unary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Count trailing zeros.",
-    fold="loom_scalar_cttzi_fold",
+    facts="loom_scalar_cttzi_facts",
     examples=["%result = scalar.cttzi %input : i32"],
 )
 scalar_ctpopi = unary_op(
@@ -124,7 +124,7 @@ scalar_ctpopi = unary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Population count (number of set bits).",
-    fold="loom_scalar_ctpopi_fold",
+    facts="loom_scalar_ctpopi_facts",
     examples=["%result = scalar.ctpopi %input : i32"],
 )
 

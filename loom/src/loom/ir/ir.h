@@ -693,21 +693,22 @@ typedef iree_status_t (*loom_canonicalize_fn_t)(loom_op_t* op,
 // The callback gives each op kind control over interpretation.
 typedef loom_trait_flags_t (*loom_effective_traits_fn_t)(const loom_op_t* op);
 
+typedef struct loom_fact_context_t loom_fact_context_t;
 typedef struct loom_value_facts_t loom_value_facts_t;
 
-// Fold callback. Computes output facts from operand facts for value
-// analysis and constant folding. Called by the rewriter to propagate
-// facts through operations and to fold ops to constants when all
-// output facts are exact.
+// Fact inference callback. Computes output facts from operand facts for value
+// analysis. Constant folding is a consumer of these facts, not part of this
+// callback's contract: the rewriter may materialize constants when all result
+// facts are exact.
 //
 // Writes one entry per result into |result_facts|. Single-result ops
 // write result_facts[0]. Multi-result ops fill the entire array.
 // |module| provides type access (int vs float detection, bitwidth
 // queries via loom_module_value_type). Must not mutate IR.
-typedef void (*loom_op_fold_fn_t)(const loom_module_t* module,
-                                  const loom_op_t* op,
-                                  const loom_value_facts_t* operand_facts,
-                                  loom_value_facts_t* result_facts);
+typedef iree_status_t (*loom_op_infer_facts_fn_t)(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 //===----------------------------------------------------------------------===//
 // FuncLike interface vtable
@@ -856,7 +857,7 @@ typedef struct loom_region_branch_t {
 // Layout is cache-optimized for compiler pass inner loops:
 //
 //   Cache line 1 (bytes 0-63): scalars and pointers touched by every
-//   pass on every op — traits, counts, canonicalize/fold fn pointers,
+//   pass on every op — traits, counts, canonicalize/fact fn pointers,
 //   attr/operand descriptors.
 //
 //   Cache line 2 (bytes 64-127): verification, parse/print, and
@@ -892,7 +893,7 @@ struct loom_op_vtable_t {
   // 5 bytes padding to align pointers at offset 16.
 
   loom_canonicalize_fn_t canonicalize;
-  loom_op_fold_fn_t fold;
+  loom_op_infer_facts_fn_t infer_facts;
   loom_effective_traits_fn_t effective_traits;
   const loom_attr_descriptor_t* attr_descriptors;
   const loom_operand_descriptor_t* operand_descriptors;

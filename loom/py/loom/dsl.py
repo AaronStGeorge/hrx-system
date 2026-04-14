@@ -1716,7 +1716,7 @@ class Op:
     effective_traits: str = (
         ""  # C function name for per-instance trait computation, or "".
     )
-    fold: str = ""  # C function name for fold/transfer, or "".
+    facts: str = ""  # C function name for fact inference, or "".
     verify: str = ""  # C function name for op-specific verification, or "".
     interfaces: tuple[
         Any, ...
@@ -1739,7 +1739,7 @@ class Op:
         effects: list[Effect] | tuple[Effect, ...] = (),
         canonicalize: str = "",
         effective_traits: str = "",
-        fold: str = "",
+        facts: str = "",
         verify: str = "",
         interfaces: list[Any] | tuple[Any, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
@@ -1764,7 +1764,7 @@ class Op:
         object.__setattr__(self, "effects", frozen_effects)
         object.__setattr__(self, "canonicalize", canonicalize)
         object.__setattr__(self, "effective_traits", effective_traits)
-        object.__setattr__(self, "fold", fold)
+        object.__setattr__(self, "facts", facts)
         object.__setattr__(self, "verify", verify)
         object.__setattr__(self, "interfaces", tuple(interfaces))
         object.__setattr__(self, "format", frozen_format)

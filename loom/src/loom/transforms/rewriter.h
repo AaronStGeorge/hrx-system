@@ -110,8 +110,8 @@ iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
                                           loom_func_like_t function);
 
 // Enables value analysis on this rewriter. Initializes the fact table
-// and runs the initial forward pass over the function, seeding facts
-// from fold functions. Call once after initialize, before the worklist
+// and runs the initial forward pass over the function, seeding facts from fact
+// inference functions. Call once after initialize, before the worklist
 // loop. Patterns can then query facts via loom_rewriter_value_facts.
 iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
                                             loom_func_like_t function);
@@ -134,13 +134,12 @@ iree_status_t loom_rewriter_build_constant(loom_rewriter_t* rewriter,
                                            loom_location_id_t location,
                                            loom_value_id_t* out_value_id);
 
-// Attempts to fold an op to constants using its vtable fold function.
-// Gathers operand facts, calls fold, updates stored facts in the
-// table. If all results produce exact facts, materializes constants
-// via the rewriter's materialize_constant callback and replaces the
-// original op via RAUW+erase.
+// Attempts to fold an op to constants using its vtable fact inference function.
+// Gathers operand facts, updates stored facts in the table, and materializes
+// constants via the rewriter's materialize_constant callback when all results
+// produce exact facts. Replaces the original op via RAUW+erase.
 // Sets |*out_folded| to true if the op was erased, false otherwise.
-// No-op if analysis is not enabled or the op has no fold function.
+// No-op if analysis is not enabled or the op has no inference function.
 iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
                                      bool* out_folded);
 
