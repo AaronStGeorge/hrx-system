@@ -4,7 +4,7 @@
 // scalar is poison: no vector lane observes the operand.
 func.def @empty_splat_ignores_poison() -> (vector<0xf32>) {
   %p = scalar.poison : f32
-  %r = vector.splat %p : f32 -> vector<0xf32>
+  %r = vector.splat %p : vector<0xf32>
   func.return %r : vector<0xf32>
 }
 // ----
@@ -35,6 +35,18 @@ func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
 }
 // ----
 func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
+  func.return %init : f32
+}
+
+// ====
+
+// Dotting zero lanes observes no vector lanes and returns the explicit init.
+func.def @empty_dotf(%lhs: vector<0xf32>, %rhs: vector<0xf32>, %init: f32) -> (f32) {
+  %r = vector.dotf %lhs, %rhs, %init : vector<0xf32>, vector<0xf32> -> f32
+  func.return %r : f32
+}
+// ----
+func.def @empty_dotf(%lhs: vector<0xf32>, %rhs: vector<0xf32>, %init: f32) -> (f32) {
   func.return %init : f32
 }
 

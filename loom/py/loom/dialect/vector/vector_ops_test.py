@@ -355,3 +355,19 @@ def test_vector_dot4i_is_pure_grouped_i8_to_i32_dot() -> None:
     assert "Pure" in trait_names
     assert "Elementwise" not in trait_names
     assert op.effects == ()
+
+
+def test_vector_dotf_is_pure_same_element_fused_dot() -> None:
+    op = _op_by_name()["vector.dotf"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    trait_names = {trait.name for trait in op.traits}
+
+    assert ("HasFloatElement", ("lhs",)) in constraints
+    assert ("SameShape", ("lhs", "rhs")) in constraints
+    assert ("SameType", ("init", "result")) in constraints
+    assert ("SameElementType", ("lhs", "rhs", "init")) in constraints
+    assert "scalar.fmaf" in op.doc
+    assert "Zero-lane inputs return init" in op.doc
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
+    assert op.effects == ()

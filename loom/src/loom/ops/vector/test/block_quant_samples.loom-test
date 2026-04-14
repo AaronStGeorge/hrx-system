@@ -60,7 +60,7 @@ func.def @q8_0_reference_chunk() -> (i1) {
   %q = vector.from_elements %q0, %q1, %q2, %q3 : i8, i8, i8, i8 -> vector<4xi8>
 
   %scale = scalar.constant 0.5 : f16
-  %scalev = vector.splat %scale : f16 -> vector<4xf16>
+  %scalev = vector.splat %scale : vector<4xf16>
   %qf = vector.sitofp %q : vector<4xi8> to vector<4xf16>
   %decoded = vector.mulf %qf, %scalev : vector<4xf16>
 
@@ -294,9 +294,8 @@ func.def @turboquant_logit_reference(%query: vector<4xf16>, %packed_codes: vecto
   %decoded = vector.table.lookup %centroids[%codes] : vector<4xf16>, vector<4xi8> -> vector<4xf16>
   %q32 = vector.extf %query : vector<4xf16> to vector<4xf32>
   %d32 = vector.extf %decoded : vector<4xf16> to vector<4xf32>
-  %prod = vector.mulf %q32, %d32 : vector<4xf32>
   %zero = scalar.constant 0.0 : f32
-  %logit = vector.reduce<addf> %prod, %zero : vector<4xf32> -> f32
+  %logit = vector.dotf %q32, %d32, %zero : vector<4xf32>, vector<4xf32> -> f32
   func.return %logit : f32
 }
 

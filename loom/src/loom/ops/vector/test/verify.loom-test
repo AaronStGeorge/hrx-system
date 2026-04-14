@@ -948,6 +948,43 @@ func.def @bitunpack_static_count_mismatch(%v: vector<1xi8>) {
 
 // ====
 
+// Floating dot products consume floating source lanes.
+func.def @dotf_source_not_float(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: i32) {
+  // ERROR@+1: TYPE/003 "float_element"
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xi32>, vector<4xi32> -> i32
+  func.return
+}
+
+// ====
+
+// Floating dot products require same-shaped source vectors.
+func.def @dotf_source_shape_mismatch(%lhs: vector<4xf32>, %rhs: vector<8xf32>, %acc: f32) {
+  // ERROR@+1: SHAPE/002
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<8xf32> -> f32
+  func.return
+}
+
+// ====
+
+// Plain dotf is a same-element operation; widened target-shaped dots use
+// explicit conversion or dedicated target-specific grouped dot ops.
+func.def @dotf_acc_element_mismatch(%lhs: vector<4xf16>, %rhs: vector<4xf16>, %acc: f32) {
+  // ERROR@+1: TYPE/002
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf16>, vector<4xf16> -> f32
+  func.return
+}
+
+// ====
+
+// The explicit init and scalar result are the same accumulator type.
+func.def @dotf_result_type_mismatch(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) {
+  // ERROR@+1: TYPE/001
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32> -> f64
+  func.return
+}
+
+// ====
+
 // Dot4 source lanes are byte lanes; larger integer lanes are not silently
 // reinterpreted.
 func.def @dot4i_source_not_i8(%lhs: vector<16xi32>, %rhs: vector<16xi8>, %acc: vector<4xi32>) {

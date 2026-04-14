@@ -1366,6 +1366,13 @@ class TestParseLoopOp:
             op.regions[0].blocks[0].ops[0].operands[0]
             == (op.regions[0].blocks[0].arg_ids[1])
         )
+        assert (
+            _op_printer().print_operation(op, module)
+            == "%r = test.loop %i = %c0 to %n step %c1"
+            " iter_args(%acc = %init : f32) -> (%init as f32) {\n"
+            "  test.yield %acc : f32\n"
+            "}"
+        )
 
     def test_iter_arg_name_is_not_tied_result_target(self) -> None:
         module, scope = _setup_scope(

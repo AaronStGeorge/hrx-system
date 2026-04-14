@@ -326,7 +326,11 @@ def _element_constraint_for(
 vector_constant = Op(
     "vector.constant",
     group=vector_ops,
-    doc="Materialize a compile-time splat constant vector value.",
+    doc=(
+        "Materialize a compile-time vector value whose every lane has the "
+        "same scalar attribute payload. The result type supplies both the "
+        "vector shape and the element type used to interpret the payload."
+    ),
     results=[Result("result", VECTOR)],
     attrs=[AttrDef("value", ATTR_TYPE_ANY, doc="The constant payload.")],
     verify="loom_vector_constant_verify",
@@ -371,22 +375,32 @@ vector_empty = Op(
 vector_splat = Op(
     "vector.splat",
     group=vector_ops,
-    doc="Replicate one scalar value to every lane of a vector result.",
+    doc=(
+        "Replicate one scalar value to every lane of a vector result. The "
+        "annotation after ':' is the result vector type; the scalar operand "
+        "must already have the same element type, so conversions must be "
+        "spelled with scalar/vector cast ops before or after the splat."
+    ),
     operands=[Operand("scalar", SCALAR)],
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("scalar", "result")],
     traits=[PURE],
-    format=[Ref("scalar"), COLON, TypeOf("scalar"), ARROW, ResultType("result")],
+    format=[Ref("scalar"), COLON, ResultType("result")],
     examples=[
-        "%vec = vector.splat %scalar : f32 -> vector<16xf32>",
-        "%vec = vector.splat %scalar : i32 -> vector<[%n]xi32>",
+        "%vec = vector.splat %scalar : vector<16xf32>",
+        "%vec = vector.splat %scalar : vector<[%n]xi32>",
     ],
 )
 
 vector_broadcast = Op(
     "vector.broadcast",
     group=vector_ops,
-    doc="Broadcast a vector value to a vector result with a compatible shape.",
+    doc=(
+        "Broadcast a vector value to a larger-rank or same-rank vector "
+        "result. Source axes align with the trailing result axes, and each "
+        "static source extent must either be 1 or match the corresponding "
+        "result extent."
+    ),
     operands=[Operand("source", VECTOR)],
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("source", "result")],
@@ -399,7 +413,7 @@ vector_broadcast = Op(
 vector_from_elements = Op(
     "vector.from_elements",
     group=vector_ops,
-    doc="Build a vector from scalar element operands in lane order.",
+    doc=("Build an all-static vector from scalar element operands in logical lane order. The number of operands must equal the static element count of the result type."),
     operands=[Operand("elements", SCALAR, variadic=True)],
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("elements", "result")],
@@ -423,7 +437,12 @@ vector_from_elements = Op(
 vector_extract = Op(
     "vector.extract",
     group=vector_ops,
-    doc="Extract a scalar or subvector from a vector at explicit indices.",
+    doc=(
+        "Extract a scalar or tail subvector from a vector at explicit leading "
+        "indices. Supplying one index consumes the first source axis, two "
+        "indices consume the first two axes, and consuming all axes produces "
+        "a scalar element."
+    ),
     operands=[
         Operand("source", VECTOR),
         Operand("indices", INDEX, variadic=True),
@@ -453,7 +472,12 @@ vector_extract = Op(
 vector_insert = Op(
     "vector.insert",
     group=vector_ops,
-    doc="Insert a scalar or subvector into a vector at explicit indices.",
+    doc=(
+        "Insert a scalar or tail subvector into a vector at explicit leading "
+        "indices. The inserted value must match the destination tail shape "
+        "remaining after the supplied indices, and the result type is the "
+        "same as the destination type."
+    ),
     operands=[
         Operand("value", ANY),
         Operand("dest", VECTOR),
@@ -496,7 +520,11 @@ vector_insert = Op(
 vector_slice = Op(
     "vector.slice",
     group=vector_ops,
-    doc="Extract a rank-preserving contiguous register subvector at explicit offsets.",
+    doc=(
+        "Extract a rank-preserving contiguous register subvector at explicit "
+        "offsets. The offset list has one entry per source axis; each result "
+        "axis extent describes how many lanes are kept from that source axis."
+    ),
     operands=[
         Operand("source", VECTOR),
         Operand("offsets", INDEX, variadic=True),
@@ -529,7 +557,11 @@ vector_slice = Op(
 vector_concat = Op(
     "vector.concat",
     group=vector_ops,
-    doc="Concatenate same-rank vectors along one explicit result axis.",
+    doc=(
+        "Concatenate one or more same-rank vectors along the template axis. "
+        "All non-concatenated axes must match the result shape, and when "
+        "static the result axis extent must equal the sum of input extents."
+    ),
     operands=[Operand("inputs", VECTOR, variadic=True)],
     results=[Result("result", VECTOR)],
     attrs=[
@@ -559,14 +591,20 @@ vector_concat = Op(
 vector_transpose = Op(
     "vector.transpose",
     group=vector_ops,
-    doc="Reorder vector register axes using an explicit result-axis to source-axis permutation.",
+    doc=(
+        "Permute vector register axes. The template list maps each result "
+        "axis to a source axis: permutation[i] is the source axis used for "
+        "result axis i, so <[1, 0]> maps vector<MxN> to vector<NxM>. This "
+        "does not touch memory layout; it only reorders lanes in the register "
+        "value."
+    ),
     operands=[Operand("source", VECTOR)],
     results=[Result("result", VECTOR)],
     attrs=[
         AttrDef(
             "permutation",
             ATTR_TYPE_I64_ARRAY,
-            doc="Permutation mapping each result axis to the corresponding source axis.",
+            doc=("Result-axis to source-axis permutation. The list length must equal the source rank and must mention each source axis exactly once."),
         ),
     ],
     constraints=[SameElementType("source", "result")],
@@ -588,7 +626,12 @@ vector_transpose = Op(
 vector_shuffle = Op(
     "vector.shuffle",
     group=vector_ops,
-    doc="Build a same-typed rank-1 vector by selecting source register lanes with a static lane map; duplicate lanes are allowed.",
+    doc=(
+        "Reorder a static rank-1 vector with a static lane map. Entry i of "
+        "source_lanes selects the source lane for result lane i; duplicate "
+        "source lanes are allowed, but the result type is the same as the "
+        "source type."
+    ),
     operands=[Operand("source", VECTOR)],
     results=[Result("result", VECTOR)],
     attrs=[
@@ -617,7 +660,12 @@ vector_shuffle = Op(
 vector_interleave = Op(
     "vector.interleave",
     group=vector_ops,
-    doc=("Interleave two same-typed vectors along one axis; even lanes come from the first operand and odd lanes come from the second operand."),
+    doc=(
+        "Interleave two same-typed vectors along the template axis. Result "
+        "positions with even coordinates along that axis come from the first "
+        "operand, odd coordinates come from the second operand, and the "
+        "result extent on that axis is doubled."
+    ),
     operands=[
         Operand("even", VECTOR, doc="Vector providing result lanes at even positions along the interleaved axis."),
         Operand("odd", VECTOR, doc="Vector providing result lanes at odd positions along the interleaved axis."),
@@ -657,7 +705,12 @@ vector_interleave = Op(
 vector_deinterleave = Op(
     "vector.deinterleave",
     group=vector_ops,
-    doc=("Split one vector along an axis into even-position and odd-position vectors of the same type."),
+    doc=(
+        "Split one vector along the template axis into two same-typed "
+        "results. The first result receives even coordinates along that axis, "
+        "the second receives odd coordinates, and each result extent on that "
+        "axis is half of the source extent."
+    ),
     operands=[Operand("source", VECTOR)],
     results=[Result("results", VECTOR, variadic=True, doc="Even-position result followed by odd-position result.")],
     attrs=[
@@ -691,7 +744,12 @@ vector_deinterleave = Op(
 vector_table_lookup = Op(
     "vector.table.lookup",
     group=vector_ops,
-    doc="Select table vector lanes using explicit integer index lanes; every index lane must be within the table extent.",
+    doc=(
+        "Select values from a rank-1 register table using integer index "
+        "lanes. Each result lane reads table[indices lane]; the result shape "
+        "matches the index vector shape and the result element type matches "
+        "the table element type."
+    ),
     operands=[
         Operand("table", VECTOR, doc="Rank-1 register table containing selectable lane values."),
         Operand("indices", VECTOR, doc="Index vector selecting one table lane for each result lane."),
@@ -725,7 +783,12 @@ vector_table_lookup = Op(
 vector_table_quantize = Op(
     "vector.table.quantize",
     group=vector_ops,
-    doc=("Map floating-point lanes to unsigned integer ordinal code lanes by counting ordered rank-1 threshold table entries."),
+    doc=(
+        "Map floating-point lanes to integer ordinal code lanes using an "
+        "ordered rank-1 threshold table. For each input lane, the result code "
+        "is the selected quantization bin; nan and tie attributes make NaN "
+        "and threshold equality behavior explicit."
+    ),
     operands=[
         Operand("input", VECTOR, doc="Floating-point lanes to quantize."),
         Operand("thresholds", VECTOR, doc="Rank-1 ordered floating-point threshold table."),
@@ -764,7 +827,13 @@ vector_table_quantize = Op(
 vector_transform = Op(
     "vector.transform",
     group=vector_ops,
-    doc="Apply an explicit numeric transform descriptor to vector register lanes.",
+    doc=(
+        "Apply an explicit numeric transform descriptor to vector register "
+        "lanes. The transform operand is an encoding<transform> value that "
+        "names the numeric mapping, such as scale/zero-point decode, "
+        "whitening, or projection; verifier rules keep supported transform "
+        "families and shape-changing parameters explicit."
+    ),
     operands=[
         Operand("source", VECTOR, doc="Vector lanes to transform."),
         Operand("transform", ENCODING_TRANSFORM, doc="Numeric transform descriptor."),
@@ -802,7 +871,12 @@ vector_transform = Op(
 vector_load = Op(
     "vector.load",
     group=vector_ops,
-    doc="Load a vector footprint from a typed view at a full-rank logical origin.",
+    doc=(
+        "Load a vector footprint from a typed view at a full-rank logical "
+        "origin. The index list addresses the origin in view coordinates; "
+        "vector axes map onto the trailing view axes, so leading view axes "
+        "select a slice and trailing axes describe the loaded footprint."
+    ),
     operands=[
         Operand("view", VIEW, doc="Typed source view."),
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
@@ -834,7 +908,11 @@ vector_load = Op(
 vector_store = Op(
     "vector.store",
     group=vector_ops,
-    doc="Store a vector footprint into a typed view at a full-rank logical origin.",
+    doc=(
+        "Store a vector footprint into a typed view at a full-rank logical "
+        "origin. The index list addresses the origin in view coordinates; "
+        "vector axes map onto the trailing view axes, matching vector.load."
+    ),
     operands=[
         Operand("value", VECTOR, doc="Vector value to store."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -868,7 +946,11 @@ vector_store = Op(
 vector_load_mask = Op(
     "vector.load.mask",
     group=vector_ops,
-    doc="Masked vector load from a typed view; masked-off lanes take the passthrough value.",
+    doc=(
+        "Masked vector load from a typed view. Mask lanes with true values "
+        "perform the same access as vector.load, while false lanes do not "
+        "access memory and instead take the corresponding passthrough lane."
+    ),
     operands=[
         Operand("view", VIEW, doc="Typed source view."),
         Operand("mask", VECTOR, doc="i1 vector mask selecting loaded lanes."),
@@ -915,7 +997,7 @@ vector_load_mask = Op(
 vector_store_mask = Op(
     "vector.store.mask",
     group=vector_ops,
-    doc="Masked vector store into a typed view; masked-off lanes leave memory unchanged.",
+    doc=("Masked vector store into a typed view. True mask lanes store the corresponding value lane, and false mask lanes do not access memory and leave the destination unchanged."),
     operands=[
         Operand("value", VECTOR, doc="Vector value to store."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -958,7 +1040,12 @@ vector_store_mask = Op(
 vector_load_expand = Op(
     "vector.load.expand",
     group=vector_ops,
-    doc=("Rank-1 masked expand load from consecutive view elements; active lanes consume memory in increasing lane order and inactive lanes take the passthrough value."),
+    doc=(
+        "Rank-1 masked expand load from consecutive view elements. Active "
+        "lanes consume memory densely in increasing lane order; inactive "
+        "lanes do not consume memory and take the corresponding passthrough "
+        "lane."
+    ),
     operands=[
         Operand("view", VIEW, doc="Typed source view."),
         Operand("mask", VECTOR, doc="i1 rank-1 vector mask selecting loaded lanes."),
@@ -1005,7 +1092,7 @@ vector_load_expand = Op(
 vector_store_compress = Op(
     "vector.store.compress",
     group=vector_ops,
-    doc=("Rank-1 masked compress store to consecutive view elements; active lanes produce memory in increasing lane order and inactive lanes do not write."),
+    doc=("Rank-1 masked compress store to consecutive view elements. Active lanes write densely in increasing lane order; inactive lanes do not produce memory elements."),
     operands=[
         Operand("value", VECTOR, doc="Rank-1 vector value to store."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -1048,7 +1135,11 @@ vector_store_compress = Op(
 vector_gather = Op(
     "vector.gather",
     group=vector_ops,
-    doc="Gather a vector from per-lane signed element offsets relative to a full-rank view origin.",
+    doc=(
+        "Gather a vector from per-lane signed element offsets relative to a "
+        "full-rank view origin. Each result lane reads origin + offsets[lane] "
+        "in element units; the offset vector shape matches the result shape."
+    ),
     operands=[
         Operand("view", VIEW, doc="Typed source view."),
         Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
@@ -1090,7 +1181,12 @@ vector_gather = Op(
 vector_scatter = Op(
     "vector.scatter",
     group=vector_ops,
-    doc="Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin; active lane addresses must be distinct.",
+    doc=(
+        "Non-atomic scatter of a vector to per-lane signed element offsets "
+        "relative to a full-rank view origin. Each lane writes origin + "
+        "offsets[lane] in element units, and active lane addresses must be "
+        "distinct because no atomic conflict resolution is implied."
+    ),
     operands=[
         Operand("value", VECTOR, doc="Vector value to store."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -1134,7 +1230,11 @@ vector_scatter = Op(
 vector_gather_mask = Op(
     "vector.gather.mask",
     group=vector_ops,
-    doc="Masked vector gather from per-lane signed element offsets; masked-off lanes take the passthrough value.",
+    doc=(
+        "Masked vector gather from per-lane signed element offsets. True mask "
+        "lanes read origin + offsets[lane], while false mask lanes do not "
+        "access memory and take the corresponding passthrough lane."
+    ),
     operands=[
         Operand("view", VIEW, doc="Typed source view."),
         Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
@@ -1188,7 +1288,7 @@ vector_gather_mask = Op(
 vector_scatter_mask = Op(
     "vector.scatter.mask",
     group=vector_ops,
-    doc="Masked non-atomic scatter; masked-off lanes leave memory unchanged and active lane addresses must be distinct.",
+    doc=("Masked non-atomic scatter. True mask lanes write origin + offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct."),
     operands=[
         Operand("value", VECTOR, doc="Vector value to store."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -1262,7 +1362,12 @@ def _atomic_memory_attrs() -> list[AttrDef]:
 vector_atomic_reduce = Op(
     "vector.atomic.reduce",
     group=vector_ops,
-    doc="Atomic no-result scatter reduction/update into per-lane signed element offsets. Duplicate active lane addresses are allowed and are serialized by the atomic memory contract.",
+    doc=(
+        "Atomic no-result scatter reduction/update into per-lane signed "
+        "element offsets. Each lane atomically combines its value into origin "
+        "+ offsets[lane]; duplicate active addresses are valid and are "
+        "serialized by the required ordering and scope attributes."
+    ),
     operands=[
         Operand("value", VECTOR, doc="Vector contribution for each lane."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -1302,7 +1407,7 @@ vector_atomic_reduce = Op(
 vector_atomic_reduce_mask = Op(
     "vector.atomic.reduce.mask",
     group=vector_ops,
-    doc="Masked atomic no-result scatter reduction/update; masked-off lanes do not access memory.",
+    doc=("Masked atomic no-result scatter reduction/update. True mask lanes perform vector.atomic.reduce, while false mask lanes do not access memory."),
     operands=[
         Operand("value", VECTOR, doc="Vector contribution for each lane."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -1348,7 +1453,12 @@ vector_atomic_reduce_mask = Op(
 vector_atomic_rmw = Op(
     "vector.atomic.rmw",
     group=vector_ops,
-    doc="Atomic read-modify-write at per-lane signed element offsets, returning the old memory value for each lane.",
+    doc=(
+        "Atomic read-modify-write at per-lane signed element offsets. Each "
+        "lane atomically combines its value with origin + offsets[lane] and "
+        "the result lane is the old memory value observed by that atomic "
+        "operation."
+    ),
     operands=[
         Operand("value", VECTOR, doc="Vector update value for each lane."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -1392,7 +1502,7 @@ vector_atomic_rmw = Op(
 vector_atomic_rmw_mask = Op(
     "vector.atomic.rmw.mask",
     group=vector_ops,
-    doc="Masked atomic read-modify-write. Masked-off result lanes take the explicit passthrough value.",
+    doc=("Masked atomic read-modify-write. True mask lanes perform vector.atomic.rmw, while false mask lanes do not access memory and take the corresponding passthrough lane in the result."),
     operands=[
         Operand("value", VECTOR, doc="Vector update value for each lane."),
         Operand("view", VIEW, doc="Typed destination view."),
@@ -1452,7 +1562,7 @@ vector_atomic_rmw_mask = Op(
 vector_select = Op(
     "vector.select",
     group=vector_ops,
-    doc="Lanewise select from two same-typed vector values using an i1 mask vector.",
+    doc=("Lanewise select from two same-typed vector values using an i1 mask vector. True condition lanes choose true_value; false lanes choose false_value."),
     operands=[
         Operand("condition", VECTOR),
         Operand("true_value", VECTOR),
@@ -1481,7 +1591,7 @@ vector_select = Op(
 vector_cmpi = Op(
     "vector.cmpi",
     group=vector_ops,
-    doc="Lanewise integer comparison producing an i1 mask vector.",
+    doc=("Lanewise integer comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpi predicate names and applies independently to each lane."),
     operands=[
         Operand("lhs", VECTOR),
         Operand("rhs", VECTOR),
@@ -1513,7 +1623,7 @@ vector_cmpi = Op(
 vector_cmpf = Op(
     "vector.cmpf",
     group=vector_ops,
-    doc="Lanewise floating-point comparison producing an i1 mask vector.",
+    doc=("Lanewise floating-point comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpf ordered/unordered predicate names and applies independently to each lane."),
     operands=[
         Operand("lhs", VECTOR),
         Operand("rhs", VECTOR),
@@ -1550,7 +1660,7 @@ vector_cmpf = Op(
 vector_addf = _lanewise_binary(
     "vector.addf",
     result_constraint=FLOAT_ELEMENT,
-    doc="Lanewise floating-point addition.",
+    doc=("Lanewise floating-point addition of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
     commutative=True,
     flags=("assumptions", FloatAssumptionFlags),
 )
@@ -1558,7 +1668,7 @@ vector_addf = _lanewise_binary(
 vector_mulf = _lanewise_binary(
     "vector.mulf",
     result_constraint=FLOAT_ELEMENT,
-    doc="Lanewise floating-point multiplication.",
+    doc=("Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations."),
     commutative=True,
     flags=("assumptions", FloatAssumptionFlags),
 )
@@ -1566,7 +1676,11 @@ vector_mulf = _lanewise_binary(
 vector_fmaf = Op(
     "vector.fmaf",
     group=vector_ops,
-    doc="Lanewise fused multiply-add: a*b + c with single rounding.",
+    doc=(
+        "Lanewise fused multiply-add of same-typed floating-point vectors. "
+        "Each result lane computes a*b + c with one final rounding; use "
+        "separate vector.mulf/vector.addf when unfused rounding is required."
+    ),
     operands=[
         Operand("a", VECTOR),
         Operand("b", VECTOR),
@@ -1602,7 +1716,7 @@ vector_fmaf = Op(
 vector_addi = _lanewise_binary(
     "vector.addi",
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise integer addition.",
+    doc=("Lanewise integer addition of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     commutative=True,
     flags=("overflow", IntOverflowFlags),
 )
@@ -1610,7 +1724,7 @@ vector_addi = _lanewise_binary(
 vector_muli = _lanewise_binary(
     "vector.muli",
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise integer multiplication.",
+    doc=("Lanewise integer multiplication of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     commutative=True,
     flags=("overflow", IntOverflowFlags),
 )
@@ -1618,34 +1732,34 @@ vector_muli = _lanewise_binary(
 vector_andi = _lanewise_binary(
     "vector.andi",
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise bitwise AND.",
+    doc="Lanewise bitwise AND of same-typed integer vector operands.",
     commutative=True,
 )
 
 vector_ori = _lanewise_binary(
     "vector.ori",
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise bitwise OR.",
+    doc="Lanewise bitwise OR of same-typed integer vector operands.",
     commutative=True,
 )
 
 vector_xori = _lanewise_binary(
     "vector.xori",
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise bitwise XOR.",
+    doc="Lanewise bitwise XOR of same-typed integer vector operands.",
     commutative=True,
 )
 
 vector_ctpopi = _lanewise_unary(
     "vector.ctpopi",
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise population count over integer lanes.",
+    doc=("Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input."),
 )
 
 vector_sqrtf = _lanewise_unary(
     "vector.sqrtf",
     result_constraint=FLOAT_ELEMENT,
-    doc="Lanewise square root.",
+    doc=("Lanewise floating-point square root. Optional assumptions flags constrain lane value domains for optimization and lowering."),
     flags=("assumptions", FloatAssumptionFlags),
 )
 
@@ -1658,7 +1772,7 @@ vector_extf = _vector_cast(
     "vector.extf",
     source_constraint=HasFloatElement,
     result_constraint=FLOAT_ELEMENT,
-    doc="Lanewise floating-point precision extension.",
+    doc=("Lanewise floating-point precision extension. Source and result shapes match exactly; only the floating-point element type widens."),
     verify="loom_vector_extf_verify",
 )
 
@@ -1666,7 +1780,7 @@ vector_fptrunc = _vector_cast(
     "vector.fptrunc",
     source_constraint=HasFloatElement,
     result_constraint=FLOAT_ELEMENT,
-    doc="Lanewise floating-point precision truncation.",
+    doc=("Lanewise floating-point precision truncation. Source and result shapes match exactly; only the floating-point element type narrows."),
     verify="loom_vector_fptrunc_verify",
 )
 
@@ -1674,7 +1788,7 @@ vector_extsi = _vector_cast(
     "vector.extsi",
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise signed integer extension.",
+    doc=("Lanewise signed integer extension. Source and result shapes match exactly, and each source lane is sign-extended to the result element width."),
     verify="loom_vector_extsi_verify",
 )
 
@@ -1682,7 +1796,7 @@ vector_extui = _vector_cast(
     "vector.extui",
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise unsigned integer extension.",
+    doc=("Lanewise unsigned integer extension. Source and result shapes match exactly, and each source lane is zero-extended to the result element width."),
     verify="loom_vector_extui_verify",
 )
 
@@ -1690,7 +1804,7 @@ vector_trunci = _vector_cast(
     "vector.trunci",
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise integer truncation.",
+    doc=("Lanewise integer truncation. Source and result shapes match exactly, and each lane keeps the low bits required by the result element width."),
     verify="loom_vector_trunci_verify",
 )
 
@@ -1698,34 +1812,34 @@ vector_sitofp = _vector_cast(
     "vector.sitofp",
     source_constraint=HasIntegerElement,
     result_constraint=FLOAT_ELEMENT,
-    doc="Lanewise signed integer to floating-point conversion.",
+    doc=("Lanewise signed integer to floating-point conversion with unchanged shape."),
 )
 
 vector_uitofp = _vector_cast(
     "vector.uitofp",
     source_constraint=HasIntegerElement,
     result_constraint=FLOAT_ELEMENT,
-    doc="Lanewise unsigned integer to floating-point conversion.",
+    doc=("Lanewise unsigned integer to floating-point conversion with unchanged shape."),
 )
 
 vector_fptosi = _vector_cast(
     "vector.fptosi",
     source_constraint=HasFloatElement,
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise floating-point to signed integer conversion.",
+    doc=("Lanewise floating-point to signed integer conversion with unchanged shape."),
 )
 
 vector_fptoui = _vector_cast(
     "vector.fptoui",
     source_constraint=HasFloatElement,
     result_constraint=INTEGER_ELEMENT,
-    doc="Lanewise floating-point to unsigned integer conversion.",
+    doc=("Lanewise floating-point to unsigned integer conversion with unchanged shape."),
 )
 
 vector_bitcast = Op(
     "vector.bitcast",
     group=vector_ops,
-    doc="Bitwise reinterpretation between vector register types with the same total bit count.",
+    doc=("Bitwise reinterpretation between vector register types with the same total bit count. No numeric conversion is performed; only the lane shape and element interpretation change."),
     operands=[Operand("input", VECTOR)],
     results=[Result("result", VECTOR)],
     verify="loom_vector_bitcast_verify",
@@ -1767,7 +1881,7 @@ def _bitfield_attrs() -> list[AttrDef]:
 vector_bitfield_extractu = Op(
     "vector.bitfield.extractu",
     group=vector_ops,
-    doc="Extract and zero-extend one fixed bitfield from each integer source lane.",
+    doc=("Extract one fixed bitfield from each integer source lane and zero-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width."),
     operands=[Operand("source", VECTOR)],
     results=[Result("result", VECTOR)],
     attrs=_bitfield_attrs(),
@@ -1795,7 +1909,7 @@ vector_bitfield_extractu = Op(
 vector_bitfield_extracts = Op(
     "vector.bitfield.extracts",
     group=vector_ops,
-    doc="Extract and sign-extend one fixed bitfield from each integer source lane.",
+    doc=("Extract one fixed bitfield from each integer source lane and sign-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width."),
     operands=[Operand("source", VECTOR)],
     results=[Result("result", VECTOR)],
     attrs=_bitfield_attrs(),
@@ -1823,7 +1937,7 @@ vector_bitfield_extracts = Op(
 vector_bitfield_insert = Op(
     "vector.bitfield.insert",
     group=vector_ops,
-    doc="Insert the low bits of each integer field lane into a fixed bitfield of each integer base lane.",
+    doc=("Insert the low bits of each integer field lane into a fixed bitfield of the corresponding integer base lane. Bits outside the target field are preserved from the base lane."),
     operands=[
         Operand("field", VECTOR, doc="Integer field values. Only the low `width` bits are inserted."),
         Operand("base", VECTOR, doc="Integer base lanes whose target bitfield is replaced."),
@@ -1860,7 +1974,12 @@ vector_bitfield_insert = Op(
 vector_bitpack = Op(
     "vector.bitpack",
     group=vector_ops,
-    doc=("Pack the low bits of each integer source lane into a contiguous little-endian bitstream stored in integer result lanes."),
+    doc=(
+        "Pack the low bits of each integer source lane into a contiguous "
+        "little-endian bitstream stored in integer result lanes. Source lanes "
+        "are consumed in logical lane order and width gives the number of "
+        "bits taken from each source lane."
+    ),
     operands=[Operand("source", VECTOR, doc="Integer lanes whose low `width` bits are packed.")],
     results=[Result("result", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
     attrs=[
@@ -1893,7 +2012,7 @@ vector_bitpack = Op(
 vector_bitunpacku = Op(
     "vector.bitunpacku",
     group=vector_ops,
-    doc=("Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes."),
+    doc=("Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes. Result lanes are produced in logical lane order."),
     operands=[Operand("source", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
     results=[Result("result", VECTOR, doc="Integer lanes receiving zero-extended unpacked fields.")],
     attrs=[
@@ -1926,7 +2045,7 @@ vector_bitunpacku = Op(
 vector_bitunpacks = Op(
     "vector.bitunpacks",
     group=vector_ops,
-    doc=("Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes."),
+    doc=("Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes. Result lanes are produced in logical lane order."),
     operands=[Operand("source", VECTOR, doc="Integer storage lanes containing the packed bitstream.")],
     results=[Result("result", VECTOR, doc="Integer lanes receiving sign-extended unpacked fields.")],
     attrs=[
@@ -1960,10 +2079,58 @@ vector_bitunpacks = Op(
 # Dot products
 # ============================================================================
 
+vector_dotf = Op(
+    "vector.dotf",
+    group=vector_ops,
+    doc=(
+        "Compute a same-element floating-point dot product with an explicit "
+        "scalar accumulator. Semantics are equivalent to accumulating "
+        "scalar.fmaf(lhs_lane, rhs_lane, acc) over lanes in logical lane order; "
+        "use vector.mulf followed by vector.reduce<addf> when separately "
+        "rounded products and additions are required. The source vectors must "
+        "have the same shape and element type, and the init/result scalar type "
+        "matches that element type. Zero-lane inputs return init."
+    ),
+    operands=[
+        Operand("lhs", VECTOR, doc="Floating-point source lanes."),
+        Operand("rhs", VECTOR, doc="Floating-point source lanes."),
+        Operand("init", SCALAR, doc="Scalar accumulator seed."),
+    ],
+    results=[Result("result", SCALAR, doc="Scalar dot-product accumulator result.")],
+    constraints=[
+        HasFloatElement("lhs"),
+        SameShape("lhs", "rhs"),
+        SameType("init", "result"),
+        SameElementType("lhs", "rhs", "init"),
+    ],
+    traits=[PURE],
+    format=[
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COMMA,
+        Ref("init"),
+        COLON,
+        TypeOf("lhs"),
+        COMMA,
+        TypeOf("rhs"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32> -> f32",
+    ],
+)
+
 vector_dot4i = Op(
     "vector.dot4i",
     group=vector_ops,
-    doc=("Group adjacent four-lane i8 products into i32 accumulator lanes."),
+    doc=(
+        "Group adjacent four-lane i8 products along the last axis and add "
+        "each four-product sum into an i32 accumulator lane. The signedness "
+        "template chooses how lhs and rhs i8 lanes are interpreted, matching "
+        "dp4a/VNNI-style hardware operations."
+    ),
     operands=[
         Operand("lhs", VECTOR, doc="Integer source lanes grouped in fours along the last axis."),
         Operand("rhs", VECTOR, doc="Integer source lanes grouped in fours along the last axis."),
@@ -2008,7 +2175,12 @@ vector_dot4i = Op(
 vector_reduce = Op(
     "vector.reduce",
     group=vector_ops,
-    doc="Reduce all lanes of a vector into a scalar accumulator/result.",
+    doc=(
+        "Reduce all lanes of a vector into a scalar accumulator/result using "
+        "the template combining kind. The init operand and result have the "
+        "same scalar type, and the combining kind must be valid for the input "
+        "element type."
+    ),
     operands=[
         Operand("input", VECTOR),
         Operand("init", SCALAR),
@@ -2100,6 +2272,7 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_bitpack,
     vector_bitunpacku,
     vector_bitunpacks,
+    vector_dotf,
     vector_dot4i,
     vector_reduce,
 )

@@ -7,9 +7,9 @@ func.def @construction(%x: f32, %i: i32, %n: index) {
   %ps = scalar.poison : f32
   %pv = vector.poison : vector<4xf32>
   %empty = vector.empty : vector<0xf32>
-  %vf = vector.splat %x : f32 -> vector<16xf32>
-  %empty_splat = vector.splat %x : f32 -> vector<0xf32>
-  %vi = vector.splat %i : i32 -> vector<[%n]xi32>
+  %vf = vector.splat %x : vector<16xf32>
+  %empty_splat = vector.splat %x : vector<0xf32>
+  %vi = vector.splat %i : vector<[%n]xi32>
   %c = vector.constant 0.0 : vector<4xf32>
   %wide = vector.broadcast %c : vector<4xf32> -> vector<4x4xf32>
   %lane0 = vector.extract %c[0] : vector<4xf32> -> f32
@@ -93,6 +93,17 @@ func.def @bitpack(%codes: vector<32xi8>, %signed_deltas: vector<32xi8>, %signs: 
   %dyn_stream = vector.bitpack<4> %dyn_codes : vector<[%n]xi8> -> vector<[%m]xi8>
   %dyn_unpacked = vector.bitunpacku<4> %dyn_packed : vector<[%m]xi8> -> vector<[%n]xi8>
   test.use %q4_unpacked, %sign_mask, %q3_unpacked, %dyn_stream, %dyn_unpacked : vector<32xi8>, vector<128xi1>, vector<32xi8>, vector<[%m]xi8>, vector<[%n]xi8>
+  func.return
+}
+
+// ====
+
+// Floating dot products keep the scalar accumulator explicit and use fused
+// multiply-add semantics over logical lane order.
+func.def @dotf(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %acc: f32, %n: index, %dyn_lhs: vector<[%n]xf32>, %dyn_rhs: vector<[%n]xf32>) {
+  %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32> -> f32
+  %dyn = vector.dotf %dyn_lhs, %dyn_rhs, %acc : vector<[%n]xf32>, vector<[%n]xf32> -> f32
+  test.use %r, %dyn : f32, f32
   func.return
 }
 

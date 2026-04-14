@@ -182,16 +182,28 @@ static iree_status_t loom_canonicalize_try_replace_empty_extract_with_poison(
   return iree_ok_status();
 }
 
-static iree_status_t loom_canonicalize_try_fold_empty_reduce(
+static iree_status_t loom_canonicalize_try_fold_empty_accumulator_op(
     loom_rewriter_t* rewriter, loom_op_t* op, bool* out_folded) {
   *out_folded = false;
-  if (!loom_vector_reduce_isa(op)) return iree_ok_status();
-  if (!loom_canonicalize_value_is_static_empty_vector(
-          rewriter->module, loom_vector_reduce_input(op))) {
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t init = LOOM_VALUE_ID_INVALID;
+  if (loom_vector_reduce_isa(op)) {
+    input = loom_vector_reduce_input(op);
+    init = loom_vector_reduce_init(op);
+  } else if (loom_vector_dotf_isa(op)) {
+    input = loom_vector_dotf_lhs(op);
+    init = loom_vector_dotf_init(op);
+  } else {
     return iree_ok_status();
   }
 
-  loom_value_id_t replacement = loom_vector_reduce_init(op);
+  if (!loom_canonicalize_value_is_static_empty_vector(rewriter->module,
+                                                      input)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t replacement = init;
   IREE_RETURN_IF_ERROR(
       loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement, 1));
   *out_folded = true;
@@ -364,8 +376,8 @@ static iree_status_t loom_canonicalize_try_elide_empty_vector_op(
       rewriter, op, out_elided));
   if (*out_elided) return iree_ok_status();
 
-  IREE_RETURN_IF_ERROR(
-      loom_canonicalize_try_fold_empty_reduce(rewriter, op, out_elided));
+  IREE_RETURN_IF_ERROR(loom_canonicalize_try_fold_empty_accumulator_op(
+      rewriter, op, out_elided));
   if (*out_elided) return iree_ok_status();
 
   IREE_RETURN_IF_ERROR(loom_canonicalize_try_elide_empty_memory_effect(

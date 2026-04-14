@@ -1159,15 +1159,19 @@ class Printer:
         if not operand_ids:
             return "()"
 
-        # Block arg names come from the first region's entry block.
+        # Binding args are appended after any implicit region args, so use the
+        # trailing block args that correspond to the binding operands.
         block_arg_names: list[str] = []
         op = fields._op
         if op.regions:
             first_region = op.regions[0]
             if first_region.blocks:
                 entry_block = first_region.blocks[0]
+                binding_arg_ids = entry_block.arg_ids
+                if len(binding_arg_ids) > len(operand_ids):
+                    binding_arg_ids = binding_arg_ids[-len(operand_ids) :]
                 block_arg_names.extend(
-                    self._value_name(arg_id) for arg_id in entry_block.arg_ids
+                    self._value_name(arg_id) for arg_id in binding_arg_ids
                 )
 
         parts: list[str] = []

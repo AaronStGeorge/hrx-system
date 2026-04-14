@@ -78,9 +78,10 @@ enum {
   LOOM_OP_VECTOR_BITPACK = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 57),
   LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 58),
   LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 59),
-  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 60),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 61),
-  LOOM_OP_VECTOR_COUNT_ = 62,
+  LOOM_OP_VECTOR_DOTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 60),
+  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 61),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 62),
+  LOOM_OP_VECTOR_COUNT_ = 63,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -210,7 +211,7 @@ typedef enum loom_vector_reduce_kind_e {
   LOOM_VECTOR_REDUCE_KIND_COUNT_ = 15,
 } loom_vector_reduce_kind_t;
 
-// LOOM_OP_VECTOR_CONSTANT: Materialize a compile-time splat constant vector value.
+// LOOM_OP_VECTOR_CONSTANT: Materialize a compile-time vector value whose every lane has the same scalar attribute payload. The result type supplies both the vector shape and the element type used to interpret the payload.
 // %v = vector.constant 0.0 : vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_constant_isa, LOOM_OP_VECTOR_CONSTANT)
 LOOM_DEFINE_RESULT(loom_vector_constant_result, 0)
@@ -251,8 +252,8 @@ iree_status_t loom_vector_empty_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SPLAT: Replicate one scalar value to every lane of a vector result.
-// %vec = vector.splat %scalar : f32 -> vector<16xf32>
+// LOOM_OP_VECTOR_SPLAT: Replicate one scalar value to every lane of a vector result. The annotation after ':' is the result vector type; the scalar operand must already have the same element type, so conversions must be spelled with scalar/vector cast ops before or after the splat.
+// %vec = vector.splat %scalar : vector<16xf32>
 LOOM_DEFINE_ISA(loom_vector_splat_isa, LOOM_OP_VECTOR_SPLAT)
 LOOM_DEFINE_OPERAND(loom_vector_splat_scalar, 0)
 LOOM_DEFINE_RESULT(loom_vector_splat_result, 0)
@@ -263,7 +264,7 @@ iree_status_t loom_vector_splat_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_BROADCAST: Broadcast a vector value to a vector result with a compatible shape.
+// LOOM_OP_VECTOR_BROADCAST: Broadcast a vector value to a larger-rank or same-rank vector result. Source axes align with the trailing result axes, and each static source extent must either be 1 or match the corresponding result extent.
 // %wide = vector.broadcast %v : vector<4xf32> -> vector<16x4xf32>
 LOOM_DEFINE_ISA(loom_vector_broadcast_isa, LOOM_OP_VECTOR_BROADCAST)
 LOOM_DEFINE_OPERAND(loom_vector_broadcast_source, 0)
@@ -278,7 +279,7 @@ iree_status_t loom_vector_broadcast_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_FROM_ELEMENTS: Build a vector from scalar element operands in lane order.
+// LOOM_OP_VECTOR_FROM_ELEMENTS: Build an all-static vector from scalar element operands in logical lane order. The number of operands must equal the static element count of the result type.
 // %v = vector.from_elements %a, %b, %c, %d : f32, f32, f32, f32 -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_from_elements_isa, LOOM_OP_VECTOR_FROM_ELEMENTS)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_from_elements_elements, 0)
@@ -294,7 +295,7 @@ iree_status_t loom_vector_from_elements_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_EXTRACT: Extract a scalar or subvector from a vector at explicit indices.
+// LOOM_OP_VECTOR_EXTRACT: Extract a scalar or tail subvector from a vector at explicit leading indices. Supplying one index consumes the first source axis, two indices consume the first two axes, and consuming all axes produces a scalar element.
 // %x = vector.extract %v[%i] : vector<[%n]xf32> -> f32
 LOOM_DEFINE_ISA(loom_vector_extract_isa, LOOM_OP_VECTOR_EXTRACT)
 LOOM_DEFINE_OPERAND(loom_vector_extract_source, 0)
@@ -315,7 +316,7 @@ iree_status_t loom_vector_extract_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_INSERT: Insert a scalar or subvector into a vector at explicit indices.
+// LOOM_OP_VECTOR_INSERT: Insert a scalar or tail subvector into a vector at explicit leading indices. The inserted value must match the destination tail shape remaining after the supplied indices, and the result type is the same as the destination type.
 // %r = vector.insert %x into %v[%i] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
 LOOM_DEFINE_ISA(loom_vector_insert_isa, LOOM_OP_VECTOR_INSERT)
 LOOM_DEFINE_OPERAND(loom_vector_insert_value, 0)
@@ -338,7 +339,7 @@ iree_status_t loom_vector_insert_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SLICE: Extract a rank-preserving contiguous register subvector at explicit offsets.
+// LOOM_OP_VECTOR_SLICE: Extract a rank-preserving contiguous register subvector at explicit offsets. The offset list has one entry per source axis; each result axis extent describes how many lanes are kept from that source axis.
 // %tail = vector.slice %v[%i] : vector<[%n]xf32> -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_slice_isa, LOOM_OP_VECTOR_SLICE)
 LOOM_DEFINE_OPERAND(loom_vector_slice_source, 0)
@@ -359,7 +360,7 @@ iree_status_t loom_vector_slice_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_CONCAT: Concatenate same-rank vectors along one explicit result axis.
+// LOOM_OP_VECTOR_CONCAT: Concatenate one or more same-rank vectors along the template axis. All non-concatenated axes must match the result shape, and when static the result axis extent must equal the sum of input extents.
 // %wide = vector.concat<0> %a, %b : vector<4xf32>, vector<4xf32> -> vector<8xf32>
 LOOM_DEFINE_ISA(loom_vector_concat_isa, LOOM_OP_VECTOR_CONCAT)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_concat_inputs, 0)
@@ -377,7 +378,7 @@ iree_status_t loom_vector_concat_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_TRANSPOSE: Reorder vector register axes using an explicit result-axis to source-axis permutation.
+// LOOM_OP_VECTOR_TRANSPOSE: Permute vector register axes. The template list maps each result axis to a source axis: permutation[i] is the source axis used for result axis i, so <[1, 0]> maps vector<MxN> to vector<NxM>. This does not touch memory layout; it only reorders lanes in the register value.
 // %t = vector.transpose<[1, 0]> %v : vector<4x8xf32> -> vector<8x4xf32>
 LOOM_DEFINE_ISA(loom_vector_transpose_isa, LOOM_OP_VECTOR_TRANSPOSE)
 LOOM_DEFINE_OPERAND(loom_vector_transpose_source, 0)
@@ -395,7 +396,7 @@ iree_status_t loom_vector_transpose_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SHUFFLE: Build a same-typed rank-1 vector by selecting source register lanes with a static lane map; duplicate lanes are allowed.
+// LOOM_OP_VECTOR_SHUFFLE: Reorder a static rank-1 vector with a static lane map. Entry i of source_lanes selects the source lane for result lane i; duplicate source lanes are allowed, but the result type is the same as the source type.
 // %rev = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_shuffle_isa, LOOM_OP_VECTOR_SHUFFLE)
 LOOM_DEFINE_OPERAND(loom_vector_shuffle_source, 0)
@@ -413,7 +414,7 @@ iree_status_t loom_vector_shuffle_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_INTERLEAVE: Interleave two same-typed vectors along one axis; even lanes come from the first operand and odd lanes come from the second operand.
+// LOOM_OP_VECTOR_INTERLEAVE: Interleave two same-typed vectors along the template axis. Result positions with even coordinates along that axis come from the first operand, odd coordinates come from the second operand, and the result extent on that axis is doubled.
 // %r = vector.interleave<0> %lo, %hi : vector<16xi8>, vector<16xi8> -> vector<32xi8>
 LOOM_DEFINE_ISA(loom_vector_interleave_isa, LOOM_OP_VECTOR_INTERLEAVE)
 LOOM_DEFINE_OPERAND(loom_vector_interleave_even, 0)
@@ -432,7 +433,7 @@ iree_status_t loom_vector_interleave_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_DEINTERLEAVE: Split one vector along an axis into even-position and odd-position vectors of the same type.
+// LOOM_OP_VECTOR_DEINTERLEAVE: Split one vector along the template axis into two same-typed results. The first result receives even coordinates along that axis, the second receives odd coordinates, and each result extent on that axis is half of the source extent.
 // %lo, %hi = vector.deinterleave<0> %r : vector<32xi8> -> vector<16xi8>, vector<16xi8>
 LOOM_DEFINE_ISA(loom_vector_deinterleave_isa, LOOM_OP_VECTOR_DEINTERLEAVE)
 LOOM_DEFINE_OPERAND(loom_vector_deinterleave_source, 0)
@@ -452,7 +453,7 @@ iree_status_t loom_vector_deinterleave_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_TABLE_LOOKUP: Select table vector lanes using explicit integer index lanes; every index lane must be within the table extent.
+// LOOM_OP_VECTOR_TABLE_LOOKUP: Select values from a rank-1 register table using integer index lanes. Each result lane reads table[indices lane]; the result shape matches the index vector shape and the result element type matches the table element type.
 // %values = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<32xi8> -> vector<32xf16>
 LOOM_DEFINE_ISA(loom_vector_table_lookup_isa, LOOM_OP_VECTOR_TABLE_LOOKUP)
 LOOM_DEFINE_OPERAND(loom_vector_table_lookup_table, 0)
@@ -469,7 +470,7 @@ iree_status_t loom_vector_table_lookup_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_TABLE_QUANTIZE: Map floating-point lanes to unsigned integer ordinal code lanes by counting ordered rank-1 threshold table entries.
+// LOOM_OP_VECTOR_TABLE_QUANTIZE: Map floating-point lanes to integer ordinal code lanes using an ordered rank-1 threshold table. For each input lane, the result code is the selected quantization bin; nan and tie attributes make NaN and threshold equality behavior explicit.
 // %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<32xf32>, vector<15xf32> -> vector<32xi8>
 LOOM_DEFINE_ISA(loom_vector_table_quantize_isa, LOOM_OP_VECTOR_TABLE_QUANTIZE)
 LOOM_DEFINE_OPERAND(loom_vector_table_quantize_input, 0)
@@ -490,7 +491,7 @@ iree_status_t loom_vector_table_quantize_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_TRANSFORM: Apply an explicit numeric transform descriptor to vector register lanes.
+// LOOM_OP_VECTOR_TRANSFORM: Apply an explicit numeric transform descriptor to vector register lanes. The transform operand is an encoding<transform> value that names the numeric mapping, such as scale/zero-point decode, whitening, or projection; verifier rules keep supported transform families and shape-changing parameters explicit.
 // %r = vector.transform %v, %xf : vector<128xf32>, encoding<transform> -> vector<128xf32>
 LOOM_DEFINE_ISA(loom_vector_transform_isa, LOOM_OP_VECTOR_TRANSFORM)
 LOOM_DEFINE_OPERAND(loom_vector_transform_source, 0)
@@ -507,7 +508,7 @@ iree_status_t loom_vector_transform_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_LOAD: Load a vector footprint from a typed view at a full-rank logical origin.
+// LOOM_OP_VECTOR_LOAD: Load a vector footprint from a typed view at a full-rank logical origin. The index list addresses the origin in view coordinates; vector axes map onto the trailing view axes, so leading view axes select a slice and trailing axes describe the loaded footprint.
 // %v = vector.load %view[%row, %col] : view<[%m]x[%n]xf32, %layout> -> vector<4x8xf32>
 LOOM_DEFINE_ISA(loom_vector_load_isa, LOOM_OP_VECTOR_LOAD)
 LOOM_DEFINE_OPERAND(loom_vector_load_view, 0)
@@ -528,7 +529,7 @@ iree_status_t loom_vector_load_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_STORE: Store a vector footprint into a typed view at a full-rank logical origin.
+// LOOM_OP_VECTOR_STORE: Store a vector footprint into a typed view at a full-rank logical origin. The index list addresses the origin in view coordinates; vector axes map onto the trailing view axes, matching vector.load.
 // vector.store %v, %view[%row, %col] : vector<4x8xf32>, view<[%m]x[%n]xf32, %layout>
 LOOM_DEFINE_ISA(loom_vector_store_isa, LOOM_OP_VECTOR_STORE)
 LOOM_DEFINE_OPERAND(loom_vector_store_value, 0)
@@ -549,7 +550,7 @@ iree_status_t loom_vector_store_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_LOAD_MASK: Masked vector load from a typed view; masked-off lanes take the passthrough value.
+// LOOM_OP_VECTOR_LOAD_MASK: Masked vector load from a typed view. Mask lanes with true values perform the same access as vector.load, while false lanes do not access memory and instead take the corresponding passthrough lane.
 // %v = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32> -> vector<4x8xf32>
 LOOM_DEFINE_ISA(loom_vector_load_mask_isa, LOOM_OP_VECTOR_LOAD_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_load_mask_view, 0)
@@ -574,7 +575,7 @@ iree_status_t loom_vector_load_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_STORE_MASK: Masked vector store into a typed view; masked-off lanes leave memory unchanged.
+// LOOM_OP_VECTOR_STORE_MASK: Masked vector store into a typed view. True mask lanes store the corresponding value lane, and false mask lanes do not access memory and leave the destination unchanged.
 // vector.store.mask %v, %view[%row, %col], %mask : vector<4x8xf32>, view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>
 LOOM_DEFINE_ISA(loom_vector_store_mask_isa, LOOM_OP_VECTOR_STORE_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_store_mask_value, 0)
@@ -597,7 +598,7 @@ iree_status_t loom_vector_store_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_LOAD_EXPAND: Rank-1 masked expand load from consecutive view elements; active lanes consume memory in increasing lane order and inactive lanes take the passthrough value.
+// LOOM_OP_VECTOR_LOAD_EXPAND: Rank-1 masked expand load from consecutive view elements. Active lanes consume memory densely in increasing lane order; inactive lanes do not consume memory and take the corresponding passthrough lane.
 // %v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_load_expand_isa, LOOM_OP_VECTOR_LOAD_EXPAND)
 LOOM_DEFINE_OPERAND(loom_vector_load_expand_view, 0)
@@ -622,7 +623,7 @@ iree_status_t loom_vector_load_expand_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_STORE_COMPRESS: Rank-1 masked compress store to consecutive view elements; active lanes produce memory in increasing lane order and inactive lanes do not write.
+// LOOM_OP_VECTOR_STORE_COMPRESS: Rank-1 masked compress store to consecutive view elements. Active lanes write densely in increasing lane order; inactive lanes do not produce memory elements.
 // vector.store.compress %v, %view[%row, %col], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi1>
 LOOM_DEFINE_ISA(loom_vector_store_compress_isa, LOOM_OP_VECTOR_STORE_COMPRESS)
 LOOM_DEFINE_OPERAND(loom_vector_store_compress_value, 0)
@@ -645,7 +646,7 @@ iree_status_t loom_vector_store_compress_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_GATHER: Gather a vector from per-lane signed element offsets relative to a full-rank view origin.
+// LOOM_OP_VECTOR_GATHER: Gather a vector from per-lane signed element offsets relative to a full-rank view origin. Each result lane reads origin + offsets[lane] in element units; the offset vector shape matches the result shape.
 // %v = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_gather_isa, LOOM_OP_VECTOR_GATHER)
 LOOM_DEFINE_OPERAND(loom_vector_gather_view, 0)
@@ -668,7 +669,7 @@ iree_status_t loom_vector_gather_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SCATTER: Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin; active lane addresses must be distinct.
+// LOOM_OP_VECTOR_SCATTER: Non-atomic scatter of a vector to per-lane signed element offsets relative to a full-rank view origin. Each lane writes origin + offsets[lane] in element units, and active lane addresses must be distinct because no atomic conflict resolution is implied.
 // vector.scatter %v, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
 LOOM_DEFINE_ISA(loom_vector_scatter_isa, LOOM_OP_VECTOR_SCATTER)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_value, 0)
@@ -691,7 +692,7 @@ iree_status_t loom_vector_scatter_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_GATHER_MASK: Masked vector gather from per-lane signed element offsets; masked-off lanes take the passthrough value.
+// LOOM_OP_VECTOR_GATHER_MASK: Masked vector gather from per-lane signed element offsets. True mask lanes read origin + offsets[lane], while false mask lanes do not access memory and take the corresponding passthrough lane.
 // %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_gather_mask_isa, LOOM_OP_VECTOR_GATHER_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_gather_mask_view, 0)
@@ -718,7 +719,7 @@ iree_status_t loom_vector_gather_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SCATTER_MASK: Masked non-atomic scatter; masked-off lanes leave memory unchanged and active lane addresses must be distinct.
+// LOOM_OP_VECTOR_SCATTER_MASK: Masked non-atomic scatter. True mask lanes write origin + offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct.
 // vector.scatter.mask %v, %view[%row, %col][%offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>
 LOOM_DEFINE_ISA(loom_vector_scatter_mask_isa, LOOM_OP_VECTOR_SCATTER_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_value, 0)
@@ -743,7 +744,7 @@ iree_status_t loom_vector_scatter_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_ATOMIC_REDUCE: Atomic no-result scatter reduction/update into per-lane signed element offsets. Duplicate active lane addresses are allowed and are serialized by the atomic memory contract.
+// LOOM_OP_VECTOR_ATOMIC_REDUCE: Atomic no-result scatter reduction/update into per-lane signed element offsets. Each lane atomically combines its value into origin + offsets[lane]; duplicate active addresses are valid and are serialized by the required ordering and scope attributes.
 // vector.atomic.reduce<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
 LOOM_DEFINE_ISA(loom_vector_atomic_reduce_isa, LOOM_OP_VECTOR_ATOMIC_REDUCE)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_value, 0)
@@ -772,7 +773,7 @@ iree_status_t loom_vector_atomic_reduce_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK: Masked atomic no-result scatter reduction/update; masked-off lanes do not access memory.
+// LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK: Masked atomic no-result scatter reduction/update. True mask lanes perform vector.atomic.reduce, while false mask lanes do not access memory.
 // vector.atomic.reduce.mask<addf> %v, %view[%row, %col][%offsets], %mask {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>
 LOOM_DEFINE_ISA(loom_vector_atomic_reduce_mask_isa, LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_reduce_mask_value, 0)
@@ -803,7 +804,7 @@ iree_status_t loom_vector_atomic_reduce_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_ATOMIC_RMW: Atomic read-modify-write at per-lane signed element offsets, returning the old memory value for each lane.
+// LOOM_OP_VECTOR_ATOMIC_RMW: Atomic read-modify-write at per-lane signed element offsets. Each lane atomically combines its value with origin + offsets[lane] and the result lane is the old memory value observed by that atomic operation.
 // %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
 LOOM_DEFINE_ISA(loom_vector_atomic_rmw_isa, LOOM_OP_VECTOR_ATOMIC_RMW)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_value, 0)
@@ -834,7 +835,7 @@ iree_status_t loom_vector_atomic_rmw_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_ATOMIC_RMW_MASK: Masked atomic read-modify-write. Masked-off result lanes take the explicit passthrough value.
+// LOOM_OP_VECTOR_ATOMIC_RMW_MASK: Masked atomic read-modify-write. True mask lanes perform vector.atomic.rmw, while false mask lanes do not access memory and take the corresponding passthrough lane in the result.
 // %old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_atomic_rmw_mask_isa, LOOM_OP_VECTOR_ATOMIC_RMW_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_value, 0)
@@ -869,7 +870,7 @@ iree_status_t loom_vector_atomic_rmw_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SELECT: Lanewise select from two same-typed vector values using an i1 mask vector.
+// LOOM_OP_VECTOR_SELECT: Lanewise select from two same-typed vector values using an i1 mask vector. True condition lanes choose true_value; false lanes choose false_value.
 // %r = vector.select %mask, %a, %b : vector<16xf32>
 LOOM_DEFINE_ISA(loom_vector_select_isa, LOOM_OP_VECTOR_SELECT)
 LOOM_DEFINE_OPERAND(loom_vector_select_condition, 0)
@@ -885,7 +886,7 @@ iree_status_t loom_vector_select_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_CMPI: Lanewise integer comparison producing an i1 mask vector.
+// LOOM_OP_VECTOR_CMPI: Lanewise integer comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpi predicate names and applies independently to each lane.
 // %m = vector.cmpi slt, %lhs, %rhs : vector<16xi32> -> vector<16xi1>
 LOOM_DEFINE_ISA(loom_vector_cmpi_isa, LOOM_OP_VECTOR_CMPI)
 LOOM_DEFINE_OPERAND(loom_vector_cmpi_lhs, 0)
@@ -898,7 +899,7 @@ iree_status_t loom_vector_cmpi_build(
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_CMPF: Lanewise floating-point comparison producing an i1 mask vector.
+// LOOM_OP_VECTOR_CMPF: Lanewise floating-point comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpf ordered/unordered predicate names and applies independently to each lane.
 // %m = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
 LOOM_DEFINE_ISA(loom_vector_cmpf_isa, LOOM_OP_VECTOR_CMPF)
 LOOM_DEFINE_OPERAND(loom_vector_cmpf_lhs, 0)
@@ -911,7 +912,7 @@ iree_status_t loom_vector_cmpf_build(
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_ADDF: Lanewise floating-point addition.
+// LOOM_OP_VECTOR_ADDF: Lanewise floating-point addition of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape.
 // vector.addf
 LOOM_DEFINE_ISA(loom_vector_addf_isa, LOOM_OP_VECTOR_ADDF)
 LOOM_DEFINE_OPERAND(loom_vector_addf_lhs, 0)
@@ -924,7 +925,7 @@ iree_status_t loom_vector_addf_build(
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_MULF: Lanewise floating-point multiplication.
+// LOOM_OP_VECTOR_MULF: Lanewise floating-point multiplication of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not imply fusion with neighboring operations.
 // vector.mulf
 LOOM_DEFINE_ISA(loom_vector_mulf_isa, LOOM_OP_VECTOR_MULF)
 LOOM_DEFINE_OPERAND(loom_vector_mulf_lhs, 0)
@@ -937,7 +938,7 @@ iree_status_t loom_vector_mulf_build(
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_FMAF: Lanewise fused multiply-add: a*b + c with single rounding.
+// LOOM_OP_VECTOR_FMAF: Lanewise fused multiply-add of same-typed floating-point vectors. Each result lane computes a*b + c with one final rounding; use separate vector.mulf/vector.addf when unfused rounding is required.
 // %r = vector.fmaf %a, %b, %c : vector<16xf32>
 LOOM_DEFINE_ISA(loom_vector_fmaf_isa, LOOM_OP_VECTOR_FMAF)
 LOOM_DEFINE_OPERAND(loom_vector_fmaf_a, 0)
@@ -955,7 +956,7 @@ iree_status_t loom_vector_fmaf_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_ADDI: Lanewise integer addition.
+// LOOM_OP_VECTOR_ADDI: Lanewise integer addition of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
 // vector.addi
 LOOM_DEFINE_ISA(loom_vector_addi_isa, LOOM_OP_VECTOR_ADDI)
 LOOM_DEFINE_OPERAND(loom_vector_addi_lhs, 0)
@@ -968,7 +969,7 @@ iree_status_t loom_vector_addi_build(
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_MULI: Lanewise integer multiplication.
+// LOOM_OP_VECTOR_MULI: Lanewise integer multiplication of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane.
 // vector.muli
 LOOM_DEFINE_ISA(loom_vector_muli_isa, LOOM_OP_VECTOR_MULI)
 LOOM_DEFINE_OPERAND(loom_vector_muli_lhs, 0)
@@ -981,7 +982,7 @@ iree_status_t loom_vector_muli_build(
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_ANDI: Lanewise bitwise AND.
+// LOOM_OP_VECTOR_ANDI: Lanewise bitwise AND of same-typed integer vector operands.
 // vector.andi
 LOOM_DEFINE_ISA(loom_vector_andi_isa, LOOM_OP_VECTOR_ANDI)
 LOOM_DEFINE_OPERAND(loom_vector_andi_lhs, 0)
@@ -992,7 +993,7 @@ iree_status_t loom_vector_andi_build(
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_ORI: Lanewise bitwise OR.
+// LOOM_OP_VECTOR_ORI: Lanewise bitwise OR of same-typed integer vector operands.
 // vector.ori
 LOOM_DEFINE_ISA(loom_vector_ori_isa, LOOM_OP_VECTOR_ORI)
 LOOM_DEFINE_OPERAND(loom_vector_ori_lhs, 0)
@@ -1003,7 +1004,7 @@ iree_status_t loom_vector_ori_build(
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_XORI: Lanewise bitwise XOR.
+// LOOM_OP_VECTOR_XORI: Lanewise bitwise XOR of same-typed integer vector operands.
 // vector.xori
 LOOM_DEFINE_ISA(loom_vector_xori_isa, LOOM_OP_VECTOR_XORI)
 LOOM_DEFINE_OPERAND(loom_vector_xori_lhs, 0)
@@ -1014,7 +1015,7 @@ iree_status_t loom_vector_xori_build(
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_CTPOPI: Lanewise population count over integer lanes.
+// LOOM_OP_VECTOR_CTPOPI: Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input.
 // vector.ctpopi
 LOOM_DEFINE_ISA(loom_vector_ctpopi_isa, LOOM_OP_VECTOR_CTPOPI)
 LOOM_DEFINE_OPERAND(loom_vector_ctpopi_input, 0)
@@ -1024,7 +1025,7 @@ iree_status_t loom_vector_ctpopi_build(
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_SQRTF: Lanewise square root.
+// LOOM_OP_VECTOR_SQRTF: Lanewise floating-point square root. Optional assumptions flags constrain lane value domains for optimization and lowering.
 // vector.sqrtf
 LOOM_DEFINE_ISA(loom_vector_sqrtf_isa, LOOM_OP_VECTOR_SQRTF)
 LOOM_DEFINE_OPERAND(loom_vector_sqrtf_input, 0)
@@ -1035,7 +1036,7 @@ iree_status_t loom_vector_sqrtf_build(
     loom_value_id_t input, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_EXTF: Lanewise floating-point precision extension.
+// LOOM_OP_VECTOR_EXTF: Lanewise floating-point precision extension. Source and result shapes match exactly; only the floating-point element type widens.
 // vector.extf
 LOOM_DEFINE_ISA(loom_vector_extf_isa, LOOM_OP_VECTOR_EXTF)
 LOOM_DEFINE_OPERAND(loom_vector_extf_input, 0)
@@ -1048,7 +1049,7 @@ iree_status_t loom_vector_extf_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_FPTRUNC: Lanewise floating-point precision truncation.
+// LOOM_OP_VECTOR_FPTRUNC: Lanewise floating-point precision truncation. Source and result shapes match exactly; only the floating-point element type narrows.
 // vector.fptrunc
 LOOM_DEFINE_ISA(loom_vector_fptrunc_isa, LOOM_OP_VECTOR_FPTRUNC)
 LOOM_DEFINE_OPERAND(loom_vector_fptrunc_input, 0)
@@ -1061,7 +1062,7 @@ iree_status_t loom_vector_fptrunc_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_EXTSI: Lanewise signed integer extension.
+// LOOM_OP_VECTOR_EXTSI: Lanewise signed integer extension. Source and result shapes match exactly, and each source lane is sign-extended to the result element width.
 // vector.extsi
 LOOM_DEFINE_ISA(loom_vector_extsi_isa, LOOM_OP_VECTOR_EXTSI)
 LOOM_DEFINE_OPERAND(loom_vector_extsi_input, 0)
@@ -1074,7 +1075,7 @@ iree_status_t loom_vector_extsi_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_EXTUI: Lanewise unsigned integer extension.
+// LOOM_OP_VECTOR_EXTUI: Lanewise unsigned integer extension. Source and result shapes match exactly, and each source lane is zero-extended to the result element width.
 // vector.extui
 LOOM_DEFINE_ISA(loom_vector_extui_isa, LOOM_OP_VECTOR_EXTUI)
 LOOM_DEFINE_OPERAND(loom_vector_extui_input, 0)
@@ -1087,7 +1088,7 @@ iree_status_t loom_vector_extui_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_TRUNCI: Lanewise integer truncation.
+// LOOM_OP_VECTOR_TRUNCI: Lanewise integer truncation. Source and result shapes match exactly, and each lane keeps the low bits required by the result element width.
 // vector.trunci
 LOOM_DEFINE_ISA(loom_vector_trunci_isa, LOOM_OP_VECTOR_TRUNCI)
 LOOM_DEFINE_OPERAND(loom_vector_trunci_input, 0)
@@ -1100,7 +1101,7 @@ iree_status_t loom_vector_trunci_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_SITOFP: Lanewise signed integer to floating-point conversion.
+// LOOM_OP_VECTOR_SITOFP: Lanewise signed integer to floating-point conversion with unchanged shape.
 // vector.sitofp
 LOOM_DEFINE_ISA(loom_vector_sitofp_isa, LOOM_OP_VECTOR_SITOFP)
 LOOM_DEFINE_OPERAND(loom_vector_sitofp_input, 0)
@@ -1110,7 +1111,7 @@ iree_status_t loom_vector_sitofp_build(
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_UITOFP: Lanewise unsigned integer to floating-point conversion.
+// LOOM_OP_VECTOR_UITOFP: Lanewise unsigned integer to floating-point conversion with unchanged shape.
 // vector.uitofp
 LOOM_DEFINE_ISA(loom_vector_uitofp_isa, LOOM_OP_VECTOR_UITOFP)
 LOOM_DEFINE_OPERAND(loom_vector_uitofp_input, 0)
@@ -1120,7 +1121,7 @@ iree_status_t loom_vector_uitofp_build(
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_FPTOSI: Lanewise floating-point to signed integer conversion.
+// LOOM_OP_VECTOR_FPTOSI: Lanewise floating-point to signed integer conversion with unchanged shape.
 // vector.fptosi
 LOOM_DEFINE_ISA(loom_vector_fptosi_isa, LOOM_OP_VECTOR_FPTOSI)
 LOOM_DEFINE_OPERAND(loom_vector_fptosi_input, 0)
@@ -1130,7 +1131,7 @@ iree_status_t loom_vector_fptosi_build(
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_FPTOUI: Lanewise floating-point to unsigned integer conversion.
+// LOOM_OP_VECTOR_FPTOUI: Lanewise floating-point to unsigned integer conversion with unchanged shape.
 // vector.fptoui
 LOOM_DEFINE_ISA(loom_vector_fptoui_isa, LOOM_OP_VECTOR_FPTOUI)
 LOOM_DEFINE_OPERAND(loom_vector_fptoui_input, 0)
@@ -1140,7 +1141,7 @@ iree_status_t loom_vector_fptoui_build(
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
 
-// LOOM_OP_VECTOR_BITCAST: Bitwise reinterpretation between vector register types with the same total bit count.
+// LOOM_OP_VECTOR_BITCAST: Bitwise reinterpretation between vector register types with the same total bit count. No numeric conversion is performed; only the lane shape and element interpretation change.
 // %r = vector.bitcast %input : vector<16xf32> to vector<16xi32>
 LOOM_DEFINE_ISA(loom_vector_bitcast_isa, LOOM_OP_VECTOR_BITCAST)
 LOOM_DEFINE_OPERAND(loom_vector_bitcast_input, 0)
@@ -1153,7 +1154,7 @@ iree_status_t loom_vector_bitcast_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_BITFIELD_EXTRACTU: Extract and zero-extend one fixed bitfield from each integer source lane.
+// LOOM_OP_VECTOR_BITFIELD_EXTRACTU: Extract one fixed bitfield from each integer source lane and zero-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width.
 // %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>
 LOOM_DEFINE_ISA(loom_vector_bitfield_extractu_isa, LOOM_OP_VECTOR_BITFIELD_EXTRACTU)
 LOOM_DEFINE_OPERAND(loom_vector_bitfield_extractu_source, 0)
@@ -1172,7 +1173,7 @@ iree_status_t loom_vector_bitfield_extractu_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_BITFIELD_EXTRACTS: Extract and sign-extend one fixed bitfield from each integer source lane.
+// LOOM_OP_VECTOR_BITFIELD_EXTRACTS: Extract one fixed bitfield from each integer source lane and sign-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width.
 // %signed = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<16xi8> -> vector<16xi32>
 LOOM_DEFINE_ISA(loom_vector_bitfield_extracts_isa, LOOM_OP_VECTOR_BITFIELD_EXTRACTS)
 LOOM_DEFINE_OPERAND(loom_vector_bitfield_extracts_source, 0)
@@ -1191,7 +1192,7 @@ iree_status_t loom_vector_bitfield_extracts_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_BITFIELD_INSERT: Insert the low bits of each integer field lane into a fixed bitfield of each integer base lane.
+// LOOM_OP_VECTOR_BITFIELD_INSERT: Insert the low bits of each integer field lane into a fixed bitfield of the corresponding integer base lane. Bits outside the target field are preserved from the base lane.
 // %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
 LOOM_DEFINE_ISA(loom_vector_bitfield_insert_isa, LOOM_OP_VECTOR_BITFIELD_INSERT)
 LOOM_DEFINE_OPERAND(loom_vector_bitfield_insert_field, 0)
@@ -1212,7 +1213,7 @@ iree_status_t loom_vector_bitfield_insert_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_BITPACK: Pack the low bits of each integer source lane into a contiguous little-endian bitstream stored in integer result lanes.
+// LOOM_OP_VECTOR_BITPACK: Pack the low bits of each integer source lane into a contiguous little-endian bitstream stored in integer result lanes. Source lanes are consumed in logical lane order and width gives the number of bits taken from each source lane.
 // %packed = vector.bitpack<4> %codes : vector<32xi8> -> vector<16xi8>
 LOOM_DEFINE_ISA(loom_vector_bitpack_isa, LOOM_OP_VECTOR_BITPACK)
 LOOM_DEFINE_OPERAND(loom_vector_bitpack_source, 0)
@@ -1229,7 +1230,7 @@ iree_status_t loom_vector_bitpack_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_BITUNPACKU: Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes.
+// LOOM_OP_VECTOR_BITUNPACKU: Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes. Result lanes are produced in logical lane order.
 // %codes = vector.bitunpacku<4> %packed : vector<16xi8> -> vector<32xi8>
 LOOM_DEFINE_ISA(loom_vector_bitunpacku_isa, LOOM_OP_VECTOR_BITUNPACKU)
 LOOM_DEFINE_OPERAND(loom_vector_bitunpacku_source, 0)
@@ -1246,7 +1247,7 @@ iree_status_t loom_vector_bitunpacku_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_BITUNPACKS: Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes.
+// LOOM_OP_VECTOR_BITUNPACKS: Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes. Result lanes are produced in logical lane order.
 // %deltas = vector.bitunpacks<3> %packed : vector<12xi8> -> vector<32xi8>
 LOOM_DEFINE_ISA(loom_vector_bitunpacks_isa, LOOM_OP_VECTOR_BITUNPACKS)
 LOOM_DEFINE_OPERAND(loom_vector_bitunpacks_source, 0)
@@ -1263,7 +1264,23 @@ iree_status_t loom_vector_bitunpacks_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_DOT4I: Group adjacent four-lane i8 products into i32 accumulator lanes.
+// LOOM_OP_VECTOR_DOTF: Compute a same-element floating-point dot product with an explicit scalar accumulator. Semantics are equivalent to accumulating scalar.fmaf(lhs_lane, rhs_lane, acc) over lanes in logical lane order; use vector.mulf followed by vector.reduce<addf> when separately rounded products and additions are required. The source vectors must have the same shape and element type, and the init/result scalar type matches that element type. Zero-lane inputs return init.
+// %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32> -> f32
+LOOM_DEFINE_ISA(loom_vector_dotf_isa, LOOM_OP_VECTOR_DOTF)
+LOOM_DEFINE_OPERAND(loom_vector_dotf_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_dotf_rhs, 1)
+LOOM_DEFINE_OPERAND(loom_vector_dotf_init, 2)
+LOOM_DEFINE_RESULT(loom_vector_dotf_result, 0)
+iree_status_t loom_vector_dotf_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t lhs,
+    loom_may_consume loom_value_id_t rhs,
+    loom_may_consume loom_value_id_t init,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_VECTOR_DOT4I: Group adjacent four-lane i8 products along the last axis and add each four-product sum into an i32 accumulator lane. The signedness template chooses how lhs and rhs i8 lanes are interpreted, matching dp4a/VNNI-style hardware operations.
 // %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
 LOOM_DEFINE_ISA(loom_vector_dot4i_isa, LOOM_OP_VECTOR_DOT4I)
 LOOM_DEFINE_OPERAND(loom_vector_dot4i_lhs, 0)
@@ -1284,7 +1301,7 @@ iree_status_t loom_vector_dot4i_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result.
+// LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type.
 // %sum = vector.reduce<addf> %v, %zero : vector<16xf32> -> f32
 LOOM_DEFINE_ISA(loom_vector_reduce_isa, LOOM_OP_VECTOR_REDUCE)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_input, 0)
