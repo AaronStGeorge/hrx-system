@@ -438,9 +438,12 @@ iree_status_t loom_builder_allocate_op(
       (iree_host_size_t)region_count * sizeof(loom_region_t*);
   iree_host_size_t tied_size =
       (iree_host_size_t)tied_result_count * sizeof(loom_tied_result_t);
+  iree_host_size_t operand_use_indices_size =
+      (iree_host_size_t)operand_count * sizeof(loom_use_index_t);
 
   iree_host_size_t before_attrs = sizeof(loom_op_t) + operands_size +
-                                  results_size + regions_size + tied_size;
+                                  results_size + regions_size + tied_size +
+                                  operand_use_indices_size;
   iree_host_size_t aligned_before_attrs =
       attribute_count > 0
           ? iree_host_align(before_attrs, iree_alignof(loom_attribute_t))
@@ -463,6 +466,10 @@ iree_status_t loom_builder_allocate_op(
   op->attribute_count = attribute_count;
   op->location = location;
   op->parent_op = builder->ip.parent_op;
+  loom_use_index_t* operand_use_indices = loom_op_operand_use_indices(op);
+  for (uint16_t i = 0; i < operand_count; ++i) {
+    operand_use_indices[i] = LOOM_USE_INDEX_INVALID;
+  }
 
   if (!builder->ip.before_op) {
     IREE_RETURN_IF_ERROR(
@@ -531,12 +538,20 @@ iree_status_t loom_value_add_use(loom_module_t* module,
                                  loom_value_id_t value_id, loom_op_t* user_op,
                                  uint16_t operand_index) {
   loom_value_t* value = &module->values.entries[value_id];
+  if (value->use_count >= LOOM_VALUE_MAX_USE_COUNT) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED, "value %%%u has too many uses (%u max)",
+        (unsigned)value_id, (unsigned)LOOM_VALUE_MAX_USE_COUNT);
+  }
   loom_use_t use = loom_use_make(user_op, operand_index);
+  loom_use_index_t* operand_use_indices = loom_op_operand_use_indices(user_op);
+  loom_use_index_t use_index = value->use_count;
 
   if (!loom_value_has_overflow_uses(value)) {
     if (value->use_count < LOOM_VALUE_INLINE_USE_COUNT) {
       // Common path: store inline.
-      value->inline_uses[value->use_count] = use;
+      value->inline_uses[use_index] = use;
+      operand_use_indices[operand_index] = use_index;
       ++value->use_count;
       return iree_ok_status();
     }
@@ -549,10 +564,11 @@ iree_status_t loom_value_add_use(loom_module_t* module,
     for (uint16_t i = 0; i < LOOM_VALUE_INLINE_USE_COUNT; ++i) {
       overflow[i] = value->inline_uses[i];
     }
-    overflow[LOOM_VALUE_INLINE_USE_COUNT] = use;
+    overflow[use_index] = use;
     value->overflow_uses = overflow;
     value->overflow_capacity = capacity;
     value->flags |= LOOM_VALUE_FLAG_OVERFLOW_USES;
+    operand_use_indices[operand_index] = use_index;
     ++value->use_count;
     return iree_ok_status();
   }
@@ -560,23 +576,30 @@ iree_status_t loom_value_add_use(loom_module_t* module,
   // Already in overflow mode.
   if (value->use_count < value->overflow_capacity) {
     // Space available: append.
-    value->overflow_uses[value->use_count] = use;
+    value->overflow_uses[use_index] = use;
+    operand_use_indices[operand_index] = use_index;
     ++value->use_count;
     return iree_ok_status();
   }
 
   // Overflow array is full: grow by 2x (floor to initial capacity as
   // a safety net against zero-capacity invariant violations).
-  uint32_t new_capacity = iree_max(value->overflow_capacity * 2,
-                                   LOOM_USE_INITIAL_OVERFLOW_CAPACITY);
+  uint32_t new_capacity =
+      iree_max(value->overflow_capacity, LOOM_USE_INITIAL_OVERFLOW_CAPACITY);
+  if (new_capacity > LOOM_VALUE_MAX_USE_COUNT / 2) {
+    new_capacity = LOOM_VALUE_MAX_USE_COUNT;
+  } else {
+    new_capacity *= 2;
+  }
   loom_use_t* new_overflow = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       &module->arena, new_capacity, sizeof(loom_use_t), (void**)&new_overflow));
   memcpy(new_overflow, value->overflow_uses,
          (iree_host_size_t)value->use_count * sizeof(loom_use_t));
-  new_overflow[value->use_count] = use;
+  new_overflow[use_index] = use;
   value->overflow_uses = new_overflow;
   value->overflow_capacity = new_capacity;
+  operand_use_indices[operand_index] = use_index;
   ++value->use_count;
   return iree_ok_status();
 }
@@ -586,15 +609,26 @@ iree_status_t loom_value_remove_use(loom_module_t* module,
                                     loom_op_t* user_op,
                                     uint16_t operand_index) {
   loom_value_t* value = &module->values.entries[value_id];
+  loom_use_index_t* operand_use_indices = loom_op_operand_use_indices(user_op);
+  loom_use_index_t use_index = operand_use_indices[operand_index];
   loom_use_t* uses = loom_value_uses_mutable(value);
-  for (uint16_t i = 0; i < value->use_count; ++i) {
-    if (loom_use_user_op(uses[i]) == user_op &&
-        loom_use_operand_index(uses[i]) == operand_index) {
-      // Swap with last and decrement.
-      uses[i] = uses[value->use_count - 1];
-      --value->use_count;
-      return iree_ok_status();
+  if (use_index < value->use_count &&
+      loom_use_user_op(uses[use_index]) == user_op &&
+      loom_use_operand_index(uses[use_index]) == operand_index) {
+    // Swap with last and decrement. Update the moved user's backpointer so
+    // future removals stay O(1).
+    loom_use_index_t last_index = value->use_count - 1;
+    if (use_index != last_index) {
+      loom_use_t moved_use = uses[last_index];
+      uses[use_index] = moved_use;
+      loom_op_t* moved_user_op = loom_use_user_op(moved_use);
+      uint16_t moved_operand_index = loom_use_operand_index(moved_use);
+      loom_op_operand_use_indices(moved_user_op)[moved_operand_index] =
+          use_index;
     }
+    operand_use_indices[operand_index] = LOOM_USE_INDEX_INVALID;
+    --value->use_count;
+    return iree_ok_status();
   }
   iree_string_view_t op_name = loom_op_name(module, user_op);
   return iree_make_status(IREE_STATUS_NOT_FOUND,
@@ -695,8 +729,13 @@ iree_status_t loom_op_set_operand(loom_module_t* module, loom_op_t* op,
 // entries. Used by RAUW to pre-allocate before bulk transfer.
 static iree_status_t loom_value_ensure_use_capacity(loom_module_t* module,
                                                     loom_value_t* value,
-                                                    uint16_t additional) {
-  uint32_t needed = (uint32_t)value->use_count + (uint32_t)additional;
+                                                    uint32_t additional) {
+  if (additional > LOOM_VALUE_MAX_USE_COUNT - value->use_count) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "value use count exceeds maximum (%u)",
+                            (unsigned)LOOM_VALUE_MAX_USE_COUNT);
+  }
+  uint32_t needed = value->use_count + additional;
   if (!loom_value_has_overflow_uses(value)) {
     if (needed <= LOOM_VALUE_INLINE_USE_COUNT) return iree_ok_status();
     // Transition to overflow with enough capacity.
@@ -705,7 +744,7 @@ static iree_status_t loom_value_ensure_use_capacity(loom_module_t* module,
     loom_use_t* overflow = NULL;
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         &module->arena, capacity, sizeof(loom_use_t), (void**)&overflow));
-    for (uint16_t i = 0; i < value->use_count; ++i) {
+    for (uint32_t i = 0; i < value->use_count; ++i) {
       overflow[i] = value->inline_uses[i];
     }
     value->overflow_uses = overflow;
@@ -733,7 +772,7 @@ iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
                                                loom_value_id_t new_id) {
   if (old_id == new_id) return iree_ok_status();
   loom_value_t* old_value = &module->values.entries[old_id];
-  uint16_t old_use_count = old_value->use_count;
+  uint32_t old_use_count = old_value->use_count;
 
   loom_value_t* new_value = &module->values.entries[new_id];
   IREE_RETURN_IF_ERROR(
@@ -745,7 +784,7 @@ iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
 
   // Patch every user op's operand slot.
   const loom_use_t* old_uses = loom_value_uses(old_value);
-  for (uint16_t i = 0; i < old_use_count; ++i) {
+  for (uint32_t i = 0; i < old_use_count; ++i) {
     loom_op_t* user_op = loom_use_user_op(old_uses[i]);
     uint16_t operand_index = loom_use_operand_index(old_uses[i]);
     loom_op_operands(user_op)[operand_index] = new_id;
@@ -756,8 +795,13 @@ iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
   // above) is still valid: ensure_use_capacity only touches new_value,
   // and old_id != new_id is guarded at entry.
   loom_use_t* new_uses = loom_value_uses_mutable(new_value);
-  for (uint16_t i = 0; i < old_use_count; ++i) {
-    new_uses[new_value->use_count + i] = old_uses[i];
+  uint32_t new_use_start = new_value->use_count;
+  for (uint32_t i = 0; i < old_use_count; ++i) {
+    uint32_t new_use_index = new_use_start + i;
+    new_uses[new_use_index] = old_uses[i];
+    loom_op_t* user_op = loom_use_user_op(old_uses[i]);
+    uint16_t operand_index = loom_use_operand_index(old_uses[i]);
+    loom_op_operand_use_indices(user_op)[operand_index] = new_use_index;
   }
   new_value->use_count += old_use_count;
 
@@ -777,8 +821,8 @@ iree_status_t loom_value_replace_all_uses_except(loom_module_t* module,
 
   // Count how many uses will be transferred vs kept.
   const loom_use_t* old_uses = loom_value_uses(old_value);
-  uint16_t transfer_count = 0;
-  for (uint16_t i = 0; i < old_value->use_count; ++i) {
+  uint32_t transfer_count = 0;
+  for (uint32_t i = 0; i < old_value->use_count; ++i) {
     if (loom_use_user_op(old_uses[i]) != except_op) {
       ++transfer_count;
     }
@@ -794,17 +838,26 @@ iree_status_t loom_value_replace_all_uses_except(loom_module_t* module,
   // Walk old's list backwards so swap-removal doesn't skip entries.
   loom_use_t* old_uses_mutable = loom_value_uses_mutable(old_value);
   loom_use_t* new_uses = loom_value_uses_mutable(new_value);
-  for (int32_t i = (int32_t)old_value->use_count - 1; i >= 0; --i) {
+  for (uint32_t i = old_value->use_count; i-- > 0;) {
     if (loom_use_user_op(old_uses_mutable[i]) == except_op) continue;
     // Patch the operand slot.
     loom_op_t* user_op = loom_use_user_op(old_uses_mutable[i]);
     uint16_t operand_index = loom_use_operand_index(old_uses_mutable[i]);
     loom_op_operands(user_op)[operand_index] = new_id;
     // Add to new's list.
-    new_uses[new_value->use_count] = old_uses_mutable[i];
+    uint32_t new_use_index = new_value->use_count;
+    new_uses[new_use_index] = old_uses_mutable[i];
+    loom_op_operand_use_indices(user_op)[operand_index] = new_use_index;
     ++new_value->use_count;
     // Remove from old's list (swap with last).
-    old_uses_mutable[i] = old_uses_mutable[old_value->use_count - 1];
+    uint32_t last_index = old_value->use_count - 1;
+    if (i != last_index) {
+      loom_use_t moved_use = old_uses_mutable[last_index];
+      old_uses_mutable[i] = moved_use;
+      loom_op_t* moved_user_op = loom_use_user_op(moved_use);
+      uint16_t moved_operand_index = loom_use_operand_index(moved_use);
+      loom_op_operand_use_indices(moved_user_op)[moved_operand_index] = i;
+    }
     --old_value->use_count;
   }
 
@@ -826,8 +879,8 @@ iree_status_t loom_value_replace_uses_if(loom_module_t* module,
 
   // Count how many uses will be transferred.
   const loom_use_t* old_uses = loom_value_uses(old_value);
-  uint16_t transfer_count = 0;
-  for (uint16_t i = 0; i < old_value->use_count; ++i) {
+  uint32_t transfer_count = 0;
+  for (uint32_t i = 0; i < old_value->use_count; ++i) {
     if (predicate(loom_use_user_op(old_uses[i]), user_data)) {
       ++transfer_count;
     }
@@ -842,14 +895,23 @@ iree_status_t loom_value_replace_uses_if(loom_module_t* module,
   // Patch and transfer (walk backwards for safe swap-removal).
   loom_use_t* old_uses_mutable = loom_value_uses_mutable(old_value);
   loom_use_t* new_uses = loom_value_uses_mutable(new_value);
-  for (int32_t i = (int32_t)old_value->use_count - 1; i >= 0; --i) {
+  for (uint32_t i = old_value->use_count; i-- > 0;) {
     if (!predicate(loom_use_user_op(old_uses_mutable[i]), user_data)) continue;
     loom_op_t* user_op = loom_use_user_op(old_uses_mutable[i]);
     uint16_t operand_index = loom_use_operand_index(old_uses_mutable[i]);
     loom_op_operands(user_op)[operand_index] = new_id;
-    new_uses[new_value->use_count] = old_uses_mutable[i];
+    uint32_t new_use_index = new_value->use_count;
+    new_uses[new_use_index] = old_uses_mutable[i];
+    loom_op_operand_use_indices(user_op)[operand_index] = new_use_index;
     ++new_value->use_count;
-    old_uses_mutable[i] = old_uses_mutable[old_value->use_count - 1];
+    uint32_t last_index = old_value->use_count - 1;
+    if (i != last_index) {
+      loom_use_t moved_use = old_uses_mutable[last_index];
+      old_uses_mutable[i] = moved_use;
+      loom_op_t* moved_user_op = loom_use_user_op(moved_use);
+      uint16_t moved_operand_index = loom_use_operand_index(moved_use);
+      loom_op_operand_use_indices(moved_user_op)[moved_operand_index] = i;
+    }
     --old_value->use_count;
   }
   if (old_value->use_count == 0) {

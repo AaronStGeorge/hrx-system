@@ -1180,6 +1180,37 @@ TEST_F(BuilderTest, OverflowGrowth) {
   }
 }
 
+TEST_F(BuilderTest, HighFanoutUsesExceedUint16AndRemoveInConstantTime) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t v = build_constant(&builder_, module_, i32);
+
+  constexpr uint32_t kUseCount = 70000;
+  loom_op_t* first = NULL;
+  loom_op_t* middle = NULL;
+  loom_op_t* last = NULL;
+  for (uint32_t i = 0; i < kUseCount; ++i) {
+    loom_op_t* op = NULL;
+    IREE_ASSERT_OK(
+        loom_test_neg_build(&builder_, v, i32, LOOM_LOCATION_UNKNOWN, &op));
+    if (i == 0) first = op;
+    if (i == kUseCount / 2) middle = op;
+    if (i == kUseCount - 1) last = op;
+  }
+
+  loom_value_t* value_v = loom_module_value(module_, v);
+  EXPECT_EQ(value_v->use_count, kUseCount);
+  EXPECT_TRUE(loom_value_has_overflow_uses(value_v));
+
+  // Removing from the middle swaps another use into the removed slot and must
+  // update that moved user's operand backpointer.
+  IREE_ASSERT_OK(loom_op_erase(module_, middle));
+  EXPECT_EQ(value_v->use_count, kUseCount - 1);
+  IREE_ASSERT_OK(loom_op_erase(module_, first));
+  EXPECT_EQ(value_v->use_count, kUseCount - 2);
+  IREE_ASSERT_OK(loom_op_erase(module_, last));
+  EXPECT_EQ(value_v->use_count, kUseCount - 3);
+}
+
 TEST_F(BuilderTest, HasNoUsesAndSingleUse) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_value_id_t a = build_constant(&builder_, module_, i32);

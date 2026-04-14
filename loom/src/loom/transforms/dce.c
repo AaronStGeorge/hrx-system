@@ -36,34 +36,81 @@ const loom_pass_info_t* loom_dce_pass_info(void) {
 }
 
 //===----------------------------------------------------------------------===//
-// Block collection
+// Worklist
 //===----------------------------------------------------------------------===//
 //
-// Collects all blocks reachable from a function into a flat array,
-// including blocks inside nested regions. Uses an iterative region
-// stack to avoid recursion on deeply nested untrusted input.
+// DCE is driven by a deduplicated worklist so cascading deadness follows only
+// the values whose use counts changed. A fixed-point whole-function scan can
+// require one full scan per dependency layer when producers and consumers live
+// in different blocks or regions.
 
 #define LOOM_DCE_INITIAL_CAPACITY 32
 
-static iree_status_t loom_dce_collect_blocks(iree_arena_allocator_t* arena,
-                                             loom_region_t* body,
-                                             loom_block_t*** out_blocks,
-                                             iree_host_size_t* out_count) {
-  // Region stack for iterative DFS.
+typedef struct loom_dce_worklist_t {
+  // Deduplicated operations to re-check for deadness.
+  loom_op_t** entries;
+  // Number of queued operations.
+  iree_host_size_t count;
+  // Capacity of entries.
+  iree_host_size_t capacity;
+} loom_dce_worklist_t;
+
+static iree_status_t loom_dce_worklist_initialize(
+    iree_arena_allocator_t* arena, loom_dce_worklist_t* worklist) {
+  worklist->count = 0;
+  worklist->capacity = LOOM_DCE_INITIAL_CAPACITY;
+  return iree_arena_allocate_array(arena, worklist->capacity,
+                                   sizeof(loom_op_t*),
+                                   (void**)&worklist->entries);
+}
+
+static void loom_dce_worklist_deinitialize(loom_dce_worklist_t* worklist) {
+  for (iree_host_size_t i = 0; i < worklist->count; ++i) {
+    worklist->entries[i]->flags &= ~LOOM_OP_FLAG_ON_WORKLIST;
+  }
+}
+
+static iree_status_t loom_dce_worklist_push(iree_arena_allocator_t* arena,
+                                            loom_dce_worklist_t* worklist,
+                                            loom_op_t* op) {
+  if (!op || iree_any_bit_set(op->flags,
+                              LOOM_OP_FLAG_DEAD | LOOM_OP_FLAG_ON_WORKLIST)) {
+    return iree_ok_status();
+  }
+  if (worklist->count >= worklist->capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, worklist->count, worklist->count + 1, sizeof(loom_op_t*),
+        &worklist->capacity, (void**)&worklist->entries));
+  }
+  op->flags |= LOOM_OP_FLAG_ON_WORKLIST;
+  worklist->entries[worklist->count++] = op;
+  return iree_ok_status();
+}
+
+static loom_op_t* loom_dce_worklist_pop(loom_dce_worklist_t* worklist) {
+  while (worklist->count > 0) {
+    loom_op_t* op = worklist->entries[--worklist->count];
+    op->flags &= ~LOOM_OP_FLAG_ON_WORKLIST;
+    if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) continue;
+    return op;
+  }
+  return NULL;
+}
+
+//===----------------------------------------------------------------------===//
+// Worklist seeding
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_dce_seed_worklist(iree_arena_allocator_t* arena,
+                                            loom_module_t* module,
+                                            loom_region_t* body,
+                                            loom_dce_worklist_t* worklist) {
   loom_region_t** region_stack = NULL;
   iree_host_size_t stack_count = 0;
   iree_host_size_t stack_capacity = LOOM_DCE_INITIAL_CAPACITY;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, stack_capacity, sizeof(loom_region_t*), (void**)&region_stack));
 
-  // Output block array.
-  loom_block_t** blocks = NULL;
-  iree_host_size_t block_count = 0;
-  iree_host_size_t block_capacity = LOOM_DCE_INITIAL_CAPACITY;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, block_capacity, sizeof(loom_block_t*), (void**)&blocks));
-
-  // Seed with the function body.
   region_stack[stack_count++] = body;
 
   while (stack_count > 0) {
@@ -71,18 +118,13 @@ static iree_status_t loom_dce_collect_blocks(iree_arena_allocator_t* arena,
 
     loom_block_t* block = NULL;
     loom_region_for_each_block(region, block) {
-      // Append block to output array.
-      if (block_count >= block_capacity) {
-        IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-            arena, block_count, block_count + 1, sizeof(loom_block_t*),
-            &block_capacity, (void**)&blocks));
-      }
-      blocks[block_count++] = block;
-
-      // Push nested regions from ops in this block.
       loom_op_t* op = NULL;
       loom_block_for_each_op(block, op) {
-        if (op->region_count == 0) continue;
+        op->flags &= ~LOOM_OP_FLAG_ON_WORKLIST;
+        if (loom_op_is_trivially_dead(module, op)) {
+          IREE_RETURN_IF_ERROR(loom_dce_worklist_push(arena, worklist, op));
+        }
+
         loom_region_t** regions = loom_op_regions(op);
         for (uint8_t r = 0; r < op->region_count; ++r) {
           if (!regions[r] || regions[r]->block_count == 0) continue;
@@ -97,8 +139,62 @@ static iree_status_t loom_dce_collect_blocks(iree_arena_allocator_t* arena,
     }
   }
 
-  *out_blocks = blocks;
-  *out_count = block_count;
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Cascading enqueue helpers
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_dce_add_operand_providers_to_worklist(
+    iree_arena_allocator_t* arena, loom_module_t* module,
+    loom_dce_worklist_t* worklist, loom_op_t* op) {
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    if (operands[i] == LOOM_VALUE_ID_INVALID) continue;
+    loom_value_t* value = loom_module_value(module, operands[i]);
+    if (loom_value_is_block_arg(value)) continue;
+    loom_op_t* def = loom_value_def_op(value);
+    IREE_RETURN_IF_ERROR(loom_dce_worklist_push(arena, worklist, def));
+  }
+  return iree_ok_status();
+}
+
+typedef struct loom_dce_type_ref_provider_context_t {
+  // Module containing the value table and use-def links.
+  loom_module_t* module;
+  // Pass arena used for worklist growth.
+  iree_arena_allocator_t* arena;
+  // Candidate worklist to receive defining ops.
+  loom_dce_worklist_t* worklist;
+} loom_dce_type_ref_provider_context_t;
+
+static iree_status_t loom_dce_add_type_ref_provider_to_worklist(
+    loom_value_id_t value_id, void* user_data) {
+  loom_dce_type_ref_provider_context_t* context =
+      (loom_dce_type_ref_provider_context_t*)user_data;
+  if (value_id >= context->module->values.count) return iree_ok_status();
+  loom_value_t* value = loom_module_value(context->module, value_id);
+  if (loom_value_is_block_arg(value)) return iree_ok_status();
+  return loom_dce_worklist_push(context->arena, context->worklist,
+                                loom_value_def_op(value));
+}
+
+static iree_status_t loom_dce_add_result_type_ref_providers_to_worklist(
+    iree_arena_allocator_t* arena, loom_module_t* module,
+    loom_dce_worklist_t* worklist, loom_op_t* op) {
+  loom_dce_type_ref_provider_context_t context = {
+      .module = module,
+      .arena = arena,
+      .worklist = worklist,
+  };
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (results[i] == LOOM_VALUE_ID_INVALID) continue;
+    IREE_RETURN_IF_ERROR(loom_type_walk_value_refs(
+        loom_module_value_type(module, results[i]),
+        loom_dce_add_type_ref_provider_to_worklist, &context));
+  }
   return iree_ok_status();
 }
 
@@ -111,35 +207,30 @@ iree_status_t loom_dce_run(loom_pass_t* pass, loom_module_t* module,
   loom_region_t* body = loom_func_like_body(function);
   if (!body) return iree_ok_status();
 
-  // Collect all blocks (including nested regions) into a flat array.
-  loom_block_t** all_blocks = NULL;
-  iree_host_size_t block_count = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_dce_collect_blocks(pass->arena, body, &all_blocks, &block_count));
+  loom_dce_worklist_t worklist = {0};
+  iree_status_t status = loom_dce_worklist_initialize(pass->arena, &worklist);
+  if (iree_status_is_ok(status)) {
+    status = loom_dce_seed_worklist(pass->arena, module, body, &worklist);
+  }
 
-  // Walk all blocks. Within each block, walk ops in reverse so that
-  // erasing a dead op may make its operand-producing ops newly dead
-  // (their use count drops, and we haven't visited them yet).
-  // The outer fixed-point loop handles cascading across blocks: erasing
-  // an op in one block may make ops in other blocks dead.
-  bool changed = true;
-  while (changed) {
-    changed = false;
-    for (iree_host_size_t b = 0; b < block_count; ++b) {
-      loom_block_t* block = all_blocks[b];
-      for (loom_op_t* op = block->last_op; op;) {
-        loom_op_t* prev_op = op->prev_op;
-        if (!iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD) &&
-            loom_op_is_trivially_dead(module, op)) {
-          IREE_RETURN_IF_ERROR(loom_op_erase(module, op));
-          if (pass->statistics) {
-            loom_pass_statistic_add(pass, LOOM_DCE_STAT_OPS_ELIMINATED, 1);
-          }
-          changed = true;
-        }
-        op = prev_op;
-      }
+  while (iree_status_is_ok(status)) {
+    loom_op_t* op = loom_dce_worklist_pop(&worklist);
+    if (!op) break;
+    if (!loom_op_is_trivially_dead(module, op)) continue;
+
+    status = loom_dce_add_operand_providers_to_worklist(pass->arena, module,
+                                                        &worklist, op);
+    if (!iree_status_is_ok(status)) break;
+    status = loom_dce_add_result_type_ref_providers_to_worklist(
+        pass->arena, module, &worklist, op);
+    if (!iree_status_is_ok(status)) break;
+    status = loom_op_erase(module, op);
+    if (!iree_status_is_ok(status)) break;
+    if (pass->statistics) {
+      loom_pass_statistic_add(pass, LOOM_DCE_STAT_OPS_ELIMINATED, 1);
     }
   }
-  return iree_ok_status();
+
+  loom_dce_worklist_deinitialize(&worklist);
+  return status;
 }

@@ -2524,17 +2524,29 @@ TEST_F(PrintOpTest, BoundsCheckIndexListDynamicOutOfRange) {
       LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(256), 0);
   loom_value_id_t source = def(tile_type);
   loom_value_id_t target = def(tensor_type);
-  loom_value_id_t offset = def(loom_type_scalar(LOOM_SCALAR_TYPE_INDEX));
   // INT64_MIN marks a dynamic operand slot in the static_offsets array.
   int64_t static_offsets[] = {INT64_MIN};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_test_update_build(&builder_, source, target, &offset, 1,
-                                        static_offsets, 1, tensor_type,
-                                        LOOM_LOCATION_UNKNOWN, &op));
-  // Verify the op has the dynamic operand (3 total: source, target, offset).
-  ASSERT_EQ(op->operand_count, 3);
-  // Corrupt: reduce operand count so the dynamic offset operand is OOB.
-  op->operand_count = 2;
+  IREE_ASSERT_OK(loom_builder_allocate_op(&builder_, LOOM_OP_TEST_UPDATE,
+                                          /*operand_count=*/2,
+                                          /*result_count=*/1,
+                                          /*region_count=*/0,
+                                          /*tied_result_count=*/1,
+                                          /*attribute_count=*/1,
+                                          LOOM_LOCATION_UNKNOWN, &op));
+  loom_op_operands(op)[0] = source;
+  loom_op_operands(op)[1] = target;
+  loom_op_attrs(op)[0] = loom_attr_i64_array(static_offsets, 1);
+  loom_op_results(op)[0] = def(tensor_type);
+  loom_op_tied_results(op)[0] = (loom_tied_result_t){
+      .result_index = 0,
+      .operand_index = 1,
+      .has_type_change = true,
+  };
+  IREE_ASSERT_OK(loom_builder_finalize_op(&builder_, op));
+  // The index list starts dynamic operands at field index 2, but this malformed
+  // op only has source and target operands.
+  ASSERT_EQ(op->operand_count, 2);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         print_op_status(op, LOOM_TEXT_PRINT_DEFAULT));
 }

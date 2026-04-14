@@ -203,6 +203,10 @@ static inline uint16_t loom_use_operand_index(loom_use_t use) {
 
 static_assert(sizeof(loom_use_t) == 8, "loom_use_t must be 8 bytes");
 
+// Index of a use entry within a value's use list.
+typedef uint32_t loom_use_index_t;
+#define LOOM_USE_INDEX_INVALID ((loom_use_index_t)UINT32_MAX)
+
 //===----------------------------------------------------------------------===//
 // Value definition pointer
 //===----------------------------------------------------------------------===//
@@ -336,6 +340,12 @@ enum loom_value_flag_bits_e {
 };
 typedef uint16_t loom_value_flags_t;
 
+// Maximum representable use count. Count and flags share one 32-bit storage
+// unit in loom_value_t so values can track high-fanout uses while preserving
+// the 64-byte value layout and three inline uses.
+#define LOOM_VALUE_USE_COUNT_BITS 29
+#define LOOM_VALUE_MAX_USE_COUNT ((1u << LOOM_VALUE_USE_COUNT_BITS) - 1u)
+
 //===----------------------------------------------------------------------===//
 // Value — 64-byte cache-line-aligned
 //===----------------------------------------------------------------------===//
@@ -364,12 +374,14 @@ typedef iree_alignas(64) struct loom_value_t {
   // have different names but the same type.
   loom_string_id_t name_id;
 
-  // Number of operations that use this value as an operand.
-  // When 0, the value is dead (candidate for dead code elimination).
-  uint16_t use_count;
+  // Number of operand uses of this value. When 0, the value is dead
+  // (candidate for dead code elimination). Stored as a 29-bit bitfield so
+  // high-fanout values scale past 64K uses without growing loom_value_t.
+  uint32_t use_count : LOOM_VALUE_USE_COUNT_BITS;
 
-  // Bitfield of loom_value_flag_bits_e.
-  loom_value_flags_t flags;
+  // Bitfield of loom_value_flag_bits_e. Stored in the upper 3 bits of the same
+  // 32-bit unit as use_count.
+  uint32_t flags : 3;
 
   // --- 8 bytes ---
 
@@ -1000,6 +1012,7 @@ typedef struct loom_op_t {
   //   loom_value_id_t    operands[operand_count]
   //   loom_value_id_t    results[result_count]
   //   loom_tied_result_t tied_results[tied_result_count]
+  //   loom_use_index_t   operand_use_indices[operand_count]
   //   <padding to alignof(loom_attribute_t)>
   //   loom_attribute_t   attributes[attribute_count]
 } loom_op_t;
@@ -1018,6 +1031,7 @@ static_assert(sizeof(loom_op_t) == 64, "loom_op_t must be 64 bytes");
 //   loom_value_id_t    operands[operand_count]     (4 bytes each)
 //   loom_value_id_t    results[result_count]        (4 bytes each)
 //   loom_tied_result_t tied_results[tied_result_count]
+//   loom_use_index_t   operand_use_indices[operand_count]
 //   <padding to alignof(loom_attribute_t)>
 //   loom_attribute_t   attributes[attribute_count]  (16 bytes each)
 
@@ -1052,12 +1066,20 @@ static inline loom_tied_result_t* loom_op_tied_results(const loom_op_t* op) {
   return (loom_tied_result_t*)(loom_op_results(op) + op->result_count);
 }
 
+// Returns a pointer to the per-operand use-list index array (after tied
+// results). Each entry gives the operand's current position in the referenced
+// value's use list, enabling O(1) use removal.
+static inline loom_use_index_t* loom_op_operand_use_indices(
+    const loom_op_t* op) {
+  return (loom_use_index_t*)(loom_op_tied_results(op) + op->tied_result_count);
+}
+
 // Returns a pointer to the attribute array. Aligned to
 // alignof(loom_attribute_t) because the union contains int64_t/double.
 static inline loom_attribute_t* loom_op_attrs(const loom_op_t* op) {
-  uintptr_t after_tied =
-      (uintptr_t)(loom_op_tied_results(op) + op->tied_result_count);
-  return (loom_attribute_t*)iree_host_align(after_tied,
+  uintptr_t after_use_indices =
+      (uintptr_t)(loom_op_operand_use_indices(op) + op->operand_count);
+  return (loom_attribute_t*)iree_host_align(after_use_indices,
                                             iree_alignof(loom_attribute_t));
 }
 

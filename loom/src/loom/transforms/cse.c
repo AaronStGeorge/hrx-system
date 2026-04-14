@@ -149,24 +149,37 @@ typedef struct loom_cse_entry_t {
 
 typedef struct loom_cse_table_t {
   loom_cse_entry_t* entries;
+  // Slots containing live non-PURE entries, used for O(non-pure) write
+  // barriers.
+  iree_host_size_t* non_pure_slots;
   // Always a power of 2.
   iree_host_size_t capacity;
   // Live entries only (excludes tombstones).
   iree_host_size_t count;
-  // Count of live non-PURE entries. Enables O(1) early-exit from
-  // write barrier scans when all entries are PURE.
-  iree_host_size_t non_pure_count;
+  // Count of live non-PURE slot entries.
+  iree_host_size_t non_pure_slot_count;
+  // Capacity of non_pure_slots.
+  iree_host_size_t non_pure_slot_capacity;
 } loom_cse_table_t;
 
 static iree_status_t loom_cse_table_initialize(iree_arena_allocator_t* arena,
                                                iree_host_size_t capacity,
+                                               iree_host_size_t max_entry_count,
                                                loom_cse_table_t* table) {
+  table->entries = NULL;
+  table->non_pure_slots = NULL;
   table->capacity = capacity;
   table->count = 0;
-  table->non_pure_count = 0;
+  table->non_pure_slot_count = 0;
+  table->non_pure_slot_capacity = max_entry_count;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, capacity, sizeof(loom_cse_entry_t), (void**)&table->entries));
   memset(table->entries, 0, capacity * sizeof(loom_cse_entry_t));
+  if (max_entry_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, max_entry_count, sizeof(iree_host_size_t),
+        (void**)&table->non_pure_slots));
+  }
   return iree_ok_status();
 }
 
@@ -205,28 +218,28 @@ static void loom_cse_table_insert(loom_cse_table_t* table, loom_op_t* op,
   };
   ++table->count;
   if (!(traits & LOOM_TRAIT_PURE)) {
-    ++table->non_pure_count;
+    IREE_ASSERT(table->non_pure_slot_count < table->non_pure_slot_capacity);
+    table->non_pure_slots[table->non_pure_slot_count++] = slot;
   }
 }
 
 // Evicts all non-PURE entries from the table by replacing them with
 // tombstones. PURE entries (no memory effects) survive write barriers
 // because their results don't depend on mutable resource state.
-// Early-exits when all non-PURE entries have been found to avoid
-// scanning the entire capacity for all-pure tables.
+// The non_pure_slots side list avoids scanning the full hash table capacity on
+// every write in large blocks that alternate reads and writes.
 static void loom_cse_table_invalidate_reads(loom_cse_table_t* table) {
-  if (table->non_pure_count == 0) return;
-  iree_host_size_t remaining = table->non_pure_count;
-  for (iree_host_size_t i = 0; i < table->capacity; ++i) {
-    loom_op_t* op = table->entries[i].op;
+  if (table->non_pure_slot_count == 0) return;
+  for (iree_host_size_t i = 0; i < table->non_pure_slot_count; ++i) {
+    iree_host_size_t slot = table->non_pure_slots[i];
+    loom_op_t* op = table->entries[slot].op;
     if (op && op != LOOM_CSE_TOMBSTONE &&
-        !(table->entries[i].traits & LOOM_TRAIT_PURE)) {
-      table->entries[i].op = LOOM_CSE_TOMBSTONE;
+        !(table->entries[slot].traits & LOOM_TRAIT_PURE)) {
+      table->entries[slot].op = LOOM_CSE_TOMBSTONE;
       --table->count;
-      if (--remaining == 0) break;
     }
   }
-  table->non_pure_count = 0;
+  table->non_pure_slot_count = 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -268,7 +281,8 @@ static iree_status_t loom_cse_scope_allocate(iree_arena_allocator_t* arena,
   (*out_scope)->parent = parent;
   iree_host_size_t capacity = iree_host_size_next_power_of_two(
       iree_max((iree_host_size_t)block->op_count * 2, 16));
-  return loom_cse_table_initialize(arena, capacity, &(*out_scope)->table);
+  return loom_cse_table_initialize(arena, capacity, block->op_count,
+                                   &(*out_scope)->table);
 }
 
 // Walks the scope chain looking for an equivalent op.
@@ -442,21 +456,23 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
 
   // DFS stack: allocated from the pass arena (pass lifetime).
   loom_cse_stack_t stack;
-  IREE_RETURN_IF_ERROR(loom_cse_stack_initialize(pass->arena, &stack));
+  iree_status_t status = loom_cse_stack_initialize(pass->arena, &stack);
 
   // Process each top-level block independently.
   loom_block_t* top_block = NULL;
   loom_region_for_each_block(body, top_block) {
+    if (!iree_status_is_ok(status)) break;
     iree_arena_reset(&scope_arena);
 
     loom_cse_scope_t* root_scope = NULL;
-    IREE_RETURN_IF_ERROR(
-        loom_cse_scope_allocate(&scope_arena, NULL, top_block, &root_scope));
+    status =
+        loom_cse_scope_allocate(&scope_arena, NULL, top_block, &root_scope);
+    if (!iree_status_is_ok(status)) break;
 
     stack.count = 0;
     loom_cse_stack_push(&stack, top_block, root_scope);
 
-    while (stack.count > 0) {
+    while (iree_status_is_ok(status) && stack.count > 0) {
       loom_cse_frame_t* frame = &stack.frames[stack.count - 1];
 
       // Block done — pop frame.
@@ -499,13 +515,14 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
             loom_traits_is_isolated(traits) ? NULL : frame->scope;
 
         iree_host_size_t child_block_count = loom_cse_total_block_count(op);
-        IREE_RETURN_IF_ERROR(
-            loom_cse_stack_reserve(&stack, pass->arena, child_block_count));
+        status = loom_cse_stack_reserve(&stack, pass->arena, child_block_count);
+        if (!iree_status_is_ok(status)) break;
         // Re-fetch frame pointer — reserve may have reallocated the array.
         frame = &stack.frames[stack.count - 1];
 
-        IREE_RETURN_IF_ERROR(loom_cse_push_region_frames(
-            &stack, pass->arena, &scope_arena, op, parent_scope));
+        status = loom_cse_push_region_frames(&stack, pass->arena, &scope_arena,
+                                             op, parent_scope);
+        if (!iree_status_is_ok(status)) break;
         continue;  // Ops with regions are never CSE candidates.
       }
 
@@ -525,11 +542,14 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         for (uint16_t r = 0; r < op->result_count; ++r) {
           if (op_results[r] != LOOM_VALUE_ID_INVALID &&
               existing_results[r] != LOOM_VALUE_ID_INVALID) {
-            IREE_RETURN_IF_ERROR(loom_value_replace_all_uses_with(
-                module, op_results[r], existing_results[r]));
+            status = loom_value_replace_all_uses_with(module, op_results[r],
+                                                      existing_results[r]);
+            if (!iree_status_is_ok(status)) break;
           }
         }
-        IREE_RETURN_IF_ERROR(loom_op_erase(module, op));
+        if (!iree_status_is_ok(status)) break;
+        status = loom_op_erase(module, op);
+        if (!iree_status_is_ok(status)) break;
         if (pass->statistics) {
           loom_pass_statistic_add(pass, LOOM_CSE_STAT_EXPRESSIONS_ELIMINATED,
                                   1);
@@ -541,5 +561,5 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
   }
 
   iree_arena_deinitialize(&scope_arena);
-  return iree_ok_status();
+  return status;
 }

@@ -277,6 +277,14 @@ typedef struct loom_bytecode_op_entry_t {
   uint32_t string_writer_id;
 } loom_bytecode_op_entry_t;
 
+// Hash table entry mapping a structural loom_type_t to its module type index.
+typedef struct loom_bytecode_type_index_entry_t {
+  // Structural hash of module->types.entries[module_index].
+  uint32_t hash;
+  // Module type table index, or LOOM_WRITER_ID_NONE for an empty slot.
+  uint32_t module_index;
+} loom_bytecode_type_index_entry_t;
+
 typedef struct loom_bytecode_numbering_t {
   const loom_module_t* module;
   iree_arena_allocator_t* arena;
@@ -297,6 +305,10 @@ typedef struct loom_bytecode_numbering_t {
 
   // Type mapping: module type index → writer type_id.
   uint32_t* type_map;
+  // Reverse lookup from structural type value to module type index.
+  loom_bytecode_type_index_entry_t* type_index_entries;
+  // Capacity of type_index_entries. Always a power of two when non-zero.
+  iree_host_size_t type_index_capacity;
   // Writer type_id → module type index (for section writing).
   iree_host_size_t* type_order;
   iree_host_size_t type_count;
@@ -333,6 +345,29 @@ static iree_status_t loom_bytecode_numbering_initialize(
         iree_arena_allocate_array(arena, module->types.count, sizeof(uint32_t),
                                   (void**)&numbering->type_map));
     memset(numbering->type_map, 0xFF, module->types.count * sizeof(uint32_t));
+
+    iree_host_size_t type_index_capacity =
+        iree_host_size_next_power_of_two((module->types.count * 4 + 2) / 3);
+    if (type_index_capacity < 16) type_index_capacity = 16;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, type_index_capacity, sizeof(loom_bytecode_type_index_entry_t),
+        (void**)&numbering->type_index_entries));
+    for (iree_host_size_t i = 0; i < type_index_capacity; ++i) {
+      numbering->type_index_entries[i].hash = 0;
+      numbering->type_index_entries[i].module_index = LOOM_WRITER_ID_NONE;
+    }
+    numbering->type_index_capacity = type_index_capacity;
+    iree_host_size_t mask = type_index_capacity - 1;
+    for (iree_host_size_t i = 0; i < module->types.count; ++i) {
+      uint32_t hash = loom_type_hash(module->types.entries[i]);
+      iree_host_size_t slot = hash & mask;
+      while (numbering->type_index_entries[slot].module_index !=
+             LOOM_WRITER_ID_NONE) {
+        slot = (slot + 1) & mask;
+      }
+      numbering->type_index_entries[slot].hash = hash;
+      numbering->type_index_entries[slot].module_index = (uint32_t)i;
+    }
   }
 
   return iree_ok_status();
@@ -422,15 +457,25 @@ static iree_status_t loom_bytecode_numbering_intern_string_view(
   return iree_ok_status();
 }
 
-// Finds the module type table index for a given type.
-static iree_host_size_t loom_bytecode_find_type_index(
-    const loom_module_t* module, loom_type_t type) {
-  for (iree_host_size_t i = 0; i < module->types.count; ++i) {
-    if (loom_type_equal(module->types.entries[i], type)) {
-      return i;
+// Finds the module type table index for a given structural type.
+static uint32_t loom_bytecode_find_type_index(
+    const loom_bytecode_numbering_t* numbering, loom_type_t type) {
+  if (numbering->type_index_capacity == 0) return LOOM_WRITER_ID_NONE;
+  uint32_t hash = loom_type_hash(type);
+  iree_host_size_t mask = numbering->type_index_capacity - 1;
+  iree_host_size_t slot = hash & mask;
+  while (numbering->type_index_entries[slot].module_index !=
+         LOOM_WRITER_ID_NONE) {
+    const loom_bytecode_type_index_entry_t* entry =
+        &numbering->type_index_entries[slot];
+    if (entry->hash == hash &&
+        loom_type_equal(numbering->module->types.entries[entry->module_index],
+                        type)) {
+      return entry->module_index;
     }
+    slot = (slot + 1) & mask;
   }
-  return SIZE_MAX;
+  return LOOM_WRITER_ID_NONE;
 }
 
 // Forward declaration for recursive type interning.
@@ -442,9 +487,8 @@ static iree_status_t loom_bytecode_numbering_intern_type(
 static iree_status_t loom_bytecode_numbering_intern_type(
     loom_bytecode_numbering_t* numbering, loom_type_t type,
     uint32_t* out_writer_id) {
-  iree_host_size_t module_index =
-      loom_bytecode_find_type_index(numbering->module, type);
-  if (module_index == SIZE_MAX) {
+  uint32_t module_index = loom_bytecode_find_type_index(numbering, type);
+  if (module_index == LOOM_WRITER_ID_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "type not found in module type table (kind=%u, "
                             "rank=%u, module types=%" PRIhsz ")",

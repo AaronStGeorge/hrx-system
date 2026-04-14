@@ -328,8 +328,9 @@ static iree_status_t loom_rewriter_add_operand_providers_to_worklist(
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     if (operands[i] == LOOM_VALUE_ID_INVALID) continue;
-    loom_op_t* def =
-        loom_value_def_op(loom_module_value(rewriter->module, operands[i]));
+    loom_value_t* value = loom_module_value(rewriter->module, operands[i]);
+    if (loom_value_is_block_arg(value)) continue;
+    loom_op_t* def = loom_value_def_op(value);
     if (def) {
       IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, def));
     }
@@ -369,7 +370,7 @@ static iree_status_t loom_rewriter_add_users_to_worklist(
     loom_rewriter_t* rewriter, loom_value_id_t value_id) {
   loom_value_t* value = loom_module_value(rewriter->module, value_id);
   const loom_use_t* uses = loom_value_uses(value);
-  for (uint16_t i = 0; i < value->use_count; ++i) {
+  for (uint32_t i = 0; i < value->use_count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_rewriter_add_to_worklist(rewriter, loom_use_user_op(uses[i])));
   }
@@ -390,7 +391,7 @@ static iree_status_t loom_rewriter_add_users_to_worklist(
       }
     }
     const loom_use_t* user_value_uses = loom_value_uses(user_value);
-    for (uint16_t i = 0; i < user_value->use_count; ++i) {
+    for (uint32_t i = 0; i < user_value->use_count; ++i) {
       IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(
           rewriter, loom_use_user_op(user_value_uses[i])));
     }
