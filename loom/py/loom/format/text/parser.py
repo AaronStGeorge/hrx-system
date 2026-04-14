@@ -296,6 +296,7 @@ def _parse_static_encoding_from_tokens(
 
 _SCALAR_NAMES: dict[str, ScalarTypeKind] = {
     "index": ScalarTypeKind.INDEX,
+    "offset": ScalarTypeKind.OFFSET,
     "i1": ScalarTypeKind.I1,
     "i8": ScalarTypeKind.I8,
     "i16": ScalarTypeKind.I16,

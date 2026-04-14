@@ -16,8 +16,8 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
-    INDEX,
     INTEGER,
+    OFFSET,
     POOL,
     PURE,
     TILE,
@@ -46,7 +46,7 @@ pool_load = Op(
     operands=[
         Operand("pool", POOL, doc="The pool to load from."),
         Operand("page_id", INTEGER, doc="Page index within the pool."),
-        Operand("page_bytes", INDEX, doc="Page stride in bytes."),
+        Operand("page_bytes", OFFSET, doc="Page stride in bytes."),
     ],
     results=[Result("result", TILE, doc="Typed tile view of the page.")],
     effects=[Reads("pool")],
@@ -66,7 +66,7 @@ pool_load = Op(
         ResultType("result"),
     ],
     examples=[
-        "%tile = pool.load %pool, %pid, %pb : pool<[%BS]>, i32, index -> tile<[16, 128]xf16>",
+        "%tile = pool.load %pool, %pid, %pb : pool<[%BS]>, i32, offset -> tile<[16, 128]xf16>",
     ],
 )
 
@@ -81,8 +81,8 @@ pool_store = Op(
     operands=[
         Operand("pool", POOL, doc="The pool to store into."),
         Operand("page_id", INTEGER, doc="Page index within the pool."),
-        Operand("page_bytes", INDEX, doc="Page stride in bytes."),
-        Operand("offset_in_page", INTEGER, doc="Byte offset within the page."),
+        Operand("page_bytes", OFFSET, doc="Page stride in bytes."),
+        Operand("offset_in_page", OFFSET, doc="Byte offset within the page."),
         Operand("data", TILE, doc="Tile data to write."),
     ],
     results=[],
@@ -109,7 +109,7 @@ pool_store = Op(
         TypeOf("data"),
     ],
     examples=[
-        "pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, index, i32, tile<[16, 128]xf16>",
+        "pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, offset, offset, tile<[16, 128]xf16>",
     ],
 )
 

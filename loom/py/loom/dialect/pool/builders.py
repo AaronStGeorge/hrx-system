@@ -23,7 +23,7 @@ class PoolBuilders:
         """Read a page from the pool as a typed tile.
 
         Example::
-            %tile = pool.load %pool, %pid, %pb : pool<[%BS]>, i32, index -> tile<[16, 128]xf16>
+            %tile = pool.load %pool, %pid, %pb : pool<[%BS]>, i32, offset -> tile<[16, 128]xf16>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -37,7 +37,7 @@ class PoolBuilders:
         """Write tile data into the pool at a page offset.
 
         Example::
-            pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, index, i32, tile<[16, 128]xf16>
+            pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, offset, offset, tile<[16, 128]xf16>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}

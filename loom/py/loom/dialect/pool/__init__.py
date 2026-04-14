@@ -24,7 +24,7 @@ and the tile compute world:
     pool.unpin  — atomically decrement block pin count
     pool.buffer — extract raw device buffer handle
 
-Page addressing uses i32 page IDs with a dynamic page_bytes stride:
+Page addressing uses i32 page IDs with a dynamic offset-typed byte stride:
 byte_offset = page_id * page_bytes. No indirection, no page table.
 The encoding is on the tiles, not the pool — pool ops are
 encoding-agnostic byte stores.

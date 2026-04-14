@@ -38,6 +38,7 @@ from loom.ir import (
     I32,
     I64,
     INDEX,
+    OFFSET,
     VALUE_DEF_BLOCK_NONE,
     VALUE_DEF_OP_NONE,
     CanonicalAttrDict,
@@ -163,6 +164,9 @@ class TestParseScalarTypes:
 
     def test_index(self) -> None:
         assert _parse_type("index") == INDEX
+
+    def test_offset(self) -> None:
+        assert _parse_type("offset") == OFFSET
 
     def test_bf16(self) -> None:
         assert _parse_type("bf16") == BF16

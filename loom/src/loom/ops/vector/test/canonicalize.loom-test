@@ -66,14 +66,14 @@ func.def @extract_from_empty_axis(%v: vector<0xf32>) -> (f32) {
 // ====
 
 // A zero-lane load has no memory footprint and returns vector.empty.
-func.def @empty_load(%buffer: buffer, %offset: index) -> (vector<0xf32>) {
+func.def @empty_load(%buffer: buffer, %offset: offset) -> (vector<0xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
   %r = vector.load %view[0] : view<16xf32, %layout> -> vector<0xf32>
   func.return %r : vector<0xf32>
 }
 // ----
-func.def @empty_load(%buffer: buffer, %offset: index) -> (vector<0xf32>) {
+func.def @empty_load(%buffer: buffer, %offset: offset) -> (vector<0xf32>) {
   %r = vector.empty : vector<0xf32>
   func.return %r : vector<0xf32>
 }
@@ -81,7 +81,7 @@ func.def @empty_load(%buffer: buffer, %offset: index) -> (vector<0xf32>) {
 // ====
 
 // A zero-lane store has no memory footprint and erases completely.
-func.def @empty_store(%buffer: buffer, %offset: index) {
+func.def @empty_store(%buffer: buffer, %offset: offset) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
   %v = vector.empty : vector<0xf32>
@@ -89,6 +89,6 @@ func.def @empty_store(%buffer: buffer, %offset: index) {
   func.return
 }
 // ----
-func.def @empty_store(%buffer: buffer, %offset: index) {
+func.def @empty_store(%buffer: buffer, %offset: offset) {
   func.return
 }

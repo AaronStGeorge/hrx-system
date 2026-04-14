@@ -18,7 +18,7 @@ from loom.assembly import (
 )
 from loom.dsl import (
     BUFFER,
-    INDEX,
+    OFFSET,
     PURE,
     VIEW,
     Dialect,
@@ -47,7 +47,7 @@ buffer_view = Op(
     doc=("Form a typed non-owning view from an opaque buffer root and base byte offset. The result view type carries the address layout."),
     operands=[
         Operand("buffer", BUFFER, doc="Opaque storage root."),
-        Operand("byte_offset", INDEX, doc="Base byte offset from the buffer root."),
+        Operand("byte_offset", OFFSET, doc="Base byte offset from the buffer root."),
     ],
     results=[Result("result", VIEW, doc="Typed logical view over the buffer.")],
     traits=[PURE],

@@ -28,6 +28,7 @@ from loom.ir import (
     I32,
     INDEX,
     NONE_TYPE,
+    OFFSET,
     Block,
     CanonicalAttrDict,
     DynamicDim,
@@ -131,6 +132,7 @@ class TestPrintType:
         assert print_type(F32) == "f32"
         assert print_type(I32) == "i32"
         assert print_type(INDEX) == "index"
+        assert print_type(OFFSET) == "offset"
         assert print_type(BF16) == "bf16"
         assert print_type(I8) == "i8"
 

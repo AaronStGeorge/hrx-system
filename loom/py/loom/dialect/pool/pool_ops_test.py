@@ -17,8 +17,8 @@ from loom.dialect.pool import (
 )
 from loom.dsl import (
     ANY,
-    INDEX,
     INTEGER,
+    OFFSET,
     POOL,
     TILE,
 )
@@ -63,7 +63,7 @@ class TestPoolLoad:
     def test_operand_types(self) -> None:
         assert pool_load.operands[0].type_constraint == POOL
         assert pool_load.operands[1].type_constraint == INTEGER
-        assert pool_load.operands[2].type_constraint == INDEX
+        assert pool_load.operands[2].type_constraint == OFFSET
 
     def test_result_is_tile(self) -> None:
         assert len(pool_load.results) == 1
@@ -85,8 +85,8 @@ class TestPoolStore:
     def test_operand_types(self) -> None:
         assert pool_store.operands[0].type_constraint == POOL
         assert pool_store.operands[1].type_constraint == INTEGER
-        assert pool_store.operands[2].type_constraint == INDEX
-        assert pool_store.operands[3].type_constraint == INTEGER
+        assert pool_store.operands[2].type_constraint == OFFSET
+        assert pool_store.operands[3].type_constraint == OFFSET
         assert pool_store.operands[4].type_constraint == TILE
 
     def test_no_results(self) -> None:

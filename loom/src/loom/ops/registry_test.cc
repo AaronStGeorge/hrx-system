@@ -76,6 +76,36 @@ TEST(OpRegistry, AllEntriesValid) {
 // Type constraints
 //===----------------------------------------------------------------------===//
 
+TEST(TypeConstraint, ScalarAddressFamiliesAreExplicit) {
+  loom_type_t scalar_i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t scalar_index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t scalar_offset = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+
+  EXPECT_STREQ("scalar",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_SCALAR));
+  EXPECT_STREQ("index", loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_INDEX));
+  EXPECT_STREQ("offset",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_OFFSET));
+
+  EXPECT_TRUE(
+      loom_type_satisfies_constraint(scalar_i32, LOOM_TYPE_CONSTRAINT_SCALAR));
+  EXPECT_TRUE(loom_type_satisfies_constraint(scalar_index,
+                                             LOOM_TYPE_CONSTRAINT_SCALAR));
+  EXPECT_TRUE(loom_type_satisfies_constraint(scalar_offset,
+                                             LOOM_TYPE_CONSTRAINT_SCALAR));
+
+  EXPECT_TRUE(
+      loom_type_satisfies_constraint(scalar_index, LOOM_TYPE_CONSTRAINT_INDEX));
+  EXPECT_FALSE(loom_type_satisfies_constraint(scalar_offset,
+                                              LOOM_TYPE_CONSTRAINT_INDEX));
+  EXPECT_TRUE(loom_type_satisfies_constraint(scalar_offset,
+                                             LOOM_TYPE_CONSTRAINT_OFFSET));
+  EXPECT_FALSE(loom_type_satisfies_constraint(scalar_index,
+                                              LOOM_TYPE_CONSTRAINT_OFFSET));
+  EXPECT_FALSE(
+      loom_type_satisfies_constraint(scalar_i32, LOOM_TYPE_CONSTRAINT_OFFSET));
+}
+
 TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
   const uint64_t lanes = loom_dim_pack_static(4);
   loom_type_t vector_i32 =

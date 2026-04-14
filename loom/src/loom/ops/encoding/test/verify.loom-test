@@ -50,7 +50,7 @@ func.def @numeric_transform_unknown_family_define_only() {
 
 // ====
 
-func.def @turboquant_missing_static_param(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_missing_static_param(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -63,7 +63,7 @@ func.def @turboquant_missing_static_param(%params: buffer, %thresholds_offset: i
 
 // ====
 
-func.def @turboquant_wrong_static_kind(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_wrong_static_kind(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -76,7 +76,7 @@ func.def @turboquant_wrong_static_kind(%params: buffer, %thresholds_offset: inde
 
 // ====
 
-func.def @turboquant_unsupported_pack_order(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_unsupported_pack_order(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -89,7 +89,7 @@ func.def @turboquant_unsupported_pack_order(%params: buffer, %thresholds_offset:
 
 // ====
 
-func.def @turboquant_record_too_small(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_record_too_small(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -102,7 +102,7 @@ func.def @turboquant_record_too_small(%params: buffer, %thresholds_offset: index
 
 // ====
 
-func.def @turboquant_threshold_count_mismatch(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_threshold_count_mismatch(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<4xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -115,7 +115,7 @@ func.def @turboquant_threshold_count_mismatch(%params: buffer, %thresholds_offse
 
 // ====
 
-func.def @turboquant_centroids_wrong_type(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_centroids_wrong_type(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xi32, %dense>
@@ -128,7 +128,7 @@ func.def @turboquant_centroids_wrong_type(%params: buffer, %thresholds_offset: i
 
 // ====
 
-func.def @turboquant_transform_role_mismatch(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_transform_role_mismatch(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -141,7 +141,7 @@ func.def @turboquant_transform_role_mismatch(%params: buffer, %thresholds_offset
 
 // ====
 
-func.def @turboquant_transform_family_mismatch(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_transform_family_mismatch(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -154,7 +154,7 @@ func.def @turboquant_transform_family_mismatch(%params: buffer, %thresholds_offs
 
 // ====
 
-func.def @turboquant_qjl_transform_family_mismatch(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_qjl_transform_family_mismatch(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>

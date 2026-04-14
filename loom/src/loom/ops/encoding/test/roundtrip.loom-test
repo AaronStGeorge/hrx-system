@@ -23,7 +23,7 @@ func.def @dynamic_encoding_attachment(%group_size: index) {
 
 // TurboQuant-style KV storage schemas keep physical byte layout static while
 // table storage and transform descriptors remain ordinary SSA operands.
-func.def @turboquant_kv_schema(%params: buffer, %thresholds_offset: index, %centroids_offset: index) {
+func.def @turboquant_kv_schema(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>

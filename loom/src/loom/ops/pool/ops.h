@@ -27,7 +27,7 @@ enum {
 };
 
 // LOOM_OP_POOL_LOAD: Read a page from the pool as a typed tile.
-// %tile = pool.load %pool, %pid, %pb : pool<[%BS]>, i32, index -> tile<[16, 128]xf16>
+// %tile = pool.load %pool, %pid, %pb : pool<[%BS]>, i32, offset -> tile<[16, 128]xf16>
 LOOM_DEFINE_ISA(loom_pool_load_isa, LOOM_OP_POOL_LOAD)
 LOOM_DEFINE_OPERAND(loom_pool_load_pool, 0)
 LOOM_DEFINE_OPERAND(loom_pool_load_page_id, 1)
@@ -43,7 +43,7 @@ iree_status_t loom_pool_load_build(
     loom_op_t** out_op);
 
 // LOOM_OP_POOL_STORE: Write tile data into the pool at a page offset.
-// pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, index, i32, tile<[16, 128]xf16>
+// pool.store %pool, %pid, %pb, %off, %data : pool<[%BS]>, i32, offset, offset, tile<[16, 128]xf16>
 LOOM_DEFINE_ISA(loom_pool_store_isa, LOOM_OP_POOL_STORE)
 LOOM_DEFINE_OPERAND(loom_pool_store_pool, 0)
 LOOM_DEFINE_OPERAND(loom_pool_store_page_id, 1)

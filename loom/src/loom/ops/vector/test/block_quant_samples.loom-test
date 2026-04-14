@@ -205,7 +205,7 @@ func.def @iq_grid_reference_chunk() -> (i1) {
 // Encoded KV cache pages are still physical byte views. The schema says how a
 // record can be decoded, but the memory operation below only moves i8 bytes.
 // BSR/page descriptors are ordinary index views over the same slabs.
-func.def @turboquant_kv_page_views(%transient: buffer, %params: buffer, %kv_offset: index, %thresholds_offset: index, %centroids_offset: index, %row_ptr_offset: index, %col_idx_offset: index, %page: index, %head: index, %token: index, %max_pages: index, %heads: index, %page_size: index, %rows_plus_one: index, %nnz: index) -> (vector<40xi8>) {
+func.def @turboquant_kv_page_views(%transient: buffer, %params: buffer, %kv_offset: offset, %thresholds_offset: offset, %centroids_offset: offset, %row_ptr_offset: offset, %col_idx_offset: offset, %page: index, %head: index, %token: index, %max_pages: index, %heads: index, %page_size: index, %rows_plus_one: index, %nnz: index) -> (vector<40xi8>) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -231,7 +231,7 @@ func.def @turboquant_kv_page_views(%transient: buffer, %params: buffer, %kv_offs
 // threshold <= value. Targets can match that compare-and-count shape to vector
 // compares plus mask popcount or add trees without recovering intent from
 // arithmetic soup.
-func.def @turboquant_threshold_encode_reference(%values: vector<4xf16>, %params: buffer, %thresholds_offset: index, %centroids_offset: index) -> (vector<4xi8>) {
+func.def @turboquant_threshold_encode_reference(%values: vector<4xf16>, %params: buffer, %thresholds_offset: offset, %centroids_offset: offset) -> (vector<4xi8>) {
   %dense = encoding.layout.dense : encoding<layout>
   %threshold_view = buffer.view %params[%thresholds_offset] : buffer -> view<3xf16, %dense>
   %centroid_view = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -252,7 +252,7 @@ func.def @turboquant_threshold_encode_reference(%values: vector<4xf16>, %params:
 
 // Reference decode keeps the table lookup visible instead of hiding it inside a
 // load. A fused target kernel should match before this expansion when possible.
-func.def @turboquant_decode_reference(%packed_codes: vector<1xi8>, %params: buffer, %thresholds_offset: index, %centroids_offset: index) -> (vector<4xf16>) {
+func.def @turboquant_decode_reference(%packed_codes: vector<1xi8>, %params: buffer, %thresholds_offset: offset, %centroids_offset: offset) -> (vector<4xf16>) {
   %dense = encoding.layout.dense : encoding<layout>
   %threshold_view = buffer.view %params[%thresholds_offset] : buffer -> view<3xf16, %dense>
   %centroid_view = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
@@ -276,7 +276,7 @@ func.def @turboquant_decode_reference(%packed_codes: vector<1xi8>, %params: buff
 // The scalar-quantized contribution to an attention logit is an ordinary dot
 // after reference decode. P0 lowering should match the encoded tile contract
 // before expanding to this shape, but this remains the portable fallback.
-func.def @turboquant_logit_reference(%query: vector<4xf16>, %packed_codes: vector<1xi8>, %params: buffer, %thresholds_offset: index, %centroids_offset: index) -> (f32) {
+func.def @turboquant_logit_reference(%query: vector<4xf16>, %packed_codes: vector<1xi8>, %params: buffer, %thresholds_offset: offset, %centroids_offset: offset) -> (f32) {
   %dense = encoding.layout.dense : encoding<layout>
   %threshold_view = buffer.view %params[%thresholds_offset] : buffer -> view<3xf16, %dense>
   %centroid_view = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>

@@ -26,6 +26,7 @@ from loom.ir import (
     I32,
     I64,
     INDEX,
+    OFFSET,
     SYMBOL_FLAG_IMPORT,
     SYMBOL_FLAG_PUBLIC,
     VALUE_DEF_OP_NONE,
@@ -336,6 +337,9 @@ class TestTypeRoundTrips:
 
     def test_index(self) -> None:
         assert self._roundtrip_type(INDEX) == INDEX
+
+    def test_offset(self) -> None:
+        assert self._roundtrip_type(OFFSET) == OFFSET
 
     def test_bf16(self) -> None:
         assert self._roundtrip_type(BF16) == BF16

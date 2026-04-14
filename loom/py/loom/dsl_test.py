@@ -44,6 +44,7 @@ from loom.dsl import (
     INTEGER_ELEMENT,
     INVOLUTION,
     NON_DETERMINISTIC,
+    OFFSET,
     POOL,
     PURE,
     TENSOR,
@@ -125,6 +126,7 @@ class TestTypeConstraints:
     def test_singleton_equality(self) -> None:
         assert TILE == TypeConstraint.TILE
         assert INTEGER == TypeConstraint.INTEGER
+        assert OFFSET == TypeConstraint.OFFSET
         assert BUFFER == TypeConstraint.BUFFER
         assert ANY_ENCODING == TypeConstraint.ANY_ENCODING
         assert ENCODING_LAYOUT == TypeConstraint.ENCODING_LAYOUT
@@ -142,6 +144,7 @@ class TestTypeConstraints:
         assert FLOAT_ELEMENT.value == "float_element"
         assert I1_ELEMENT.value == "i1_element"
         assert INDEX.value == "index"
+        assert OFFSET.value == "offset"
 
     def test_element_family_constraints_are_shaped_specific(self) -> None:
         element_family_constraints = {
