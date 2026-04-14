@@ -820,7 +820,7 @@ class PredicateArg:
 class Predicate:
     """A predicate constraint on dynamic dimension values.
 
-    Used in function where clauses and scalar.assume ops to express
+    Used in function where clauses and assume ops to express
     constraints like "M is a multiple of 16" or "K is between 32 and 512".
 
     kind: Predicate kind name ("eq", "lt", "mul", "pow2", "range", etc.).

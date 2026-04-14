@@ -1265,10 +1265,10 @@ class ScalarBuilders:
         return cast(ValueRef, self._b.build("scalar.ctpopi", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def assume(self, *, values: list[ValueRef], predicates: list[Predicate], result_types: list[Type]) -> list[ValueRef]:
-        """Identity with predicate constraints on results.
+        """Identity with predicate constraints on integer payload results. Use index.assume for index or offset values.
 
         Example::
-            %M2 = scalar.assume %M [mul(%M, 16)] : index
+            %n2 = scalar.assume %n [mul(%n, 16)] : i64
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}

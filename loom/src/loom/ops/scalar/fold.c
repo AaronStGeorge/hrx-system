@@ -439,8 +439,13 @@ void loom_scalar_bitcast_fold(const loom_module_t* module, const loom_op_t* op,
 void loom_scalar_assume_fold(const loom_module_t* module, const loom_op_t* op,
                              const loom_value_facts_t* operand_facts,
                              loom_value_facts_t* result_facts) {
-  for (uint16_t i = 0; i < op->result_count; ++i) {
+  uint16_t fold_count = op->operand_count < op->result_count ? op->operand_count
+                                                             : op->result_count;
+  for (uint16_t i = 0; i < fold_count; ++i) {
     result_facts[i] = operand_facts[i];
+  }
+  for (uint16_t i = fold_count; i < op->result_count; ++i) {
+    result_facts[i] = loom_value_facts_unknown();
   }
   loom_attribute_t pred_attr = loom_op_attrs(op)[0];
   const loom_predicate_t* predicates = pred_attr.predicate_list;
@@ -460,7 +465,7 @@ void loom_scalar_assume_fold(const loom_module_t* module, const loom_op_t* op,
       }
     }
     if (!found) continue;
-    if (target < op->result_count) {
+    if (target < fold_count) {
       loom_value_facts_apply_predicate(&result_facts[target], pred);
     }
   }

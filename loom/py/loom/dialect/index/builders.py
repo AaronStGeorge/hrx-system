@@ -8,7 +8,7 @@ import builtins
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
-from loom.ir import Region, Type
+from loom.ir import Predicate, Region, Type
 
 
 class IndexBuilders:
@@ -42,6 +42,19 @@ class IndexBuilders:
         _regions: list[Region] = []
         _operands.append(input)
         return cast(ValueRef, self._b.build("index.cast", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
+    def assume(self, *, values: list[ValueRef], predicates: list[Predicate], result_types: list[Type]) -> list[ValueRef]:
+        """Identity with predicate constraints on index or offset results.
+
+        Example::
+            %n2 = index.assume %n [mul(%n, 16)] : index
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["predicates"] = predicates
+        _operands.extend(values)
+        return cast(list[ValueRef], self._b.build("index.assume", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def add(self, *, lhs: ValueRef, rhs: ValueRef, result_types: list[Type]) -> ValueRef:
         """Address-domain addition. Operands and result must all be index or all offset.

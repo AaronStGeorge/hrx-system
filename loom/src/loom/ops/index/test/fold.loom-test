@@ -36,6 +36,22 @@ func.def @offset_add_sub_exact() -> (i64, i64) {
 
 // ====
 
+// index.assume applies predicate facts to matching index and offset results.
+func.def @assume_refines_address_facts(%n: index, %base: offset) -> (i64, i64) {
+  %n2, %base2 = index.assume %n, %base [mul(%n, 16), range(%base, 64, 4096)] : index, offset
+  %n_div = test.fact_divisor %n2 : index -> i64
+  %base_lo = test.fact_range_lo %base2 : offset -> i64
+  func.return %n_div, %base_lo : i64, i64
+}
+// ----
+func.def @assume_refines_address_facts(%n: index, %base: offset) -> (i64, i64) {
+  %n_div = scalar.constant 16 : i64
+  %base_lo = scalar.constant 64 : i64
+  func.return %n_div, %base_lo : i64, i64
+}
+
+// ====
+
 // index.mul by a constant propagates divisibility.
 func.def @mul_divisibility(%x: index) -> (i64) {
   %c64 = index.constant 64 : index

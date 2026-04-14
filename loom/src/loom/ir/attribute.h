@@ -83,7 +83,7 @@ typedef enum loom_predicate_arg_tag_e {
 // A single predicate constraint. 32 bytes, arena-allocated.
 //
 // Predicates constrain dynamic dimension values in where clauses and
-// scalar.assume ops. Each predicate has a kind (eq, mul, range, etc.)
+// assume ops. Each predicate has a kind (eq, mul, range, etc.)
 // and 1-3 arguments. Arguments are tagged: SSA value references or
 // integer constants.
 typedef struct loom_predicate_t {

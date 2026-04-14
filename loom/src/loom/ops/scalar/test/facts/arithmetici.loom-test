@@ -49,6 +49,20 @@ func.def @constant_exact(%x: i32) -> (i64, i64) {
 
 // ====
 
+// scalar.assume applies predicate facts to integer payload results.
+func.def @assume_divisibility(%x: i64) -> (i64) {
+  %x2 = scalar.assume %x [mul(%x, 32)] : i64
+  %div = test.fact_divisor %x2 : i64 -> i64
+  func.return %div : i64
+}
+// ----
+func.def @assume_divisibility(%x: i64) -> (i64) {
+  %div = scalar.constant 32 : i64
+  func.return %div : i64
+}
+
+// ====
+
 // addi of exact values produces exact result.
 func.def @addi_exact() -> (i64) {
   %a = scalar.constant 10 : i32

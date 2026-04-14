@@ -403,7 +403,7 @@ class PredicateList:
 
     Predicates constrain dynamic dimension values. Each predicate is
     a named function applied to SSA values and/or integer constants.
-    Used in function where clauses and scalar.assume ops.
+    Used in function where clauses and assume ops.
 
     For builders: maps to a list of Predicate instances.
     """

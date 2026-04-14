@@ -16,9 +16,12 @@ from loom.assembly import (
     COLON,
     COMMA,
     Attr,
+    PredicateList,
     Ref,
+    Refs,
     ResultType,
     TypeOf,
+    TypesOf,
 )
 from loom.dsl import (
     ADDRESS,
@@ -105,6 +108,33 @@ index_cast = cast_op(
         "%i = index.cast %n : i64 to index",
         "%bytes = index.cast %raw : i64 to offset",
         "%n = index.cast %i : index to i64",
+    ],
+)
+
+# ============================================================================
+# Assumptions
+# ============================================================================
+
+index_assume = Op(
+    "index.assume",
+    group=index_ops,
+    doc="Identity with predicate constraints on index or offset results.",
+    operands=[Operand("values", ADDRESS, variadic=True)],
+    results=[Result("results", ADDRESS, variadic=True)],
+    attrs=[AttrDef("predicates", "predicate_list")],
+    traits=[PURE],
+    fold="loom_index_assume_fold",
+    verify="loom_index_assume_verify",
+    format=[
+        Refs("values"),
+        PredicateList("predicates"),
+        COLON,
+        TypesOf("results"),
+    ],
+    examples=[
+        "%n2 = index.assume %n [mul(%n, 16)] : index",
+        "%end2 = index.assume %end [range(%end, 0, 4096)] : offset",
+        "%n2, %off2 = index.assume %n, %off [mul(%n, 16), mul(%off, 64)] : index, offset",
     ],
 )
 
@@ -224,6 +254,7 @@ index_select = Op(
 ALL_INDEX_OPS: tuple[Op, ...] = (
     index_constant,
     index_cast,
+    index_assume,
     index_add,
     index_sub,
     index_mul,

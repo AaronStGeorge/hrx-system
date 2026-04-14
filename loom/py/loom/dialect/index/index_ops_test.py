@@ -26,6 +26,7 @@ class TestIndexDialect:
         assert [op.name for op in ALL_INDEX_OPS] == [
             "index.constant",
             "index.cast",
+            "index.assume",
             "index.add",
             "index.sub",
             "index.mul",
@@ -43,6 +44,15 @@ class TestIndexDialect:
         assert op.operands[0].type_constraint == SCALAR
         assert op.results[0].type_constraint == SCALAR
         assert op.verify == "loom_index_cast_verify"
+
+    def test_assume_is_address_typed(self) -> None:
+        op = _ops()["index.assume"]
+        assert op.operands[0].type_constraint == ADDRESS
+        assert op.operands[0].variadic is True
+        assert op.results[0].type_constraint == ADDRESS
+        assert op.results[0].variadic is True
+        assert op.verify == "loom_index_assume_verify"
+        assert op.fold == "loom_index_assume_fold"
 
     def test_address_arithmetic_is_address_typed(self) -> None:
         for name in ("index.add", "index.sub"):

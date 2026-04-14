@@ -20,13 +20,14 @@ extern "C" {
 enum {
   LOOM_OP_INDEX_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 0),
   LOOM_OP_INDEX_CAST = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 1),
-  LOOM_OP_INDEX_ADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 2),
-  LOOM_OP_INDEX_SUB = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 3),
-  LOOM_OP_INDEX_MUL = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 4),
-  LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 5),
-  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
-  LOOM_OP_INDEX_SELECT = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
-  LOOM_OP_INDEX_COUNT_ = 8,
+  LOOM_OP_INDEX_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 2),
+  LOOM_OP_INDEX_ADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 3),
+  LOOM_OP_INDEX_SUB = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 4),
+  LOOM_OP_INDEX_MUL = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 5),
+  LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 6),
+  LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
+  LOOM_OP_INDEX_SELECT = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 8),
+  LOOM_OP_INDEX_COUNT_ = 9,
 };
 
 // Address-domain comparison predicates.
@@ -77,6 +78,29 @@ void loom_index_cast_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 iree_status_t loom_index_cast_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_INDEX_ASSUME: Identity with predicate constraints on index or offset results.
+// %n2 = index.assume %n [mul(%n, 16)] : index
+LOOM_DEFINE_ISA(loom_index_assume_isa, LOOM_OP_INDEX_ASSUME)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_index_assume_values, 0)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_index_assume_results, 0)
+iree_status_t loom_index_assume_build(
+    loom_builder_t* builder,
+    const loom_value_id_t* values,
+    iree_host_size_t values_count,
+    const loom_predicate_t* predicates,
+    iree_host_size_t predicates_count,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+void loom_index_assume_fold(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_index_assume_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

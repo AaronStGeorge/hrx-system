@@ -14,7 +14,7 @@ identity (the output equals the input).
 
 from loom.assembly import COLON, PredicateList, Refs, TypesOf
 from loom.dialect.scalar.defs import scalar_ops
-from loom.dsl import ANY, PURE, AttrDef, Op, Operand, Result
+from loom.dsl import INTEGER, PURE, AttrDef, Op, Operand, Result
 
 __all__ = [
     "scalar_assume",
@@ -28,12 +28,13 @@ __all__ = [
 scalar_assume = Op(
     "scalar.assume",
     group=scalar_ops,
-    doc="Identity with predicate constraints on results.",
-    operands=[Operand("values", ANY, variadic=True)],
-    results=[Result("results", ANY, variadic=True)],
+    doc="Identity with predicate constraints on integer payload results. Use index.assume for index or offset values.",
+    operands=[Operand("values", INTEGER, variadic=True)],
+    results=[Result("results", INTEGER, variadic=True)],
     attrs=[AttrDef("predicates", "predicate_list")],
     traits=[PURE],
     fold="loom_scalar_assume_fold",
+    verify="loom_scalar_assume_verify",
     format=[
         Refs("values"),
         PredicateList("predicates"),
@@ -41,8 +42,8 @@ scalar_assume = Op(
         TypesOf("results"),
     ],
     examples=[
-        "%M2 = scalar.assume %M [mul(%M, 16)] : index",
-        "%M2, %K2 = scalar.assume %M, %K [mul(%M, 16), lt(%K, 1024)] : index, index",
+        "%n2 = scalar.assume %n [mul(%n, 16)] : i64",
+        "%n2, %k2 = scalar.assume %n, %k [mul(%n, 16), lt(%k, 1024)] : i64, i64",
     ],
 )
 

@@ -1565,8 +1565,8 @@ void loom_scalar_ctpopi_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_SCALAR_ASSUME: Identity with predicate constraints on results.
-// %M2 = scalar.assume %M [mul(%M, 16)] : index
+// LOOM_OP_SCALAR_ASSUME: Identity with predicate constraints on integer payload results. Use index.assume for index or offset values.
+// %n2 = scalar.assume %n [mul(%n, 16)] : i64
 LOOM_DEFINE_ISA(loom_scalar_assume_isa, LOOM_OP_SCALAR_ASSUME)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_scalar_assume_values, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_scalar_assume_results, 0)
@@ -1584,6 +1584,9 @@ void loom_scalar_assume_fold(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+iree_status_t loom_scalar_assume_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the scalar dialect.
 const loom_op_vtable_t* const* loom_scalar_dialect_vtables(

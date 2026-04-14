@@ -65,6 +65,43 @@ static iree_status_t loom_index_emit_result_constraint(
                          IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_index_emit_assume_count_mismatch(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("values")),
+      loom_param_u32(op->operand_count),
+      loom_param_string(IREE_SV("results")),
+      loom_param_u32(op->result_count),
+  };
+  return loom_index_emit(emitter, op, &loom_err_structure_013, params,
+                         IREE_ARRAYSIZE(params));
+}
+
+static void loom_index_format_assume_field_name(
+    char* buffer, iree_host_size_t buffer_capacity, const char* prefix,
+    uint16_t field_index) {
+  iree_snprintf(buffer, buffer_capacity, "%s %u", prefix, field_index);
+}
+
+static iree_status_t loom_index_emit_assume_type_mismatch(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    uint16_t field_index, loom_type_t value_type, loom_type_t result_type) {
+  char value_name[32];
+  char result_name[32];
+  loom_index_format_assume_field_name(value_name, sizeof(value_name), "value",
+                                      field_index);
+  loom_index_format_assume_field_name(result_name, sizeof(result_name),
+                                      "result", field_index);
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(iree_make_cstring_view(value_name)),
+      loom_param_type(value_type),
+      loom_param_string(iree_make_cstring_view(result_name)),
+      loom_param_type(result_type),
+  };
+  return loom_index_emit(emitter, op, &loom_err_type_001, params,
+                         IREE_ARRAYSIZE(params));
+}
+
 iree_status_t loom_index_constant_verify(const loom_module_t* module,
                                          const loom_op_t* op,
                                          iree_diagnostic_emitter_t emitter) {
@@ -110,6 +147,30 @@ iree_status_t loom_index_cast_verify(const loom_module_t* module,
     return loom_index_emit_result_constraint(
         emitter, op, IREE_SV("result"), result_type,
         IREE_SV("index or offset boundary"));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_index_assume_verify(const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       iree_diagnostic_emitter_t emitter) {
+  if (op->operand_count != op->result_count) {
+    return loom_index_emit_assume_count_mismatch(emitter, op);
+  }
+
+  const loom_value_id_t* values = loom_op_const_operands(op);
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    loom_type_t value_type = loom_module_value_type(module, values[i]);
+    loom_type_t result_type = loom_module_value_type(module, results[i]);
+    if (!loom_index_type_is_address(value_type) ||
+        !loom_index_type_is_address(result_type)) {
+      continue;
+    }
+    if (!loom_type_equal(value_type, result_type)) {
+      return loom_index_emit_assume_type_mismatch(emitter, op, i, value_type,
+                                                  result_type);
+    }
   }
   return iree_ok_status();
 }

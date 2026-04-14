@@ -69,3 +69,27 @@ func.def @madd_rejects_offset(%x: offset, %y: offset, %z: offset) -> (offset) {
   %r = index.madd %x, %y, %z : offset
   func.return %r : offset
 }
+
+// ====
+
+func.def @assume_rejects_integer_payload(%x: i64) -> (index) {
+  // ERROR@+1: TYPE/003 "operand 0" "i64" "address"
+  %r = index.assume %x [] : index
+  func.return %r : index
+}
+
+// ====
+
+func.def @assume_rejects_result_type_mismatch(%x: index) -> (offset) {
+  // ERROR@+1: TYPE/001 "value 0" "index" "result 0" "offset"
+  %r = index.assume %x [] : offset
+  func.return %r : offset
+}
+
+// ====
+
+func.def @assume_rejects_count_mismatch(%x: index, %y: index) -> (index) {
+  // ERROR@+1: STRUCTURE/013 "values" "2" "results" "1"
+  %r = index.assume %x, %y [] : index
+  func.return %r : index
+}

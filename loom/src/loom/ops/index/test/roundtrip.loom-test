@@ -32,3 +32,10 @@ func.def @offset_address_ops(%base: offset, %delta: offset, %limit: offset, %con
   %selected = index.select %cond, %back, %limit : offset
   func.return %selected, %inside : offset, i1
 }
+
+// ====
+
+func.def @index_assume(%n: index, %base: offset) -> (index, offset) {
+  %n2, %base2 = index.assume %n, %base [mul(%n, 16), mul(%base, 64)] : index, offset
+  func.return %n2, %base2 : index, offset
+}

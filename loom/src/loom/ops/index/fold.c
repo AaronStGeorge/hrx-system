@@ -31,6 +31,42 @@ void loom_index_cast_fold(const loom_module_t* module, const loom_op_t* op,
   result_facts[0] = operand_facts[0];
 }
 
+void loom_index_assume_fold(const loom_module_t* module, const loom_op_t* op,
+                            const loom_value_facts_t* operand_facts,
+                            loom_value_facts_t* result_facts) {
+  uint16_t fold_count = op->operand_count < op->result_count ? op->operand_count
+                                                             : op->result_count;
+  for (uint16_t i = 0; i < fold_count; ++i) {
+    result_facts[i] = operand_facts[i];
+  }
+  for (uint16_t i = fold_count; i < op->result_count; ++i) {
+    result_facts[i] = loom_value_facts_unknown();
+  }
+  loom_attribute_t pred_attr = loom_op_attrs(op)[0];
+  const loom_predicate_t* predicates = pred_attr.predicate_list;
+  uint16_t predicate_count = pred_attr.count;
+  for (uint16_t predicate_ordinal = 0; predicate_ordinal < predicate_count;
+       ++predicate_ordinal) {
+    const loom_predicate_t* predicate = &predicates[predicate_ordinal];
+    if (predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE) continue;
+    loom_value_slice_t values = loom_index_assume_values(op);
+    loom_value_id_t target_id = (loom_value_id_t)predicate->args[0];
+    uint16_t target = 0;
+    bool found = false;
+    for (uint16_t i = 0; i < values.count; ++i) {
+      if (values.values[i] == target_id) {
+        target = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) continue;
+    if (target < fold_count) {
+      loom_value_facts_apply_predicate(&result_facts[target], predicate);
+    }
+  }
+}
+
 LOOM_INDEX_BINARY_FOLD(loom_index_add_fold, loom_value_facts_addi)
 LOOM_INDEX_BINARY_FOLD(loom_index_sub_fold, loom_value_facts_subi)
 LOOM_INDEX_BINARY_FOLD(loom_index_mul_fold, loom_value_facts_muli)

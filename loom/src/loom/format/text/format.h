@@ -755,7 +755,7 @@
 // even when printing omits them.
 //
 // ==========================================================================
-// Predicate vocabulary (where clauses and scalar.assume)
+// Predicate vocabulary (where clauses and assume ops)
 // ==========================================================================
 //
 // predicate ::= pred-name '(' pred-arg (',' pred-arg)* ')'
@@ -763,7 +763,7 @@
 //             | 'min' | 'max' | 'mul' | 'pow2' | 'range'
 // pred-arg  ::= SSA-VALUE | INTEGER
 //
-// Predicates constrain dim values in where clauses and scalar.assume.
+// Predicates constrain dim values in where clauses and assume ops.
 //
 // Examples:
 //   mul(%M, 16)          %M is a multiple of 16.

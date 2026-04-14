@@ -723,7 +723,12 @@ def _translate_format_elements(
 
                 case TypesOf(field=name):
                     kind, index = _resolve_field(name)
-                    elements.append(("LOOM_FORMAT_KIND_OPERAND_TYPES", index, "0"))
+                    if kind == FieldKind.OPERAND:
+                        elements.append(("LOOM_FORMAT_KIND_OPERAND_TYPES", index, "0"))
+                    elif kind == FieldKind.RESULT:
+                        elements.append(("LOOM_FORMAT_KIND_RESULT_TYPE_LIST", index, "0"))
+                    else:
+                        raise ValueError(f"Op '{op.name}': TypesOf('{name}') references {kind.name}")
 
                 case ResultType(field=name):
                     kind, index = _resolve_field(name)

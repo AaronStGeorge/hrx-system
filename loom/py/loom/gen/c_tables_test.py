@@ -6,7 +6,7 @@
 
 import pytest
 
-from loom.assembly import Attr, AttrDict, OperandDict, Ref, ResultType
+from loom.assembly import COLON, Attr, AttrDict, OperandDict, Ref, ResultType, TypesOf
 from loom.dsl import (
     INTEGER,
     AttrDef,
@@ -107,6 +107,20 @@ def test_generate_builders_preserve_named_operands_for_non_binary_shapes() -> No
     assert "LOOM_DEFINE_BINARY_OP_BUILDER" not in builders_c
     assert "loom_op_operands(*out_op)[0] = table;" in builders_c
     assert "loom_op_operands(*out_op)[1] = indices;" in builders_c
+
+
+def test_types_of_result_field_generates_result_type_list_format() -> None:
+    op = Op(
+        "test.results",
+        group=Dialect("test"),
+        results=[Result("results", INTEGER, variadic=True)],
+        format=[COLON, TypesOf("results")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_FORMAT_KIND_RESULT_TYPE_LIST" in tables_c
+    assert "LOOM_FORMAT_KIND_OPERAND_TYPES" not in tables_c
 
 
 def test_inline_attr_dict_uses_declared_attrs() -> None:
