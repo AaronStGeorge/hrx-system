@@ -358,7 +358,7 @@ func.def @gather_index_count_mismatch(%buffer: buffer, %offset: offset, %offsets
 func.def @gather_offsets_i1(%buffer: buffer, %offset: offset, %offsets: vector<4xi1>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
-  // ERROR@+1: TYPE/003 "offsets" "vector<...>" "vector with index or non-i1 integer elements"
+  // ERROR@+1: TYPE/003 "offsets" "vector<4xi1>" "vector with index or non-i1 integer elements"
   %r = vector.gather %view[0][%offsets] : view<4xf32, %layout>, vector<4xi1> -> vector<4xf32>
   func.return
 }
@@ -618,7 +618,7 @@ func.def @deinterleave_axis_shape_mismatch(%source: vector<8xi8>) {
 
 // Register table lookup uses a rank-1 table vector.
 func.def @table_lookup_table_rank_mismatch(%table: vector<2x2xf32>, %indices: vector<4xi8>) {
-  // ERROR@+1: TYPE/003 "table" "vector<...>" "rank-1 vector"
+  // ERROR@+1: TYPE/003 "table" "vector<2x2xf32>" "rank-1 vector"
   %r = vector.table.lookup %table[%indices] : vector<2x2xf32>, vector<4xi8> -> vector<4xf32>
   func.return
 }
@@ -627,7 +627,7 @@ func.def @table_lookup_table_rank_mismatch(%table: vector<2x2xf32>, %indices: ve
 
 // Lookup index lanes are explicit index/non-i1 integer lanes, not masks.
 func.def @table_lookup_indices_i1(%table: vector<4xf32>, %indices: vector<4xi1>) {
-  // ERROR@+1: TYPE/003 "indices" "vector<...>" "vector with index or non-i1 integer elements"
+  // ERROR@+1: TYPE/003 "indices" "vector<4xi1>" "vector with index or non-i1 integer elements"
   %r = vector.table.lookup %table[%indices] : vector<4xf32>, vector<4xi1> -> vector<4xf32>
   func.return
 }
@@ -676,7 +676,7 @@ func.def @table_lookup_static_negative_index() {
 
 // Table quantize threshold tables are rank-1 register vectors.
 func.def @table_quantize_threshold_rank_mismatch(%values: vector<4xf32>, %thresholds: vector<2x2xf32>) {
-  // ERROR@+1: TYPE/003 "thresholds" "vector<...>" "rank-1 vector"
+  // ERROR@+1: TYPE/003 "thresholds" "vector<2x2xf32>" "rank-1 vector"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xf32>, vector<2x2xf32> -> vector<4xi8>
   func.return
 }
@@ -685,8 +685,8 @@ func.def @table_quantize_threshold_rank_mismatch(%values: vector<4xf32>, %thresh
 
 // Quantize input and threshold lanes must be floating-point lanes.
 func.def @table_quantize_integer_operands(%values: vector<4xi32>, %thresholds: vector<2xi32>) {
-  // ERROR@+2: TYPE/003 "operand 0" "vector<...>" "float_element"
-  // ERROR@+1: TYPE/003 "operand 1" "vector<...>" "float_element"
+  // ERROR@+2: TYPE/003 "operand 0" "vector<4xi32>" "float_element"
+  // ERROR@+1: TYPE/003 "operand 1" "vector<2xi32>" "float_element"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xi32>, vector<2xi32> -> vector<4xi8>
   func.return
 }
@@ -732,7 +732,7 @@ func.def @table_quantize_missing_policy(%values: vector<4xf32>, %thresholds: vec
 
 // Static result code lanes must have enough bit capacity for all bins.
 func.def @table_quantize_result_capacity(%values: vector<4xf32>, %thresholds: vector<2xf32>) {
-  // ERROR@+1: TYPE/011 "result" "vector<...>" "2" "2"
+  // ERROR@+1: TYPE/011 "result" "vector<4xi1>" "2" "2"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xf32>, vector<2xf32> -> vector<4xi1>
   func.return
 }

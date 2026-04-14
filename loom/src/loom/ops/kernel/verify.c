@@ -8,7 +8,10 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ir/scalar_type.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/kernel/ops.h"
+#include "loom/ops/view/ops.h"
 
 static iree_status_t loom_kernel_emit(iree_diagnostic_emitter_t emitter,
                                       const loom_op_t* op,
@@ -37,6 +40,545 @@ static iree_status_t loom_kernel_emit_attribute_value_constraint(
                           IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_kernel_emit_operand_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t operand_name, loom_type_t actual_type,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(operand_name),
+      loom_param_type(actual_type),
+      loom_param_string(expected_constraint),
+  };
+  return loom_kernel_emit(emitter, op, &loom_err_type_003, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_kernel_emit_result_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t result_name, loom_type_t actual_type,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(result_name),
+      loom_param_type(actual_type),
+      loom_param_string(expected_constraint),
+  };
+  return loom_kernel_emit(emitter, op, &loom_err_type_004, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static iree_string_view_t loom_kernel_value_name(const loom_module_t* module,
+                                                 loom_value_id_t value_id) {
+  if (value_id >= module->values.count) return IREE_SV("<invalid>");
+  loom_string_id_t name_id = module->values.entries[value_id].name_id;
+  if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+    return IREE_SV("<unnamed>");
+  }
+  return module->strings.entries[name_id];
+}
+
+static iree_string_view_t loom_kernel_op_name(const loom_module_t* module,
+                                              const loom_op_t* op) {
+  if (!op) return IREE_SV("<null>");
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable) return IREE_SV("<unknown>");
+  return loom_op_vtable_name(vtable);
+}
+
+static iree_status_t loom_kernel_emit_value_use_count_constraint(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t value_id, uint32_t actual_count,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_kernel_value_name(module, value_id)),
+      loom_param_u32(actual_count),
+      loom_param_string(expected_constraint),
+  };
+  return loom_kernel_emit(emitter, op, &loom_err_dominance_009, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_kernel_emit_value_user_constraint(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t value_id, const loom_op_t* user_op,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_kernel_value_name(module, value_id)),
+      loom_param_string(loom_kernel_op_name(module, user_op)),
+      loom_param_string(expected_constraint),
+  };
+  return loom_kernel_emit(emitter, op, &loom_err_dominance_010, params,
+                          IREE_ARRAYSIZE(params));
+}
+
+static bool loom_kernel_type_is_opaque_dialect(const loom_module_t* module,
+                                               loom_type_t type,
+                                               iree_string_view_t name) {
+  if (!loom_type_is_dialect(type) || loom_type_dialect_param_count(type) != 0) {
+    return false;
+  }
+  loom_string_id_t name_id = loom_type_dialect_name_id(type);
+  if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+    return false;
+  }
+  return iree_string_view_equal(module->strings.entries[name_id], name);
+}
+
+static bool loom_kernel_type_is_async_token(const loom_module_t* module,
+                                            loom_type_t type) {
+  return loom_kernel_type_is_opaque_dialect(module, type,
+                                            IREE_SV("kernel.async.token"));
+}
+
+static bool loom_kernel_type_is_async_group(const loom_module_t* module,
+                                            loom_type_t type) {
+  return loom_kernel_type_is_opaque_dialect(module, type,
+                                            IREE_SV("kernel.async.group"));
+}
+
+static iree_status_t loom_kernel_verify_result_async_token(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t result_name,
+    loom_value_id_t result_id) {
+  loom_type_t result_type = loom_module_value_type(module, result_id);
+  if (loom_kernel_type_is_async_token(module, result_type)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_result_constraint(
+      emitter, op, result_name, result_type, IREE_SV("kernel.async.token"));
+}
+
+static iree_status_t loom_kernel_verify_result_async_group(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t result_name,
+    loom_value_id_t result_id) {
+  loom_type_t result_type = loom_module_value_type(module, result_id);
+  if (loom_kernel_type_is_async_group(module, result_type)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_result_constraint(
+      emitter, op, result_name, result_type, IREE_SV("kernel.async.group"));
+}
+
+static iree_status_t loom_kernel_verify_operand_async_group(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t operand_name,
+    loom_value_id_t operand_id) {
+  loom_type_t operand_type = loom_module_value_type(module, operand_id);
+  if (loom_kernel_type_is_async_group(module, operand_type)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_operand_constraint(
+      emitter, op, operand_name, operand_type, IREE_SV("kernel.async.group"));
+}
+
+static bool loom_kernel_try_get_local_buffer_memory_space(
+    const loom_module_t* module, loom_value_id_t buffer_id,
+    uint8_t* out_memory_space) {
+  if (buffer_id >= module->values.count) return false;
+  const loom_value_t* value = loom_module_value(module, buffer_id);
+  if (loom_value_is_block_arg(value)) return false;
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op) return false;
+  if (loom_buffer_alloca_isa(defining_op)) {
+    *out_memory_space = loom_buffer_alloca_memory_space(defining_op);
+    return true;
+  }
+  if (loom_buffer_assume_memory_space_isa(defining_op)) {
+    *out_memory_space =
+        loom_buffer_assume_memory_space_memory_space(defining_op);
+    return true;
+  }
+  return false;
+}
+
+static bool loom_kernel_try_get_local_view_memory_space(
+    const loom_module_t* module, loom_value_id_t view_id,
+    uint8_t* out_memory_space) {
+  for (uint8_t depth = 0; depth < 32; ++depth) {
+    if (view_id >= module->values.count) return false;
+    const loom_value_t* value = loom_module_value(module, view_id);
+    if (loom_value_is_block_arg(value)) return false;
+    const loom_op_t* defining_op = loom_value_def_op(value);
+    if (!defining_op) return false;
+
+    if (loom_buffer_view_isa(defining_op)) {
+      return loom_kernel_try_get_local_buffer_memory_space(
+          module, loom_buffer_view_buffer(defining_op), out_memory_space);
+    }
+    if (loom_view_subview_isa(defining_op)) {
+      view_id = loom_view_subview_source(defining_op);
+      continue;
+    }
+    if (loom_view_refine_isa(defining_op)) {
+      view_id = loom_view_refine_source(defining_op);
+      continue;
+    }
+    return false;
+  }
+  return false;
+}
+
+static bool loom_kernel_memory_space_is_global_source(uint8_t memory_space) {
+  return memory_space == LOOM_BUFFER_MEMORY_SPACE_GLOBAL ||
+         memory_space == LOOM_BUFFER_MEMORY_SPACE_CONSTANT ||
+         memory_space == LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR;
+}
+
+static bool loom_kernel_memory_space_is_global_dest(uint8_t memory_space) {
+  return memory_space == LOOM_BUFFER_MEMORY_SPACE_GLOBAL ||
+         memory_space == LOOM_BUFFER_MEMORY_SPACE_DESCRIPTOR;
+}
+
+static bool loom_kernel_view_memory_space_is(const loom_module_t* module,
+                                             loom_value_id_t view_id,
+                                             bool (*predicate)(uint8_t)) {
+  uint8_t memory_space = LOOM_BUFFER_MEMORY_SPACE_UNKNOWN;
+  if (!loom_kernel_try_get_local_view_memory_space(module, view_id,
+                                                   &memory_space)) {
+    return false;
+  }
+  return predicate(memory_space);
+}
+
+static bool loom_kernel_memory_space_is_workgroup(uint8_t memory_space) {
+  return memory_space == LOOM_BUFFER_MEMORY_SPACE_WORKGROUP;
+}
+
+static bool loom_kernel_type_static_element_byte_count(
+    loom_type_t type, int64_t* out_byte_count) {
+  int32_t bit_count = loom_scalar_type_bitwidth(loom_type_element_type(type));
+  if (bit_count <= 0 || (bit_count % 8) != 0) return false;
+  *out_byte_count = bit_count / 8;
+  return true;
+}
+
+static bool loom_kernel_type_static_byte_count_from_axis(
+    loom_type_t type, uint8_t first_axis, int64_t* out_byte_count) {
+  if (!out_byte_count || !loom_type_is_view(type) ||
+      first_axis > loom_type_rank(type)) {
+    return false;
+  }
+
+  int64_t byte_count = 0;
+  if (!loom_kernel_type_static_element_byte_count(type, &byte_count)) {
+    return false;
+  }
+  for (uint8_t axis = first_axis; axis < loom_type_rank(type); ++axis) {
+    if (loom_type_dim_is_dynamic_at(type, axis)) return false;
+    int64_t dimension_size = loom_type_dim_static_size_at(type, axis);
+    if (dimension_size < 0 ||
+        !iree_checked_mul_i64(byte_count, dimension_size, &byte_count)) {
+      return false;
+    }
+  }
+
+  *out_byte_count = byte_count;
+  return true;
+}
+
+static bool loom_kernel_type_static_byte_count(loom_type_t type,
+                                               int64_t* out_byte_count) {
+  return loom_kernel_type_static_byte_count_from_axis(type, /*first_axis=*/0,
+                                                      out_byte_count);
+}
+
+static iree_status_t loom_kernel_verify_static_byte_count(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t operand_name,
+    loom_value_id_t view_id, int64_t* out_byte_count) {
+  loom_type_t view_type = loom_module_value_type(module, view_id);
+  if (loom_kernel_type_static_byte_count(view_type, out_byte_count)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_operand_constraint(
+      emitter, op, operand_name, view_type,
+      IREE_SV("view with a static byte-addressable footprint"));
+}
+
+static iree_status_t loom_kernel_verify_same_static_byte_count(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id) {
+  int64_t source_byte_count = 0;
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_static_byte_count(
+      module, emitter, op, IREE_SV("source"), source_id, &source_byte_count));
+
+  int64_t dest_byte_count = 0;
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_static_byte_count(
+      module, emitter, op, IREE_SV("dest"), dest_id, &dest_byte_count));
+
+  if (source_byte_count == dest_byte_count) return iree_ok_status();
+  loom_type_t dest_type = loom_module_value_type(module, dest_id);
+  return loom_kernel_emit_operand_constraint(
+      emitter, op, IREE_SV("dest"), dest_type,
+      IREE_SV("same static byte footprint as source"));
+}
+
+static iree_status_t loom_kernel_verify_async_copy_memory_spaces(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id,
+    uint8_t direction) {
+  switch ((loom_kernel_direction_t)direction) {
+    case LOOM_KERNEL_DIRECTION_GLOBAL_TO_WORKGROUP:
+      if (!loom_kernel_view_memory_space_is(
+              module, source_id, loom_kernel_memory_space_is_global_source)) {
+        loom_type_t source_type = loom_module_value_type(module, source_id);
+        return loom_kernel_emit_operand_constraint(
+            emitter, op, IREE_SV("source"), source_type,
+            IREE_SV("global, constant, or descriptor memory-space fact"));
+      }
+      if (!loom_kernel_view_memory_space_is(
+              module, dest_id, loom_kernel_memory_space_is_workgroup)) {
+        loom_type_t dest_type = loom_module_value_type(module, dest_id);
+        return loom_kernel_emit_operand_constraint(
+            emitter, op, IREE_SV("dest"), dest_type,
+            IREE_SV("workgroup memory-space fact"));
+      }
+      return iree_ok_status();
+    case LOOM_KERNEL_DIRECTION_WORKGROUP_TO_GLOBAL:
+      if (!loom_kernel_view_memory_space_is(
+              module, source_id, loom_kernel_memory_space_is_workgroup)) {
+        loom_type_t source_type = loom_module_value_type(module, source_id);
+        return loom_kernel_emit_operand_constraint(
+            emitter, op, IREE_SV("source"), source_type,
+            IREE_SV("workgroup memory-space fact"));
+      }
+      if (!loom_kernel_view_memory_space_is(
+              module, dest_id, loom_kernel_memory_space_is_global_dest)) {
+        loom_type_t dest_type = loom_module_value_type(module, dest_id);
+        return loom_kernel_emit_operand_constraint(
+            emitter, op, IREE_SV("dest"), dest_type,
+            IREE_SV("global or descriptor memory-space fact"));
+      }
+      return iree_ok_status();
+    case LOOM_KERNEL_DIRECTION_COUNT_:
+      break;
+  }
+  return loom_kernel_emit_attribute_value_constraint(
+      emitter, op, IREE_SV("direction"), direction,
+      IREE_SV("global_to_workgroup or workgroup_to_global"));
+}
+
+static iree_status_t loom_kernel_verify_async_cache_scope(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    uint8_t cache_scope) {
+  switch ((loom_kernel_cache_scope_t)cache_scope) {
+    case LOOM_KERNEL_CACHE_SCOPE_CU:
+    case LOOM_KERNEL_CACHE_SCOPE_SE:
+    case LOOM_KERNEL_CACHE_SCOPE_DEVICE:
+    case LOOM_KERNEL_CACHE_SCOPE_SYSTEM:
+      return iree_ok_status();
+    case LOOM_KERNEL_CACHE_SCOPE_COUNT_:
+      break;
+  }
+  return loom_kernel_emit_attribute_value_constraint(
+      emitter, op, IREE_SV("cache_scope"), cache_scope,
+      IREE_SV("cu, se, device, or system"));
+}
+
+static iree_status_t loom_kernel_verify_async_cache_temporal(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    uint8_t cache_temporal, uint8_t cache_scope, bool is_store) {
+  switch ((loom_kernel_cache_temporal_t)cache_temporal) {
+    case LOOM_KERNEL_CACHE_TEMPORAL_REGULAR:
+    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL:
+    case LOOM_KERNEL_CACHE_TEMPORAL_HIGH_TEMPORAL:
+    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR:
+    case LOOM_KERNEL_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL:
+    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL:
+      return iree_ok_status();
+    case LOOM_KERNEL_CACHE_TEMPORAL_LAST_USE:
+      if (is_store) {
+        return loom_kernel_emit_attribute_value_constraint(
+            emitter, op, IREE_SV("cache_temporal"), cache_temporal,
+            IREE_SV("load-compatible temporal hint"));
+      }
+      if (cache_scope == LOOM_KERNEL_CACHE_SCOPE_SYSTEM) {
+        return loom_kernel_emit_attribute_value_constraint(
+            emitter, op, IREE_SV("cache_scope"), cache_scope,
+            IREE_SV("non-system scope for last_use temporal hint"));
+      }
+      return iree_ok_status();
+    case LOOM_KERNEL_CACHE_TEMPORAL_WRITEBACK:
+    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK:
+      if (!is_store) {
+        return loom_kernel_emit_attribute_value_constraint(
+            emitter, op, IREE_SV("cache_temporal"), cache_temporal,
+            IREE_SV("store-compatible temporal hint"));
+      }
+      return iree_ok_status();
+    case LOOM_KERNEL_CACHE_TEMPORAL_BYPASS:
+      if (cache_scope != LOOM_KERNEL_CACHE_SCOPE_SYSTEM) {
+        return loom_kernel_emit_attribute_value_constraint(
+            emitter, op, IREE_SV("cache_scope"), cache_scope,
+            IREE_SV("system scope for bypass temporal hint"));
+      }
+      return iree_ok_status();
+    case LOOM_KERNEL_CACHE_TEMPORAL_COUNT_:
+      break;
+  }
+  return loom_kernel_emit_attribute_value_constraint(
+      emitter, op, IREE_SV("cache_temporal"), cache_temporal,
+      IREE_SV("supported async cache temporal hint"));
+}
+
+static iree_status_t loom_kernel_verify_async_cache_policy(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint8_t cache_scope,
+    uint8_t cache_temporal, bool is_store) {
+  IREE_RETURN_IF_ERROR(
+      loom_kernel_verify_async_cache_scope(emitter, op, cache_scope));
+  return loom_kernel_verify_async_cache_temporal(emitter, op, cache_temporal,
+                                                 cache_scope, is_store);
+}
+
+static iree_status_t loom_kernel_verify_copy_token_group_use(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t token_id) {
+  if (token_id >= module->values.count) return iree_ok_status();
+  const loom_value_t* token = loom_module_value(module, token_id);
+  if (token->use_count != 1) {
+    return loom_kernel_emit_value_use_count_constraint(
+        module, emitter, op, token_id, token->use_count,
+        IREE_SV("exactly one kernel.async.group use"));
+  }
+
+  const loom_use_t use = loom_value_uses(token)[0];
+  const loom_op_t* user_op = loom_use_user_op(use);
+  if (loom_kernel_async_group_isa(user_op)) return iree_ok_status();
+  return loom_kernel_emit_value_user_constraint(
+      module, emitter, op, token_id, user_op,
+      IREE_SV("kernel.async.group token operand"));
+}
+
+static iree_status_t loom_kernel_verify_token_defined_by_copy(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t token_id) {
+  if (token_id >= module->values.count) return iree_ok_status();
+  const loom_value_t* token = loom_module_value(module, token_id);
+  const loom_op_t* defining_op =
+      loom_value_is_block_arg(token) ? NULL : loom_value_def_op(token);
+  if (defining_op && (loom_kernel_async_copy_isa(defining_op) ||
+                      loom_kernel_async_copy_mask_isa(defining_op) ||
+                      loom_kernel_async_gather_isa(defining_op) ||
+                      loom_kernel_async_gather_mask_isa(defining_op))) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_value_user_constraint(
+      module, emitter, op, token_id, defining_op,
+      IREE_SV("kernel.async.copy or kernel.async.gather result"));
+}
+
+static iree_status_t loom_kernel_verify_group_has_uses(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t group_id) {
+  if (group_id >= module->values.count) return iree_ok_status();
+  const loom_value_t* group = loom_module_value(module, group_id);
+  if (group->use_count != 0) return iree_ok_status();
+  return loom_kernel_emit_value_use_count_constraint(
+      module, emitter, op, group_id, 0,
+      IREE_SV("at least one wait or carried group use"));
+}
+
+static iree_status_t loom_kernel_verify_group_origin_if_local(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t group_id) {
+  if (group_id >= module->values.count) return iree_ok_status();
+  const loom_value_t* group = loom_module_value(module, group_id);
+  if (loom_value_is_block_arg(group)) return iree_ok_status();
+  const loom_op_t* defining_op = loom_value_def_op(group);
+  if (defining_op && loom_kernel_async_group_isa(defining_op)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_value_user_constraint(
+      module, emitter, op, group_id, defining_op,
+      IREE_SV("kernel.async.group result"));
+}
+
+static iree_status_t loom_kernel_verify_gather_destination(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id) {
+  loom_type_t source_type = loom_module_value_type(module, source_id);
+  loom_type_t dest_type = loom_module_value_type(module, dest_id);
+  if (!loom_type_is_view(source_type) || !loom_type_is_view(dest_type)) {
+    return iree_ok_status();
+  }
+
+  uint8_t source_rank = loom_type_rank(source_type);
+  uint8_t dest_rank = loom_type_rank(dest_type);
+  if (dest_rank != source_rank + 1) {
+    return loom_kernel_emit_operand_constraint(
+        emitter, op, IREE_SV("dest"), dest_type,
+        IREE_SV("view with one leading subgroup-lane axis"));
+  }
+
+  int64_t source_byte_count = 0;
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_static_byte_count(
+      module, emitter, op, IREE_SV("source"), source_id, &source_byte_count));
+
+  int64_t dest_lane_byte_count = 0;
+  if (!loom_kernel_type_static_byte_count_from_axis(dest_type, /*first_axis=*/1,
+                                                    &dest_lane_byte_count)) {
+    return loom_kernel_emit_operand_constraint(
+        emitter, op, IREE_SV("dest"), dest_type,
+        IREE_SV("view with static byte-addressable trailing lane footprint"));
+  }
+  if (source_byte_count <= dest_lane_byte_count) return iree_ok_status();
+  return loom_kernel_emit_operand_constraint(
+      emitter, op, IREE_SV("dest"), dest_type,
+      IREE_SV("trailing lane byte footprint at least source footprint"));
+}
+
+static iree_status_t loom_kernel_verify_gather_memory_spaces(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id) {
+  if (!loom_kernel_view_memory_space_is(
+          module, source_id, loom_kernel_memory_space_is_global_source)) {
+    loom_type_t source_type = loom_module_value_type(module, source_id);
+    return loom_kernel_emit_operand_constraint(
+        emitter, op, IREE_SV("source"), source_type,
+        IREE_SV("global, constant, or descriptor memory-space fact"));
+  }
+  if (!loom_kernel_view_memory_space_is(
+          module, dest_id, loom_kernel_memory_space_is_workgroup)) {
+    loom_type_t dest_type = loom_module_value_type(module, dest_id);
+    return loom_kernel_emit_operand_constraint(
+        emitter, op, IREE_SV("dest"), dest_type,
+        IREE_SV("workgroup memory-space fact"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_kernel_verify_async_copy_like(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id,
+    uint8_t direction, uint8_t cache_scope, uint8_t cache_temporal,
+    loom_value_id_t token_id) {
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_result_async_token(
+      module, emitter, op, IREE_SV("token"), token_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_same_static_byte_count(
+      module, emitter, op, source_id, dest_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_async_copy_memory_spaces(
+      module, emitter, op, source_id, dest_id, direction));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_async_cache_policy(
+      emitter, op, cache_scope, cache_temporal,
+      direction == LOOM_KERNEL_DIRECTION_WORKGROUP_TO_GLOBAL));
+  return loom_kernel_verify_copy_token_group_use(module, emitter, op, token_id);
+}
+
+static iree_status_t loom_kernel_verify_async_gather_like(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id,
+    uint8_t cache_scope, uint8_t cache_temporal, loom_value_id_t token_id) {
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_result_async_token(
+      module, emitter, op, IREE_SV("token"), token_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_gather_destination(
+      module, emitter, op, source_id, dest_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_gather_memory_spaces(
+      module, emitter, op, source_id, dest_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_async_cache_policy(
+      emitter, op, cache_scope, cache_temporal, /*is_store=*/false));
+  return loom_kernel_verify_copy_token_group_use(module, emitter, op, token_id);
+}
+
 iree_status_t loom_kernel_barrier_verify(const loom_module_t* module,
                                          const loom_op_t* op,
                                          iree_diagnostic_emitter_t emitter) {
@@ -62,4 +604,88 @@ iree_status_t loom_kernel_barrier_verify(const loom_module_t* module,
         emitter, op, IREE_SV("scope"), scope, IREE_SV("workgroup scope"));
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_kernel_async_copy_verify(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_copy_like(
+      module, emitter, op, loom_kernel_async_copy_source(op),
+      loom_kernel_async_copy_dest(op), loom_kernel_async_copy_direction(op),
+      loom_kernel_async_copy_cache_scope(op),
+      loom_kernel_async_copy_cache_temporal(op),
+      loom_kernel_async_copy_token(op));
+}
+
+iree_status_t loom_kernel_async_copy_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_copy_like(
+      module, emitter, op, loom_kernel_async_copy_mask_source(op),
+      loom_kernel_async_copy_mask_dest(op),
+      loom_kernel_async_copy_mask_direction(op),
+      loom_kernel_async_copy_mask_cache_scope(op),
+      loom_kernel_async_copy_mask_cache_temporal(op),
+      loom_kernel_async_copy_mask_token(op));
+}
+
+iree_status_t loom_kernel_async_gather_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_gather_like(
+      module, emitter, op, loom_kernel_async_gather_source(op),
+      loom_kernel_async_gather_dest(op),
+      loom_kernel_async_gather_cache_scope(op),
+      loom_kernel_async_gather_cache_temporal(op),
+      loom_kernel_async_gather_token(op));
+}
+
+iree_status_t loom_kernel_async_gather_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_gather_like(
+      module, emitter, op, loom_kernel_async_gather_mask_source(op),
+      loom_kernel_async_gather_mask_dest(op),
+      loom_kernel_async_gather_mask_cache_scope(op),
+      loom_kernel_async_gather_mask_cache_temporal(op),
+      loom_kernel_async_gather_mask_token(op));
+}
+
+iree_status_t loom_kernel_async_group_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_value_slice_t tokens = loom_kernel_async_group_tokens(op);
+  for (uint16_t i = 0; i < tokens.count; ++i) {
+    loom_value_id_t token_id = loom_value_slice_get(tokens, i);
+    loom_type_t token_type = loom_module_value_type(module, token_id);
+    if (!loom_kernel_type_is_async_token(module, token_type)) {
+      IREE_RETURN_IF_ERROR(loom_kernel_emit_operand_constraint(
+          emitter, op, IREE_SV("tokens"), token_type,
+          IREE_SV("kernel.async.token")));
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_kernel_verify_token_defined_by_copy(
+        module, emitter, op, token_id));
+  }
+
+  loom_value_id_t group_id = loom_kernel_async_group_group(op);
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_result_async_group(
+      module, emitter, op, IREE_SV("group"), group_id));
+  return loom_kernel_verify_group_has_uses(module, emitter, op, group_id);
+}
+
+iree_status_t loom_kernel_async_wait_verify(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            iree_diagnostic_emitter_t emitter) {
+  loom_value_id_t group_id = loom_kernel_async_wait_group(op);
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_operand_async_group(
+      module, emitter, op, IREE_SV("group"), group_id));
+  int64_t newer_groups = loom_kernel_async_wait_newer_groups(op);
+  if (newer_groups < 0 || newer_groups > UINT16_MAX) {
+    return loom_kernel_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("newer_groups"), newer_groups,
+        IREE_SV("nonnegative i16 wait count"));
+  }
+  return loom_kernel_verify_group_origin_if_local(module, emitter, op,
+                                                  group_id);
 }

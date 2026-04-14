@@ -9,6 +9,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/error/renderer.h"
 #include "loom/format/text/parser.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/module.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/util/json.h"
@@ -34,11 +35,19 @@ typedef struct loom_collected_diagnostic_t {
 // Accumulates diagnostics emitted during parse and verify phases.
 // All storage is arena-allocated (no per-entry cleanup needed).
 typedef struct loom_diagnostic_collector_t {
+  // Collected diagnostic entries, arena-allocated.
   loom_collected_diagnostic_t* diagnostics;
+  // Number of populated entries in diagnostics.
   iree_host_size_t count;
+  // Allocated entry capacity of diagnostics.
   iree_host_size_t capacity;
+  // Arena used for diagnostics and rendered message storage.
   iree_arena_allocator_t* arena;
+  // Host allocator used by temporary string builders.
   iree_allocator_t host_allocator;
+  // Current parsed module for full type rendering; NULL during parse recovery.
+  const loom_module_t* module;
+  // File-level result receiving structured diagnostic captures.
   loom_check_result_t* result;
 } loom_diagnostic_collector_t;
 
@@ -60,6 +69,15 @@ static iree_status_t loom_collector_grow(
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_format_type(loom_type_t type, void* user_data,
+                                            loom_output_stream_t* stream) {
+  const loom_module_t* module = (const loom_module_t*)user_data;
+  if (!module) {
+    return loom_type_format_minimal(type, NULL, stream);
+  }
+  return loom_text_print_type(type, module, stream);
+}
+
 // Diagnostic sink callback. Renders the message, stores the entry.
 static iree_status_t loom_collector_sink(void* user_data,
                                          const loom_diagnostic_t* diagnostic) {
@@ -75,7 +93,8 @@ static iree_status_t loom_collector_sink(void* user_data,
   iree_string_builder_initialize(collector->host_allocator, &message_builder);
   loom_output_stream_t message_stream;
   loom_output_stream_for_builder(&message_builder, &message_stream);
-  loom_type_formatter_t type_formatter = {loom_type_format_minimal, NULL};
+  loom_type_formatter_t type_formatter = {loom_check_format_type,
+                                          (void*)collector->module};
   iree_status_t render_status = loom_diagnostic_render_message(
       diagnostic->error, diagnostic->params, diagnostic->param_count,
       type_formatter, &message_stream);
@@ -524,6 +543,7 @@ iree_status_t loom_check_execute_verify(
     };
     status = loom_text_parse(stripped_view, filename, context, block_pool,
                              &parse_options, &module);
+    collector.module = module;
   }
 
   // If parsing succeeded (module != NULL), run the verifier to collect

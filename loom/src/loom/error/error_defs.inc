@@ -62,6 +62,8 @@ extern const loom_error_def_t loom_err_dominance_005;
 extern const loom_error_def_t loom_err_dominance_006;
 extern const loom_error_def_t loom_err_dominance_007;
 extern const loom_error_def_t loom_err_dominance_008;
+extern const loom_error_def_t loom_err_dominance_009;
+extern const loom_error_def_t loom_err_dominance_010;
 extern const loom_error_def_t loom_err_symbol_001;
 extern const loom_error_def_t loom_err_symbol_002;
 extern const loom_error_def_t loom_err_symbol_003;

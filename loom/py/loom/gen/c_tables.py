@@ -2868,7 +2868,7 @@ def main() -> None:
     from loom.dialect.globals import ALL_GLOBAL_OPS, global_ops
     from loom.dialect.hal import ALL_HAL_TYPES
     from loom.dialect.index import ALL_INDEX_OPS, index_ops
-    from loom.dialect.kernel import ALL_KERNEL_OPS, kernel_ops
+    from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES, kernel_ops
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
@@ -2917,7 +2917,12 @@ def main() -> None:
 
     # Generate cross-dialect registries.
     op_reg_h, op_reg_c = generate_op_registry(dialects)
-    type_reg_h, type_reg_c = generate_type_registry(list(ALL_BUILTIN_TYPES) + list(ALL_HAL_TYPES))
+    all_types = [
+        *ALL_BUILTIN_TYPES,
+        *ALL_HAL_TYPES,
+        *ALL_KERNEL_TYPES,
+    ]
+    type_reg_h, type_reg_c = generate_type_registry(all_types)
 
     # Generate keyword definitions.
     keyword_enum = generate_keyword_enum_inc()
@@ -2936,7 +2941,7 @@ def main() -> None:
             f.write(content)
 
     total_ops = sum(len(ops) for _, ops in dialects)
-    total_types = len(ALL_BUILTIN_TYPES) + len(ALL_HAL_TYPES)
+    total_types = len(all_types)
     print(f"  op_registry: {total_ops} ops")
     print(f"  type_registry: {total_types} types")
     print(f"  keywords: {len(KEYWORD_MAP)} keywords")

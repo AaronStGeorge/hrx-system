@@ -19,8 +19,45 @@ extern "C" {
 
 enum {
   LOOM_OP_KERNEL_BARRIER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 0),
-  LOOM_OP_KERNEL_COUNT_ = 1,
+  LOOM_OP_KERNEL_ASYNC_COPY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 1),
+  LOOM_OP_KERNEL_ASYNC_COPY_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 2),
+  LOOM_OP_KERNEL_ASYNC_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 3),
+  LOOM_OP_KERNEL_ASYNC_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 4),
+  LOOM_OP_KERNEL_ASYNC_GROUP = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 5),
+  LOOM_OP_KERNEL_ASYNC_WAIT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 6),
+  LOOM_OP_KERNEL_COUNT_ = 7,
 };
+
+// Target-independent cache scope for async memory traffic.
+typedef enum loom_kernel_cache_scope_e {
+  LOOM_KERNEL_CACHE_SCOPE_CU = 0,
+  LOOM_KERNEL_CACHE_SCOPE_SE = 1,
+  LOOM_KERNEL_CACHE_SCOPE_DEVICE = 2,
+  LOOM_KERNEL_CACHE_SCOPE_SYSTEM = 3,
+  LOOM_KERNEL_CACHE_SCOPE_COUNT_ = 4,
+} loom_kernel_cache_scope_t;
+
+// Target-independent temporal cache hint for async memory traffic.
+typedef enum loom_kernel_cache_temporal_e {
+  LOOM_KERNEL_CACHE_TEMPORAL_REGULAR = 0,
+  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL = 1,
+  LOOM_KERNEL_CACHE_TEMPORAL_HIGH_TEMPORAL = 2,
+  LOOM_KERNEL_CACHE_TEMPORAL_LAST_USE = 3,
+  LOOM_KERNEL_CACHE_TEMPORAL_WRITEBACK = 4,
+  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR = 5,
+  LOOM_KERNEL_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL = 6,
+  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL = 7,
+  LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK = 8,
+  LOOM_KERNEL_CACHE_TEMPORAL_BYPASS = 9,
+  LOOM_KERNEL_CACHE_TEMPORAL_COUNT_ = 10,
+} loom_kernel_cache_temporal_t;
+
+// Required async copy direction.
+typedef enum loom_kernel_direction_e {
+  LOOM_KERNEL_DIRECTION_GLOBAL_TO_WORKGROUP = 0,
+  LOOM_KERNEL_DIRECTION_WORKGROUP_TO_GLOBAL = 1,
+  LOOM_KERNEL_DIRECTION_COUNT_ = 2,
+} loom_kernel_direction_t;
 
 // Target-independent memory space fenced by a kernel synchronization op.
 typedef enum loom_kernel_barrier_memory_space_e {
@@ -54,7 +91,7 @@ typedef enum loom_kernel_barrier_scope_e {
   LOOM_KERNEL_BARRIER_SCOPE_COUNT_ = 5,
 } loom_kernel_barrier_scope_t;
 
-// LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The initial supported form is a workgroup barrier over workgroup memory with acquire-release ordering; other enum cases are reserved until their lowering and legality rules are implemented.
+// LOOM_OP_KERNEL_BARRIER: Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
 // kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
 LOOM_DEFINE_ISA(loom_kernel_barrier_isa, LOOM_OP_KERNEL_BARRIER)
 LOOM_DEFINE_ATTR_ENUM(loom_kernel_barrier_memory_space, 0)
@@ -68,6 +105,129 @@ iree_status_t loom_kernel_barrier_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_kernel_barrier_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_COPY: Initiate an asynchronous byte-for-byte transfer between two already originated views. The source and destination view types may use different logical element types or shapes, but they must describe the same static byte footprint. The direction attribute makes the required memory-space flow explicit. The returned token must be committed to exactly one kernel.async.group before the copied bytes are waited or consumed.
+// %copy = kernel.async.copy %src to %dst {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8> to view<16xi8> -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_copy_isa, LOOM_OP_KERNEL_ASYNC_COPY)
+LOOM_DEFINE_OPERAND(loom_kernel_async_copy_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_copy_dest, 1)
+LOOM_DEFINE_RESULT(loom_kernel_async_copy_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_direction, 2)
+iree_status_t loom_kernel_async_copy_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    uint8_t direction,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_copy_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_COPY_MASK: Predicated form of kernel.async.copy. When predicate is true, the op initiates the same transfer as kernel.async.copy. When predicate is false, the op performs no memory access and produces an already complete token so grouping and waiting remain structurally uniform.
+// %copy = kernel.async.copy.mask %src to %dst, %in_bounds {cache_scope = cu, cache_temporal = non_temporal, direction = global_to_workgroup} : view<16xi8> to view<16xi8>, i1 -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_copy_mask_isa, LOOM_OP_KERNEL_ASYNC_COPY_MASK)
+LOOM_DEFINE_OPERAND(loom_kernel_async_copy_mask_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_copy_mask_dest, 1)
+LOOM_DEFINE_OPERAND(loom_kernel_async_copy_mask_predicate, 2)
+LOOM_DEFINE_RESULT(loom_kernel_async_copy_mask_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_mask_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_copy_mask_direction, 2)
+iree_status_t loom_kernel_async_copy_mask_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    loom_may_consume loom_value_id_t predicate,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    uint8_t direction,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_copy_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_GATHER: Initiate a subgroup-collective asynchronous gather from each invocation's source view into a lane-contiguous workgroup destination view. The destination view has one leading subgroup-lane axis and a trailing lane slot with enough static bytes to hold one source payload. If the lane slot is larger than the source footprint, the extra destination bytes are padding bytes with unspecified contents. The destination denotes the subgroup-uniform base tile; the current subgroup lane is applied by the op semantics and must not be pre-applied by forming a lane subview. This directly represents AMDGPU global_load_lds-style staging, including padded narrow loads, without requiring a later pass to rediscover that a set of per-lane copies was really one subgroup LDS DMA operation.
+// %copy = kernel.async.gather %src_lane to %lds_tile {cache_scope = cu, cache_temporal = regular} : view<4xi8> to view<[%wave]x4xi8> -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_gather_isa, LOOM_OP_KERNEL_ASYNC_GATHER)
+LOOM_DEFINE_OPERAND(loom_kernel_async_gather_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_gather_dest, 1)
+LOOM_DEFINE_RESULT(loom_kernel_async_gather_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_cache_temporal, 1)
+iree_status_t loom_kernel_async_gather_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_gather_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_GATHER_MASK: Predicated form of kernel.async.gather. False predicates perform no source or destination access for the current invocation but still produce a completed token, preserving a uniform async group shape for tails and guarded tiles.
+// %copy = kernel.async.gather.mask %src_lane to %lds_tile, %in_bounds {cache_scope = cu, cache_temporal = regular} : view<4xi8> to view<[%wave]x4xi8>, i1 -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_gather_mask_isa, LOOM_OP_KERNEL_ASYNC_GATHER_MASK)
+LOOM_DEFINE_OPERAND(loom_kernel_async_gather_mask_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_gather_mask_dest, 1)
+LOOM_DEFINE_OPERAND(loom_kernel_async_gather_mask_predicate, 2)
+LOOM_DEFINE_RESULT(loom_kernel_async_gather_mask_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_mask_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_gather_mask_cache_temporal, 1)
+iree_status_t loom_kernel_async_gather_mask_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    loom_may_consume loom_value_id_t predicate,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_gather_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_GROUP: Commit zero or more async copy/gather tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
+// %empty = kernel.async.group -> kernel.async.group
+LOOM_DEFINE_ISA(loom_kernel_async_group_isa, LOOM_OP_KERNEL_ASYNC_GROUP)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_kernel_async_group_tokens, 0)
+LOOM_DEFINE_RESULT(loom_kernel_async_group_group, 0)
+iree_status_t loom_kernel_async_group_build(
+    loom_builder_t* builder,
+    loom_may_consume const loom_value_id_t* tokens,
+    iree_host_size_t tokens_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_group_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_WAIT: Wait until a committed async-copy group has completed. This completes the named group and all older groups in the same ordered async stream. The required newer_groups value states how many younger groups are allowed to remain outstanding after the wait, matching AMDGPU wait.asyncmark and NVVM wait_group count semantics without making lowering rediscover the software-pipeline distance from scratch. It is not a workgroup barrier; use kernel.barrier separately when other invocations must observe the copied destination data.
+// kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+LOOM_DEFINE_ISA(loom_kernel_async_wait_isa, LOOM_OP_KERNEL_ASYNC_WAIT)
+LOOM_DEFINE_OPERAND(loom_kernel_async_wait_group, 0)
+LOOM_DEFINE_ATTR_I64(loom_kernel_async_wait_newer_groups, 0)
+iree_status_t loom_kernel_async_wait_build(
+    loom_builder_t* builder,
+    loom_value_id_t group,
+    int64_t newer_groups,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_wait_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

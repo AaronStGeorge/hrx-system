@@ -1601,6 +1601,62 @@
     ]
   },
   {
+    "error_id": "ERR_DOMINANCE_009",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Value use count violates a structural lifetime contract.",
+    "message_template": "value '%{value_name}' has {actual_count} uses, expected {expected_constraint}",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_constraint",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Route '%{value_name}' through the required consumer shape."
+  },
+  {
+    "error_id": "ERR_DOMINANCE_010",
+    "domain": 5,
+    "domain_name": "DOMINANCE",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Value user violates a structural lifetime contract.",
+    "message_template": "value '%{value_name}' is used by '{user_op}', expected {expected_constraint}",
+    "params": [
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "user_op",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_constraint",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use '%{value_name}' only where the lifetime contract allows it."
+  },
+  {
     "error_id": "ERR_SYMBOL_001",
     "domain": 6,
     "domain_name": "SYMBOL",

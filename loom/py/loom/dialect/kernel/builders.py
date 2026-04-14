@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import builtins
-from typing import Any
+from typing import Any, cast
 
-from loom.builder import IRBuilder, ValueRef
-from loom.ir import Region
+from loom.builder import IRBuilder, TiedResultSpec, ValueRef
+from loom.ir import Region, Type
 
 
 class KernelBuilders:
@@ -20,7 +20,7 @@ class KernelBuilders:
         self._b = builder
 
     def barrier(self, *, memory_space: str, ordering: str, scope: str) -> None:
-        """Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The initial supported form is a workgroup barrier over workgroup memory with acquire-release ordering; other enum cases are reserved until their lowering and legality rules are implemented.
+        """Synchronize invocations in an explicit execution scope and fence a named memory space with a required ordering. The supported kernel barrier is a workgroup execution barrier over workgroup memory with acquire-release ordering. Async-copy completion is modeled by kernel.async.wait; use kernel.barrier only when invocations must rendezvous before consuming shared memory.
 
         Example::
             kernel.barrier {memory_space = workgroup, ordering = acq_rel, scope = workgroup}
@@ -32,3 +32,92 @@ class KernelBuilders:
         _attributes["ordering"] = ordering
         _attributes["scope"] = scope
         self._b.build("kernel.barrier", _operands, attributes=_attributes, regions=_regions)
+
+    def copy(self, *, source: ValueRef, dest: ValueRef, cache_scope: str, cache_temporal: str, direction: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Initiate an asynchronous byte-for-byte transfer between two already originated views. The source and destination view types may use different logical element types or shapes, but they must describe the same static byte footprint. The direction attribute makes the required memory-space flow explicit. The returned token must be committed to exactly one kernel.async.group before the copied bytes are waited or consumed.
+
+        Example::
+            %copy = kernel.async.copy %src to %dst {cache_scope = cu, cache_temporal = regular, direction = global_to_workgroup} : view<16xi8> to view<16xi8> -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _attributes["direction"] = direction
+        _operands.append(source)
+        _operands.append(dest)
+        return cast(ValueRef, self._b.build("kernel.async.copy", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def async_copy_mask(self, *, source: ValueRef, dest: ValueRef, predicate: ValueRef, cache_scope: str, cache_temporal: str, direction: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Predicated form of kernel.async.copy. When predicate is true, the op initiates the same transfer as kernel.async.copy. When predicate is false, the op performs no memory access and produces an already complete token so grouping and waiting remain structurally uniform.
+
+        Example::
+            %copy = kernel.async.copy.mask %src to %dst, %in_bounds {cache_scope = cu, cache_temporal = non_temporal, direction = global_to_workgroup} : view<16xi8> to view<16xi8>, i1 -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _attributes["direction"] = direction
+        _operands.append(source)
+        _operands.append(dest)
+        _operands.append(predicate)
+        return cast(ValueRef, self._b.build("kernel.async.copy.mask", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def gather(self, *, source: ValueRef, dest: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Initiate a subgroup-collective asynchronous gather from each invocation's source view into a lane-contiguous workgroup destination view. The destination view has one leading subgroup-lane axis and a trailing lane slot with enough static bytes to hold one source payload. If the lane slot is larger than the source footprint, the extra destination bytes are padding bytes with unspecified contents. The destination denotes the subgroup-uniform base tile; the current subgroup lane is applied by the op semantics and must not be pre-applied by forming a lane subview. This directly represents AMDGPU global_load_lds-style staging, including padded narrow loads, without requiring a later pass to rediscover that a set of per-lane copies was really one subgroup LDS DMA operation.
+
+        Example::
+            %copy = kernel.async.gather %src_lane to %lds_tile {cache_scope = cu, cache_temporal = regular} : view<4xi8> to view<[%wave]x4xi8> -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _operands.append(source)
+        _operands.append(dest)
+        return cast(ValueRef, self._b.build("kernel.async.gather", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def async_gather_mask(self, *, source: ValueRef, dest: ValueRef, predicate: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Predicated form of kernel.async.gather. False predicates perform no source or destination access for the current invocation but still produce a completed token, preserving a uniform async group shape for tails and guarded tiles.
+
+        Example::
+            %copy = kernel.async.gather.mask %src_lane to %lds_tile, %in_bounds {cache_scope = cu, cache_temporal = regular} : view<4xi8> to view<[%wave]x4xi8>, i1 -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _operands.append(source)
+        _operands.append(dest)
+        _operands.append(predicate)
+        return cast(ValueRef, self._b.build("kernel.async.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def group(self, *, tokens: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Commit zero or more async copy/gather tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
+
+        Example::
+            %empty = kernel.async.group -> kernel.async.group
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.extend(tokens)
+        return cast(ValueRef, self._b.build("kernel.async.group", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def wait(self, *, group: ValueRef, newer_groups: int) -> None:
+        """Wait until a committed async-copy group has completed. This completes the named group and all older groups in the same ordered async stream. The required newer_groups value states how many younger groups are allowed to remain outstanding after the wait, matching AMDGPU wait.asyncmark and NVVM wait_group count semantics without making lowering rediscover the software-pipeline distance from scratch. It is not a workgroup barrier; use kernel.barrier separately when other invocations must observe the copied destination data.
+
+        Example::
+            kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["newer_groups"] = newer_groups
+        _operands.append(group)
+        self._b.build("kernel.async.wait", _operands, attributes=_attributes, regions=_regions)

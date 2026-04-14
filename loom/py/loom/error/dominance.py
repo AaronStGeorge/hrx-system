@@ -117,6 +117,38 @@ ERR_DOMINANCE_008 = ErrorDef(
     ),
 )
 
+# ERR_DOMINANCE_009: Value use count violates a structural lifetime contract.
+ERR_DOMINANCE_009 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=9,
+    severity=Severity.ERROR,
+    summary="Value use count violates a structural lifetime contract.",
+    message="value '%{value_name}' has {actual_count} uses, expected "
+    "{expected_constraint}",
+    params=(
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_count", ParamKind.U32),
+        ErrorParam("expected_constraint", ParamKind.STRING),
+    ),
+    fix_hint="Route '%{value_name}' through the required consumer shape.",
+)
+
+# ERR_DOMINANCE_010: Value user violates a structural lifetime contract.
+ERR_DOMINANCE_010 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=10,
+    severity=Severity.ERROR,
+    summary="Value user violates a structural lifetime contract.",
+    message="value '%{value_name}' is used by '{user_op}', expected "
+    "{expected_constraint}",
+    params=(
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("user_op", ParamKind.STRING),
+        ErrorParam("expected_constraint", ParamKind.STRING),
+    ),
+    fix_hint="Use '%{value_name}' only where the lifetime contract allows it.",
+)
+
 ALL_DOMINANCE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_DOMINANCE_001,
     ERR_DOMINANCE_002,
@@ -126,4 +158,6 @@ ALL_DOMINANCE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_DOMINANCE_006,
     ERR_DOMINANCE_007,
     ERR_DOMINANCE_008,
+    ERR_DOMINANCE_009,
+    ERR_DOMINANCE_010,
 )
