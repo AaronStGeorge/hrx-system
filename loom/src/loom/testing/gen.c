@@ -370,6 +370,17 @@ loom_value_id_t loom_test_gen_values_pick_for_constraint(
       }
       return id;
     }
+    case LOOM_TYPE_CONSTRAINT_ADDRESS: {
+      loom_scalar_type_t scalar_type = loom_test_gen_next_bool(gen)
+                                           ? LOOM_SCALAR_TYPE_INDEX
+                                           : LOOM_SCALAR_TYPE_OFFSET;
+      loom_value_id_t id =
+          loom_test_gen_values_pick_typed(gen, values, scalar_type);
+      if (id != LOOM_VALUE_ID_INVALID && out_type) {
+        *out_type = loom_type_scalar(scalar_type);
+      }
+      return id;
+    }
     case LOOM_TYPE_CONSTRAINT_I1: {
       loom_value_id_t id =
           loom_test_gen_values_pick_typed(gen, values, LOOM_SCALAR_TYPE_I1);

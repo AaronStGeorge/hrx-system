@@ -45,3 +45,22 @@ func.def @boolean_constant_value_range() -> (i1) {
   %c = scalar.constant 2 : i1
   func.return %c : i1
 }
+
+// ====
+
+// Logical coordinate constants must be authored with index.constant so that
+// address-domain values are structurally unambiguous.
+func.def @index_constant_requires_index_dialect() -> (index) {
+  // ERROR@+1: TYPE/004 "result" "index" "integer or floating-point scalar; use index.constant"
+  %c = scalar.constant 0 : index
+  func.return %c : index
+}
+
+// ====
+
+// Physical byte offset constants use the index dialect too.
+func.def @offset_constant_requires_index_dialect() -> (offset) {
+  // ERROR@+1: TYPE/004 "result" "offset" "integer or floating-point scalar; use index.constant"
+  %c = scalar.constant 0 : offset
+  func.return %c : offset
+}

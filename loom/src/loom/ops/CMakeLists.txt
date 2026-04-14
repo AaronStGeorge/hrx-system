@@ -43,6 +43,7 @@ loom_cc_library(
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::global
+    loom::src::loom::ops::index
     loom::src::loom::ops::pool
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
@@ -107,6 +108,7 @@ loom_cc_test(
     ::op_registry
     ::type_registry
     loom::src::loom::ops::func
+    loom::src::loom::ops::index
     loom::src::loom::ops::test
     iree::testing::gtest
     iree::testing::gtest_main

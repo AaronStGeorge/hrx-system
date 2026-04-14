@@ -17,10 +17,27 @@ iree_status_t loom_scalar_constant_verify(const loom_module_t* module,
   if (!loom_type_is_scalar(result_type)) {
     return iree_ok_status();
   }
+  loom_scalar_type_t result_scalar_type = loom_type_element_type(result_type);
+  if (result_scalar_type == LOOM_SCALAR_TYPE_INDEX ||
+      result_scalar_type == LOOM_SCALAR_TYPE_OFFSET) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("result")),
+        loom_param_type(result_type),
+        loom_param_string(
+            IREE_SV("integer or floating-point scalar; use index.constant")),
+    };
+    loom_diagnostic_emission_t emission = {
+        .op = op,
+        .error = &loom_err_type_004,
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+    };
+    return iree_diagnostic_emit(emitter, &emission);
+  }
 
   loom_attribute_t value = loom_scalar_constant_value(op);
   loom_attr_kind_t expected_kind = LOOM_ATTR_ANY;
-  if (loom_attr_matches_scalar_type(value, loom_type_element_type(result_type),
+  if (loom_attr_matches_scalar_type(value, result_scalar_type,
                                     &expected_kind)) {
     return iree_ok_status();
   }

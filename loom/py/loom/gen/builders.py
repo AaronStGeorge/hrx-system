@@ -591,6 +591,7 @@ def main() -> None:
     from loom.dialect.buffer import ALL_BUFFER_OPS
     from loom.dialect.encoding import ALL_ENCODING_OPS
     from loom.dialect.func import ALL_FUNC_OPS
+    from loom.dialect.index import ALL_INDEX_OPS
     from loom.dialect.pool import ALL_POOL_OPS
     from loom.dialect.scalar import ALL_SCALAR_OPS
     from loom.dialect.test import ALL_TEST_OPS
@@ -613,6 +614,7 @@ def main() -> None:
         ("buffer", list(ALL_BUFFER_OPS), "BufferBuilders", "buffer/builders.py"),
         ("view", list(ALL_VIEW_OPS), "ViewBuilders", "view/builders.py"),
         ("vector", list(ALL_VECTOR_OPS), "VectorBuilders", "vector/builders.py"),
+        ("index", list(ALL_INDEX_OPS), "IndexBuilders", "index/builders.py"),
     ]
 
     for _dialect_name, ops, class_name, rel_path in dialects:

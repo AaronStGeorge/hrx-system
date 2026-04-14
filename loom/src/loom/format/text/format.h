@@ -60,7 +60,7 @@
 //
 // Example of canonical output (single line per op, regions indented):
 //
-//   %c0 = scalar.constant 0 : index
+//   %c0 = index.constant 0 : index
 //   %slice0 = tensor.slice %input[%c0] : tensor<4xf32> -> (tile<4xf32>)
 //   %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%output as tensor<[%M]xf32>) {
 //     %w = tensor.slice %weights[%i, %c0] : tensor<[%M]x4xf32> -> (tile<4x4xf32>)
@@ -434,7 +434,7 @@
 // Binary scalar:     %result = scalar.addf %a, %b : f32
 // Unary scalar:      %result = scalar.negf %x : f32
 // Cast:              %result = scalar.sitofp %x : i32 to f32
-// Constant:          %c0 = scalar.constant 0 : index
+// Constant:          %c0 = index.constant 0 : index
 // Comparison:        %result = scalar.cmpi slt, %a, %b : i32
 // Reduce:            %result = tile.reduce %x {axis = 0, combine = "add"} : tile<4xf32> -> (tile<f32>)
 // Tile slice:        %subtile = tile.slice %src[%o0, %o1] : tile<64x64xf16> -> (tile<16x16xf16>)
@@ -781,8 +781,8 @@
 //   #enc = #q8_0<block=32>
 //
 //   func.def @tiled_matvec(%weights: tensor<[%M]x4xf32>, %input: tensor<4xf32>, %output: tensor<[%M]xf32>) -> (%output as tensor<[%M]xf32>) {
-//     %c0 = scalar.constant 0 : index
-//     %c4 = scalar.constant 4 : index
+//     %c0 = index.constant 0 : index
+//     %c4 = index.constant 4 : index
 //     %tile = tensor.slice %input[%c0] : tensor<4xf32> -> (tile<4xf32>)
 //     %result = scf.for %i = %c0 to %M step %c4 iter_args(%out = %output : tensor<[%M]xf32>) -> (%output as tensor<[%M]xf32>) {
 //       %w = tensor.slice %weights[%i, %c0] : tensor<[%M]x4xf32> -> (tile<4x4xf32>)
@@ -796,8 +796,8 @@
 // Without user-assigned names (what the printer auto-generates):
 //
 //   func.def @tiled_matvec(%0: tensor<[%M]x4xf32>, %1: tensor<4xf32>, %2: tensor<[%M]xf32>) -> (%2 as tensor<[%M]xf32>) {
-//     %3 = scalar.constant 0 : index
-//     %4 = scalar.constant 4 : index
+//     %3 = index.constant 0 : index
+//     %4 = index.constant 4 : index
 //     %5 = tensor.slice %1[%3] : tensor<4xf32> -> (tile<4xf32>)
 //     %6 = scf.for %7 = %3 to %M step %4 iter_args(%8 = %2 : tensor<[%M]xf32>) -> (%2 as tensor<[%M]xf32>) {
 //       %9 = tensor.slice %0[%7, %3] : tensor<[%M]x4xf32> -> (tile<4x4xf32>)

@@ -127,15 +127,6 @@ scalar_trunci = cast_op(
 # Special conversions
 # ============================================================================
 
-scalar_index_cast = cast_op(
-    "scalar.index_cast",
-    group=scalar_ops,
-    from_constraint=SCALAR,
-    to_constraint=SCALAR,
-    doc="Index/offset to integer or integer to index/offset conversion.",
-    fold="loom_scalar_index_cast_fold",
-    examples=["%result = scalar.index_cast %input : index to i64"],
-)
 scalar_bitcast = cast_op(
     "scalar.bitcast",
     group=scalar_ops,
@@ -153,7 +144,7 @@ scalar_bitcast = cast_op(
 scalar_constant = Op(
     "scalar.constant",
     group=scalar_ops,
-    doc="Materialize a compile-time constant scalar value.",
+    doc=("Materialize a compile-time integer or floating-point scalar value. Logical coordinate and byte-offset constants use index.constant."),
     results=[Result("result", SCALAR)],
     attrs=[AttrDef("value", "any", doc="The constant value.")],
     traits=[PURE, CONSTANT_LIKE],
@@ -198,7 +189,6 @@ ALL_CONVERSION_OPS: tuple[Op, ...] = (
     scalar_extsi,
     scalar_extui,
     scalar_trunci,
-    scalar_index_cast,
     scalar_bitcast,
     scalar_constant,
     scalar_poison,

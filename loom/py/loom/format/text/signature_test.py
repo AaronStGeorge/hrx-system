@@ -8,6 +8,7 @@ import pytest
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.func import ALL_FUNC_OPS
+from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.format.text.parser import ParseError, Parser
 from loom.format.text.printer import Printer
@@ -16,11 +17,13 @@ from loom.format.text.printer import Printer
 def _roundtrip(text: str) -> str:
     parser = Parser()
     parser.register_ops(ALL_FUNC_OPS)
+    parser.register_ops(ALL_INDEX_OPS)
     parser.register_ops(ALL_SCALAR_OPS)
     parser.register_types(ALL_BUILTIN_TYPES)
     module = parser.parse(text)
     printer = Printer()
     printer.register_ops(ALL_FUNC_OPS)
+    printer.register_ops(ALL_INDEX_OPS)
     printer.register_ops(ALL_SCALAR_OPS)
     printer.register_types(ALL_BUILTIN_TYPES)
     return printer.print_module(module).strip()
@@ -46,7 +49,7 @@ def test_forward_reference_dim() -> None:
 def test_named_result() -> None:
     # Named result %n.
     text = """func.def @f() -> (%n: index, tile<[%n]xf32>) {
-  %c0 = scalar.constant 0 : index
+  %c0 = index.constant 0 : index
   %t = scalar.constant 0 : tile<0xf32>
   func.return %c0, %t : index, tile<0xf32>
 }"""
@@ -94,7 +97,7 @@ def test_numeric_hash_attr_fail() -> None:
 def test_isolation() -> None:
     # %n (named result) should NOT be visible in function body.
     text = """func.def @f() -> (%n: index, tile<[%n]xf32>) {
-  %x = scalar.addi %n, %n : index
+  %x = index.add %n, %n : index
   func.return %x, %x : index, tile<[%n]xf32>
 }"""
     with pytest.raises(ParseError, match="undefined SSA value '%n'"):

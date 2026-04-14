@@ -269,31 +269,32 @@ typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_SCALAR = 4,
   LOOM_TYPE_CONSTRAINT_INDEX = 5,
   LOOM_TYPE_CONSTRAINT_OFFSET = 6,
-  LOOM_TYPE_CONSTRAINT_ANY = 7,
-  LOOM_TYPE_CONSTRAINT_GROUP = 8,
-  LOOM_TYPE_CONSTRAINT_ANY_ENCODING = 9,
-  LOOM_TYPE_CONSTRAINT_POOL = 10,
+  LOOM_TYPE_CONSTRAINT_ADDRESS = 7,
+  LOOM_TYPE_CONSTRAINT_ANY = 8,
+  LOOM_TYPE_CONSTRAINT_GROUP = 9,
+  LOOM_TYPE_CONSTRAINT_ANY_ENCODING = 10,
+  LOOM_TYPE_CONSTRAINT_POOL = 11,
   // Exactly i1. Used for comparison results and boolean predicates.
   // Unlike INTEGER (which accepts any integer width), this requires
   // the type to be specifically i1.
-  LOOM_TYPE_CONSTRAINT_I1 = 11,
-  LOOM_TYPE_CONSTRAINT_VECTOR = 12,
-  LOOM_TYPE_CONSTRAINT_VIEW = 13,
-  LOOM_TYPE_CONSTRAINT_BUFFER = 14,
+  LOOM_TYPE_CONSTRAINT_I1 = 12,
+  LOOM_TYPE_CONSTRAINT_VECTOR = 13,
+  LOOM_TYPE_CONSTRAINT_VIEW = 14,
+  LOOM_TYPE_CONSTRAINT_BUFFER = 15,
   // Shaped type with an integer element type.
-  LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT = 15,
+  LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT = 16,
   // Shaped type with a floating-point element type.
-  LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT = 16,
+  LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT = 17,
   // Shaped type with element type i1.
-  LOOM_TYPE_CONSTRAINT_I1_ELEMENT = 17,
+  LOOM_TYPE_CONSTRAINT_I1_ELEMENT = 18,
   // Encoding type with address-layout role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT = 18,
+  LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT = 19,
   // Encoding type with storage-schema role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA = 19,
+  LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA = 20,
   // Encoding type with physical-storage role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE = 20,
+  LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE = 21,
   // Encoding type with numeric-transform role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM = 21,
+  LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM = 22,
   LOOM_TYPE_CONSTRAINT_COUNT_,
 } loom_type_constraint_t;
 
@@ -326,6 +327,10 @@ static inline bool loom_type_satisfies_constraint(
     case LOOM_TYPE_CONSTRAINT_OFFSET:
       return loom_type_is_scalar(type) &&
              loom_type_element_type(type) == LOOM_SCALAR_TYPE_OFFSET;
+    case LOOM_TYPE_CONSTRAINT_ADDRESS:
+      return loom_type_is_scalar(type) &&
+             (loom_type_element_type(type) == LOOM_SCALAR_TYPE_INDEX ||
+              loom_type_element_type(type) == LOOM_SCALAR_TYPE_OFFSET);
     case LOOM_TYPE_CONSTRAINT_INTEGER:
       return loom_type_is_scalar(type) &&
              loom_scalar_type_is_integer(loom_type_element_type(type));

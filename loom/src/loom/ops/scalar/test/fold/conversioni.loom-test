@@ -28,20 +28,6 @@ func.def @trunci() -> (i8) {
 
 // ====
 
-// index_cast: index to i64 folds.
-func.def @index_cast() -> (i64) {
-  %a = scalar.constant 100 : index
-  %r = scalar.index_cast %a : index to i64
-  func.return %r : i64
-}
-// ----
-func.def @index_cast() -> (i64) {
-  %r = scalar.constant 100 : i64
-  func.return %r : i64
-}
-
-// ====
-
 // Dynamic operands: no fold for conversion.
 func.def @no_fold(%x: i32) -> (i64) {
   %r = scalar.extsi %x : i32 to i64

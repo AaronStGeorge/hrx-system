@@ -16,6 +16,7 @@
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/global/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/pool/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
@@ -173,6 +174,8 @@ iree_status_t loom_check_context_initialize(loom_context_t* context) {
                                                    loom_pool_dialect_vtables));
   IREE_RETURN_IF_ERROR(loom_check_register_dialect(
       context, LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables));
+  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_INDEX,
+                                                   loom_index_dialect_vtables));
   IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_SCF,
                                                    loom_scf_dialect_vtables));
   IREE_RETURN_IF_ERROR(loom_check_register_dialect(

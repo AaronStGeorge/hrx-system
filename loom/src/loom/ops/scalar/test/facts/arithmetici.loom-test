@@ -2,8 +2,8 @@
 
 // muli by constant 64 sets divisibility to 64.
 func.def @muli_divisibility(%x: index) -> (i64) {
-  %c64 = scalar.constant 64 : index
-  %r = scalar.muli %x, %c64 : index
+  %c64 = index.constant 64 : index
+  %r = index.mul %x, %c64 : index
   %div = test.fact_divisor %r : index -> i64
   func.return %div : i64
 }
@@ -17,11 +17,11 @@ func.def @muli_divisibility(%x: index) -> (i64) {
 
 // addi of two values with known divisors: gcd(64, 16) = 16.
 func.def @addi_divisibility(%x: index, %y: index) -> (i64) {
-  %c64 = scalar.constant 64 : index
-  %c16 = scalar.constant 16 : index
-  %a = scalar.muli %x, %c64 : index
-  %b = scalar.muli %y, %c16 : index
-  %r = scalar.addi %a, %b : index
+  %c64 = index.constant 64 : index
+  %c16 = index.constant 16 : index
+  %a = index.mul %x, %c64 : index
+  %b = index.mul %y, %c16 : index
+  %r = index.add %a, %b : index
   %div = test.fact_divisor %r : index -> i64
   func.return %div : i64
 }
@@ -140,12 +140,12 @@ func.def @not_power_of_two() -> (i1) {
 // a = x*8 (divisible by 8), b = 4 (const), c = y*16 (divisible by 16)
 // a*b = divisible by 32, result = gcd(32, 16) = 16
 func.def @fmai_divisibility(%x: index, %y: index) -> (i64) {
-  %c8 = scalar.constant 8 : index
-  %c4 = scalar.constant 4 : index
-  %c16 = scalar.constant 16 : index
-  %a = scalar.muli %x, %c8 : index
-  %c = scalar.muli %y, %c16 : index
-  %r = scalar.fmai %a, %c4, %c : index
+  %c8 = index.constant 8 : index
+  %c4 = index.constant 4 : index
+  %c16 = index.constant 16 : index
+  %a = index.mul %x, %c8 : index
+  %c = index.mul %y, %c16 : index
+  %r = index.madd %a, %c4, %c : index
   %div = test.fact_divisor %r : index -> i64
   func.return %div : i64
 }

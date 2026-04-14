@@ -379,8 +379,6 @@ static iree_status_t loom_test_gen_hook_scalar_conversion(
       candidates[candidate_count++] = (typeof(candidates[0])){
           loom_scalar_trunci_build, LOOM_SCALAR_TYPE_I8};
     }
-    candidates[candidate_count++] = (typeof(candidates[0])){
-        loom_scalar_index_cast_build, LOOM_SCALAR_TYPE_INDEX};
   } else if (src_is_float) {
     candidates[candidate_count++] =
         (typeof(candidates[0])){loom_scalar_fptosi_build, LOOM_SCALAR_TYPE_I32};
@@ -394,11 +392,6 @@ static iree_status_t loom_test_gen_hook_scalar_conversion(
       candidates[candidate_count++] = (typeof(candidates[0])){
           loom_scalar_fptrunc_build, LOOM_SCALAR_TYPE_F16};
     }
-  } else if (src_scalar == LOOM_SCALAR_TYPE_INDEX) {
-    candidates[candidate_count++] = (typeof(candidates[0])){
-        loom_scalar_index_cast_build, LOOM_SCALAR_TYPE_I32};
-    candidates[candidate_count++] = (typeof(candidates[0])){
-        loom_scalar_index_cast_build, LOOM_SCALAR_TYPE_I64};
   }
 
   if (candidate_count == 0) {
@@ -462,12 +455,47 @@ static iree_status_t loom_test_gen_hook_scalar_select(
 // Constant ops
 //===----------------------------------------------------------------------===//
 
+static bool loom_test_gen_type_palette_pick_scalar_constant_type(
+    loom_test_gen_t* gen, const loom_test_gen_type_palette_t* palette,
+    loom_type_t* out_type) {
+  uint32_t matching_weight = 0;
+  for (uint16_t i = 0; i < palette->count; ++i) {
+    loom_scalar_type_t scalar_type = palette->types[i];
+    if (loom_scalar_type_is_integer(scalar_type) ||
+        loom_scalar_type_is_float(scalar_type)) {
+      matching_weight += palette->weights[i];
+    }
+  }
+  if (matching_weight == 0) return false;
+
+  uint32_t target = loom_test_gen_next_range(gen, matching_weight);
+  uint32_t cumulative = 0;
+  for (uint16_t i = 0; i < palette->count; ++i) {
+    loom_scalar_type_t scalar_type = palette->types[i];
+    if (!loom_scalar_type_is_integer(scalar_type) &&
+        !loom_scalar_type_is_float(scalar_type)) {
+      continue;
+    }
+    cumulative += palette->weights[i];
+    if (target < cumulative) {
+      *out_type = loom_type_scalar(scalar_type);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 static iree_status_t loom_test_gen_hook_scalar_constant(
     const loom_test_gen_hook_context_t* context, void* user_data,
     loom_test_gen_hook_result_t* out_result) {
   (void)user_data;
-  loom_type_t type =
-      loom_test_gen_type_palette_pick(context->gen, context->palette);
+  loom_type_t type = loom_type_none();
+  if (!loom_test_gen_type_palette_pick_scalar_constant_type(
+          context->gen, context->palette, &type)) {
+    *out_result = LOOM_TEST_GEN_HOOK_SKIPPED;
+    return iree_ok_status();
+  }
 
   loom_attribute_t value = loom_test_gen_constant_attr(
       type, (int64_t)loom_test_gen_next_range(context->gen, 200) - 100);

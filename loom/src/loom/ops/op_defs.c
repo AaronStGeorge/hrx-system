@@ -25,6 +25,7 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint) {
       [LOOM_TYPE_CONSTRAINT_SCALAR] = "scalar",
       [LOOM_TYPE_CONSTRAINT_INDEX] = "index",
       [LOOM_TYPE_CONSTRAINT_OFFSET] = "offset",
+      [LOOM_TYPE_CONSTRAINT_ADDRESS] = "address",
       [LOOM_TYPE_CONSTRAINT_ANY] = "any",
       [LOOM_TYPE_CONSTRAINT_GROUP] = "group",
       [LOOM_TYPE_CONSTRAINT_ANY_ENCODING] = "encoding",

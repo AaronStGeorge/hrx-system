@@ -96,23 +96,22 @@ enum {
   LOOM_OP_SCALAR_EXTSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 75),
   LOOM_OP_SCALAR_EXTUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 76),
   LOOM_OP_SCALAR_TRUNCI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 77),
-  LOOM_OP_SCALAR_INDEX_CAST = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 78),
-  LOOM_OP_SCALAR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 79),
-  LOOM_OP_SCALAR_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 80),
-  LOOM_OP_SCALAR_POISON = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 81),
-  LOOM_OP_SCALAR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 82),
-  LOOM_OP_SCALAR_ORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 83),
-  LOOM_OP_SCALAR_XORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 84),
-  LOOM_OP_SCALAR_SHLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 85),
-  LOOM_OP_SCALAR_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 86),
-  LOOM_OP_SCALAR_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 87),
-  LOOM_OP_SCALAR_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 88),
-  LOOM_OP_SCALAR_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 89),
-  LOOM_OP_SCALAR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 90),
-  LOOM_OP_SCALAR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 91),
-  LOOM_OP_SCALAR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 92),
-  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 93),
-  LOOM_OP_SCALAR_COUNT_ = 94,
+  LOOM_OP_SCALAR_BITCAST = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 78),
+  LOOM_OP_SCALAR_CONSTANT = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 79),
+  LOOM_OP_SCALAR_POISON = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 80),
+  LOOM_OP_SCALAR_ANDI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 81),
+  LOOM_OP_SCALAR_ORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 82),
+  LOOM_OP_SCALAR_XORI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 83),
+  LOOM_OP_SCALAR_SHLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 84),
+  LOOM_OP_SCALAR_SHRSI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 85),
+  LOOM_OP_SCALAR_SHRUI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 86),
+  LOOM_OP_SCALAR_ROTLI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 87),
+  LOOM_OP_SCALAR_ROTRI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 88),
+  LOOM_OP_SCALAR_CTLZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 89),
+  LOOM_OP_SCALAR_CTTZI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 90),
+  LOOM_OP_SCALAR_CTPOPI = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 91),
+  LOOM_OP_SCALAR_ASSUME = LOOM_OP_KIND(LOOM_DIALECT_SCALAR, 92),
+  LOOM_OP_SCALAR_COUNT_ = 93,
 };
 
 // Integer overflow behavior flags.
@@ -1359,20 +1358,6 @@ void loom_scalar_trunci_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_SCALAR_INDEX_CAST: Index/offset to integer or integer to index/offset conversion.
-// %result = scalar.index_cast %input : index to i64
-LOOM_DEFINE_ISA(loom_scalar_index_cast_isa, LOOM_OP_SCALAR_INDEX_CAST)
-LOOM_DEFINE_OPERAND(loom_scalar_index_cast_input, 0)
-LOOM_DEFINE_RESULT(loom_scalar_index_cast_result, 0)
-iree_status_t loom_scalar_index_cast_build(
-    loom_builder_t* builder, loom_value_id_t input,
-    loom_type_t input_type, loom_type_t result_type,
-    loom_location_id_t location, loom_op_t** out_op);
-void loom_scalar_index_cast_fold(
-    const loom_module_t* module, const loom_op_t* op,
-    const loom_value_facts_t* operand_facts,
-    loom_value_facts_t* result_facts);
-
 // LOOM_OP_SCALAR_BITCAST: Bitwise reinterpretation: same bits, different type. No conversion.
 // %result = scalar.bitcast %input : f32 to i32
 LOOM_DEFINE_ISA(loom_scalar_bitcast_isa, LOOM_OP_SCALAR_BITCAST)
@@ -1387,7 +1372,7 @@ void loom_scalar_bitcast_fold(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_SCALAR_CONSTANT: Materialize a compile-time constant scalar value.
+// LOOM_OP_SCALAR_CONSTANT: Materialize a compile-time integer or floating-point scalar value. Logical coordinate and byte-offset constants use index.constant.
 // %c42 = scalar.constant 42 : i32
 LOOM_DEFINE_ISA(loom_scalar_constant_isa, LOOM_OP_SCALAR_CONSTANT)
 LOOM_DEFINE_RESULT(loom_scalar_constant_result, 0)

@@ -1,0 +1,81 @@
+// RUN: pass canonicalize
+
+// Address-domain constants contribute exact value facts.
+func.def @constant_exact() -> (i64, i64) {
+  %c = index.constant 42 : index
+  %lo = test.fact_range_lo %c : index -> i64
+  %hi = test.fact_range_hi %c : index -> i64
+  func.return %lo, %hi : i64, i64
+}
+// ----
+func.def @constant_exact() -> (i64, i64) {
+  %lo = scalar.constant 42 : i64
+  %hi = scalar.constant 42 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
+// index.mul by a constant propagates divisibility.
+func.def @mul_divisibility(%x: index) -> (i64) {
+  %c64 = index.constant 64 : index
+  %r = index.mul %x, %c64 : index
+  %div = test.fact_divisor %r : index -> i64
+  func.return %div : i64
+}
+// ----
+func.def @mul_divisibility(%x: index) -> (i64) {
+  %div = scalar.constant 64 : i64
+  func.return %div : i64
+}
+
+// ====
+
+// index.add meets divisibility across operands.
+func.def @add_divisibility(%x: index, %y: index) -> (i64) {
+  %c64 = index.constant 64 : index
+  %c16 = index.constant 16 : index
+  %a = index.mul %x, %c64 : index
+  %b = index.mul %y, %c16 : index
+  %r = index.add %a, %b : index
+  %div = test.fact_divisor %r : index -> i64
+  func.return %div : i64
+}
+// ----
+func.def @add_divisibility(%x: index, %y: index) -> (i64) {
+  %div = scalar.constant 16 : i64
+  func.return %div : i64
+}
+
+// ====
+
+// index.madd keeps multiply-add coordinate facts in the index dialect.
+func.def @madd_divisibility(%x: index, %y: index) -> (i64) {
+  %c8 = index.constant 8 : index
+  %c4 = index.constant 4 : index
+  %c16 = index.constant 16 : index
+  %a = index.mul %x, %c8 : index
+  %c = index.mul %y, %c16 : index
+  %r = index.madd %a, %c4, %c : index
+  %div = test.fact_divisor %r : index -> i64
+  func.return %div : i64
+}
+// ----
+func.def @madd_divisibility(%x: index, %y: index) -> (i64) {
+  %div = scalar.constant 16 : i64
+  func.return %div : i64
+}
+
+// ====
+
+// index.cast preserves facts across address/integer boundaries.
+func.def @cast_preserves_exact() -> (i64) {
+  %a = index.constant 100 : index
+  %r = index.cast %a : index to i64
+  func.return %r : i64
+}
+// ----
+func.def @cast_preserves_exact() -> (i64) {
+  %r = scalar.constant 100 : i64
+  func.return %r : i64
+}

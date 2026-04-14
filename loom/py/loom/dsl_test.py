@@ -22,6 +22,7 @@ from loom.assembly import (
     kw,
 )
 from loom.dsl import (
+    ADDRESS,
     ANY,
     ANY_ENCODING,
     BUFFER,
@@ -127,6 +128,7 @@ class TestTypeConstraints:
         assert TILE == TypeConstraint.TILE
         assert INTEGER == TypeConstraint.INTEGER
         assert OFFSET == TypeConstraint.OFFSET
+        assert ADDRESS == TypeConstraint.ADDRESS
         assert BUFFER == TypeConstraint.BUFFER
         assert ANY_ENCODING == TypeConstraint.ANY_ENCODING
         assert ENCODING_LAYOUT == TypeConstraint.ENCODING_LAYOUT
@@ -145,6 +147,7 @@ class TestTypeConstraints:
         assert I1_ELEMENT.value == "i1_element"
         assert INDEX.value == "index"
         assert OFFSET.value == "offset"
+        assert ADDRESS.value == "address"
 
     def test_element_family_constraints_are_shaped_specific(self) -> None:
         element_family_constraints = {

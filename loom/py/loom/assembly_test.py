@@ -202,7 +202,7 @@ class TestFormatSpecs:
         assert len(fmt) == 5
 
     def test_constant(self) -> None:
-        # %c = scalar.constant 42 : index
+        # %c = index.constant 42 : index
         fmt = [Attr("value"), COLON, TypeOf("result")]
         assert len(fmt) == 3
 

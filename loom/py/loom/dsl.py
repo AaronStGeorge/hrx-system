@@ -62,6 +62,7 @@ __all__ = [
     "SCALAR",
     "INDEX",
     "OFFSET",
+    "ADDRESS",
     "ANY",
     "GROUP",
     "ANY_ENCODING",
@@ -190,6 +191,7 @@ class TypeConstraint(Enum):
       SCALAR   → any ScalarType (INTEGER | FLOAT | INDEX | OFFSET)
       INDEX    → ScalarType with kind=INDEX
       OFFSET   → ScalarType with kind=OFFSET
+      ADDRESS  → ScalarType with kind in {INDEX, OFFSET}
       ANY      → any type
       GROUP    → GroupType
       ANY_ENCODING → any EncodingType
@@ -218,6 +220,7 @@ class TypeConstraint(Enum):
     SCALAR = "scalar"
     INDEX = "index"
     OFFSET = "offset"
+    ADDRESS = "address"
     ANY = "any"
     GROUP = "group"
     ANY_ENCODING = "encoding"
@@ -243,6 +246,7 @@ I1_ELEMENT = TypeConstraint.I1_ELEMENT
 SCALAR = TypeConstraint.SCALAR
 INDEX = TypeConstraint.INDEX
 OFFSET = TypeConstraint.OFFSET
+ADDRESS = TypeConstraint.ADDRESS
 ANY = TypeConstraint.ANY
 GROUP = TypeConstraint.GROUP
 ANY_ENCODING = TypeConstraint.ANY_ENCODING

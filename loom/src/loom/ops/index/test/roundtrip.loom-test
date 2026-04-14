@@ -1,0 +1,24 @@
+// RUN: roundtrip
+
+// ====
+
+func.def @index_arithmetic(%i: index, %j: index, %cond: i1) -> (index, i1, i64) {
+  %c4 = index.constant 4 : index
+  %add = index.add %i, %c4 : index
+  %mul = index.mul %add, %j : index
+  %madd = index.madd %i, %c4, %mul : index
+  %cmp = index.cmpi slt, %madd, %j : index
+  %sel = index.select %cond, %madd, %j : index
+  %payload = index.cast %sel : index to i64
+  func.return %sel, %cmp, %payload : index, i1, i64
+}
+
+// ====
+
+func.def @address_boundary(%raw: i64, %i: index, %byte_offset: offset) -> (index, offset, i64) {
+  %base = index.constant 0 : offset
+  %from_raw = index.cast %raw : i64 to index
+  %bytes = index.cast %raw : i64 to offset
+  %payload = index.cast %byte_offset : offset to i64
+  func.return %from_raw, %bytes, %payload : index, offset, i64
+}

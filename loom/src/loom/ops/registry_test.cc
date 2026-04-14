@@ -6,6 +6,7 @@
 
 #include "iree/testing/gtest.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/op_registry.h"
 #include "loom/ops/test/ops.h"
 #include "loom/ops/type_registry.h"
@@ -26,6 +27,10 @@ TEST(OpRegistry, LookupKnownOps) {
   EXPECT_TRUE(
       loom_op_registry_lookup(iree_make_cstring_view("func.def"), &kind));
   EXPECT_EQ(kind, LOOM_OP_FUNC_DEF);
+
+  EXPECT_TRUE(
+      loom_op_registry_lookup(iree_make_cstring_view("index.constant"), &kind));
+  EXPECT_EQ(kind, LOOM_OP_INDEX_CONSTANT);
 }
 
 TEST(OpRegistry, LookupUnknownReturnsNull) {
@@ -86,6 +91,8 @@ TEST(TypeConstraint, ScalarAddressFamiliesAreExplicit) {
   EXPECT_STREQ("index", loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_INDEX));
   EXPECT_STREQ("offset",
                loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_OFFSET));
+  EXPECT_STREQ("address",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_ADDRESS));
 
   EXPECT_TRUE(
       loom_type_satisfies_constraint(scalar_i32, LOOM_TYPE_CONSTRAINT_SCALAR));
@@ -93,6 +100,12 @@ TEST(TypeConstraint, ScalarAddressFamiliesAreExplicit) {
                                              LOOM_TYPE_CONSTRAINT_SCALAR));
   EXPECT_TRUE(loom_type_satisfies_constraint(scalar_offset,
                                              LOOM_TYPE_CONSTRAINT_SCALAR));
+  EXPECT_TRUE(loom_type_satisfies_constraint(scalar_index,
+                                             LOOM_TYPE_CONSTRAINT_ADDRESS));
+  EXPECT_TRUE(loom_type_satisfies_constraint(scalar_offset,
+                                             LOOM_TYPE_CONSTRAINT_ADDRESS));
+  EXPECT_FALSE(
+      loom_type_satisfies_constraint(scalar_i32, LOOM_TYPE_CONSTRAINT_ADDRESS));
 
   EXPECT_TRUE(
       loom_type_satisfies_constraint(scalar_index, LOOM_TYPE_CONSTRAINT_INDEX));

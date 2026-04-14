@@ -11,6 +11,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/special_values.h"
@@ -21,7 +22,7 @@
 // Constant materialization
 //===----------------------------------------------------------------------===//
 
-// Materializes a scalar.constant from exact facts.
+// Materializes a typed constant from exact facts.
 static iree_status_t loom_canonicalize_materialize_constant(
     loom_builder_t* builder, loom_value_facts_t facts, loom_type_t result_type,
     loom_location_id_t location, loom_value_id_t* out_value_id) {
@@ -30,6 +31,15 @@ static iree_status_t loom_canonicalize_materialize_constant(
     attr = loom_attr_f64(loom_value_facts_as_f64(facts));
   } else {
     attr = loom_attr_i64(facts.range_lo);
+  }
+  if (loom_type_is_scalar(result_type) &&
+      (loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_INDEX ||
+       loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_OFFSET)) {
+    loom_op_t* constant_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_index_constant_build(builder, attr, result_type,
+                                                   location, &constant_op));
+    *out_value_id = loom_index_constant_result(constant_op);
+    return iree_ok_status();
   }
   loom_op_t* constant_op = NULL;
   IREE_RETURN_IF_ERROR(loom_scalar_constant_build(builder, attr, result_type,

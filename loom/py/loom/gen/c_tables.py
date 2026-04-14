@@ -120,6 +120,7 @@ TYPE_CONSTRAINT_MAP: dict[TypeConstraint, str] = {
     TypeConstraint.SCALAR: "LOOM_TYPE_CONSTRAINT_SCALAR",
     TypeConstraint.INDEX: "LOOM_TYPE_CONSTRAINT_INDEX",
     TypeConstraint.OFFSET: "LOOM_TYPE_CONSTRAINT_OFFSET",
+    TypeConstraint.ADDRESS: "LOOM_TYPE_CONSTRAINT_ADDRESS",
     TypeConstraint.ANY: "LOOM_TYPE_CONSTRAINT_ANY",
     TypeConstraint.GROUP: "LOOM_TYPE_CONSTRAINT_GROUP",
     TypeConstraint.ANY_ENCODING: "LOOM_TYPE_CONSTRAINT_ANY_ENCODING",
@@ -2860,6 +2861,7 @@ def main() -> None:
     from loom.dialect.func import ALL_FUNC_OPS, func_ops
     from loom.dialect.globals import ALL_GLOBAL_OPS, global_ops
     from loom.dialect.hal import ALL_HAL_TYPES
+    from loom.dialect.index import ALL_INDEX_OPS, index_ops
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
@@ -2878,6 +2880,7 @@ def main() -> None:
         (buffer_ops, list(ALL_BUFFER_OPS)),
         (view_ops, list(ALL_VIEW_OPS)),
         (vector_ops, list(ALL_VECTOR_OPS)),
+        (index_ops, list(ALL_INDEX_OPS)),
     ]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"

@@ -1087,18 +1087,6 @@ class ScalarBuilders:
         _operands.append(input)
         return cast(ValueRef, self._b.build("scalar.trunci", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
-    def index_cast(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Index/offset to integer or integer to index/offset conversion.
-
-        Example::
-            %result = scalar.index_cast %input : index to i64
-        """
-        _operands: list[ValueRef | int] = []
-        _attributes: builtins.dict[str, Any] = {}
-        _regions: list[Region] = []
-        _operands.append(input)
-        return cast(ValueRef, self._b.build("scalar.index_cast", _operands, results=result_types, attributes=_attributes, regions=_regions))
-
     def bitcast(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Bitwise reinterpretation: same bits, different type. No conversion.
 
@@ -1112,7 +1100,7 @@ class ScalarBuilders:
         return cast(ValueRef, self._b.build("scalar.bitcast", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def constant(self, *, value: Any, result_types: list[Type]) -> ValueRef:
-        """Materialize a compile-time constant scalar value.
+        """Materialize a compile-time integer or floating-point scalar value. Logical coordinate and byte-offset constants use index.constant.
 
         Example::
             %c42 = scalar.constant 42 : i32

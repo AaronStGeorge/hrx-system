@@ -1,0 +1,50 @@
+// RUN: verify
+
+// ====
+
+func.def @constant_rejects_integer_result() -> (i64) {
+  // ERROR@+1: TYPE/004 "expected address"
+  %c = index.constant 4 : i64
+  func.return %c : i64
+}
+
+// ====
+
+func.def @constant_rejects_float_payload() -> (index) {
+  // ERROR@+1: TYPE/005 "value"
+  %c = index.constant 4.0 : index
+  func.return %c : index
+}
+
+// ====
+
+func.def @cast_rejects_float_input(%x: f32) -> (index) {
+  // ERROR@+1: TYPE/003 "input" "f32" "integer, index, or offset"
+  %i = index.cast %x : f32 to index
+  func.return %i : index
+}
+
+// ====
+
+func.def @cast_rejects_float_result(%x: index) -> (f32) {
+  // ERROR@+1: TYPE/004 "result" "f32" "integer, index, or offset"
+  %f = index.cast %x : index to f32
+  func.return %f : f32
+}
+
+// ====
+
+func.def @cast_rejects_integer_to_integer(%x: i32) -> (i64) {
+  // ERROR@+1: TYPE/004 "result" "i64" "index or offset boundary"
+  %wide = index.cast %x : i32 to i64
+  func.return %wide : i64
+}
+
+// ====
+
+func.def @add_rejects_integer_payload(%x: i64, %y: index) -> (index) {
+  // ERROR@+2: TYPE/003 "operand 0"
+  // ERROR@+1: TYPE/001 "operand 0" "operand 1"
+  %r = index.add %x, %y : index
+  func.return %r : index
+}
