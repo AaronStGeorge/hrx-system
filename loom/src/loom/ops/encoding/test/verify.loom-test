@@ -48,6 +48,14 @@ func.def @layout_assume_strided_rejects_negative_rank(%layout: encoding<layout>)
 
 // ====
 
+func.def @layout_strided_rejects_negative_static_stride() {
+  // ERROR@+1: STRUCTURE/014 "static_strides" "-1" "stride >= 0 or dynamic sentinel"
+  %strided = encoding.layout.strided [-1, 1] : encoding<layout>
+  func.return
+}
+
+// ====
+
 func.def @assume_spec_rejects_role_mismatch(%schema: encoding<schema>) {
   // ERROR@+1: ENCODING/012 "dense" "encoding<schema>" "encoding<layout>"
   %bad = encoding.assume.spec %schema, #dense : encoding<schema>

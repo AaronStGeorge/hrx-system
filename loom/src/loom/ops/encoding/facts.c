@@ -121,6 +121,10 @@ iree_status_t loom_encoding_layout_strided_facts(
     if (static_stride == INT64_MIN) {
       strides[i] = operand_facts[dynamic_ordinal++];
     } else {
+      if (static_stride < 0) {
+        return loom_encoding_facts_make_unknown_address_layout(
+            context, &result_facts[0]);
+      }
       strides[i] = loom_value_facts_exact_i64(static_stride);
     }
   }

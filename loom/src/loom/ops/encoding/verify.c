@@ -64,6 +64,7 @@ static iree_status_t loom_encoding_emit_attribute_value_constraint(
 }
 
 static uint16_t loom_encoding_dynamic_sentinel_count(loom_attribute_t values) {
+  if (values.kind != LOOM_ATTR_I64_ARRAY) return 0;
   uint16_t dynamic_count = 0;
   for (uint16_t i = 0; i < values.count; ++i) {
     if (values.i64_array[i] == INT64_MIN) ++dynamic_count;
@@ -92,6 +93,18 @@ static iree_status_t loom_encoding_verify_dynamic_index_count(
 iree_status_t loom_encoding_layout_strided_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {
+  loom_attribute_t static_strides =
+      loom_encoding_layout_strided_static_strides(op);
+  if (static_strides.kind == LOOM_ATTR_I64_ARRAY) {
+    for (uint16_t i = 0; i < static_strides.count; ++i) {
+      int64_t static_stride = static_strides.i64_array[i];
+      if (static_stride < 0 && static_stride != INT64_MIN) {
+        return loom_encoding_emit_attribute_value_constraint(
+            emitter, op, IREE_SV("static_strides"), static_stride,
+            IREE_SV("stride >= 0 or dynamic sentinel"));
+      }
+    }
+  }
   return loom_encoding_verify_dynamic_index_count(
       module, op, emitter, loom_encoding_layout_strided_static_strides(op),
       loom_encoding_layout_strided_strides(op).count);
