@@ -179,12 +179,21 @@ loom_cc_library(
     vector_to_scalar
   HDRS
     "vector_to_scalar.h"
+    "vector_to_scalar_internal.h"
   SRCS
     "vector_to_scalar.c"
+    "vector_to_scalar_aggregates.c"
+    "vector_to_scalar_descriptors.c"
+    "vector_to_scalar_lanes.c"
+    "vector_to_scalar_quantized.c"
+    "vector_to_scalar_reductions.c"
+    "vector_to_scalar_structural.c"
+    "vector_to_scalar_tables.c"
   DEPS
     ::pass
     ::rewriter
     iree::base
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs

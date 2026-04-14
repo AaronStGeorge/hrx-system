@@ -91,6 +91,7 @@ class ErrorDomain(IntEnum):
     PARSE = 7  # Syntax errors, tokenization.
     BYTECODE = 8  # Format errors, version mismatches.
     FOLD = 9  # Poison folding, canonicalization.
+    LOWERING = 10  # Pass lowering legality and unsupported mappings.
 
 
 @unique

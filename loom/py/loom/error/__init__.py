@@ -18,6 +18,8 @@ from loom.error.encoding import *  # noqa: F403
 from loom.error.encoding import ALL_ENCODING_ERRORS
 from loom.error.fold import *  # noqa: F403
 from loom.error.fold import ALL_FOLD_ERRORS
+from loom.error.lowering import *  # noqa: F403
+from loom.error.lowering import ALL_LOWERING_ERRORS
 from loom.error.parse import *  # noqa: F403
 from loom.error.parse import ALL_PARSE_ERRORS
 from loom.error.shape import *  # noqa: F403
@@ -43,4 +45,5 @@ ALL_ERRORS: tuple[ErrorDef, ...] = (
     *ALL_PARSE_ERRORS,
     *ALL_BYTECODE_ERRORS,
     *ALL_FOLD_ERRORS,
+    *ALL_LOWERING_ERRORS,
 )

@@ -2507,5 +2507,33 @@
         "kind_name": "I64"
       }
     ]
+  },
+  {
+    "error_id": "ERR_LOWERING_001",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Operation has no legal lowering.",
+    "message_template": "{op_name} cannot be lowered by {pass_name}: {reason}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "pass_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Run a refinement pass that makes the operation legal for {pass_name}, or lower it with a pass that supports this operation"
   }
 ]

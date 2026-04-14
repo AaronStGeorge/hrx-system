@@ -27,6 +27,7 @@ static const char* const loom_error_domain_names[LOOM_ERROR_DOMAIN_COUNT_] = {
     [LOOM_ERROR_DOMAIN_PARSE] = "PARSE",
     [LOOM_ERROR_DOMAIN_BYTECODE] = "BYTECODE",
     [LOOM_ERROR_DOMAIN_FOLD] = "FOLD",
+    [LOOM_ERROR_DOMAIN_LOWERING] = "LOWERING",
 };
 
 const char* loom_error_domain_name(loom_error_domain_t domain) {
@@ -1946,6 +1947,25 @@ const loom_error_def_t loom_err_fold_005 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_lowering_001_params[] = {
+    {"op_name", LOOM_PARAM_STRING},
+    {"pass_name", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_lowering_001 = {
+    .error_id = "ERR_LOWERING_001",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 1,
+    .summary = "Operation has no legal lowering.",
+    .message_template = "{op_name} cannot be lowered by {pass_name}: {reason}",
+    .fix_hint_template =
+        "Run a refinement pass that makes the operation legal for {pass_name}, "
+        "or lower it with a pass that supports this operation",
+    .param_defs = loom_err_lowering_001_params,
+    .param_count = 3,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -1982,6 +2002,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_bytecode_002,  &loom_err_bytecode_003,  &loom_err_bytecode_004,
     &loom_err_bytecode_005,  &loom_err_fold_001,      &loom_err_fold_002,
     &loom_err_fold_003,      &loom_err_fold_004,      &loom_err_fold_005,
+    &loom_err_lowering_001,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

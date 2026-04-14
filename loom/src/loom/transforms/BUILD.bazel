@@ -156,11 +156,24 @@ loom_cc_library(
 
 loom_cc_library(
     name = "vector_to_scalar",
-    srcs = ["vector_to_scalar.c"],
-    hdrs = ["vector_to_scalar.h"],
+    srcs = [
+        "vector_to_scalar.c",
+        "vector_to_scalar_aggregates.c",
+        "vector_to_scalar_descriptors.c",
+        "vector_to_scalar_lanes.c",
+        "vector_to_scalar_quantized.c",
+        "vector_to_scalar_reductions.c",
+        "vector_to_scalar_structural.c",
+        "vector_to_scalar_tables.c",
+    ],
+    hdrs = [
+        "vector_to_scalar.h",
+        "vector_to_scalar_internal.h",
+    ],
     deps = [
         ":pass",
         ":rewriter",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/index",

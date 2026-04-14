@@ -1270,3 +1270,154 @@ func.def @dynamic_bitpack_q4(%n: index, %m: index, %codes: vector<[%n]xi8>, %pac
   }
   func.return %stream, %unpacked : vector<[%m]xi8>, vector<[%n]xi8>
 }
+
+// ====
+
+// Table lookup keeps the register table explicit while exposing the per-lane
+// integer-to-index boundary used to select decoded values.
+func.def @static_table_lookup(%table: vector<4xf32>) -> (vector<2xf32>) {
+  %i0 = scalar.constant 3 : i8
+  %i1 = scalar.constant 0 : i8
+  %codes = vector.from_elements %i0, %i1 : i8, i8 -> vector<2xi8>
+  %r = vector.table.lookup %table[%codes] : vector<4xf32>, vector<2xi8> -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @static_table_lookup(%table: vector<4xf32>) -> (vector<2xf32>) {
+  %i0 = scalar.constant 3 : i8
+  %i1 = scalar.constant 0 : i8
+  %6 = index.cast %i0 : i8 to index
+  %7 = vector.extract %table[%6] : vector<4xf32> -> f32
+  %8 = index.cast %i1 : i8 to index
+  %9 = vector.extract %table[%8] : vector<4xf32> -> f32
+  %r = vector.from_elements %7, %9 : f32, f32 -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+
+// Dynamic table lookup uses the same aggregate loop shape as lanewise ops and
+// performs the code-lane cast inside the loop body.
+func.def @dynamic_table_lookup(%n: index, %table: vector<4xf32>, %codes: vector<[%n]xi8>) -> (vector<[%n]xf32>) {
+  %r = vector.table.lookup %table[%codes] : vector<4xf32>, vector<[%n]xi8> -> vector<[%n]xf32>
+  func.return %r : vector<[%n]xf32>
+}
+
+// ----
+func.def @dynamic_table_lookup(%n: index, %table: vector<4xf32>, %codes: vector<[%n]xi8>) -> (vector<[%n]xf32>) {
+  %5 = vector.constant 0.0 : vector<[%n]xf32>
+  %6 = index.constant 0 : index
+  %7 = index.constant 1 : index
+  %r = scf.for %8 = [%6 to %n step %7](%9 = %5 : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+    %11 = vector.extract %codes[%8] : vector<[%n]xi8> -> i8
+    %12 = index.cast %11 : i8 to index
+    %13 = vector.extract %table[%12] : vector<4xf32> -> f32
+    %14 = vector.insert %13 into %9[%8] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    scf.yield %14 : vector<[%n]xf32>
+  }
+  func.return %r : vector<[%n]xf32>
+}
+
+// ====
+
+// Static table quantize spells out compare-and-count semantics. tie=upper
+// counts thresholds equal to the value, and nan=max selects the top code.
+func.def @static_table_quantize(%values: vector<2xf32>) -> (vector<2xi8>) {
+  %t0 = scalar.constant -1.0 : f32
+  %t1 = scalar.constant 0.0 : f32
+  %t2 = scalar.constant 1.0 : f32
+  %thresholds = vector.from_elements %t0, %t1, %t2 : f32, f32, f32 -> vector<3xf32>
+  %r = vector.table.quantize %values, %thresholds {nan = max, tie = upper} : vector<2xf32>, vector<3xf32> -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ----
+func.def @static_table_quantize(%values: vector<2xf32>) -> (vector<2xi8>) {
+  %t0 = scalar.constant -1.0 : f32
+  %t1 = scalar.constant 0.0 : f32
+  %t2 = scalar.constant 1.0 : f32
+  %7 = vector.extract %values[0] : vector<2xf32> -> f32
+  %8 = scalar.constant 0 : i8
+  %9 = scalar.cmpf ole, %t0, %7 : f32
+  %10 = scalar.constant 1 : i8
+  %11 = scalar.addi %8, %10 : i8
+  %12 = scalar.select %9, %11, %8 : i8
+  %13 = scalar.cmpf ole, %t1, %7 : f32
+  %14 = scalar.constant 1 : i8
+  %15 = scalar.addi %12, %14 : i8
+  %16 = scalar.select %13, %15, %12 : i8
+  %17 = scalar.cmpf ole, %t2, %7 : f32
+  %18 = scalar.constant 1 : i8
+  %19 = scalar.addi %16, %18 : i8
+  %20 = scalar.select %17, %19, %16 : i8
+  %21 = scalar.constant 3 : i8
+  %22 = scalar.isnanf %7 : f32
+  %23 = scalar.select %22, %21, %20 : i8
+  %24 = vector.extract %values[1] : vector<2xf32> -> f32
+  %25 = scalar.constant 0 : i8
+  %26 = scalar.cmpf ole, %t0, %24 : f32
+  %27 = scalar.constant 1 : i8
+  %28 = scalar.addi %25, %27 : i8
+  %29 = scalar.select %26, %28, %25 : i8
+  %30 = scalar.cmpf ole, %t1, %24 : f32
+  %31 = scalar.constant 1 : i8
+  %32 = scalar.addi %29, %31 : i8
+  %33 = scalar.select %30, %32, %29 : i8
+  %34 = scalar.cmpf ole, %t2, %24 : f32
+  %35 = scalar.constant 1 : i8
+  %36 = scalar.addi %33, %35 : i8
+  %37 = scalar.select %34, %36, %33 : i8
+  %38 = scalar.constant 3 : i8
+  %39 = scalar.isnanf %24 : f32
+  %40 = scalar.select %39, %38, %37 : i8
+  %r = vector.from_elements %23, %40 : i8, i8 -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ====
+
+// Dynamic table quantize nests a scalar threshold loop inside the result-lane
+// aggregate loop, giving the portable reference path for runtime threshold
+// tables.
+func.def @dynamic_table_quantize(%n: index, %k: index, %values: vector<[%n]xf32>, %thresholds: vector<[%k]xf32>) -> (vector<[%n]xi8>) {
+  %r = vector.table.quantize %values, %thresholds {nan = max, tie = lower} : vector<[%n]xf32>, vector<[%k]xf32> -> vector<[%n]xi8>
+  func.return %r : vector<[%n]xi8>
+}
+
+// ----
+func.def @dynamic_table_quantize(%n: index, %k: index, %values: vector<[%n]xf32>, %thresholds: vector<[%k]xf32>) -> (vector<[%n]xi8>) {
+  %6 = vector.constant 0 : vector<[%n]xi8>
+  %7 = index.constant 0 : index
+  %8 = index.constant 1 : index
+  %r = scf.for %9 = [%7 to %n step %8](%10 = %6 : vector<[%n]xi8>) -> (vector<[%n]xi8>) {
+    %12 = vector.extract %values[%9] : vector<[%n]xf32> -> f32
+    %13 = index.constant 0 : index
+    %14 = index.constant 1 : index
+    %15 = scalar.constant 0 : i8
+    %18 = scf.for %16 = [%13 to %k step %14](%17 = %15 : i8) -> (i8) {
+      %19 = vector.extract %thresholds[%16] : vector<[%k]xf32> -> f32
+      %20 = scalar.cmpf olt, %19, %12 : f32
+      %21 = scalar.constant 1 : i8
+      %22 = scalar.addi %17, %21 : i8
+      %23 = scalar.select %20, %22, %17 : i8
+      scf.yield %23 : i8
+    }
+    %24 = index.cast %k : index to i8
+    %25 = scalar.isnanf %12 : f32
+    %26 = scalar.select %25, %24, %18 : i8
+    %27 = vector.insert %26 into %10[%9] : i8, vector<[%n]xi8> -> vector<[%n]xi8>
+    scf.yield %27 : vector<[%n]xi8>
+  }
+  func.return %r : vector<[%n]xi8>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+// XFAIL: vector.transform has no implemented reference semantics yet.
+
+func.def @transform_unsupported(%v: vector<4xf32>) -> (vector<4xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard", input_elems=4, output_elems=4> : encoding<transform>
+  %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>
+  func.return %r : vector<4xf32>
+}

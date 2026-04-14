@@ -107,3 +107,4 @@ extern const loom_error_def_t loom_err_fold_002;
 extern const loom_error_def_t loom_err_fold_003;
 extern const loom_error_def_t loom_err_fold_004;
 extern const loom_error_def_t loom_err_fold_005;
+extern const loom_error_def_t loom_err_lowering_001;

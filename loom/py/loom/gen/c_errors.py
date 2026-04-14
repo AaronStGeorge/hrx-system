@@ -56,6 +56,7 @@ DOMAIN_MAP: dict[ErrorDomain, str] = {
     ErrorDomain.PARSE: "LOOM_ERROR_DOMAIN_PARSE",
     ErrorDomain.BYTECODE: "LOOM_ERROR_DOMAIN_BYTECODE",
     ErrorDomain.FOLD: "LOOM_ERROR_DOMAIN_FOLD",
+    ErrorDomain.LOWERING: "LOOM_ERROR_DOMAIN_LOWERING",
 }
 
 

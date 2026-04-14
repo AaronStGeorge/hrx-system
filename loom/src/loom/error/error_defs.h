@@ -59,6 +59,7 @@ typedef enum loom_error_domain_e {
   LOOM_ERROR_DOMAIN_PARSE = 7,      // Syntax errors, tokenization.
   LOOM_ERROR_DOMAIN_BYTECODE = 8,   // Format errors, version mismatches.
   LOOM_ERROR_DOMAIN_FOLD = 9,       // Poison folding, canonicalization.
+  LOOM_ERROR_DOMAIN_LOWERING = 10,  // Pass legality and unsupported mappings.
   LOOM_ERROR_DOMAIN_COUNT_,
 } loom_error_domain_t;
 
