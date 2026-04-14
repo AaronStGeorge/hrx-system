@@ -593,6 +593,82 @@
     "fix_hint_template": "Ensure offset + size <= {bound} for dimension {dim_index}"
   },
   {
+    "error_id": "ERR_SUBRANGE_005",
+    "domain": 2,
+    "domain_name": "SUBRANGE",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Vector memory footprint is not proven in bounds.",
+    "message_template": "{op_name} footprint proof failed on view axis {view_axis} (vector axis {vector_axis}): {reason}; required {required}; origin {origin}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "view_axis",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "vector_axis",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "origin",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "required",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Refine the origin, vector extent, mask, or view layout facts so {required} is provable"
+  },
+  {
+    "error_id": "ERR_SUBRANGE_006",
+    "domain": 2,
+    "domain_name": "SUBRANGE",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Vector memory linear footprint is not proven in bounds.",
+    "message_template": "{op_name} linear footprint proof failed: {reason}; required {required}; origin {origin}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "origin",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "required",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Refine the origin, offset lane range, or view storage span facts so {required} is provable"
+  },
+  {
     "error_id": "ERR_ENCODING_001",
     "domain": 3,
     "domain_name": "ENCODING",

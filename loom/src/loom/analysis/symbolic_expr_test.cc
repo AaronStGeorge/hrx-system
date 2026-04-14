@@ -229,6 +229,39 @@ TEST_F(SymbolicExprTest, ProvesLessEqualFromTermFacts) {
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
 }
 
+TEST_F(SymbolicExprTest, ProvesLessEqualFromExpressionFactsAfterExpansion) {
+  loom_value_id_t value_id = DefineIndexValue();
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_RANGE,
+      .arg_count = 3,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                   LOOM_PRED_ARG_CONST},
+      .args = {value_id, 0, 10},
+  };
+  loom_op_t* assume_op = nullptr;
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  IREE_ASSERT_OK(loom_index_assume_build(&builder_, &value_id, 1, &predicate, 1,
+                                         &index_type, 1, LOOM_LOCATION_UNKNOWN,
+                                         &assume_op));
+  loom_value_id_t assumed_value =
+      loom_index_assume_results(assume_op).values[0];
+  DefineFacts(assumed_value, loom_value_facts_make(0, 10, 1));
+
+  loom_symbolic_expr_t expression = {0};
+  IREE_ASSERT_OK(loom_symbolic_expr_from_value(&expression_context_,
+                                               assumed_value, &expression));
+  ASSERT_TRUE(loom_symbolic_expr_is_linear(&expression));
+  ASSERT_EQ(expression.term_count, 1);
+  EXPECT_EQ(expression.terms[0].value_id, value_id);
+
+  loom_symbolic_expr_t zero = {0};
+  loom_symbolic_expr_constant(0, &zero);
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_le(&expression_context_, &zero,
+                                             &expression, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
 TEST_F(SymbolicExprTest, SelectUsesExactConditionFacts) {
   loom_value_id_t condition = DefineIndexValue();
   loom_value_id_t true_value = DefineIndexValue();

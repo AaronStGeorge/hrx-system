@@ -36,6 +36,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
@@ -117,6 +118,10 @@ struct loom_pass_t {
   // Per-instance state from create(). The pass owns this memory (typically
   // allocated from |instance_arena|).
   void* state;
+  // Optional structured diagnostic emitter. Legality passes use this for
+  // agent-actionable failures while still returning a non-OK status to abort
+  // the pipeline.
+  iree_diagnostic_emitter_t diagnostic_emitter;
 };
 
 // Increments a statistic counter by |delta|.
@@ -152,11 +157,19 @@ enum loom_pass_manager_flag_bits_e {
 typedef uint32_t loom_pass_manager_flags_t;
 
 typedef struct loom_pass_manager_t {
+  // Optional structured diagnostic emitter copied into every pass invocation.
+  iree_diagnostic_emitter_t diagnostic_emitter;
+  // Pipeline entries in execution order.
   loom_pipeline_entry_t* entries;
+  // Number of active pipeline entries.
   iree_host_size_t count;
+  // Allocated pipeline entry count.
   iree_host_size_t capacity;
+  // Shared block pool used to allocate pass instance and function arenas.
   iree_arena_block_pool_t* block_pool;
+  // Execution and debug behavior flags.
   loom_pass_manager_flags_t flags;
+  // Host allocator that owns the pipeline entry array.
   iree_allocator_t allocator;
 } loom_pass_manager_t;
 

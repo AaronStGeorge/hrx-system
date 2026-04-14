@@ -29,6 +29,7 @@
 #include "loom/transforms/dce.h"
 #include "loom/transforms/pass.h"
 #include "loom/transforms/strip_hints.h"
+#include "loom/transforms/vector_memory_footprint.h"
 #include "loom/transforms/vector_to_scalar.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
@@ -152,6 +153,34 @@ iree_status_t loom_check_diagnostic_capture_sink(
   return iree_ok_status();
 }
 
+typedef struct loom_check_pass_diagnostic_capture_t {
+  // Diagnostic sink shared with parser, verifier, and pass-mode reporting.
+  loom_check_diagnostic_capture_t* diagnostic_capture;
+
+  // Number of diagnostics emitted by the pass pipeline in this execution.
+  iree_host_size_t emission_count;
+} loom_check_pass_diagnostic_capture_t;
+
+static iree_status_t loom_check_pass_diagnostic_emitter(
+    void* user_data, const loom_diagnostic_emission_t* emission) {
+  loom_check_pass_diagnostic_capture_t* capture =
+      (loom_check_pass_diagnostic_capture_t*)user_data;
+  loom_diagnostic_t diagnostic = {
+      .severity = emission->error->severity,
+      .error = emission->error,
+      .params = emission->params,
+      .param_count = emission->param_count,
+      .emitter = LOOM_EMITTER_PASS,
+      .origin = {.provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
+      .source_location = {.provenance =
+                              LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
+  };
+  IREE_RETURN_IF_ERROR(loom_check_diagnostic_capture_sink(
+      capture->diagnostic_capture, &diagnostic));
+  ++capture->emission_count;
+  return iree_ok_status();
+}
+
 // Registers a single dialect's vtable array with the context.
 static iree_status_t loom_check_register_dialect(
     loom_context_t* context, uint8_t dialect_id,
@@ -247,10 +276,11 @@ iree_status_t loom_check_execute_case(
 // Runs a comma-separated pass pipeline on a module.
 static iree_status_t loom_check_run_pipeline(
     iree_string_view_t pipeline, iree_arena_block_pool_t* block_pool,
-    loom_module_t* module) {
+    iree_diagnostic_emitter_t diagnostic_emitter, loom_module_t* module) {
   loom_pass_manager_t manager;
   IREE_RETURN_IF_ERROR(loom_pass_manager_initialize(
       block_pool, 0, iree_allocator_system(), &manager));
+  manager.diagnostic_emitter = diagnostic_emitter;
 
   // Parse comma-separated pass names and add each to the pipeline.
   iree_string_view_t remaining = pipeline;
@@ -281,6 +311,12 @@ static iree_status_t loom_check_run_pipeline(
       status = loom_pass_manager_add_function_pass(
           &manager, loom_vector_to_scalar_pass_info(),
           loom_vector_to_scalar_run, NULL, NULL, iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name,
+                                      IREE_SV("vector-memory-footprint"))) {
+      status = loom_pass_manager_add_function_pass(
+          &manager, loom_vector_memory_footprint_pass_info(),
+          loom_vector_memory_footprint_run, NULL, NULL,
+          iree_string_view_empty());
     } else {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "unknown pass: '%.*s'",
@@ -323,10 +359,21 @@ iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
   }
 
   // Build and run the pass pipeline.
-  iree_status_t pipeline_status =
-      loom_check_run_pipeline(test_case->pipeline, block_pool, module);
+  loom_check_pass_diagnostic_capture_t pass_diagnostic_capture = {
+      .diagnostic_capture = &diagnostic_capture,
+  };
+  iree_diagnostic_emitter_t pass_diagnostic_emitter = {
+      .fn = loom_check_pass_diagnostic_emitter,
+      .user_data = &pass_diagnostic_capture,
+  };
+  iree_status_t pipeline_status = loom_check_run_pipeline(
+      test_case->pipeline, block_pool, pass_diagnostic_emitter, module);
   if (!iree_status_is_ok(pipeline_status)) {
     loom_module_free(module);
+    if (pass_diagnostic_capture.emission_count > 0) {
+      result->raw_outcome = LOOM_CHECK_FAIL;
+      return iree_status_ignore(pipeline_status);
+    }
     return pipeline_status;
   }
 

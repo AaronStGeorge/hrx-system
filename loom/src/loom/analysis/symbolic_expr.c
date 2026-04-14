@@ -776,9 +776,13 @@ iree_status_t loom_symbolic_expr_prove_le(
   *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
   if (loom_symbolic_expr_is_linear(left_expression) &&
       loom_symbolic_expr_is_linear(right_expression)) {
-    return loom_symbolic_expr_prove_le_linear(context, left_expression,
-                                              right_expression, out_result);
+    IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le_linear(
+        context, left_expression, right_expression, out_result));
+    if (*out_result != LOOM_SYMBOLIC_PROOF_UNKNOWN) return iree_ok_status();
   }
+  // Expanded expressions may still carry stronger facts from their defining
+  // SSA value, such as index.assume range facts on a value that algebraically
+  // expands back to its unconstrained source.
   *out_result =
       loom_symbolic_expr_prove_le_by_facts(left_expression, right_expression);
   return iree_ok_status();

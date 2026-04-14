@@ -122,6 +122,7 @@ static iree_status_t loom_pass_manager_run_entry(loom_pass_manager_t* manager,
       .info = entry->info,
       .instance_arena = &instance_arena,
       .arena = &instance_arena,
+      .diagnostic_emitter = manager->diagnostic_emitter,
   };
 
   // Allocate statistics counters from the stable instance arena.

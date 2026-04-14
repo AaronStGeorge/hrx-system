@@ -653,6 +653,29 @@ TEST_F(ExecuteTest, PassModeDce) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, PassModeCapturesPassDiagnostic) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: pass vector-memory-footprint\n"
+      "func.def @f(%buffer: buffer, %base: offset) {\n"
+      "  %layout = encoding.layout.dense : encoding<layout>\n"
+      "  %view = buffer.view %buffer[%base] : buffer -> view<8xf32, %layout>\n"
+      "  %loaded = vector.load %view[5] : view<8xf32, %layout> -> "
+      "vector<4xf32>\n"
+      "  func.return\n"
+      "}\n",
+      &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_GT(result.diagnostic_count, 0u);
+  EXPECT_NE(DiagnosticJsonString(result).find("\"emitter\":\"pass\""),
+            std::string::npos);
+  EXPECT_NE(
+      DiagnosticJsonString(result).find("\"error_id\":\"ERR_SUBRANGE_005\""),
+      std::string::npos);
+  EXPECT_NE(DetailString(result).find("SUBRANGE/005"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, FormatModeUnimplemented) {
   loom_check_result_t result;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,

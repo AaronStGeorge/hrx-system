@@ -106,6 +106,7 @@ loom_cc_library(
     srcs = ["pass.c"],
     hdrs = ["pass.h"],
     deps = [
+        "//loom/src/loom/error:emitter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//runtime/src/iree/base",
@@ -167,6 +168,48 @@ loom_cc_library(
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "vector_memory_footprint",
+    srcs = ["vector_memory_footprint.c"],
+    hdrs = ["vector_memory_footprint.h"],
+    deps = [
+        ":pass",
+        "//loom/src/loom/analysis:symbolic_expr",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "vector_memory_footprint_test",
+    srcs = ["vector_memory_footprint_test.cc"],
+    deps = [
+        ":pass",
+        ":vector_memory_footprint",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/pool",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/ops/view",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

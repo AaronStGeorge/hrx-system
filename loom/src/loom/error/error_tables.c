@@ -477,6 +477,49 @@ const loom_error_def_t loom_err_subrange_004 = {
     .param_count = 5,
 };
 
+static const loom_error_param_def_t loom_err_subrange_005_params[] = {
+    {"op_name", LOOM_PARAM_STRING},  {"view_axis", LOOM_PARAM_I64},
+    {"vector_axis", LOOM_PARAM_I64}, {"origin", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},   {"required", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_subrange_005 = {
+    .error_id = "ERR_SUBRANGE_005",
+    .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 5,
+    .summary = "Vector memory footprint is not proven in bounds.",
+    .message_template =
+        "{op_name} footprint proof failed on view axis {view_axis} (vector "
+        "axis {vector_axis}): {reason}; required {required}; origin {origin}",
+    .fix_hint_template =
+        "Refine the origin, vector extent, mask, or view layout facts so "
+        "{required} is provable",
+    .param_defs = loom_err_subrange_005_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_subrange_006_params[] = {
+    {"op_name", LOOM_PARAM_STRING},
+    {"origin", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+    {"required", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_subrange_006 = {
+    .error_id = "ERR_SUBRANGE_006",
+    .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 6,
+    .summary = "Vector memory linear footprint is not proven in bounds.",
+    .message_template =
+        "{op_name} linear footprint proof failed: {reason}; required "
+        "{required}; origin {origin}",
+    .fix_hint_template =
+        "Refine the origin, offset lane range, or view storage span facts so "
+        "{required} is provable",
+    .param_defs = loom_err_subrange_006_params,
+    .param_count = 4,
+};
+
 static const loom_error_param_def_t loom_err_encoding_001_params[] = {
     {"field_a", LOOM_PARAM_STRING},
     {"field_b", LOOM_PARAM_STRING},
@@ -1871,33 +1914,34 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_shape_001,     &loom_err_shape_002,     &loom_err_shape_003,
     &loom_err_shape_004,     &loom_err_shape_005,     &loom_err_subrange_001,
     &loom_err_subrange_002,  &loom_err_subrange_003,  &loom_err_subrange_004,
-    &loom_err_encoding_001,  &loom_err_encoding_002,  &loom_err_encoding_003,
-    &loom_err_encoding_004,  &loom_err_encoding_005,  &loom_err_encoding_006,
-    &loom_err_encoding_007,  &loom_err_encoding_008,  &loom_err_encoding_009,
-    &loom_err_encoding_010,  &loom_err_encoding_011,  &loom_err_encoding_012,
-    &loom_err_encoding_013,  &loom_err_structure_001, &loom_err_structure_002,
-    &loom_err_structure_003, &loom_err_structure_004, &loom_err_structure_005,
-    &loom_err_structure_006, &loom_err_structure_007, &loom_err_structure_008,
-    &loom_err_structure_009, &loom_err_structure_010, &loom_err_structure_011,
-    &loom_err_structure_012, &loom_err_structure_013, &loom_err_structure_014,
-    &loom_err_structure_015, &loom_err_structure_016, &loom_err_dominance_001,
-    &loom_err_dominance_002, &loom_err_dominance_003, &loom_err_dominance_004,
-    &loom_err_dominance_005, &loom_err_dominance_006, &loom_err_dominance_007,
-    &loom_err_dominance_008, &loom_err_symbol_001,    &loom_err_symbol_002,
-    &loom_err_symbol_003,    &loom_err_symbol_004,    &loom_err_parse_001,
-    &loom_err_parse_002,     &loom_err_parse_003,     &loom_err_parse_004,
-    &loom_err_parse_005,     &loom_err_parse_006,     &loom_err_parse_007,
-    &loom_err_parse_008,     &loom_err_parse_009,     &loom_err_parse_010,
-    &loom_err_parse_011,     &loom_err_parse_012,     &loom_err_parse_013,
-    &loom_err_parse_014,     &loom_err_parse_015,     &loom_err_parse_016,
-    &loom_err_parse_017,     &loom_err_parse_018,     &loom_err_parse_019,
-    &loom_err_parse_020,     &loom_err_parse_021,     &loom_err_parse_022,
-    &loom_err_parse_023,     &loom_err_parse_024,     &loom_err_parse_025,
-    &loom_err_parse_026,     &loom_err_parse_027,     &loom_err_parse_028,
-    &loom_err_parse_029,     &loom_err_bytecode_001,  &loom_err_bytecode_002,
-    &loom_err_bytecode_003,  &loom_err_bytecode_004,  &loom_err_bytecode_005,
-    &loom_err_fold_001,      &loom_err_fold_002,      &loom_err_fold_003,
-    &loom_err_fold_004,      &loom_err_fold_005,
+    &loom_err_subrange_005,  &loom_err_subrange_006,  &loom_err_encoding_001,
+    &loom_err_encoding_002,  &loom_err_encoding_003,  &loom_err_encoding_004,
+    &loom_err_encoding_005,  &loom_err_encoding_006,  &loom_err_encoding_007,
+    &loom_err_encoding_008,  &loom_err_encoding_009,  &loom_err_encoding_010,
+    &loom_err_encoding_011,  &loom_err_encoding_012,  &loom_err_encoding_013,
+    &loom_err_structure_001, &loom_err_structure_002, &loom_err_structure_003,
+    &loom_err_structure_004, &loom_err_structure_005, &loom_err_structure_006,
+    &loom_err_structure_007, &loom_err_structure_008, &loom_err_structure_009,
+    &loom_err_structure_010, &loom_err_structure_011, &loom_err_structure_012,
+    &loom_err_structure_013, &loom_err_structure_014, &loom_err_structure_015,
+    &loom_err_structure_016, &loom_err_dominance_001, &loom_err_dominance_002,
+    &loom_err_dominance_003, &loom_err_dominance_004, &loom_err_dominance_005,
+    &loom_err_dominance_006, &loom_err_dominance_007, &loom_err_dominance_008,
+    &loom_err_symbol_001,    &loom_err_symbol_002,    &loom_err_symbol_003,
+    &loom_err_symbol_004,    &loom_err_parse_001,     &loom_err_parse_002,
+    &loom_err_parse_003,     &loom_err_parse_004,     &loom_err_parse_005,
+    &loom_err_parse_006,     &loom_err_parse_007,     &loom_err_parse_008,
+    &loom_err_parse_009,     &loom_err_parse_010,     &loom_err_parse_011,
+    &loom_err_parse_012,     &loom_err_parse_013,     &loom_err_parse_014,
+    &loom_err_parse_015,     &loom_err_parse_016,     &loom_err_parse_017,
+    &loom_err_parse_018,     &loom_err_parse_019,     &loom_err_parse_020,
+    &loom_err_parse_021,     &loom_err_parse_022,     &loom_err_parse_023,
+    &loom_err_parse_024,     &loom_err_parse_025,     &loom_err_parse_026,
+    &loom_err_parse_027,     &loom_err_parse_028,     &loom_err_parse_029,
+    &loom_err_bytecode_001,  &loom_err_bytecode_002,  &loom_err_bytecode_003,
+    &loom_err_bytecode_004,  &loom_err_bytecode_005,  &loom_err_fold_001,
+    &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
+    &loom_err_fold_005,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

@@ -23,6 +23,8 @@ extern const loom_error_def_t loom_err_subrange_001;
 extern const loom_error_def_t loom_err_subrange_002;
 extern const loom_error_def_t loom_err_subrange_003;
 extern const loom_error_def_t loom_err_subrange_004;
+extern const loom_error_def_t loom_err_subrange_005;
+extern const loom_error_def_t loom_err_subrange_006;
 extern const loom_error_def_t loom_err_encoding_001;
 extern const loom_error_def_t loom_err_encoding_002;
 extern const loom_error_def_t loom_err_encoding_003;
