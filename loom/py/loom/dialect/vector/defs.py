@@ -392,6 +392,86 @@ vector_splat = Op(
     ],
 )
 
+vector_iota = Op(
+    "vector.iota",
+    group=vector_ops,
+    doc=(
+        "Construct a vector of lane-coordinate values. Lane order is the "
+        "logical row-major order of the result shape; result lane ordinal i "
+        "contains base + i * step. The result element type must be index or a "
+        "non-i1 integer payload, and base/step must be scalar values with the "
+        "same element type. Dynamic result extents are allowed: the result "
+        "type supplies the lane count symbolically and later specialization "
+        "fixes the concrete number of produced coordinates."
+    ),
+    operands=[
+        Operand("base", SCALAR, doc="First coordinate value."),
+        Operand("step", SCALAR, doc="Coordinate delta between adjacent logical lanes."),
+    ],
+    results=[Result("result", VECTOR)],
+    constraints=[
+        SameType("base", "step"),
+        SameElementType("base", "step", "result"),
+    ],
+    verify="loom_vector_iota_verify",
+    traits=[PURE],
+    format=[
+        Ref("base"),
+        kw("step"),
+        Ref("step"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%lanes = vector.iota %c0 step %c1 : vector<16xindex>",
+        "%offsets = vector.iota %base step %stride : vector<4xi32>",
+        "%dyn = vector.iota %c0 step %c1 : vector<[%n]xindex>",
+    ],
+)
+
+vector_mask_range = Op(
+    "vector.mask.range",
+    group=vector_ops,
+    doc=(
+        "Construct an i1 tail mask from an explicit scalar coordinate range. "
+        "For logical lane ordinal i, the lane is true when "
+        "lower_bound + i * step is strictly less than upper_bound using the "
+        "coordinate domain's signed ordering. The bracketed syntax mirrors "
+        "scf.for ranges because the same inclusive-lower, exclusive-upper "
+        "semantics are being tested; the result vector type supplies the "
+        "number and shape of lanes to test."
+    ),
+    operands=[
+        Operand("lower_bound", SCALAR, doc="First coordinate tested by lane 0."),
+        Operand("upper_bound", SCALAR, doc="Exclusive coordinate bound."),
+        Operand("step", SCALAR, doc="Coordinate delta between adjacent logical lanes."),
+    ],
+    results=[Result("result", VECTOR)],
+    constraints=[
+        HasI1Element("result"),
+        SameType("lower_bound", "upper_bound", "step"),
+    ],
+    verify="loom_vector_mask_range_verify",
+    traits=[PURE],
+    format=[
+        LBRACKET,
+        Ref("lower_bound"),
+        kw("to"),
+        Ref("upper_bound"),
+        kw("step"),
+        Ref("step"),
+        RBRACKET,
+        COLON,
+        TypeOf("lower_bound"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%mask = vector.mask.range [%iv to %n step %c1] : index -> vector<16xi1>",
+        "%mask = vector.mask.range [%base to %limit step %stride] : i32 -> vector<8xi1>",
+    ],
+)
+
 vector_broadcast = Op(
     "vector.broadcast",
     group=vector_ops,
@@ -2216,6 +2296,8 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_poison,
     vector_empty,
     vector_splat,
+    vector_iota,
+    vector_mask_range,
     vector_broadcast,
     vector_from_elements,
     vector_extract,

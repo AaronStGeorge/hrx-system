@@ -18,6 +18,7 @@ from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.test import ALL_TEST_OPS
+from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import (
     FORMAT_VERSION,
@@ -71,36 +72,52 @@ from loom.ir import (
 # ============================================================================
 
 
-def _text_parser(*, include_encoding: bool = False) -> Parser:
+def _text_parser(
+    *, include_encoding: bool = False, include_vector: bool = False
+) -> Parser:
     parser = Parser()
     ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
         ops += list(ALL_ENCODING_OPS)
+    if include_vector:
+        ops += list(ALL_VECTOR_OPS)
     parser.register_ops(ops)
     parser.register_types(ALL_BUILTIN_TYPES)
     return parser
 
 
-def _text_printer(*, include_encoding: bool = False) -> Printer:
+def _text_printer(
+    *, include_encoding: bool = False, include_vector: bool = False
+) -> Printer:
     printer = Printer()
     ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
         ops += list(ALL_ENCODING_OPS)
+    if include_vector:
+        ops += list(ALL_VECTOR_OPS)
     printer.register_ops(ops)
     printer.register_types(ALL_BUILTIN_TYPES)
     return printer
 
 
-def _parse_write_read(text: str, *, include_encoding: bool = False) -> Module:
-    module = _text_parser(include_encoding=include_encoding).parse(text)
+def _parse_write_read(
+    text: str, *, include_encoding: bool = False, include_vector: bool = False
+) -> Module:
+    module = _text_parser(
+        include_encoding=include_encoding, include_vector=include_vector
+    ).parse(text)
     return read_module(write_module(module))
 
 
 def _roundtrip_text_through_bytecode(
-    text: str, *, include_encoding: bool = False
+    text: str, *, include_encoding: bool = False, include_vector: bool = False
 ) -> str:
-    loaded = _parse_write_read(text, include_encoding=include_encoding)
-    return _text_printer(include_encoding=include_encoding).print_module(loaded)
+    loaded = _parse_write_read(
+        text, include_encoding=include_encoding, include_vector=include_vector
+    )
+    return _text_printer(
+        include_encoding=include_encoding, include_vector=include_vector
+    ).print_module(loaded)
 
 
 def _make_func_op(
@@ -1074,6 +1091,22 @@ class TestCrossFormatRoundTrip:
         )
 
         assert _roundtrip_text_through_bytecode(text, include_encoding=True) == expected
+
+    def test_vector_iota_and_range_mask_survive_bytecode(self) -> None:
+        text = (
+            "func.def @vector_coords(%lo: index, %hi: index, %step: index, "
+            "%base: i32, %stride: i32) {\n"
+            "  %lanes = vector.iota %lo step %step : vector<16xindex>\n"
+            "  %mask = vector.mask.range [%lo to %hi step %step] : index -> "
+            "vector<16xi1>\n"
+            "  %ints = vector.iota %base step %stride : vector<[%hi]xi32>\n"
+            "  test.use %lanes, %mask, %ints : vector<16xindex>, "
+            "vector<16xi1>, vector<[%hi]xi32>\n"
+            "  func.return\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_vector=True) == text
 
     def test_attr_dict_parser_programmatic_and_readback_converge(self) -> None:
         from loom.builtin_types import ALL_BUILTIN_TYPES

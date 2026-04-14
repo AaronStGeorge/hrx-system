@@ -86,6 +86,29 @@ def test_empty_vector_is_constant_like_empty_aggregate() -> None:
     assert "not poison" in op.doc
 
 
+def test_vector_coordinate_construction_is_pure_and_explicit() -> None:
+    ops = _op_by_name()
+    iota = ops["vector.iota"]
+    mask_range = ops["vector.mask.range"]
+    iota_constraints = {(constraint.name, constraint.args) for constraint in iota.constraints}
+    mask_range_constraints = {(constraint.name, constraint.args) for constraint in mask_range.constraints}
+
+    assert ("SameType", ("base", "step")) in iota_constraints
+    assert ("SameElementType", ("base", "step", "result")) in iota_constraints
+    assert "base + i * step" in iota.doc
+    assert "Dynamic result extents are allowed" in iota.doc
+
+    assert ("HasI1Element", ("result",)) in mask_range_constraints
+    assert ("SameType", ("lower_bound", "upper_bound", "step")) in mask_range_constraints
+    assert "inclusive-lower, exclusive-upper" in mask_range.doc
+    assert "scf.for" in mask_range.doc
+
+    for op in (iota, mask_range):
+        assert "Pure" in {trait.name for trait in op.traits}
+        assert "Elementwise" not in {trait.name for trait in op.traits}
+        assert op.effects == ()
+
+
 def test_vector_ctpopi_is_lanewise_integer_popcount() -> None:
     op = _op_by_name()["vector.ctpopi"]
     constraints = {(constraint.name, constraint.args) for constraint in op.constraints}

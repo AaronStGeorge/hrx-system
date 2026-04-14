@@ -65,6 +65,33 @@ class VectorBuilders:
         _operands.append(scalar)
         return cast(ValueRef, self._b.build("vector.splat", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def iota(self, *, base: ValueRef, step: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Construct a vector of lane-coordinate values. Lane order is the logical row-major order of the result shape; result lane ordinal i contains base + i * step. The result element type must be index or a non-i1 integer payload, and base/step must be scalar values with the same element type. Dynamic result extents are allowed: the result type supplies the lane count symbolically and later specialization fixes the concrete number of produced coordinates.
+
+        Example::
+            %lanes = vector.iota %c0 step %c1 : vector<16xindex>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(base)
+        _operands.append(step)
+        return cast(ValueRef, self._b.build("vector.iota", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def range(self, *, lower_bound: ValueRef, upper_bound: ValueRef, step: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Construct an i1 tail mask from an explicit scalar coordinate range. For logical lane ordinal i, the lane is true when lower_bound + i * step is strictly less than upper_bound using the coordinate domain's signed ordering. The bracketed syntax mirrors scf.for ranges because the same inclusive-lower, exclusive-upper semantics are being tested; the result vector type supplies the number and shape of lanes to test.
+
+        Example::
+            %mask = vector.mask.range [%iv to %n step %c1] : index -> vector<16xi1>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lower_bound)
+        _operands.append(upper_bound)
+        _operands.append(step)
+        return cast(ValueRef, self._b.build("vector.mask.range", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def broadcast(self, *, source: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Broadcast a vector value to a larger-rank or same-rank vector result. Source axes align with the trailing result axes, and each static source extent must either be 1 or match the corresponding result extent.
 

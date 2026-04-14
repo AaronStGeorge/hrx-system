@@ -572,6 +572,15 @@ static bool loom_vector_type_has_index_or_non_i1_integer_element(
          loom_scalar_type_is_integer(element_type);
 }
 
+static bool loom_vector_type_is_index_or_non_i1_integer_scalar(
+    loom_type_t type) {
+  if (!loom_type_is_scalar(type)) return false;
+  loom_scalar_type_t scalar_type = loom_type_element_type(type);
+  if (scalar_type == LOOM_SCALAR_TYPE_INDEX) return true;
+  return scalar_type != LOOM_SCALAR_TYPE_I1 &&
+         loom_scalar_type_is_integer(scalar_type);
+}
+
 static iree_status_t loom_vector_verify_memory_access(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, iree_string_view_t vector_name, bool vector_is_result,
@@ -800,6 +809,40 @@ iree_status_t loom_vector_from_elements_verify(
   return loom_vector_emit_count_mismatch(
       emitter, op, IREE_SV("elements"), elements.count,
       IREE_SV("result element count"), expected_count);
+}
+
+iree_status_t loom_vector_iota_verify(const loom_module_t* module,
+                                      const loom_op_t* op,
+                                      iree_diagnostic_emitter_t emitter) {
+  loom_type_t base_type =
+      loom_module_value_type(module, loom_vector_iota_base(op));
+  if (!loom_vector_type_is_index_or_non_i1_integer_scalar(base_type)) {
+    return loom_vector_emit_operand_constraint(
+        emitter, op, IREE_SV("base"), base_type,
+        IREE_SV("index or non-i1 integer scalar"));
+  }
+
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_iota_result(op));
+  if (loom_vector_type_has_index_or_non_i1_integer_element(result_type)) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_result_constraint(
+      emitter, op, IREE_SV("result"), result_type,
+      IREE_SV("vector with index or non-i1 integer elements"));
+}
+
+iree_status_t loom_vector_mask_range_verify(const loom_module_t* module,
+                                            const loom_op_t* op,
+                                            iree_diagnostic_emitter_t emitter) {
+  loom_type_t lower_bound_type =
+      loom_module_value_type(module, loom_vector_mask_range_lower_bound(op));
+  if (loom_vector_type_is_index_or_non_i1_integer_scalar(lower_bound_type)) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_operand_constraint(
+      emitter, op, IREE_SV("lower_bound"), lower_bound_type,
+      IREE_SV("index or non-i1 integer scalar"));
 }
 
 iree_status_t loom_vector_load_verify(const loom_module_t* module,

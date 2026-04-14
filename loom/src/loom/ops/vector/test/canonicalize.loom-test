@@ -28,6 +28,32 @@ func.def @empty_lanewise(%a: vector<0xf32>, %b: vector<0xf32>) -> (vector<0xf32>
 
 // ====
 
+// A zero-lane iota has no observable coordinate lanes.
+func.def @empty_iota(%base: index, %step: index) -> (vector<0xindex>) {
+  %r = vector.iota %base step %step : vector<0xindex>
+  func.return %r : vector<0xindex>
+}
+// ----
+func.def @empty_iota(%base: index, %step: index) -> (vector<0xindex>) {
+  %r = vector.empty : vector<0xindex>
+  func.return %r : vector<0xindex>
+}
+
+// ====
+
+// A zero-lane range mask performs no range tests.
+func.def @empty_mask_range(%lo: index, %hi: index, %step: index) -> (vector<0xi1>) {
+  %r = vector.mask.range [%lo to %hi step %step] : index -> vector<0xi1>
+  func.return %r : vector<0xi1>
+}
+// ----
+func.def @empty_mask_range(%lo: index, %hi: index, %step: index) -> (vector<0xi1>) {
+  %r = vector.empty : vector<0xi1>
+  func.return %r : vector<0xi1>
+}
+
+// ====
+
 // Reducing zero lanes observes no input lanes and returns the explicit init.
 func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
   %r = vector.reduce<addf> %v, %init : vector<0xf32> -> f32

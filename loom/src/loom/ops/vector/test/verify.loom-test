@@ -146,6 +146,78 @@ func.def @from_elements_dynamic_result(%x: f32, %n: index) {
 
 // ====
 
+// vector.iota constructs coordinate vectors, not arbitrary floating-point lanes.
+func.def @iota_float_domain(%base: f32, %step: f32) {
+  // ERROR@+1: TYPE/003 "base" "f32" "index or non-i1 integer scalar"
+  %r = vector.iota %base step %step : vector<4xf32>
+  func.return
+}
+
+// ====
+
+// vector.iota does not use i1 lanes as coordinate payloads.
+func.def @iota_i1_domain(%base: i1, %step: i1) {
+  // ERROR@+1: TYPE/003 "base" "i1" "index or non-i1 integer scalar"
+  %r = vector.iota %base step %step : vector<4xi1>
+  func.return
+}
+
+// ====
+
+// offset is a scalar byte-count domain, not a vector element-offset payload.
+func.def @iota_offset_domain(%base: offset, %step: offset) {
+  // ERROR@+1: TYPE/003 "base" "offset" "index or non-i1 integer scalar"
+  %r = vector.iota %base step %step : vector<4xoffset>
+  func.return
+}
+
+// ====
+
+// vector.iota ties the scalar coordinate domain to the result element type.
+func.def @iota_element_mismatch(%base: index, %step: index) {
+  // ERROR@+1: TYPE/002
+  %r = vector.iota %base step %step : vector<4xi32>
+  func.return
+}
+
+// ====
+
+// Range masks use coordinate domains and produce i1 vector masks.
+func.def @mask_range_float_domain(%lo: f32, %hi: f32, %step: f32) {
+  // ERROR@+1: TYPE/003 "lower_bound" "f32" "index or non-i1 integer scalar"
+  %r = vector.mask.range [%lo to %hi step %step] : f32 -> vector<4xi1>
+  func.return
+}
+
+// ====
+
+// Range masks do not treat scalar byte offsets as lane-coordinate payloads.
+func.def @mask_range_offset_domain(%lo: offset, %hi: offset, %step: offset) {
+  // ERROR@+1: TYPE/003 "lower_bound" "offset" "index or non-i1 integer scalar"
+  %r = vector.mask.range [%lo to %hi step %step] : offset -> vector<4xi1>
+  func.return
+}
+
+// ====
+
+// Range mask bounds and step all live in the same coordinate domain.
+func.def @mask_range_type_mismatch(%lo: index, %hi: i32, %step: index) {
+  // ERROR@+1: TYPE/001
+  %r = vector.mask.range [%lo to %hi step %step] : index -> vector<4xi1>
+  func.return
+}
+
+// ====
+
+// Range masks are boolean lane masks.
+func.def @mask_range_result_not_i1(%lo: index, %hi: index, %step: index) {
+  // ERROR@+1: TYPE/004 "i1_element"
+  %r = vector.mask.range [%lo to %hi step %step] : index -> vector<4xi32>
+  func.return
+}
+
+// ====
+
 // Vector memory ops require one logical origin index per view rank.
 func.def @load_index_count_mismatch(%buffer: buffer, %offset: offset) {
   %layout = encoding.layout.dense : encoding<layout>
