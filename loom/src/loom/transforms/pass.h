@@ -13,8 +13,8 @@
 // block pool.
 //
 // Pipeline strings for loom-opt:
-//   --pass-pipeline='canonicalize,cse,dce'
-//   --pass-pipeline='inline,canonicalize{max-iterations=20},cse'
+//   --pass-pipeline='canonicalize,licm,cse,dce'
+//   --pass-pipeline='inline,canonicalize{max-iterations=20},licm,cse'
 //
 // Pass lifecycle:
 //   1. Instance arena created from shared block pool.

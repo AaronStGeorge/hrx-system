@@ -103,6 +103,19 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "licm",
+    srcs = ["licm.c"],
+    hdrs = ["licm.h"],
+    deps = [
+        ":pass",
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "pass",
     srcs = ["pass.c"],
     hdrs = ["pass.h"],

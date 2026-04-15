@@ -15,6 +15,7 @@ package(
 loom_check_test_suite(
     name = "test",
     srcs = [
+        "licm.loom-test",
         "scf_index.loom-test",
         "vector_to_scalar.loom-test",
     ],

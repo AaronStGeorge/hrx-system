@@ -114,6 +114,22 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    licm
+  HDRS
+    "licm.h"
+  SRCS
+    "licm.c"
+  DEPS
+    ::pass
+    ::rewriter
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     pass
   HDRS
     "pass.h"

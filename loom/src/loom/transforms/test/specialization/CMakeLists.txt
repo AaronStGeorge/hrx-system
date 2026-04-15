@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "licm"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/licm.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "scf_index"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/scf_index.loom-test"

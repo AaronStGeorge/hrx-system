@@ -29,6 +29,7 @@
 #include "loom/transforms/canonicalize.h"
 #include "loom/transforms/cse.h"
 #include "loom/transforms/dce.h"
+#include "loom/transforms/licm.h"
 #include "loom/transforms/pass.h"
 #include "loom/transforms/strip_hints.h"
 #include "loom/transforms/vector_memory_footprint.h"
@@ -313,6 +314,10 @@ static iree_status_t loom_check_run_pipeline(
     } else if (iree_string_view_equal(pass_name, IREE_SV("cse"))) {
       status = loom_pass_manager_add_function_pass(
           &manager, loom_cse_pass_info(), loom_cse_run, NULL, NULL,
+          iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name, IREE_SV("licm"))) {
+      status = loom_pass_manager_add_function_pass(
+          &manager, loom_licm_pass_info(), loom_licm_run, NULL, NULL,
           iree_string_view_empty());
     } else if (iree_string_view_equal(pass_name, IREE_SV("strip-hints"))) {
       status = loom_pass_manager_add_function_pass(
