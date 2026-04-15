@@ -237,6 +237,51 @@ class LlvmIrLowerTest : public ::testing::Test {
     IREE_ASSERT_OK(status);
   }
 
+  void CompileX86TextToObject(const std::string& text) {
+    TempFile input_file(TempPath(".ll"));
+    TempFile bitcode_file(TempPath(".bc"));
+    TempFile object_file(TempPath(".o"));
+    IREE_ASSERT_OK(WriteTempFile(input_file.path(), text));
+
+    loom_llvmir_toolchain_t toolchain;
+    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+    iree_status_t status = loom_llvmir_tool_assemble_text_file(
+        &toolchain, StringView(input_file.path()),
+        StringView(bitcode_file.path()), iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    status = loom_llvmir_tool_verify_bitcode_file(
+        &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    status = loom_llvmir_tool_compile_object_file(
+        &toolchain, StringView(bitcode_file.path()),
+        StringView(object_file.path()), NULL, 0, iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    iree_io_file_contents_t* object_contents = NULL;
+    IREE_ASSERT_OK(iree_io_file_contents_read(StringView(object_file.path()),
+                                              iree_allocator_system(),
+                                              &object_contents));
+    ASSERT_GT(object_contents->const_buffer.data_length, 0u);
+    iree_io_file_contents_free(object_contents);
+  }
+
   void CompileAmdgpuTextToObjectIfAvailable(const std::string& text) {
     TempFile input_file(TempPath(".ll"));
     TempFile bitcode_file(TempPath(".bc"));
@@ -342,6 +387,11 @@ TEST_F(LlvmIrLowerTest, LowersIntegerArithmeticAndReturn) {
 TEST_F(LlvmIrLowerTest, LoweredTextAssemblesWithLlvmTools) {
   BuildAddI32Function();
   VerifyTextWithLlvmTools(LowerToText());
+}
+
+TEST_F(LlvmIrLowerTest, LoweredTextCompilesToX86Object) {
+  BuildAddI32Function();
+  CompileX86TextToObject(LowerToText());
 }
 
 TEST_F(LlvmIrLowerTest, LowersCallsComparisonsSelectAndCasts) {
