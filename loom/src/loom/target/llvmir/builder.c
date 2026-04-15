@@ -267,6 +267,29 @@ iree_status_t loom_llvmir_build_fcmp(loom_llvmir_block_t* block,
   return loom_llvmir_builder_append_instruction(block, &instruction);
 }
 
+iree_status_t loom_llvmir_build_cast(loom_llvmir_block_t* block,
+                                     const loom_llvmir_cast_desc_t* desc,
+                                     loom_llvmir_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(block);
+  IREE_ASSERT_ARGUMENT(desc);
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->value));
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_CAST,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .cast =
+          {
+              .op = desc->op,
+              .value = desc->value,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
 iree_status_t loom_llvmir_build_gep(loom_llvmir_block_t* block,
                                     const loom_llvmir_gep_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id) {

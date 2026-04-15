@@ -8,7 +8,7 @@
 
 #include "loom/target/llvmir/llvmir.h"
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 8
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 9
 
 static loom_llvmir_attr_t loom_llvmir_test_attr(loom_llvmir_attr_kind_t kind) {
   return (loom_llvmir_attr_t){
@@ -700,6 +700,209 @@ static iree_status_t loom_llvmir_test_populate_compare_select(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_test_populate_casts(
+    loom_llvmir_module_t* module) {
+  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t f64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t ptr_global_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_void_type(module, &void_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 16, &i16_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 64, &i64_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_float_type(
+      module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_float_type(
+      module, LOOM_LLVMIR_FLOAT_F64, &f64_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_pointer_type(module, 0, &ptr_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_pointer_type(module, 1, &ptr_global_type));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("casts"),
+          .return_type = void_type,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+
+  loom_llvmir_value_id_t wide = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t narrow = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t scalar = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t wide_scalar = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i64_type,
+                                             .name = IREE_SV("wide"),
+                                         },
+                                         &wide));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i16_type,
+                                             .name = IREE_SV("narrow"),
+                                         },
+                                         &narrow));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = f32_type,
+                                             .name = IREE_SV("scalar"),
+                                         },
+                                         &scalar));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = f64_type,
+                                             .name = IREE_SV("wide_scalar"),
+                                         },
+                                         &wide_scalar));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = ptr_type,
+                                             .name = IREE_SV("pointer"),
+                                         },
+                                         &pointer));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("truncated"),
+                                 .result_type = i32_type,
+                                 .op = LOOM_LLVMIR_CAST_TRUNCATE,
+                                 .value = wide,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("zero_extended"),
+                                 .result_type = i64_type,
+                                 .op = LOOM_LLVMIR_CAST_ZERO_EXTEND,
+                                 .value = narrow,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("sign_extended"),
+                                 .result_type = i64_type,
+                                 .op = LOOM_LLVMIR_CAST_SIGN_EXTEND,
+                                 .value = narrow,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("fp_truncated"),
+                                 .result_type = f32_type,
+                                 .op = LOOM_LLVMIR_CAST_FP_TRUNCATE,
+                                 .value = wide_scalar,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("fp_extended"),
+                                 .result_type = f64_type,
+                                 .op = LOOM_LLVMIR_CAST_FP_EXTEND,
+                                 .value = scalar,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("unsigned_to_fp"),
+                                 .result_type = f32_type,
+                                 .op = LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP,
+                                 .value = narrow,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("signed_to_fp"),
+                                 .result_type = f32_type,
+                                 .op = LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP,
+                                 .value = narrow,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("fp_to_unsigned"),
+                                 .result_type = i32_type,
+                                 .op = LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT,
+                                 .value = scalar,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("fp_to_signed"),
+                                 .result_type = i32_type,
+                                 .op = LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT,
+                                 .value = scalar,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("ptr_to_int"),
+                                 .result_type = i64_type,
+                                 .op = LOOM_LLVMIR_CAST_PTR_TO_INT,
+                                 .value = pointer,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("int_to_ptr"),
+                                 .result_type = ptr_type,
+                                 .op = LOOM_LLVMIR_CAST_INT_TO_PTR,
+                                 .value = wide,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("bits"),
+                                 .result_type = i32_type,
+                                 .op = LOOM_LLVMIR_CAST_BITCAST,
+                                 .value = scalar,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_cast(entry,
+                             &(loom_llvmir_cast_desc_t){
+                                 .result_name = IREE_SV("global_pointer"),
+                                 .result_type = ptr_global_type,
+                                 .op = LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST,
+                                 .value = pointer,
+                             },
+                             &result));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret_void(entry));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_test_populate_inline_asm(
     loom_llvmir_module_t* module) {
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -1089,6 +1292,26 @@ static const char kCompareSelectText[] =
     "  ret i32 %result\n"
     "}\n";
 
+static const char kCastsText[] =
+    "define void @casts(i64 %wide, i16 %narrow, float %scalar, double "
+    "%wide_scalar, ptr %pointer) {\n"
+    "entry:\n"
+    "  %truncated = trunc i64 %wide to i32\n"
+    "  %zero_extended = zext i16 %narrow to i64\n"
+    "  %sign_extended = sext i16 %narrow to i64\n"
+    "  %fp_truncated = fptrunc double %wide_scalar to float\n"
+    "  %fp_extended = fpext float %scalar to double\n"
+    "  %unsigned_to_fp = uitofp i16 %narrow to float\n"
+    "  %signed_to_fp = sitofp i16 %narrow to float\n"
+    "  %fp_to_unsigned = fptoui float %scalar to i32\n"
+    "  %fp_to_signed = fptosi float %scalar to i32\n"
+    "  %ptr_to_int = ptrtoint ptr %pointer to i64\n"
+    "  %int_to_ptr = inttoptr i64 %wide to ptr\n"
+    "  %bits = bitcast float %scalar to i32\n"
+    "  %global_pointer = addrspacecast ptr %pointer to ptr addrspace(1)\n"
+    "  ret void\n"
+    "}\n";
+
 static const char kInlineAsmText[] =
     "define i32 @inline_asm_add(i32 %lhs, i32 %rhs) {\n"
     "entry:\n"
@@ -1168,6 +1391,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
       return IREE_SV("builtin_intrinsics");
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return IREE_SV("compare_select");
+    case LOOM_LLVMIR_TEST_MODULE_CASTS:
+      return IREE_SV("casts");
     default:
       return IREE_SV("unknown");
   }
@@ -1215,6 +1440,7 @@ static iree_status_t loom_llvmir_test_module_target_config(
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
+    case LOOM_LLVMIR_TEST_MODULE_CASTS:
       return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1241,6 +1467,8 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_scalar_binop(module);
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return loom_llvmir_test_populate_compare_select(module);
+    case LOOM_LLVMIR_TEST_MODULE_CASTS:
+      return loom_llvmir_test_populate_casts(module);
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown LLVM IR test module scenario");
@@ -1299,6 +1527,8 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return iree_make_string_view(kCompareSelectText,
                                    IREE_ARRAYSIZE(kCompareSelectText) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_CASTS:
+      return iree_make_string_view(kCastsText, IREE_ARRAYSIZE(kCastsText) - 1);
     default:
       return iree_string_view_empty();
   }

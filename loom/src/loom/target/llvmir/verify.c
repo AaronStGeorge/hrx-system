@@ -59,6 +59,87 @@ static bool loom_llvmir_verify_type_is_i1(const loom_llvmir_module_t* module,
   return type && type->kind == LOOM_LLVMIR_TYPE_INTEGER && type->bit_width == 1;
 }
 
+static const loom_llvmir_type_t* loom_llvmir_verify_scalar_type(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  if (!type) return NULL;
+  if (type->kind != LOOM_LLVMIR_TYPE_VECTOR) return type;
+  return loom_llvmir_verify_type(module, type->element_type);
+}
+
+static uint32_t loom_llvmir_verify_vector_lanes(
+    const loom_llvmir_type_t* type) {
+  return type && type->kind == LOOM_LLVMIR_TYPE_VECTOR ? type->element_count
+                                                       : 0;
+}
+
+static bool loom_llvmir_verify_same_vector_shape(
+    const loom_llvmir_type_t* lhs, const loom_llvmir_type_t* rhs) {
+  return loom_llvmir_verify_vector_lanes(lhs) ==
+         loom_llvmir_verify_vector_lanes(rhs);
+}
+
+static bool loom_llvmir_verify_type_is_first_class(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  const loom_llvmir_type_t* scalar_type =
+      loom_llvmir_verify_scalar_type(module, type);
+  return scalar_type && scalar_type->kind != LOOM_LLVMIR_TYPE_VOID &&
+         scalar_type->kind != LOOM_LLVMIR_TYPE_VECTOR;
+}
+
+static bool loom_llvmir_verify_type_is_int_like(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  const loom_llvmir_type_t* scalar_type =
+      loom_llvmir_verify_scalar_type(module, type);
+  return scalar_type && scalar_type->kind == LOOM_LLVMIR_TYPE_INTEGER;
+}
+
+static bool loom_llvmir_verify_type_is_pointer_like(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  const loom_llvmir_type_t* scalar_type =
+      loom_llvmir_verify_scalar_type(module, type);
+  return scalar_type && scalar_type->kind == LOOM_LLVMIR_TYPE_POINTER;
+}
+
+static bool loom_llvmir_verify_type_is_float_like(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  const loom_llvmir_type_t* scalar_type =
+      loom_llvmir_verify_scalar_type(module, type);
+  return scalar_type && scalar_type->kind == LOOM_LLVMIR_TYPE_FLOAT;
+}
+
+static uint32_t loom_llvmir_verify_type_scalar_bit_width(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  const loom_llvmir_type_t* scalar_type =
+      loom_llvmir_verify_scalar_type(module, type);
+  if (!scalar_type) return 0;
+  switch (scalar_type->kind) {
+    case LOOM_LLVMIR_TYPE_INTEGER:
+      return scalar_type->bit_width;
+    case LOOM_LLVMIR_TYPE_FLOAT:
+      switch (scalar_type->float_kind) {
+        case LOOM_LLVMIR_FLOAT_F16:
+          return 16;
+        case LOOM_LLVMIR_FLOAT_F32:
+          return 32;
+        case LOOM_LLVMIR_FLOAT_F64:
+          return 64;
+        default:
+          return 0;
+      }
+    default:
+      return 0;
+  }
+}
+
+static uint64_t loom_llvmir_verify_type_primitive_bit_width(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  uint32_t scalar_bit_width =
+      loom_llvmir_verify_type_scalar_bit_width(module, type);
+  if (scalar_bit_width == 0) return 0;
+  uint32_t lanes = loom_llvmir_verify_vector_lanes(type);
+  return lanes == 0 ? scalar_bit_width : (uint64_t)scalar_bit_width * lanes;
+}
+
 static iree_status_t loom_llvmir_verify_mask_result_type(
     const loom_llvmir_module_t* module, loom_llvmir_type_id_t operand_type_id,
     loom_llvmir_type_id_t result_type_id) {
@@ -89,26 +170,10 @@ static iree_status_t loom_llvmir_verify_mask_result_type(
 
 static bool loom_llvmir_verify_type_is_integer_or_pointer_like(
     const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
-  if (!type) return false;
-  if (type->kind == LOOM_LLVMIR_TYPE_INTEGER ||
-      type->kind == LOOM_LLVMIR_TYPE_POINTER) {
-    return true;
-  }
-  if (type->kind != LOOM_LLVMIR_TYPE_VECTOR) return false;
   const loom_llvmir_type_t* element_type =
-      loom_llvmir_verify_type(module, type->element_type);
+      loom_llvmir_verify_scalar_type(module, type);
   return element_type && (element_type->kind == LOOM_LLVMIR_TYPE_INTEGER ||
                           element_type->kind == LOOM_LLVMIR_TYPE_POINTER);
-}
-
-static bool loom_llvmir_verify_type_is_float_like(
-    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
-  if (!type) return false;
-  if (type->kind == LOOM_LLVMIR_TYPE_FLOAT) return true;
-  if (type->kind != LOOM_LLVMIR_TYPE_VECTOR) return false;
-  const loom_llvmir_type_t* element_type =
-      loom_llvmir_verify_type(module, type->element_type);
-  return element_type && element_type->kind == LOOM_LLVMIR_TYPE_FLOAT;
 }
 
 static bool loom_llvmir_verify_icmp_predicate(
@@ -153,6 +218,140 @@ static bool loom_llvmir_verify_fcmp_predicate(
     default:
       return false;
   }
+}
+
+static bool loom_llvmir_verify_type_same_pointer_address_space(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* lhs,
+    const loom_llvmir_type_t* rhs) {
+  const loom_llvmir_type_t* lhs_scalar =
+      loom_llvmir_verify_scalar_type(module, lhs);
+  const loom_llvmir_type_t* rhs_scalar =
+      loom_llvmir_verify_scalar_type(module, rhs);
+  return lhs_scalar && rhs_scalar &&
+         lhs_scalar->kind == LOOM_LLVMIR_TYPE_POINTER &&
+         rhs_scalar->kind == LOOM_LLVMIR_TYPE_POINTER &&
+         lhs_scalar->address_space == rhs_scalar->address_space;
+}
+
+static bool loom_llvmir_verify_bitcast(const loom_llvmir_module_t* module,
+                                       const loom_llvmir_type_t* source_type,
+                                       const loom_llvmir_type_t* result_type) {
+  bool source_is_pointer =
+      loom_llvmir_verify_type_is_pointer_like(module, source_type);
+  bool result_is_pointer =
+      loom_llvmir_verify_type_is_pointer_like(module, result_type);
+  if (source_is_pointer != result_is_pointer) return false;
+  if (!source_is_pointer) {
+    uint64_t source_bit_width =
+        loom_llvmir_verify_type_primitive_bit_width(module, source_type);
+    uint64_t result_bit_width =
+        loom_llvmir_verify_type_primitive_bit_width(module, result_type);
+    return source_bit_width != 0 && source_bit_width == result_bit_width;
+  }
+  if (!loom_llvmir_verify_type_same_pointer_address_space(module, source_type,
+                                                          result_type)) {
+    return false;
+  }
+  bool source_is_vector = source_type->kind == LOOM_LLVMIR_TYPE_VECTOR;
+  bool result_is_vector = result_type->kind == LOOM_LLVMIR_TYPE_VECTOR;
+  if (source_is_vector && result_is_vector) {
+    return loom_llvmir_verify_same_vector_shape(source_type, result_type);
+  }
+  if (source_is_vector) return source_type->element_count == 1;
+  if (result_is_vector) return result_type->element_count == 1;
+  return true;
+}
+
+static bool loom_llvmir_verify_cast_is_valid(
+    const loom_llvmir_module_t* module, loom_llvmir_cast_op_t op,
+    const loom_llvmir_type_t* source_type,
+    const loom_llvmir_type_t* result_type) {
+  if (!loom_llvmir_verify_type_is_first_class(module, source_type) ||
+      !loom_llvmir_verify_type_is_first_class(module, result_type)) {
+    return false;
+  }
+  uint32_t source_bits =
+      loom_llvmir_verify_type_scalar_bit_width(module, source_type);
+  uint32_t result_bits =
+      loom_llvmir_verify_type_scalar_bit_width(module, result_type);
+  switch (op) {
+    case LOOM_LLVMIR_CAST_TRUNCATE:
+      return loom_llvmir_verify_type_is_int_like(module, source_type) &&
+             loom_llvmir_verify_type_is_int_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type) &&
+             source_bits > result_bits;
+    case LOOM_LLVMIR_CAST_ZERO_EXTEND:
+    case LOOM_LLVMIR_CAST_SIGN_EXTEND:
+      return loom_llvmir_verify_type_is_int_like(module, source_type) &&
+             loom_llvmir_verify_type_is_int_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type) &&
+             source_bits < result_bits;
+    case LOOM_LLVMIR_CAST_FP_TRUNCATE:
+      return loom_llvmir_verify_type_is_float_like(module, source_type) &&
+             loom_llvmir_verify_type_is_float_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type) &&
+             source_bits > result_bits;
+    case LOOM_LLVMIR_CAST_FP_EXTEND:
+      return loom_llvmir_verify_type_is_float_like(module, source_type) &&
+             loom_llvmir_verify_type_is_float_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type) &&
+             source_bits < result_bits;
+    case LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP:
+    case LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP:
+      return loom_llvmir_verify_type_is_int_like(module, source_type) &&
+             loom_llvmir_verify_type_is_float_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type);
+    case LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT:
+    case LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT:
+      return loom_llvmir_verify_type_is_float_like(module, source_type) &&
+             loom_llvmir_verify_type_is_int_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type);
+    case LOOM_LLVMIR_CAST_PTR_TO_INT:
+      return loom_llvmir_verify_type_is_pointer_like(module, source_type) &&
+             loom_llvmir_verify_type_is_int_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type);
+    case LOOM_LLVMIR_CAST_INT_TO_PTR:
+      return loom_llvmir_verify_type_is_int_like(module, source_type) &&
+             loom_llvmir_verify_type_is_pointer_like(module, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type);
+    case LOOM_LLVMIR_CAST_BITCAST:
+      return loom_llvmir_verify_bitcast(module, source_type, result_type);
+    case LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST:
+      return loom_llvmir_verify_type_is_pointer_like(module, source_type) &&
+             loom_llvmir_verify_type_is_pointer_like(module, result_type) &&
+             !loom_llvmir_verify_type_same_pointer_address_space(
+                 module, source_type, result_type) &&
+             loom_llvmir_verify_same_vector_shape(source_type, result_type);
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_llvmir_verify_cast(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM cast has no result value");
+  }
+  loom_llvmir_type_id_t source_type_id =
+      loom_llvmir_verify_value_type(module, instruction->cast.value);
+  loom_llvmir_type_id_t result_type_id =
+      loom_llvmir_verify_value_type(module, instruction->result_value_id);
+  const loom_llvmir_type_t* source_type =
+      loom_llvmir_verify_type(module, source_type_id);
+  const loom_llvmir_type_t* result_type =
+      loom_llvmir_verify_type(module, result_type_id);
+  if (!source_type || !result_type) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM cast references unknown type");
+  }
+  if (!loom_llvmir_verify_cast_is_valid(module, instruction->cast.op,
+                                        source_type, result_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM cast has invalid source/result types");
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_llvmir_verify_compare(
@@ -278,6 +477,8 @@ static iree_status_t loom_llvmir_verify_instruction(
           loom_llvmir_verify_type_is_float_like);
     case LOOM_LLVMIR_INST_SELECT:
       return loom_llvmir_verify_select(module, instruction);
+    case LOOM_LLVMIR_INST_CAST:
+      return loom_llvmir_verify_cast(module, instruction);
     case LOOM_LLVMIR_INST_GEP:
       if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

@@ -82,15 +82,16 @@ typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_ICMP = 2,
   LOOM_LLVMIR_INST_FCMP = 3,
   LOOM_LLVMIR_INST_SELECT = 4,
-  LOOM_LLVMIR_INST_GEP = 5,
-  LOOM_LLVMIR_INST_LOAD = 6,
-  LOOM_LLVMIR_INST_STORE = 7,
-  LOOM_LLVMIR_INST_CALL = 8,
-  LOOM_LLVMIR_INST_INLINE_ASM = 9,
-  LOOM_LLVMIR_INST_RET = 10,
-  LOOM_LLVMIR_INST_BR = 11,
-  LOOM_LLVMIR_INST_COND_BR = 12,
-  LOOM_LLVMIR_INST_UNREACHABLE = 13,
+  LOOM_LLVMIR_INST_CAST = 5,
+  LOOM_LLVMIR_INST_GEP = 6,
+  LOOM_LLVMIR_INST_LOAD = 7,
+  LOOM_LLVMIR_INST_STORE = 8,
+  LOOM_LLVMIR_INST_CALL = 9,
+  LOOM_LLVMIR_INST_INLINE_ASM = 10,
+  LOOM_LLVMIR_INST_RET = 11,
+  LOOM_LLVMIR_INST_BR = 12,
+  LOOM_LLVMIR_INST_COND_BR = 13,
+  LOOM_LLVMIR_INST_UNREACHABLE = 14,
 } loom_llvmir_inst_kind_t;
 
 typedef struct loom_llvmir_instruction_t {
@@ -143,6 +144,13 @@ typedef struct loom_llvmir_instruction_t {
       // Value selected when |condition| is false.
       loom_llvmir_value_id_t false_value;
     } select;
+    // Cast operands.
+    struct {
+      // Cast opcode.
+      loom_llvmir_cast_op_t op;
+      // Source value.
+      loom_llvmir_value_id_t value;
+    } cast;
     // GetElementPtr operands.
     struct {
       // Pointee element type used by LLVM's opaque-pointer GEP syntax.

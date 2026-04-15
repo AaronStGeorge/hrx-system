@@ -62,6 +62,22 @@ typedef enum loom_llvmir_fcmp_predicate_e {
   LOOM_LLVMIR_FCMP_TRUE = 15,
 } loom_llvmir_fcmp_predicate_t;
 
+typedef enum loom_llvmir_cast_op_e {
+  LOOM_LLVMIR_CAST_TRUNCATE = 0,
+  LOOM_LLVMIR_CAST_ZERO_EXTEND = 1,
+  LOOM_LLVMIR_CAST_SIGN_EXTEND = 2,
+  LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT = 3,
+  LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT = 4,
+  LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP = 5,
+  LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP = 6,
+  LOOM_LLVMIR_CAST_FP_TRUNCATE = 7,
+  LOOM_LLVMIR_CAST_FP_EXTEND = 8,
+  LOOM_LLVMIR_CAST_PTR_TO_INT = 9,
+  LOOM_LLVMIR_CAST_INT_TO_PTR = 10,
+  LOOM_LLVMIR_CAST_BITCAST = 11,
+  LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST = 12,
+} loom_llvmir_cast_op_t;
+
 typedef enum loom_llvmir_memory_flag_bits_e {
   LOOM_LLVMIR_MEMORY_VOLATILE = 1u << 0,
 } loom_llvmir_memory_flags_t;
@@ -128,6 +144,17 @@ typedef struct loom_llvmir_fcmp_desc_t {
   // Right operand value.
   loom_llvmir_value_id_t rhs;
 } loom_llvmir_fcmp_desc_t;
+
+typedef struct loom_llvmir_cast_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Result type.
+  loom_llvmir_type_id_t result_type;
+  // Cast opcode.
+  loom_llvmir_cast_op_t op;
+  // Source value.
+  loom_llvmir_value_id_t value;
+} loom_llvmir_cast_desc_t;
 
 typedef struct loom_llvmir_gep_desc_t {
   // Optional result name without the leading percent sign.
@@ -227,6 +254,10 @@ iree_status_t loom_llvmir_build_icmp(loom_llvmir_block_t* block,
 
 iree_status_t loom_llvmir_build_fcmp(loom_llvmir_block_t* block,
                                      const loom_llvmir_fcmp_desc_t* desc,
+                                     loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_cast(loom_llvmir_block_t* block,
+                                     const loom_llvmir_cast_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_gep(loom_llvmir_block_t* block,

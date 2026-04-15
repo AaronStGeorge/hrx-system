@@ -939,6 +939,9 @@ static iree_status_t loom_llvmir_bitcode_map_mark_instruction_constants(
       return loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->select.false_value);
     }
+    case LOOM_LLVMIR_INST_CAST:
+      return loom_llvmir_bitcode_map_mark_constant(module, map,
+                                                   instruction->cast.value);
     case LOOM_LLVMIR_INST_GEP: {
       IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->gep.base));
@@ -1370,6 +1373,54 @@ static iree_status_t loom_llvmir_bitcode_fcmp_predicate(
   }
 }
 
+static iree_status_t loom_llvmir_bitcode_cast_op(loom_llvmir_cast_op_t op,
+                                                 uint64_t* out_op) {
+  switch (op) {
+    case LOOM_LLVMIR_CAST_TRUNCATE:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_TRUNCATE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_ZERO_EXTEND:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_ZERO_EXTEND;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_SIGN_EXTEND:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_SIGN_EXTEND;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_FP_TO_UNSIGNED_INT;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_FP_TO_SIGNED_INT;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_UNSIGNED_INT_TO_FP;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_SIGNED_INT_TO_FP;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_FP_TRUNCATE:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_FP_TRUNCATE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_FP_EXTEND:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_FP_EXTEND;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_PTR_TO_INT:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_PTR_TO_INT;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_INT_TO_PTR:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_INT_TO_PTR;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_BITCAST:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_BITCAST;
+      return iree_ok_status();
+    case LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST:
+      *out_op = LOOM_LLVMIR_BITCODE_CAST_ADDRESS_SPACE_CAST;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown LLVM cast op");
+  }
+}
+
 static iree_status_t loom_llvmir_bitcode_check_instruction(
     const loom_llvmir_module_t* module,
     const loom_llvmir_instruction_t* instruction) {
@@ -1395,6 +1446,10 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
     }
     case LOOM_LLVMIR_INST_SELECT:
       return iree_ok_status();
+    case LOOM_LLVMIR_INST_CAST: {
+      uint64_t op = 0;
+      return loom_llvmir_bitcode_cast_op(instruction->cast.op, &op);
+    }
     case LOOM_LLVMIR_INST_GEP:
       if (instruction->gep.index_count > (IREE_HOST_SIZE_MAX - 4) / 2) {
         return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -2284,6 +2339,26 @@ static iree_status_t loom_llvmir_bitcode_write_select(
       operand_count);
 }
 
+static iree_status_t loom_llvmir_bitcode_write_cast(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t op = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_cast_op(instruction->cast.op, &op));
+  uint64_t operands[4];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->cast.value, instruction_value_id,
+      operands, &operand_count));
+  operands[operand_count++] =
+      module->values[instruction->result_value_id].type_id;
+  operands[operand_count++] = op;
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_CAST, operands,
+      operand_count);
+}
+
 static iree_status_t loom_llvmir_bitcode_write_gep(
     const loom_llvmir_module_t* module,
     const loom_llvmir_bitcode_function_value_map_t* value_map,
@@ -2592,6 +2667,9 @@ static iree_status_t loom_llvmir_bitcode_write_instruction(
     case LOOM_LLVMIR_INST_SELECT:
       return loom_llvmir_bitcode_write_select(module, value_map, instruction,
                                               instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_CAST:
+      return loom_llvmir_bitcode_write_cast(module, value_map, instruction,
+                                            instruction_value_id, writer);
     case LOOM_LLVMIR_INST_GEP:
       return loom_llvmir_bitcode_write_gep(module, value_map, instruction,
                                            instruction_value_id, writer);

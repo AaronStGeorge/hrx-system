@@ -374,6 +374,39 @@ static const char* loom_llvmir_fcmp_predicate_spelling(
   }
 }
 
+static const char* loom_llvmir_cast_op_spelling(loom_llvmir_cast_op_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_CAST_TRUNCATE:
+      return "trunc";
+    case LOOM_LLVMIR_CAST_ZERO_EXTEND:
+      return "zext";
+    case LOOM_LLVMIR_CAST_SIGN_EXTEND:
+      return "sext";
+    case LOOM_LLVMIR_CAST_FP_TO_UNSIGNED_INT:
+      return "fptoui";
+    case LOOM_LLVMIR_CAST_FP_TO_SIGNED_INT:
+      return "fptosi";
+    case LOOM_LLVMIR_CAST_UNSIGNED_INT_TO_FP:
+      return "uitofp";
+    case LOOM_LLVMIR_CAST_SIGNED_INT_TO_FP:
+      return "sitofp";
+    case LOOM_LLVMIR_CAST_FP_TRUNCATE:
+      return "fptrunc";
+    case LOOM_LLVMIR_CAST_FP_EXTEND:
+      return "fpext";
+    case LOOM_LLVMIR_CAST_PTR_TO_INT:
+      return "ptrtoint";
+    case LOOM_LLVMIR_CAST_INT_TO_PTR:
+      return "inttoptr";
+    case LOOM_LLVMIR_CAST_BITCAST:
+      return "bitcast";
+    case LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST:
+      return "addrspacecast";
+    default:
+      return NULL;
+  }
+}
+
 static iree_status_t loom_llvmir_write_result_prefix(
     const loom_llvmir_module_t* module,
     const loom_llvmir_instruction_t* instruction,
@@ -493,6 +526,24 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
       return loom_llvmir_write_typed_value_ref(
           module, instruction->select.false_value, stream);
+    }
+    case LOOM_LLVMIR_INST_CAST: {
+      const char* op = loom_llvmir_cast_op_spelling(instruction->cast.op);
+      if (!op) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM cast op");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, op));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->cast.value, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " to "));
+      return loom_llvmir_write_type(
+          module,
+          loom_llvmir_text_value_type(module, instruction->result_value_id),
+          stream);
     }
     case LOOM_LLVMIR_INST_GEP: {
       IREE_RETURN_IF_ERROR(

@@ -39,6 +39,9 @@ typedef enum loom_llvmir_test_module_scenario_e {
   LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS = 6,
   // Scalar compare and select function.
   LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT = 7,
+  // Scalar cast function covering integer, float, pointer, and address-space
+  // casts.
+  LOOM_LLVMIR_TEST_MODULE_CASTS = 8,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);
