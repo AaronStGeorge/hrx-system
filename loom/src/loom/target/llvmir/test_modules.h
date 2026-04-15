@@ -35,6 +35,8 @@ typedef enum loom_llvmir_test_module_scenario_e {
   LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS = 4,
   // Scalar arithmetic function with a value-producing binary op.
   LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP = 5,
+  // Host function using target-independent memory intrinsics.
+  LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS = 6,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);

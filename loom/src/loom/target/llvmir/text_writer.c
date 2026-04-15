@@ -194,6 +194,10 @@ static iree_status_t loom_llvmir_write_attr(const loom_llvmir_module_t* module,
       return loom_output_stream_write_cstring(stream, "inreg");
     case LOOM_LLVMIR_ATTR_ALWAYSINLINE:
       return loom_output_stream_write_cstring(stream, "alwaysinline");
+    case LOOM_LLVMIR_ATTR_NOCAPTURE:
+      return loom_output_stream_write_cstring(stream, "nocapture");
+    case LOOM_LLVMIR_ATTR_IMMARG:
+      return loom_output_stream_write_cstring(stream, "immarg");
     case LOOM_LLVMIR_ATTR_RANGE: {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "range("));
       IREE_RETURN_IF_ERROR(

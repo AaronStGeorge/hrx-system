@@ -10,5 +10,6 @@
 #define LOOM_TARGET_LLVMIR_INTRINSICS_H_
 
 #include "loom/target/llvmir/intrinsics_amdgpu.h"
+#include "loom/target/llvmir/intrinsics_builtin.h"
 
 #endif  // LOOM_TARGET_LLVMIR_INTRINSICS_H_

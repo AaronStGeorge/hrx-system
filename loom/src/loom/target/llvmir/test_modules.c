@@ -8,7 +8,7 @@
 
 #include "loom/target/llvmir/llvmir.h"
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 6
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 7
 
 static loom_llvmir_attr_t loom_llvmir_test_attr(loom_llvmir_attr_kind_t kind) {
   return (loom_llvmir_attr_t){
@@ -316,6 +316,120 @@ static iree_status_t loom_llvmir_test_populate_call_constants(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
+    loom_llvmir_module_t* module) {
+  const loom_llvmir_target_env_t* target_env =
+      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+
+  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i1_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i8_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_void_type(module, &void_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      module, target_env->address_spaces.generic, &ptr_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 1, &i1_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 8, &i8_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 64, &i64_type));
+
+  loom_llvmir_function_t* memcpy_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_declare_memcpy(
+      module, target_env->address_spaces.generic,
+      target_env->address_spaces.generic, 64, &memcpy_function));
+  loom_llvmir_function_t* memset_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_declare_memset(
+      module, target_env->address_spaces.generic, 64, &memset_function));
+  loom_llvmir_function_t* lifetime_start = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_start(
+      module, target_env->address_spaces.generic, &lifetime_start));
+  loom_llvmir_function_t* lifetime_end = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_end(
+      module, target_env->address_spaces.generic, &lifetime_end));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("memory_ops"),
+          .return_type = void_type,
+          .linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+  loom_llvmir_value_id_t target = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t source = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = ptr_type,
+                                             .name = IREE_SV("target"),
+                                         },
+                                         &target));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = ptr_type,
+                                             .name = IREE_SV("source"),
+                                         },
+                                         &source));
+
+  loom_llvmir_value_id_t size = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t zero_byte = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t false_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_add_integer_constant(module, i64_type, 16, &size));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_add_integer_constant(module, i8_type, 0, &zero_byte));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i1_type, 0, &false_value));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  loom_llvmir_value_id_t lifetime_args[] = {size, target};
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      entry,
+      &(loom_llvmir_call_desc_t){
+          .callee = loom_llvmir_function_id(lifetime_start),
+          .args = lifetime_args,
+          .arg_count = IREE_ARRAYSIZE(lifetime_args),
+      },
+      NULL));
+  loom_llvmir_value_id_t memset_args[] = {target, zero_byte, size, false_value};
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      entry,
+      &(loom_llvmir_call_desc_t){
+          .callee = loom_llvmir_function_id(memset_function),
+          .args = memset_args,
+          .arg_count = IREE_ARRAYSIZE(memset_args),
+      },
+      NULL));
+  loom_llvmir_value_id_t memcpy_args[] = {target, source, size, false_value};
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      entry,
+      &(loom_llvmir_call_desc_t){
+          .callee = loom_llvmir_function_id(memcpy_function),
+          .args = memcpy_args,
+          .arg_count = IREE_ARRAYSIZE(memcpy_args),
+      },
+      NULL));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      entry,
+      &(loom_llvmir_call_desc_t){
+          .callee = loom_llvmir_function_id(lifetime_end),
+          .args = lifetime_args,
+          .arg_count = IREE_ARRAYSIZE(lifetime_args),
+      },
+      NULL));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret_void(entry));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_test_populate_cfg_phi(
     loom_llvmir_module_t* module) {
   loom_llvmir_type_id_t i1_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -511,7 +625,6 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
-  loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t v1f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t global_ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -521,8 +634,6 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
       loom_llvmir_module_get_integer_type(module, 16, &i16_type));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 32, &i32_type));
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_module_get_integer_type(module, 64, &i64_type));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_float_type(
       module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
   IREE_RETURN_IF_ERROR(
@@ -619,7 +730,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i16_type, 0, &stride_zero));
   IREE_RETURN_IF_ERROR(
-      loom_llvmir_module_add_integer_constant(module, i64_type, 64, &records));
+      loom_llvmir_module_add_integer_constant(module, i32_type, 64, &records));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(module, i32_type,
                                                                159744, &flags));
 
@@ -784,6 +895,30 @@ static const char kCallConstantsText[] =
     "  ret i32 %y\n"
     "}\n";
 
+static const char kBuiltinIntrinsicsText[] =
+    "source_filename = \"loom-builtins\"\n"
+    "target triple = \"x86_64-unknown-linux-gnu\"\n"
+    "\n"
+    "declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, "
+    "ptr noalias nocapture readonly, i64, i1 immarg)\n"
+    "\n"
+    "declare void @llvm.memset.p0.i64(ptr nocapture writeonly, i8, i64, "
+    "i1 immarg)\n"
+    "\n"
+    "declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)\n"
+    "\n"
+    "declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)\n"
+    "\n"
+    "define dso_local void @memory_ops(ptr %target, ptr %source) {\n"
+    "entry:\n"
+    "  call void @llvm.lifetime.start.p0(i64 16, ptr %target)\n"
+    "  call void @llvm.memset.p0.i64(ptr %target, i8 0, i64 16, i1 0)\n"
+    "  call void @llvm.memcpy.p0.p0.i64(ptr %target, ptr %source, "
+    "i64 16, i1 0)\n"
+    "  call void @llvm.lifetime.end.p0(i64 16, ptr %target)\n"
+    "  ret void\n"
+    "}\n";
+
 static const char kCfgPhiText[] =
     "define i32 @select_i32(i1 %c, i32 %a, i32 %b) {\n"
     "entry:\n"
@@ -826,13 +961,13 @@ static const char kAmdgpuIntrinsicsText[] =
     "@llvm.amdgcn.workitem.id.x()\n"
     "  %x.rsrc = call ptr addrspace(7) "
     "@llvm.amdgcn.make.buffer.rsrc.p7.p1(ptr addrspace(1) %x, i16 0, "
-    "i64 64, i32 159744)\n"
+    "i32 64, i32 159744)\n"
     "  %y.rsrc = call ptr addrspace(7) "
     "@llvm.amdgcn.make.buffer.rsrc.p7.p1(ptr addrspace(1) %y, i16 0, "
-    "i64 64, i32 159744)\n"
+    "i32 64, i32 159744)\n"
     "  %z.rsrc = call ptr addrspace(7) "
     "@llvm.amdgcn.make.buffer.rsrc.p7.p1(ptr addrspace(1) %z, i16 0, "
-    "i64 64, i32 159744)\n"
+    "i32 64, i32 159744)\n"
     "  %x.ptr = getelementptr float, ptr addrspace(7) %x.rsrc, i32 "
     "%tid\n"
     "  %y.ptr = getelementptr float, ptr addrspace(7) %y.rsrc, i32 "
@@ -852,7 +987,7 @@ static const char kAmdgpuIntrinsicsText[] =
     "declare i32 @llvm.amdgcn.workitem.id.x()\n"
     "\n"
     "declare ptr addrspace(7) @llvm.amdgcn.make.buffer.rsrc.p7.p1("
-    "ptr addrspace(1) readnone, i16, i64, i32)\n"
+    "ptr addrspace(1) readnone, i16, i32, i32)\n"
     "\n"
     "attributes #0 = { alwaysinline "
     "\"amdgpu-flat-work-group-size\"=\"64,64\" "
@@ -879,6 +1014,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
       return IREE_SV("amdgpu_intrinsics");
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
       return IREE_SV("scalar_binop");
+    case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
+      return IREE_SV("builtin_intrinsics");
     default:
       return IREE_SV("unknown");
   }
@@ -903,6 +1040,14 @@ static iree_status_t loom_llvmir_test_module_target_config(
           loom_llvmir_target_env_x86_64_unknown_linux_gnu();
       IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
           target_env, IREE_SV("loom-call-constants"), out_target_config));
+      *out_target_config_ptr = out_target_config;
+      return iree_ok_status();
+    }
+    case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS: {
+      const loom_llvmir_target_env_t* target_env =
+          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
+          target_env, IREE_SV("loom-builtins"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
@@ -931,6 +1076,8 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_object_vadd4(module);
     case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS:
       return loom_llvmir_test_populate_call_constants(module);
+    case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
+      return loom_llvmir_test_populate_builtin_intrinsics(module);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return loom_llvmir_test_populate_cfg_phi(module);
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
@@ -979,6 +1126,9 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS:
       return iree_make_string_view(kCallConstantsText,
                                    IREE_ARRAYSIZE(kCallConstantsText) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
+      return iree_make_string_view(kBuiltinIntrinsicsText,
+                                   IREE_ARRAYSIZE(kBuiltinIntrinsicsText) - 1);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return iree_make_string_view(kCfgPhiText,
                                    IREE_ARRAYSIZE(kCfgPhiText) - 1);

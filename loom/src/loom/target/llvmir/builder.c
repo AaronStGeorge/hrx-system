@@ -379,6 +379,10 @@ iree_status_t loom_llvmir_build_inline_asm(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM inline asm has null arg storage");
   }
+  loom_llvmir_type_id_t inline_asm_pointer_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_pointer_type(module, 0, &inline_asm_pointer_type));
+  (void)inline_asm_pointer_type;
   for (iree_host_size_t i = 0; i < desc->arg_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->args[i]));
   }

@@ -214,6 +214,8 @@ struct loom_llvmir_block_t {
 typedef struct loom_llvmir_metadata_node_t {
   // Integer tuple storage owned by the module arena.
   int32_t* i32_values;
+  // Module constants corresponding to |i32_values| in tuple order.
+  loom_llvmir_value_id_t* i32_value_ids;
   // Number of entries in |i32_values|.
   iree_host_size_t i32_value_count;
 } loom_llvmir_metadata_node_t;

@@ -328,11 +328,22 @@ iree_status_t loom_llvmir_module_add_metadata_i32_tuple(
       &module->metadata_node_count, &module->metadata_node_capacity,
       sizeof(*module->metadata_nodes), (void**)&node));
   if (metadata->value_count > 0) {
+    loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_module_get_integer_type(module, 32, &i32_type));
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         &module->arena, metadata->value_count, sizeof(*node->i32_values),
         (void**)&node->i32_values));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        &module->arena, metadata->value_count, sizeof(*node->i32_value_ids),
+        (void**)&node->i32_value_ids));
     memcpy(node->i32_values, metadata->values,
            metadata->value_count * sizeof(*node->i32_values));
+    for (iree_host_size_t i = 0; i < metadata->value_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+          module, i32_type, (uint32_t)metadata->values[i],
+          &node->i32_value_ids[i]));
+    }
   }
   node->i32_value_count = metadata->value_count;
   *out_metadata_id =
