@@ -46,6 +46,7 @@ scalar_addi = binary_op(
     commutative=True,
     flags=("overflow", IntOverflowFlags),
     facts="loom_scalar_addi_facts",
+    canonicalize="loom_scalar_addi_canonicalize",
     examples=[
         "%result = scalar.addi %lhs, %rhs : i32",
         "%result = scalar.addi<nuw> %lhs, %rhs : i32",
@@ -59,6 +60,7 @@ scalar_subi = binary_op(
     doc="Integer subtraction.",
     flags=("overflow", IntOverflowFlags),
     facts="loom_scalar_subi_facts",
+    canonicalize="loom_scalar_subi_canonicalize",
     examples=["%result = scalar.subi %lhs, %rhs : i32"],
 )
 
@@ -70,6 +72,7 @@ scalar_muli = binary_op(
     commutative=True,
     flags=("overflow", IntOverflowFlags),
     facts="loom_scalar_muli_facts",
+    canonicalize="loom_scalar_muli_canonicalize",
     examples=["%result = scalar.muli %lhs, %rhs : i32"],
 )
 
@@ -79,6 +82,7 @@ scalar_divsi = binary_op(
     type_constraint=INTEGER,
     doc="Signed integer division (rounds toward zero).",
     facts="loom_scalar_divsi_facts",
+    canonicalize="loom_scalar_divsi_canonicalize",
     examples=["%result = scalar.divsi %lhs, %rhs : i32"],
 )
 
@@ -88,6 +92,7 @@ scalar_divui = binary_op(
     type_constraint=INTEGER,
     doc="Unsigned integer division.",
     facts="loom_scalar_divui_facts",
+    canonicalize="loom_scalar_divui_canonicalize",
     examples=["%result = scalar.divui %lhs, %rhs : i32"],
 )
 
@@ -97,6 +102,7 @@ scalar_remsi = binary_op(
     type_constraint=INTEGER,
     doc="Signed integer remainder.",
     facts="loom_scalar_remsi_facts",
+    canonicalize="loom_scalar_remsi_canonicalize",
     examples=["%result = scalar.remsi %lhs, %rhs : i32"],
 )
 
@@ -106,6 +112,7 @@ scalar_remui = binary_op(
     type_constraint=INTEGER,
     doc="Unsigned integer remainder.",
     facts="loom_scalar_remui_facts",
+    canonicalize="loom_scalar_remui_canonicalize",
     examples=["%result = scalar.remui %lhs, %rhs : i32"],
 )
 
@@ -114,6 +121,7 @@ scalar_ceildivsi = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Signed integer division, rounding toward positive infinity.",
+    canonicalize="loom_scalar_ceildivsi_canonicalize",
     examples=["%result = scalar.ceildivsi %lhs, %rhs : i32"],
 )
 
@@ -122,6 +130,7 @@ scalar_ceildivui = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Unsigned integer division, rounding toward positive infinity.",
+    canonicalize="loom_scalar_ceildivui_canonicalize",
     examples=["%result = scalar.ceildivui %lhs, %rhs : i32"],
 )
 
@@ -130,6 +139,7 @@ scalar_floordivsi = binary_op(
     group=scalar_ops,
     type_constraint=INTEGER,
     doc="Signed integer division, rounding toward negative infinity.",
+    canonicalize="loom_scalar_floordivsi_canonicalize",
     examples=["%result = scalar.floordivsi %lhs, %rhs : i32"],
 )
 
@@ -140,6 +150,7 @@ scalar_negi = unary_op(
     doc="Integer negation.",
     traits=[INVOLUTION],
     facts="loom_scalar_negi_facts",
+    canonicalize="loom_scalar_negi_canonicalize",
     examples=["%result = scalar.negi %input : i32"],
 )
 
@@ -150,6 +161,7 @@ scalar_absi = unary_op(
     doc="Integer absolute value.",
     traits=[IDEMPOTENT],
     facts="loom_scalar_absi_facts",
+    canonicalize="loom_scalar_absi_canonicalize",
     examples=["%result = scalar.absi %input : i32"],
 )
 
@@ -160,6 +172,7 @@ scalar_minsi = binary_op(
     doc="Signed integer minimum.",
     commutative=True,
     facts="loom_scalar_minsi_facts",
+    canonicalize="loom_scalar_minsi_canonicalize",
     examples=["%result = scalar.minsi %lhs, %rhs : i32"],
 )
 
@@ -170,6 +183,7 @@ scalar_maxsi = binary_op(
     doc="Signed integer maximum.",
     commutative=True,
     facts="loom_scalar_maxsi_facts",
+    canonicalize="loom_scalar_maxsi_canonicalize",
     examples=["%result = scalar.maxsi %lhs, %rhs : i32"],
 )
 
@@ -180,6 +194,7 @@ scalar_minui = binary_op(
     doc="Unsigned integer minimum.",
     commutative=True,
     facts="loom_scalar_minui_facts",
+    canonicalize="loom_scalar_minui_canonicalize",
     examples=["%result = scalar.minui %lhs, %rhs : i32"],
 )
 
@@ -190,6 +205,7 @@ scalar_maxui = binary_op(
     doc="Unsigned integer maximum.",
     commutative=True,
     facts="loom_scalar_maxui_facts",
+    canonicalize="loom_scalar_maxui_canonicalize",
     examples=["%result = scalar.maxui %lhs, %rhs : i32"],
 )
 

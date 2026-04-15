@@ -1603,7 +1603,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
         result_count_expr = str(layout.fixed_result_count)
 
     region_count = len(op.regions)
-    attr_count = len(op.attrs)
+    attr_count = len(_non_flags_attrs(op))
 
     # Compute tied result count expression.
     static_ties = _static_tied_results(op)
@@ -1619,6 +1619,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
     lines.append(f"      builder, {enum_name}, {operand_count_expr},")
     lines.append(f"      {result_count_expr}, {region_count}, {tied_count_expr},")
     lines.append(f"      {attr_count}, location, out_op));")
+    lines.extend(f"  (*out_op)->instance_flags = {param['name']};" for param in params if param["kind"] == "instance_flags")
 
     # Fill in fixed operands.
     lines.extend(f"  loom_op_operands(*out_op)[{param['index']}] = {param['name']};" for param in params if param["kind"] == "operand")

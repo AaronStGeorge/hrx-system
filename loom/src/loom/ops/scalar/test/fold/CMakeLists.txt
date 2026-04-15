@@ -23,6 +23,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "arithmetici_structural"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici_structural.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "bitwisei"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei.loom-test"

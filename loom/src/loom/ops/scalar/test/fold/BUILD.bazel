@@ -16,6 +16,7 @@ loom_check_test_suite(
     name = "fold",
     srcs = [
         "arithmetici.loom-test",
+        "arithmetici_structural.loom-test",
         "bitwisei.loom-test",
         "comparisoni.loom-test",
         "conversioni.loom-test",
