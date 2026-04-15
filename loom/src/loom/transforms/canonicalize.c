@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/analysis/symbolic_expr.h"
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
@@ -49,6 +50,29 @@ static iree_status_t loom_canonicalize_materialize_constant(
                                                   location, &constant_op));
   *out_value_id = loom_scalar_constant_result(constant_op);
   return iree_ok_status();
+}
+
+static iree_status_t loom_canonicalize_replace_single_result_with_value(
+    loom_rewriter_t* rewriter, loom_op_t* op, loom_value_id_t replacement) {
+  return loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement,
+                                                  1);
+}
+
+static iree_status_t loom_canonicalize_replace_single_result_with_exact_i64(
+    loom_rewriter_t* rewriter, loom_op_t* op, int64_t value) {
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_value_id_t result = loom_op_const_results(op)[0];
+  loom_type_t result_type = loom_module_value_type(rewriter->module, result);
+
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_build_constant(rewriter, loom_value_facts_exact_i64(value),
+                                   result_type, op->location, &replacement));
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &replacement, 1, value_checkpoint));
+  return loom_canonicalize_replace_single_result_with_value(rewriter, op,
+                                                            replacement);
 }
 
 //===----------------------------------------------------------------------===//
@@ -407,6 +431,128 @@ static iree_status_t loom_canonicalize_try_elide_empty_vector_op(
   return iree_ok_status();
 }
 
+static bool loom_canonicalize_symbolic_relation_from_index_predicate(
+    loom_rewriter_t* rewriter, uint8_t predicate, loom_value_id_t lhs,
+    loom_value_id_t rhs, loom_symbolic_integer_relation_t* out_relation) {
+  switch ((loom_index_cmp_predicate_t)predicate) {
+    case LOOM_INDEX_CMP_PREDICATE_EQ:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
+      return true;
+    case LOOM_INDEX_CMP_PREDICATE_NE:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_NE;
+      return true;
+    case LOOM_INDEX_CMP_PREDICATE_SLT:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT;
+      return true;
+    case LOOM_INDEX_CMP_PREDICATE_SLE:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LE;
+      return true;
+    case LOOM_INDEX_CMP_PREDICATE_SGT:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GT;
+      return true;
+    case LOOM_INDEX_CMP_PREDICATE_SGE:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GE;
+      return true;
+    case LOOM_INDEX_CMP_PREDICATE_ULT:
+    case LOOM_INDEX_CMP_PREDICATE_ULE:
+    case LOOM_INDEX_CMP_PREDICATE_UGT:
+    case LOOM_INDEX_CMP_PREDICATE_UGE:
+      if (!loom_value_facts_is_non_negative(
+              loom_rewriter_value_facts(rewriter, lhs)) ||
+          !loom_value_facts_is_non_negative(
+              loom_rewriter_value_facts(rewriter, rhs))) {
+        return false;
+      }
+      if (predicate == LOOM_INDEX_CMP_PREDICATE_ULT) {
+        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT;
+      } else if (predicate == LOOM_INDEX_CMP_PREDICATE_ULE) {
+        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LE;
+      } else if (predicate == LOOM_INDEX_CMP_PREDICATE_UGT) {
+        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GT;
+      } else {
+        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GE;
+      }
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_canonicalize_try_symbolic_index_sub(
+    loom_rewriter_t* rewriter, loom_symbolic_expr_context_t* expression_context,
+    loom_op_t* op, bool* out_changed) {
+  *out_changed = false;
+  if (!loom_index_sub_isa(op)) return iree_ok_status();
+
+  loom_symbolic_value_difference_t difference = {0};
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_simplify_value_difference(
+      expression_context, loom_index_sub_lhs(op), loom_index_sub_rhs(op),
+      &difference));
+  switch (difference.kind) {
+    case LOOM_SYMBOLIC_VALUE_DIFFERENCE_CONSTANT: {
+      IREE_RETURN_IF_ERROR(
+          loom_canonicalize_replace_single_result_with_exact_i64(
+              rewriter, op, difference.constant));
+      *out_changed = true;
+      return iree_ok_status();
+    }
+    case LOOM_SYMBOLIC_VALUE_DIFFERENCE_VALUE: {
+      loom_type_t result_type = loom_module_value_type(
+          rewriter->module, loom_op_const_results(op)[0]);
+      loom_type_t replacement_type =
+          loom_module_value_type(rewriter->module, difference.value_id);
+      if (!loom_type_equal(result_type, replacement_type)) {
+        return iree_ok_status();
+      }
+      IREE_RETURN_IF_ERROR(loom_canonicalize_replace_single_result_with_value(
+          rewriter, op, difference.value_id));
+      *out_changed = true;
+      return iree_ok_status();
+    }
+    case LOOM_SYMBOLIC_VALUE_DIFFERENCE_UNKNOWN:
+    default:
+      return iree_ok_status();
+  }
+}
+
+static iree_status_t loom_canonicalize_try_symbolic_index_cmp(
+    loom_rewriter_t* rewriter, loom_symbolic_expr_context_t* expression_context,
+    loom_op_t* op, bool* out_changed) {
+  *out_changed = false;
+  if (!loom_index_cmp_isa(op)) return iree_ok_status();
+
+  loom_value_id_t lhs = loom_index_cmp_lhs(op);
+  loom_value_id_t rhs = loom_index_cmp_rhs(op);
+  loom_symbolic_integer_relation_t relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
+  if (!loom_canonicalize_symbolic_relation_from_index_predicate(
+          rewriter, loom_index_cmp_predicate(op), lhs, rhs, &relation)) {
+    return iree_ok_status();
+  }
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_value_relation(
+      expression_context, relation, lhs, rhs, &proof));
+  if (proof == LOOM_SYMBOLIC_PROOF_UNKNOWN) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(loom_canonicalize_replace_single_result_with_exact_i64(
+      rewriter, op, proof == LOOM_SYMBOLIC_PROOF_TRUE ? 1 : 0));
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_canonicalize_try_symbolic_index_cleanup(
+    loom_rewriter_t* rewriter, loom_symbolic_expr_context_t* expression_context,
+    loom_op_t* op, bool* out_changed) {
+  *out_changed = false;
+
+  IREE_RETURN_IF_ERROR(loom_canonicalize_try_symbolic_index_sub(
+      rewriter, expression_context, op, out_changed));
+  if (*out_changed) return iree_ok_status();
+
+  return loom_canonicalize_try_symbolic_index_cmp(rewriter, expression_context,
+                                                  op, out_changed);
+}
+
 iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
                                     loom_func_like_t function) {
   if (!loom_func_like_body(function)) return iree_ok_status();
@@ -418,6 +564,13 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       loom_rewriter_initialize(&rewriter, module, pass->arena));
   rewriter.materialize_constant = loom_canonicalize_materialize_constant;
   iree_status_t status = loom_rewriter_enable_analysis(&rewriter, function);
+  if (!iree_status_is_ok(status)) {
+    loom_rewriter_deinitialize(&rewriter);
+    return status;
+  }
+  loom_symbolic_expr_context_t expression_context;
+  loom_symbolic_expr_context_initialize(module, &rewriter.fact_table,
+                                        pass->arena, &expression_context);
 
   for (uint32_t iteration = 0;
        iree_status_is_ok(status) && iteration < max_iterations; ++iteration) {
@@ -437,6 +590,7 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       }
       if (erased) {
         any_changed = true;
+        loom_symbolic_expr_context_reset(&expression_context);
         continue;
       }
 
@@ -452,6 +606,7 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       }
       if (empty_elided) {
         any_changed = true;
+        loom_symbolic_expr_context_reset(&expression_context);
         if (pass->statistics) {
           loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
         }
@@ -470,6 +625,7 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       }
       if (poison_propagated) {
         any_changed = true;
+        loom_symbolic_expr_context_reset(&expression_context);
         if (pass->statistics) {
           loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
         }
@@ -485,6 +641,26 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       }
       if (folded) {
         any_changed = true;
+        loom_symbolic_expr_context_reset(&expression_context);
+        if (pass->statistics) {
+          loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
+        }
+        continue;
+      }
+
+      // Symbolic address-domain cleanup uses the generic expression analysis
+      // for exact linear cancellation and relation proofs that are awkward as
+      // op-local patterns.
+      bool symbolic_changed = false;
+      status = loom_canonicalize_try_symbolic_index_cleanup(
+          &rewriter, &expression_context, op, &symbolic_changed);
+      if (!iree_status_is_ok(status)) {
+        loom_rewriter_deinitialize(&rewriter);
+        return status;
+      }
+      if (symbolic_changed) {
+        any_changed = true;
+        loom_symbolic_expr_context_reset(&expression_context);
         if (pass->statistics) {
           loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
         }
@@ -503,6 +679,7 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       }
       if (rewriter.flags & LOOM_REWRITER_FLAG_CHANGED) {
         any_changed = true;
+        loom_symbolic_expr_context_reset(&expression_context);
         if (pass->statistics) {
           loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
         }

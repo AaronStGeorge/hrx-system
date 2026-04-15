@@ -671,15 +671,21 @@ static bool loom_symbolic_expr_term_interval(
   return true;
 }
 
-static iree_status_t loom_symbolic_expr_prove_le_linear(
+static iree_status_t loom_symbolic_expr_normalize_difference_into_scratch(
     loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_t* left_expression,
-    const loom_symbolic_expr_t* right_expression,
-    loom_symbolic_proof_result_t* out_result) {
-  int64_t constant = 0;
+    const loom_symbolic_expr_t* right_expression, int64_t* out_constant,
+    iree_host_size_t* out_term_count, bool* out_linear) {
+  *out_constant = 0;
+  *out_term_count = 0;
+  *out_linear = false;
+  if (!loom_symbolic_expr_is_linear(left_expression) ||
+      !loom_symbolic_expr_is_linear(right_expression)) {
+    return iree_ok_status();
+  }
+
   if (!loom_checked_sub_i64(left_expression->constant,
-                            right_expression->constant, &constant)) {
-    *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+                            right_expression->constant, out_constant)) {
     return iree_ok_status();
   }
 
@@ -687,11 +693,9 @@ static iree_status_t loom_symbolic_expr_prove_le_linear(
   if (!loom_symbolic_expr_checked_term_count(left_expression->term_count,
                                              right_expression->term_count,
                                              &term_count)) {
-    *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
     return iree_ok_status();
   }
   if (term_count > context->maximum_term_count) {
-    *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(
@@ -703,7 +707,6 @@ static iree_status_t loom_symbolic_expr_prove_le_linear(
   for (iree_host_size_t i = 0; i < right_expression->term_count; ++i) {
     int64_t coefficient = right_expression->terms[i].coefficient;
     if (coefficient == INT64_MIN) {
-      *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
       return iree_ok_status();
     }
     context->scratch_terms[term_ordinal++] = (loom_symbolic_term_t){
@@ -726,7 +729,6 @@ static iree_status_t loom_symbolic_expr_prove_le_linear(
       if (!loom_checked_add_i64(coefficient,
                                 context->scratch_terms[read_index].coefficient,
                                 &new_coefficient)) {
-        *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
         return iree_ok_status();
       }
       coefficient = new_coefficient;
@@ -738,8 +740,28 @@ static iree_status_t loom_symbolic_expr_prove_le_linear(
         .value_id = value_id,
     };
   }
+  *out_term_count = write_index;
+  *out_linear = true;
+  return iree_ok_status();
+}
 
-  if (write_index == 0) {
+static iree_status_t loom_symbolic_expr_prove_le_linear(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_expr_t* left_expression,
+    const loom_symbolic_expr_t* right_expression,
+    loom_symbolic_proof_result_t* out_result) {
+  int64_t constant = 0;
+  iree_host_size_t term_count = 0;
+  bool linear = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
+      context, left_expression, right_expression, &constant, &term_count,
+      &linear));
+  if (!linear) {
+    *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+    return iree_ok_status();
+  }
+
+  if (term_count == 0) {
     *out_result =
         constant <= 0 ? LOOM_SYMBOLIC_PROOF_TRUE : LOOM_SYMBOLIC_PROOF_FALSE;
     return iree_ok_status();
@@ -747,7 +769,7 @@ static iree_status_t loom_symbolic_expr_prove_le_linear(
 
   int64_t minimum = constant;
   int64_t maximum = constant;
-  for (iree_host_size_t i = 0; i < write_index; ++i) {
+  for (iree_host_size_t i = 0; i < term_count; ++i) {
     int64_t term_minimum = 0;
     int64_t term_maximum = 0;
     if (!loom_symbolic_expr_term_interval(context, context->scratch_terms[i],
@@ -786,4 +808,132 @@ iree_status_t loom_symbolic_expr_prove_le(
   *out_result =
       loom_symbolic_expr_prove_le_by_facts(left_expression, right_expression);
   return iree_ok_status();
+}
+
+iree_status_t loom_symbolic_expr_simplify_value_difference(
+    loom_symbolic_expr_context_t* context, loom_value_id_t left_value,
+    loom_value_id_t right_value,
+    loom_symbolic_value_difference_t* out_difference) {
+  *out_difference = (loom_symbolic_value_difference_t){
+      .kind = LOOM_SYMBOLIC_VALUE_DIFFERENCE_UNKNOWN,
+      .constant = 0,
+      .value_id = LOOM_VALUE_ID_INVALID,
+  };
+  loom_symbolic_expr_t left_expression = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_symbolic_expr_from_value(context, left_value, &left_expression));
+  loom_symbolic_expr_t right_expression = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_symbolic_expr_from_value(context, right_value, &right_expression));
+
+  int64_t constant = 0;
+  iree_host_size_t term_count = 0;
+  bool linear = false;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_normalize_difference_into_scratch(
+      context, &left_expression, &right_expression, &constant, &term_count,
+      &linear));
+  if (!linear) return iree_ok_status();
+
+  if (term_count == 0) {
+    *out_difference = (loom_symbolic_value_difference_t){
+        .kind = LOOM_SYMBOLIC_VALUE_DIFFERENCE_CONSTANT,
+        .constant = constant,
+        .value_id = LOOM_VALUE_ID_INVALID,
+    };
+    return iree_ok_status();
+  }
+  if (constant == 0 && term_count == 1 &&
+      context->scratch_terms[0].coefficient == 1) {
+    *out_difference = (loom_symbolic_value_difference_t){
+        .kind = LOOM_SYMBOLIC_VALUE_DIFFERENCE_VALUE,
+        .constant = 0,
+        .value_id = context->scratch_terms[0].value_id,
+    };
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbolic_expr_prove_equal(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_expr_t* left_expression,
+    const loom_symbolic_expr_t* right_expression,
+    loom_symbolic_proof_result_t* out_result) {
+  loom_symbolic_proof_result_t left_le_right = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le(
+      context, left_expression, right_expression, &left_le_right));
+  loom_symbolic_proof_result_t right_le_left = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le(
+      context, right_expression, left_expression, &right_le_left));
+  if (left_le_right == LOOM_SYMBOLIC_PROOF_TRUE &&
+      right_le_left == LOOM_SYMBOLIC_PROOF_TRUE) {
+    *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+  } else if (left_le_right == LOOM_SYMBOLIC_PROOF_FALSE ||
+             right_le_left == LOOM_SYMBOLIC_PROOF_FALSE) {
+    *out_result = LOOM_SYMBOLIC_PROOF_FALSE;
+  } else {
+    *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbolic_expr_prove_less_than(
+    loom_symbolic_expr_context_t* context,
+    const loom_symbolic_expr_t* left_expression,
+    const loom_symbolic_expr_t* right_expression,
+    loom_symbolic_proof_result_t* out_result) {
+  loom_symbolic_proof_result_t right_le_left = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_le(
+      context, right_expression, left_expression, &right_le_left));
+  if (right_le_left == LOOM_SYMBOLIC_PROOF_TRUE) {
+    *out_result = LOOM_SYMBOLIC_PROOF_FALSE;
+  } else if (right_le_left == LOOM_SYMBOLIC_PROOF_FALSE) {
+    *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+  } else {
+    *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_symbolic_expr_prove_value_relation(
+    loom_symbolic_expr_context_t* context,
+    loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
+    loom_value_id_t right_value, loom_symbolic_proof_result_t* out_result) {
+  *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  loom_symbolic_expr_t left_expression = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_symbolic_expr_from_value(context, left_value, &left_expression));
+  loom_symbolic_expr_t right_expression = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_symbolic_expr_from_value(context, right_value, &right_expression));
+
+  switch (relation) {
+    case LOOM_SYMBOLIC_INTEGER_RELATION_EQ:
+      return loom_symbolic_expr_prove_equal(context, &left_expression,
+                                            &right_expression, out_result);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_NE: {
+      loom_symbolic_proof_result_t equal = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+      IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_equal(
+          context, &left_expression, &right_expression, &equal));
+      if (equal == LOOM_SYMBOLIC_PROOF_TRUE) {
+        *out_result = LOOM_SYMBOLIC_PROOF_FALSE;
+      } else if (equal == LOOM_SYMBOLIC_PROOF_FALSE) {
+        *out_result = LOOM_SYMBOLIC_PROOF_TRUE;
+      }
+      return iree_ok_status();
+    }
+    case LOOM_SYMBOLIC_INTEGER_RELATION_LT:
+      return loom_symbolic_expr_prove_less_than(context, &left_expression,
+                                                &right_expression, out_result);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_LE:
+      return loom_symbolic_expr_prove_le(context, &left_expression,
+                                         &right_expression, out_result);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_GT:
+      return loom_symbolic_expr_prove_less_than(context, &right_expression,
+                                                &left_expression, out_result);
+    case LOOM_SYMBOLIC_INTEGER_RELATION_GE:
+      return loom_symbolic_expr_prove_le(context, &right_expression,
+                                         &left_expression, out_result);
+    default:
+      return iree_ok_status();
+  }
 }

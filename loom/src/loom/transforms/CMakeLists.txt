@@ -21,6 +21,7 @@ loom_cc_library(
     ::pass
     ::rewriter
     iree::base
+    loom::src::loom::analysis::symbolic_expr
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::index

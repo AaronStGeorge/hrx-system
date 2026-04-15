@@ -376,6 +376,106 @@ func.def @cmp_exact_equal_distinct_values() -> (i1, i1) {
 
 // ====
 
+// Symbolic expressions cancel common scaled address prefixes that are not local
+// structural identities.
+func.def @symbolic_sub_cancels_scaled_prefix(%i: index, %j: index) -> (index) {
+  %c4 = index.constant 4 : index
+  %scaled = index.mul %i, %c4 : index
+  %address = index.add %scaled, %j : index
+  %delta = index.sub %address, %scaled : index
+  func.return %delta : index
+}
+// ----
+func.def @symbolic_sub_cancels_scaled_prefix(%i: index, %j: index) -> (index) {
+  func.return %j : index
+}
+
+// ====
+
+// Symbolic equality proves that structurally different but algebraically equal
+// address expressions compare equal.
+func.def @symbolic_cmp_equal_address_forms(%i: index, %j: index) -> (i1, i1) {
+  %c4 = index.constant 4 : index
+  %scaled = index.mul %i, %c4 : index
+  %add_form = index.add %scaled, %j : index
+  %madd_form = index.madd %i, %c4, %j : index
+  %eq = index.cmp eq, %add_form, %madd_form : index
+  %ne = index.cmp ne, %add_form, %madd_form : index
+  func.return %eq, %ne : i1, i1
+}
+// ----
+func.def @symbolic_cmp_equal_address_forms(%i: index, %j: index) -> (i1, i1) {
+  %eq = scalar.constant true : i1
+  %ne = scalar.constant false : i1
+  func.return %eq, %ne : i1, i1
+}
+
+// ====
+
+// Symbolic range proofs can establish ordered relations after common address
+// terms cancel, without requiring absolute ranges for the dynamic base.
+func.def @symbolic_cmp_proves_offset_order(%i: index, %j: index) -> (i1, i1) {
+  %c4 = index.constant 4 : index
+  %c16 = index.constant 16 : index
+  %base = index.madd %i, %c4, %j : index
+  %past = index.add %base, %c16 : index
+  %le = index.cmp sle, %base, %past : index
+  %gt = index.cmp sgt, %base, %past : index
+  func.return %le, %gt : i1, i1
+}
+// ----
+func.def @symbolic_cmp_proves_offset_order(%i: index, %j: index) -> (i1, i1) {
+  %le = scalar.constant true : i1
+  %gt = scalar.constant false : i1
+  func.return %le, %gt : i1, i1
+}
+
+// ====
+
+// Unsigned symbolic ordering uses the same proof only after both operands are
+// known non-negative.
+func.def @symbolic_unsigned_cmp_proves_non_negative_order(%i: index, %j: index) -> (i1) {
+  %i2 = index.assume %i [range(%i, 0, 1024)] : index
+  %j2 = index.assume %j [range(%j, 0, 16)] : index
+  %c4 = index.constant 4 : index
+  %c16 = index.constant 16 : index
+  %base = index.madd %i2, %c4, %j2 : index
+  %past = index.add %base, %c16 : index
+  %ule = index.cmp ule, %base, %past : index
+  func.return %ule : i1
+}
+// ----
+func.def @symbolic_unsigned_cmp_proves_non_negative_order(%i: index, %j: index) -> (i1) {
+  %ule = scalar.constant true : i1
+  func.return %ule : i1
+}
+
+// ====
+
+// Without non-negative facts, signed symbolic cancellation must not be reused
+// for unsigned ordering.
+func.def @symbolic_unsigned_cmp_unknown_sign_preserved(%i: index, %j: index) -> (i1) {
+  %c4 = index.constant 4 : index
+  %c16 = index.constant 16 : index
+  %base = index.madd %i, %c4, %j : index
+  %past = index.add %base, %c16 : index
+  %ule = index.cmp ule, %base, %past : index
+  func.return %ule : i1
+}
+
+// ====
+
+// Distinct nonlinear products remain symbolic variables. The cleanup is
+// conservative and keeps the compare when no exact relation is available.
+func.def @symbolic_cmp_unknown_dynamic_products_preserved(%a: index, %b: index, %c: index) -> (i1) {
+  %ab = index.mul %a, %b : index
+  %ac = index.mul %a, %c : index
+  %lt = index.cmp slt, %ab, %ac : index
+  func.return %lt : i1
+}
+
+// ====
+
 // Signed range proofs fold both true and false comparison results from
 // dynamic values refined by index.assume.
 func.def @cmp_signed_ranges(%x: index, %y: index) -> (i1, i1) {

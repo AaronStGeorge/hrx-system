@@ -148,6 +148,79 @@ TEST_F(SymbolicExprTest, AddSubNormalizeAndCancelTerms) {
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
 }
 
+TEST_F(SymbolicExprTest, SimplifiesDifferenceToExistingValue) {
+  loom_value_id_t row = DefineIndexValue();
+  loom_value_id_t column = DefineIndexValue();
+  loom_value_id_t stride = loom_index_constant_result(BuildIndexConstant(16));
+  loom_op_t* scaled_op = nullptr;
+  IREE_ASSERT_OK(loom_index_mul_build(&builder_, row, stride,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &scaled_op));
+  loom_op_t* address_op = nullptr;
+  IREE_ASSERT_OK(loom_index_add_build(&builder_,
+                                      loom_index_mul_result(scaled_op), column,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &address_op));
+
+  loom_symbolic_value_difference_t difference = {};
+  IREE_ASSERT_OK(loom_symbolic_expr_simplify_value_difference(
+      &expression_context_, loom_index_add_result(address_op),
+      loom_index_mul_result(scaled_op), &difference));
+
+  EXPECT_EQ(difference.kind, LOOM_SYMBOLIC_VALUE_DIFFERENCE_VALUE);
+  EXPECT_EQ(difference.value_id, column);
+}
+
+TEST_F(SymbolicExprTest, SimplifiesDifferenceToConstant) {
+  loom_value_id_t value = DefineIndexValue();
+  loom_value_id_t eight = loom_index_constant_result(BuildIndexConstant(8));
+  loom_value_id_t twenty_four =
+      loom_index_constant_result(BuildIndexConstant(24));
+  loom_op_t* left_op = nullptr;
+  IREE_ASSERT_OK(loom_index_add_build(&builder_, value, twenty_four,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &left_op));
+  loom_op_t* right_op = nullptr;
+  IREE_ASSERT_OK(loom_index_add_build(&builder_, value, eight,
+                                      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                      LOOM_LOCATION_UNKNOWN, &right_op));
+
+  loom_symbolic_value_difference_t difference = {};
+  IREE_ASSERT_OK(loom_symbolic_expr_simplify_value_difference(
+      &expression_context_, loom_index_add_result(left_op),
+      loom_index_add_result(right_op), &difference));
+
+  EXPECT_EQ(difference.kind, LOOM_SYMBOLIC_VALUE_DIFFERENCE_CONSTANT);
+  EXPECT_EQ(difference.constant, 16);
+}
+
+TEST_F(SymbolicExprTest, ProvesRelationsThroughSymbolicCancellation) {
+  loom_value_id_t value = DefineIndexValue();
+  loom_value_id_t four = loom_index_constant_result(BuildIndexConstant(4));
+  loom_value_id_t eight = loom_index_constant_result(BuildIndexConstant(8));
+  loom_op_t* value_plus_four_op = nullptr;
+  IREE_ASSERT_OK(loom_index_add_build(
+      &builder_, value, four, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      LOOM_LOCATION_UNKNOWN, &value_plus_four_op));
+  loom_op_t* value_plus_eight_op = nullptr;
+  IREE_ASSERT_OK(loom_index_add_build(
+      &builder_, value, eight, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      LOOM_LOCATION_UNKNOWN, &value_plus_eight_op));
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+      loom_index_add_result(value_plus_four_op),
+      loom_index_add_result(value_plus_eight_op), &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_EQ,
+      loom_index_add_result(value_plus_four_op),
+      loom_index_add_result(value_plus_eight_op), &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+}
+
 TEST_F(SymbolicExprTest, TermsAreSortedByValueId) {
   loom_value_id_t first_value = DefineIndexValue();
   loom_value_id_t second_value = DefineIndexValue();

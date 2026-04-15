@@ -19,6 +19,7 @@ loom_cc_library(
     deps = [
         ":pass",
         ":rewriter",
+        "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
