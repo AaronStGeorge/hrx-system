@@ -16,6 +16,7 @@ loom_cc_library(
     name = "vector",
     srcs = [
         "builders.c",
+        "canonicalize.c",
         "facts.c",
         "memory.c",
         "tables.c",
@@ -32,6 +33,7 @@ loom_cc_library(
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/transforms:rewriter",
         "//loom/src/loom/util:fact_table",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",

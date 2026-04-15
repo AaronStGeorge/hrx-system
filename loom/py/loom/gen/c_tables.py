@@ -1925,6 +1925,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             lines.append("")
 
     # Per-op sections.
+    emitted_canonicalize_declarations: set[str] = set()
     for op in ops:
         prefix = _c_prefix(op)
         enum_name = _c_enum_name(op)
@@ -2035,8 +2036,9 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             lines.extend(_generate_builder_declaration(op, prefix))
 
         # Canonicalize function declaration (hand-written, linked in).
-        if op.canonicalize:
+        if op.canonicalize and op.canonicalize not in emitted_canonicalize_declarations:
             lines.append(f"iree_status_t {op.canonicalize}(loom_op_t* op, loom_rewriter_t* rewriter);")
+            emitted_canonicalize_declarations.add(op.canonicalize)
 
         # Effective traits function declaration (hand-written, linked in).
         if op.effective_traits:

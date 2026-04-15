@@ -337,6 +337,7 @@ iree_status_t loom_vector_splat_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_splat_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
