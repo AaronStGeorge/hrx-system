@@ -1248,6 +1248,16 @@ loom_builder_ip_t loom_builder_enter_region(loom_builder_t* builder,
                                             loom_op_t* parent_op,
                                             loom_region_t* region);
 
+// Builds the required yield-style terminator for |region_index| using
+// |values| as its forwarded operands. RegionBranch terminators are required to
+// be operand-only terminators; dialects needing richer terminators need a more
+// specific interface before participating in generic branch factoring.
+iree_status_t loom_region_branch_build_region_terminator(
+    loom_builder_t* builder, const loom_module_t* module,
+    loom_region_branch_t branch, uint8_t region_index,
+    const loom_value_id_t* values, iree_host_size_t value_count,
+    loom_location_id_t location, loom_op_t** out_op);
+
 // Saves the current insertion point. Returns a value that can be
 // passed to loom_builder_restore to return to this position.
 loom_builder_ip_t loom_builder_save(const loom_builder_t* builder);

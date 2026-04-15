@@ -296,11 +296,11 @@ loom_region_t* loom_region_branch_region(const loom_module_t* module,
 static bool loom_region_branch_terminator_matches(
     const loom_region_descriptor_t* region_descriptor,
     const loom_op_t* terminator) {
-  if (!terminator || region_descriptor->terminator == LOOM_OP_KIND_UNKNOWN) {
-    return false;
-  }
-  return terminator->kind == region_descriptor->terminator ||
-         terminator->kind == region_descriptor->implicit_terminator;
+  if (!terminator) return false;
+  return (region_descriptor->terminator != LOOM_OP_KIND_UNKNOWN &&
+          terminator->kind == region_descriptor->terminator) ||
+         (region_descriptor->implicit_terminator != LOOM_OP_KIND_UNKNOWN &&
+          terminator->kind == region_descriptor->implicit_terminator);
 }
 
 loom_op_t* loom_region_branch_region_terminator(const loom_module_t* module,
@@ -347,6 +347,59 @@ bool loom_region_branch_region_yield_only_operands(
     };
   }
   return true;
+}
+
+iree_status_t loom_region_branch_build_region_terminator(
+    loom_builder_t* builder, const loom_module_t* module,
+    loom_region_branch_t branch, uint8_t region_index,
+    const loom_value_id_t* values, iree_host_size_t value_count,
+    loom_location_id_t location, loom_op_t** out_op) {
+  if (!out_op) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "region branch terminator output is NULL");
+  }
+  *out_op = NULL;
+  if (value_count > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "region branch terminator operand count exceeds uint16_t range");
+  }
+  if (value_count > 0 && !values) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "region branch terminator operands are NULL");
+  }
+  if (!builder || builder->module != module ||
+      !loom_region_branch_isa(branch) ||
+      region_index >= branch.op->region_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid region branch terminator build request");
+  }
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, branch.op);
+  const loom_region_descriptor_t* region_descriptor =
+      loom_op_vtable_region_descriptor(vtable, region_index);
+  if (!region_descriptor) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "region branch has no region descriptor");
+  }
+
+  loom_op_kind_t terminator_kind = region_descriptor->terminator;
+  if (terminator_kind == LOOM_OP_KIND_UNKNOWN) {
+    terminator_kind = region_descriptor->implicit_terminator;
+  }
+  if (terminator_kind == LOOM_OP_KIND_UNKNOWN) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "region branch has no yield-style terminator");
+  }
+
+  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(builder, terminator_kind,
+                                                (uint16_t)value_count, 0, 0, 0,
+                                                0, location, out_op));
+  if (value_count > 0) {
+    memcpy(loom_op_operands(*out_op), values,
+           value_count * sizeof(loom_value_id_t));
+  }
+  return loom_builder_finalize_op(builder, *out_op);
 }
 
 //===----------------------------------------------------------------------===//

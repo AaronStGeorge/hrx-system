@@ -7,7 +7,6 @@
 #include <string.h>
 
 #include "loom/analysis/availability.h"
-#include "loom/analysis/motion.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
@@ -423,6 +422,308 @@ iree_status_t loom_scf_lookup_canonicalize(loom_op_t* op,
 }
 
 //===----------------------------------------------------------------------===//
+// RegionBranch tail factoring
+//===----------------------------------------------------------------------===//
+
+static loom_op_t* loom_scf_region_branch_tail_op_from_yielded_value(
+    const loom_module_t* module, loom_block_t* block, loom_op_t* yield_op,
+    loom_value_id_t yielded_value) {
+  if (yielded_value == LOOM_VALUE_ID_INVALID ||
+      yielded_value >= module->values.count) {
+    return NULL;
+  }
+  const loom_value_t* value = loom_module_value(module, yielded_value);
+  if (loom_value_is_block_arg(value) || loom_value_def_index(value) != 0) {
+    return NULL;
+  }
+  loom_op_t* tail_op = loom_value_def_op(value);
+  if (!tail_op || tail_op->parent_block != block ||
+      tail_op->next_op != yield_op) {
+    return NULL;
+  }
+  return tail_op;
+}
+
+static bool loom_scf_region_branch_tail_result_has_single_yield_use(
+    const loom_module_t* module, const loom_op_t* tail_op) {
+  loom_value_id_t result = loom_op_const_results(tail_op)[0];
+  if (result == LOOM_VALUE_ID_INVALID || result >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, result);
+  return loom_value_has_single_use(value) &&
+         !loom_module_value_has_type_uses(module, result);
+}
+
+static bool loom_scf_region_branch_tail_attrs_match(const loom_op_t* lhs,
+                                                    const loom_op_t* rhs) {
+  if (lhs->attribute_count != rhs->attribute_count) return false;
+  const loom_attribute_t* lhs_attrs = loom_op_const_attrs(lhs);
+  const loom_attribute_t* rhs_attrs = loom_op_const_attrs(rhs);
+  for (uint8_t i = 0; i < lhs->attribute_count; ++i) {
+    if (!loom_attribute_equal(&lhs_attrs[i], &rhs_attrs[i])) return false;
+  }
+  return true;
+}
+
+static bool loom_scf_region_branch_tail_op_can_factor(const loom_op_t* op) {
+  // Common-tail factoring is not speculation: exactly one matching tail already
+  // executed on every branch path, and branch-local work remains before the new
+  // yield. Result-producing side-effecting tails are therefore legal here.
+  return op && !iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD) &&
+         op->result_count == 1 && op->region_count == 0 &&
+         op->tied_result_count == 0;
+}
+
+static iree_status_t loom_scf_region_branch_tail_ops_match(
+    loom_rewriter_t* rewriter, const loom_op_t* branch_op,
+    const loom_op_t* reference_tail, const loom_op_t* candidate_tail,
+    const loom_availability_analysis_t* availability, bool* out_match) {
+  *out_match = false;
+  if (reference_tail->kind != candidate_tail->kind ||
+      reference_tail->instance_flags != candidate_tail->instance_flags ||
+      reference_tail->operand_count != candidate_tail->operand_count ||
+      !loom_scf_region_branch_tail_op_can_factor(reference_tail) ||
+      !loom_scf_region_branch_tail_op_can_factor(candidate_tail)) {
+    return iree_ok_status();
+  }
+  if (!loom_scf_region_branch_tail_result_has_single_yield_use(
+          rewriter->module, reference_tail) ||
+      !loom_scf_region_branch_tail_result_has_single_yield_use(
+          rewriter->module, candidate_tail)) {
+    return iree_ok_status();
+  }
+  if (!loom_scf_region_branch_tail_attrs_match(reference_tail,
+                                               candidate_tail)) {
+    return iree_ok_status();
+  }
+  bool attrs_available = false;
+  IREE_RETURN_IF_ERROR(loom_availability_op_attrs_are_available_before_op(
+      availability, /*moving_root_op=*/NULL, branch_op, reference_tail,
+      &attrs_available));
+  if (!attrs_available) return iree_ok_status();
+
+  loom_value_id_t branch_result = loom_op_const_results(branch_op)[0];
+  if (branch_result == LOOM_VALUE_ID_INVALID ||
+      branch_result >= rewriter->module->values.count) {
+    return iree_ok_status();
+  }
+  loom_type_t result_type =
+      loom_module_value_type(rewriter->module, branch_result);
+  if (!loom_type_equal(
+          result_type,
+          loom_module_value_type(rewriter->module,
+                                 loom_op_const_results(reference_tail)[0])) ||
+      !loom_type_equal(
+          result_type,
+          loom_module_value_type(rewriter->module,
+                                 loom_op_const_results(candidate_tail)[0]))) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t* reference_operands =
+      loom_op_const_operands(reference_tail);
+  const loom_value_id_t* candidate_operands =
+      loom_op_const_operands(candidate_tail);
+  for (uint16_t i = 0; i < reference_tail->operand_count; ++i) {
+    if (reference_operands[i] == LOOM_VALUE_ID_INVALID ||
+        reference_operands[i] >= rewriter->module->values.count ||
+        candidate_operands[i] == LOOM_VALUE_ID_INVALID ||
+        candidate_operands[i] >= rewriter->module->values.count) {
+      return iree_ok_status();
+    }
+    loom_type_t reference_type =
+        loom_module_value_type(rewriter->module, reference_operands[i]);
+    if (!loom_type_equal(
+            reference_type,
+            loom_module_value_type(rewriter->module, candidate_operands[i]))) {
+      return iree_ok_status();
+    }
+    bool type_available = false;
+    IREE_RETURN_IF_ERROR(loom_availability_type_is_available_before_op(
+        availability, /*moving_root_op=*/NULL, branch_op, reference_type,
+        &type_available));
+    if (!type_available) return iree_ok_status();
+  }
+  *out_match = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_scf_region_branch_build_empty_clone(
+    loom_rewriter_t* rewriter, const loom_op_t* branch_op,
+    const loom_type_t* result_types, uint16_t result_count,
+    loom_op_t** out_new_branch) {
+  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
+      &rewriter->builder, branch_op->kind, branch_op->operand_count,
+      result_count, branch_op->region_count, /*tied_result_count=*/0,
+      branch_op->attribute_count, branch_op->location, out_new_branch));
+  (*out_new_branch)->instance_flags = branch_op->instance_flags;
+
+  if (branch_op->operand_count > 0) {
+    memcpy(
+        loom_op_operands(*out_new_branch), loom_op_const_operands(branch_op),
+        (iree_host_size_t)branch_op->operand_count * sizeof(loom_value_id_t));
+  }
+  if (branch_op->attribute_count > 0) {
+    memcpy(loom_op_attrs(*out_new_branch), loom_op_const_attrs(branch_op),
+           (iree_host_size_t)branch_op->attribute_count *
+               sizeof(loom_attribute_t));
+  }
+
+  loom_region_t** new_regions = loom_op_regions(*out_new_branch);
+  for (uint8_t i = 0; i < branch_op->region_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_module_allocate_region(rewriter->module, 1, &new_regions[i]));
+  }
+
+  loom_value_id_t* new_results = loom_op_results(*out_new_branch);
+  for (uint16_t i = 0; i < result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_builder_define_value(
+        &rewriter->builder, result_types[i], &new_results[i]));
+  }
+  return loom_builder_finalize_op(&rewriter->builder, *out_new_branch);
+}
+
+static iree_status_t loom_scf_region_branch_build_operand_yield(
+    loom_rewriter_t* rewriter, loom_region_branch_t branch,
+    uint8_t region_index, const loom_value_id_t* values, uint16_t count,
+    loom_location_id_t location, loom_op_t** out_yield) {
+  loom_region_t* region =
+      loom_region_branch_region(rewriter->module, branch, region_index);
+  if (!region) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "region branch operand yield has no region");
+  }
+  loom_builder_ip_t saved_ip =
+      loom_builder_enter_region(&rewriter->builder, branch.op, region);
+  iree_status_t status = loom_region_branch_build_region_terminator(
+      &rewriter->builder, rewriter->module, branch, region_index, values, count,
+      location, out_yield);
+  loom_builder_restore(&rewriter->builder, saved_ip);
+  return status;
+}
+
+static iree_status_t loom_scf_region_branch_clone_tail_after_branch(
+    loom_rewriter_t* rewriter, const loom_op_t* branch_op,
+    const loom_op_t* tail_op, loom_op_t* new_branch, loom_type_t result_type,
+    loom_op_t** out_cloned_tail) {
+  loom_builder_set_after(&rewriter->builder, new_branch);
+  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
+      &rewriter->builder, tail_op->kind, tail_op->operand_count,
+      tail_op->result_count, 0, 0, tail_op->attribute_count, tail_op->location,
+      out_cloned_tail));
+  (*out_cloned_tail)->instance_flags = tail_op->instance_flags;
+
+  loom_value_slice_t new_branch_results = {
+      .values = loom_op_results(new_branch),
+      .count = new_branch->result_count,
+  };
+  if (tail_op->operand_count > 0) {
+    memcpy(loom_op_operands(*out_cloned_tail), new_branch_results.values,
+           (iree_host_size_t)tail_op->operand_count * sizeof(loom_value_id_t));
+  }
+  loom_value_id_t result = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_builder_define_value(&rewriter->builder, result_type, &result));
+  loom_op_results(*out_cloned_tail)[0] = result;
+  if (tail_op->attribute_count > 0) {
+    memcpy(
+        loom_op_attrs(*out_cloned_tail), loom_op_const_attrs(tail_op),
+        (iree_host_size_t)tail_op->attribute_count * sizeof(loom_attribute_t));
+  }
+  return loom_builder_finalize_op(&rewriter->builder, *out_cloned_tail);
+}
+
+static iree_status_t loom_scf_region_branch_factor_common_tail(
+    loom_op_t* op, loom_rewriter_t* rewriter) {
+  if (op->result_count != 1 || op->tied_result_count != 0) {
+    return iree_ok_status();
+  }
+  loom_region_branch_t branch = loom_region_branch_cast(rewriter->module, op);
+  if (!loom_region_branch_isa(branch) || op->region_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_op_t** tail_ops = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, op->region_count, sizeof(*tail_ops), (void**)&tail_ops));
+
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    loom_region_t* region =
+        loom_region_branch_region(rewriter->module, branch, i);
+    if (!region || region->block_count != 1) return iree_ok_status();
+    loom_block_t* block = loom_region_entry_block(region);
+    loom_op_t* terminator =
+        loom_region_branch_region_terminator(rewriter->module, branch, i);
+    if (!block || !terminator || terminator->operand_count != 1) {
+      return iree_ok_status();
+    }
+    tail_ops[i] = loom_scf_region_branch_tail_op_from_yielded_value(
+        rewriter->module, block, terminator, loom_op_operands(terminator)[0]);
+    if (!tail_ops[i]) return iree_ok_status();
+  }
+
+  loom_availability_analysis_t availability;
+  loom_availability_analysis_initialize(rewriter->module, rewriter->arena,
+                                        &availability);
+  loom_op_t* reference_tail = tail_ops[0];
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    bool tail_ops_match = false;
+    IREE_RETURN_IF_ERROR(loom_scf_region_branch_tail_ops_match(
+        rewriter, op, reference_tail, tail_ops[i], &availability,
+        &tail_ops_match));
+    if (!tail_ops_match) return iree_ok_status();
+  }
+
+  loom_type_t* operand_types = NULL;
+  const loom_value_id_t* reference_tail_operands =
+      loom_op_const_operands(reference_tail);
+  if (reference_tail->operand_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        rewriter->arena, reference_tail->operand_count, sizeof(*operand_types),
+        (void**)&operand_types));
+    for (uint16_t i = 0; i < reference_tail->operand_count; ++i) {
+      operand_types[i] =
+          loom_module_value_type(rewriter->module, reference_tail_operands[i]);
+    }
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* new_branch_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_region_branch_build_empty_clone(
+      rewriter, op, operand_types, reference_tail->operand_count,
+      &new_branch_op));
+  loom_region_branch_t new_branch =
+      loom_region_branch_cast(rewriter->module, new_branch_op);
+
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    loom_op_t* new_terminator = NULL;
+    IREE_RETURN_IF_ERROR(loom_scf_region_branch_build_operand_yield(
+        rewriter, new_branch, i, loom_op_const_operands(tail_ops[i]),
+        reference_tail->operand_count, op->location, &new_terminator));
+    if (!new_terminator) return iree_ok_status();
+    loom_region_t* old_region =
+        loom_region_branch_region(rewriter->module, branch, i);
+    IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
+        rewriter, old_region, tail_ops[i], new_terminator));
+  }
+
+  loom_type_t old_result_type =
+      loom_module_value_type(rewriter->module, loom_op_const_results(op)[0]);
+  loom_op_t* cloned_tail = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_region_branch_clone_tail_after_branch(
+      rewriter, op, reference_tail, new_branch_op, old_result_type,
+      &cloned_tail));
+
+  loom_value_id_t replacement = loom_op_results(cloned_tail)[0];
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &replacement, 1, value_checkpoint));
+  return loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement,
+                                                  1);
+}
+
+//===----------------------------------------------------------------------===//
 // scf.switch
 //===----------------------------------------------------------------------===//
 
@@ -579,6 +880,11 @@ iree_status_t loom_scf_switch_canonicalize(loom_op_t* op,
   uint8_t selected_region_index = UINT8_MAX;
   if (!loom_scf_switch_selected_region(rewriter, op, &selected_region,
                                        &selected_region_index)) {
+    IREE_RETURN_IF_ERROR(
+        loom_scf_region_branch_factor_common_tail(op, rewriter));
+    if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
+      return iree_ok_status();
+    }
     return loom_scf_switch_selectify_yield_only(op, rewriter);
   }
 
@@ -836,242 +1142,6 @@ static iree_status_t loom_scf_if_selectify_yield_only(
                                                   op->result_count);
 }
 
-static loom_op_t* loom_scf_if_tail_op_from_yielded_value(
-    const loom_module_t* module, loom_block_t* block, loom_op_t* yield_op,
-    loom_value_id_t yielded_value) {
-  if (yielded_value == LOOM_VALUE_ID_INVALID ||
-      yielded_value >= module->values.count) {
-    return NULL;
-  }
-  const loom_value_t* value = loom_module_value(module, yielded_value);
-  if (loom_value_is_block_arg(value) || loom_value_def_index(value) != 0) {
-    return NULL;
-  }
-  loom_op_t* tail_op = loom_value_def_op(value);
-  if (!tail_op || tail_op->parent_block != block ||
-      tail_op->next_op != yield_op) {
-    return NULL;
-  }
-  return tail_op;
-}
-
-static bool loom_scf_if_tail_result_has_single_yield_use(
-    const loom_module_t* module, const loom_op_t* tail_op) {
-  loom_value_id_t result = loom_op_const_results(tail_op)[0];
-  if (result == LOOM_VALUE_ID_INVALID || result >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* value = loom_module_value(module, result);
-  return loom_value_has_single_use(value) &&
-         !loom_module_value_has_type_uses(module, result);
-}
-
-static bool loom_scf_if_tail_attrs_match(const loom_op_t* lhs,
-                                         const loom_op_t* rhs) {
-  if (lhs->attribute_count != rhs->attribute_count) return false;
-  const loom_attribute_t* lhs_attrs = loom_op_const_attrs(lhs);
-  const loom_attribute_t* rhs_attrs = loom_op_const_attrs(rhs);
-  for (uint8_t i = 0; i < lhs->attribute_count; ++i) {
-    if (!loom_attribute_equal(&lhs_attrs[i], &rhs_attrs[i])) return false;
-  }
-  return true;
-}
-
-static iree_status_t loom_scf_if_tail_ops_match(
-    loom_rewriter_t* rewriter, const loom_op_t* if_op,
-    const loom_op_t* then_tail, const loom_op_t* else_tail,
-    const loom_availability_analysis_t* availability, bool* out_match) {
-  *out_match = false;
-  if (then_tail->kind != else_tail->kind ||
-      then_tail->instance_flags != else_tail->instance_flags ||
-      then_tail->operand_count != else_tail->operand_count ||
-      then_tail->result_count != 1 || else_tail->result_count != 1 ||
-      then_tail->region_count != 0 || else_tail->region_count != 0 ||
-      then_tail->tied_result_count != 0 || else_tail->tied_result_count != 0) {
-    return iree_ok_status();
-  }
-  if (!loom_motion_op_can_relocate_effect_free(rewriter->module, then_tail) ||
-      !loom_motion_op_can_relocate_effect_free(rewriter->module, else_tail)) {
-    return iree_ok_status();
-  }
-  if (!loom_scf_if_tail_result_has_single_yield_use(rewriter->module,
-                                                    then_tail) ||
-      !loom_scf_if_tail_result_has_single_yield_use(rewriter->module,
-                                                    else_tail)) {
-    return iree_ok_status();
-  }
-  if (!loom_scf_if_tail_attrs_match(then_tail, else_tail)) {
-    return iree_ok_status();
-  }
-  bool attrs_available = false;
-  IREE_RETURN_IF_ERROR(loom_availability_op_attrs_are_available_before_op(
-      availability, /*moving_root_op=*/NULL, if_op, then_tail,
-      &attrs_available));
-  if (!attrs_available) return iree_ok_status();
-
-  loom_value_id_t if_result = loom_op_const_results(if_op)[0];
-  if (if_result == LOOM_VALUE_ID_INVALID ||
-      if_result >= rewriter->module->values.count) {
-    return iree_ok_status();
-  }
-  loom_type_t result_type = loom_module_value_type(rewriter->module, if_result);
-  if (!loom_type_equal(result_type, loom_module_value_type(
-                                        rewriter->module,
-                                        loom_op_const_results(then_tail)[0])) ||
-      !loom_type_equal(result_type, loom_module_value_type(
-                                        rewriter->module,
-                                        loom_op_const_results(else_tail)[0]))) {
-    return iree_ok_status();
-  }
-
-  const loom_value_id_t* then_operands = loom_op_const_operands(then_tail);
-  const loom_value_id_t* else_operands = loom_op_const_operands(else_tail);
-  for (uint16_t i = 0; i < then_tail->operand_count; ++i) {
-    if (then_operands[i] == LOOM_VALUE_ID_INVALID ||
-        then_operands[i] >= rewriter->module->values.count ||
-        else_operands[i] == LOOM_VALUE_ID_INVALID ||
-        else_operands[i] >= rewriter->module->values.count) {
-      return iree_ok_status();
-    }
-    loom_type_t then_type =
-        loom_module_value_type(rewriter->module, then_operands[i]);
-    if (!loom_type_equal(then_type, loom_module_value_type(rewriter->module,
-                                                           else_operands[i]))) {
-      return iree_ok_status();
-    }
-    bool type_available = false;
-    IREE_RETURN_IF_ERROR(loom_availability_type_is_available_before_op(
-        availability, /*moving_root_op=*/NULL, if_op, then_type,
-        &type_available));
-    if (!type_available) return iree_ok_status();
-  }
-  *out_match = true;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_scf_if_build_operand_yield(
-    loom_rewriter_t* rewriter, loom_op_t* owner_op, loom_region_t* region,
-    const loom_value_id_t* values, uint16_t count, loom_op_t** out_yield) {
-  loom_builder_ip_t saved_ip =
-      loom_builder_enter_region(&rewriter->builder, owner_op, region);
-  iree_status_t status = loom_scf_yield_build(&rewriter->builder, values, count,
-                                              owner_op->location, out_yield);
-  loom_builder_restore(&rewriter->builder, saved_ip);
-  return status;
-}
-
-static iree_status_t loom_scf_if_clone_tail_after_if(
-    loom_rewriter_t* rewriter, const loom_op_t* if_op, const loom_op_t* tail_op,
-    loom_op_t* new_if, loom_type_t result_type, loom_op_t** out_cloned_tail) {
-  loom_builder_set_after(&rewriter->builder, new_if);
-  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
-      &rewriter->builder, tail_op->kind, tail_op->operand_count,
-      tail_op->result_count, 0, 0, tail_op->attribute_count, if_op->location,
-      out_cloned_tail));
-  (*out_cloned_tail)->instance_flags = tail_op->instance_flags;
-
-  loom_value_slice_t new_if_results = loom_scf_if_results(new_if);
-  if (tail_op->operand_count > 0) {
-    memcpy(loom_op_operands(*out_cloned_tail), new_if_results.values,
-           (iree_host_size_t)tail_op->operand_count * sizeof(loom_value_id_t));
-  }
-  loom_value_id_t result = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_builder_define_value(&rewriter->builder, result_type, &result));
-  loom_op_results(*out_cloned_tail)[0] = result;
-  if (tail_op->attribute_count > 0) {
-    memcpy(
-        loom_op_attrs(*out_cloned_tail), loom_op_const_attrs(tail_op),
-        (iree_host_size_t)tail_op->attribute_count * sizeof(loom_attribute_t));
-  }
-  return loom_builder_finalize_op(&rewriter->builder, *out_cloned_tail);
-}
-
-static iree_status_t loom_scf_if_factor_common_tail(loom_op_t* op,
-                                                    loom_rewriter_t* rewriter) {
-  if (op->result_count != 1 || op->tied_result_count != 0) {
-    return iree_ok_status();
-  }
-
-  loom_region_t* then_region = loom_scf_if_then_region(op);
-  loom_region_t* else_region = loom_scf_if_else_region(op);
-  loom_op_t* then_yield = loom_scf_region_terminator(then_region);
-  loom_op_t* else_yield = loom_scf_region_terminator(else_region);
-  if (!then_yield || !else_yield) return iree_ok_status();
-
-  loom_value_slice_t then_values = loom_scf_yield_values(then_yield);
-  loom_value_slice_t else_values = loom_scf_yield_values(else_yield);
-  if (then_values.count != 1 || else_values.count != 1) {
-    return iree_ok_status();
-  }
-
-  loom_block_t* then_block = loom_region_entry_block(then_region);
-  loom_block_t* else_block = loom_region_entry_block(else_region);
-  loom_op_t* then_tail = loom_scf_if_tail_op_from_yielded_value(
-      rewriter->module, then_block, then_yield, then_values.values[0]);
-  loom_op_t* else_tail = loom_scf_if_tail_op_from_yielded_value(
-      rewriter->module, else_block, else_yield, else_values.values[0]);
-  if (!then_tail || !else_tail) return iree_ok_status();
-
-  loom_availability_analysis_t availability;
-  loom_availability_analysis_initialize(rewriter->module, rewriter->arena,
-                                        &availability);
-  bool tail_ops_match = false;
-  IREE_RETURN_IF_ERROR(loom_scf_if_tail_ops_match(
-      rewriter, op, then_tail, else_tail, &availability, &tail_ops_match));
-  if (!tail_ops_match) {
-    return iree_ok_status();
-  }
-
-  loom_type_t* operand_types = NULL;
-  const loom_value_id_t* then_tail_operands = loom_op_const_operands(then_tail);
-  const loom_value_id_t* else_tail_operands = loom_op_const_operands(else_tail);
-  if (then_tail->operand_count > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        rewriter->arena, then_tail->operand_count, sizeof(*operand_types),
-        (void**)&operand_types));
-    for (uint16_t i = 0; i < then_tail->operand_count; ++i) {
-      operand_types[i] =
-          loom_module_value_type(rewriter->module, then_tail_operands[i]);
-    }
-  }
-
-  loom_builder_set_before(&rewriter->builder, op);
-  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
-  loom_op_t* new_if = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build(
-      &rewriter->builder, loom_scf_if_condition(op), operand_types,
-      then_tail->operand_count, /*tied_results=*/NULL,
-      /*tied_result_count=*/0, op->location, &new_if));
-
-  loom_op_t* new_then_yield = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build_operand_yield(
-      rewriter, new_if, loom_scf_if_then_region(new_if), then_tail_operands,
-      then_tail->operand_count, &new_then_yield));
-
-  loom_op_t* new_else_yield = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_build_operand_yield(
-      rewriter, new_if, loom_scf_if_else_region(new_if), else_tail_operands,
-      else_tail->operand_count, &new_else_yield));
-
-  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
-      rewriter, then_region, then_tail, new_then_yield));
-  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
-      rewriter, else_region, else_tail, new_else_yield));
-
-  loom_type_t old_result_type =
-      loom_module_value_type(rewriter->module, loom_op_const_results(op)[0]);
-  loom_op_t* cloned_tail = NULL;
-  IREE_RETURN_IF_ERROR(loom_scf_if_clone_tail_after_if(
-      rewriter, op, then_tail, new_if, old_result_type, &cloned_tail));
-
-  loom_value_id_t replacement = loom_op_results(cloned_tail)[0];
-  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
-      rewriter, op, &replacement, 1, value_checkpoint));
-  return loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement,
-                                                  1);
-}
-
 iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
                                        loom_rewriter_t* rewriter) {
   bool condition = false;
@@ -1085,7 +1155,8 @@ iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
     if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
       return iree_ok_status();
     }
-    IREE_RETURN_IF_ERROR(loom_scf_if_factor_common_tail(op, rewriter));
+    IREE_RETURN_IF_ERROR(
+        loom_scf_region_branch_factor_common_tail(op, rewriter));
     if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
       return iree_ok_status();
     }

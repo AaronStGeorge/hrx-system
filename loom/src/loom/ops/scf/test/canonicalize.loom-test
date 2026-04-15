@@ -242,6 +242,29 @@ func.def @if_factors_tail_and_preserves_branch_effects(%cond: i1, %a: i32, %b: i
 
 // ====
 
+// The common-tail rewrite is not speculation: the tail op executed on every
+// branch before the rewrite, so an effectful result-producing tail can move
+// after the branch once the branch yields its operands.
+func.def @if_factors_common_side_effecting_tail(%cond: i1, %pool: pool<16>, %a: i32, %b: i32) -> (i32) {
+  %result = scf.if %cond -> (i32) {
+    %then = test.mutate_resource %pool, %a : pool<16>, i32 -> i32
+    scf.yield %then : i32
+  } else {
+    %else = test.mutate_resource %pool, %b : pool<16>, i32 -> i32
+    scf.yield %else : i32
+  }
+  func.return %result : i32
+}
+
+// ----
+func.def @if_factors_common_side_effecting_tail(%cond: i1, %pool: pool<16>, %a: i32, %b: i32) -> (i32) {
+  %12 = scf.select %cond, %a, %b : i32
+  %result = test.mutate_resource %pool, %12 : pool<16>, i32 -> i32
+  func.return %result : i32
+}
+
+// ====
+
 // Different tail op kinds do not factor: the conditional still chooses between
 // two distinct computations.
 func.def @if_preserves_different_tail_kinds(%cond: i1, %a: i32, %b: i32) -> (i32) {
@@ -944,6 +967,84 @@ func.def @switch_with_body_preserved(%variant: index, %a: index, %b: index, %fal
     }
   }
   func.return %result : index
+}
+
+// ====
+
+// Matching pure tails factor out of every switch branch. Once the switch is
+// reduced to yielded operands, the existing yield-only rewrite turns it into a
+// greppable lookup table feeding the common op.
+func.def @switch_factors_common_pure_tail_to_lookup(%variant: index, %a0: i32, %b0: i32, %a1: i32, %b1: i32, %af: i32, %bf: i32) -> (i32) {
+  %result = scf.switch %variant -> (i32) {
+    case 0 {
+      %case0 = test.addi %a0, %b0 : i32
+      scf.yield %case0 : i32
+    }
+    case 1 {
+      %case1 = test.addi %a1, %b1 : i32
+      scf.yield %case1 : i32
+    }
+    default {
+      %fallback = test.addi %af, %bf : i32
+      scf.yield %fallback : i32
+    }
+  }
+  func.return %result : i32
+}
+
+// ----
+func.def @switch_factors_common_pure_tail_to_lookup(%variant: index, %a0: i32, %b0: i32, %a1: i32, %b1: i32, %af: i32, %bf: i32) -> (i32) {
+  %15, %16 = scf.lookup %variant {
+    0 = (%a0, %b0),
+    1 = (%a1, %b1)
+  } default(%af, %bf) : i32, i32
+  %result = test.addi %15, %16 : i32
+  func.return %result : i32
+}
+
+// ====
+
+// Branch-local effects stay inside the switch while the common pure tail moves
+// after it.
+func.def @switch_factors_tail_and_preserves_branch_effects(%variant: index, %a0: i32, %b0: i32, %a1: i32, %b1: i32, %af: i32, %bf: i32) -> (i32) {
+  %result = scf.switch %variant -> (i32) {
+    case 0 {
+      test.use %a0 : i32
+      %case0 = test.addi %a0, %b0 : i32
+      scf.yield %case0 : i32
+    }
+    case 1 {
+      test.use %a1 : i32
+      %case1 = test.addi %a1, %b1 : i32
+      scf.yield %case1 : i32
+    }
+    default {
+      test.use %af : i32
+      %fallback = test.addi %af, %bf : i32
+      scf.yield %fallback : i32
+    }
+  }
+  func.return %result : i32
+}
+
+// ----
+func.def @switch_factors_tail_and_preserves_branch_effects(%variant: index, %a0: i32, %b0: i32, %a1: i32, %b1: i32, %af: i32, %bf: i32) -> (i32) {
+  %12, %13 = scf.switch %variant -> (i32, i32) {
+    case 0 {
+      test.use %a0 : i32
+      scf.yield %a0, %b0 : i32, i32
+    }
+    case 1 {
+      test.use %a1 : i32
+      scf.yield %a1, %b1 : i32, i32
+    }
+    default {
+      test.use %af : i32
+      scf.yield %af, %bf : i32, i32
+    }
+  }
+  %result = test.addi %12, %13 : i32
+  func.return %result : i32
 }
 
 // ====
