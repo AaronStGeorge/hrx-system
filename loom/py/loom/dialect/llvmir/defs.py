@@ -63,6 +63,16 @@ IntrinsicKind = EnumDef(
             2,
             doc="Returns the AMDGPU workitem id in the x dimension.",
         ),
+        EnumCase(
+            "llvm.amdgcn.workitem.id.y",
+            3,
+            doc="Returns the AMDGPU workitem id in the y dimension.",
+        ),
+        EnumCase(
+            "llvm.amdgcn.workitem.id.z",
+            4,
+            doc="Returns the AMDGPU workitem id in the z dimension.",
+        ),
     ],
     doc="LLVM intrinsic selected by llvmir.intrinsic.",
 )

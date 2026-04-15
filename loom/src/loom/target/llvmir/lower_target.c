@@ -161,9 +161,47 @@ static iree_status_t loom_llvmir_lowering_expect_scalar_result(
   return iree_ok_status();
 }
 
+static bool loom_llvmir_lowering_intrinsic_is_x86(uint8_t kind) {
+  return kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC ||
+         kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE;
+}
+
+static bool loom_llvmir_lowering_intrinsic_is_amdgpu(uint8_t kind) {
+  return kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X ||
+         kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y ||
+         kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z;
+}
+
+static bool loom_llvmir_lowering_target_triple_is(
+    const loom_llvmir_lowering_state_t* state, iree_string_view_t triple) {
+  return iree_string_view_equal(
+      state->target_profile->target_env->target_triple, triple);
+}
+
+static iree_status_t loom_llvmir_lowering_validate_intrinsic_target(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    uint8_t kind) {
+  if (loom_llvmir_lowering_intrinsic_is_x86(kind) &&
+      !loom_llvmir_lowering_target_triple_is(
+          state, IREE_SV("x86_64-unknown-linux-gnu"))) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "x86 llvmir.intrinsic requires an x86 target environment");
+  }
+  if (loom_llvmir_lowering_intrinsic_is_amdgpu(kind) &&
+      !loom_llvmir_lowering_target_triple_is(state,
+                                             IREE_SV("amdgcn-amd-amdhsa"))) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op,
+        "AMDGPU llvmir.intrinsic requires an AMDGPU target environment");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_lowering_validate_intrinsic(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     uint8_t kind) {
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_validate_intrinsic_target(state, op, kind));
   switch (kind) {
     case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC: {
       IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
@@ -180,6 +218,20 @@ static iree_status_t loom_llvmir_lowering_validate_intrinsic(
       return loom_llvmir_lowering_expect_scalar_result(
           state, op, LOOM_SCALAR_TYPE_I32,
           "llvm.amdgcn.workitem.id.x expects () -> i32");
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
+          state, op, 0, 1, "llvm.amdgcn.workitem.id.y expects () -> i32"));
+      return loom_llvmir_lowering_expect_scalar_result(
+          state, op, LOOM_SCALAR_TYPE_I32,
+          "llvm.amdgcn.workitem.id.y expects () -> i32");
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
+          state, op, 0, 1, "llvm.amdgcn.workitem.id.z expects () -> i32"));
+      return loom_llvmir_lowering_expect_scalar_result(
+          state, op, LOOM_SCALAR_TYPE_I32,
+          "llvm.amdgcn.workitem.id.z expects () -> i32");
     }
     default:
       return loom_llvmir_lowering_unsupported_op(
@@ -218,6 +270,16 @@ static iree_status_t loom_llvmir_lowering_declare_intrinsic(
     }
     case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X: {
       IREE_RETURN_IF_ERROR(loom_llvmir_declare_amdgcn_workitem_id_x(
+          state->target_module, &function));
+      break;
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_declare_amdgcn_workitem_id_y(
+          state->target_module, &function));
+      break;
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_declare_amdgcn_workitem_id_z(
           state->target_module, &function));
       break;
     }

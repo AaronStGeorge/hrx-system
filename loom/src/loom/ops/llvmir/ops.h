@@ -33,7 +33,9 @@ typedef enum loom_llvmir_intrinsic_kind_e {
   LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC = 0,
   LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE = 1,
   LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X = 2,
-  LOOM_LLVMIR_INTRINSIC_KIND_COUNT_ = 3,
+  LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y = 3,
+  LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z = 4,
+  LOOM_LLVMIR_INTRINSIC_KIND_COUNT_ = 5,
 } loom_llvmir_intrinsic_kind_t;
 
 // LOOM_OP_LLVMIR_INLINE_ASM: Structured LLVM inline assembly call. The asm template and constraint strings use LLVM inline asm syntax; operands/results remain ordinary typed Loom SSA values.

@@ -6,7 +6,7 @@
 
 """Tests for the LLVM IR target dialect declarations."""
 
-from loom.assembly import Flags, ResultTypeList, TemplateParam
+from loom.assembly import Flags, FormatElement, OptionalGroup, ResultTypeList, Scope, TemplateParam
 from loom.dialect.llvmir import (
     ALL_LLVMIR_OPS,
     AsmFlags,
@@ -16,6 +16,15 @@ from loom.dialect.llvmir import (
     llvmir_ops,
 )
 from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_FLAGS, ATTR_TYPE_STRING, UNKNOWN_EFFECTS
+
+
+def _format_contains(elements: tuple[FormatElement, ...], element_type: type[object]) -> bool:
+    for element in elements:
+        if isinstance(element, element_type):
+            return True
+        if isinstance(element, OptionalGroup | Scope) and _format_contains(element.elements, element_type):
+            return True
+    return False
 
 
 class TestLlvmIrDialect:
@@ -52,7 +61,7 @@ class TestLlvmIrDialect:
         assert op.attrs[2].attr_type == ATTR_TYPE_STRING
         assert UNKNOWN_EFFECTS in op.traits
         assert any(isinstance(element, Flags) for element in op.format)
-        assert any(isinstance(element, ResultTypeList) for element in op.format)
+        assert _format_contains(op.format, ResultTypeList)
 
     def test_inline_asm_flags_are_bitmasks(self) -> None:
         assert [(case.keyword, case.value) for case in AsmFlags.cases] == [
@@ -74,11 +83,13 @@ class TestLlvmIrDialect:
         assert op.attrs[0].enum_def is IntrinsicKind
         assert UNKNOWN_EFFECTS in op.traits
         assert any(isinstance(element, TemplateParam) for element in op.format)
-        assert any(isinstance(element, ResultTypeList) for element in op.format)
+        assert _format_contains(op.format, ResultTypeList)
 
     def test_intrinsic_kinds_use_llvm_spellings(self) -> None:
         assert [(case.keyword, case.value) for case in IntrinsicKind.cases] == [
             ("llvm.x86.rdtsc", 0),
             ("llvm.x86.sse2.pause", 1),
             ("llvm.amdgcn.workitem.id.x", 2),
+            ("llvm.amdgcn.workitem.id.y", 3),
+            ("llvm.amdgcn.workitem.id.z", 4),
         ]

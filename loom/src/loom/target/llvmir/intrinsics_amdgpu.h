@@ -18,6 +18,12 @@ extern "C" {
 iree_status_t loom_llvmir_declare_amdgcn_workitem_id_x(
     loom_llvmir_module_t* module, loom_llvmir_function_t** out_function);
 
+iree_status_t loom_llvmir_declare_amdgcn_workitem_id_y(
+    loom_llvmir_module_t* module, loom_llvmir_function_t** out_function);
+
+iree_status_t loom_llvmir_declare_amdgcn_workitem_id_z(
+    loom_llvmir_module_t* module, loom_llvmir_function_t** out_function);
+
 iree_status_t loom_llvmir_declare_amdgcn_make_buffer_rsrc(
     loom_llvmir_module_t* module, uint32_t result_address_space,
     uint32_t base_address_space, loom_llvmir_function_t** out_function);

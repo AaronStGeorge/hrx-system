@@ -1389,7 +1389,7 @@ TEST_F(LlvmIrLowerTest, LowersX86IntrinsicsToStructuredCalls) {
   CompileX86TextToObject(text);
 }
 
-TEST_F(LlvmIrLowerTest, LowersAmdgpuIntrinsicToStructuredCall) {
+TEST_F(LlvmIrLowerTest, LowersAmdgpuWorkitemIntrinsicsToStructuredCalls) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_symbol_ref_t callee = MakeSymbol(IREE_SV("dispatch"));
   loom_type_t result_types[1] = {i32};
@@ -1401,26 +1401,92 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuIntrinsicToStructuredCall) {
       NULL, 0, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
 
   loom_builder_t body_builder = BodyBuilder(func_op);
-  loom_op_t* tid_op = NULL;
+  loom_op_t* tid_x_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
       &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X, NULL,
       0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
-      LOOM_LOCATION_UNKNOWN, &tid_op));
-  loom_value_id_t tid =
-      loom_value_slice_get(loom_llvmir_intrinsic_results(tid_op), 0);
-  SetValueName(tid, IREE_SV("tid"));
+      LOOM_LOCATION_UNKNOWN, &tid_x_op));
+  loom_value_id_t tid_x =
+      loom_value_slice_get(loom_llvmir_intrinsic_results(tid_x_op), 0);
+  SetValueName(tid_x, IREE_SV("tid_x"));
+  loom_op_t* tid_y_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y, NULL,
+      0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &tid_y_op));
+  loom_value_id_t tid_y =
+      loom_value_slice_get(loom_llvmir_intrinsic_results(tid_y_op), 0);
+  SetValueName(tid_y, IREE_SV("tid_y"));
+  loom_op_t* tid_z_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z, NULL,
+      0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &tid_z_op));
+  loom_value_id_t tid_z =
+      loom_value_slice_get(loom_llvmir_intrinsic_results(tid_z_op), 0);
+  SetValueName(tid_z, IREE_SV("tid_z"));
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
-                                        LOOM_LOCATION_UNKNOWN, &tid_op));
+                                        LOOM_LOCATION_UNKNOWN, &tid_z_op));
 
   std::string text = LowerToText(loom_llvmir_target_profile_amdgpu_hal());
   EXPECT_NE(text.find("declare i32 @llvm.amdgcn.workitem.id.x()\n"),
             std::string::npos)
       << text;
-  EXPECT_NE(text.find("  %tid = call i32 @llvm.amdgcn.workitem.id.x()\n"),
+  EXPECT_NE(text.find("declare i32 @llvm.amdgcn.workitem.id.y()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare i32 @llvm.amdgcn.workitem.id.z()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %tid_x = call i32 @llvm.amdgcn.workitem.id.x()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %tid_y = call i32 @llvm.amdgcn.workitem.id.y()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %tid_z = call i32 @llvm.amdgcn.workitem.id.z()\n"),
             std::string::npos)
       << text;
   VerifyTextWithLlvmTools(text);
   CompileAmdgpuTextToObjectIfAvailable(text);
+}
+
+TEST_F(LlvmIrLowerTest, RejectsAmdgpuIntrinsicOnX86Profile) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("bad_intrinsic_target"));
+  loom_type_t result_types[1] = {i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, NULL, 0, result_types, 1, NULL,
+      0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* tid_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y, NULL,
+      0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &tid_op));
+  loom_value_id_t tid =
+      loom_value_slice_get(loom_llvmir_intrinsic_results(tid_op), 0);
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &tid, 1,
+                                        LOOM_LOCATION_UNKNOWN, &tid_op));
+
+  loom_llvmir_lowering_options_t options;
+  options.target_profile = loom_llvmir_target_profile_x86_64_object();
+  options.source_name = IREE_SV("lower_test");
+  loom_llvmir_module_t* lowered = NULL;
+  iree_status_t status = loom_llvmir_lower_module(
+      module_, &options, iree_allocator_system(), &lowered);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_UNIMPLEMENTED);
+  std::string message = StatusToString(status);
+  EXPECT_NE(message.find("AMDGPU llvmir.intrinsic requires an AMDGPU target"),
+            std::string::npos)
+      << message;
+  iree_status_free(status);
+  if (lowered) {
+    loom_llvmir_module_free(lowered);
+  }
 }
 
 TEST_F(LlvmIrLowerTest, LowersPublicDeviceFunctionWithAmdgpuHalAbi) {

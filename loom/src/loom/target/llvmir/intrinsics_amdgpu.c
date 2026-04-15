@@ -8,8 +8,9 @@
 
 #include <stdio.h>
 
-iree_status_t loom_llvmir_declare_amdgcn_workitem_id_x(
-    loom_llvmir_module_t* module, loom_llvmir_function_t** out_function) {
+static iree_status_t loom_llvmir_declare_amdgcn_workitem_id(
+    loom_llvmir_module_t* module, iree_string_view_t name,
+    loom_llvmir_function_t** out_function) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(out_function);
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -17,13 +18,31 @@ iree_status_t loom_llvmir_declare_amdgcn_workitem_id_x(
       loom_llvmir_module_get_integer_type(module, 32, &i32_type));
   loom_llvmir_function_desc_t desc = {
       .kind = LOOM_LLVMIR_FUNCTION_DECLARATION,
-      .name = IREE_SV("llvm.amdgcn.workitem.id.x"),
+      .name = name,
       .return_type = i32_type,
       .linkage = LOOM_LLVMIR_LINKAGE_DEFAULT,
       .calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
       .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
   };
   return loom_llvmir_module_add_function(module, &desc, out_function);
+}
+
+iree_status_t loom_llvmir_declare_amdgcn_workitem_id_x(
+    loom_llvmir_module_t* module, loom_llvmir_function_t** out_function) {
+  return loom_llvmir_declare_amdgcn_workitem_id(
+      module, IREE_SV("llvm.amdgcn.workitem.id.x"), out_function);
+}
+
+iree_status_t loom_llvmir_declare_amdgcn_workitem_id_y(
+    loom_llvmir_module_t* module, loom_llvmir_function_t** out_function) {
+  return loom_llvmir_declare_amdgcn_workitem_id(
+      module, IREE_SV("llvm.amdgcn.workitem.id.y"), out_function);
+}
+
+iree_status_t loom_llvmir_declare_amdgcn_workitem_id_z(
+    loom_llvmir_module_t* module, loom_llvmir_function_t** out_function) {
+  return loom_llvmir_declare_amdgcn_workitem_id(
+      module, IREE_SV("llvm.amdgcn.workitem.id.z"), out_function);
 }
 
 iree_status_t loom_llvmir_declare_amdgcn_make_buffer_rsrc(
