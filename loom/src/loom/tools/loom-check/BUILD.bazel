@@ -65,6 +65,7 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
     ],
 )
 
@@ -98,6 +99,7 @@ loom_cc_test(
         ":check",
         ":execute",
         ":report",
+        "//loom/src/loom/target/llvmir",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

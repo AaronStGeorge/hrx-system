@@ -262,6 +262,29 @@ TEST(LlvmIrToolTest, DisassemblesBitcode) {
   loom_llvmir_tool_output_deinitialize(&text, iree_allocator_system());
 }
 
+TEST(LlvmIrToolTest, DisassemblesBitcodeBytes) {
+  std::string bitcode;
+  IREE_ASSERT_OK(
+      BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
+
+  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvmir_tool_output_t text = {};
+  iree_status_t status = loom_llvmir_tool_disassemble_bitcode(
+      &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
+      iree_allocator_system(), &text);
+  if (IsToolUnavailable(status)) {
+    std::string message = StatusToString(status);
+    iree_status_ignore(status);
+    GTEST_SKIP() << message;
+  }
+  IREE_ASSERT_OK(status);
+
+  std::string disassembly = ToString(text);
+  EXPECT_NE(disassembly.find("define dso_local void @vadd4_object"),
+            std::string::npos);
+  loom_llvmir_tool_output_deinitialize(&text, iree_allocator_system());
+}
+
 TEST(LlvmIrToolTest, CompilesX86Object) {
   std::string bitcode;
   IREE_ASSERT_OK(

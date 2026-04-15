@@ -11,10 +11,46 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/llvmir/tool.h"
 #include "loom/tools/loom-check/check.h"
 
 namespace loom {
 namespace {
+
+bool IsToolUnavailable(iree_status_t status) {
+  iree_status_code_t code = iree_status_code(status);
+  return code == IREE_STATUS_NOT_FOUND || code == IREE_STATUS_UNAVAILABLE ||
+         code == IREE_STATUS_UNIMPLEMENTED;
+}
+
+std::string StatusToString(iree_status_t status) {
+  iree_allocator_t allocator = iree_allocator_system();
+  char* buffer = nullptr;
+  iree_host_size_t length = 0;
+  if (iree_status_to_string(status, &allocator, &buffer, &length)) {
+    std::string result(buffer, length);
+    iree_allocator_free(allocator, buffer);
+    return result;
+  }
+  return std::string("status code ") +
+         std::to_string(static_cast<int>(iree_status_code(status)));
+}
+
+void SkipIfLlvmDisUnavailable() {
+  loom_llvmir_toolchain_t toolchain;
+  loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+  loom_llvmir_tool_output_t version_text = {};
+  iree_status_t status =
+      loom_llvmir_tool_query_version(&toolchain, LOOM_LLVMIR_TOOL_LLVM_DIS,
+                                     iree_allocator_system(), &version_text);
+  if (IsToolUnavailable(status)) {
+    std::string message = StatusToString(status);
+    iree_status_ignore(status);
+    GTEST_SKIP() << message;
+  }
+  IREE_ASSERT_OK(status);
+  loom_llvmir_tool_output_deinitialize(&version_text, iree_allocator_system());
+}
 
 class ExecuteTest : public ::testing::Test {
  protected:
@@ -712,6 +748,35 @@ TEST_F(ExecuteTest, EmitModeLlvmIrText) {
   loom_check_result_t result;
   IREE_ASSERT_OK(ExecuteFirst(
       "// RUN: emit llvmir\n"
+      "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n"
+      "// ----\n"
+      "source_filename = \"test.loom-test\"\n"
+      "target datalayout = "
+      "\"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:"
+      "128-n8:16:32:64-S128\"\n"
+      "target triple = \"x86_64-unknown-linux-gnu\"\n"
+      "\n"
+      "define internal i32 @add(i32 %lhs, i32 %rhs) {\n"
+      "entry:\n"
+      "  %sum = add i32 %lhs, %rhs\n"
+      "  ret i32 %sum\n"
+      "}\n",
+      &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
+      << "detail: " << DetailString(result)
+      << "\nactual: " << ActualOutputString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitModeLlvmIrBitcodeDisassembly) {
+  SkipIfLlvmDisUnavailable();
+
+  loom_check_result_t result;
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: emit llvmir-bitcode\n"
       "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
       "  %sum = scalar.addi %lhs, %rhs : i32\n"
       "  func.return %sum : i32\n"

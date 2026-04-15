@@ -91,6 +91,12 @@ iree_status_t loom_llvmir_tool_disassemble_bitcode_file(
     const loom_llvmir_toolchain_t* toolchain, iree_string_view_t input_path,
     iree_allocator_t allocator, loom_llvmir_tool_output_t* out_text);
 
+// Writes |bitcode| to a temporary file, runs `llvm-dis <temp> -o -`, and
+// returns textual LLVM IR.
+iree_status_t loom_llvmir_tool_disassemble_bitcode(
+    const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    iree_allocator_t allocator, loom_llvmir_tool_output_t* out_text);
+
 // Runs `opt -passes=verify <input_path> -disable-output`.
 iree_status_t loom_llvmir_tool_verify_bitcode_file(
     const loom_llvmir_toolchain_t* toolchain, iree_string_view_t input_path,

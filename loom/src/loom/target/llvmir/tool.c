@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "iree/base/internal/path.h"
+#include "iree/io/file_contents.h"
 
 #if defined(IREE_PLATFORM_WINDOWS)
 
@@ -351,6 +352,44 @@ static iree_status_t loom_llvmir_capture_file_read(
   return status;
 }
 
+typedef struct loom_llvmir_temp_input_file_t {
+  // Temporary filesystem path passed to LLVM tools.
+  char path[MAX_PATH];
+} loom_llvmir_temp_input_file_t;
+
+static iree_status_t loom_llvmir_temp_input_file_allocate(
+    const char* prefix, loom_llvmir_temp_input_file_t* out_file) {
+  memset(out_file, 0, sizeof(*out_file));
+  char temp_directory[MAX_PATH] = {0};
+  DWORD temp_directory_length =
+      GetTempPathA(IREE_ARRAYSIZE(temp_directory), temp_directory);
+  if (temp_directory_length == 0 ||
+      temp_directory_length >= IREE_ARRAYSIZE(temp_directory)) {
+    return loom_llvmir_win32_status(GetLastError(),
+                                    "failed to resolve temporary directory");
+  }
+
+  if (GetTempFileNameA(temp_directory, prefix, 0, out_file->path) == 0) {
+    memset(out_file, 0, sizeof(*out_file));
+    return loom_llvmir_win32_status(GetLastError(),
+                                    "failed to allocate temporary input path");
+  }
+  return iree_ok_status();
+}
+
+static iree_string_view_t loom_llvmir_temp_input_file_path(
+    const loom_llvmir_temp_input_file_t* file) {
+  return iree_make_cstring_view(file->path);
+}
+
+static void loom_llvmir_temp_input_file_deinitialize(
+    loom_llvmir_temp_input_file_t* file) {
+  if (file->path[0] != '\0') {
+    DeleteFileA(file->path);
+  }
+  memset(file, 0, sizeof(*file));
+}
+
 static bool loom_llvmir_win32_arg_needs_quotes(const char* argument) {
   if (argument[0] == '\0') return true;
   for (const char* p = argument; *p != '\0'; ++p) {
@@ -583,6 +622,51 @@ static iree_status_t loom_llvmir_capture_file_read(
   return status;
 }
 
+typedef struct loom_llvmir_temp_input_file_t {
+  // Temporary filesystem path passed to LLVM tools.
+  char path[4096];
+} loom_llvmir_temp_input_file_t;
+
+static iree_status_t loom_llvmir_temp_input_file_allocate(
+    const char* stem, loom_llvmir_temp_input_file_t* out_file) {
+  memset(out_file, 0, sizeof(*out_file));
+  int length = iree_snprintf(out_file->path, sizeof(out_file->path),
+                             "%s/loom_llvmir_%s_XXXXXX",
+                             loom_llvmir_temp_directory(), stem);
+  if (length < 0 || (iree_host_size_t)length >= sizeof(out_file->path)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "temporary input path is too long");
+  }
+  int fd = mkstemp(out_file->path);
+  if (fd < 0) {
+    int error_number = errno;
+    memset(out_file, 0, sizeof(*out_file));
+    return loom_llvmir_posix_status(error_number,
+                                    "failed to open temporary input file");
+  }
+  if (close(fd) < 0 && errno != EINTR) {
+    int error_number = errno;
+    unlink(out_file->path);
+    memset(out_file, 0, sizeof(*out_file));
+    return loom_llvmir_posix_status(error_number,
+                                    "failed to close temporary input file");
+  }
+  return iree_ok_status();
+}
+
+static iree_string_view_t loom_llvmir_temp_input_file_path(
+    const loom_llvmir_temp_input_file_t* file) {
+  return iree_make_cstring_view(file->path);
+}
+
+static void loom_llvmir_temp_input_file_deinitialize(
+    loom_llvmir_temp_input_file_t* file) {
+  if (file->path[0] != '\0') {
+    unlink(file->path);
+  }
+  memset(file, 0, sizeof(*file));
+}
+
 static iree_status_t loom_llvmir_tool_process_wait(pid_t pid,
                                                    int* out_exit_code) {
   *out_exit_code = 1;
@@ -675,6 +759,31 @@ static iree_status_t loom_llvmir_tool_process_run(
 }
 
 #else
+
+typedef struct loom_llvmir_temp_input_file_t {
+  // Unused placeholder for unsupported platforms.
+  uint8_t unused;
+} loom_llvmir_temp_input_file_t;
+
+static iree_status_t loom_llvmir_temp_input_file_allocate(
+    const char* stem, loom_llvmir_temp_input_file_t* out_file) {
+  (void)stem;
+  (void)out_file;
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "LLVM tool temporary input files are unsupported on this platform");
+}
+
+static iree_string_view_t loom_llvmir_temp_input_file_path(
+    const loom_llvmir_temp_input_file_t* file) {
+  (void)file;
+  return iree_string_view_empty();
+}
+
+static void loom_llvmir_temp_input_file_deinitialize(
+    loom_llvmir_temp_input_file_t* file) {
+  (void)file;
+}
 
 static iree_status_t loom_llvmir_tool_process_run(
     char** argv, bool search_path, iree_allocator_t allocator,
@@ -811,6 +920,35 @@ iree_status_t loom_llvmir_tool_disassemble_bitcode_file(
                                         IREE_SV("disassembling LLVM bitcode"));
   }
   loom_llvmir_tool_result_deinitialize(&result, allocator);
+  return status;
+}
+
+iree_status_t loom_llvmir_tool_disassemble_bitcode(
+    const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    iree_allocator_t allocator, loom_llvmir_tool_output_t* out_text) {
+  if (out_text == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM disassembly output is required");
+  }
+  *out_text = (loom_llvmir_tool_output_t){0};
+  if (bitcode.data == NULL && bitcode.data_length != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM bitcode data is required");
+  }
+
+  loom_llvmir_temp_input_file_t input_file;
+  iree_status_t status =
+      loom_llvmir_temp_input_file_allocate("bc", &input_file);
+  if (iree_status_is_ok(status)) {
+    status = iree_io_file_contents_write(
+        loom_llvmir_temp_input_file_path(&input_file), bitcode, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_tool_disassemble_bitcode_file(
+        toolchain, loom_llvmir_temp_input_file_path(&input_file), allocator,
+        out_text);
+  }
+  loom_llvmir_temp_input_file_deinitialize(&input_file);
   return status;
 }
 

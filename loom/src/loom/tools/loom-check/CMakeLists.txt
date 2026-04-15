@@ -40,6 +40,7 @@ loom_cc_library(
     ::update
     iree::base
     iree::base::internal::arena
+    iree::io::stream
     loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
     loom::src::loom::error::json_sink
@@ -114,6 +115,7 @@ loom_cc_test(
     ::report
     iree::base
     iree::base::internal::arena
+    loom::src::loom::target::llvmir
     iree::testing::gtest
     iree::testing::gtest_main
 )
