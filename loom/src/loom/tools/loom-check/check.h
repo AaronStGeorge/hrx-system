@@ -26,7 +26,7 @@
 //   // RUN: verify          Parse -> verify -> match annotations.
 //   // RUN: pass <pipeline> Parse -> run pipeline -> print -> compare.
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
-//   // RUN: emit <target>   Parse -> lower to target text -> compare.
+//   // RUN: emit <target>   Parse -> lower to target output -> compare.
 //   // XFAIL: <reason>      Mark case as expected failure.
 //
 // Separators:
@@ -89,7 +89,7 @@ typedef enum loom_check_mode_e {
   LOOM_CHECK_MODE_VERIFY = 1,     // Parse -> verify -> match annotations.
   LOOM_CHECK_MODE_PASS = 2,       // Parse -> run pipeline -> print -> compare.
   LOOM_CHECK_MODE_FORMAT = 3,  // Parse -> convert format -> print -> compare.
-  LOOM_CHECK_MODE_EMIT = 4,    // Parse -> lower to target text -> compare.
+  LOOM_CHECK_MODE_EMIT = 4,    // Parse -> lower to target output -> compare.
 } loom_check_mode_t;
 
 // Returns a human-readable name for the mode.

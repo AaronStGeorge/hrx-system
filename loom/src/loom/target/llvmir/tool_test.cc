@@ -310,6 +310,27 @@ TEST(LlvmIrToolTest, CompilesX86Object) {
   iree_io_file_contents_free(contents);
 }
 
+TEST(LlvmIrToolTest, CompilesX86ObjectBytes) {
+  std::string bitcode;
+  IREE_ASSERT_OK(
+      BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
+
+  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvmir_tool_output_t object = {};
+  iree_status_t status = loom_llvmir_tool_compile_object(
+      &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
+      NULL, 0, iree_allocator_system(), &object);
+  if (IsToolUnavailable(status)) {
+    std::string message = StatusToString(status);
+    iree_status_ignore(status);
+    GTEST_SKIP() << message;
+  }
+  IREE_ASSERT_OK(status);
+
+  EXPECT_GT(object.length, 0u);
+  loom_llvmir_tool_output_deinitialize(&object, iree_allocator_system());
+}
+
 TEST(LlvmIrToolTest, CompilesAmdgpuObjectWhenTargetIsRegistered) {
   loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
   loom_llvmir_tool_output_t version_text = {};

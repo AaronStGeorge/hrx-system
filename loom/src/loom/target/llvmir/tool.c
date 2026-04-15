@@ -243,6 +243,40 @@ static iree_status_t loom_llvmir_tool_checked_status(
       stderr_data);
 }
 
+static iree_status_t loom_llvmir_tool_output_read_file(
+    iree_string_view_t path, iree_allocator_t allocator,
+    loom_llvmir_tool_output_t* out_output) {
+  *out_output = (loom_llvmir_tool_output_t){0};
+  iree_io_file_contents_t* contents = NULL;
+  IREE_RETURN_IF_ERROR(iree_io_file_contents_read(path, allocator, &contents));
+
+  iree_host_size_t length = contents->const_buffer.data_length;
+  iree_host_size_t total_size = 0;
+  iree_status_t status = iree_ok_status();
+  if (!iree_host_size_checked_add(length, 1, &total_size)) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "LLVM tool output file is too large");
+  }
+  char* data = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc(allocator, total_size, (void**)&data);
+  }
+  if (iree_status_is_ok(status)) {
+    if (length != 0) {
+      memcpy(data, contents->const_buffer.data, length);
+    }
+    data[length] = '\0';
+    *out_output = (loom_llvmir_tool_output_t){
+        .data = data,
+        .length = length,
+    };
+  } else {
+    iree_allocator_free(allocator, data);
+  }
+  iree_io_file_contents_free(contents);
+  return status;
+}
+
 //===----------------------------------------------------------------------===//
 // Platform capture files and process execution
 //===----------------------------------------------------------------------===//
@@ -352,13 +386,13 @@ static iree_status_t loom_llvmir_capture_file_read(
   return status;
 }
 
-typedef struct loom_llvmir_temp_input_file_t {
+typedef struct loom_llvmir_temp_file_t {
   // Temporary filesystem path passed to LLVM tools.
   char path[MAX_PATH];
-} loom_llvmir_temp_input_file_t;
+} loom_llvmir_temp_file_t;
 
-static iree_status_t loom_llvmir_temp_input_file_allocate(
-    const char* prefix, loom_llvmir_temp_input_file_t* out_file) {
+static iree_status_t loom_llvmir_temp_file_allocate(
+    const char* prefix, loom_llvmir_temp_file_t* out_file) {
   memset(out_file, 0, sizeof(*out_file));
   char temp_directory[MAX_PATH] = {0};
   DWORD temp_directory_length =
@@ -377,13 +411,12 @@ static iree_status_t loom_llvmir_temp_input_file_allocate(
   return iree_ok_status();
 }
 
-static iree_string_view_t loom_llvmir_temp_input_file_path(
-    const loom_llvmir_temp_input_file_t* file) {
+static iree_string_view_t loom_llvmir_temp_file_path(
+    const loom_llvmir_temp_file_t* file) {
   return iree_make_cstring_view(file->path);
 }
 
-static void loom_llvmir_temp_input_file_deinitialize(
-    loom_llvmir_temp_input_file_t* file) {
+static void loom_llvmir_temp_file_deinitialize(loom_llvmir_temp_file_t* file) {
   if (file->path[0] != '\0') {
     DeleteFileA(file->path);
   }
@@ -622,13 +655,13 @@ static iree_status_t loom_llvmir_capture_file_read(
   return status;
 }
 
-typedef struct loom_llvmir_temp_input_file_t {
+typedef struct loom_llvmir_temp_file_t {
   // Temporary filesystem path passed to LLVM tools.
   char path[4096];
-} loom_llvmir_temp_input_file_t;
+} loom_llvmir_temp_file_t;
 
-static iree_status_t loom_llvmir_temp_input_file_allocate(
-    const char* stem, loom_llvmir_temp_input_file_t* out_file) {
+static iree_status_t loom_llvmir_temp_file_allocate(
+    const char* stem, loom_llvmir_temp_file_t* out_file) {
   memset(out_file, 0, sizeof(*out_file));
   int length = iree_snprintf(out_file->path, sizeof(out_file->path),
                              "%s/loom_llvmir_%s_XXXXXX",
@@ -654,13 +687,12 @@ static iree_status_t loom_llvmir_temp_input_file_allocate(
   return iree_ok_status();
 }
 
-static iree_string_view_t loom_llvmir_temp_input_file_path(
-    const loom_llvmir_temp_input_file_t* file) {
+static iree_string_view_t loom_llvmir_temp_file_path(
+    const loom_llvmir_temp_file_t* file) {
   return iree_make_cstring_view(file->path);
 }
 
-static void loom_llvmir_temp_input_file_deinitialize(
-    loom_llvmir_temp_input_file_t* file) {
+static void loom_llvmir_temp_file_deinitialize(loom_llvmir_temp_file_t* file) {
   if (file->path[0] != '\0') {
     unlink(file->path);
   }
@@ -760,13 +792,13 @@ static iree_status_t loom_llvmir_tool_process_run(
 
 #else
 
-typedef struct loom_llvmir_temp_input_file_t {
+typedef struct loom_llvmir_temp_file_t {
   // Unused placeholder for unsupported platforms.
   uint8_t unused;
-} loom_llvmir_temp_input_file_t;
+} loom_llvmir_temp_file_t;
 
-static iree_status_t loom_llvmir_temp_input_file_allocate(
-    const char* stem, loom_llvmir_temp_input_file_t* out_file) {
+static iree_status_t loom_llvmir_temp_file_allocate(
+    const char* stem, loom_llvmir_temp_file_t* out_file) {
   (void)stem;
   (void)out_file;
   return iree_make_status(
@@ -774,14 +806,13 @@ static iree_status_t loom_llvmir_temp_input_file_allocate(
       "LLVM tool temporary input files are unsupported on this platform");
 }
 
-static iree_string_view_t loom_llvmir_temp_input_file_path(
-    const loom_llvmir_temp_input_file_t* file) {
+static iree_string_view_t loom_llvmir_temp_file_path(
+    const loom_llvmir_temp_file_t* file) {
   (void)file;
   return iree_string_view_empty();
 }
 
-static void loom_llvmir_temp_input_file_deinitialize(
-    loom_llvmir_temp_input_file_t* file) {
+static void loom_llvmir_temp_file_deinitialize(loom_llvmir_temp_file_t* file) {
   (void)file;
 }
 
@@ -936,19 +967,18 @@ iree_status_t loom_llvmir_tool_disassemble_bitcode(
                             "LLVM bitcode data is required");
   }
 
-  loom_llvmir_temp_input_file_t input_file;
-  iree_status_t status =
-      loom_llvmir_temp_input_file_allocate("bc", &input_file);
+  loom_llvmir_temp_file_t input_file;
+  iree_status_t status = loom_llvmir_temp_file_allocate("bc", &input_file);
   if (iree_status_is_ok(status)) {
     status = iree_io_file_contents_write(
-        loom_llvmir_temp_input_file_path(&input_file), bitcode, allocator);
+        loom_llvmir_temp_file_path(&input_file), bitcode, allocator);
   }
   if (iree_status_is_ok(status)) {
     status = loom_llvmir_tool_disassemble_bitcode_file(
-        toolchain, loom_llvmir_temp_input_file_path(&input_file), allocator,
+        toolchain, loom_llvmir_temp_file_path(&input_file), allocator,
         out_text);
   }
-  loom_llvmir_temp_input_file_deinitialize(&input_file);
+  loom_llvmir_temp_file_deinitialize(&input_file);
   return status;
 }
 
@@ -1001,5 +1031,49 @@ iree_status_t loom_llvmir_tool_compile_object_file(
       toolchain, LOOM_LLVMIR_TOOL_LLC, arguments, argument_count, allocator,
       IREE_SV("compiling LLVM bitcode to an object file"));
   iree_allocator_free(allocator, arguments);
+  return status;
+}
+
+iree_status_t loom_llvmir_tool_compile_object(
+    const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvmir_tool_output_t* out_object) {
+  if (out_object == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM object output is required");
+  }
+  *out_object = (loom_llvmir_tool_output_t){0};
+  if (bitcode.data == NULL && bitcode.data_length != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM bitcode data is required");
+  }
+  if (extra_arguments == NULL && extra_argument_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "extra LLVM tool arguments are required");
+  }
+
+  loom_llvmir_temp_file_t input_file = {0};
+  loom_llvmir_temp_file_t output_file = {0};
+  iree_status_t status = loom_llvmir_temp_file_allocate("bc", &input_file);
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_temp_file_allocate("obj", &output_file);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_io_file_contents_write(
+        loom_llvmir_temp_file_path(&input_file), bitcode, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_tool_compile_object_file(
+        toolchain, loom_llvmir_temp_file_path(&input_file),
+        loom_llvmir_temp_file_path(&output_file), extra_arguments,
+        extra_argument_count, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_tool_output_read_file(
+        loom_llvmir_temp_file_path(&output_file), allocator, out_object);
+  }
+  loom_llvmir_temp_file_deinitialize(&output_file);
+  loom_llvmir_temp_file_deinitialize(&input_file);
   return status;
 }

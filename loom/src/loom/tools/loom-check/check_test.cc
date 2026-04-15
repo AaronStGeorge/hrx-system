@@ -116,6 +116,16 @@ TEST_F(CheckParseTest, EmitBitcodeMode) {
       iree_make_cstring_view("llvmir-bitcode x86_64-object")));
 }
 
+TEST_F(CheckParseTest, EmitObjectMode) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: emit llvmir-object x86_64-object\nfunc.def @f() {}\n"));
+  ASSERT_EQ(file_.case_count, 1);
+  EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.cases[0].emit_target,
+      iree_make_cstring_view("llvmir-object x86_64-object")));
+}
+
 TEST_F(CheckParseTest, XfailDirective) {
   IREE_ASSERT_OK(
       Parse("// XFAIL: parser does not support this yet\n"

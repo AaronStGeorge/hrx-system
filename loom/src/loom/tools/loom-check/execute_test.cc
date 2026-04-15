@@ -36,13 +36,12 @@ std::string StatusToString(iree_status_t status) {
          std::to_string(static_cast<int>(iree_status_code(status)));
 }
 
-void SkipIfLlvmDisUnavailable() {
+void SkipIfLlvmToolUnavailable(loom_llvmir_tool_kind_t tool_kind) {
   loom_llvmir_toolchain_t toolchain;
   loom_llvmir_toolchain_initialize_from_environment(&toolchain);
   loom_llvmir_tool_output_t version_text = {};
-  iree_status_t status =
-      loom_llvmir_tool_query_version(&toolchain, LOOM_LLVMIR_TOOL_LLVM_DIS,
-                                     iree_allocator_system(), &version_text);
+  iree_status_t status = loom_llvmir_tool_query_version(
+      &toolchain, tool_kind, iree_allocator_system(), &version_text);
   if (IsToolUnavailable(status)) {
     std::string message = StatusToString(status);
     iree_status_ignore(status);
@@ -772,7 +771,7 @@ TEST_F(ExecuteTest, EmitModeLlvmIrText) {
 }
 
 TEST_F(ExecuteTest, EmitModeLlvmIrBitcodeDisassembly) {
-  SkipIfLlvmDisUnavailable();
+  SkipIfLlvmToolUnavailable(LOOM_LLVMIR_TOOL_LLVM_DIS);
 
   loom_check_result_t result;
   IREE_ASSERT_OK(ExecuteFirst(
@@ -794,6 +793,25 @@ TEST_F(ExecuteTest, EmitModeLlvmIrBitcodeDisassembly) {
       "  ret i32 %sum\n"
       "}\n",
       &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
+      << "detail: " << DetailString(result)
+      << "\nactual: " << ActualOutputString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitModeLlvmIrObject) {
+  SkipIfLlvmToolUnavailable(LOOM_LLVMIR_TOOL_LLC);
+
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit llvmir-object\n"
+                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n"
+                   "// ----\n"
+                   "object emitted: x86_64-object\n",
+                   &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
       << "detail: " << DetailString(result)
       << "\nactual: " << ActualOutputString(result);

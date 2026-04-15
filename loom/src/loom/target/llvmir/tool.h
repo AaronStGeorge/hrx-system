@@ -111,6 +111,17 @@ iree_status_t loom_llvmir_tool_compile_object_file(
     iree_string_view_t output_path, const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator);
 
+// Writes |bitcode| to a temporary file, runs `llc <temp> -filetype=obj`, and
+// returns the produced object bytes.
+//
+// |extra_arguments| are appended after the standard arguments and may include
+// target-specific flags such as `-mcpu=gfx1100`.
+iree_status_t loom_llvmir_tool_compile_object(
+    const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvmir_tool_output_t* out_object);
+
 #ifdef __cplusplus
 }
 #endif

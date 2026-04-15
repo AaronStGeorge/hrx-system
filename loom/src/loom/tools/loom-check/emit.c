@@ -18,6 +18,7 @@
 typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LLVMIR_TEXT = 0,
   LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY = 1,
+  LOOM_CHECK_EMIT_LLVMIR_OBJECT = 2,
 } loom_check_emit_format_t;
 
 typedef struct loom_check_emit_request_t {
@@ -26,6 +27,13 @@ typedef struct loom_check_emit_request_t {
   // LLVM target/ABI profile used by lowering.
   const loom_llvmir_target_profile_t* profile;
 } loom_check_emit_request_t;
+
+typedef struct loom_check_emit_byte_buffer_t {
+  // Allocated byte storage owned by this buffer.
+  uint8_t* data;
+  // Number of valid bytes in |data|.
+  iree_host_size_t length;
+} loom_check_emit_byte_buffer_t;
 
 static iree_status_t loom_check_emit_status_failure(
     iree_status_t failure_status, loom_check_result_t* result) {
@@ -55,6 +63,8 @@ static iree_status_t loom_check_emit_parse_request(
     out_request->format = LOOM_CHECK_EMIT_LLVMIR_TEXT;
   } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-bitcode"))) {
     out_request->format = LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY;
+  } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-object"))) {
+    out_request->format = LOOM_CHECK_EMIT_LLVMIR_OBJECT;
   } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown emit target '%.*s'", (int)target_name.size,
@@ -126,9 +136,16 @@ static iree_status_t loom_check_emit_write_llvmir_text(
   return loom_llvmir_text_write_module(lowered_module, &stream);
 }
 
-static iree_status_t loom_check_emit_write_llvmir_bitcode_disassembly(
+static void loom_check_emit_byte_buffer_deinitialize(
+    loom_check_emit_byte_buffer_t* buffer, iree_allocator_t allocator) {
+  iree_allocator_free(allocator, buffer->data);
+  *buffer = (loom_check_emit_byte_buffer_t){0};
+}
+
+static iree_status_t loom_check_emit_write_llvmir_bitcode_bytes(
     const loom_llvmir_module_t* lowered_module, iree_allocator_t allocator,
-    loom_check_result_t* result) {
+    loom_check_emit_byte_buffer_t* out_bitcode) {
+  *out_bitcode = (loom_check_emit_byte_buffer_t){0};
   iree_io_stream_t* bitcode_stream = NULL;
   iree_status_t status = iree_io_vec_stream_create(
       IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_WRITABLE |
@@ -161,13 +178,32 @@ static iree_status_t loom_check_emit_write_llvmir_bitcode_disassembly(
     status =
         iree_io_stream_read(bitcode_stream, bitcode_length, bitcode_data, NULL);
   }
+  if (iree_status_is_ok(status)) {
+    *out_bitcode = (loom_check_emit_byte_buffer_t){
+        .data = bitcode_data,
+        .length = bitcode_length,
+    };
+    bitcode_data = NULL;
+  }
+
+  iree_allocator_free(allocator, bitcode_data);
+  iree_io_stream_release(bitcode_stream);
+  return status;
+}
+
+static iree_status_t loom_check_emit_write_llvmir_bitcode_disassembly(
+    const loom_llvmir_module_t* lowered_module, iree_allocator_t allocator,
+    loom_check_result_t* result) {
+  loom_check_emit_byte_buffer_t bitcode = {0};
+  iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
+      lowered_module, allocator, &bitcode);
 
   loom_llvmir_tool_output_t disassembly = {0};
   if (iree_status_is_ok(status)) {
     loom_llvmir_toolchain_t toolchain;
     loom_llvmir_toolchain_initialize_from_environment(&toolchain);
     status = loom_llvmir_tool_disassemble_bitcode(
-        &toolchain, iree_make_const_byte_span(bitcode_data, bitcode_length),
+        &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
         allocator, &disassembly);
   }
   if (iree_status_is_ok(status)) {
@@ -177,8 +213,38 @@ static iree_status_t loom_check_emit_write_llvmir_bitcode_disassembly(
   }
 
   loom_llvmir_tool_output_deinitialize(&disassembly, allocator);
-  iree_allocator_free(allocator, bitcode_data);
-  iree_io_stream_release(bitcode_stream);
+  loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
+  return status;
+}
+
+static iree_status_t loom_check_emit_write_llvmir_object(
+    const loom_llvmir_module_t* lowered_module,
+    const loom_llvmir_target_profile_t* profile, iree_allocator_t allocator,
+    loom_check_result_t* result) {
+  loom_check_emit_byte_buffer_t bitcode = {0};
+  iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
+      lowered_module, allocator, &bitcode);
+
+  loom_llvmir_tool_output_t object = {0};
+  if (iree_status_is_ok(status)) {
+    loom_llvmir_toolchain_t toolchain;
+    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+    status = loom_llvmir_tool_compile_object(
+        &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
+        NULL, 0, allocator, &object);
+  }
+  if (iree_status_is_ok(status) && object.length == 0) {
+    status =
+        iree_make_status(IREE_STATUS_DATA_LOSS, "LLVM object output is empty");
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_format(
+        &result->actual_output, "object emitted: %.*s\n",
+        (int)profile->name.size, profile->name.data);
+  }
+
+  loom_llvmir_tool_output_deinitialize(&object, allocator);
+  loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
   return status;
 }
 
@@ -243,6 +309,10 @@ iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
       case LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY:
         status = loom_check_emit_write_llvmir_bitcode_disassembly(
             lowered_module, allocator, result);
+        break;
+      case LOOM_CHECK_EMIT_LLVMIR_OBJECT:
+        status = loom_check_emit_write_llvmir_object(
+            lowered_module, request.profile, allocator, result);
         break;
     }
   }
