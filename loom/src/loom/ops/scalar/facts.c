@@ -16,6 +16,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scalar/compare.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/util/math.h"
 
@@ -287,12 +288,21 @@ BIT_COUNT_FACTS(loom_scalar_ctpopi_facts, loom_scalar_ctpopi_result,
 // Comparison
 //===----------------------------------------------------------------------===//
 
-// cmpi/cmpf: boolean result, no predicate-aware folding yet.
 iree_status_t loom_scalar_cmpi_facts(loom_fact_context_t* context,
                                      const loom_module_t* module,
                                      const loom_op_t* op,
                                      const loom_value_facts_t* operand_facts,
                                      loom_value_facts_t* result_facts) {
+  bool result = false;
+  if ((loom_scalar_cmpi_lhs(op) == loom_scalar_cmpi_rhs(op) &&
+       loom_scalar_cmpi_same_value_result(loom_scalar_cmpi_predicate(op),
+                                          &result)) ||
+      loom_scalar_cmpi_result_from_facts(loom_scalar_cmpi_predicate(op),
+                                         &operand_facts[0], &operand_facts[1],
+                                         &result)) {
+    result_facts[0] = loom_value_facts_exact_i64(result ? 1 : 0);
+    return iree_ok_status();
+  }
   result_facts[0] = loom_value_facts_make(0, 1, 1);
   return iree_ok_status();
 }
@@ -302,6 +312,25 @@ iree_status_t loom_scalar_cmpf_facts(loom_fact_context_t* context,
                                      const loom_op_t* op,
                                      const loom_value_facts_t* operand_facts,
                                      loom_value_facts_t* result_facts) {
+  bool result = false;
+  if (loom_scalar_cmpf_lhs(op) == loom_scalar_cmpf_rhs(op) &&
+      (loom_scalar_cmpf_fastmath(op) & LOOM_SCALAR_FASTMATHFLAGS_NNAN) != 0 &&
+      loom_scalar_cmpf_same_value_result(loom_scalar_cmpf_predicate(op),
+                                         &result)) {
+    result_facts[0] = loom_value_facts_exact_i64(result ? 1 : 0);
+    return iree_ok_status();
+  }
+  if (loom_value_facts_is_exact(operand_facts[0]) &&
+      loom_value_facts_is_float(operand_facts[0]) &&
+      loom_value_facts_is_exact(operand_facts[1]) &&
+      loom_value_facts_is_float(operand_facts[1]) &&
+      loom_scalar_cmpf_exact_result(loom_scalar_cmpf_predicate(op),
+                                    loom_value_facts_as_f64(operand_facts[0]),
+                                    loom_value_facts_as_f64(operand_facts[1]),
+                                    &result)) {
+    result_facts[0] = loom_value_facts_exact_i64(result ? 1 : 0);
+    return iree_ok_status();
+  }
   result_facts[0] = loom_value_facts_make(0, 1, 1);
   return iree_ok_status();
 }

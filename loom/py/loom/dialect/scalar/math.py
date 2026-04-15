@@ -110,6 +110,7 @@ scalar_powf = binary_op(
     type_constraint=FLOAT,
     doc="Power: x^y.",
     flags=_FM,
+    canonicalize="loom_scalar_powf_canonicalize",
     facts="loom_scalar_powf_facts",
     examples=["%result = scalar.powf %lhs, %rhs : f32"],
 )
@@ -330,6 +331,7 @@ scalar_ceilf = unary_op(
     doc="Round toward positive infinity.",
     traits=[IDEMPOTENT],
     flags=_FM,
+    canonicalize="loom_scalar_ceilf_canonicalize",
     facts="loom_scalar_ceilf_facts",
     examples=["%result = scalar.ceilf %input : f32"],
 )
@@ -340,6 +342,7 @@ scalar_floorf = unary_op(
     doc="Round toward negative infinity.",
     traits=[IDEMPOTENT],
     flags=_FM,
+    canonicalize="loom_scalar_floorf_canonicalize",
     facts="loom_scalar_floorf_facts",
     examples=["%result = scalar.floorf %input : f32"],
 )
@@ -350,6 +353,7 @@ scalar_roundf = unary_op(
     doc="Round to nearest, ties away from zero.",
     traits=[IDEMPOTENT],
     flags=_FM,
+    canonicalize="loom_scalar_roundf_canonicalize",
     facts="loom_scalar_roundf_facts",
     examples=["%result = scalar.roundf %input : f32"],
 )
@@ -360,6 +364,7 @@ scalar_roundevenf = unary_op(
     doc="Round to nearest, ties to even (IEEE 754 default rounding).",
     traits=[IDEMPOTENT],
     flags=_FM,
+    canonicalize="loom_scalar_roundevenf_canonicalize",
     facts="loom_scalar_roundevenf_facts",
     examples=["%result = scalar.roundevenf %input : f32"],
 )
@@ -370,6 +375,7 @@ scalar_truncf = unary_op(
     doc="Round toward zero (C trunc).",
     traits=[IDEMPOTENT],
     flags=_FM,
+    canonicalize="loom_scalar_truncf_canonicalize",
     facts="loom_scalar_truncf_facts",
     examples=["%result = scalar.truncf %input : f32"],
 )

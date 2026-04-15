@@ -67,6 +67,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "comparison_structural"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/comparison_structural.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "comparisoni"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/comparisoni.loom-test"
@@ -78,9 +89,31 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "conversion_structural"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/conversion_structural.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "conversioni"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/conversioni.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "mathf_structural"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/mathf_structural.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

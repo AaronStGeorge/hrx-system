@@ -20,8 +20,11 @@ loom_check_test_suite(
         "arithmetici_structural.loom-test",
         "bitwisei.loom-test",
         "bitwisei_structural.loom-test",
+        "comparison_structural.loom-test",
         "comparisoni.loom-test",
+        "conversion_structural.loom-test",
         "conversioni.loom-test",
+        "mathf_structural.loom-test",
         "poison.loom-test",
     ],
 )

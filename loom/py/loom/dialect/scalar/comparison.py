@@ -86,6 +86,7 @@ scalar_cmpi = comparison_op(
     type_constraint=INTEGER,
     predicates=CmpIPredicate,
     doc="Integer comparison.",
+    canonicalize="loom_scalar_cmpi_canonicalize",
     facts="loom_scalar_cmpi_facts",
     examples=["%result = scalar.cmpi eq, %lhs, %rhs : i32"],
 )
@@ -97,6 +98,7 @@ scalar_cmpf = comparison_op(
     predicates=CmpFPredicate,
     doc="Floating-point comparison.",
     flags=("fastmath", FastMathFlags),
+    canonicalize="loom_scalar_cmpf_canonicalize",
     facts="loom_scalar_cmpf_facts",
     examples=["%result = scalar.cmpf olt, %lhs, %rhs : f32"],
 )
@@ -122,6 +124,7 @@ scalar_select = Op(
         COLON,
         TypeOf("result"),
     ],
+    canonicalize="loom_scalar_select_canonicalize",
     facts="loom_scalar_select_facts",
     examples=["%result = scalar.select %cond, %t, %f : f32"],
 )

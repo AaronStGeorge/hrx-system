@@ -1,0 +1,44 @@
+// RUN: pass canonicalize
+
+// Any float rounding op applied to an already-rounded value is redundant.
+func.def @rounding_chain(%x: f32) -> (f32, f32) {
+  %floor = scalar.floorf %x : f32
+  %ceil_floor = scalar.ceilf %floor : f32
+  %round = scalar.roundf %x : f32
+  %trunc_round = scalar.truncf %round : f32
+  func.return %ceil_floor, %trunc_round : f32, f32
+}
+// ----
+func.def @rounding_chain(%x: f32) -> (f32, f32) {
+  %floor = scalar.floorf %x : f32
+  %round = scalar.roundf %x : f32
+  func.return %floor, %round : f32, f32
+}
+
+// ====
+
+// powf handles structural exponent identities without requiring exact lhs.
+func.def @powf_special_exponents(%x: f32) -> (f32, f32, f32) {
+  %zero = scalar.constant 0.0 : f32
+  %one = scalar.constant 1.0 : f32
+  %two = scalar.constant 2.0 : f32
+  %pow0 = scalar.powf %x, %zero : f32
+  %pow1 = scalar.powf %x, %one : f32
+  %pow2 = scalar.powf<nnan|ninf|nsz> %x, %two : f32
+  func.return %pow0, %pow1, %pow2 : f32, f32, f32
+}
+// ----
+func.def @powf_special_exponents(%x: f32) -> (f32, f32, f32) {
+  %pow0 = scalar.constant 1.0 : f32
+  %pow2 = scalar.mulf<nnan|ninf|nsz> %x, %x : f32
+  func.return %pow0, %x, %pow2 : f32, f32, f32
+}
+
+// ====
+
+// nnan alone does not prove log(exp(x)) is safe to cancel: exp can overflow.
+func.def @log_exp_keeps_domain_and_overflow_semantics(%x: f32) -> (f32) {
+  %exp = scalar.expf<nnan> %x : f32
+  %log = scalar.logf<nnan> %exp : f32
+  func.return %log : f32
+}

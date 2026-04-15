@@ -78,6 +78,7 @@ scalar_extf = cast_op(
     from_constraint=FLOAT,
     to_constraint=FLOAT,
     doc="Float precision extension (widen): e.g. f16 to f32.",
+    canonicalize="loom_scalar_extf_canonicalize",
     facts="loom_scalar_extf_facts",
     examples=["%result = scalar.extf %input : f16 to f32"],
 )
@@ -87,6 +88,7 @@ scalar_fptrunc = cast_op(
     from_constraint=FLOAT,
     to_constraint=FLOAT,
     doc="Float precision truncation (narrow): e.g. f32 to f16.",
+    canonicalize="loom_scalar_fptrunc_canonicalize",
     facts="loom_scalar_fptrunc_facts",
     examples=["%result = scalar.fptrunc %input : f32 to f16"],
 )
@@ -101,6 +103,7 @@ scalar_extsi = cast_op(
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Signed integer extension (sign-extend): e.g. i8 to i32.",
+    canonicalize="loom_scalar_extsi_canonicalize",
     facts="loom_scalar_extsi_facts",
     examples=["%result = scalar.extsi %input : i8 to i32"],
 )
@@ -110,6 +113,7 @@ scalar_extui = cast_op(
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Unsigned integer extension (zero-extend): e.g. i8 to i32.",
+    canonicalize="loom_scalar_extui_canonicalize",
     facts="loom_scalar_extui_facts",
     examples=["%result = scalar.extui %input : i8 to i32"],
 )
@@ -119,6 +123,7 @@ scalar_trunci = cast_op(
     from_constraint=INTEGER,
     to_constraint=INTEGER,
     doc="Integer truncation (narrow): e.g. i32 to i8.",
+    canonicalize="loom_scalar_trunci_canonicalize",
     facts="loom_scalar_trunci_facts",
     examples=["%result = scalar.trunci %input : i32 to i8"],
 )
@@ -133,6 +138,7 @@ scalar_bitcast = cast_op(
     from_constraint=SCALAR,
     to_constraint=SCALAR,
     doc="Bitwise reinterpretation: same bits, different type. No conversion.",
+    canonicalize="loom_scalar_bitcast_canonicalize",
     facts="loom_scalar_bitcast_facts",
     examples=["%result = scalar.bitcast %input : f32 to i32"],
 )
