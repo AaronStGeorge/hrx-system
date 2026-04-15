@@ -14,23 +14,25 @@
 //      contracts: PURE is enough for conservative effect-free relocation, while
 //      true speculation additionally requires SAFE_TO_SPECULATE.
 //
-//   2. SSA availability. Moving an op also moves its result types and nested
-//      regions. Every ordinary operand and every SSA value embedded in a moved
-//      value type must either be defined outside the moved subtree and dominate
-//      the insertion point, or be defined inside the moved subtree itself.
+//   2. SSA availability. Moving an op also moves its result types, attributes,
+//      and nested regions. Every ordinary operand and every SSA value embedded
+//      in moved types, attributes, predicates, static encodings, and block
+//      argument types must either be defined outside the moved subtree and
+//      dominate the insertion point, or be defined inside the moved subtree
+//      itself.
 //
 // Keep pass-specific profitability outside this file. This layer answers
 // whether a proposed motion preserves IR contracts, not whether it is a good
 // optimization.
 
-#ifndef LOOM_TRANSFORMS_MOTION_H_
-#define LOOM_TRANSFORMS_MOTION_H_
+#ifndef LOOM_ANALYSIS_MOTION_H_
+#define LOOM_ANALYSIS_MOTION_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/availability.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/op_defs.h"
-#include "loom/util/dominance.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,8 +56,8 @@ typedef struct loom_motion_analysis_t {
   const loom_module_t* module;
   // Scratch arena used for temporary traversal stacks.
   iree_arena_allocator_t* arena;
-  // Dominance and before-op availability queries.
-  loom_dominance_info_t dominance;
+  // Value, type, and attribute capture availability queries.
+  loom_availability_analysis_t availability;
   // Reusable stack for subtree region walks.
   loom_motion_region_stack_t region_stack;
 } loom_motion_analysis_t;
@@ -115,4 +117,4 @@ iree_status_t loom_motion_subtree_can_speculate_before(
 }
 #endif
 
-#endif  // LOOM_TRANSFORMS_MOTION_H_
+#endif  // LOOM_ANALYSIS_MOTION_H_

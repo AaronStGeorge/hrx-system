@@ -6,14 +6,14 @@
 
 #include <string.h>
 
+#include "loom/analysis/availability.h"
+#include "loom/analysis/motion.h"
 #include "loom/ir/attribute.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/scf/ops.h"
-#include "loom/transforms/motion.h"
 #include "loom/transforms/rewriter.h"
-#include "loom/util/dominance.h"
 #include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//
@@ -362,80 +362,6 @@ static iree_status_t loom_scf_if_selectify_yield_only(
                                                   op->result_count);
 }
 
-static bool loom_scf_predicate_is_available_before_op(
-    const loom_dominance_info_t* dominance, const loom_predicate_t* predicate,
-    const loom_op_t* before_op) {
-  for (uint8_t i = 0; i < IREE_ARRAYSIZE(predicate->arg_tags); ++i) {
-    if (predicate->arg_tags[i] != LOOM_PRED_ARG_VALUE) continue;
-    if (predicate->args[i] < 0 ||
-        (uint64_t)predicate->args[i] >= dominance->module->values.count ||
-        !loom_value_is_available_before_op(
-            dominance, (loom_value_id_t)predicate->args[i], before_op)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-static bool loom_scf_attr_is_available_before_op(
-    const loom_module_t* module, const loom_dominance_info_t* dominance,
-    const loom_attribute_t* attr, const loom_op_t* before_op, uint8_t depth) {
-  if (depth > LOOM_ATTR_DICT_MAX_NESTING_DEPTH) return false;
-  switch (attr->kind) {
-    case LOOM_ATTR_ABSENT:
-    case LOOM_ATTR_I64:
-    case LOOM_ATTR_F64:
-    case LOOM_ATTR_STRING:
-    case LOOM_ATTR_BOOL:
-    case LOOM_ATTR_ENUM:
-    case LOOM_ATTR_I64_ARRAY:
-    case LOOM_ATTR_SYMBOL:
-    case LOOM_ATTR_ENCODING:
-      return true;
-    case LOOM_ATTR_TYPE:
-      if (attr->type_id == LOOM_TYPE_ID_INVALID ||
-          attr->type_id >= module->types.count) {
-        return false;
-      }
-      return loom_type_is_available_before_op(
-          dominance, module->types.entries[attr->type_id], before_op);
-    case LOOM_ATTR_PREDICATE_LIST:
-      if (attr->count > 0 && !attr->predicate_list) return false;
-      for (uint16_t i = 0; i < attr->count; ++i) {
-        if (!loom_scf_predicate_is_available_before_op(
-                dominance, &attr->predicate_list[i], before_op)) {
-          return false;
-        }
-      }
-      return true;
-    case LOOM_ATTR_DICT:
-      if (attr->count > 0 && !attr->dict_entries) return false;
-      for (uint16_t i = 0; i < attr->count; ++i) {
-        if (!loom_scf_attr_is_available_before_op(
-                module, dominance, &attr->dict_entries[i].value, before_op,
-                (uint8_t)(depth + 1))) {
-          return false;
-        }
-      }
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool loom_scf_attrs_are_available_before_op(
-    const loom_module_t* module, const loom_dominance_info_t* dominance,
-    const loom_op_t* source_op, const loom_op_t* before_op) {
-  const loom_attribute_t* attrs = loom_op_const_attrs(source_op);
-  for (uint8_t i = 0; i < source_op->attribute_count; ++i) {
-    if (!loom_scf_attr_is_available_before_op(module, dominance, &attrs[i],
-                                              before_op, 0)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 static loom_op_t* loom_scf_if_tail_op_from_yielded_value(
     const loom_module_t* module, loom_block_t* block, loom_op_t* yield_op,
     loom_value_id_t yielded_value) {
@@ -477,39 +403,42 @@ static bool loom_scf_if_tail_attrs_match(const loom_op_t* lhs,
   return true;
 }
 
-static bool loom_scf_if_tail_ops_match(loom_rewriter_t* rewriter,
-                                       const loom_op_t* if_op,
-                                       const loom_op_t* then_tail,
-                                       const loom_op_t* else_tail,
-                                       const loom_dominance_info_t* dominance) {
+static iree_status_t loom_scf_if_tail_ops_match(
+    loom_rewriter_t* rewriter, const loom_op_t* if_op,
+    const loom_op_t* then_tail, const loom_op_t* else_tail,
+    const loom_availability_analysis_t* availability, bool* out_match) {
+  *out_match = false;
   if (then_tail->kind != else_tail->kind ||
       then_tail->instance_flags != else_tail->instance_flags ||
       then_tail->operand_count != else_tail->operand_count ||
       then_tail->result_count != 1 || else_tail->result_count != 1 ||
       then_tail->region_count != 0 || else_tail->region_count != 0 ||
       then_tail->tied_result_count != 0 || else_tail->tied_result_count != 0) {
-    return false;
+    return iree_ok_status();
   }
   if (!loom_motion_op_can_relocate_effect_free(rewriter->module, then_tail) ||
       !loom_motion_op_can_relocate_effect_free(rewriter->module, else_tail)) {
-    return false;
+    return iree_ok_status();
   }
   if (!loom_scf_if_tail_result_has_single_yield_use(rewriter->module,
                                                     then_tail) ||
       !loom_scf_if_tail_result_has_single_yield_use(rewriter->module,
                                                     else_tail)) {
-    return false;
+    return iree_ok_status();
   }
-  if (!loom_scf_if_tail_attrs_match(then_tail, else_tail)) return false;
-  if (!loom_scf_attrs_are_available_before_op(rewriter->module, dominance,
-                                              then_tail, if_op)) {
-    return false;
+  if (!loom_scf_if_tail_attrs_match(then_tail, else_tail)) {
+    return iree_ok_status();
   }
+  bool attrs_available = false;
+  IREE_RETURN_IF_ERROR(loom_availability_op_attrs_are_available_before_op(
+      availability, /*moving_root_op=*/NULL, if_op, then_tail,
+      &attrs_available));
+  if (!attrs_available) return iree_ok_status();
 
   loom_value_id_t if_result = loom_op_const_results(if_op)[0];
   if (if_result == LOOM_VALUE_ID_INVALID ||
       if_result >= rewriter->module->values.count) {
-    return false;
+    return iree_ok_status();
   }
   loom_type_t result_type = loom_module_value_type(rewriter->module, if_result);
   if (!loom_type_equal(result_type, loom_module_value_type(
@@ -518,7 +447,7 @@ static bool loom_scf_if_tail_ops_match(loom_rewriter_t* rewriter,
       !loom_type_equal(result_type, loom_module_value_type(
                                         rewriter->module,
                                         loom_op_const_results(else_tail)[0]))) {
-    return false;
+    return iree_ok_status();
   }
 
   const loom_value_id_t* then_operands = loom_op_const_operands(then_tail);
@@ -528,19 +457,22 @@ static bool loom_scf_if_tail_ops_match(loom_rewriter_t* rewriter,
         then_operands[i] >= rewriter->module->values.count ||
         else_operands[i] == LOOM_VALUE_ID_INVALID ||
         else_operands[i] >= rewriter->module->values.count) {
-      return false;
+      return iree_ok_status();
     }
     loom_type_t then_type =
         loom_module_value_type(rewriter->module, then_operands[i]);
     if (!loom_type_equal(then_type, loom_module_value_type(rewriter->module,
                                                            else_operands[i]))) {
-      return false;
+      return iree_ok_status();
     }
-    if (!loom_type_is_available_before_op(dominance, then_type, if_op)) {
-      return false;
-    }
+    bool type_available = false;
+    IREE_RETURN_IF_ERROR(loom_availability_type_is_available_before_op(
+        availability, /*moving_root_op=*/NULL, if_op, then_type,
+        &type_available));
+    if (!type_available) return iree_ok_status();
   }
-  return true;
+  *out_match = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_scf_if_build_operand_yield(
@@ -607,10 +539,13 @@ static iree_status_t loom_scf_if_factor_common_tail(loom_op_t* op,
       rewriter->module, else_block, else_yield, else_values.values[0]);
   if (!then_tail || !else_tail) return iree_ok_status();
 
-  loom_dominance_info_t dominance;
-  loom_dominance_info_initialize(rewriter->module, rewriter->arena, &dominance);
-  if (!loom_scf_if_tail_ops_match(rewriter, op, then_tail, else_tail,
-                                  &dominance)) {
+  loom_availability_analysis_t availability;
+  loom_availability_analysis_initialize(rewriter->module, rewriter->arena,
+                                        &availability);
+  bool tail_ops_match = false;
+  IREE_RETURN_IF_ERROR(loom_scf_if_tail_ops_match(
+      rewriter, op, then_tail, else_tail, &availability, &tail_ops_match));
+  if (!tail_ops_match) {
     return iree_ok_status();
   }
 

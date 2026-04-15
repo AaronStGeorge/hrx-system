@@ -13,6 +13,60 @@ package(
 )
 
 loom_cc_library(
+    name = "availability",
+    srcs = ["availability.c"],
+    hdrs = ["availability.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:dominance",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "availability_test",
+    srcs = ["availability_test.cc"],
+    deps = [
+        ":availability",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "motion",
+    srcs = ["motion.c"],
+    hdrs = ["motion.h"],
+    deps = [
+        ":availability",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "motion_test",
+    srcs = ["motion_test.cc"],
+    deps = [
+        ":motion",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "symbolic_expr",
     srcs = ["symbolic_expr.c"],
     hdrs = ["symbolic_expr.h"],

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/transforms/motion.h"
+#include "loom/analysis/motion.h"
 
 #include "loom/ir/module.h"
 
@@ -49,7 +49,8 @@ iree_status_t loom_motion_analysis_initialize(
     loom_motion_analysis_t* out_analysis) {
   out_analysis->module = module;
   out_analysis->arena = arena;
-  loom_dominance_info_initialize(module, arena, &out_analysis->dominance);
+  loom_availability_analysis_initialize(module, arena,
+                                        &out_analysis->availability);
   return loom_motion_region_stack_initialize(arena,
                                              &out_analysis->region_stack);
 }
@@ -65,60 +66,6 @@ static bool loom_motion_op_is_nested_under(const loom_op_t* root,
     if (current == root) return true;
   }
   return false;
-}
-
-static bool loom_motion_region_contains_block(const loom_region_t* region,
-                                              const loom_block_t* target) {
-  if (!region || !target) return false;
-  for (uint16_t block_index = 0; block_index < region->block_count;
-       ++block_index) {
-    const loom_block_t* block = loom_region_const_block(region, block_index);
-    if (block == target) return true;
-
-    const loom_op_t* op = block->first_op;
-    while (op) {
-      loom_region_t** regions = loom_op_regions(op);
-      for (uint8_t i = 0; i < op->region_count; ++i) {
-        if (loom_motion_region_contains_block(regions[i], target)) {
-          return true;
-        }
-      }
-      op = op->next_op;
-    }
-  }
-  return false;
-}
-
-static const loom_op_t* loom_motion_block_owner_op(const loom_block_t* block) {
-  if (!block || !block->first_op) return NULL;
-  return block->first_op->parent_op;
-}
-
-static bool loom_motion_block_is_nested_under(const loom_op_t* root,
-                                              const loom_block_t* block) {
-  if (!root || !block) return false;
-  const loom_op_t* owner_op = loom_motion_block_owner_op(block);
-  if (owner_op) return loom_motion_op_is_nested_under(root, owner_op);
-
-  loom_region_t** regions = loom_op_regions(root);
-  for (uint8_t i = 0; i < root->region_count; ++i) {
-    if (loom_motion_region_contains_block(regions[i], block)) return true;
-  }
-  return false;
-}
-
-static bool loom_motion_value_moves_with_subtree(const loom_module_t* module,
-                                                 const loom_op_t* root_op,
-                                                 loom_value_id_t value_id) {
-  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
-    return false;
-  }
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) {
-    return loom_motion_block_is_nested_under(root_op,
-                                             loom_value_def_block(value));
-  }
-  return loom_motion_op_is_nested_under(root_op, loom_value_def_op(value));
 }
 
 static bool loom_motion_traits_are_effect_free_relocatable(
@@ -188,108 +135,6 @@ bool loom_motion_op_can_speculate(const loom_module_t* module,
 }
 
 //===----------------------------------------------------------------------===//
-// Value and type availability
-//===----------------------------------------------------------------------===//
-
-typedef struct loom_motion_type_ref_query_t {
-  // Motion analysis answering value availability.
-  loom_motion_analysis_t* analysis;
-  // Candidate subtree that moves as one unit.
-  const loom_op_t* candidate_op;
-  // Insertion point before which the subtree would move.
-  const loom_op_t* before_op;
-  // Cleared when any type-embedded SSA reference is unavailable.
-  bool available;
-} loom_motion_type_ref_query_t;
-
-static bool loom_motion_value_is_available_before(
-    loom_motion_analysis_t* analysis, const loom_op_t* candidate_op,
-    const loom_op_t* before_op, loom_value_id_t value_id) {
-  if (loom_motion_value_moves_with_subtree(analysis->module, candidate_op,
-                                           value_id)) {
-    return true;
-  }
-  return loom_value_is_available_before_op(&analysis->dominance, value_id,
-                                           before_op);
-}
-
-static iree_status_t loom_motion_check_type_ref(loom_value_id_t value_id,
-                                                void* user_data) {
-  loom_motion_type_ref_query_t* query =
-      (loom_motion_type_ref_query_t*)user_data;
-  if (!loom_motion_value_is_available_before(
-          query->analysis, query->candidate_op, query->before_op, value_id)) {
-    query->available = false;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_motion_type_refs_are_available_before(
-    loom_motion_analysis_t* analysis, const loom_op_t* candidate_op,
-    const loom_op_t* before_op, loom_type_t type, bool* out_available) {
-  loom_motion_type_ref_query_t query = {
-      .analysis = analysis,
-      .candidate_op = candidate_op,
-      .before_op = before_op,
-      .available = true,
-  };
-  IREE_RETURN_IF_ERROR(
-      loom_type_walk_value_refs(type, loom_motion_check_type_ref, &query));
-  *out_available = query.available;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_motion_value_type_refs_are_available_before(
-    loom_motion_analysis_t* analysis, const loom_op_t* candidate_op,
-    const loom_op_t* before_op, loom_value_id_t value_id, bool* out_available) {
-  if (value_id == LOOM_VALUE_ID_INVALID ||
-      value_id >= analysis->module->values.count) {
-    *out_available = false;
-    return iree_ok_status();
-  }
-  return loom_motion_type_refs_are_available_before(
-      analysis, candidate_op, before_op,
-      loom_module_value_type(analysis->module, value_id), out_available);
-}
-
-static iree_status_t loom_motion_op_dependencies_are_available_before(
-    loom_motion_analysis_t* analysis, const loom_op_t* candidate_op,
-    const loom_op_t* before_op, const loom_op_t* op, bool* out_available) {
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  for (uint16_t i = 0; i < op->operand_count; ++i) {
-    if (!loom_motion_value_is_available_before(analysis, candidate_op,
-                                               before_op, operands[i])) {
-      *out_available = false;
-      return iree_ok_status();
-    }
-  }
-
-  const loom_value_id_t* results = loom_op_const_results(op);
-  for (uint16_t i = 0; i < op->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_motion_value_type_refs_are_available_before(
-        analysis, candidate_op, before_op, results[i], out_available));
-    if (!*out_available) return iree_ok_status();
-  }
-
-  *out_available = true;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_motion_block_arg_type_refs_are_available_before(
-    loom_motion_analysis_t* analysis, const loom_op_t* candidate_op,
-    const loom_op_t* before_op, const loom_block_t* block,
-    bool* out_available) {
-  for (uint16_t i = 0; i < block->arg_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_motion_value_type_refs_are_available_before(
-        analysis, candidate_op, before_op, loom_block_arg_id(block, i),
-        out_available));
-    if (!*out_available) return iree_ok_status();
-  }
-  *out_available = true;
-  return iree_ok_status();
-}
-
-//===----------------------------------------------------------------------===//
 // Subtree motion
 //===----------------------------------------------------------------------===//
 
@@ -336,8 +181,9 @@ static iree_status_t loom_motion_subtree_can_move_before(
                                        /*is_root_op=*/true)) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_motion_op_dependencies_are_available_before(
-      analysis, candidate_op, before_op, candidate_op, out_can_move));
+  IREE_RETURN_IF_ERROR(loom_availability_op_captures_are_available_before_op(
+      &analysis->availability, candidate_op, before_op, candidate_op,
+      out_can_move));
   if (!*out_can_move) return iree_ok_status();
 
   analysis->region_stack.count = 0;
@@ -354,8 +200,10 @@ static iree_status_t loom_motion_subtree_can_move_before(
 
     loom_block_t* block = NULL;
     loom_region_for_each_block(region, block) {
-      IREE_RETURN_IF_ERROR(loom_motion_block_arg_type_refs_are_available_before(
-          analysis, candidate_op, before_op, block, out_can_move));
+      IREE_RETURN_IF_ERROR(
+          loom_availability_block_arg_types_are_available_before_op(
+              &analysis->availability, candidate_op, before_op, block,
+              out_can_move));
       if (!*out_can_move) return iree_ok_status();
 
       loom_op_t* child_op = NULL;
@@ -365,8 +213,10 @@ static iree_status_t loom_motion_subtree_can_move_before(
           *out_can_move = false;
           return iree_ok_status();
         }
-        IREE_RETURN_IF_ERROR(loom_motion_op_dependencies_are_available_before(
-            analysis, candidate_op, before_op, child_op, out_can_move));
+        IREE_RETURN_IF_ERROR(
+            loom_availability_op_captures_are_available_before_op(
+                &analysis->availability, candidate_op, before_op, child_op,
+                out_can_move));
         if (!*out_can_move) return iree_ok_status();
 
         loom_region_t** child_regions = loom_op_regions(child_op);

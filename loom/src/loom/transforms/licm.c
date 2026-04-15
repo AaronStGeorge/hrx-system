@@ -6,10 +6,10 @@
 
 #include "loom/transforms/licm.h"
 
+#include "loom/analysis/motion.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
-#include "loom/transforms/motion.h"
 #include "loom/transforms/rewriter.h"
 
 //===----------------------------------------------------------------------===//

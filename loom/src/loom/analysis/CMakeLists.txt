@@ -12,6 +12,68 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    availability
+  HDRS
+    "availability.h"
+  SRCS
+    "availability.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::util::dominance
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    availability_test
+  SRCS
+    "availability_test.cc"
+  DEPS
+    ::availability
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
+    motion
+  HDRS
+    "motion.h"
+  SRCS
+    "motion.c"
+  DEPS
+    ::availability
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    motion_test
+  SRCS
+    "motion_test.cc"
+  DEPS
+    ::motion
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     symbolic_expr
   HDRS
     "symbolic_expr.h"

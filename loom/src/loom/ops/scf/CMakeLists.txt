@@ -21,13 +21,13 @@ loom_cc_library(
     "facts.c"
     "tables.c"
   DEPS
+    loom::src::loom::analysis::availability
+    loom::src::loom::analysis::motion
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
-    loom::src::loom::transforms::motion
     loom::src::loom::transforms::rewriter
-    loom::src::loom::util::dominance
     loom::src::loom::util::math
   PUBLIC
 )

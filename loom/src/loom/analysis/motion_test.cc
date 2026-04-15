@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/transforms/motion.h"
+#include "loom/analysis/motion.h"
 
 #include <vector>
 
@@ -356,6 +356,41 @@ TEST_F(MotionTest, SubtreeRejectsUnavailableTypeReference) {
 
   bool can_relocate = true;
   IREE_ASSERT_OK(QueryRelocateBefore(vector_op, anchor_op, &can_relocate));
+  EXPECT_FALSE(can_relocate);
+}
+
+TEST_F(MotionTest, SubtreeRejectsUnavailablePredicateAttrReference) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_op_t* input_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32_type,
+                                          LOOM_LOCATION_UNKNOWN, &input_op));
+  loom_value_id_t input = loom_test_constant_result(input_op);
+
+  loom_op_t* anchor_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0), i32_type,
+                                          LOOM_LOCATION_UNKNOWN, &anchor_op));
+
+  loom_op_t* late_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), i32_type,
+                                          LOOM_LOCATION_UNKNOWN, &late_op));
+  loom_value_id_t late = loom_test_constant_result(late_op);
+
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_EQ,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+      .args = {(int64_t)late, 2},
+  };
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_test_assume_build(&builder_, &input, 1, &predicate, 1,
+                                        &i32_type, 1, LOOM_LOCATION_UNKNOWN,
+                                        &assume_op));
+
+  PrepareMotionAnalysis();
+
+  bool can_relocate = true;
+  IREE_ASSERT_OK(QueryRelocateBefore(assume_op, anchor_op, &can_relocate));
   EXPECT_FALSE(can_relocate);
 }
 
