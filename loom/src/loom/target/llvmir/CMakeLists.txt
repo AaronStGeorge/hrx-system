@@ -66,6 +66,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower.c"
+  DEPS
+    ::llvmir
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     bitcode_record_writer_test
@@ -136,6 +153,27 @@ loom_cc_test(
     ::test_modules
     iree::io::file_handle
     iree::io::stream
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "requires-filesystem"
+)
+
+loom_cc_test(
+  NAME
+    lower_test
+  SRCS
+    "lower_test.cc"
+  DEPS
+    ::llvmir
+    ::lower
+    iree::base::internal::arena
+    iree::io::file_handle
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
