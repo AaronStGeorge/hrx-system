@@ -26,6 +26,7 @@
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/text_writer.h"
 #include "loom/target/llvmir/tool.h"
@@ -124,6 +125,7 @@ class LlvmIrLowerTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_LLVMIR, loom_llvmir_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
@@ -483,6 +485,123 @@ TEST_F(LlvmIrLowerTest, LowersCallsComparisonsSelectAndCasts) {
       text.find("  %selected = select i1 %predicate, i32 %called, i32 %lhs\n"),
       std::string::npos)
       << text;
+}
+
+TEST_F(LlvmIrLowerTest, LowersVectorNumericOps) {
+  loom_type_t v4f32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  loom_type_t v4i32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("vector_numeric"));
+  loom_type_t arg_types[4] = {v4f32, v4f32, v4i32, v4i32};
+  loom_type_t result_types[1] = {v4f32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, 0, 0, 0, 0, callee, arg_types,
+      IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 4);
+  SetValueName(args[0], IREE_SV("lhsf"));
+  SetValueName(args[1], IREE_SV("rhsf"));
+  SetValueName(args[2], IREE_SV("lhsi"));
+  SetValueName(args[3], IREE_SV("rhsi"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* addi_op = NULL;
+  IREE_ASSERT_OK(loom_vector_addi_build(
+      &body_builder, LOOM_VECTOR_INTOVERFLOWFLAGS_NSW, args[2], args[3], v4i32,
+      LOOM_LOCATION_UNKNOWN, &addi_op));
+  loom_value_id_t sumi = loom_vector_addi_result(addi_op);
+  SetValueName(sumi, IREE_SV("sumi"));
+
+  loom_type_t v4i1 = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I1,
+                                         loom_dim_pack_static(4), 0);
+  loom_op_t* icmp_op = NULL;
+  IREE_ASSERT_OK(loom_vector_cmpi_build(
+      &body_builder, LOOM_VECTOR_CMPI_PREDICATE_SGT, sumi, args[3], v4i32, v4i1,
+      LOOM_LOCATION_UNKNOWN, &icmp_op));
+  loom_value_id_t int_mask = loom_vector_cmpi_result(icmp_op);
+  SetValueName(int_mask, IREE_SV("int_mask"));
+
+  loom_op_t* int_select_op = NULL;
+  IREE_ASSERT_OK(loom_vector_select_build(&body_builder, int_mask, sumi,
+                                          args[2], v4i32, LOOM_LOCATION_UNKNOWN,
+                                          &int_select_op));
+  loom_value_id_t selectedi = loom_vector_select_result(int_select_op);
+  SetValueName(selectedi, IREE_SV("selectedi"));
+
+  loom_op_t* cast_op = NULL;
+  IREE_ASSERT_OK(loom_vector_sitofp_build(
+      &body_builder, selectedi, v4i32, v4f32, LOOM_LOCATION_UNKNOWN, &cast_op));
+  loom_value_id_t sumf = loom_vector_sitofp_result(cast_op);
+  SetValueName(sumf, IREE_SV("sumf"));
+
+  loom_op_t* mulf_op = NULL;
+  IREE_ASSERT_OK(loom_vector_mulf_build(
+      &body_builder, LOOM_VECTOR_FLOATASSUMPTIONFLAGS_NNAN, args[0], args[1],
+      v4f32, LOOM_LOCATION_UNKNOWN, &mulf_op));
+  loom_value_id_t product = loom_vector_mulf_result(mulf_op);
+  SetValueName(product, IREE_SV("product"));
+
+  loom_op_t* cmp_op = NULL;
+  IREE_ASSERT_OK(loom_vector_cmpf_build(
+      &body_builder, LOOM_VECTOR_CMPF_PREDICATE_OLT, product, sumf, v4f32, v4i1,
+      LOOM_LOCATION_UNKNOWN, &cmp_op));
+  loom_value_id_t mask = loom_vector_cmpf_result(cmp_op);
+  SetValueName(mask, IREE_SV("mask"));
+
+  loom_op_t* select_op = NULL;
+  IREE_ASSERT_OK(loom_vector_select_build(&body_builder, mask, product, sumf,
+                                          v4f32, LOOM_LOCATION_UNKNOWN,
+                                          &select_op));
+  loom_value_id_t selected = loom_vector_select_result(select_op);
+  SetValueName(selected, IREE_SV("selected"));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &selected, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define internal <4 x float> @vector_numeric(<4 x "
+                      "float> %lhsf, <4 x float> %rhsf, <4 x i32> %lhsi, "
+                      "<4 x i32> %rhsi) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %sumi = add nsw <4 x i32> %lhsi, %rhsi\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %int_mask = icmp sgt <4 x i32> %sumi, %rhsi\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %selectedi = select <4 x i1> %int_mask, <4 x i32> "
+                      "%sumi, <4 x i32> %lhsi\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %sumf = sitofp <4 x i32> %selectedi to <4 x float>\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %product = fmul nnan <4 x float> %lhsf, %rhsf\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %mask = fcmp olt <4 x float> %product, %sumf\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %selected = select <4 x i1> %mask, <4 x float> "
+                      "%product, <4 x float> %sumf\n"),
+            std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
+
+  std::string amdgpu_text =
+      LowerToText(loom_llvmir_target_profile_amdgpu_hal());
+  EXPECT_NE(amdgpu_text.find("target triple = \"amdgcn-amd-amdhsa\"\n"),
+            std::string::npos)
+      << amdgpu_text;
+  VerifyTextWithLlvmTools(amdgpu_text);
+  CompileAmdgpuTextToObjectIfAvailable(amdgpu_text);
 }
 
 TEST_F(LlvmIrLowerTest, LowersScfIfToBranchesAndPhi) {

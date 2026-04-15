@@ -14,6 +14,7 @@
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/lower_internal.h"
 
@@ -556,8 +557,29 @@ static iree_status_t loom_llvmir_lowering_lower_op(
     case LOOM_OP_INDEX_DIV:
     case LOOM_OP_INDEX_REM:
       return loom_llvmir_lowering_lower_binop(state, target_block, op);
+    case LOOM_OP_VECTOR_ADDF:
+    case LOOM_OP_VECTOR_SUBF:
+    case LOOM_OP_VECTOR_MULF:
+    case LOOM_OP_VECTOR_DIVF:
+    case LOOM_OP_VECTOR_REMF:
+    case LOOM_OP_VECTOR_ADDI:
+    case LOOM_OP_VECTOR_SUBI:
+    case LOOM_OP_VECTOR_MULI:
+    case LOOM_OP_VECTOR_DIVSI:
+    case LOOM_OP_VECTOR_DIVUI:
+    case LOOM_OP_VECTOR_REMSI:
+    case LOOM_OP_VECTOR_REMUI:
+    case LOOM_OP_VECTOR_ANDI:
+    case LOOM_OP_VECTOR_ORI:
+    case LOOM_OP_VECTOR_XORI:
+    case LOOM_OP_VECTOR_SHLI:
+    case LOOM_OP_VECTOR_SHRSI:
+    case LOOM_OP_VECTOR_SHRUI:
+      return loom_llvmir_lowering_lower_vector_binop(state, target_block, op);
     case LOOM_OP_SCALAR_NEGF:
       return loom_llvmir_lowering_lower_negf(state, target_block, op);
+    case LOOM_OP_VECTOR_NEGF:
+      return loom_llvmir_lowering_lower_vector_negf(state, target_block, op);
     case LOOM_OP_SCALAR_CONSTANT:
       return loom_llvmir_lowering_lower_constant(
           state, op, loom_scalar_constant_value(op));
@@ -572,11 +594,17 @@ static iree_status_t loom_llvmir_lowering_lower_op(
     case LOOM_OP_INDEX_CMP:
       return loom_llvmir_lowering_lower_icmp(state, target_block, op,
                                              loom_index_cmp_predicate(op));
+    case LOOM_OP_VECTOR_CMPI:
+      return loom_llvmir_lowering_lower_vector_icmp(state, target_block, op);
     case LOOM_OP_SCALAR_CMPF:
       return loom_llvmir_lowering_lower_fcmp(state, target_block, op);
+    case LOOM_OP_VECTOR_CMPF:
+      return loom_llvmir_lowering_lower_vector_fcmp(state, target_block, op);
     case LOOM_OP_SCALAR_SELECT:
     case LOOM_OP_INDEX_SELECT:
       return loom_llvmir_lowering_lower_select(state, target_block, op);
+    case LOOM_OP_VECTOR_SELECT:
+      return loom_llvmir_lowering_lower_vector_select(state, target_block, op);
     case LOOM_OP_SCALAR_SITOFP:
     case LOOM_OP_SCALAR_UITOFP:
     case LOOM_OP_SCALAR_FPTOSI:
@@ -588,6 +616,17 @@ static iree_status_t loom_llvmir_lowering_lower_op(
     case LOOM_OP_SCALAR_TRUNCI:
     case LOOM_OP_SCALAR_BITCAST:
       return loom_llvmir_lowering_lower_cast(state, target_block, op);
+    case LOOM_OP_VECTOR_SITOFP:
+    case LOOM_OP_VECTOR_UITOFP:
+    case LOOM_OP_VECTOR_FPTOSI:
+    case LOOM_OP_VECTOR_FPTOUI:
+    case LOOM_OP_VECTOR_EXTF:
+    case LOOM_OP_VECTOR_FPTRUNC:
+    case LOOM_OP_VECTOR_EXTSI:
+    case LOOM_OP_VECTOR_EXTUI:
+    case LOOM_OP_VECTOR_TRUNCI:
+    case LOOM_OP_VECTOR_BITCAST:
+      return loom_llvmir_lowering_lower_vector_cast(state, target_block, op);
     case LOOM_OP_INDEX_CAST:
       return loom_llvmir_lowering_lower_index_cast(state, target_block, op);
     case LOOM_OP_BUFFER_ALLOCA:

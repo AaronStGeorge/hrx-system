@@ -204,6 +204,30 @@ iree_status_t loom_llvmir_lowering_lower_scf_if(
     loom_llvmir_function_t* target_function,
     loom_llvmir_block_t** current_block, const loom_op_t* op);
 
+iree_status_t loom_llvmir_lowering_lower_vector_binop(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_negf(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_icmp(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_fcmp(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_select(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_cast(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
 #ifdef __cplusplus
 }
 #endif
