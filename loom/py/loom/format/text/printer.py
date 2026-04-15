@@ -36,6 +36,7 @@ from typing import Any
 from loom.assembly import (
     Attr,
     AttrDict,
+    AttrTable,
     BindingList,
     Flags,
     FormatElement,
@@ -943,9 +944,11 @@ class Printer:
                     result_id = fields.value_id(name)
                     stream.emit(self._print_value_type(result_id, module))
 
-                case ResultTypeList(field=name):
+                case ResultTypeList(field=name, parens=parens):
                     assert isinstance(fields, ResolvedFields)
-                    stream.emit(self._format_result_types(fields, name, op_decl))
+                    stream.emit(
+                        self._format_result_types(fields, name, op_decl, parens=parens)
+                    )
 
                 case Keyword(text=text):
                     stream.emit(text)
@@ -968,6 +971,15 @@ class Printer:
                         )
                         if attr_str:
                             stream.emit(attr_str)
+
+                case AttrTable(keys=keys_field, values=values_field):
+                    assert isinstance(fields, ResolvedFields)
+                    covered_attrs.add(keys_field)
+                    stream.emit(
+                        self._format_attr_table(
+                            fields, keys_field, values_field, module
+                        )
+                    )
 
                 case OperandDict(operands=operand_field, names=names_field):
                     assert isinstance(fields, ResolvedFields)
@@ -1082,15 +1094,12 @@ class Printer:
     # --- Formatting helpers ---
 
     def _format_result_types(
-        self, fields: ResolvedFields, name: str, op_decl: Op
+        self, fields: ResolvedFields, name: str, op_decl: Op, *, parens: bool = True
     ) -> str:
-        """Format result types: (type) or (%operand as type, type).
-
-        Always uses parens. Reads tied results from the operation.
-        """
+        """Format result types with optional parentheses."""
         desc = fields._layout.fields.get(name)
         if desc is None:
-            return "()"
+            return "()" if parens else ""
 
         if desc.variadic:
             result_ids = fields.value_ids(name)
@@ -1098,7 +1107,7 @@ class Printer:
             result_ids = [fields.value_id(name)]
 
         if not result_ids:
-            return "()"
+            return "()" if parens else ""
 
         tied_map = fields.tied_result_map()
         parts: list[str] = []
@@ -1131,7 +1140,10 @@ class Printer:
             else:
                 parts.append(type_str)
 
-        return "(" + ", ".join(parts) + ")"
+        text = ", ".join(parts)
+        if parens:
+            return "(" + text + ")"
+        return text
 
     def _format_index_list(
         self, fields: ResolvedFields, dynamic_field: str, static_field: str
@@ -1226,6 +1238,50 @@ class Printer:
             operand_type = self._print_value_type(operand_id, module)
             parts.append(f"{key} = {operand_name} : {operand_type}")
         return "{" + ", ".join(parts) + "}"
+
+    def _format_attr_table(
+        self,
+        fields: ResolvedFields,
+        keys_field: str,
+        values_field: str,
+        _module: Module,
+    ) -> str:
+        """Format {key = (%row), ...} default(%row) from flattened operands."""
+        keys = fields.attr(keys_field)
+        if keys is None:
+            keys = []
+        if not isinstance(keys, Sequence) or isinstance(keys, str | bytes):
+            raise TypeError(
+                f"AttrTable keys field '{keys_field}' must be a sequence of ints, "
+                f"got {type(keys).__name__}."
+            )
+        key_values = list(keys)
+        for key in key_values:
+            if not isinstance(key, int):
+                raise TypeError(
+                    f"AttrTable key field '{keys_field}' contains "
+                    f"{type(key).__name__}, expected int."
+                )
+
+        value_ids = fields.value_ids(values_field)
+        row_count = len(key_values) + 1
+        if len(value_ids) % row_count != 0:
+            raise ValueError(
+                f"AttrTable values field '{values_field}' has {len(value_ids)} "
+                f"values for {row_count} rows."
+            )
+        row_width = len(value_ids) // row_count
+
+        def format_row(row_index: int) -> str:
+            start = row_index * row_width
+            row_value_ids = value_ids[start : start + row_width]
+            return "(" + ", ".join(self._value_name(v) for v in row_value_ids) + ")"
+
+        parts = [
+            f"{key} = {format_row(row_index)}"
+            for row_index, key in enumerate(key_values)
+        ]
+        return "{" + ", ".join(parts) + "} default" + format_row(len(key_values))
 
     def _format_named_dict(self, dict_value: Mapping[str, Any], op_decl: Op) -> str:
         """Format {key = value, ...} from a named dict attribute."""

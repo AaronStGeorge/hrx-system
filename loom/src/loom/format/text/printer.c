@@ -842,6 +842,8 @@ static bool loom_print_format_element_covers_attr(
       return element->data == attr_index;
     case LOOM_FORMAT_KIND_OPERAND_DICT:
       return element->data == attr_index;
+    case LOOM_FORMAT_KIND_ATTR_TABLE:
+      return element->data == attr_index;
     case LOOM_FORMAT_KIND_ATTR_DICT:
       if (iree_any_bit_set(element->data, LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS)) {
         return false;
@@ -1067,6 +1069,94 @@ static iree_status_t loom_print_operand_dict(
   loom_print_report_field(
       ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->data),
       dict_start, ctx->stream->offset);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_attr_table(
+    loom_print_context_t* ctx, const loom_op_t* op,
+    const loom_format_element_t* element) {
+  uint16_t start = element->field_index;
+  if (start > op->operand_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format ATTR_TABLE field_index %u out of range (op has %u operands)",
+        start, op->operand_count);
+  }
+  if (element->data >= op->attribute_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format ATTR_TABLE attr index %u out of range (op has %u attributes)",
+        element->data, op->attribute_count);
+  }
+
+  loom_attribute_t keys_attr = loom_op_attrs(op)[element->data];
+  if (keys_attr.kind != LOOM_ATTR_I64_ARRAY) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format ATTR_TABLE attr index %u expected I64_ARRAY attr but found %d",
+        element->data, (int)keys_attr.kind);
+  }
+  if (keys_attr.count > 0 && !keys_attr.i64_array) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "ATTR_TABLE keys attr has count %u but NULL values",
+                            keys_attr.count);
+  }
+  uint16_t operand_count = (uint16_t)(op->operand_count - start);
+  iree_host_size_t row_count = (iree_host_size_t)keys_attr.count + 1;
+  if (operand_count % row_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "format ATTR_TABLE has %u operands for %" PRIhsz
+                            " rows",
+                            operand_count, row_count);
+  }
+  uint16_t row_width = (uint16_t)(operand_count / row_count);
+
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  iree_host_size_t table_start = ctx->stream->offset;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t row = 0; row < keys_attr.count; ++row) {
+    if (row > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        ctx->stream, "%" PRId64 " = (", keys_attr.i64_array[row]));
+    for (uint16_t column = 0; column < row_width; ++column) {
+      if (column > 0) {
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(ctx->stream, ", "));
+      }
+      uint16_t operand_index = (uint16_t)(start + row * row_width + column);
+      iree_host_size_t value_start = ctx->stream->offset;
+      IREE_RETURN_IF_ERROR(loom_print_value_ref(ctx->stream, ctx->module,
+                                                operands[operand_index]));
+      loom_print_report_field(
+          ctx, loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index),
+          value_start, ctx->stream->offset);
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(ctx->stream, "} default("));
+  uint16_t default_row = keys_attr.count;
+  for (uint16_t column = 0; column < row_width; ++column) {
+    if (column > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
+    uint16_t operand_index =
+        (uint16_t)(start + default_row * row_width + column);
+    iree_host_size_t value_start = ctx->stream->offset;
+    IREE_RETURN_IF_ERROR(loom_print_value_ref(ctx->stream, ctx->module,
+                                              operands[operand_index]));
+    loom_print_report_field(
+        ctx, loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index),
+        value_start, ctx->stream->offset);
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
+  loom_print_did_write(ctx);
+  loom_print_report_field(
+      ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->data),
+      table_start, ctx->stream->offset);
   return iree_ok_status();
 }
 
@@ -1602,6 +1692,10 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
       }
       case LOOM_FORMAT_KIND_OPERAND_DICT: {
         IREE_RETURN_IF_ERROR(loom_print_operand_dict(ctx, op, element));
+        break;
+      }
+      case LOOM_FORMAT_KIND_ATTR_TABLE: {
+        IREE_RETURN_IF_ERROR(loom_print_attr_table(ctx, op, element));
         break;
       }
       case LOOM_FORMAT_KIND_PREDICATE_LIST: {

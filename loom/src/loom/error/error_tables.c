@@ -1793,6 +1793,25 @@ const loom_error_def_t loom_err_parse_029 = {
     .param_count = 1,
 };
 
+static const loom_error_param_def_t loom_err_parse_030_params[] = {
+    {"actual_count", LOOM_PARAM_U32},
+    {"expected_count", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_parse_030 = {
+    .error_id = "ERR_PARSE_030",
+    .domain = LOOM_ERROR_DOMAIN_PARSE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 30,
+    .summary = "Attribute table row width mismatch.",
+    .message_template =
+        "attribute table row has {actual_count} values, expected "
+        "{expected_count}",
+    .fix_hint_template =
+        "Every explicit row and the default row must have the same width",
+    .param_defs = loom_err_parse_030_params,
+    .param_count = 2,
+};
+
 static const loom_error_param_def_t loom_err_bytecode_001_params[] = {
     {"expected_magic", LOOM_PARAM_STRING},
     {"actual_magic", LOOM_PARAM_STRING},
@@ -2019,10 +2038,10 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_parse_021,     &loom_err_parse_022,     &loom_err_parse_023,
     &loom_err_parse_024,     &loom_err_parse_025,     &loom_err_parse_026,
     &loom_err_parse_027,     &loom_err_parse_028,     &loom_err_parse_029,
-    &loom_err_bytecode_001,  &loom_err_bytecode_002,  &loom_err_bytecode_003,
-    &loom_err_bytecode_004,  &loom_err_bytecode_005,  &loom_err_fold_001,
-    &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
-    &loom_err_fold_005,      &loom_err_lowering_001,
+    &loom_err_parse_030,     &loom_err_bytecode_001,  &loom_err_bytecode_002,
+    &loom_err_bytecode_003,  &loom_err_bytecode_004,  &loom_err_bytecode_005,
+    &loom_err_fold_001,      &loom_err_fold_002,      &loom_err_fold_003,
+    &loom_err_fold_004,      &loom_err_fold_005,      &loom_err_lowering_001,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

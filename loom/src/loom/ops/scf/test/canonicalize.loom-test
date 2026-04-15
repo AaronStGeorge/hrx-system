@@ -765,3 +765,100 @@ func.def @for_forward_unknown_step_is_preserved(%lo: index, %hi: index, %step: i
   }
   func.return %same, %sum : f32, f32
 }
+
+// ====
+
+// Exact selector facts replace scf.lookup with the matching explicit case row.
+func.def @lookup_exact_case(%a: index, %b: index, %fallback: index) -> (index) {
+  %variant = index.constant 1 : index
+  %result = scf.lookup %variant {0 = (%a), 1 = (%b)} default(%fallback) : index
+  func.return %result : index
+}
+
+// ----
+func.def @lookup_exact_case(%a: index, %b: index, %fallback: index) -> (index) {
+  func.return %b : index
+}
+
+// ====
+
+// Exact selector facts that miss every explicit key select the final default
+// payload row.
+func.def @lookup_exact_default(%a: index, %b: index, %fallback: index) -> (index) {
+  %variant = index.constant 5 : index
+  %result = scf.lookup %variant {0 = (%a), 1 = (%b)} default(%fallback) : index
+  func.return %result : index
+}
+
+// ----
+func.def @lookup_exact_default(%a: index, %b: index, %fallback: index) -> (index) {
+  func.return %fallback : index
+}
+
+// ====
+
+// A column whose payload value is identical for every explicit/default row does
+// not need to stay in the lookup. The remaining columns keep table selection.
+func.def @lookup_compacts_uniform_column(%variant: index, %common: index, %x0: index, %x1: index, %xf: index) -> (index, index) {
+  %same, %selected = scf.lookup %variant {0 = (%common, %x0), 1 = (%common, %x1)} default(%common, %xf) : index, index
+  func.return %same, %selected : index, index
+}
+
+// ----
+func.def @lookup_compacts_uniform_column(%variant: index, %common: index, %x0: index, %x1: index, %xf: index) -> (index, index) {
+  %selected = scf.lookup %variant {0 = (%x0), 1 = (%x1)} default(%xf) : index
+  func.return %common, %selected : index, index
+}
+
+// ====
+
+// Selector facts prune unreachable explicit rows. The lookup remains total by
+// keeping a dead default row, but the dead row reuses a reachable payload so it
+// does not keep otherwise-unneeded values live.
+func.def @lookup_prunes_unreachable_cases(%variant: index, %a: index, %b: index, %dead: index, %fallback: index) -> (index) {
+  %bounded = index.assume %variant [range(%variant, 0, 1)] : index
+  %result = scf.lookup %bounded {0 = (%a), 1 = (%b), 2 = (%dead)} default(%fallback) : index
+  func.return %result : index
+}
+
+// ----
+func.def @lookup_prunes_unreachable_cases(%variant: index, %a: index, %b: index, %dead: index, %fallback: index) -> (index) {
+  %bounded = index.assume %variant [range(%variant, 0, 1)] : index
+  %result = scf.lookup %bounded {0 = (%a), 1 = (%b)} default(%a) : index
+  func.return %result : index
+}
+
+// ====
+
+// Even when every explicit key remains reachable, an exhaustive key set makes
+// the default row dead. Replacing it with a reachable payload lets ordinary DCE
+// remove fallback producers without needing lookup-specific liveness rules.
+func.def @lookup_replaces_unreachable_default(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
+  %bounded = index.assume %variant [range(%variant, 0, 1)] : index
+  %result = scf.lookup %bounded {0 = (%a), 1 = (%b)} default(%fallback) : index
+  func.return %result : index
+}
+
+// ----
+func.def @lookup_replaces_unreachable_default(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
+  %bounded = index.assume %variant [range(%variant, 0, 1)] : index
+  %result = scf.lookup %bounded {0 = (%a), 1 = (%b)} default(%a) : index
+  func.return %result : index
+}
+
+// ====
+
+// Reachability drives column forwarding. Values that are uniform across the
+// possible rows can be forwarded even if unreachable rows disagree.
+func.def @lookup_compacts_reachable_uniform_column(%variant: index, %common: index, %x0: index, %x1: index, %dead_common: index, %dead_x: index, %fallback_common: index, %fallback_x: index) -> (index, index) {
+  %bounded = index.assume %variant [range(%variant, 0, 1)] : index
+  %same, %selected = scf.lookup %bounded {0 = (%common, %x0), 1 = (%common, %x1), 2 = (%dead_common, %dead_x)} default(%fallback_common, %fallback_x) : index, index
+  func.return %same, %selected : index, index
+}
+
+// ----
+func.def @lookup_compacts_reachable_uniform_column(%variant: index, %common: index, %x0: index, %x1: index, %dead_common: index, %dead_x: index, %fallback_common: index, %fallback_x: index) -> (index, index) {
+  %bounded = index.assume %variant [range(%variant, 0, 1)] : index
+  %selected = scf.lookup %bounded {0 = (%x0), 1 = (%x1)} default(%x0) : index
+  func.return %common, %selected : index, index
+}

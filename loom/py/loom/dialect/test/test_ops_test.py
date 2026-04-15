@@ -14,6 +14,7 @@ fields, traits are sensible, and examples exist.
 from loom.assembly import (
     Attr,
     AttrDict,
+    AttrTable,
     BindingList,
     FormatElement,
     FuncArgs,
@@ -36,6 +37,7 @@ from loom.dialect.test import (
     ALL_TEST_OPS,
     cmp_predicates,
     test_addi,
+    test_attr_table,
     test_attrs,
     test_branch,
     test_cast,
@@ -352,6 +354,16 @@ class TestSpecificOps:
         assert param_names_attr.optional
         has_operand_dict = any(isinstance(e, OperandDict) for e in test_operand_dict.format)
         assert has_operand_dict
+
+    def test_attr_table(self) -> None:
+        values_operand = test_attr_table.operand("values")
+        assert values_operand is not None
+        assert values_operand.variadic
+        case_keys_attr = test_attr_table.attr("case_keys")
+        assert case_keys_attr is not None
+        assert case_keys_attr.attr_type == "i64_array"
+        has_attr_table = any(isinstance(e, AttrTable) for e in test_attr_table.format)
+        assert has_attr_table
 
     def test_convert(self) -> None:
         assert test_convert.is_pure

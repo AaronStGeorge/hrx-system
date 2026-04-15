@@ -30,3 +30,4 @@
     [LOOM_KW_IMPORT] = (const uint8_t*)"\x06" "import",
     [LOOM_KW_LAYOUT] = (const uint8_t*)"\x06" "layout",
     [LOOM_KW_INTO] = (const uint8_t*)"\x04" "into",
+    [LOOM_KW_DEFAULT] = (const uint8_t*)"\x07" "default",

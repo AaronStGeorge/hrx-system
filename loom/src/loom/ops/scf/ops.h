@@ -22,7 +22,8 @@ enum {
   LOOM_OP_SCF_IF = LOOM_OP_KIND(LOOM_DIALECT_SCF, 1),
   LOOM_OP_SCF_YIELD = LOOM_OP_KIND(LOOM_DIALECT_SCF, 2),
   LOOM_OP_SCF_SELECT = LOOM_OP_KIND(LOOM_DIALECT_SCF, 3),
-  LOOM_OP_SCF_COUNT_ = 4,
+  LOOM_OP_SCF_LOOKUP = LOOM_OP_KIND(LOOM_DIALECT_SCF, 4),
+  LOOM_OP_SCF_COUNT_ = 5,
 };
 
 // LOOM_OP_SCF_FOR: Bounded counted loop with optional loop-carried state.
@@ -99,6 +100,36 @@ iree_status_t loom_scf_select_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_SCF_LOOKUP: Total table lookup over already-computed SSA values. The selector is an index value. The table gives sorted unique explicit case rows. default(...) gives the total fallback row. The result count is the row width, and every payload value in a column must match that column's result type.
+// %ordinal, %wgx = scf.lookup %variant {0 = (%gemm0, %x0), 1 = (%gemm1, %x1)} default(%fallback, %xf) : index, index
+LOOM_DEFINE_ISA(loom_scf_lookup_isa, LOOM_OP_SCF_LOOKUP)
+LOOM_DEFINE_OPERAND(loom_scf_lookup_selector, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_scf_lookup_values, 1)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_scf_lookup_results, 0)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_scf_lookup_case_keys, 0)
+iree_status_t loom_scf_lookup_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t selector,
+    const int64_t* case_keys,
+    iree_host_size_t case_keys_count,
+    loom_may_consume const loom_value_id_t* values,
+    iree_host_size_t values_count,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_scf_lookup_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_scf_lookup_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_scf_lookup_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the scf dialect.
 const loom_op_vtable_t* const* loom_scf_dialect_vtables(

@@ -19,6 +19,7 @@ from loom.assembly import (
     RPAREN,
     Attr,
     AttrDict,
+    AttrTable,
     BindingList,
     FuncArgs,
     IndexList,
@@ -135,6 +136,13 @@ class TestOperandDict:
         operand_dict = OperandDict("params", "param_names")
         assert operand_dict.operands == "params"
         assert operand_dict.names == "param_names"
+
+
+class TestAttrTable:
+    def test_construct(self) -> None:
+        attr_table = AttrTable("case_keys", "values")
+        assert attr_table.keys == "case_keys"
+        assert attr_table.values == "values"
 
 
 class TestRegion:

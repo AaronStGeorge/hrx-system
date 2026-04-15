@@ -10,14 +10,18 @@ from loom.assembly import (
     COLON,
     Attr,
     AttrDict,
+    AttrTable,
     Flags,
     OperandDict,
     Ref,
     ResultType,
+    ResultTypeList,
     TemplateParam,
     TypesOf,
 )
 from loom.dsl import (
+    ANY,
+    ATTR_TYPE_I64_ARRAY,
     INTEGER,
     AttrDef,
     Dialect,
@@ -225,3 +229,33 @@ def test_operand_dict_generates_format_and_builder_support() -> None:
     assert "iree_host_size_t params_count" in ops_h
     assert "loom_make_named_value_slice(params, params_count)" in builders_c
     assert "&loom_op_attrs(*out_op)[0]" in builders_c
+
+
+def test_attr_table_generates_format_and_builder_support() -> None:
+    op = Op(
+        "test.attr_table",
+        group=Dialect("test"),
+        operands=[
+            Operand("selector", INTEGER),
+            Operand("values", ANY, variadic=True),
+        ],
+        results=[Result("results", ANY, variadic=True)],
+        attrs=[AttrDef("case_keys", ATTR_TYPE_I64_ARRAY)],
+        format=[
+            Ref("selector"),
+            AttrTable("case_keys", "values"),
+            COLON,
+            ResultTypeList("results", parens=False),
+        ],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_FORMAT_KIND_ATTR_TABLE" in tables_c
+    assert "const int64_t* case_keys" in ops_h
+    assert "iree_host_size_t case_keys_count" in ops_h
+    assert "const loom_value_id_t* values" in ops_h
+    assert "iree_host_size_t values_count" in ops_h
+    assert "loom_attr_i64_array(" in builders_c

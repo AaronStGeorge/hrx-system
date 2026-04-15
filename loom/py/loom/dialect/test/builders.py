@@ -317,6 +317,20 @@ class TestBuilders:
             _attributes["param_names"] = _operand_dict_names
         return cast(ValueRef, self._b.build("test.operand_dict", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def attr_table(self, *, selector: ValueRef, case_keys: list[int], values: list[ValueRef], results: list[Type | TiedResultSpec]) -> list[ValueRef]:
+        """Test op with a static-attribute-keyed SSA value table.
+
+        Example::
+            %a, %b = test.attr_table %selector {0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["case_keys"] = case_keys
+        _operands.append(selector)
+        _operands.extend(values)
+        return cast(list[ValueRef], self._b.build("test.attr_table", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def deflate(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
         """Test op with result type referencing a co-result dim.
 

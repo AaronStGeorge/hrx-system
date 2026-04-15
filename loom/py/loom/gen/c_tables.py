@@ -29,6 +29,7 @@ from typing import Any, TypeVar
 from loom.assembly import (
     Attr,
     AttrDict,
+    AttrTable,
     BindingList,
     Flags,
     FormatElement,
@@ -103,6 +104,7 @@ KEYWORD_MAP: dict[str, str] = {
     "import": "LOOM_KW_IMPORT",
     "layout": "LOOM_KW_LAYOUT",
     "into": "LOOM_KW_INTO",
+    "default": "LOOM_KW_DEFAULT",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.
@@ -784,6 +786,21 @@ def _translate_format_elements(
                         raise ValueError(f"Op '{op.name}': OperandDict names field '{names_field}' must be a dict attr")
                     elements.append(("LOOM_FORMAT_KIND_OPERAND_DICT", operand_index, str(names_index)))
 
+                case AttrTable(keys=keys_field, values=values_field):
+                    values_kind, values_index = _resolve_field(values_field)
+                    keys_kind, keys_index = _resolve_field(keys_field)
+                    if values_kind != FieldKind.OPERAND:
+                        raise ValueError(f"Op '{op.name}': AttrTable values field '{values_field}' is not an operand field")
+                    if keys_kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': AttrTable keys field '{keys_field}' is not an attr field")
+                    values_desc = layout.fields[values_field]
+                    if not values_desc.variadic:
+                        raise ValueError(f"Op '{op.name}': AttrTable values field '{values_field}' must be variadic")
+                    attr_def = op.attr(keys_field)
+                    if attr_def is None or attr_def.attr_type != "i64_array":
+                        raise ValueError(f"Op '{op.name}': AttrTable keys field '{keys_field}' must be an i64_array attr")
+                    elements.append(("LOOM_FORMAT_KIND_ATTR_TABLE", values_index, str(keys_index)))
+
                 case RegionFmt(field=name):
                     kind, index = _resolve_field(name)
                     elements.append(("LOOM_FORMAT_KIND_REGION", index, "0"))
@@ -1206,6 +1223,24 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                         }
                     )
                     covered_attrs.add(names_field)
+
+                case AttrTable(keys=keys_field, values=values_field):
+                    append_attr_param(keys_field)
+                    values_desc = layout.fields.get(values_field)
+                    if values_desc is None or values_desc.kind != FieldKind.OPERAND:
+                        raise ValueError(f"Op '{op.name}': AttrTable values field '{values_field}' is not an operand field")
+                    if not values_desc.variadic:
+                        raise ValueError(f"Op '{op.name}': AttrTable values field '{values_field}' must be variadic")
+                    params.append(
+                        {
+                            "name": values_field,
+                            "kind": "operand_variadic",
+                            "c_type": "const loom_value_id_t*",
+                            "may_consume": has_result_type_list,
+                            "index": values_desc.index,
+                        }
+                    )
+                    covered_attrs.add(keys_field)
 
                 case Attr(field=name):
                     append_attr_param(name)

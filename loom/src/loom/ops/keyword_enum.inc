@@ -30,3 +30,4 @@
   LOOM_KW_IMPORT = 21,  // "import"
   LOOM_KW_LAYOUT = 22,  // "layout"
   LOOM_KW_INTO = 23,  // "into"
+  LOOM_KW_DEFAULT = 24,  // "default"

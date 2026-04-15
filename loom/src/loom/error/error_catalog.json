@@ -2287,6 +2287,29 @@
     "fix_hint_template": "Each static encoding parameter name must be unique"
   },
   {
+    "error_id": "ERR_PARSE_030",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 30,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Attribute table row width mismatch.",
+    "message_template": "attribute table row has {actual_count} values, expected {expected_count}",
+    "params": [
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Every explicit row and the default row must have the same width"
+  },
+  {
     "error_id": "ERR_BYTECODE_001",
     "domain": 8,
     "domain_name": "BYTECODE",

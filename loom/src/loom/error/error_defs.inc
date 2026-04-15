@@ -98,6 +98,7 @@ extern const loom_error_def_t loom_err_parse_026;
 extern const loom_error_def_t loom_err_parse_027;
 extern const loom_error_def_t loom_err_parse_028;
 extern const loom_error_def_t loom_err_parse_029;
+extern const loom_error_def_t loom_err_parse_030;
 extern const loom_error_def_t loom_err_bytecode_001;
 extern const loom_error_def_t loom_err_bytecode_002;
 extern const loom_error_def_t loom_err_bytecode_003;

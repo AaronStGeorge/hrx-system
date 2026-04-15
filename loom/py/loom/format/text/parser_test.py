@@ -1217,6 +1217,64 @@ class TestOperandDict:
             )
 
 
+class TestAttrTable:
+    def test_grouped_rows_roundtrip(self) -> None:
+        module = _op_parser().parse(
+            "func.def @attr_table(%selector: index, %a0: i32, %b0: f32, "
+            "%a1: i32, %b1: f32, %ad: i32, %bd: f32) -> (i32, f32) {\n"
+            "  %x, %y = test.attr_table %selector "
+            "{0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32\n"
+            "  test.yield %x, %y : i32, f32\n"
+            "}\n"
+        )
+        printed = _op_printer().print_module(module)
+        assert printed == (
+            "func.def @attr_table(%selector: index, %a0: i32, %b0: f32, "
+            "%a1: i32, %b1: f32, %ad: i32, %bd: f32) -> (i32, f32) {\n"
+            "  %x, %y = test.attr_table %selector "
+            "{0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32\n"
+            "  test.yield %x, %y : i32, f32\n"
+            "}\n"
+        )
+
+    def test_empty_cases_roundtrip(self) -> None:
+        module = _op_parser().parse(
+            "func.def @attr_table_empty(%selector: index, %fallback: i32) -> (i32) {\n"
+            "  %x = test.attr_table %selector {} default(%fallback) : i32\n"
+            "  test.yield %x : i32\n"
+            "}\n"
+        )
+        printed = _op_printer().print_module(module)
+        assert printed == (
+            "func.def @attr_table_empty(%selector: index, %fallback: i32) -> (i32) {\n"
+            "  %x = test.attr_table %selector {} default(%fallback) : i32\n"
+            "  test.yield %x : i32\n"
+            "}\n"
+        )
+
+    def test_case_row_width_mismatch_rejected(self) -> None:
+        with pytest.raises(ParseError, match="attribute table rows"):
+            _op_parser().parse(
+                "func.def @attr_table_bad(%selector: index, %a: i32, %b: i32) "
+                "-> (i32, i32) {\n"
+                "  %x, %y = test.attr_table %selector "
+                "{0 = (%a, %b), 1 = (%a)} default(%a, %b) : i32, i32\n"
+                "  test.yield %x, %y : i32, i32\n"
+                "}\n"
+            )
+
+    def test_default_row_width_mismatch_rejected(self) -> None:
+        with pytest.raises(ParseError, match="attribute table default row"):
+            _op_parser().parse(
+                "func.def @attr_table_bad(%selector: index, %a: i32, %b: i32) "
+                "-> (i32, i32) {\n"
+                "  %x, %y = test.attr_table %selector "
+                "{0 = (%a, %b)} default(%a) : i32, i32\n"
+                "  test.yield %x, %y : i32, i32\n"
+                "}\n"
+            )
+
+
 # ============================================================================
 # Op parsing — region-containing ops
 # ============================================================================

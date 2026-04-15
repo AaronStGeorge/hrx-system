@@ -332,6 +332,22 @@ ERR_PARSE_029 = ErrorDef(
     fix_hint="Each static encoding parameter name must be unique",
 )
 
+# ERR_PARSE_030: Attribute table row width mismatch.
+ERR_PARSE_030 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=30,
+    severity=Severity.ERROR,
+    summary="Attribute table row width mismatch.",
+    message=(
+        "attribute table row has {actual_count} values, expected {expected_count}"
+    ),
+    params=(
+        ErrorParam("actual_count", ParamKind.U32),
+        ErrorParam("expected_count", ParamKind.U32),
+    ),
+    fix_hint="Every explicit row and the default row must have the same width",
+)
+
 ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_001,
     ERR_PARSE_002,
@@ -362,4 +378,5 @@ ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_027,
     ERR_PARSE_028,
     ERR_PARSE_029,
+    ERR_PARSE_030,
 )

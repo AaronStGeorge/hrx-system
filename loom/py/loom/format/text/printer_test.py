@@ -433,6 +433,35 @@ class TestPrintComparisonOp:
         )
 
 
+class TestPrintAttrTable:
+    """Exercises: AttrTable grouped rows over flattened variadic operands."""
+
+    def test_basic(self) -> None:
+        module, value_ids = _module_with(
+            ("selector", INDEX),
+            ("a0", I32),
+            ("b0", F32),
+            ("a1", I32),
+            ("b1", F32),
+            ("ad", I32),
+            ("bd", F32),
+            ("x", I32),
+            ("y", F32),
+        )
+        selector, a0, b0, a1, b1, ad, bd, x, y = value_ids
+        op = Operation(
+            name="test.attr_table",
+            operands=[selector, a0, b0, a1, b1, ad, bd],
+            results=[x, y],
+            attributes={"case_keys": [0, 1]},
+        )
+        assert (
+            _printer().print_operation(op, module)
+            == "%x, %y = test.attr_table %selector "
+            "{0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32"
+        )
+
+
 class TestPrintYield:
     """Exercises: Refs (variadic), TypesOf (variadic), TERMINATOR."""
 

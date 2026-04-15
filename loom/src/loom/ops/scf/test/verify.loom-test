@@ -53,3 +53,60 @@ func.def @for_iter_args_second_type_mismatch(%lo: index, %hi: index, %step: inde
   }
   func.return %x, %y : f32, i32
 }
+
+// ====
+
+// scf.lookup case keys are sorted and unique. The parser preserves source key
+// order so the verifier owns the structured key-order diagnostic.
+func.def @lookup_unsorted_case_keys(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
+  // ERROR@+1: STRUCTURE/014 "case_keys" "1" "strictly increasing sorted unique case key"
+  %r = scf.lookup %variant {2 = (%a), 1 = (%b)} default(%fallback) : index
+  func.return %r : index
+}
+
+// ====
+
+// Duplicate keys violate the same strict-increase contract as unsorted keys.
+func.def @lookup_duplicate_case_keys(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
+  // ERROR@+1: STRUCTURE/014 "case_keys" "1" "strictly increasing sorted unique case key"
+  %r = scf.lookup %variant {1 = (%a), 1 = (%b)} default(%fallback) : index
+  func.return %r : index
+}
+
+// ====
+
+// The table contains one row per case key plus one default row. With two
+// result columns and two explicit keys, six payload operands are required.
+func.def @lookup_wrong_payload_count(%variant: index, %a: index, %b: index, %c: index, %d: index) -> (index, index) {
+  // ERROR@+1: STRUCTURE/013 "table" "3" "(case key count + default row) * result count" "6"
+  %x, %y = scf.lookup %variant {0 = (%a), 1 = (%b)} default(%c) : index, index
+  func.return %x, %y : index, index
+}
+
+// ====
+
+// The grouped assembly rejects ragged source rows before the verifier sees the
+// flattened payload operands.
+func.def @lookup_ragged_case_row(%variant: index, %a: index, %b: index) -> (index, index) {
+  // ERROR@+1: PARSE/030 "1" "2"
+  %x, %y = scf.lookup %variant {0 = (%a, %b), 1 = (%a)} default(%a, %b) : index, index
+  func.return %x, %y : index, index
+}
+
+// ====
+
+func.def @lookup_ragged_default_row(%variant: index, %a: index, %b: index) -> (index, index) {
+  // ERROR@+1: PARSE/030 "1" "2"
+  %x, %y = scf.lookup %variant {0 = (%a, %b)} default(%a) : index, index
+  func.return %x, %y : index, index
+}
+
+// ====
+
+// Each payload column must match the corresponding result type. This catches
+// refactors that accidentally swap one row element across typed columns.
+func.def @lookup_payload_type_mismatch(%variant: index, %a: index, %b: f32, %fallback: index, %fallback_i32: i32) -> (index, i32) {
+  // ERROR@+1: TYPE/001 "table[1]" "results[1]"
+  %x, %y = scf.lookup %variant {0 = (%a, %b)} default(%fallback, %fallback_i32) : index, i32
+  func.return %x, %y : index, i32
+}

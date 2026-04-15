@@ -10,6 +10,7 @@ Core ops:
 
   scf.for     — Bounded counted loop with bracketed range syntax.
   scf.if      — Conditional execution with both regions required.
+  scf.lookup  — Keyed whole-value table selection.
   scf.select  — Scalar-condition whole-value selection.
   scf.yield   — Variadic terminator for all scf op regions.
 
@@ -25,6 +26,7 @@ from loom.assembly import (
     EQUALS,
     LBRACKET,
     RBRACKET,
+    AttrTable,
     BindingList,
     OptionalGroup,
     Ref,
@@ -37,11 +39,13 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_I64_ARRAY,
     I1,
     INDEX,
     PURE,
     SAFE_TO_SPECULATE,
     TERMINATOR,
+    AttrDef,
     Dialect,
     IterArgsMatchResults,
     LoopLikeInterface,
@@ -135,6 +139,54 @@ scf_select = Op(
     examples=[
         "%r = scf.select %cond, %a, %b : f32",
         "%v = scf.select %cond, %then_vec, %else_vec : vector<16xf32>",
+    ],
+)
+
+# ============================================================================
+# scf.lookup — keyed whole-value table selection
+# ============================================================================
+#
+# Total table lookup over already-computed SSA values. The case table names
+# every explicit selector value, and every row lists one complete result tuple.
+# The final `default(...)` row is selected when the selector does not equal any
+# explicit key. The grouped assembly is backed by generic i64-array attrs and
+# variadic operands, preserving a strict verifier contract without a custom
+# op-specific parser.
+
+scf_lookup = Op(
+    "scf.lookup",
+    group=scf_ops,
+    doc=(
+        "Total table lookup over already-computed SSA values. The selector is "
+        "an index value. The table gives sorted unique explicit case rows. "
+        "default(...) gives the total fallback row. The result count is the "
+        "row width, and every payload value in a column must match that "
+        "column's result type."
+    ),
+    operands=[
+        Operand("selector", INDEX),
+        Operand("values", ANY, variadic=True),
+    ],
+    results=[Result("results", ANY, variadic=True)],
+    attrs=[
+        AttrDef(
+            "case_keys",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Sorted unique selector values for explicit lookup cases.",
+        ),
+    ],
+    traits=[PURE, SAFE_TO_SPECULATE],
+    verify="loom_scf_lookup_verify",
+    canonicalize="loom_scf_lookup_canonicalize",
+    facts="loom_scf_lookup_facts",
+    format=[
+        Ref("selector"),
+        AttrTable("case_keys", "values"),
+        COLON,
+        ResultTypeList("results", parens=False),
+    ],
+    examples=[
+        "%ordinal, %wgx = scf.lookup %variant {0 = (%gemm0, %x0), 1 = (%gemm1, %x1)} default(%fallback, %xf) : index, index",
     ],
 )
 
@@ -284,4 +336,5 @@ ALL_SCF_OPS: tuple[Op, ...] = (
     scf_if,
     scf_yield,
     scf_select,
+    scf_lookup,
 )

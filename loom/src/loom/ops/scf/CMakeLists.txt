@@ -20,9 +20,11 @@ loom_cc_library(
     "canonicalize.c"
     "facts.c"
     "tables.c"
+    "verify.c"
   DEPS
     loom::src::loom::analysis::availability
     loom::src::loom::analysis::motion
+    loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ir::facts

@@ -1378,6 +1378,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
     from loom.assembly import (
         Attr,
         AttrDict,
+        AttrTable,
         BindingList,
         EncodingOf,
         Flags,
@@ -1432,6 +1433,9 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
             case OperandDict(operands=operands, names=names):
                 fields.add(operands)
                 fields.add(names)
+            case AttrTable(keys=keys, values=values):
+                fields.add(keys)
+                fields.add(values)
             case OptionalGroup(elements=inner):
                 fields |= _collect_format_fields(inner)
             case Scope(elements=inner):

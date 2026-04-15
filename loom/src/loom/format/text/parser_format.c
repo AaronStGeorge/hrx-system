@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #define LOOM_OPERAND_DICT_INLINE_ENTRIES 16
+#define LOOM_ATTR_TABLE_INLINE_KEYS 16
 
 typedef struct loom_parsed_operand_dict_entry_t {
   // Interned key spelling for this operand dictionary entry.
@@ -36,6 +37,17 @@ typedef struct loom_parsed_operand_dict_entries_t {
   loom_parsed_operand_dict_entry_t
       inline_entries[LOOM_OPERAND_DICT_INLINE_ENTRIES];
 } loom_parsed_operand_dict_entries_t;
+
+typedef struct loom_parsed_attr_table_keys_t {
+  // Mutable key storage, initially pointing at inline_keys.
+  int64_t* keys;
+  // Number of populated keys.
+  iree_host_size_t count;
+  // Allocated key capacity.
+  iree_host_size_t capacity;
+  // Inline storage for small attribute-keyed tables.
+  int64_t inline_keys[LOOM_ATTR_TABLE_INLINE_KEYS];
+} loom_parsed_attr_table_keys_t;
 
 static iree_status_t loom_parse_format_add_field_span(
     loom_parser_t* parser, loom_parsed_op_t* parsed,
@@ -910,6 +922,184 @@ static iree_status_t loom_parse_format_emit_operand_dict_type_mismatch(
                           IREE_ARRAYSIZE(params), value_token);
 }
 
+static void loom_parsed_attr_table_keys_initialize(
+    loom_parsed_attr_table_keys_t* keys) {
+  keys->keys = keys->inline_keys;
+  keys->count = 0;
+  keys->capacity = LOOM_ATTR_TABLE_INLINE_KEYS;
+}
+
+static iree_status_t loom_parsed_attr_table_keys_add(
+    loom_parser_t* parser, loom_parsed_attr_table_keys_t* keys, int64_t key) {
+  if (keys->count >= UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "attribute table has more than %u keys",
+                            (unsigned)UINT16_MAX);
+  }
+  if (keys->count == keys->capacity) {
+    iree_host_size_t old_capacity = keys->capacity;
+    iree_host_size_t new_capacity = old_capacity * 2;
+    int64_t* new_keys = NULL;
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(&parser->parser_arena, new_capacity,
+                                  sizeof(*new_keys), (void**)&new_keys));
+    memcpy(new_keys, keys->keys, old_capacity * sizeof(*new_keys));
+    keys->keys = new_keys;
+    keys->capacity = new_capacity;
+  }
+  keys->keys[keys->count++] = key;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_i64_attr_table_key(
+    loom_parser_t* parser, loom_token_t* out_token, int64_t* out_key) {
+  loom_token_t token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_INTEGER, &token);
+  int64_t key = 0;
+  if (!iree_string_view_atoi_int64(token.text, &key)) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(token.text),
+    };
+    return loom_parser_emit(parser, &loom_err_parse_015, params,
+                            IREE_ARRAYSIZE(params), token);
+  }
+  *out_token = token;
+  *out_key = key;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_attr_table_row(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed, iree_host_size_t* value_count,
+    uint16_t* out_row_width) {
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LPAREN, NULL);
+  uint16_t row_width = 0;
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if (row_width > 0 &&
+        !loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+      break;
+    }
+
+    loom_token_t value_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &value_token);
+    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    LOOM_PARSE_RESOLVE_VALUE(parser, value_token, &value_id);
+
+    if (row_width == UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "attribute table row width exceeds %u",
+                              (unsigned)UINT16_MAX);
+    }
+    iree_host_size_t operand_index =
+        (iree_host_size_t)element->field_index + *value_count;
+    if (operand_index > UINT16_MAX) {
+      return iree_make_status(
+          IREE_STATUS_RESOURCE_EXHAUSTED,
+          "attribute table operand index exceeds max operand count %u",
+          (unsigned)UINT16_MAX);
+    }
+    IREE_RETURN_IF_ERROR(loom_parsed_op_set_operand(
+        parsed, &parser->parser_arena, (uint16_t)operand_index, value_id));
+    IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+        parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
+        (uint16_t)operand_index, value_token, value_token.line,
+        value_token.end_column));
+    ++*value_count;
+    ++row_width;
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RPAREN, NULL);
+  *out_row_width = row_width;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_emit_attr_table_row_width_mismatch(
+    loom_parser_t* parser, loom_token_t token, uint16_t actual_width,
+    uint16_t expected_width) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_u32(actual_width),
+      loom_param_u32(expected_width),
+  };
+  return loom_parser_emit(parser, &loom_err_parse_030, params,
+                          IREE_ARRAYSIZE(params), token);
+}
+
+static iree_status_t loom_parse_format_attr_table(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed) {
+  uint32_t errors_before = parser->error_count;
+  loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LBRACE, NULL);
+
+  loom_parsed_attr_table_keys_t keys;
+  loom_parsed_attr_table_keys_initialize(&keys);
+  iree_host_size_t value_count = 0;
+  bool has_case_row_width = false;
+  uint16_t case_row_width = 0;
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RBRACE) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if (keys.count > 0 &&
+        !loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+      break;
+    }
+
+    loom_token_t key_token = loom_token_none();
+    int64_t key = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_parse_format_i64_attr_table_key(parser, &key_token, &key));
+    IREE_RETURN_IF_ERROR(loom_parsed_attr_table_keys_add(parser, &keys, key));
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_EQUALS, NULL);
+
+    uint16_t row_width = 0;
+    IREE_RETURN_IF_ERROR(loom_parse_format_attr_table_row(
+        parser, element, parsed, &value_count, &row_width));
+    if (parser->error_count > errors_before) {
+      loom_parser_sync_to_brace(parser);
+      return iree_ok_status();
+    }
+    if (!has_case_row_width) {
+      case_row_width = row_width;
+      has_case_row_width = true;
+    } else if (row_width != case_row_width) {
+      IREE_RETURN_IF_ERROR(loom_parse_format_emit_attr_table_row_width_mismatch(
+          parser, key_token, row_width, case_row_width));
+    }
+  }
+
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACE, NULL);
+  IREE_RETURN_IF_ERROR(loom_parse_keyword(parser, LOOM_KW_DEFAULT));
+
+  loom_token_t default_token = loom_tokenizer_peek(&parser->tokenizer);
+  uint16_t default_row_width = 0;
+  IREE_RETURN_IF_ERROR(loom_parse_format_attr_table_row(
+      parser, element, parsed, &value_count, &default_row_width));
+  if (parser->error_count > errors_before) return iree_ok_status();
+  if (has_case_row_width && default_row_width != case_row_width) {
+    IREE_RETURN_IF_ERROR(loom_parse_format_emit_attr_table_row_width_mismatch(
+        parser, default_token, default_row_width, case_row_width));
+  }
+
+  int64_t* arena_keys = NULL;
+  if (keys.count > 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(&parser->module->arena, keys.count,
+                                  sizeof(*arena_keys), (void**)&arena_keys));
+    memcpy(arena_keys, keys.keys, keys.count * sizeof(*arena_keys));
+  }
+  loom_attribute_t key_attr =
+      loom_attr_i64_array(arena_keys, (uint16_t)keys.count);
+  if (element->data > UINT8_MAX) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "format ATTR_TABLE attr index %u out of range",
+                            element->data);
+  }
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+      parsed, &parser->parser_arena, (uint8_t)element->data, key_attr));
+  return loom_parse_format_add_field_span(parser, parsed,
+                                          LOOM_LOCATION_FIELD_ATTRIBUTE,
+                                          (uint8_t)element->data, start_token);
+}
+
 static iree_status_t loom_parse_format_operand_dict(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
@@ -1372,6 +1562,12 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       case LOOM_FORMAT_KIND_OPERAND_DICT: {
         IREE_RETURN_IF_ERROR(
             loom_parse_format_operand_dict(parser, element, parsed));
+        break;
+      }
+
+      case LOOM_FORMAT_KIND_ATTR_TABLE: {
+        IREE_RETURN_IF_ERROR(
+            loom_parse_format_attr_table(parser, element, parsed));
         break;
       }
 

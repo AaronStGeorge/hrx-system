@@ -25,6 +25,7 @@ from typing import Any
 from loom.assembly import (
     Attr,
     AttrDict,
+    AttrTable,
     BindingList,
     Flags,
     FormatElement,
@@ -185,6 +186,18 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                         }
                     )
                     covered_attrs.add(names_field)
+
+                case AttrTable(keys=keys_field, values=values_field):
+                    append_attr_param(keys_field)
+                    params.append(
+                        {
+                            "name": values_field,
+                            "kind": "operand_variadic",
+                            "type_hint": "list[ValueRef]",
+                            "doc": f"Attribute-keyed table values: {values_field}",
+                        }
+                    )
+                    covered_attrs.add(keys_field)
 
                 case ResultType(field=name):
                     params.append(

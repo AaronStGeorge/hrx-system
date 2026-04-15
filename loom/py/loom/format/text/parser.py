@@ -26,6 +26,7 @@ from typing import Any
 from loom.assembly import (
     Attr,
     AttrDict,
+    AttrTable,
     BindingList,
     Flags,
     FormatElement,
@@ -1599,8 +1600,8 @@ class Parser:
                 case ResultType(field=name):
                     self._parse_result_type(parsed)
 
-                case ResultTypeList(field=name):
-                    self._parse_result_type_list(parsed, op_decl, name)
+                case ResultTypeList(field=name, parens=parens):
+                    self._parse_result_type_list(parsed, op_decl, name, parens=parens)
 
                 case Keyword(text=text):
                     _expect_keyword(tok, text)
@@ -1608,6 +1609,9 @@ class Parser:
                 case AttrDict(field=dict_field):
                     if tok.at(TokenKind.LBRACE):
                         self._parse_attr_dict(parsed, dict_field)
+
+                case AttrTable(keys=keys_field, values=values_field):
+                    self._parse_attr_table(parsed, keys_field, values_field)
 
                 case OperandDict(operands=operand_field, names=names_field):
                     if tok.at(TokenKind.LBRACE):
@@ -1876,13 +1880,9 @@ class Parser:
         parsed.result_bindings.append(bindings)
 
     def _parse_result_type_list(
-        self, parsed: ParsedFields, op_decl: Op, field_name: str
+        self, parsed: ParsedFields, op_decl: Op, field_name: str, *, parens: bool = True
     ) -> None:
-        """Parse (type) or (%operand as type, type).
-
-        Pushes pre-allocated result names into a child scope so type
-        annotations can reference co-results by name.
-        """
+        """Parse a parenthesized or bare result type list."""
         saved_scope = self._scope
         if self._reserved_result_names:
             self._scope = self._scope.push()
@@ -1891,12 +1891,20 @@ class Parser:
             ):
                 self._scope.define(name, value_id)
         tok = self._tokenizer
-        tok.expect(TokenKind.LPAREN)
-        if not tok.at(TokenKind.RPAREN):
+        if parens:
+            tok.expect(TokenKind.LPAREN)
+        if parens:
+            has_entry = not tok.at(TokenKind.RPAREN)
+        else:
+            has_entry = _is_type_start(tok.peek(), self._type_registry) or tok.at(
+                TokenKind.SSA_VALUE
+            )
+        if has_entry:
             self._parse_one_result_type(parsed)
             while tok.try_consume(TokenKind.COMMA):
                 self._parse_one_result_type(parsed)
-        tok.expect(TokenKind.RPAREN)
+        if parens:
+            tok.expect(TokenKind.RPAREN)
         self._scope = saved_scope
 
     def _parse_one_result_type(self, parsed: ParsedFields) -> None:
@@ -2412,3 +2420,70 @@ class Parser:
             parsed.operand_ids.append(value_id)
         if name_entries:
             parsed.attributes[names_field] = CanonicalAttrDict(name_entries)
+
+    def _parse_attr_table_row(self) -> list[int]:
+        tok = self._tokenizer
+        tok.expect(TokenKind.LPAREN)
+        row: list[int] = []
+        if not tok.at(TokenKind.RPAREN):
+            value_tok = tok.expect(TokenKind.SSA_VALUE)
+            try:
+                row.append(self._scope.lookup(value_tok.text))
+            except KeyError:
+                raise ParseError(
+                    f"undefined SSA value '%{value_tok.text}'",
+                    value_tok.location,
+                    tok._filename,
+                ) from None
+            while tok.try_consume(TokenKind.COMMA):
+                value_tok = tok.expect(TokenKind.SSA_VALUE)
+                try:
+                    row.append(self._scope.lookup(value_tok.text))
+                except KeyError:
+                    raise ParseError(
+                        f"undefined SSA value '%{value_tok.text}'",
+                        value_tok.location,
+                        tok._filename,
+                    ) from None
+        tok.expect(TokenKind.RPAREN)
+        return row
+
+    def _parse_attr_table(
+        self, parsed: ParsedFields, keys_field: str, _values_field: str
+    ) -> None:
+        """Parse {key = (%row), ...} default(%row) into flattened operands."""
+        tok = self._tokenizer
+        tok.expect(TokenKind.LBRACE)
+        keys: list[int] = []
+        values: list[int] = []
+        row_width: int | None = None
+        while not tok.at(TokenKind.RBRACE):
+            key_tok = tok.expect(TokenKind.INTEGER)
+            keys.append(int(key_tok.text))
+            tok.expect(TokenKind.EQUALS)
+            row = self._parse_attr_table_row()
+            if row_width is None:
+                row_width = len(row)
+            elif len(row) != row_width:
+                raise ParseError(
+                    "attribute table rows must all have the same width",
+                    key_tok.location,
+                    tok._filename,
+                )
+            values.extend(row)
+            if not tok.try_consume(TokenKind.COMMA):
+                break
+        tok.expect(TokenKind.RBRACE)
+        _expect_keyword(tok, "default")
+        default_row = self._parse_attr_table_row()
+        if row_width is None:
+            row_width = len(default_row)
+        elif len(default_row) != row_width:
+            raise ParseError(
+                "attribute table default row must match case row width",
+                tok.peek().location,
+                tok._filename,
+            )
+        values.extend(default_row)
+        parsed.attributes[keys_field] = keys
+        parsed.operand_ids.extend(values)

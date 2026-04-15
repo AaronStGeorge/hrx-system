@@ -187,6 +187,13 @@ typedef enum loom_format_kind_e {
   // key -> operand ordinal relative to field_index. The dict stores only
   // integer ordinals, never SSA value IDs.
   LOOM_FORMAT_KIND_OPERAND_DICT = 22,
+
+  // Static-attribute-keyed value table:
+  // {0 = (%a, %b), 1 = (%c, %d)} default(%x, %y).
+  // field_index = variadic operand start, data = i64 array attr field index
+  // storing the row keys. The operand field stores row payloads flattened in
+  // row-major order, followed by one default row.
+  LOOM_FORMAT_KIND_ATTR_TABLE = 23,
 };
 typedef uint8_t loom_format_kind_t;
 
@@ -199,6 +206,7 @@ typedef uint8_t loom_format_kind_t;
 //   KEYWORD:        keyword ID (loom_keyword_id_t).
 //   INDEX_LIST:     static attribute field index.
 //   OPERAND_DICT:   dict attribute field index storing key -> operand ordinal.
+//   ATTR_TABLE:     i64 array attr field index storing row keys.
 //   BINDING_LIST:   binding kind (CAPTURE=0, ELEMENT=1).
 //   OPTIONAL_GROUP: (skip_count << 2) | anchor_category.
 typedef struct loom_format_element_t {

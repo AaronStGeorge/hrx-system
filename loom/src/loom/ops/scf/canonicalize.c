@@ -42,6 +42,114 @@ static bool loom_scf_value_facts_are_exact_bool(loom_rewriter_t* rewriter,
   return true;
 }
 
+static bool loom_scf_lookup_selected_row(loom_rewriter_t* rewriter,
+                                         loom_op_t* op,
+                                         iree_host_size_t* out_row_index) {
+  int64_t selector = 0;
+  if (!loom_scf_value_facts_are_exact_i64(
+          rewriter, loom_scf_lookup_selector(op), &selector)) {
+    return false;
+  }
+  loom_attribute_t case_keys = loom_scf_lookup_case_keys(op);
+  for (uint16_t i = 0; i < case_keys.count; ++i) {
+    if (case_keys.i64_array[i] == selector) {
+      *out_row_index = i;
+      return true;
+    }
+  }
+  *out_row_index = case_keys.count;
+  return true;
+}
+
+static bool loom_scf_lookup_has_well_formed_table_shape(loom_op_t* op) {
+  if (op->result_count == 0) return false;
+  loom_attribute_t case_keys = loom_scf_lookup_case_keys(op);
+  if (case_keys.kind != LOOM_ATTR_I64_ARRAY ||
+      (case_keys.count > 0 && !case_keys.i64_array)) {
+    return false;
+  }
+  loom_value_slice_t values = loom_scf_lookup_values(op);
+  iree_host_size_t row_count = (iree_host_size_t)case_keys.count + 1;
+  return values.count == row_count * (iree_host_size_t)op->result_count;
+}
+
+static bool loom_scf_lookup_key_matches_selector_facts(
+    loom_value_facts_t selector_facts, int64_t key) {
+  if (loom_value_facts_is_float(selector_facts)) return true;
+  if (key < selector_facts.range_lo || key > selector_facts.range_hi) {
+    return false;
+  }
+  int64_t divisor = selector_facts.known_divisor;
+  return divisor <= 1 || key % divisor == 0;
+}
+
+static bool loom_scf_lookup_key_is_explicit(loom_attribute_t case_keys,
+                                            int64_t key) {
+  for (uint16_t i = 0; i < case_keys.count; ++i) {
+    if (case_keys.i64_array[i] == key) return true;
+    if (case_keys.i64_array[i] > key) return false;
+  }
+  return false;
+}
+
+static bool loom_scf_lookup_default_row_may_match(
+    loom_value_facts_t selector_facts, loom_attribute_t case_keys) {
+  if (loom_value_facts_is_float(selector_facts)) return true;
+  if (loom_value_facts_is_exact(selector_facts)) {
+    return !loom_scf_lookup_key_is_explicit(case_keys, selector_facts.range_lo);
+  }
+
+  int64_t span = 0;
+  if (!loom_checked_sub_i64(selector_facts.range_hi, selector_facts.range_lo,
+                            &span) ||
+      span < 0 || span > 4096) {
+    return true;
+  }
+
+  for (int64_t offset = 0; offset <= span; ++offset) {
+    int64_t candidate = selector_facts.range_lo + offset;
+    if (!loom_scf_lookup_key_matches_selector_facts(selector_facts,
+                                                    candidate)) {
+      continue;
+    }
+    if (!loom_scf_lookup_key_is_explicit(case_keys, candidate)) return true;
+  }
+  return false;
+}
+
+static void loom_scf_lookup_mark_reachable_rows(
+    loom_op_t* op, loom_value_facts_t selector_facts, bool* reachable_rows,
+    iree_host_size_t* out_reachable_count,
+    iree_host_size_t* out_reachable_explicit_count,
+    iree_host_size_t* out_first_reachable_row) {
+  loom_attribute_t case_keys = loom_scf_lookup_case_keys(op);
+  iree_host_size_t row_count = (iree_host_size_t)case_keys.count + 1;
+  for (iree_host_size_t i = 0; i < row_count; ++i) {
+    reachable_rows[i] = false;
+  }
+
+  *out_reachable_count = 0;
+  *out_reachable_explicit_count = 0;
+  *out_first_reachable_row = row_count;
+  for (uint16_t i = 0; i < case_keys.count; ++i) {
+    if (!loom_scf_lookup_key_matches_selector_facts(selector_facts,
+                                                    case_keys.i64_array[i])) {
+      continue;
+    }
+    reachable_rows[i] = true;
+    if (*out_reachable_count == 0) *out_first_reachable_row = i;
+    ++*out_reachable_count;
+    ++*out_reachable_explicit_count;
+  }
+
+  iree_host_size_t default_row = case_keys.count;
+  if (loom_scf_lookup_default_row_may_match(selector_facts, case_keys)) {
+    reachable_rows[default_row] = true;
+    if (*out_reachable_count == 0) *out_first_reachable_row = default_row;
+    ++*out_reachable_count;
+  }
+}
+
 static loom_op_t* loom_scf_region_terminator(loom_region_t* region) {
   if (!region || region->block_count != 1) return NULL;
   loom_block_t* block = loom_region_entry_block(region);
@@ -73,6 +181,30 @@ static iree_status_t loom_scf_replace_results_and_erase(
   if (op->result_count == 0) return loom_rewriter_erase(rewriter, op);
   return loom_rewriter_replace_all_uses_and_erase(rewriter, op, replacements,
                                                   replacement_count);
+}
+
+static bool loom_scf_lookup_reachable_column_is_uniform(
+    loom_op_t* op, const bool* reachable_rows, uint16_t column,
+    loom_value_id_t* out_value) {
+  loom_attribute_t case_keys = loom_scf_lookup_case_keys(op);
+  loom_value_slice_t values = loom_scf_lookup_values(op);
+  uint16_t result_count = op->result_count;
+  iree_host_size_t row_count = (iree_host_size_t)case_keys.count + 1;
+  loom_value_id_t first_value = LOOM_VALUE_ID_INVALID;
+  for (iree_host_size_t row = 0; row < row_count; ++row) {
+    if (!reachable_rows[row]) continue;
+    loom_value_id_t value = values.values[row * result_count + column];
+    if (first_value == LOOM_VALUE_ID_INVALID) {
+      first_value = value;
+      continue;
+    }
+    if (value != first_value) {
+      return false;
+    }
+  }
+  if (first_value == LOOM_VALUE_ID_INVALID) return false;
+  *out_value = first_value;
+  return true;
 }
 
 static void loom_scf_preserve_value_name(loom_module_t* module,
@@ -124,6 +256,170 @@ iree_status_t loom_scf_select_canonicalize(loom_op_t* op,
   }
   loom_value_id_t replacement = condition ? true_value : false_value;
   return loom_scf_replace_results_and_erase(op, rewriter, &replacement, 1);
+}
+
+//===----------------------------------------------------------------------===//
+// scf.lookup
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_scf_lookup_replace_with_row(
+    loom_op_t* op, iree_host_size_t row_index, loom_rewriter_t* rewriter) {
+  loom_value_slice_t values = loom_scf_lookup_values(op);
+  loom_value_id_t* replacements = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(rewriter->arena, op->result_count,
+                                sizeof(*replacements), (void**)&replacements));
+  iree_host_size_t row_offset = row_index * op->result_count;
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    replacements[i] = values.values[row_offset + i];
+  }
+  return loom_scf_replace_results_and_erase(op, rewriter, replacements,
+                                            op->result_count);
+}
+
+static iree_status_t loom_scf_lookup_compact_uniform_columns(
+    loom_op_t* op, loom_rewriter_t* rewriter) {
+  loom_attribute_t case_keys = loom_scf_lookup_case_keys(op);
+  loom_value_slice_t old_values = loom_scf_lookup_values(op);
+  const loom_value_id_t* old_results = loom_op_const_results(op);
+  iree_host_size_t row_count = (iree_host_size_t)case_keys.count + 1;
+
+  bool* reachable_rows = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, row_count,
+                                                 sizeof(*reachable_rows),
+                                                 (void**)&reachable_rows));
+  loom_value_facts_t selector_facts =
+      loom_rewriter_value_facts(rewriter, loom_scf_lookup_selector(op));
+  iree_host_size_t reachable_count = 0;
+  iree_host_size_t reachable_explicit_count = 0;
+  iree_host_size_t first_reachable_row = row_count;
+  loom_scf_lookup_mark_reachable_rows(
+      op, selector_facts, reachable_rows, &reachable_count,
+      &reachable_explicit_count, &first_reachable_row);
+  if (reachable_count == 0) return iree_ok_status();
+
+  bool* forwarded_results = NULL;
+  loom_value_id_t* replacements = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, op->result_count, sizeof(*forwarded_results),
+      (void**)&forwarded_results));
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(rewriter->arena, op->result_count,
+                                sizeof(*replacements), (void**)&replacements));
+
+  uint16_t forwarded_count = 0;
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    forwarded_results[i] = loom_scf_lookup_reachable_column_is_uniform(
+        op, reachable_rows, i, &replacements[i]);
+    if (forwarded_results[i]) ++forwarded_count;
+  }
+  bool default_reachable = reachable_rows[case_keys.count];
+  bool default_row_matches_dead_source = true;
+  if (!default_reachable) {
+    for (uint16_t i = 0; i < op->result_count; ++i) {
+      if (forwarded_results[i]) continue;
+      loom_value_id_t default_value =
+          old_values.values[case_keys.count * op->result_count + i];
+      loom_value_id_t source_value =
+          old_values.values[first_reachable_row * op->result_count + i];
+      if (default_value != source_value) {
+        default_row_matches_dead_source = false;
+        break;
+      }
+    }
+  }
+  if (forwarded_count == 0 && reachable_explicit_count == case_keys.count &&
+      (default_reachable || default_row_matches_dead_source)) {
+    return iree_ok_status();
+  }
+  if (forwarded_count == op->result_count) {
+    return loom_scf_replace_results_and_erase(op, rewriter, replacements,
+                                              op->result_count);
+  }
+
+  uint16_t kept_count = (uint16_t)(op->result_count - forwarded_count);
+  int64_t* kept_case_keys = NULL;
+  loom_type_t* kept_result_types = NULL;
+  loom_value_id_t* kept_values = NULL;
+  if (reachable_explicit_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        rewriter->arena, reachable_explicit_count, sizeof(*kept_case_keys),
+        (void**)&kept_case_keys));
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, kept_count,
+                                                 sizeof(*kept_result_types),
+                                                 (void**)&kept_result_types));
+  iree_host_size_t kept_row_count = reachable_explicit_count + 1;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(rewriter->arena, kept_row_count * kept_count,
+                                sizeof(*kept_values), (void**)&kept_values));
+
+  uint16_t kept_ordinal = 0;
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (forwarded_results[i]) continue;
+    kept_result_types[kept_ordinal] =
+        loom_module_value_type(rewriter->module, old_results[i]);
+    ++kept_ordinal;
+  }
+
+  iree_host_size_t new_row = 0;
+  for (uint16_t row = 0; row < case_keys.count; ++row) {
+    if (!reachable_rows[row]) continue;
+    kept_case_keys[new_row] = case_keys.i64_array[row];
+    kept_ordinal = 0;
+    for (uint16_t column = 0; column < op->result_count; ++column) {
+      if (forwarded_results[column]) continue;
+      kept_values[new_row * kept_count + kept_ordinal] =
+          old_values.values[row * op->result_count + column];
+      ++kept_ordinal;
+    }
+    ++new_row;
+  }
+
+  iree_host_size_t default_source_row =
+      reachable_rows[case_keys.count] ? case_keys.count : first_reachable_row;
+  kept_ordinal = 0;
+  for (uint16_t column = 0; column < op->result_count; ++column) {
+    if (forwarded_results[column]) continue;
+    kept_values[new_row * kept_count + kept_ordinal] =
+        old_values.values[default_source_row * op->result_count + column];
+    ++kept_ordinal;
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* new_lookup = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_lookup_build(
+      &rewriter->builder, loom_scf_lookup_selector(op), kept_case_keys,
+      reachable_explicit_count, kept_values, kept_row_count * kept_count,
+      kept_result_types, kept_count, /*tied_results=*/NULL,
+      /*tied_result_count=*/0, op->location, &new_lookup));
+
+  kept_ordinal = 0;
+  loom_value_slice_t new_results = loom_scf_lookup_results(new_lookup);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (!forwarded_results[i]) {
+      replacements[i] = new_results.values[kept_ordinal++];
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, replacements, op->result_count, value_checkpoint));
+  return loom_rewriter_replace_all_uses_and_erase(rewriter, op, replacements,
+                                                  op->result_count);
+}
+
+iree_status_t loom_scf_lookup_canonicalize(loom_op_t* op,
+                                           loom_rewriter_t* rewriter) {
+  if (op->tied_result_count != 0 ||
+      !loom_scf_lookup_has_well_formed_table_shape(op)) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t selected_row = 0;
+  if (loom_scf_lookup_selected_row(rewriter, op, &selected_row)) {
+    return loom_scf_lookup_replace_with_row(op, selected_row, rewriter);
+  }
+  return loom_scf_lookup_compact_uniform_columns(op, rewriter);
 }
 
 //===----------------------------------------------------------------------===//

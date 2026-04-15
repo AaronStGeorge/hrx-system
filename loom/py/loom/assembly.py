@@ -61,6 +61,7 @@ __all__ = [
     "ResultTypeList",
     "Keyword",
     "AttrDict",
+    "AttrTable",
     "Region",
     "IndexList",
     "OperandDict",
@@ -291,6 +292,21 @@ class AttrDict:
     """
 
     field: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class AttrTable:
+    """A static-attribute-keyed SSA value table.
+
+    Prints/parses: {0 = (%a, %b), 1 = (%c, %d)} default(%x, %y)
+
+    |keys| names an attribute field containing the static row keys. |values|
+    names a variadic operand field containing row payloads flattened in
+    row-major order, with the final row reserved for the default payload.
+    """
+
+    keys: str
+    values: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -648,6 +664,7 @@ type FormatElement = (
     | ResultTypeList
     | Keyword
     | AttrDict
+    | AttrTable
     | Region
     | IndexList
     | OperandDict

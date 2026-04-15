@@ -6,7 +6,15 @@
 
 """Tests for Python builder stub generation."""
 
-from loom.assembly import AttrDict, IndexList, OperandDict, Ref, ResultType
+from loom.assembly import (
+    AttrDict,
+    AttrTable,
+    IndexList,
+    OperandDict,
+    Ref,
+    ResultType,
+    ResultTypeList,
+)
 from loom.dsl import ANY, ATTR_TYPE_I64_ARRAY, AttrDef, EnumCase, EnumDef, Op, Operand, Result
 from loom.gen.builders import generate_builders
 
@@ -108,3 +116,33 @@ def test_builder_params_include_operand_dict_as_keyed_values() -> None:
     assert "_operand_dict_names[_name] = len(_operand_dict_names)" in generated
     assert "_operands.append(params[_name])" in generated
     assert '_attributes["param_names"] = _operand_dict_names' in generated
+
+
+def test_builder_params_include_attr_table_as_flattened_values() -> None:
+    generated = generate_builders(
+        [
+            Op(
+                "test.attr_table",
+                operands=[
+                    Operand("selector", ANY),
+                    Operand("values", ANY, variadic=True),
+                ],
+                results=[Result("results", ANY, variadic=True)],
+                attrs=[AttrDef("case_keys", ATTR_TYPE_I64_ARRAY)],
+                format=[
+                    Ref("selector"),
+                    AttrTable("case_keys", "values"),
+                    ResultTypeList("results", parens=False),
+                ],
+            ),
+        ],
+        "TestBuilders",
+    )
+
+    assert "def attr_table(self, *, selector: ValueRef" in generated
+    assert "case_keys: list[int]" in generated
+    assert "values: list[ValueRef]" in generated
+    assert "results:" in generated
+    assert "_operands.append(selector)" in generated
+    assert "_operands.extend(values)" in generated
+    assert '_attributes["case_keys"] = case_keys' in generated

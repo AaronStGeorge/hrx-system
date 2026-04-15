@@ -395,6 +395,11 @@
 //                           -> (type, %op as type). Always uses parens.
 //   Keyword(text)         Literal token: , : -> to step else ( ) etc.
 //   AttrDict()            Optional {key = value, ...} dictionary.
+//   AttrTable(k, v)       Static-keyed value table:
+//                           {0 = (%a, %b), 1 = (%c, %d)} default(%x, %y).
+//                           Attribute field k stores i64 row keys; operand
+//                           field v stores row payloads flattened row-major,
+//                           followed by the default row.
 //   OperandDict(o, n)     Optional keyed SSA operand dictionary:
 //                           {key = %value : type, ...}. Values are ordinary
 //                           operands in field o. Attribute field n stores only
@@ -427,7 +432,7 @@
 // Forward-glue (no space after): ( [ {
 // Built-in glue: non-leading IndexList, BindingList, FuncArgs.
 // Explicit Glue: suppresses space before the next token.
-// ResultTypeList, PredicateList, and OperandDict never glue.
+// ResultTypeList, PredicateList, OperandDict, and AttrTable never glue.
 //
 // --- Common format patterns ---
 //

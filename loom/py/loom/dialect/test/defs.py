@@ -29,6 +29,7 @@ from loom.assembly import (
     RPAREN,
     Attr,
     AttrDict,
+    AttrTable,
     BindingList,
     FuncArgs,
     IndexList,
@@ -49,6 +50,7 @@ from loom.assembly import (
 from loom.dsl import (
     ANY,
     ANY_ENCODING,
+    ATTR_TYPE_I64_ARRAY,
     CONSTANT_LIKE,
     ELEMENTWISE,
     FLOAT,
@@ -925,6 +927,38 @@ test_operand_dict = Op(
 )
 
 # ============================================================================
+# test.attr_table — op with static-attribute-keyed SSA value table
+# ============================================================================
+
+test_attr_table = Op(
+    "test.attr_table",
+    group=test_ops,
+    doc="Test op with a static-attribute-keyed SSA value table.",
+    operands=[
+        Operand("selector", INDEX),
+        Operand("values", ANY, variadic=True),
+    ],
+    results=[Result("results", ANY, variadic=True)],
+    attrs=[
+        AttrDef(
+            "case_keys",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Sorted selector values for explicit table rows.",
+        ),
+    ],
+    traits=[PURE],
+    format=[
+        Ref("selector"),
+        AttrTable("case_keys", "values"),
+        COLON,
+        ResultTypeList("results", parens=False),
+    ],
+    examples=[
+        "%a, %b = test.attr_table %selector {0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32",
+    ],
+)
+
+# ============================================================================
 # test.deflate — result dim references
 # ============================================================================
 
@@ -1218,6 +1252,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_decl,
     test_attrs,
     test_operand_dict,
+    test_attr_table,
     test_deflate,
     test_assume,
     test_convert,
