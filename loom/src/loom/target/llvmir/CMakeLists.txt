@@ -76,6 +76,7 @@ loom_cc_library(
     "lower.c"
     "lower_memory.c"
     "lower_scalar.c"
+    "lower_target.c"
   DEPS
     ::llvmir
     iree::base
@@ -86,6 +87,7 @@ loom_cc_library(
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::ops::llvmir
     loom::src::loom::ops::scalar
     loom::src::loom::ops::view
     loom::src::loom::util::fact_table
@@ -183,6 +185,7 @@ loom_cc_test(
     loom::src::loom::ops::buffer
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::ops::llvmir
     loom::src::loom::ops::scalar
     loom::src::loom::ops::view
     loom::src::loom::util::stream

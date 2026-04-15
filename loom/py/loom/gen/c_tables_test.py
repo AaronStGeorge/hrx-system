@@ -6,7 +6,7 @@
 
 import pytest
 
-from loom.assembly import COLON, Attr, AttrDict, OperandDict, Ref, ResultType, TypesOf
+from loom.assembly import COLON, Attr, AttrDict, Flags, OperandDict, Ref, ResultType, TypesOf
 from loom.dsl import (
     INTEGER,
     AttrDef,
@@ -145,6 +145,30 @@ def test_inline_attr_dict_uses_declared_attrs() -> None:
     assert "uint8_t scope" in ops_h
     assert "loom_op_attrs(*out_op)[0] = loom_attr_enum(ordering);" in builders_c
     assert "loom_op_attrs(*out_op)[1] = loom_attr_enum(scope);" in builders_c
+
+
+def test_flags_attrs_do_not_shift_regular_attr_indices() -> None:
+    flags = EnumDef("Flags", [EnumCase("hot", 1)])
+    op = Op(
+        "test.flagged",
+        group=Dialect("test"),
+        attrs=[
+            AttrDef("flags", "flags", optional=True, enum_def=flags),
+            AttrDef("name", "string"),
+            AttrDef("constraints", "string"),
+        ],
+        format=[Flags("flags"), Attr("name"), Attr("constraints")],
+    )
+
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "loom_op_attrs(*out_op)[0] = loom_attr_string(name);" in builders_c
+    assert "loom_op_attrs(*out_op)[1] = loom_attr_string(constraints);" in builders_c
+    assert "loom_op_attrs(*out_op)[2]" not in builders_c
+    assert "{LOOM_FORMAT_KIND_ATTR_VALUE, 0, 0}" in tables_c
+    assert "{LOOM_FORMAT_KIND_ATTR_VALUE, 1, 0}" in tables_c
+    assert "{LOOM_FORMAT_KIND_ATTR_VALUE, 2, 0}" not in tables_c
 
 
 def test_operand_dict_generates_format_and_builder_support() -> None:

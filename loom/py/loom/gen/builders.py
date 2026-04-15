@@ -593,6 +593,7 @@ def main() -> None:
     from loom.dialect.func import ALL_FUNC_OPS
     from loom.dialect.index import ALL_INDEX_OPS
     from loom.dialect.kernel import ALL_KERNEL_OPS
+    from loom.dialect.llvmir import ALL_LLVMIR_OPS
     from loom.dialect.pool import ALL_POOL_OPS
     from loom.dialect.scalar import ALL_SCALAR_OPS
     from loom.dialect.test import ALL_TEST_OPS
@@ -617,6 +618,7 @@ def main() -> None:
         ("vector", list(ALL_VECTOR_OPS), "VectorBuilders", "vector/builders.py"),
         ("index", list(ALL_INDEX_OPS), "IndexBuilders", "index/builders.py"),
         ("kernel", list(ALL_KERNEL_OPS), "KernelBuilders", "kernel/builders.py"),
+        ("llvmir", list(ALL_LLVMIR_OPS), "LlvmIrBuilders", "llvmir/builders.py"),
     ]
 
     for _dialect_name, ops, class_name, rel_path in dialects:

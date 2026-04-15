@@ -407,6 +407,7 @@ def main() -> None:
     from loom.dialect.hal import ALL_HAL_TYPES
     from loom.dialect.index import ALL_INDEX_OPS
     from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
+    from loom.dialect.llvmir import ALL_LLVMIR_OPS
     from loom.dialect.pool import ALL_POOL_OPS
     from loom.dialect.scalar import ALL_SCALAR_OPS
     from loom.dialect.scf import ALL_SCF_OPS
@@ -427,6 +428,7 @@ def main() -> None:
         *ALL_VECTOR_OPS,
         *ALL_INDEX_OPS,
         *ALL_KERNEL_OPS,
+        *ALL_LLVMIR_OPS,
     ]
     type_defs = [
         *ALL_BUILTIN_TYPES,

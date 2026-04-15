@@ -11,6 +11,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/lower_internal.h"
@@ -603,6 +604,8 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_view_store(state, target_block, op);
     case LOOM_OP_VIEW_PREFETCH:
       return loom_llvmir_lowering_lower_view_prefetch(state, target_block, op);
+    case LOOM_OP_LLVMIR_INLINE_ASM:
+      return loom_llvmir_lowering_lower_inline_asm(state, target_block, op);
     case LOOM_OP_FUNC_CALL:
       return loom_llvmir_lowering_lower_call(state, target_block, op);
     case LOOM_OP_FUNC_RETURN:

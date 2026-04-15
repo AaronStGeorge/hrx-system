@@ -684,6 +684,8 @@ def _translate_format_elements(
         desc = layout.fields.get(name)
         if desc is None:
             raise ValueError(f"Op '{op.name}': format references undeclared field '{name}'")
+        if desc.kind == FieldKind.ATTR:
+            return desc.kind, _resolve_attr_index(op, name, "format")
         return desc.kind, desc.index
 
     def _walk(fmt_elements: tuple[FormatElement, ...]) -> None:
@@ -1118,7 +1120,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                 "c_type": c_type,
                 "attr_type": attr_def.attr_type,
                 "optional": attr_def.optional,
-                "attr_index": layout.fields[name].index,
+                "attr_index": _resolve_attr_index(op, name, "builder"),
             }
         )
         covered_attrs.add(name)
@@ -1192,7 +1194,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "kind": "operand_dict",
                             "c_type": "const loom_named_value_t*",
                             "operand_index": layout.fields[operand_field].index,
-                            "names_attr_index": layout.fields[names_field].index,
+                            "names_attr_index": _resolve_attr_index(op, names_field, "builder"),
                             "names_field": names_field,
                             "may_consume": has_result_type_list,
                         }
@@ -1208,7 +1210,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "name": name,
                             "kind": "symbol",
                             "c_type": "loom_symbol_ref_t",
-                            "attr_index": layout.fields[name].index,
+                            "attr_index": _resolve_attr_index(op, name, "builder"),
                         }
                     )
                     covered_attrs.add(name)
@@ -1221,7 +1223,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "kind": "index_list",
                             "dynamic_field": dynamic_field,
                             "static_field": static_field,
-                            "static_attr_index": (static_desc.index if static_desc else 0),
+                            "static_attr_index": (_resolve_attr_index(op, static_field, "builder") if static_desc else 0),
                         }
                     )
                     covered_attrs.add(static_field)
@@ -1333,7 +1335,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                                 "name": name,
                                 "kind": "predicate_list",
                                 "optional": attr_def.optional,
-                                "attr_index": layout.fields[name].index,
+                                "attr_index": _resolve_attr_index(op, name, "builder"),
                             }
                         )
                         covered_attrs.add(name)
@@ -2875,6 +2877,7 @@ def main() -> None:
     from loom.dialect.hal import ALL_HAL_TYPES
     from loom.dialect.index import ALL_INDEX_OPS, index_ops
     from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES, kernel_ops
+    from loom.dialect.llvmir import ALL_LLVMIR_OPS, llvmir_ops
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
@@ -2895,6 +2898,7 @@ def main() -> None:
         (vector_ops, list(ALL_VECTOR_OPS)),
         (index_ops, list(ALL_INDEX_OPS)),
         (kernel_ops, list(ALL_KERNEL_OPS)),
+        (llvmir_ops, list(ALL_LLVMIR_OPS)),
     ]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"

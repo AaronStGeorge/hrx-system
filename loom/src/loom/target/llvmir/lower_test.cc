@@ -23,6 +23,7 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/text_writer.h"
@@ -119,6 +120,7 @@ class LlvmIrLowerTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_LLVMIR, loom_llvmir_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
@@ -723,6 +725,51 @@ TEST_F(LlvmIrLowerTest, LowersViewPrefetchToBuiltinIntrinsic) {
   EXPECT_NE(text.find(", i32 0, i32 2, i32 1)\n"), std::string::npos) << text;
   EXPECT_NE(text.find(", i32 1, i32 3, i32 1)\n"), std::string::npos) << text;
   VerifyTextWithLlvmTools(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersInlineAsmToStructuredLlvmIr) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("inline_asm_add"));
+  loom_type_t arg_types[2] = {i32, i32};
+  loom_type_t result_types[1] = {i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types, 2, result_types, 1,
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 2);
+  SetValueName(args[0], IREE_SV("lhs"));
+  SetValueName(args[1], IREE_SV("rhs"));
+
+  loom_string_id_t asm_template = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module_, IREE_SV("addl $2, $0"),
+                                           &asm_template));
+  loom_string_id_t constraints = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("=r,0,r"), &constraints));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* asm_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_inline_asm_build(
+      &body_builder, LOOM_LLVMIR_ASMFLAGS_SIDEEFFECT, asm_template, constraints,
+      args, arg_count, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &asm_op));
+  loom_value_id_t sum =
+      loom_value_slice_get(loom_llvmir_inline_asm_results(asm_op), 0);
+  SetValueName(sum, IREE_SV("sum"));
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &sum, 1,
+                                        LOOM_LOCATION_UNKNOWN, &asm_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("  %sum = call i32 asm sideeffect \"addl $2, $0\", "
+                      "\"=r,0,r\"(i32 %lhs, i32 %rhs)\n"),
+            std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
 }
 
 TEST_F(LlvmIrLowerTest, LowersPublicDeviceFunctionWithAmdgpuHalAbi) {

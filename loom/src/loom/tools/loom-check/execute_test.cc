@@ -120,6 +120,21 @@ TEST_F(ExecuteTest, RoundtripWithExpectedSection) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, RoundtripLlvmIrInlineAsm) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: roundtrip\n"
+                   "func.def @inline_asm_add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = llvmir.inline_asm<sideeffect> \"addl $2, $0\", "
+                   "\"=r,0,r\" (%lhs, %rhs) : (i32, i32) -> i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
+      << DetailString(result) << ActualOutputString(result);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, RoundtripMismatch) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
