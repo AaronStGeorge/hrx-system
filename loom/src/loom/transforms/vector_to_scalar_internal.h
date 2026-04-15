@@ -128,6 +128,12 @@ const loom_vector_to_scalar_descriptor_t* loom_vector_to_scalar_find_descriptor(
 bool loom_vector_to_scalar_indices_are_dynamic(
     loom_vector_to_scalar_index_list_t indices);
 
+// Copies static index attribute storage into the builder arena so constructed
+// ops do not retain references to pass scratch memory.
+iree_status_t loom_vector_to_scalar_copy_static_indices(
+    loom_builder_t* builder, const int64_t* indices,
+    iree_host_size_t index_count, int64_t** out_indices);
+
 loom_type_t loom_vector_to_scalar_lane_type(loom_type_t vector_type);
 
 iree_status_t loom_vector_to_scalar_build_scalar_constant(

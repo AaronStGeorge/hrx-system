@@ -118,9 +118,9 @@ static iree_status_t loom_vector_to_scalar_index_list_to_view_indices(
   if (loom_vector_to_scalar_indices_are_dynamic(index_list)) {
     int64_t* static_indices = NULL;
     if (index_list.rank > 0) {
-      IREE_RETURN_IF_ERROR(
-          iree_arena_allocate_array(state->rewriter->arena, index_list.rank,
-                                    sizeof(int64_t), (void**)&static_indices));
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          state->rewriter->builder.arena, index_list.rank, sizeof(int64_t),
+          (void**)&static_indices));
     }
     for (uint8_t i = 0; i < index_list.rank; ++i) {
       static_indices[i] = INT64_MIN;
@@ -134,8 +134,12 @@ static iree_status_t loom_vector_to_scalar_index_list_to_view_indices(
     return iree_ok_status();
   }
 
+  int64_t* static_indices = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_copy_static_indices(
+      &state->rewriter->builder, index_list.static_indices, index_list.rank,
+      &static_indices));
   *out_indices = (loom_vector_to_scalar_view_indices_t){
-      .static_indices = index_list.static_indices,
+      .static_indices = static_indices,
       .static_index_count = index_list.rank,
   };
   return iree_ok_status();

@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <string.h>
+
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
@@ -68,6 +70,23 @@ iree_status_t loom_vector_to_scalar_build_index_binary(
 //===----------------------------------------------------------------------===//
 // Index terms
 //===----------------------------------------------------------------------===//
+
+iree_status_t loom_vector_to_scalar_copy_static_indices(
+    loom_builder_t* builder, const int64_t* indices,
+    iree_host_size_t index_count, int64_t** out_indices) {
+  *out_indices = NULL;
+  if (index_count == 0) return iree_ok_status();
+  if (!indices) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "static index storage is required");
+  }
+  int64_t* copied_indices = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      builder->arena, index_count, sizeof(int64_t), (void**)&copied_indices));
+  memcpy(copied_indices, indices, index_count * sizeof(int64_t));
+  *out_indices = copied_indices;
+  return iree_ok_status();
+}
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_static_term(
     int64_t value) {
