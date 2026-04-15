@@ -10,6 +10,7 @@
 
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
+#include "loom/ops/index/compare.h"
 #include "loom/ops/index/ops.h"
 
 #define LOOM_INDEX_BINARY_FACTS(name, transfer_fn)                       \
@@ -117,6 +118,17 @@ iree_status_t loom_index_cmp_facts(loom_fact_context_t* context,
                                    const loom_op_t* op,
                                    const loom_value_facts_t* operand_facts,
                                    loom_value_facts_t* result_facts) {
+  if (op->operand_count >= 2 && op->attribute_count >= 1) {
+    bool result = false;
+    uint8_t predicate = loom_index_cmp_predicate(op);
+    if ((loom_index_cmp_lhs(op) == loom_index_cmp_rhs(op) &&
+         loom_index_cmp_same_value_result(predicate, &result)) ||
+        loom_index_cmp_result_from_facts(predicate, &operand_facts[0],
+                                         &operand_facts[1], &result)) {
+      result_facts[0] = loom_value_facts_exact_i64(result ? 1 : 0);
+      return iree_ok_status();
+    }
+  }
   result_facts[0] = loom_value_facts_make(0, 1, 1);
   return iree_ok_status();
 }

@@ -50,6 +50,72 @@ func.def @if_false_keeps_selected_store(%buffer: buffer, %offset: offset, %value
 
 // ====
 
+// A dynamic signed index comparison can still prune scf.if once range facts
+// prove the condition exact.
+func.def @if_prunes_from_signed_index_range(%x: index, %y: index) -> (index) {
+  %lo = index.assume %x [range(%x, 0, 4)] : index
+  %hi = index.assume %y [range(%y, 8, 16)] : index
+  %cond = index.cmp slt, %lo, %hi : index
+  %result = scf.if %cond -> (index) {
+    %one = index.constant 1 : index
+    scf.yield %one : index
+  } else {
+    %two = index.constant 2 : index
+    scf.yield %two : index
+  }
+  func.return %result : index
+}
+
+// ----
+func.def @if_prunes_from_signed_index_range(%x: index, %y: index) -> (index) {
+  %one = index.constant 1 : index
+  func.return %one : index
+}
+
+// ====
+
+// Unsigned comparisons prune through scf.if when the address facts prove both
+// operands are non-negative.
+func.def @if_prunes_from_unsigned_index_range(%x: index, %y: index) -> (index) {
+  %lo = index.assume %x [range(%x, 0, 4)] : index
+  %hi = index.assume %y [range(%y, 8, 16)] : index
+  %cond = index.cmp ugt, %lo, %hi : index
+  %result = scf.if %cond -> (index) {
+    %one = index.constant 1 : index
+    scf.yield %one : index
+  } else {
+    %two = index.constant 2 : index
+    scf.yield %two : index
+  }
+  func.return %result : index
+}
+
+// ----
+func.def @if_prunes_from_unsigned_index_range(%x: index, %y: index) -> (index) {
+  %two = index.constant 2 : index
+  func.return %two : index
+}
+
+// ====
+
+// A maybe-negative operand keeps unsigned comparison branches alive because
+// signed interval separation does not imply unsigned order.
+func.def @if_preserves_inconclusive_unsigned_cmp(%x: index, %y: index) -> (index) {
+  %maybe_negative = index.assume %x [range(%x, -4, 4)] : index
+  %positive = index.assume %y [range(%y, 8, 16)] : index
+  %cond = index.cmp ult, %maybe_negative, %positive : index
+  %result = scf.if %cond -> (index) {
+    %one = index.constant 1 : index
+    scf.yield %one : index
+  } else {
+    %two = index.constant 2 : index
+    scf.yield %two : index
+  }
+  func.return %result : index
+}
+
+// ====
+
 // A zero-trip loop returns its iter_args and drops the body, even when the body
 // would have written memory if it executed.
 func.def @for_zero_trip_returns_initial_value(%buffer: buffer, %offset: offset, %init: f32) -> (f32) {

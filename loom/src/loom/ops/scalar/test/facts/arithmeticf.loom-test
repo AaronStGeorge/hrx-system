@@ -11,7 +11,7 @@ func.def @minimumf_propagates_nan() -> (i1) {
 }
 // ----
 func.def @minimumf_propagates_nan() -> (i1) {
-  %r = scalar.constant 1 : i1
+  %r = scalar.constant true : i1
   func.return %r : i1
 }
 
@@ -28,7 +28,7 @@ func.def @maximumf_propagates_nan() -> (i1) {
 }
 // ----
 func.def @maximumf_propagates_nan() -> (i1) {
-  %r = scalar.constant 1 : i1
+  %r = scalar.constant true : i1
   func.return %r : i1
 }
 
@@ -45,6 +45,6 @@ func.def @minnumf_skips_nan() -> (i1) {
 }
 // ----
 func.def @minnumf_skips_nan() -> (i1) {
-  %r = scalar.constant 0 : i1
+  %r = scalar.constant false : i1
   func.return %r : i1
 }

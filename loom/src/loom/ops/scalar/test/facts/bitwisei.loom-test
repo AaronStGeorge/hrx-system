@@ -24,7 +24,7 @@ func.def @andi_non_negative(%x: i32) -> (i1) {
 }
 // ----
 func.def @andi_non_negative(%x: i32) -> (i1) {
-  %nn = scalar.constant 1 : i1
+  %nn = scalar.constant true : i1
   func.return %nn : i1
 }
 
@@ -54,7 +54,7 @@ func.def @ori_non_zero(%x: i32) -> (i1) {
 }
 // ----
 func.def @ori_non_zero(%x: i32) -> (i1) {
-  %nz = scalar.constant 1 : i1
+  %nz = scalar.constant true : i1
   func.return %nz : i1
 }
 
@@ -119,6 +119,6 @@ func.def @shrui_non_negative(%x: i32) -> (i1) {
 }
 // ----
 func.def @shrui_non_negative(%x: i32) -> (i1) {
-  %nn = scalar.constant 1 : i1
+  %nn = scalar.constant true : i1
   func.return %nn : i1
 }

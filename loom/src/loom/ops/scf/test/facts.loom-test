@@ -62,7 +62,7 @@ func.def @for_iv_assumed_upper_bound(%n: index) -> (i64, i64, i64, i1) {
     %fact_lo = scalar.constant 0 : i64
     %fact_hi = scalar.constant 63 : i64
     %fact_div = scalar.constant 4 : i64
-    %fact_non_negative = scalar.constant 1 : i1
+    %fact_non_negative = scalar.constant true : i1
     scf.yield %fact_lo, %fact_hi, %fact_div, %fact_non_negative : i64, i64, i64, i1
   }
   func.return %iv_lo, %iv_hi, %iv_div, %iv_non_negative : i64, i64, i64, i1

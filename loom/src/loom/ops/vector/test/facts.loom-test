@@ -85,7 +85,7 @@ func.def @vector_minimumf_propagates_uniform_nan() -> (i1) {
 }
 // ----
 func.def @vector_minimumf_propagates_uniform_nan() -> (i1) {
-  %r = scalar.constant 1 : i1
+  %r = scalar.constant true : i1
   func.return %r : i1
 }
 
@@ -103,7 +103,7 @@ func.def @vector_minnumf_skips_uniform_nan() -> (i1) {
 }
 // ----
 func.def @vector_minnumf_skips_uniform_nan() -> (i1) {
-  %r = scalar.constant 0 : i1
+  %r = scalar.constant false : i1
   func.return %r : i1
 }
 
@@ -276,9 +276,9 @@ func.def @wave2_float_predicate_facts() -> (i1, i1, i1, f32) {
 }
 // ----
 func.def @wave2_float_predicate_facts() -> (i1, i1, i1, f32) {
-  %r0 = scalar.constant 1 : i1
-  %r1 = scalar.constant 1 : i1
-  %r2 = scalar.constant 1 : i1
+  %r0 = scalar.constant true : i1
+  %r1 = scalar.constant true : i1
+  %r2 = scalar.constant true : i1
   %r3 = scalar.constant -1.0 : f32
   func.return %r0, %r1, %r2, %r3 : i1, i1, i1, f32
 }
@@ -325,8 +325,8 @@ func.def @shuffle_small_static_lanes_then_extract() -> (i32) {
 // Small mask summaries let vector.select keep lane-specific facts when the
 // selected values also have lane-queryable summaries.
 func.def @select_small_mask_then_reduce() -> (i32) {
-  %true = scalar.constant 1 : i1
-  %false = scalar.constant 0 : i1
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
   %c1 = scalar.constant 1 : i32
   %c2 = scalar.constant 2 : i32
   %c3 = scalar.constant 3 : i32
@@ -395,7 +395,7 @@ func.def @iota_summary_fact(%n: index) -> (i1) {
 }
 // ----
 func.def @iota_summary_fact(%n: index) -> (i1) {
-  %is = scalar.constant 1 : i1
+  %is = scalar.constant true : i1
   func.return %is : i1
 }
 
@@ -411,6 +411,6 @@ func.def @prefix_mask_summary_fact(%n: index) -> (i1) {
 }
 // ----
 func.def @prefix_mask_summary_fact(%n: index) -> (i1) {
-  %is = scalar.constant 1 : i1
+  %is = scalar.constant true : i1
   func.return %is : i1
 }

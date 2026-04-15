@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ir/module.h"
+#include "loom/ops/index/compare.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/transforms/rewriter.h"
@@ -59,14 +60,6 @@ static loom_op_t* loom_index_defining_op(loom_rewriter_t* rewriter,
   loom_value_t* value = loom_module_value(rewriter->module, value_id);
   if (loom_value_is_block_arg(value)) return NULL;
   return loom_value_def_op(value);
-}
-
-static bool loom_index_value_facts_are_non_overlapping(
-    loom_rewriter_t* rewriter, loom_value_id_t lhs, loom_value_id_t rhs) {
-  loom_value_facts_t lhs_facts = loom_rewriter_value_facts(rewriter, lhs);
-  loom_value_facts_t rhs_facts = loom_rewriter_value_facts(rewriter, rhs);
-  return lhs_facts.range_hi < rhs_facts.range_lo ||
-         rhs_facts.range_hi < lhs_facts.range_lo;
 }
 
 static iree_status_t loom_index_replace_single_result_with_value(
@@ -503,136 +496,17 @@ iree_status_t loom_index_cast_canonicalize(loom_op_t* op,
                                                      loom_index_cast_input(op));
 }
 
-static bool loom_index_same_operand_cmp_result(uint8_t predicate,
-                                               bool* out_result) {
-  switch ((loom_index_cmp_predicate_t)predicate) {
-    case LOOM_INDEX_CMP_PREDICATE_EQ:
-    case LOOM_INDEX_CMP_PREDICATE_SLE:
-    case LOOM_INDEX_CMP_PREDICATE_SGE:
-    case LOOM_INDEX_CMP_PREDICATE_ULE:
-    case LOOM_INDEX_CMP_PREDICATE_UGE:
-      *out_result = true;
-      return true;
-    case LOOM_INDEX_CMP_PREDICATE_NE:
-    case LOOM_INDEX_CMP_PREDICATE_SLT:
-    case LOOM_INDEX_CMP_PREDICATE_SGT:
-    case LOOM_INDEX_CMP_PREDICATE_ULT:
-    case LOOM_INDEX_CMP_PREDICATE_UGT:
-      *out_result = false;
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool loom_index_signed_range_cmp_result(loom_rewriter_t* rewriter,
-                                               uint8_t predicate,
-                                               loom_value_id_t lhs,
-                                               loom_value_id_t rhs,
-                                               bool* out_result) {
-  loom_value_facts_t lhs_facts = loom_rewriter_value_facts(rewriter, lhs);
-  loom_value_facts_t rhs_facts = loom_rewriter_value_facts(rewriter, rhs);
-  switch ((loom_index_cmp_predicate_t)predicate) {
-    case LOOM_INDEX_CMP_PREDICATE_EQ:
-      if (loom_index_value_facts_are_non_overlapping(rewriter, lhs, rhs)) {
-        *out_result = false;
-        return true;
-      }
-      return false;
-    case LOOM_INDEX_CMP_PREDICATE_NE:
-      if (loom_index_value_facts_are_non_overlapping(rewriter, lhs, rhs)) {
-        *out_result = true;
-        return true;
-      }
-      return false;
-    case LOOM_INDEX_CMP_PREDICATE_SLT:
-      if (lhs_facts.range_hi < rhs_facts.range_lo) {
-        *out_result = true;
-        return true;
-      }
-      if (lhs_facts.range_lo >= rhs_facts.range_hi) {
-        *out_result = false;
-        return true;
-      }
-      return false;
-    case LOOM_INDEX_CMP_PREDICATE_SLE:
-      if (lhs_facts.range_hi <= rhs_facts.range_lo) {
-        *out_result = true;
-        return true;
-      }
-      if (lhs_facts.range_lo > rhs_facts.range_hi) {
-        *out_result = false;
-        return true;
-      }
-      return false;
-    case LOOM_INDEX_CMP_PREDICATE_SGT:
-      if (lhs_facts.range_lo > rhs_facts.range_hi) {
-        *out_result = true;
-        return true;
-      }
-      if (lhs_facts.range_hi <= rhs_facts.range_lo) {
-        *out_result = false;
-        return true;
-      }
-      return false;
-    case LOOM_INDEX_CMP_PREDICATE_SGE:
-      if (lhs_facts.range_lo >= rhs_facts.range_hi) {
-        *out_result = true;
-        return true;
-      }
-      if (lhs_facts.range_hi < rhs_facts.range_lo) {
-        *out_result = false;
-        return true;
-      }
-      return false;
-    default:
-      return false;
-  }
-}
-
-static bool loom_index_unsigned_range_cmp_result(loom_rewriter_t* rewriter,
-                                                 uint8_t predicate,
-                                                 loom_value_id_t lhs,
-                                                 loom_value_id_t rhs,
-                                                 bool* out_result) {
-  loom_value_facts_t lhs_facts = loom_rewriter_value_facts(rewriter, lhs);
-  loom_value_facts_t rhs_facts = loom_rewriter_value_facts(rewriter, rhs);
-  if (!loom_value_facts_is_non_negative(lhs_facts) ||
-      !loom_value_facts_is_non_negative(rhs_facts)) {
-    return false;
-  }
-  switch ((loom_index_cmp_predicate_t)predicate) {
-    case LOOM_INDEX_CMP_PREDICATE_ULT:
-      return loom_index_signed_range_cmp_result(
-          rewriter, LOOM_INDEX_CMP_PREDICATE_SLT, lhs, rhs, out_result);
-    case LOOM_INDEX_CMP_PREDICATE_ULE:
-      return loom_index_signed_range_cmp_result(
-          rewriter, LOOM_INDEX_CMP_PREDICATE_SLE, lhs, rhs, out_result);
-    case LOOM_INDEX_CMP_PREDICATE_UGT:
-      return loom_index_signed_range_cmp_result(
-          rewriter, LOOM_INDEX_CMP_PREDICATE_SGT, lhs, rhs, out_result);
-    case LOOM_INDEX_CMP_PREDICATE_UGE:
-      return loom_index_signed_range_cmp_result(
-          rewriter, LOOM_INDEX_CMP_PREDICATE_SGE, lhs, rhs, out_result);
-    default:
-      return false;
-  }
-}
-
 iree_status_t loom_index_cmp_canonicalize(loom_op_t* op,
                                           loom_rewriter_t* rewriter) {
   loom_value_id_t lhs = loom_index_cmp_lhs(op);
   loom_value_id_t rhs = loom_index_cmp_rhs(op);
   uint8_t predicate = loom_index_cmp_predicate(op);
   bool result = false;
-  if (lhs == rhs && loom_index_same_operand_cmp_result(predicate, &result)) {
-    return loom_index_replace_single_result_with_i1_constant(op, rewriter,
-                                                             result);
-  }
-  if (loom_index_signed_range_cmp_result(rewriter, predicate, lhs, rhs,
-                                         &result) ||
-      loom_index_unsigned_range_cmp_result(rewriter, predicate, lhs, rhs,
-                                           &result)) {
+  loom_value_facts_t lhs_facts = loom_rewriter_value_facts(rewriter, lhs);
+  loom_value_facts_t rhs_facts = loom_rewriter_value_facts(rewriter, rhs);
+  if ((lhs == rhs && loom_index_cmp_same_value_result(predicate, &result)) ||
+      loom_index_cmp_result_from_facts(predicate, &lhs_facts, &rhs_facts,
+                                       &result)) {
     return loom_index_replace_single_result_with_i1_constant(op, rewriter,
                                                              result);
   }

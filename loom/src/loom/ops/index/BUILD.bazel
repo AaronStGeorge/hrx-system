@@ -17,6 +17,8 @@ loom_cc_library(
     srcs = [
         "builders.c",
         "canonicalize.c",
+        "compare.c",
+        "compare.h",
         "facts.c",
         "tables.c",
         "verify.c",

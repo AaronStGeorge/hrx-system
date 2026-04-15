@@ -7,7 +7,7 @@ func.def @buffer_arg_reference(%buffer: buffer) -> (i1) {
 }
 // ----
 func.def @buffer_arg_reference(%buffer: buffer) -> (i1) {
-  %is = scalar.constant 1 : i1
+  %is = scalar.constant true : i1
   func.return %is : i1
 }
 
@@ -207,7 +207,7 @@ func.def @refine_preserves_root_and_refines_footprint(%buffer: buffer, %m: index
 }
 // ----
 func.def @refine_preserves_root_and_refines_footprint(%buffer: buffer, %m: index) -> (i1, i64) {
-  %same = scalar.constant 1 : i1
+  %same = scalar.constant true : i1
   %length_hi = scalar.constant 64 : i64
   func.return %same, %length_hi : i1, i64
 }
@@ -243,7 +243,7 @@ func.def @argument_layout_assume_strided_degrades_footprint(%buffer: buffer, %la
 }
 // ----
 func.def @argument_layout_assume_strided_degrades_footprint(%buffer: buffer, %layout: encoding<layout>) -> (i1, i64) {
-  %is = scalar.constant 1 : i1
+  %is = scalar.constant true : i1
   %length_hi = scalar.constant 9223372036854775807 : i64
   func.return %is, %length_hi : i1, i64
 }
@@ -265,7 +265,7 @@ func.def @subview_composes_base_and_root(%buffer: buffer) -> (i1, i64, i64, i64)
 }
 // ----
 func.def @subview_composes_base_and_root(%buffer: buffer) -> (i1, i64, i64, i64) {
-  %same = scalar.constant 1 : i1
+  %same = scalar.constant true : i1
   %offset_hi = scalar.constant 80 : i64
   %length_hi = scalar.constant 16 : i64
   %align = scalar.constant 16 : i64
@@ -306,7 +306,7 @@ func.def @unknown_dynamic_stride_degrades_footprint(%buffer: buffer, %stride: in
 }
 // ----
 func.def @unknown_dynamic_stride_degrades_footprint(%buffer: buffer, %stride: index) -> (i1, i64) {
-  %is = scalar.constant 1 : i1
+  %is = scalar.constant true : i1
   %length_hi = scalar.constant 9223372036854775807 : i64
   func.return %is, %length_hi : i1, i64
 }

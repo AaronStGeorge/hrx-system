@@ -358,6 +358,71 @@ func.def @cmp_proven(%x: index, %y: index) -> (i1, i1) {
 
 // ====
 
+// Distinct values with identical exact facts prove equality and inequality,
+// not just same-SSA comparisons.
+func.def @cmp_exact_equal_distinct_values() -> (i1, i1) {
+  %a = index.constant 5 : index
+  %b = index.constant 5 : index
+  %eq = index.cmp eq, %a, %b : index
+  %ne = index.cmp ne, %a, %b : index
+  func.return %eq, %ne : i1, i1
+}
+// ----
+func.def @cmp_exact_equal_distinct_values() -> (i1, i1) {
+  %eq = scalar.constant true : i1
+  %ne = scalar.constant false : i1
+  func.return %eq, %ne : i1, i1
+}
+
+// ====
+
+// Signed range proofs fold both true and false comparison results from
+// dynamic values refined by index.assume.
+func.def @cmp_signed_ranges(%x: index, %y: index) -> (i1, i1) {
+  %lo = index.assume %x [range(%x, 0, 4)] : index
+  %hi = index.assume %y [range(%y, 8, 16)] : index
+  %lt = index.cmp slt, %lo, %hi : index
+  %ge = index.cmp sge, %lo, %hi : index
+  func.return %lt, %ge : i1, i1
+}
+// ----
+func.def @cmp_signed_ranges(%x: index, %y: index) -> (i1, i1) {
+  %lt = scalar.constant true : i1
+  %ge = scalar.constant false : i1
+  func.return %lt, %ge : i1, i1
+}
+
+// ====
+
+// Unsigned range proofs reuse the signed interval rules only when both
+// operands are proven non-negative.
+func.def @cmp_unsigned_ranges(%x: index, %y: index) -> (i1, i1) {
+  %lo = index.assume %x [range(%x, 0, 4)] : index
+  %hi = index.assume %y [range(%y, 8, 16)] : index
+  %lt = index.cmp ult, %lo, %hi : index
+  %gt = index.cmp ugt, %lo, %hi : index
+  func.return %lt, %gt : i1, i1
+}
+// ----
+func.def @cmp_unsigned_ranges(%x: index, %y: index) -> (i1, i1) {
+  %lt = scalar.constant true : i1
+  %gt = scalar.constant false : i1
+  func.return %lt, %gt : i1, i1
+}
+
+// ====
+
+// A maybe-negative unsigned operand is intentionally inconclusive: signed
+// range separation would be wrong after unsigned interpretation.
+func.def @cmp_unsigned_maybe_negative_is_preserved(%x: index, %y: index) -> (i1) {
+  %maybe_negative = index.assume %x [range(%x, -4, 4)] : index
+  %positive = index.assume %y [range(%y, 8, 16)] : index
+  %lt = index.cmp ult, %maybe_negative, %positive : index
+  func.return %lt : i1
+}
+
+// ====
+
 // index.select folds exact conditions and identical arms.
 func.def @select_identities(%x: index, %y: index) -> (index, index) {
   %false = scalar.constant 0 : i1

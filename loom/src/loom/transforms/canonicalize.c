@@ -29,6 +29,9 @@ static iree_status_t loom_canonicalize_materialize_constant(
   loom_attribute_t attr;
   if (loom_value_facts_is_float(facts)) {
     attr = loom_attr_f64(loom_value_facts_as_f64(facts));
+  } else if (loom_type_is_scalar(result_type) &&
+             loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_I1) {
+    attr = loom_attr_bool(facts.range_lo != 0);
   } else {
     attr = loom_attr_i64(facts.range_lo);
   }
