@@ -641,7 +641,8 @@ static iree_status_t loom_parse_format_optional_group(
             parser, first_inner, &present));
       } else if (first_inner &&
                  first_inner->kind == LOOM_FORMAT_KIND_ATTR_VALUE &&
-                 peek.kind == LOOM_TOKEN_BARE_IDENT) {
+                 (peek.kind == LOOM_TOKEN_BARE_IDENT ||
+                  peek.kind == LOOM_TOKEN_OP_NAME)) {
         const loom_attr_descriptor_t* descriptor =
             &vtable->attr_descriptors[first_inner->field_index];
         if (descriptor->attr_kind == LOOM_ATTR_ENUM &&

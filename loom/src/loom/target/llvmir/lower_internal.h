@@ -20,6 +20,17 @@
 extern "C" {
 #endif
 
+typedef struct loom_llvmir_lowering_intrinsic_cache_key_t {
+  // Source llvmir.intrinsic kind attribute value.
+  uint8_t kind;
+  // First intrinsic overload discriminator, or zero when unused.
+  uint32_t discriminator0;
+  // Second intrinsic overload discriminator, or zero when unused.
+  uint32_t discriminator1;
+  // Third intrinsic overload discriminator, or zero when unused.
+  uint32_t discriminator2;
+} loom_llvmir_lowering_intrinsic_cache_key_t;
+
 typedef struct loom_llvmir_lowering_state_t {
   // Source Loom module being lowered.
   const loom_module_t* source_module;
@@ -51,6 +62,12 @@ typedef struct loom_llvmir_lowering_state_t {
   loom_llvmir_function_t* prefetch_functions[8];
   // Number of cached llvm.prefetch declarations.
   iree_host_size_t prefetch_function_count;
+  // Cached source intrinsic declaration keys.
+  loom_llvmir_lowering_intrinsic_cache_key_t intrinsic_function_keys[32];
+  // Cached source intrinsic declarations.
+  loom_llvmir_function_t* intrinsic_functions[32];
+  // Number of cached source intrinsic declarations.
+  iree_host_size_t intrinsic_function_count;
 } loom_llvmir_lowering_state_t;
 
 iree_string_view_t loom_llvmir_lowering_value_name(
@@ -170,6 +187,10 @@ iree_status_t loom_llvmir_lowering_lower_view_prefetch(
     const loom_op_t* op);
 
 iree_status_t loom_llvmir_lowering_lower_inline_asm(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_intrinsic(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
 

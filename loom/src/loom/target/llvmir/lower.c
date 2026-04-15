@@ -606,6 +606,8 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_view_prefetch(state, target_block, op);
     case LOOM_OP_LLVMIR_INLINE_ASM:
       return loom_llvmir_lowering_lower_inline_asm(state, target_block, op);
+    case LOOM_OP_LLVMIR_INTRINSIC:
+      return loom_llvmir_lowering_lower_intrinsic(state, target_block, op);
     case LOOM_OP_FUNC_CALL:
       return loom_llvmir_lowering_lower_call(state, target_block, op);
     case LOOM_OP_FUNC_RETURN:

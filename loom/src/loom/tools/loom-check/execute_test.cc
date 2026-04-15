@@ -135,6 +135,23 @@ TEST_F(ExecuteTest, RoundtripLlvmIrInlineAsm) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, RoundtripLlvmIrIntrinsic) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: roundtrip\n"
+      "func.def @intrinsics() -> (i64, i32) {\n"
+      "  %ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64\n"
+      "  llvmir.intrinsic<llvm.x86.sse2.pause> () : ()\n"
+      "  %tid = llvmir.intrinsic<llvm.amdgcn.workitem.id.x> () : "
+      "() -> i32\n"
+      "  func.return %ticks, %tid : i64, i32\n"
+      "}\n",
+      &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
+      << DetailString(result) << ActualOutputString(result);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, RoundtripMismatch) {
   loom_check_result_t result;
   IREE_ASSERT_OK(

@@ -6,7 +6,17 @@
 
 import pytest
 
-from loom.assembly import COLON, Attr, AttrDict, Flags, OperandDict, Ref, ResultType, TypesOf
+from loom.assembly import (
+    COLON,
+    Attr,
+    AttrDict,
+    Flags,
+    OperandDict,
+    Ref,
+    ResultType,
+    TemplateParam,
+    TypesOf,
+)
 from loom.dsl import (
     INTEGER,
     AttrDef,
@@ -169,6 +179,23 @@ def test_flags_attrs_do_not_shift_regular_attr_indices() -> None:
     assert "{LOOM_FORMAT_KIND_ATTR_VALUE, 0, 0}" in tables_c
     assert "{LOOM_FORMAT_KIND_ATTR_VALUE, 1, 0}" in tables_c
     assert "{LOOM_FORMAT_KIND_ATTR_VALUE, 2, 0}" not in tables_c
+
+
+def test_enum_keywords_with_dots_generate_valid_c_constants() -> None:
+    intrinsic_kind = EnumDef("Kind", [EnumCase("llvm.x86.rdtsc", 0)])
+    op = Op(
+        "test.intrinsic",
+        group=Dialect("test"),
+        attrs=[AttrDef("kind", "enum", enum_def=intrinsic_kind)],
+        format=[TemplateParam("kind")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_TEST_INTRINSIC_KIND_LLVM_X86_RDTSC = 0," in ops_h
+    assert "LOOM_TEST_INTRINSIC_KIND_LLVM.X86.RDTSC" not in ops_h
+    assert '"llvm.x86.rdtsc"' in tables_c
 
 
 def test_operand_dict_generates_format_and_builder_support() -> None:

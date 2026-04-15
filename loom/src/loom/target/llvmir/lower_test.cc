@@ -772,6 +772,96 @@ TEST_F(LlvmIrLowerTest, LowersInlineAsmToStructuredLlvmIr) {
   CompileX86TextToObject(text);
 }
 
+TEST_F(LlvmIrLowerTest, LowersX86IntrinsicsToStructuredCalls) {
+  loom_type_t i64 = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("read_tsc"));
+  loom_type_t result_types[1] = {i64};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, NULL, 0, result_types, 1, NULL,
+      0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* pause_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE, NULL, 0,
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &pause_op));
+  loom_op_t* first_tsc_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC, NULL, 0,
+      result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &first_tsc_op));
+  SetValueName(
+      loom_value_slice_get(loom_llvmir_intrinsic_results(first_tsc_op), 0),
+      IREE_SV("ignored"));
+  loom_op_t* second_tsc_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC, NULL, 0,
+      result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &second_tsc_op));
+  loom_value_id_t ticks =
+      loom_value_slice_get(loom_llvmir_intrinsic_results(second_tsc_op), 0);
+  SetValueName(ticks, IREE_SV("ticks"));
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &ticks, 1,
+                                        LOOM_LOCATION_UNKNOWN, &pause_op));
+
+  std::string text = LowerToText();
+  const char* rdtsc_decl = "declare i64 @llvm.x86.rdtsc()\n";
+  size_t rdtsc_decl_pos = text.find(rdtsc_decl);
+  ASSERT_NE(rdtsc_decl_pos, std::string::npos) << text;
+  EXPECT_EQ(text.find(rdtsc_decl, rdtsc_decl_pos + 1), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare void @llvm.x86.sse2.pause()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  call void @llvm.x86.sse2.pause()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %ignored = call i64 @llvm.x86.rdtsc()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %ticks = call i64 @llvm.x86.rdtsc()\n"),
+            std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersAmdgpuIntrinsicToStructuredCall) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("dispatch"));
+  loom_type_t result_types[1] = {i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_,
+      LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY | LOOM_FUNC_DEF_BUILD_FLAG_HAS_CC,
+      LOOM_FUNC_VISIBILITY_PUBLIC, LOOM_FUNC_CC_DEVICE, 0, callee, NULL, 0,
+      NULL, 0, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* tid_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X, NULL,
+      0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &tid_op));
+  loom_value_id_t tid =
+      loom_value_slice_get(loom_llvmir_intrinsic_results(tid_op), 0);
+  SetValueName(tid, IREE_SV("tid"));
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
+                                        LOOM_LOCATION_UNKNOWN, &tid_op));
+
+  std::string text = LowerToText(loom_llvmir_target_profile_amdgpu_hal());
+  EXPECT_NE(text.find("declare i32 @llvm.amdgcn.workitem.id.x()\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %tid = call i32 @llvm.amdgcn.workitem.id.x()\n"),
+            std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileAmdgpuTextToObjectIfAvailable(text);
+}
+
 TEST_F(LlvmIrLowerTest, LowersPublicDeviceFunctionWithAmdgpuHalAbi) {
   loom_type_t buffer = loom_type_buffer();
   loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);

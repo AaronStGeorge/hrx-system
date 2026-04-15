@@ -660,6 +660,11 @@ def _enum_c_prefix(
     return c_prefix, c_prefix.upper()
 
 
+def _enum_case_c_ident(keyword: str) -> str:
+    """Converts an enum assembly keyword to a C enum/macro suffix."""
+    return keyword.replace(".", "_").upper()
+
+
 # ============================================================================
 # Format element translation
 # ============================================================================
@@ -1886,7 +1891,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             enum_prefix = "LOOM_" + op.namespace.upper() + "_" + attr_def.enum_def.name.upper()
             if attr_def.enum_def.doc:
                 lines.append(f"// {attr_def.enum_def.doc}")
-            lines.extend(f"#define {enum_prefix}_{case.keyword.upper()} ((uint8_t){case.value})" for case in attr_def.enum_def.cases)
+            lines.extend(f"#define {enum_prefix}_{_enum_case_c_ident(case.keyword)} ((uint8_t){case.value})" for case in attr_def.enum_def.cases)
             lines.append("")
 
     # Enum attr C enums. When the same EnumDef object is shared by
@@ -1900,7 +1905,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
         if enum_def.doc:
             lines.append(f"// {enum_def.doc}")
         lines.append(f"typedef enum {c_prefix}_e {{")
-        lines.extend(f"  {const_prefix}_{case.keyword.upper()} = {case.value}," for case in enum_def.cases)
+        lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in enum_def.cases)
         max_value = max(c.value for c in enum_def.cases)
         lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
         lines.append(f"}} {c_prefix}_t;")
@@ -1924,7 +1929,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             if attr_def.enum_def.doc:
                 lines.append(f"// {attr_def.enum_def.doc}")
             lines.append(f"typedef enum {enum_tag} {{")
-            lines.extend(f"  {const_prefix}_{case.keyword.upper()} = {case.value}," for case in attr_def.enum_def.cases)
+            lines.extend(f"  {const_prefix}_{_enum_case_c_ident(case.keyword)} = {case.value}," for case in attr_def.enum_def.cases)
             max_value = max(c.value for c in attr_def.enum_def.cases)
             lines.append(f"  {const_prefix}_COUNT_ = {max_value + 1},")
             lines.append(f"}} {c_prefix}_t;")

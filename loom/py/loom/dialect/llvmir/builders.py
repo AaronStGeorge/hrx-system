@@ -34,3 +34,16 @@ class LlvmIrBuilders:
         _attributes["constraints"] = constraints
         _operands.extend(operands)
         return cast(list[ValueRef], self._b.build("llvmir.inline_asm", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def intrinsic(self, *, kind: str, operands: list[ValueRef], results: list[Type | TiedResultSpec]) -> list[ValueRef]:
+        """Structured call to a supported LLVM intrinsic. The intrinsic kind is an enum so target-specific spellings stay explicit while lowering still goes through the LLVMIR intrinsic catalog.
+
+        Example::
+            %ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _operands.extend(operands)
+        return cast(list[ValueRef], self._b.build("llvmir.intrinsic", _operands, results=results, attributes=_attributes, regions=_regions))

@@ -19,10 +19,12 @@ from loom.assembly import (
     OptionalGroup,
     Refs,
     ResultTypeList,
+    TemplateParam,
     TypesOf,
 )
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_ENUM,
     ATTR_TYPE_FLAGS,
     ATTR_TYPE_STRING,
     UNKNOWN_EFFECTS,
@@ -49,6 +51,20 @@ AsmFlags = EnumDef(
         EnumCase("inteldialect", 4, doc="Inline asm uses Intel assembly syntax."),
     ],
     doc="LLVM inline asm call flags.",
+)
+
+IntrinsicKind = EnumDef(
+    "IntrinsicKind",
+    [
+        EnumCase("llvm.x86.rdtsc", 0, doc="Returns the x86 timestamp counter."),
+        EnumCase("llvm.x86.sse2.pause", 1, doc="Emits an x86 pause hint."),
+        EnumCase(
+            "llvm.amdgcn.workitem.id.x",
+            2,
+            doc="Returns the AMDGPU workitem id in the x dimension.",
+        ),
+    ],
+    doc="LLVM intrinsic selected by llvmir.intrinsic.",
 )
 
 llvmir_inline_asm = Op(
@@ -90,4 +106,34 @@ llvmir_inline_asm = Op(
     ],
 )
 
-ALL_LLVMIR_OPS = (llvmir_inline_asm,)
+llvmir_intrinsic = Op(
+    "llvmir.intrinsic",
+    group=llvmir_ops,
+    doc=("Structured call to a supported LLVM intrinsic. The intrinsic kind is an enum so target-specific spellings stay explicit while lowering still goes through the LLVMIR intrinsic catalog."),
+    operands=[Operand("operands", ANY, variadic=True)],
+    results=[Result("results", ANY, variadic=True)],
+    attrs=[
+        AttrDef("kind", ATTR_TYPE_ENUM, enum_def=IntrinsicKind),
+    ],
+    traits=[UNKNOWN_EFFECTS],
+    format=[
+        TemplateParam("kind"),
+        LPAREN,
+        Refs("operands"),
+        RPAREN,
+        COLON,
+        LPAREN,
+        TypesOf("operands"),
+        RPAREN,
+        OptionalGroup([ARROW, ResultTypeList("results", parens=False)], anchor="results"),
+    ],
+    examples=[
+        "%ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64",
+        "llvmir.intrinsic<llvm.x86.sse2.pause> () : ()",
+    ],
+)
+
+ALL_LLVMIR_OPS = (
+    llvmir_inline_asm,
+    llvmir_intrinsic,
+)

@@ -1379,8 +1379,13 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
       return iree_ok_status();
     }
     case LOOM_ATTR_ENUM: {
-      loom_token_t token = loom_token_none();
-      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &token);
+      loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+      if (token.kind != LOOM_TOKEN_BARE_IDENT &&
+          token.kind != LOOM_TOKEN_OP_NAME) {
+        return loom_parser_emit_unexpected_token(parser, token,
+                                                 IREE_SV("identifier"));
+      }
+      (void)loom_tokenizer_next(&parser->tokenizer);
       // Look up the enum case name.
       if (!descriptor->enum_case_names) {
         // Internal bug: enum attribute declared without case names.

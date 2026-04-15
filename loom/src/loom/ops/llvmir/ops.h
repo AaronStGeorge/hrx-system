@@ -19,13 +19,22 @@ extern "C" {
 
 enum {
   LOOM_OP_LLVMIR_INLINE_ASM = LOOM_OP_KIND(LOOM_DIALECT_LLVMIR, 0),
-  LOOM_OP_LLVMIR_COUNT_ = 1,
+  LOOM_OP_LLVMIR_INTRINSIC = LOOM_OP_KIND(LOOM_DIALECT_LLVMIR, 1),
+  LOOM_OP_LLVMIR_COUNT_ = 2,
 };
 
 // LLVM inline asm call flags.
 #define LOOM_LLVMIR_ASMFLAGS_SIDEEFFECT ((uint8_t)1)
 #define LOOM_LLVMIR_ASMFLAGS_ALIGNSTACK ((uint8_t)2)
 #define LOOM_LLVMIR_ASMFLAGS_INTELDIALECT ((uint8_t)4)
+
+// LLVM intrinsic selected by llvmir.intrinsic.
+typedef enum loom_llvmir_intrinsic_kind_e {
+  LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC = 0,
+  LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE = 1,
+  LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X = 2,
+  LOOM_LLVMIR_INTRINSIC_KIND_COUNT_ = 3,
+} loom_llvmir_intrinsic_kind_t;
 
 // LOOM_OP_LLVMIR_INLINE_ASM: Structured LLVM inline assembly call. The asm template and constraint strings use LLVM inline asm syntax; operands/results remain ordinary typed Loom SSA values.
 // %sum = llvmir.inline_asm<sideeffect> "addl $2, $0", "=r,r,r"(%lhs, %rhs) : (i32, i32) -> i32
@@ -40,6 +49,24 @@ iree_status_t loom_llvmir_inline_asm_build(
     uint8_t instance_flags,
     loom_string_id_t asm_template,
     loom_string_id_t constraints,
+    loom_may_consume const loom_value_id_t* operands,
+    iree_host_size_t operands_count,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_LLVMIR_INTRINSIC: Structured call to a supported LLVM intrinsic. The intrinsic kind is an enum so target-specific spellings stay explicit while lowering still goes through the LLVMIR intrinsic catalog.
+// %ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
+LOOM_DEFINE_ISA(loom_llvmir_intrinsic_isa, LOOM_OP_LLVMIR_INTRINSIC)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_llvmir_intrinsic_operands, 0)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_llvmir_intrinsic_results, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_llvmir_intrinsic_kind, 0)
+iree_status_t loom_llvmir_intrinsic_build(
+    loom_builder_t* builder,
+    uint8_t kind,
     loom_may_consume const loom_value_id_t* operands,
     iree_host_size_t operands_count,
     const loom_type_t* result_types,
