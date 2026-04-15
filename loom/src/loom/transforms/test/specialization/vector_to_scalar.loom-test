@@ -1,0 +1,18 @@
+// RUN: pass vector-to-scalar,canonicalize
+
+// A specialized zero vector extent erases the scalarized load/store loops. This
+// is the optional-feature shape we want to be boring: valid dynamic IR enters
+// lowering and disappears when facts say there are no lanes.
+func.def @zero_extent_vector_memory_erases(%features: index, %buffer: buffer, %byte_offset: offset, %origin: index) {
+  %disabled = index.assume %features [range(%features, 0, 0)] : index
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%disabled]xf32, %layout>
+  %loaded = vector.load %view[%origin] : view<[%disabled]xf32, %layout> -> vector<[%disabled]xf32>
+  vector.store %loaded, %view[%origin] : vector<[%disabled]xf32>, view<[%disabled]xf32, %layout>
+  func.return
+}
+
+// ----
+func.def @zero_extent_vector_memory_erases(%features: index, %buffer: buffer, %byte_offset: offset, %origin: index) {
+  func.return
+}

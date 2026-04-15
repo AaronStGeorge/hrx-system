@@ -184,6 +184,58 @@ TEST_F(DCETest, RemovesDynamicDimProducerAfterDeadCarrierErased) {
   EXPECT_FALSE(loom_module_value_has_type_uses(module_, dim_id));
 }
 
+TEST_F(DCETest, RemovesDynamicDimProducerAfterDeadRegionBlockArgErased) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(
+      &builder_, loom_attr_i64(4), index_type, LOOM_LOCATION_UNKNOWN, &dim_op));
+  loom_value_id_t dim_id = loom_test_constant_result(dim_op);
+
+  loom_op_t* lower_bound_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0),
+                                          index_type, LOOM_LOCATION_UNKNOWN,
+                                          &lower_bound_op));
+  loom_value_id_t lower_bound = loom_test_constant_result(lower_bound_op);
+
+  loom_op_t* upper_bound_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1),
+                                          index_type, LOOM_LOCATION_UNKNOWN,
+                                          &upper_bound_op));
+  loom_value_id_t upper_bound = loom_test_constant_result(upper_bound_op);
+
+  loom_op_t* step_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1),
+                                          index_type, LOOM_LOCATION_UNKNOWN,
+                                          &step_op));
+  loom_value_id_t step = loom_test_constant_result(step_op);
+
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_dynamic(dim_id), 0);
+  loom_op_t* init_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0),
+                                          vector_type, LOOM_LOCATION_UNKNOWN,
+                                          &init_op));
+  loom_value_id_t init = loom_test_constant_result(init_op);
+
+  loom_value_id_t iter_args[] = {init};
+  loom_type_t result_types[] = {vector_type};
+  loom_op_t* loop_op = NULL;
+  IREE_ASSERT_OK(loom_test_loop_build(
+      &builder_, lower_bound, upper_bound, step, iter_args,
+      IREE_ARRAYSIZE(iter_args), result_types, IREE_ARRAYSIZE(result_types),
+      NULL, 0, LOOM_LOCATION_UNKNOWN, &loop_op));
+
+  EXPECT_TRUE(loom_module_value_has_type_uses(module_, dim_id));
+  EXPECT_EQ(count_live_ops(), 6);
+  IREE_ASSERT_OK(run_dce());
+  EXPECT_EQ(count_live_ops(), 0);
+  EXPECT_TRUE(dim_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_TRUE(init_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_TRUE(loop_op->flags & LOOM_OP_FLAG_DEAD);
+  EXPECT_FALSE(loom_module_value_has_type_uses(module_, dim_id));
+}
+
 TEST_F(DCETest, PreservesLayoutProducerForLiveViewTypeUse) {
   loom_type_t layout_type =
       loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);

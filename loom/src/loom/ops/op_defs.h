@@ -657,6 +657,17 @@ bool loom_op_results_unused(const loom_module_t* module, const loom_op_t* op);
 bool loom_op_is_trivially_dead(const loom_module_t* module,
                                const loom_op_t* op);
 
+// Walks SSA value references embedded in all value types owned by |op|'s
+// subtree.
+//
+// This includes result types on |op| and nested ops, plus block argument types
+// in nested regions. Erase and DCE paths use this before unlinking a subtree so
+// providers of dynamic dimensions or SSA encodings get rechecked after the
+// carrier values disappear.
+iree_status_t loom_op_walk_subtree_type_refs(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_type_value_ref_callback_t callback, void* user_data);
+
 //===----------------------------------------------------------------------===//
 // FuncLike interface helpers
 //===----------------------------------------------------------------------===//
@@ -1218,9 +1229,10 @@ iree_status_t loom_builder_allocate_op(
 
 // Erases an op: removes all use records for the op's operands, verifies
 // that every result has no operand uses or external type uses (caller must
-// RAUW results first), drops type-use records carried by result types, then
-// marks the op dead. Dead ops are skipped by enumeration macros and will not
-// be serialized. The memory is not freed (arena-owned). Returns
+// RAUW results first), drops type-use records carried by result and nested
+// block-argument types, then marks the op dead. Dead ops are skipped by
+// enumeration macros and will not be serialized. The memory is not freed
+// (arena-owned). Returns
 // IREE_STATUS_FAILED_PRECONDITION if any result still has uses.
 iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op);
 

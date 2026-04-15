@@ -341,6 +341,7 @@ static iree_status_t loom_rewriter_add_operand_providers_to_worklist(
 static iree_status_t loom_rewriter_add_type_ref_provider_to_worklist(
     loom_value_id_t value_id, void* user_data) {
   loom_rewriter_t* rewriter = (loom_rewriter_t*)user_data;
+  if (value_id >= rewriter->module->values.count) return iree_ok_status();
   loom_value_t* value = loom_module_value(rewriter->module, value_id);
   if (loom_value_is_block_arg(value)) return iree_ok_status();
   loom_op_t* def = loom_value_def_op(value);
@@ -354,23 +355,10 @@ static iree_status_t loom_rewriter_add_type_ref_providers_to_worklist(
       type, loom_rewriter_add_type_ref_provider_to_worklist, rewriter);
 }
 
-static iree_status_t loom_rewriter_add_result_type_ref_providers_to_worklist(
-    loom_rewriter_t* rewriter, loom_op_t* op) {
-  const loom_value_id_t* results = loom_op_const_results(op);
-  for (uint16_t i = 0; i < op->result_count; ++i) {
-    if (results[i] == LOOM_VALUE_ID_INVALID) continue;
-    IREE_RETURN_IF_ERROR(loom_rewriter_add_type_ref_providers_to_worklist(
-        rewriter, loom_module_value_type(rewriter->module, results[i])));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_rewriter_add_subtree_providers_to_worklist(
+static iree_status_t loom_rewriter_add_subtree_operand_providers_to_worklist(
     loom_rewriter_t* rewriter, loom_op_t* op) {
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_operand_providers_to_worklist(rewriter, op));
-  IREE_RETURN_IF_ERROR(
-      loom_rewriter_add_result_type_ref_providers_to_worklist(rewriter, op));
 
   loom_region_t** regions = loom_op_regions(op);
   for (uint8_t i = 0; i < op->region_count; ++i) {
@@ -380,12 +368,22 @@ static iree_status_t loom_rewriter_add_subtree_providers_to_worklist(
     loom_region_for_each_block(region, block) {
       loom_op_t* child_op = NULL;
       loom_block_for_each_op(block, child_op) {
-        IREE_RETURN_IF_ERROR(loom_rewriter_add_subtree_providers_to_worklist(
-            rewriter, child_op));
+        IREE_RETURN_IF_ERROR(
+            loom_rewriter_add_subtree_operand_providers_to_worklist(rewriter,
+                                                                    child_op));
       }
     }
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_rewriter_add_subtree_providers_to_worklist(
+    loom_rewriter_t* rewriter, loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_add_subtree_operand_providers_to_worklist(rewriter, op));
+  return loom_op_walk_subtree_type_refs(
+      rewriter->module, op, loom_rewriter_add_type_ref_provider_to_worklist,
+      rewriter);
 }
 
 // Adds all users of a value to the worklist.

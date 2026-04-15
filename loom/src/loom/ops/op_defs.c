@@ -158,6 +158,49 @@ bool loom_op_is_trivially_dead(const loom_module_t* module,
   return loom_op_results_unused(module, op);
 }
 
+iree_status_t loom_op_walk_subtree_type_refs(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_type_value_ref_callback_t callback, void* user_data) {
+  if (!module || !op || !callback) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "module, op, and callback are required");
+  }
+
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (results[i] == LOOM_VALUE_ID_INVALID ||
+        results[i] >= module->values.count) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_type_walk_value_refs(
+        loom_module_value_type(module, results[i]), callback, user_data));
+  }
+
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    loom_region_t* region = regions[i];
+    if (!region) continue;
+    loom_block_t* block = NULL;
+    loom_region_for_each_block(region, block) {
+      for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
+        loom_value_id_t arg_id = loom_block_arg_id(block, arg_index);
+        if (arg_id == LOOM_VALUE_ID_INVALID || arg_id >= module->values.count) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(loom_type_walk_value_refs(
+            loom_module_value_type(module, arg_id), callback, user_data));
+      }
+      loom_op_t* child_op = NULL;
+      loom_block_for_each_op(block, child_op) {
+        IREE_RETURN_IF_ERROR(loom_op_walk_subtree_type_refs(
+            module, child_op, callback, user_data));
+      }
+    }
+  }
+
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // FuncLike interface
 //===----------------------------------------------------------------------===//
@@ -509,6 +552,24 @@ static iree_status_t loom_op_verify_erase_preconditions(loom_module_t* module,
   return iree_ok_status();
 }
 
+static void loom_block_drop_arg_type_uses(loom_module_t* module,
+                                          loom_block_t* block) {
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    loom_value_id_t arg_id = loom_block_arg_id(block, i);
+    if (arg_id == LOOM_VALUE_ID_INVALID || arg_id >= module->values.count) {
+      continue;
+    }
+    loom_module_drop_value_type_uses(module, arg_id);
+    loom_value_t* value = loom_module_value(module, arg_id);
+    // Dead region block arguments stop being type-use carriers. Clearing the
+    // block-arg bit keeps bulk type-use recomputation from resurrecting SSA
+    // references through an unreachable region.
+    value->flags &= ~LOOM_VALUE_FLAG_BLOCK_ARG;
+    value->def = loom_value_def_make_none();
+  }
+  block->arg_count = 0;
+}
+
 // Erases |op| and every operation nested in its regions. The root op must have
 // unused results; nested ops are removed as part of the dead subtree and may
 // still have uses from sibling ops that will be erased by the same walk.
@@ -528,6 +589,7 @@ static iree_status_t loom_op_erase_subtree(loom_module_t* module, loom_op_t* op,
         IREE_RETURN_IF_ERROR(
             loom_op_erase_subtree(module, block->first_op, false));
       }
+      loom_block_drop_arg_type_uses(module, block);
     }
   }
 

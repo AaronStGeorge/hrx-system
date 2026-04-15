@@ -180,34 +180,16 @@ static iree_status_t loom_dce_add_type_ref_provider_to_worklist(
                                 loom_value_def_op(value));
 }
 
-static iree_status_t loom_dce_add_result_type_ref_providers_to_worklist(
-    iree_arena_allocator_t* arena, loom_module_t* module,
-    loom_dce_worklist_t* worklist, loom_op_t* op) {
-  loom_dce_type_ref_provider_context_t context = {
-      .module = module,
-      .arena = arena,
-      .worklist = worklist,
-  };
-  const loom_value_id_t* results = loom_op_const_results(op);
-  for (uint16_t i = 0; i < op->result_count; ++i) {
-    if (results[i] == LOOM_VALUE_ID_INVALID) continue;
-    IREE_RETURN_IF_ERROR(loom_type_walk_value_refs(
-        loom_module_value_type(module, results[i]),
-        loom_dce_add_type_ref_provider_to_worklist, &context));
-  }
-  return iree_ok_status();
-}
-
 // Queues providers that may become dead after erasing |op| and its nested
 // regions. Region operands are ordinary uses, so erasing only the parent op's
 // operands would leave captured values live through unreachable child ops.
-static iree_status_t loom_dce_add_subtree_providers_to_worklist(
+// Type references on result types and block arguments are also liveness edges,
+// so their providers must be rechecked when the carrier subtree disappears.
+static iree_status_t loom_dce_add_subtree_operand_providers_to_worklist(
     iree_arena_allocator_t* arena, loom_module_t* module,
     loom_dce_worklist_t* worklist, loom_op_t* op) {
   IREE_RETURN_IF_ERROR(
       loom_dce_add_operand_providers_to_worklist(arena, module, worklist, op));
-  IREE_RETURN_IF_ERROR(loom_dce_add_result_type_ref_providers_to_worklist(
-      arena, module, worklist, op));
 
   loom_region_t** regions = loom_op_regions(op);
   for (uint8_t i = 0; i < op->region_count; ++i) {
@@ -217,12 +199,26 @@ static iree_status_t loom_dce_add_subtree_providers_to_worklist(
     loom_region_for_each_block(region, block) {
       loom_op_t* child_op = NULL;
       loom_block_for_each_op(block, child_op) {
-        IREE_RETURN_IF_ERROR(loom_dce_add_subtree_providers_to_worklist(
+        IREE_RETURN_IF_ERROR(loom_dce_add_subtree_operand_providers_to_worklist(
             arena, module, worklist, child_op));
       }
     }
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_dce_add_subtree_providers_to_worklist(
+    iree_arena_allocator_t* arena, loom_module_t* module,
+    loom_dce_worklist_t* worklist, loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(loom_dce_add_subtree_operand_providers_to_worklist(
+      arena, module, worklist, op));
+  loom_dce_type_ref_provider_context_t context = {
+      .module = module,
+      .arena = arena,
+      .worklist = worklist,
+  };
+  return loom_op_walk_subtree_type_refs(
+      module, op, loom_dce_add_type_ref_provider_to_worklist, &context);
 }
 
 //===----------------------------------------------------------------------===//
