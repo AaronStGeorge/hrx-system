@@ -91,18 +91,19 @@ typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_SELECT = 4,
   LOOM_LLVMIR_INST_CAST = 5,
   LOOM_LLVMIR_INST_GEP = 6,
-  LOOM_LLVMIR_INST_LOAD = 7,
-  LOOM_LLVMIR_INST_STORE = 8,
-  LOOM_LLVMIR_INST_EXTRACT_ELEMENT = 9,
-  LOOM_LLVMIR_INST_INSERT_ELEMENT = 10,
-  LOOM_LLVMIR_INST_SHUFFLE_VECTOR = 11,
-  LOOM_LLVMIR_INST_CALL = 12,
-  LOOM_LLVMIR_INST_INLINE_ASM = 13,
-  LOOM_LLVMIR_INST_RET = 14,
-  LOOM_LLVMIR_INST_BR = 15,
-  LOOM_LLVMIR_INST_COND_BR = 16,
-  LOOM_LLVMIR_INST_UNREACHABLE = 17,
-  LOOM_LLVMIR_INST_UNOP = 18,
+  LOOM_LLVMIR_INST_ALLOCA = 7,
+  LOOM_LLVMIR_INST_LOAD = 8,
+  LOOM_LLVMIR_INST_STORE = 9,
+  LOOM_LLVMIR_INST_EXTRACT_ELEMENT = 10,
+  LOOM_LLVMIR_INST_INSERT_ELEMENT = 11,
+  LOOM_LLVMIR_INST_SHUFFLE_VECTOR = 12,
+  LOOM_LLVMIR_INST_CALL = 13,
+  LOOM_LLVMIR_INST_INLINE_ASM = 14,
+  LOOM_LLVMIR_INST_RET = 15,
+  LOOM_LLVMIR_INST_BR = 16,
+  LOOM_LLVMIR_INST_COND_BR = 17,
+  LOOM_LLVMIR_INST_UNREACHABLE = 18,
+  LOOM_LLVMIR_INST_UNOP = 19,
 } loom_llvmir_inst_kind_t;
 
 typedef struct loom_llvmir_instruction_t {
@@ -186,6 +187,17 @@ typedef struct loom_llvmir_instruction_t {
       // Number of entries in |indices|.
       iree_host_size_t index_count;
     } gep;
+    // Stack allocation operands and memory attributes.
+    struct {
+      // Allocated element type.
+      loom_llvmir_type_id_t element_type;
+      // Element count value.
+      loom_llvmir_value_id_t count;
+      // True when the source IR supplied an explicit count operand.
+      bool has_explicit_count;
+      // Optional byte alignment.
+      uint32_t alignment;
+    } alloca;
     // Load operands and memory attributes.
     struct {
       // Loaded result type.

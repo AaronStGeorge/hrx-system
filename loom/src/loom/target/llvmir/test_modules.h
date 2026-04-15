@@ -46,6 +46,8 @@ typedef enum loom_llvmir_test_module_scenario_e {
   // Scalar cast function covering integer, float, pointer, and address-space
   // casts.
   LOOM_LLVMIR_TEST_MODULE_CASTS = 10,
+  // Host function using stack allocation and lifetime intrinsics.
+  LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA = 11,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);

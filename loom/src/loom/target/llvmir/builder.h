@@ -223,6 +223,19 @@ typedef struct loom_llvmir_gep_desc_t {
   iree_host_size_t index_count;
 } loom_llvmir_gep_desc_t;
 
+typedef struct loom_llvmir_alloca_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Pointer result type.
+  loom_llvmir_type_id_t result_type;
+  // Allocated element type.
+  loom_llvmir_type_id_t element_type;
+  // Optional element count value, or INVALID for one implicit element.
+  loom_llvmir_value_id_t count;
+  // Optional byte alignment, or zero to omit the attribute.
+  uint32_t alignment;
+} loom_llvmir_alloca_desc_t;
+
 typedef struct loom_llvmir_load_desc_t {
   // Optional result name without the leading percent sign.
   iree_string_view_t result_name;
@@ -356,6 +369,10 @@ iree_status_t loom_llvmir_build_cast(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_gep(loom_llvmir_block_t* block,
                                     const loom_llvmir_gep_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_alloca(loom_llvmir_block_t* block,
+                                       const loom_llvmir_alloca_desc_t* desc,
+                                       loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_load(loom_llvmir_block_t* block,
                                      const loom_llvmir_load_desc_t* desc,

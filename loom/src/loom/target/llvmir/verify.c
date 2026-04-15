@@ -146,6 +146,27 @@ static uint64_t loom_llvmir_verify_type_primitive_bit_width(
   return lanes == 0 ? scalar_bit_width : (uint64_t)scalar_bit_width * lanes;
 }
 
+static bool loom_llvmir_verify_is_power_of_two_u32(uint32_t value) {
+  return value != 0 && (value & (value - 1)) == 0;
+}
+
+static iree_status_t loom_llvmir_verify_memory_alignment(uint32_t alignment) {
+  if (alignment == 0) return iree_ok_status();
+  if (!loom_llvmir_verify_is_power_of_two_u32(alignment)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM memory alignment is not a power of two");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_verify_memory_flags(uint32_t flags) {
+  if ((flags & ~LOOM_LLVMIR_MEMORY_VOLATILE) != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM memory flags");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_verify_mask_result_type(
     const loom_llvmir_module_t* module, loom_llvmir_type_id_t operand_type_id,
     loom_llvmir_type_id_t result_type_id) {
@@ -692,6 +713,35 @@ static iree_status_t loom_llvmir_verify_shuffle_vector(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_verify_alloca(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM alloca has no result value");
+  }
+  const loom_llvmir_type_t* result_type = loom_llvmir_verify_type(
+      module,
+      loom_llvmir_verify_value_type(module, instruction->result_value_id));
+  if (!result_type || result_type->kind != LOOM_LLVMIR_TYPE_POINTER) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM alloca result must be a pointer");
+  }
+  const loom_llvmir_type_t* element_type =
+      loom_llvmir_verify_type(module, instruction->alloca.element_type);
+  if (!element_type || element_type->kind == LOOM_LLVMIR_TYPE_VOID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM alloca element type is invalid");
+  }
+  const loom_llvmir_type_t* count_type = loom_llvmir_verify_type(
+      module, loom_llvmir_verify_value_type(module, instruction->alloca.count));
+  if (!count_type || count_type->kind != LOOM_LLVMIR_TYPE_INTEGER) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM alloca count must be an integer");
+  }
+  return loom_llvmir_verify_memory_alignment(instruction->alloca.alignment);
+}
+
 static iree_status_t loom_llvmir_verify_instruction(
     const loom_llvmir_module_t* module, const loom_llvmir_function_t* function,
     const loom_llvmir_block_t* block,
@@ -787,23 +837,45 @@ static iree_status_t loom_llvmir_verify_instruction(
         }
       }
       return iree_ok_status();
+    case LOOM_LLVMIR_INST_ALLOCA:
+      return loom_llvmir_verify_alloca(module, instruction);
     case LOOM_LLVMIR_INST_LOAD:
       if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "LLVM load has no result value");
       }
+      IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+          module, instruction->result_value_id, instruction->load.result_type));
       if (!loom_llvmir_verify_value(module, instruction->load.pointer)) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "LLVM load references unknown pointer");
       }
-      return iree_ok_status();
+      if (!loom_llvmir_verify_type_is_pointer_like(
+              module, loom_llvmir_verify_type(
+                          module, loom_llvmir_verify_value_type(
+                                      module, instruction->load.pointer)))) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM load pointer must be a pointer");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_verify_memory_alignment(instruction->load.alignment));
+      return loom_llvmir_verify_memory_flags(instruction->load.flags);
     case LOOM_LLVMIR_INST_STORE:
       if (!loom_llvmir_verify_value(module, instruction->store.value) ||
           !loom_llvmir_verify_value(module, instruction->store.pointer)) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "LLVM store references unknown value");
       }
-      return iree_ok_status();
+      if (!loom_llvmir_verify_type_is_pointer_like(
+              module, loom_llvmir_verify_type(
+                          module, loom_llvmir_verify_value_type(
+                                      module, instruction->store.pointer)))) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM store pointer must be a pointer");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_verify_memory_alignment(instruction->store.alignment));
+      return loom_llvmir_verify_memory_flags(instruction->store.flags);
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
       return loom_llvmir_verify_extract_element(module, instruction);
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:

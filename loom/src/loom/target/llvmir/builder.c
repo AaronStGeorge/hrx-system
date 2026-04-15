@@ -358,6 +358,48 @@ iree_status_t loom_llvmir_build_gep(loom_llvmir_block_t* block,
   return loom_llvmir_builder_append_instruction(block, &instruction);
 }
 
+iree_status_t loom_llvmir_build_alloca(loom_llvmir_block_t* block,
+                                       const loom_llvmir_alloca_desc_t* desc,
+                                       loom_llvmir_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(block);
+  IREE_ASSERT_ARGUMENT(desc);
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  loom_llvmir_module_t* module = block->function->module;
+  if (desc->element_type >= module->type_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM alloca references unknown element type");
+  }
+
+  bool has_explicit_count = true;
+  loom_llvmir_value_id_t count = desc->count;
+  if (count == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    has_explicit_count = false;
+    loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_module_add_integer_constant(module, i32_type, 1, &count));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, count));
+  }
+
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_ALLOCA,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .alloca =
+          {
+              .element_type = desc->element_type,
+              .count = count,
+              .has_explicit_count = has_explicit_count,
+              .alignment = desc->alignment,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
 iree_status_t loom_llvmir_build_load(loom_llvmir_block_t* block,
                                      const loom_llvmir_load_desc_t* desc,
                                      loom_llvmir_value_id_t* out_value_id) {

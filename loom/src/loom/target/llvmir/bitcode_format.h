@@ -131,6 +131,7 @@ typedef enum loom_llvmir_bitcode_function_code_e {
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_BR = 11,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_UNREACHABLE = 15,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_PHI = 16,
+  LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_ALLOCA = 19,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_LOAD = 20,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_CMP2 = 28,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_VSELECT = 29,
@@ -162,6 +163,12 @@ typedef enum loom_llvmir_bitcode_fast_math_flag_bits_e {
   LOOM_LLVMIR_BITCODE_FAST_MATH_APPROX_FUNC = 1u << 6,
   LOOM_LLVMIR_BITCODE_FAST_MATH_ALLOW_REASSOC = 1u << 7,
 } loom_llvmir_bitcode_fast_math_flags_t;
+
+typedef enum loom_llvmir_bitcode_alloca_packed_value_bits_e {
+  LOOM_LLVMIR_BITCODE_ALLOCA_ALIGN_LOWER_MASK = 0x1F,
+  LOOM_LLVMIR_BITCODE_ALLOCA_EXPLICIT_TYPE_BIT = 6,
+  LOOM_LLVMIR_BITCODE_ALLOCA_ALIGN_UPPER_SHIFT = 8,
+} loom_llvmir_bitcode_alloca_packed_value_bits_t;
 
 typedef enum loom_llvmir_bitcode_binary_op_e {
   LOOM_LLVMIR_BITCODE_BINOP_ADD = 0,

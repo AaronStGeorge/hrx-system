@@ -622,6 +622,38 @@ static iree_status_t loom_llvmir_write_phi(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_write_alloca(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction,
+    loom_output_stream_t* stream) {
+  const loom_llvmir_type_t* result_type = loom_llvmir_text_type(
+      module,
+      loom_llvmir_text_value_type(module, instruction->result_value_id));
+  if (!result_type || result_type->kind != LOOM_LLVMIR_TYPE_POINTER) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM alloca result must be a pointer");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_write_result_prefix(module, instruction, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "alloca "));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_write_type(module, instruction->alloca.element_type, stream));
+  if (instruction->alloca.has_explicit_count) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+    IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+        module, instruction->alloca.count, stream));
+  }
+  if (instruction->alloca.alignment != 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ", align %u", instruction->alloca.alignment));
+  }
+  if (result_type->address_space != 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ", addrspace(%u)", result_type->address_space));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_write_instruction(
     const loom_llvmir_module_t* module, const loom_llvmir_function_t* function,
     const loom_llvmir_instruction_t* instruction,
@@ -761,6 +793,8 @@ static iree_status_t loom_llvmir_write_instruction(
       }
       return iree_ok_status();
     }
+    case LOOM_LLVMIR_INST_ALLOCA:
+      return loom_llvmir_write_alloca(module, instruction, stream);
     case LOOM_LLVMIR_INST_LOAD: {
       IREE_RETURN_IF_ERROR(
           loom_llvmir_write_result_prefix(module, instruction, stream));

@@ -96,6 +96,19 @@ static iree_status_t loom_llvmir_bitcode_encode_alignment(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_bitcode_pack_alloca_flags(
+    uint32_t alignment, uint64_t* out_packed_flags) {
+  uint64_t encoded_alignment = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_bitcode_encode_alignment(alignment, &encoded_alignment));
+  *out_packed_flags =
+      (encoded_alignment & LOOM_LLVMIR_BITCODE_ALLOCA_ALIGN_LOWER_MASK) |
+      (UINT64_C(1) << LOOM_LLVMIR_BITCODE_ALLOCA_EXPLICIT_TYPE_BIT) |
+      ((encoded_alignment >> 5)
+       << LOOM_LLVMIR_BITCODE_ALLOCA_ALIGN_UPPER_SHIFT);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_bitcode_memory_volatile(
     uint32_t flags, uint64_t* out_is_volatile) {
   if ((flags & ~LOOM_LLVMIR_MEMORY_VOLATILE) != 0) {
@@ -955,6 +968,9 @@ static iree_status_t loom_llvmir_bitcode_map_mark_instruction_constants(
       }
       return iree_ok_status();
     }
+    case LOOM_LLVMIR_INST_ALLOCA:
+      return loom_llvmir_bitcode_map_mark_constant(module, map,
+                                                   instruction->alloca.count);
     case LOOM_LLVMIR_INST_LOAD:
       return loom_llvmir_bitcode_map_mark_constant(module, map,
                                                    instruction->load.pointer);
@@ -1657,6 +1673,42 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
                                 "LLVM bitcode gep operand count overflows");
       }
       return iree_ok_status();
+    case LOOM_LLVMIR_INST_ALLOCA: {
+      if (instruction->alloca.element_type >= module->type_count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "LLVM bitcode alloca references unknown element type");
+      }
+      if (module->types[instruction->alloca.element_type].kind ==
+          LOOM_LLVMIR_TYPE_VOID) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM bitcode alloca element type is invalid");
+      }
+      if (instruction->alloca.count >= module->value_count) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM bitcode alloca references unknown count");
+      }
+      loom_llvmir_type_id_t count_type_id =
+          module->values[instruction->alloca.count].type_id;
+      if (count_type_id >= module->type_count ||
+          module->types[count_type_id].kind != LOOM_LLVMIR_TYPE_INTEGER) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM bitcode alloca count must be an integer");
+      }
+      const loom_llvmir_value_t* result_value =
+          instruction->result_value_id < module->value_count
+              ? &module->values[instruction->result_value_id]
+              : NULL;
+      if (!result_value || result_value->type_id >= module->type_count ||
+          module->types[result_value->type_id].kind !=
+              LOOM_LLVMIR_TYPE_POINTER) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM bitcode alloca result must be a pointer");
+      }
+      uint64_t packed_flags = 0;
+      return loom_llvmir_bitcode_pack_alloca_flags(
+          instruction->alloca.alignment, &packed_flags);
+    }
     case LOOM_LLVMIR_INST_LOAD: {
       uint64_t encoded_alignment = 0;
       uint64_t is_volatile = 0;
@@ -2670,6 +2722,55 @@ static iree_status_t loom_llvmir_bitcode_write_gep(
   return status;
 }
 
+static iree_status_t loom_llvmir_bitcode_write_alloca(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  if (instruction->result_value_id >= module->value_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM bitcode alloca references unknown result");
+  }
+  const loom_llvmir_value_t* result_value =
+      &module->values[instruction->result_value_id];
+  if (result_value->type_id >= module->type_count ||
+      module->types[result_value->type_id].kind != LOOM_LLVMIR_TYPE_POINTER) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM bitcode alloca result must be a pointer");
+  }
+  const loom_llvmir_type_t* result_type = &module->types[result_value->type_id];
+  if (instruction->alloca.count >= module->value_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM bitcode alloca references unknown count");
+  }
+  const loom_llvmir_value_t* count_value =
+      &module->values[instruction->alloca.count];
+  uint64_t count_value_id = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_value(
+      value_map, instruction->alloca.count, &count_value_id));
+  if (count_value_id >= instruction_value_id) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM bitcode alloca count references a forward value");
+  }
+  uint64_t packed_flags = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_pack_alloca_flags(
+      instruction->alloca.alignment, &packed_flags));
+
+  uint64_t operands[5];
+  iree_host_size_t operand_count = 0;
+  operands[operand_count++] = instruction->alloca.element_type;
+  operands[operand_count++] = count_value->type_id;
+  operands[operand_count++] = count_value_id;
+  operands[operand_count++] = packed_flags;
+  if (result_type->address_space != 0) {
+    operands[operand_count++] = result_type->address_space;
+  }
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_ALLOCA, operands,
+      operand_count);
+}
+
 static iree_status_t loom_llvmir_bitcode_write_load(
     const loom_llvmir_module_t* module,
     const loom_llvmir_bitcode_function_value_map_t* value_map,
@@ -3002,6 +3103,9 @@ static iree_status_t loom_llvmir_bitcode_write_instruction(
     case LOOM_LLVMIR_INST_GEP:
       return loom_llvmir_bitcode_write_gep(module, value_map, instruction,
                                            instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_ALLOCA:
+      return loom_llvmir_bitcode_write_alloca(module, value_map, instruction,
+                                              instruction_value_id, writer);
     case LOOM_LLVMIR_INST_LOAD:
       return loom_llvmir_bitcode_write_load(module, value_map, instruction,
                                             instruction_value_id, writer);
