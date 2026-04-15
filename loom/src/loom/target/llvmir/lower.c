@@ -74,6 +74,8 @@ typedef struct loom_llvmir_lowering_state_t {
   iree_host_size_t symbol_function_count;
   // Function-local fact table active while lowering a body, or NULL.
   const loom_value_fact_table_t* fact_table;
+  // Cached profile kernel attribute group, or INVALID until materialized.
+  loom_llvmir_attr_group_id_t kernel_attr_group_id;
 } loom_llvmir_lowering_state_t;
 
 static iree_string_view_t loom_llvmir_lowering_module_name(
@@ -398,14 +400,76 @@ static loom_llvmir_linkage_t loom_llvmir_lowering_function_linkage(
   return LOOM_LLVMIR_LINKAGE_INTERNAL;
 }
 
+static bool loom_llvmir_lowering_function_is_kernel_entry(
+    const loom_llvmir_lowering_state_t* state, loom_func_like_t func) {
+  return state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL &&
+         loom_func_like_visibility(func) == LOOM_FUNC_VISIBILITY_PUBLIC &&
+         loom_func_like_cc(func) == LOOM_FUNC_CC_DEVICE;
+}
+
 static loom_llvmir_calling_convention_t
 loom_llvmir_lowering_function_calling_convention(
     const loom_llvmir_lowering_state_t* state, loom_func_like_t func) {
-  if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL &&
-      loom_func_like_cc(func) == LOOM_FUNC_CC_DEVICE) {
+  if (loom_llvmir_lowering_function_is_kernel_entry(state, func)) {
     return state->target_profile->kernel_calling_convention;
   }
   return LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT;
+}
+
+static iree_status_t loom_llvmir_lowering_kernel_attr_group(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_attr_group_id_t* out_attr_group_id) {
+  if (state->kernel_attr_group_id != LOOM_LLVMIR_ATTR_GROUP_ID_INVALID) {
+    *out_attr_group_id = state->kernel_attr_group_id;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_add_kernel_attr_group(
+      state->target_module, state->target_profile,
+      &state->kernel_attr_group_id));
+  *out_attr_group_id = state->kernel_attr_group_id;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_validate_function_abi(
+    const loom_llvmir_lowering_state_t* state, loom_func_like_t func,
+    loom_llvmir_function_kind_t function_kind, bool is_kernel_entry) {
+  if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL &&
+      loom_func_like_visibility(func) == LOOM_FUNC_VISIBILITY_PUBLIC &&
+      loom_func_like_cc(func) != LOOM_FUNC_CC_DEVICE) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, func.op,
+        "HAL kernel profile can only export public device entry points");
+  }
+  if (!is_kernel_entry) return iree_ok_status();
+  if (function_kind != LOOM_LLVMIR_FUNCTION_DEFINITION) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, func.op, "HAL kernel entry points must be function definitions");
+  }
+  if (func.op->result_count != 0) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, func.op, "HAL kernel entry points must return void");
+  }
+  uint16_t arg_count = 0;
+  const loom_value_id_t* arg_ids = loom_func_like_arg_ids(func, &arg_count);
+  for (uint16_t i = 0; i < arg_count; ++i) {
+    loom_type_t arg_type =
+        loom_module_value_type(state->source_module, arg_ids[i]);
+    if (loom_type_is_view(arg_type)) {
+      return loom_llvmir_lowering_unsupported_op(
+          state, func.op,
+          "HAL kernel entry point view parameters need an explicit ABI "
+          "adapter");
+    }
+  }
+  return iree_ok_status();
+}
+
+static uint32_t loom_llvmir_lowering_default_pointer_argument_address_space(
+    const loom_llvmir_lowering_state_t* state) {
+  if (state->target_profile->kind == LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
+    return state->target_profile->target_env->address_spaces.global;
+  }
+  return state->target_profile->target_env->address_spaces.generic;
 }
 
 static iree_status_t loom_llvmir_lowering_add_function_signature(
@@ -415,6 +479,10 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
   loom_region_t* body = loom_func_like_body(func);
   loom_llvmir_function_kind_t function_kind =
       body ? LOOM_LLVMIR_FUNCTION_DEFINITION : LOOM_LLVMIR_FUNCTION_DECLARATION;
+  bool is_kernel_entry =
+      loom_llvmir_lowering_function_is_kernel_entry(state, func);
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_validate_function_abi(
+      state, func, function_kind, is_kernel_entry));
   loom_llvmir_type_id_t return_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_lowering_lower_return_type(state, func.op, &return_type));
@@ -428,11 +496,19 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
   function_desc.calling_convention =
       loom_llvmir_lowering_function_calling_convention(state, func);
   function_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  if (is_kernel_entry) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_kernel_attr_group(
+        state, &function_desc.attr_group_id));
+  }
 
   loom_llvmir_function_t* target_function = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
       state->target_module, &function_desc, &target_function));
   state->symbol_functions[symbol_id] = target_function;
+  if (is_kernel_entry) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_attach_kernel_metadata(
+        target_function, state->target_profile));
+  }
 
   uint16_t arg_count = 0;
   const loom_value_id_t* arg_ids = loom_func_like_arg_ids(func, &arg_count);
@@ -444,7 +520,7 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
     if (loom_type_is_buffer(source_arg_type) ||
         loom_type_is_view(source_arg_type)) {
       pointer_address_space =
-          state->target_profile->target_env->address_spaces.generic;
+          loom_llvmir_lowering_default_pointer_argument_address_space(state);
       IREE_RETURN_IF_ERROR(loom_llvmir_lowering_get_pointer_type(
           state, pointer_address_space, &arg_type));
     } else {
@@ -455,6 +531,13 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
     loom_llvmir_parameter_desc_t parameter_desc = {0};
     parameter_desc.type_id = arg_type;
     parameter_desc.name = loom_llvmir_lowering_value_name(state, arg_ids[i]);
+    uint64_t pointer_alignment = 0;
+    if (is_kernel_entry && loom_type_is_buffer(source_arg_type)) {
+      parameter_desc.attrs = state->target_profile->kernel_binding_attrs;
+      parameter_desc.attr_count =
+          state->target_profile->kernel_binding_attr_count;
+      pointer_alignment = state->target_profile->amdgpu_hal.binding_alignment;
+    }
     loom_llvmir_value_id_t parameter_value = LOOM_LLVMIR_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
         target_function, &parameter_desc, &parameter_value));
@@ -464,7 +547,7 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
     } else {
       IREE_RETURN_IF_ERROR(loom_llvmir_lowering_map_pointer_value(
           state, arg_ids[i], parameter_value, pointer_address_space,
-          /*minimum_alignment=*/0));
+          pointer_alignment));
     }
   }
   return iree_ok_status();
@@ -1875,6 +1958,7 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
   state->allocator = allocator;
   state->value_map_count = source_module->values.count;
   state->symbol_function_count = source_module->symbols.count;
+  state->kernel_attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
 
   iree_string_view_t source_name = options->source_name;
   if (iree_string_view_is_empty(source_name)) {

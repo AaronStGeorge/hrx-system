@@ -49,6 +49,10 @@ std::string StatusToString(iree_status_t status) {
          std::to_string(static_cast<int>(iree_status_code(status)));
 }
 
+std::string ToolOutputToString(const loom_llvmir_tool_output_t& output) {
+  return output.data ? std::string(output.data, output.length) : std::string();
+}
+
 iree_string_view_t StringView(const std::string& value) {
   return iree_make_string_view(value.data(), value.size());
 }
@@ -181,9 +185,9 @@ class LlvmIrLowerTest : public ::testing::Test {
     return builder;
   }
 
-  std::string LowerToText() {
+  std::string LowerToText(const loom_llvmir_target_profile_t* profile) {
     loom_llvmir_lowering_options_t options;
-    options.target_profile = loom_llvmir_target_profile_x86_64_object();
+    options.target_profile = profile;
     options.source_name = IREE_SV("lower_test");
     loom_llvmir_module_t* lowered = NULL;
     IREE_CHECK_OK(loom_llvmir_lower_module(module_, &options,
@@ -200,6 +204,10 @@ class LlvmIrLowerTest : public ::testing::Test {
                      iree_string_builder_size(&builder));
     iree_string_builder_deinitialize(&builder);
     return text;
+  }
+
+  std::string LowerToText() {
+    return LowerToText(loom_llvmir_target_profile_x86_64_object());
   }
 
   void VerifyTextWithLlvmTools(const std::string& text) {
@@ -226,6 +234,62 @@ class LlvmIrLowerTest : public ::testing::Test {
       iree_status_ignore(status);
       GTEST_SKIP() << message;
     }
+    IREE_ASSERT_OK(status);
+  }
+
+  void CompileAmdgpuTextToObjectIfAvailable(const std::string& text) {
+    TempFile input_file(TempPath(".ll"));
+    TempFile bitcode_file(TempPath(".bc"));
+    TempFile object_file(TempPath(".o"));
+    IREE_ASSERT_OK(WriteTempFile(input_file.path(), text));
+
+    loom_llvmir_toolchain_t toolchain;
+    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+    iree_status_t status = loom_llvmir_tool_assemble_text_file(
+        &toolchain, StringView(input_file.path()),
+        StringView(bitcode_file.path()), iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    status = loom_llvmir_tool_verify_bitcode_file(
+        &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    loom_llvmir_tool_output_t version_text = {};
+    status =
+        loom_llvmir_tool_query_version(&toolchain, LOOM_LLVMIR_TOOL_LLC,
+                                       iree_allocator_system(), &version_text);
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+    std::string version = ToolOutputToString(version_text);
+    loom_llvmir_tool_output_deinitialize(&version_text,
+                                         iree_allocator_system());
+    if (version.find("amdgcn") == std::string::npos &&
+        version.find("AMDGPU") == std::string::npos) {
+      GTEST_SKIP() << "installed llc does not advertise an AMDGPU target";
+    }
+
+    iree_string_view_t extra_arguments[] = {
+        IREE_SV("-mtriple=amdgcn-amd-amdhsa"),
+        IREE_SV("-mcpu=gfx1100"),
+    };
+    status = loom_llvmir_tool_compile_object_file(
+        &toolchain, StringView(bitcode_file.path()),
+        StringView(object_file.path()), extra_arguments,
+        IREE_ARRAYSIZE(extra_arguments), iree_allocator_system());
     IREE_ASSERT_OK(status);
   }
 
@@ -544,6 +608,88 @@ TEST_F(LlvmIrLowerTest, LowersBufferAllocaWithAlignedScalarAccess) {
   EXPECT_NE(text.find("  %loaded = load float, ptr "), std::string::npos)
       << text;
   VerifyTextWithLlvmTools(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersPublicDeviceFunctionWithAmdgpuHalAbi) {
+  loom_type_t buffer = loom_type_buffer();
+  loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("dispatch"));
+  loom_type_t arg_types[3] = {buffer, buffer, index};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_,
+      LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY | LOOM_FUNC_DEF_BUILD_FLAG_HAS_CC,
+      LOOM_FUNC_VISIBILITY_PUBLIC, LOOM_FUNC_CC_DEVICE, 0, callee, arg_types, 3,
+      NULL, 0, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3);
+  SetValueName(args[0], IREE_SV("input"));
+  SetValueName(args[1], IREE_SV("output"));
+  SetValueName(args[2], IREE_SV("n"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText(loom_llvmir_target_profile_amdgpu_hal());
+  EXPECT_NE(text.find("target triple = \"amdgcn-amd-amdhsa\"\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("define amdgpu_kernel void @dispatch("
+                      "ptr addrspace(1) inreg noalias noundef nonnull align "
+                      "16 %input, "
+                      "ptr addrspace(1) inreg noalias noundef nonnull align "
+                      "16 %output, i32 %n) #0 !reqd_work_group_size !0 {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("attributes #0 = { alwaysinline "
+                      "\"amdgpu-flat-work-group-size\"=\"64,64\" "
+                      "\"uniform-work-group-size\" }"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("!0 = !{i32 64, i32 1, i32 1}\n"), std::string::npos)
+      << text;
+  CompileAmdgpuTextToObjectIfAvailable(text);
+}
+
+TEST_F(LlvmIrLowerTest, RejectsAmdgpuHalKernelViewParameter) {
+  uint16_t dense_encoding = AddDenseEncoding();
+  loom_type_t view_type =
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(1), dense_encoding);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("bad_view_dispatch"));
+  loom_type_t arg_types[1] = {view_type};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_,
+      LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY | LOOM_FUNC_DEF_BUILD_FLAG_HAS_CC,
+      LOOM_FUNC_VISIBILITY_PUBLIC, LOOM_FUNC_CC_DEVICE, 0, callee, arg_types, 1,
+      NULL, 0, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  loom_llvmir_lowering_options_t options;
+  options.target_profile = loom_llvmir_target_profile_amdgpu_hal();
+  options.source_name = IREE_SV("lower_test");
+  loom_llvmir_module_t* lowered = NULL;
+  iree_status_t status = loom_llvmir_lower_module(
+      module_, &options, iree_allocator_system(), &lowered);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_UNIMPLEMENTED);
+  std::string message = StatusToString(status);
+  EXPECT_NE(message.find("view parameters need an explicit ABI adapter"),
+            std::string::npos)
+      << message;
+  iree_status_free(status);
+  if (lowered) {
+    loom_llvmir_module_free(lowered);
+  }
 }
 
 TEST_F(LlvmIrLowerTest, ReportsUnsupportedOpName) {
