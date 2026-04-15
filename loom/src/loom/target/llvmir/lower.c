@@ -660,6 +660,10 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_view_load(state, target_block, op);
     case LOOM_OP_VIEW_STORE:
       return loom_llvmir_lowering_lower_view_store(state, target_block, op);
+    case LOOM_OP_VECTOR_LOAD:
+      return loom_llvmir_lowering_lower_vector_load(state, target_block, op);
+    case LOOM_OP_VECTOR_STORE:
+      return loom_llvmir_lowering_lower_vector_store(state, target_block, op);
     case LOOM_OP_VIEW_PREFETCH:
       return loom_llvmir_lowering_lower_view_prefetch(state, target_block, op);
     case LOOM_OP_LLVMIR_INLINE_ASM:

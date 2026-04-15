@@ -7,6 +7,9 @@
 #include "loom/ir/facts.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/encoding/storage.h"
+#include "loom/ops/index/ops.h"
+#include "loom/ops/vector/memory.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/intrinsics_builtin.h"
 #include "loom/target/llvmir/lower_internal.h"
@@ -78,11 +81,33 @@ static loom_value_facts_t loom_llvmir_lowering_value_facts(
   return loom_value_fact_table_lookup(state->fact_table, value_id);
 }
 
+static bool loom_llvmir_lowering_exact_index_constant(
+    const loom_llvmir_lowering_state_t* state, loom_value_id_t value_id,
+    int64_t* out_value) {
+  const loom_value_t* value = loom_module_value(state->source_module, value_id);
+  if (!value) return false;
+  const loom_op_t* def_op = loom_value_def_op(value);
+  if (!def_op || !loom_index_constant_isa(def_op)) return false;
+  loom_attribute_t attr = loom_index_constant_value(def_op);
+  if (attr.kind != LOOM_ATTR_I64) return false;
+  *out_value = attr.i64;
+  return true;
+}
+
 static uint64_t loom_llvmir_lowering_min_nonzero_u64(uint64_t lhs,
                                                      uint64_t rhs) {
   if (lhs == 0) return rhs;
   if (rhs == 0) return lhs;
   return lhs < rhs ? lhs : rhs;
+}
+
+static uint64_t loom_llvmir_lowering_alignment_from_static_byte_offset(
+    uint64_t base_alignment, int64_t byte_offset) {
+  if (base_alignment == 0 || byte_offset < 0) return 0;
+  if (byte_offset == 0) return base_alignment;
+  uint64_t offset = (uint64_t)byte_offset;
+  uint64_t offset_alignment = offset & (~offset + 1);
+  return loom_llvmir_lowering_min_nonzero_u64(base_alignment, offset_alignment);
 }
 
 static uint64_t loom_llvmir_lowering_alignment_from_offset(
@@ -114,6 +139,62 @@ static uint32_t loom_llvmir_lowering_load_store_alignment(
                            ? pointer_alignment
                            : (uint64_t)element_byte_count;
   return alignment <= 1 ? 0 : (uint32_t)alignment;
+}
+
+static iree_status_t loom_llvmir_lowering_vector_memory_access(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    loom_type_t view_type, loom_type_t vector_type,
+    loom_vector_memory_access_t* out_access, int64_t* out_vector_byte_count) {
+  if (!loom_vector_memory_access_describe(state->source_module, view_type,
+                                          vector_type, out_access)) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector memory ops need a view and vector operand");
+  }
+  if (out_access->vector_rank != 1 || !loom_type_is_all_static(vector_type)) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "only static one-dimensional vector memory ops lower today");
+  }
+  uint64_t lane_count = 0;
+  if (!loom_type_static_element_count(vector_type, &lane_count) ||
+      lane_count == 0 || lane_count > UINT32_MAX) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector memory lane count is not representable");
+  }
+  if (out_access->layout_kind != LOOM_VECTOR_MEMORY_LAYOUT_DENSE) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector memory ops only support dense address layouts");
+  }
+  int64_t vector_axis_stride = 0;
+  if (!loom_vector_memory_access_static_axis_stride(
+          out_access, out_access->first_vector_axis, &vector_axis_stride) ||
+      vector_axis_stride != 1) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector memory ops require contiguous trailing lanes");
+  }
+  if (out_access->static_element_byte_count <= 0 ||
+      lane_count >
+          (uint64_t)(INT64_MAX / out_access->static_element_byte_count)) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector memory byte size is not representable");
+  }
+  *out_vector_byte_count =
+      (int64_t)lane_count * out_access->static_element_byte_count;
+  return iree_ok_status();
+}
+
+static uint64_t loom_llvmir_lowering_static_vector_pointer_alignment(
+    const loom_vector_memory_access_t* access, loom_attribute_t static_indices,
+    uint64_t base_alignment, uint64_t fallback_alignment) {
+  int64_t lane_indices[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK] = {0};
+  int64_t byte_offset = 0;
+  if (!loom_vector_memory_access_static_lane_byte_offset(
+          access, static_indices, lane_indices, access->vector_rank,
+          &byte_offset)) {
+    return fallback_alignment;
+  }
+  uint64_t alignment = loom_llvmir_lowering_alignment_from_static_byte_offset(
+      base_alignment, byte_offset);
+  return alignment ? alignment : fallback_alignment;
 }
 
 static iree_status_t loom_llvmir_lowering_lower_memory_space_pointer_type(
@@ -500,17 +581,27 @@ iree_status_t loom_llvmir_lowering_lower_buffer_view(
       },
       &result));
 
-  uint64_t result_alignment = loom_llvmir_lowering_alignment_from_offset(
-      buffer_alignment, loom_llvmir_lowering_value_facts(
-                            state, loom_buffer_view_byte_offset(op)));
+  loom_value_id_t byte_offset_value_id = loom_buffer_view_byte_offset(op);
+  uint64_t result_alignment = 0;
+  int64_t static_byte_offset = 0;
+  if (loom_llvmir_lowering_exact_index_constant(state, byte_offset_value_id,
+                                                &static_byte_offset)) {
+    result_alignment = loom_llvmir_lowering_alignment_from_static_byte_offset(
+        buffer_alignment, static_byte_offset);
+  } else {
+    result_alignment = loom_llvmir_lowering_alignment_from_offset(
+        buffer_alignment,
+        loom_llvmir_lowering_value_facts(state, byte_offset_value_id));
+  }
   loom_value_fact_view_reference_t view_reference = {0};
   if (state->fact_table &&
       loom_value_facts_query_view_reference(
           &state->fact_table->context,
           loom_value_fact_table_lookup(state->fact_table, result_value_id),
           &view_reference)) {
-    result_alignment =
+    uint64_t fact_alignment =
         loom_llvmir_lowering_alignment_from_view_reference(view_reference);
+    if (fact_alignment > result_alignment) result_alignment = fact_alignment;
   }
   return loom_llvmir_lowering_map_pointer_value(
       state, result_value_id, result, address_space, result_alignment);
@@ -541,8 +632,9 @@ iree_status_t loom_llvmir_lowering_lower_subview(
           &state->fact_table->context,
           loom_value_fact_table_lookup(state->fact_table, result_value_id),
           &view_reference)) {
-    result_alignment =
+    uint64_t fact_alignment =
         loom_llvmir_lowering_alignment_from_view_reference(view_reference);
+    if (fact_alignment > result_alignment) result_alignment = fact_alignment;
   }
   return loom_llvmir_lowering_map_pointer_value(
       state, result_value_id, result, address_space, result_alignment);
@@ -627,6 +719,99 @@ iree_status_t loom_llvmir_lowering_lower_view_store(
                         .pointer = pointer,
                         .alignment = loom_llvmir_lowering_load_store_alignment(
                             pointer_alignment, element_byte_count),
+                    });
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_load(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_value_id_t view_value_id = loom_vector_load_view(op);
+  loom_value_id_t result_value_id = loom_vector_load_result(op);
+  loom_type_t view_type =
+      loom_module_value_type(state->source_module, view_value_id);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_value_id);
+
+  loom_vector_memory_access_t access;
+  int64_t vector_byte_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_memory_access(
+      state, op, view_type, result_source_type, &access, &vector_byte_count));
+
+  loom_llvmir_value_id_t view = LOOM_LLVMIR_VALUE_ID_INVALID;
+  uint64_t view_alignment = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_pointer(
+      state, view_value_id, &view, NULL, &view_alignment));
+  (void)view;
+
+  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  uint64_t pointer_alignment = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_build_view_element_pointer(
+      state, target_block, op, view_value_id, view_type,
+      loom_vector_load_static_indices(op), loom_vector_load_indices(op),
+      IREE_SV(""), &pointer, &pointer_alignment));
+  pointer_alignment = loom_llvmir_lowering_static_vector_pointer_alignment(
+      &access, loom_vector_load_static_indices(op), view_alignment,
+      pointer_alignment);
+
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lower_type(state, result_source_type, &result_type));
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_load(
+      target_block,
+      &(loom_llvmir_load_desc_t){
+          .result_name =
+              loom_llvmir_lowering_value_name(state, result_value_id),
+          .result_type = result_type,
+          .pointer = pointer,
+          .alignment = loom_llvmir_lowering_load_store_alignment(
+              pointer_alignment, vector_byte_count),
+      },
+      &result));
+  return loom_llvmir_lowering_map_single_result(state, op, result);
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_store(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_value_id_t value_id = loom_vector_store_value(op);
+  loom_value_id_t view_value_id = loom_vector_store_view(op);
+  loom_type_t view_type =
+      loom_module_value_type(state->source_module, view_value_id);
+  loom_type_t value_source_type =
+      loom_module_value_type(state->source_module, value_id);
+
+  loom_vector_memory_access_t access;
+  int64_t vector_byte_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_memory_access(
+      state, op, view_type, value_source_type, &access, &vector_byte_count));
+
+  loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lookup_value(state, value_id, &value));
+
+  loom_llvmir_value_id_t view = LOOM_LLVMIR_VALUE_ID_INVALID;
+  uint64_t view_alignment = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_pointer(
+      state, view_value_id, &view, NULL, &view_alignment));
+  (void)view;
+
+  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  uint64_t pointer_alignment = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_build_view_element_pointer(
+      state, target_block, op, view_value_id, view_type,
+      loom_vector_store_static_indices(op), loom_vector_store_indices(op),
+      IREE_SV(""), &pointer, &pointer_alignment));
+  pointer_alignment = loom_llvmir_lowering_static_vector_pointer_alignment(
+      &access, loom_vector_store_static_indices(op), view_alignment,
+      pointer_alignment);
+
+  return loom_llvmir_build_store(
+      target_block, &(loom_llvmir_store_desc_t){
+                        .value = value,
+                        .pointer = pointer,
+                        .alignment = loom_llvmir_lowering_load_store_alignment(
+                            pointer_alignment, vector_byte_count),
                     });
 }
 
