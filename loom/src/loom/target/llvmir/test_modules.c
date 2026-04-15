@@ -8,7 +8,7 @@
 
 #include "loom/target/llvmir/llvmir.h"
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 13
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 14
 #define TEST_X86_64_DATALAYOUT_TEXT                                   \
   "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:" \
   "64-i128:128-f80:128-n8:16:32:64-S128\"\n"
@@ -410,6 +410,51 @@ static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
       },
       NULL));
   IREE_RETURN_IF_ERROR(loom_llvmir_build_ret_void(entry));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_test_populate_x86_intrinsics(
+    loom_llvmir_module_t* module) {
+  loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 64, &i64_type));
+
+  loom_llvmir_function_t* rdtsc_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_declare_x86_rdtsc(module, &rdtsc_function));
+  loom_llvmir_function_t* pause_function = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_declare_x86_sse2_pause(module, &pause_function));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("read_clock"),
+          .return_type = i64_type,
+          .linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      entry,
+      &(loom_llvmir_call_desc_t){
+          .callee = loom_llvmir_function_id(pause_function),
+      },
+      NULL));
+  loom_llvmir_value_id_t ticks = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      entry,
+      &(loom_llvmir_call_desc_t){
+          .result_name = IREE_SV("ticks"),
+          .callee = loom_llvmir_function_id(rdtsc_function),
+      },
+      &ticks));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, ticks));
   return iree_ok_status();
 }
 
@@ -1748,6 +1793,21 @@ static const char kBuiltinIntrinsicsText[] =
     "  ret void\n"
     "}\n";
 
+static const char kX86IntrinsicsText[] =
+    "source_filename = \"loom-x86\"\n" TEST_X86_64_DATALAYOUT_TEXT
+    "target triple = \"x86_64-unknown-linux-gnu\"\n"
+    "\n"
+    "declare i64 @llvm.x86.rdtsc()\n"
+    "\n"
+    "declare void @llvm.x86.sse2.pause()\n"
+    "\n"
+    "define dso_local i64 @read_clock() {\n"
+    "entry:\n"
+    "  call void @llvm.x86.sse2.pause()\n"
+    "  %ticks = call i64 @llvm.x86.rdtsc()\n"
+    "  ret i64 %ticks\n"
+    "}\n";
+
 static const char kStackAllocaText[] =
     "source_filename = \"loom-stack\"\n" TEST_X86_64_DATALAYOUT_TEXT
     "target triple = \"x86_64-unknown-linux-gnu\"\n"
@@ -1949,6 +2009,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
       return IREE_SV("shuffle_vector");
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
       return IREE_SV("builtin_intrinsics");
+    case LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS:
+      return IREE_SV("x86_intrinsics");
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return IREE_SV("compare_select");
     case LOOM_LLVMIR_TEST_MODULE_CASTS:
@@ -1989,6 +2051,14 @@ static iree_status_t loom_llvmir_test_module_target_config(
           loom_llvmir_target_profile_x86_64_object();
       IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
           profile, IREE_SV("loom-builtins"), out_target_config));
+      *out_target_config_ptr = out_target_config;
+      return iree_ok_status();
+    }
+    case LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS: {
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_target_profile_x86_64_object();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-x86"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
@@ -2039,6 +2109,8 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_call_constants(module);
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
       return loom_llvmir_test_populate_builtin_intrinsics(module);
+    case LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS:
+      return loom_llvmir_test_populate_x86_intrinsics(module);
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA:
       return loom_llvmir_test_populate_stack_alloca(module);
     case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT:
@@ -2102,6 +2174,9 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
       return iree_make_string_view(kBuiltinIntrinsicsText,
                                    IREE_ARRAYSIZE(kBuiltinIntrinsicsText) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS:
+      return iree_make_string_view(kX86IntrinsicsText,
+                                   IREE_ARRAYSIZE(kX86IntrinsicsText) - 1);
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA:
       return iree_make_string_view(kStackAllocaText,
                                    IREE_ARRAYSIZE(kStackAllocaText) - 1);
