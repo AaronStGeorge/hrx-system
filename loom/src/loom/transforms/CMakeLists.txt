@@ -12,6 +12,23 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    branch_sink
+  HDRS
+    "branch_sink.h"
+  SRCS
+    "branch_sink.c"
+  DEPS
+    ::pass
+    ::rewriter
+    iree::base
+    loom::src::loom::analysis::motion
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     canonicalize
   HDRS
     "canonicalize.h"

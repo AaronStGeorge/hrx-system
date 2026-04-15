@@ -81,10 +81,10 @@ iree_status_t loom_motion_analysis_initialize(
 bool loom_motion_op_can_erase(const loom_module_t* module, const loom_op_t* op);
 
 // Returns true if |op| may be moved by a transform that preserves the original
-// dynamic execution predicate. This rejects terminator roots, hints, unknown
-// effects, reads, writes, and nondeterminism. It intentionally does not reject
-// UNIQUE_IDENTITY beyond the ordinary purity/effect checks: relocating one
-// execution site without duplicating it is not CSE.
+// dynamic execution predicate. This rejects tied results, terminator roots,
+// hints, unknown effects, reads, writes, and nondeterminism. It intentionally
+// does not reject UNIQUE_IDENTITY beyond the ordinary purity/effect checks:
+// relocating one execution site without duplicating it is not CSE.
 bool loom_motion_op_can_relocate_effect_free(const loom_module_t* module,
                                              const loom_op_t* op);
 

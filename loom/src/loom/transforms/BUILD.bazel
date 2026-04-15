@@ -13,6 +13,20 @@ package(
 )
 
 loom_cc_library(
+    name = "branch_sink",
+    srcs = ["branch_sink.c"],
+    hdrs = ["branch_sink.h"],
+    deps = [
+        ":pass",
+        ":rewriter",
+        "//loom/src/loom/analysis:motion",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "canonicalize",
     srcs = ["canonicalize.c"],
     hdrs = ["canonicalize.h"],

@@ -26,6 +26,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/testing/diff.h"
+#include "loom/transforms/branch_sink.h"
 #include "loom/transforms/canonicalize.h"
 #include "loom/transforms/cse.h"
 #include "loom/transforms/dce.h"
@@ -315,6 +316,10 @@ static iree_status_t loom_check_run_pipeline(
       status = loom_pass_manager_add_function_pass(
           &manager, loom_cse_pass_info(), loom_cse_run, NULL, NULL,
           iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name, IREE_SV("branch-sink"))) {
+      status = loom_pass_manager_add_function_pass(
+          &manager, loom_branch_sink_pass_info(), loom_branch_sink_run, NULL,
+          NULL, iree_string_view_empty());
     } else if (iree_string_view_equal(pass_name, IREE_SV("licm"))) {
       status = loom_pass_manager_add_function_pass(
           &manager, loom_licm_pass_info(), loom_licm_run, NULL, NULL,

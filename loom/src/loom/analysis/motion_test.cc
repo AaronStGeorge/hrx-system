@@ -125,6 +125,10 @@ class MotionTest : public ::testing::Test {
 TEST_F(MotionTest, LocalClassificationSeparatesEraseRelocateAndSpeculate) {
   loom_type_t i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t tile_type = loom_type_shaped_1d(
+      LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
+  loom_type_t tensor_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
 
   loom_op_t* lhs_op = nullptr;
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32_type,
@@ -149,6 +153,25 @@ TEST_F(MotionTest, LocalClassificationSeparatesEraseRelocateAndSpeculate) {
   IREE_ASSERT_OK(loom_test_use_build(&builder_, &add_result, 1,
                                      LOOM_LOCATION_UNKNOWN, &use_op));
 
+  loom_op_t* source_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1),
+                                          tile_type, LOOM_LOCATION_UNKNOWN,
+                                          &source_op));
+  loom_value_id_t source = loom_test_constant_result(source_op);
+
+  loom_op_t* target_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2),
+                                          tensor_type, LOOM_LOCATION_UNKNOWN,
+                                          &target_op));
+  loom_value_id_t target = loom_test_constant_result(target_op);
+
+  int64_t static_offsets[] = {0};
+  loom_op_t* update_op = nullptr;
+  IREE_ASSERT_OK(
+      loom_test_update_build(&builder_, source, target, nullptr, 0,
+                             static_offsets, IREE_ARRAYSIZE(static_offsets),
+                             tensor_type, LOOM_LOCATION_UNKNOWN, &update_op));
+
   loom_op_t* condition_op = nullptr;
   IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_bool(true),
                                           i1_type, LOOM_LOCATION_UNKNOWN,
@@ -165,6 +188,7 @@ TEST_F(MotionTest, LocalClassificationSeparatesEraseRelocateAndSpeculate) {
   EXPECT_FALSE(loom_motion_op_can_erase(module_, use_op));
   EXPECT_TRUE(loom_motion_op_can_relocate_effect_free(module_, add_op));
   EXPECT_FALSE(loom_motion_op_can_relocate_effect_free(module_, use_op));
+  EXPECT_FALSE(loom_motion_op_can_relocate_effect_free(module_, update_op));
   EXPECT_FALSE(loom_motion_op_can_speculate(module_, add_op));
   EXPECT_TRUE(loom_motion_op_can_speculate(module_, select_op));
 }

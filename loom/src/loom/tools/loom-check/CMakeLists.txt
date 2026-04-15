@@ -64,6 +64,7 @@ loom_cc_library(
     loom::src::loom::target::llvmir
     loom::src::loom::target::llvmir::lower
     loom::src::loom::testing::diff
+    loom::src::loom::transforms::branch_sink
     loom::src::loom::transforms::canonicalize
     loom::src::loom::transforms::cse
     loom::src::loom::transforms::dce

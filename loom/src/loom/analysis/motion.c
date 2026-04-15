@@ -114,6 +114,7 @@ bool loom_motion_op_can_relocate_effect_free(const loom_module_t* module,
   if (!module || !op || iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
     return false;
   }
+  if (op->tied_result_count != 0) return false;
   loom_trait_flags_t traits = loom_op_effective_traits(module, op);
   if (!loom_motion_traits_are_effect_free_relocatable(traits,
                                                       /*is_root_op=*/true)) {
@@ -127,6 +128,7 @@ bool loom_motion_op_can_speculate(const loom_module_t* module,
   if (!module || !op || iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
     return false;
   }
+  if (op->tied_result_count != 0) return false;
   loom_trait_flags_t traits = loom_op_effective_traits(module, op);
   if (!loom_motion_traits_are_speculatable(traits, /*is_root_op=*/true)) {
     return false;
@@ -152,6 +154,7 @@ static bool loom_motion_op_satisfies_policy(const loom_module_t* module,
   if (!module || !op || iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
     return false;
   }
+  if (op->tied_result_count != 0) return false;
   loom_trait_flags_t traits = loom_op_effective_traits(module, op);
   switch (policy) {
     case LOOM_MOTION_POLICY_EFFECT_FREE_RELOCATION:
