@@ -30,7 +30,8 @@ static bool loom_llvmir_verify_value_is_constant(
   return value && (value->kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER ||
                    value->kind == LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS ||
                    value->kind == LOOM_LLVMIR_VALUE_CONSTANT_NULL ||
-                   value->kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR);
+                   value->kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR ||
+                   value->kind == LOOM_LLVMIR_VALUE_CONSTANT_POISON);
 }
 
 static loom_llvmir_type_id_t loom_llvmir_verify_value_type(

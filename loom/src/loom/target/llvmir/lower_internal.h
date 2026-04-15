@@ -212,6 +212,33 @@ iree_status_t loom_llvmir_lowering_lower_vector_negf(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
 
+iree_status_t loom_llvmir_lowering_lower_vector_constant(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    loom_attribute_t value_attr);
+
+iree_status_t loom_llvmir_lowering_lower_vector_poison(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_splat(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_from_elements(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_extract(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_insert(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_shuffle(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
 iree_status_t loom_llvmir_lowering_lower_vector_icmp(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);

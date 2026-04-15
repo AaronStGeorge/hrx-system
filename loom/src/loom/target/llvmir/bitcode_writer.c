@@ -53,7 +53,8 @@ static bool loom_llvmir_bitcode_is_constant_value_kind(
   return kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER ||
          kind == LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS ||
          kind == LOOM_LLVMIR_VALUE_CONSTANT_NULL ||
-         kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR;
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR ||
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_POISON;
 }
 
 static bool loom_llvmir_bitcode_value_is_global_initializer(
@@ -1419,6 +1420,13 @@ static iree_status_t loom_llvmir_bitcode_check_constant(
                                 "LLVM bitcode null constant has invalid type");
       }
       return iree_ok_status();
+    case LOOM_LLVMIR_VALUE_CONSTANT_POISON:
+      if (type->kind == LOOM_LLVMIR_TYPE_VOID) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "LLVM bitcode poison constant has invalid type");
+      }
+      return iree_ok_status();
     case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR:
       if (type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
           type->element_type >= module->type_count ||
@@ -2005,6 +2013,7 @@ static iree_status_t loom_llvmir_bitcode_check_module(
       case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER:
       case LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS:
       case LOOM_LLVMIR_VALUE_CONSTANT_NULL:
+      case LOOM_LLVMIR_VALUE_CONSTANT_POISON:
       case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR: {
         IREE_RETURN_IF_ERROR(
             loom_llvmir_bitcode_check_constant(module, &module->values[i]));
@@ -2243,6 +2252,9 @@ static iree_status_t loom_llvmir_bitcode_write_constant(
     case LOOM_LLVMIR_VALUE_CONSTANT_NULL:
       return loom_llvmir_bitcode_write_empty_record(
           writer, LOOM_LLVMIR_BITCODE_CONSTANT_CODE_NULL);
+    case LOOM_LLVMIR_VALUE_CONSTANT_POISON:
+      return loom_llvmir_bitcode_write_empty_record(
+          writer, LOOM_LLVMIR_BITCODE_CONSTANT_CODE_POISON);
     case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR:
       return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
           writer, LOOM_LLVMIR_BITCODE_CONSTANT_CODE_DATA,

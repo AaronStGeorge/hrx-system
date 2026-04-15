@@ -9,6 +9,425 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/target/llvmir/lower_internal.h"
 
+static iree_status_t loom_llvmir_lowering_vector_lane_count(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    loom_type_t type, uint32_t* out_lane_count) {
+  if (!loom_type_is_vector(type) || !loom_type_is_all_static(type) ||
+      loom_type_rank(type) != 1) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "only static one-dimensional vectors lower today");
+  }
+  uint64_t lane_count = 0;
+  if (!loom_type_static_element_count(type, &lane_count) || lane_count == 0 ||
+      lane_count > UINT32_MAX) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector lane count is not representable in LLVMIR");
+  }
+  *out_lane_count = (uint32_t)lane_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_i32_constant(
+    loom_llvmir_lowering_state_t* state, uint32_t value,
+    loom_llvmir_value_id_t* out_value_id) {
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(state->target_module, 32, &i32_type));
+  return loom_llvmir_module_add_integer_constant(state->target_module, i32_type,
+                                                 value, out_value_id);
+}
+
+static iree_status_t loom_llvmir_lowering_i32_vector_constant(
+    loom_llvmir_lowering_state_t* state, const uint64_t* values,
+    iree_host_size_t value_count, loom_llvmir_value_id_t* out_value_id) {
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t vector_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(state->target_module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_vector_type(
+      state->target_module, (uint32_t)value_count, i32_type, &vector_type));
+  return loom_llvmir_module_add_integer_vector_constant(
+      state->target_module, vector_type, values, value_count, out_value_id);
+}
+
+static iree_status_t loom_llvmir_lowering_repeated_i32_vector_constant(
+    loom_llvmir_lowering_state_t* state, uint32_t lane_count, uint32_t value,
+    loom_llvmir_value_id_t* out_value_id) {
+  uint64_t* values = NULL;
+  iree_status_t status = iree_allocator_malloc(
+      state->allocator, (iree_host_size_t)lane_count * sizeof(*values),
+      (void**)&values);
+  if (iree_status_is_ok(status)) {
+    for (uint32_t i = 0; i < lane_count; ++i) values[i] = value;
+    status = loom_llvmir_lowering_i32_vector_constant(state, values, lane_count,
+                                                      out_value_id);
+  }
+  if (values) iree_allocator_free(state->allocator, values);
+  return status;
+}
+
+static iree_status_t loom_llvmir_lowering_add_poison_value(
+    loom_llvmir_lowering_state_t* state, loom_type_t source_type,
+    loom_llvmir_type_id_t* out_type_id, loom_llvmir_value_id_t* out_value_id) {
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lower_type(state, source_type, out_type_id));
+  return loom_llvmir_module_add_poison_constant(state->target_module,
+                                                *out_type_id, out_value_id);
+}
+
+static iree_status_t loom_llvmir_lowering_vector_lane_index(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    loom_attribute_t static_indices, loom_value_slice_t dynamic_indices,
+    uint32_t lane_count, loom_llvmir_value_id_t* out_index) {
+  if (static_indices.kind != LOOM_ATTR_I64_ARRAY || static_indices.count != 1) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector lane ops require one index term");
+  }
+  int64_t static_index = static_indices.i64_array[0];
+  if (static_index != INT64_MIN) {
+    if (dynamic_indices.count != 0) {
+      return loom_llvmir_lowering_unsupported_op(
+          state, op, "static vector lane index cannot also have operands");
+    }
+    if (static_index < 0 || static_index > UINT32_MAX) {
+      return loom_llvmir_lowering_unsupported_op(
+          state, op, "static vector lane index is not representable");
+    }
+    if ((uint32_t)static_index >= lane_count) {
+      return loom_llvmir_lowering_unsupported_op(
+          state, op, "static vector lane index is out of bounds");
+    }
+    return loom_llvmir_lowering_i32_constant(state, (uint32_t)static_index,
+                                             out_index);
+  }
+  if (dynamic_indices.count != 1) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "dynamic vector lane index sentinel needs one operand");
+  }
+  return loom_llvmir_lowering_lookup_value(
+      state, loom_value_slice_get(dynamic_indices, 0), out_index);
+}
+
+static iree_status_t loom_llvmir_lowering_shuffle_mask(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    loom_attribute_t source_lanes, uint32_t input_lane_count,
+    uint32_t result_lane_count, loom_llvmir_value_id_t* out_mask) {
+  if (source_lanes.kind != LOOM_ATTR_I64_ARRAY ||
+      source_lanes.count != result_lane_count) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector.shuffle needs one static source lane per result");
+  }
+  uint64_t* values = NULL;
+  iree_status_t status = iree_allocator_malloc(
+      state->allocator, (iree_host_size_t)result_lane_count * sizeof(*values),
+      (void**)&values);
+  for (uint32_t i = 0; i < result_lane_count && iree_status_is_ok(status);
+       ++i) {
+    int64_t source_lane = source_lanes.i64_array[i];
+    if (source_lane < 0 || source_lane >= input_lane_count) {
+      status = loom_llvmir_lowering_unsupported_op(
+          state, op, "vector.shuffle source lane is out of bounds");
+    } else {
+      values[i] = (uint64_t)source_lane;
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_llvmir_lowering_i32_vector_constant(
+        state, values, result_lane_count, out_mask);
+  }
+  if (values) iree_allocator_free(state->allocator, values);
+  return status;
+}
+
+static iree_status_t loom_llvmir_lowering_splat_value(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, loom_value_id_t result_id,
+    loom_llvmir_value_id_t scalar, loom_type_t result_source_type,
+    loom_llvmir_value_id_t* out_result) {
+  uint32_t lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_count(
+      state, op, result_source_type, &lane_count));
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_value_id_t poison = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_add_poison_value(
+      state, result_source_type, &result_type, &poison));
+  loom_llvmir_value_id_t zero_index = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_i32_constant(state, 0, &zero_index));
+
+  loom_llvmir_value_id_t first_lane = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_insert_element(target_block,
+                                       &(loom_llvmir_insert_element_desc_t){
+                                           .result_type = result_type,
+                                           .vector = poison,
+                                           .element = scalar,
+                                           .index = zero_index,
+                                       },
+                                       &first_lane));
+
+  loom_llvmir_value_id_t mask = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_repeated_i32_vector_constant(
+      state, lane_count, 0, &mask));
+  return loom_llvmir_build_shuffle_vector(
+      target_block,
+      &(loom_llvmir_shuffle_vector_desc_t){
+          .result_name = loom_llvmir_lowering_value_name(state, result_id),
+          .result_type = result_type,
+          .lhs = first_lane,
+          .rhs = poison,
+          .mask = mask,
+      },
+      out_result);
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_constant(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    loom_attribute_t value_attr) {
+  loom_value_id_t result_id = loom_vector_constant_result(op);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_id);
+  uint32_t lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_count(
+      state, op, result_source_type, &lane_count));
+  loom_scalar_type_t element_type = loom_type_element_type(result_source_type);
+  if (element_type != LOOM_SCALAR_TYPE_INDEX &&
+      element_type != LOOM_SCALAR_TYPE_OFFSET &&
+      !loom_scalar_type_is_integer(element_type)) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector.constant only supports integer-like vectors today");
+  }
+  uint64_t value = 0;
+  if (value_attr.kind == LOOM_ATTR_BOOL) {
+    value = value_attr.raw;
+  } else if (value_attr.kind == LOOM_ATTR_I64) {
+    value = (uint64_t)value_attr.i64;
+  } else {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "integer vector constants require an i64 or bool attribute");
+  }
+
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lower_type(state, result_source_type, &result_type));
+  uint64_t* values = NULL;
+  iree_status_t status = iree_allocator_malloc(
+      state->allocator, (iree_host_size_t)lane_count * sizeof(*values),
+      (void**)&values);
+  if (iree_status_is_ok(status)) {
+    for (uint32_t i = 0; i < lane_count; ++i) values[i] = value;
+    loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+    status = loom_llvmir_module_add_integer_vector_constant(
+        state->target_module, result_type, values, lane_count, &result);
+    if (iree_status_is_ok(status)) {
+      status = loom_llvmir_lowering_map_value(state, result_id, result);
+    }
+  }
+  if (values) iree_allocator_free(state->allocator, values);
+  return status;
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_poison(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op) {
+  loom_value_id_t result_id = loom_vector_poison_result(op);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_id);
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_add_poison_value(
+      state, result_source_type, &result_type, &result));
+  return loom_llvmir_lowering_map_value(state, result_id, result);
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_splat(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_llvmir_value_id_t scalar = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_value(
+      state, loom_vector_splat_scalar(op), &scalar));
+  loom_value_id_t result_id = loom_vector_splat_result(op);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_id);
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_splat_value(
+      state, target_block, op, result_id, scalar, result_source_type, &result));
+  return loom_llvmir_lowering_map_value(state, result_id, result);
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_from_elements(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_value_id_t result_id = loom_vector_from_elements_result(op);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_id);
+  uint32_t lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_count(
+      state, op, result_source_type, &lane_count));
+  loom_value_slice_t elements = loom_vector_from_elements_elements(op);
+  if (elements.count != lane_count) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector.from_elements operand count must match lanes");
+  }
+
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_value_id_t current = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_add_poison_value(
+      state, result_source_type, &result_type, &current));
+  for (uint32_t i = 0; i < lane_count; ++i) {
+    loom_llvmir_value_id_t element = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_value(
+        state, loom_value_slice_get(elements, i), &element));
+    loom_llvmir_value_id_t index = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_i32_constant(state, i, &index));
+    loom_llvmir_value_id_t inserted = LOOM_LLVMIR_VALUE_ID_INVALID;
+    iree_string_view_t result_name =
+        i + 1 == lane_count ? loom_llvmir_lowering_value_name(state, result_id)
+                            : iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_build_insert_element(target_block,
+                                         &(loom_llvmir_insert_element_desc_t){
+                                             .result_name = result_name,
+                                             .result_type = result_type,
+                                             .vector = current,
+                                             .element = element,
+                                             .index = index,
+                                         },
+                                         &inserted));
+    current = inserted;
+  }
+  return loom_llvmir_lowering_map_value(state, result_id, current);
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_extract(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_value_id_t source_id = loom_vector_extract_source(op);
+  loom_type_t source_type =
+      loom_module_value_type(state->source_module, source_id);
+  uint32_t lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_count(
+      state, op, source_type, &lane_count));
+  loom_value_id_t result_id = loom_vector_extract_result(op);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_id);
+  if (!loom_type_is_scalar(result_source_type)) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector.extract only supports scalar lane extraction");
+  }
+
+  loom_llvmir_value_id_t source = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lookup_value(state, source_id, &source));
+  loom_llvmir_value_id_t index = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_index(
+      state, op, loom_vector_extract_static_indices(op),
+      loom_vector_extract_indices(op), lane_count, &index));
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lower_type(state, result_source_type, &result_type));
+
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_extract_element(
+      target_block,
+      &(loom_llvmir_extract_element_desc_t){
+          .result_name = loom_llvmir_lowering_value_name(state, result_id),
+          .result_type = result_type,
+          .vector = source,
+          .index = index,
+      },
+      &result));
+  return loom_llvmir_lowering_map_value(state, result_id, result);
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_insert(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_value_id_t value_id = loom_vector_insert_value(op);
+  loom_type_t value_source_type =
+      loom_module_value_type(state->source_module, value_id);
+  if (!loom_type_is_scalar(value_source_type)) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "vector.insert only supports scalar lane insertion");
+  }
+  loom_value_id_t result_id = loom_vector_insert_result(op);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_id);
+  uint32_t lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_count(
+      state, op, result_source_type, &lane_count));
+
+  loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lookup_value(state, value_id, &value));
+  loom_llvmir_value_id_t dest = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_value(
+      state, loom_vector_insert_dest(op), &dest));
+  loom_llvmir_value_id_t index = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_index(
+      state, op, loom_vector_insert_static_indices(op),
+      loom_vector_insert_indices(op), lane_count, &index));
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lower_type(state, result_source_type, &result_type));
+
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_insert_element(
+      target_block,
+      &(loom_llvmir_insert_element_desc_t){
+          .result_name = loom_llvmir_lowering_value_name(state, result_id),
+          .result_type = result_type,
+          .vector = dest,
+          .element = value,
+          .index = index,
+      },
+      &result));
+  return loom_llvmir_lowering_map_value(state, result_id, result);
+}
+
+iree_status_t loom_llvmir_lowering_lower_vector_shuffle(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_value_id_t source_id = loom_vector_shuffle_source(op);
+  loom_type_t source_type =
+      loom_module_value_type(state->source_module, source_id);
+  uint32_t input_lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_count(
+      state, op, source_type, &input_lane_count));
+  loom_value_id_t result_id = loom_vector_shuffle_result(op);
+  loom_type_t result_source_type =
+      loom_module_value_type(state->source_module, result_id);
+  uint32_t result_lane_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_vector_lane_count(
+      state, op, result_source_type, &result_lane_count));
+
+  loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lower_type(state, result_source_type, &result_type));
+  loom_llvmir_value_id_t source = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_lookup_value(state, source_id, &source));
+  loom_llvmir_value_id_t poison = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_poison_constant(
+      state->target_module, result_type, &poison));
+  loom_llvmir_value_id_t mask = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_shuffle_mask(
+      state, op, loom_vector_shuffle_source_lanes(op), input_lane_count,
+      result_lane_count, &mask));
+
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_shuffle_vector(
+      target_block,
+      &(loom_llvmir_shuffle_vector_desc_t){
+          .result_name = loom_llvmir_lowering_value_name(state, result_id),
+          .result_type = result_type,
+          .lhs = source,
+          .rhs = poison,
+          .mask = mask,
+      },
+      &result));
+  return loom_llvmir_lowering_map_value(state, result_id, result);
+}
+
 static iree_status_t loom_llvmir_lowering_vector_integer_flags(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     uint8_t instance_flags, loom_llvmir_integer_arithmetic_flags_t* out_flags) {

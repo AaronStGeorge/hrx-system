@@ -177,6 +177,8 @@ static iree_status_t loom_llvmir_write_value_ref(
       return loom_output_stream_write_cstring(stream, "null");
     case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR:
       return loom_llvmir_write_integer_vector_constant(module, value, stream);
+    case LOOM_LLVMIR_VALUE_CONSTANT_POISON:
+      return loom_output_stream_write_cstring(stream, "poison");
     case LOOM_LLVMIR_VALUE_GLOBAL: {
       loom_llvmir_global_t* global =
           loom_llvmir_text_global(module, value->global.global_id);

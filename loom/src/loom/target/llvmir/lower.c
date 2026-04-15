@@ -586,6 +586,22 @@ static iree_status_t loom_llvmir_lowering_lower_op(
     case LOOM_OP_INDEX_CONSTANT:
       return loom_llvmir_lowering_lower_constant(state, op,
                                                  loom_index_constant_value(op));
+    case LOOM_OP_VECTOR_CONSTANT:
+      return loom_llvmir_lowering_lower_vector_constant(
+          state, op, loom_vector_constant_value(op));
+    case LOOM_OP_VECTOR_POISON:
+      return loom_llvmir_lowering_lower_vector_poison(state, op);
+    case LOOM_OP_VECTOR_SPLAT:
+      return loom_llvmir_lowering_lower_vector_splat(state, target_block, op);
+    case LOOM_OP_VECTOR_FROM_ELEMENTS:
+      return loom_llvmir_lowering_lower_vector_from_elements(state,
+                                                             target_block, op);
+    case LOOM_OP_VECTOR_EXTRACT:
+      return loom_llvmir_lowering_lower_vector_extract(state, target_block, op);
+    case LOOM_OP_VECTOR_INSERT:
+      return loom_llvmir_lowering_lower_vector_insert(state, target_block, op);
+    case LOOM_OP_VECTOR_SHUFFLE:
+      return loom_llvmir_lowering_lower_vector_shuffle(state, target_block, op);
     case LOOM_OP_INDEX_MADD:
       return loom_llvmir_lowering_lower_index_madd(state, target_block, op);
     case LOOM_OP_SCALAR_CMPI:

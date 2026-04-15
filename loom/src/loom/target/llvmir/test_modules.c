@@ -1097,6 +1097,14 @@ static iree_status_t loom_llvmir_test_populate_shuffle_vector(
   loom_llvmir_value_id_t mask = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_vector_constant(
       module, v4i32_type, mask_values, IREE_ARRAYSIZE(mask_values), &mask));
+  uint64_t reverse_mask_values[] = {3, 2, 1, 0};
+  loom_llvmir_value_id_t reverse_mask = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_vector_constant(
+      module, v4i32_type, reverse_mask_values,
+      IREE_ARRAYSIZE(reverse_mask_values), &reverse_mask));
+  loom_llvmir_value_id_t poison = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_add_poison_constant(module, v4f32_type, &poison));
 
   loom_llvmir_function_t* function = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
@@ -1140,6 +1148,18 @@ static iree_status_t loom_llvmir_test_populate_shuffle_vector(
           .mask = mask,
       },
       &interleaved));
+  loom_llvmir_value_id_t reversed = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_shuffle_vector(entry,
+                                       &(loom_llvmir_shuffle_vector_desc_t){
+                                           .result_name = IREE_SV("reversed"),
+                                           .result_type = v4f32_type,
+                                           .lhs = lhs,
+                                           .rhs = poison,
+                                           .mask = reverse_mask,
+                                       },
+                                       &reversed));
+  (void)reversed;
   IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, interleaved));
   return iree_ok_status();
 }
@@ -1921,6 +1941,8 @@ static const char kShuffleVectorText[] =
     "entry:\n"
     "  %interleaved = shufflevector <4 x float> %lhs, <4 x float> %rhs, "
     "<4 x i32> <i32 0, i32 4, i32 1, i32 5>\n"
+    "  %reversed = shufflevector <4 x float> %lhs, <4 x float> poison, "
+    "<4 x i32> <i32 3, i32 2, i32 1, i32 0>\n"
     "  ret <4 x float> %interleaved\n"
     "}\n";
 

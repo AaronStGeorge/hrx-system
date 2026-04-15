@@ -604,6 +604,146 @@ TEST_F(LlvmIrLowerTest, LowersVectorNumericOps) {
   CompileAmdgpuTextToObjectIfAvailable(amdgpu_text);
 }
 
+TEST_F(LlvmIrLowerTest, LowersIntegerVectorConstants) {
+  loom_type_t v4i32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("vector_constant"));
+  loom_type_t result_types[1] = {v4i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, callee, NULL,
+                                     0, result_types,
+                                     IREE_ARRAYSIZE(result_types), NULL, 0,
+                                     NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* constant_op = NULL;
+  IREE_ASSERT_OK(loom_vector_constant_build(&body_builder, loom_attr_i64(7),
+                                            v4i32, LOOM_LOCATION_UNKNOWN,
+                                            &constant_op));
+  loom_value_id_t constant = loom_vector_constant_result(constant_op);
+  SetValueName(constant, IREE_SV("constant"));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &constant, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define internal <4 x i32> @vector_constant() {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  ret <4 x i32> <i32 7, i32 7, i32 7, i32 7>\n"),
+            std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersVectorConstructorsAndLaneOps) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t v4f32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("vector_construct"));
+  loom_type_t arg_types[2] = {f32, f32};
+  loom_type_t result_types[1] = {v4f32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, 0, 0, 0, 0, callee, arg_types,
+      IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 2);
+  SetValueName(args[0], IREE_SV("scalar"));
+  SetValueName(args[1], IREE_SV("other"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* splat_op = NULL;
+  IREE_ASSERT_OK(loom_vector_splat_build(&body_builder, args[0], v4f32,
+                                         LOOM_LOCATION_UNKNOWN, &splat_op));
+  loom_value_id_t splat = loom_vector_splat_result(splat_op);
+  SetValueName(splat, IREE_SV("splat"));
+
+  loom_value_id_t elements[4] = {args[0], args[1], args[0], args[1]};
+  loom_op_t* from_elements_op = NULL;
+  IREE_ASSERT_OK(loom_vector_from_elements_build(
+      &body_builder, elements, IREE_ARRAYSIZE(elements), v4f32,
+      LOOM_LOCATION_UNKNOWN, &from_elements_op));
+  loom_value_id_t built = loom_vector_from_elements_result(from_elements_op);
+  SetValueName(built, IREE_SV("built"));
+
+  int64_t extract_index[1] = {1};
+  loom_op_t* extract_op = NULL;
+  IREE_ASSERT_OK(loom_vector_extract_build(
+      &body_builder, built, NULL, 0, extract_index,
+      IREE_ARRAYSIZE(extract_index), f32, LOOM_LOCATION_UNKNOWN, &extract_op));
+  loom_value_id_t lane = loom_vector_extract_result(extract_op);
+  SetValueName(lane, IREE_SV("lane"));
+
+  int64_t insert_index[1] = {2};
+  loom_op_t* insert_op = NULL;
+  IREE_ASSERT_OK(loom_vector_insert_build(
+      &body_builder, lane, splat, NULL, 0, insert_index,
+      IREE_ARRAYSIZE(insert_index), v4f32, LOOM_LOCATION_UNKNOWN, &insert_op));
+  loom_value_id_t updated = loom_vector_insert_result(insert_op);
+  SetValueName(updated, IREE_SV("updated"));
+
+  int64_t source_lanes[4] = {3, 2, 1, 0};
+  loom_op_t* shuffle_op = NULL;
+  IREE_ASSERT_OK(loom_vector_shuffle_build(
+      &body_builder, source_lanes, IREE_ARRAYSIZE(source_lanes), updated, v4f32,
+      LOOM_LOCATION_UNKNOWN, &shuffle_op));
+  loom_value_id_t reversed = loom_vector_shuffle_result(shuffle_op);
+  SetValueName(reversed, IREE_SV("reversed"));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &reversed, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define internal <4 x float> @vector_construct(float "
+                      "%scalar, float %other) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("insertelement <4 x float> poison, float %scalar, i32 "
+                      "0\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %splat = shufflevector <4 x float> "),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find(", <4 x float> poison, <4 x i32> <i32 0, i32 0, i32 0, "
+                      "i32 0>\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %built = insertelement <4 x float> "),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find(", float %other, i32 3\n"), std::string::npos) << text;
+  EXPECT_NE(text.find("  %lane = extractelement <4 x float> %built, i32 1\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %updated = insertelement <4 x float> %splat, float "
+                      "%lane, i32 2\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %reversed = shufflevector <4 x float> %updated, <4 x "
+                      "float> poison, <4 x i32> <i32 3, i32 2, i32 1, i32 "
+                      "0>\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  ret <4 x float> %reversed\n"), std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
+
+  std::string amdgpu_text =
+      LowerToText(loom_llvmir_target_profile_amdgpu_hal());
+  EXPECT_NE(amdgpu_text.find("target triple = \"amdgcn-amd-amdhsa\"\n"),
+            std::string::npos)
+      << amdgpu_text;
+  VerifyTextWithLlvmTools(amdgpu_text);
+  CompileAmdgpuTextToObjectIfAvailable(amdgpu_text);
+}
+
 TEST_F(LlvmIrLowerTest, LowersScfIfToBranchesAndPhi) {
   loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);

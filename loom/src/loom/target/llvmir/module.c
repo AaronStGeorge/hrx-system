@@ -126,7 +126,8 @@ static bool loom_llvmir_module_is_constant_value_kind(
   return kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER ||
          kind == LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS ||
          kind == LOOM_LLVMIR_VALUE_CONSTANT_NULL ||
-         kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR;
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR ||
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_POISON;
 }
 
 static bool loom_llvmir_module_is_power_of_two_u32(uint32_t value) {
@@ -357,6 +358,15 @@ iree_status_t loom_llvmir_module_add_null_constant(
     loom_llvmir_value_id_t* out_value_id) {
   IREE_RETURN_IF_ERROR(loom_llvmir_module_define_value(
       module, LOOM_LLVMIR_VALUE_CONSTANT_NULL, type_id,
+      iree_string_view_empty(), NULL, out_value_id));
+  return iree_ok_status();
+}
+
+iree_status_t loom_llvmir_module_add_poison_constant(
+    loom_llvmir_module_t* module, loom_llvmir_type_id_t type_id,
+    loom_llvmir_value_id_t* out_value_id) {
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_define_value(
+      module, LOOM_LLVMIR_VALUE_CONSTANT_POISON, type_id,
       iree_string_view_empty(), NULL, out_value_id));
   return iree_ok_status();
 }
