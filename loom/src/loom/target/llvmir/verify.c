@@ -515,6 +515,71 @@ static iree_status_t loom_llvmir_verify_insert_element(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_verify_shuffle_vector(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM shufflevector has no result value");
+  }
+  loom_llvmir_type_id_t lhs_type_id =
+      loom_llvmir_verify_value_type(module, instruction->shuffle_vector.lhs);
+  const loom_llvmir_type_t* lhs_type =
+      loom_llvmir_verify_type(module, lhs_type_id);
+  if (!lhs_type || lhs_type->kind != LOOM_LLVMIR_TYPE_VECTOR) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM shufflevector inputs must be vectors");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->shuffle_vector.rhs, lhs_type_id));
+
+  loom_llvmir_type_id_t result_type_id =
+      loom_llvmir_verify_value_type(module, instruction->result_value_id);
+  const loom_llvmir_type_t* result_type =
+      loom_llvmir_verify_type(module, result_type_id);
+  if (!result_type || result_type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+      result_type->element_type != lhs_type->element_type) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM shufflevector result must be an input-element vector");
+  }
+
+  const loom_llvmir_value_t* mask_value =
+      loom_llvmir_verify_value(module, instruction->shuffle_vector.mask);
+  if (!mask_value ||
+      mask_value->kind != LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM shufflevector mask must be a constant integer vector");
+  }
+  const loom_llvmir_type_t* mask_type =
+      loom_llvmir_verify_type(module, mask_value->type_id);
+  if (!mask_type || mask_type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+      mask_type->element_type >= module->type_count ||
+      module->types[mask_type->element_type].kind != LOOM_LLVMIR_TYPE_INTEGER ||
+      module->types[mask_type->element_type].bit_width != 32) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM shufflevector mask type must be a vector of i32");
+  }
+  if (result_type->element_count != mask_type->element_count ||
+      mask_value->integer_vector.value_count != mask_type->element_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM shufflevector mask lanes must match the result lanes");
+  }
+  uint64_t max_index = (uint64_t)lhs_type->element_count * 2;
+  for (iree_host_size_t i = 0; i < mask_value->integer_vector.value_count;
+       ++i) {
+    if (mask_value->integer_vector.values[i] >= max_index) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "LLVM shufflevector mask index is outside the input lanes");
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_verify_instruction(
     const loom_llvmir_module_t* module, const loom_llvmir_function_t* function,
     const loom_llvmir_block_t* block,
@@ -614,6 +679,8 @@ static iree_status_t loom_llvmir_verify_instruction(
       return loom_llvmir_verify_extract_element(module, instruction);
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:
       return loom_llvmir_verify_insert_element(module, instruction);
+    case LOOM_LLVMIR_INST_SHUFFLE_VECTOR:
+      return loom_llvmir_verify_shuffle_vector(module, instruction);
     case LOOM_LLVMIR_INST_CALL: {
       loom_llvmir_function_t* callee =
           loom_llvmir_verify_function_ref(module, instruction->call.callee);

@@ -572,6 +572,32 @@ iree_status_t loom_llvmir_build_insert_element(
   return loom_llvmir_builder_append_instruction(block, &instruction);
 }
 
+iree_status_t loom_llvmir_build_shuffle_vector(
+    loom_llvmir_block_t* block, const loom_llvmir_shuffle_vector_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(block);
+  IREE_ASSERT_ARGUMENT(desc);
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->lhs));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->rhs));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->mask));
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_SHUFFLE_VECTOR,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .shuffle_vector =
+          {
+              .lhs = desc->lhs,
+              .rhs = desc->rhs,
+              .mask = desc->mask,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
 iree_status_t loom_llvmir_build_ret_void(loom_llvmir_block_t* block) {
   IREE_ASSERT_ARGUMENT(block);
   loom_llvmir_instruction_t instruction = {

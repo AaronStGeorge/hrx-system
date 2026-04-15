@@ -270,6 +270,19 @@ typedef struct loom_llvmir_insert_element_desc_t {
   loom_llvmir_value_id_t index;
 } loom_llvmir_insert_element_desc_t;
 
+typedef struct loom_llvmir_shuffle_vector_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Shuffled vector result type.
+  loom_llvmir_type_id_t result_type;
+  // Left vector input.
+  loom_llvmir_value_id_t lhs;
+  // Right vector input.
+  loom_llvmir_value_id_t rhs;
+  // Constant vector mask.
+  loom_llvmir_value_id_t mask;
+} loom_llvmir_shuffle_vector_desc_t;
+
 iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
                                     const loom_llvmir_phi_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id);
@@ -319,6 +332,10 @@ iree_status_t loom_llvmir_build_extract_element(
 
 iree_status_t loom_llvmir_build_insert_element(
     loom_llvmir_block_t* block, const loom_llvmir_insert_element_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_shuffle_vector(
+    loom_llvmir_block_t* block, const loom_llvmir_shuffle_vector_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_ret_void(loom_llvmir_block_t* block);

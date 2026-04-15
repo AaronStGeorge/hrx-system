@@ -42,7 +42,8 @@ static bool loom_llvmir_bitcode_is_constant_value_kind(
     loom_llvmir_value_kind_t kind) {
   return kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER ||
          kind == LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS ||
-         kind == LOOM_LLVMIR_VALUE_CONSTANT_NULL;
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_NULL ||
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR;
 }
 
 static uint64_t loom_llvmir_bitcode_sign_extend_integer_constant(
@@ -974,6 +975,14 @@ static iree_status_t loom_llvmir_bitcode_map_mark_instruction_constants(
       return loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->insert_element.index);
     }
+    case LOOM_LLVMIR_INST_SHUFFLE_VECTOR: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->shuffle_vector.lhs));
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->shuffle_vector.rhs));
+      return loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->shuffle_vector.mask);
+    }
     case LOOM_LLVMIR_INST_CALL: {
       for (iree_host_size_t i = 0; i < instruction->call.arg_count; ++i) {
         IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
@@ -1305,6 +1314,18 @@ static iree_status_t loom_llvmir_bitcode_check_constant(
                                 "LLVM bitcode null constant has invalid type");
       }
       return iree_ok_status();
+    case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR:
+      if (type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+          type->element_type >= module->type_count ||
+          module->types[type->element_type].kind != LOOM_LLVMIR_TYPE_INTEGER ||
+          module->types[type->element_type].bit_width > 64 ||
+          constant->integer_vector.value_count != type->element_count) {
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "LLVM bitcode integer vector constant emission is not implemented "
+            "for this type");
+      }
+      return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "LLVM bitcode value is not a constant");
@@ -1488,6 +1509,7 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
     }
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:
+    case LOOM_LLVMIR_INST_SHUFFLE_VECTOR:
       return iree_ok_status();
     case LOOM_LLVMIR_INST_CALL:
       if (instruction->call.result_attrs.attr_count != 0 &&
@@ -1634,7 +1656,8 @@ static iree_status_t loom_llvmir_bitcode_check_module(
         break;
       case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER:
       case LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS:
-      case LOOM_LLVMIR_VALUE_CONSTANT_NULL: {
+      case LOOM_LLVMIR_VALUE_CONSTANT_NULL:
+      case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR: {
         IREE_RETURN_IF_ERROR(
             loom_llvmir_bitcode_check_constant(module, &module->values[i]));
         break;
@@ -1815,6 +1838,11 @@ static iree_status_t loom_llvmir_bitcode_write_constant(
     case LOOM_LLVMIR_VALUE_CONSTANT_NULL:
       return loom_llvmir_bitcode_write_empty_record(
           writer, LOOM_LLVMIR_BITCODE_CONSTANT_CODE_NULL);
+    case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR:
+      return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+          writer, LOOM_LLVMIR_BITCODE_CONSTANT_CODE_DATA,
+          constant->integer_vector.values,
+          constant->integer_vector.value_count);
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "LLVM bitcode value is not a constant");
@@ -2526,6 +2554,27 @@ static iree_status_t loom_llvmir_bitcode_write_insert_element(
       operand_count);
 }
 
+static iree_status_t loom_llvmir_bitcode_write_shuffle_vector(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t operands[5];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->shuffle_vector.lhs, instruction_value_id,
+      operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->shuffle_vector.rhs, instruction_value_id,
+      operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->shuffle_vector.mask, instruction_value_id,
+      operands, &operand_count));
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_SHUFFLEVEC, operands,
+      operand_count);
+}
+
 static iree_status_t loom_llvmir_bitcode_write_call(
     const loom_llvmir_module_t* module,
     const loom_llvmir_bitcode_function_value_map_t* value_map,
@@ -2754,6 +2803,9 @@ static iree_status_t loom_llvmir_bitcode_write_instruction(
           module, value_map, instruction, instruction_value_id, writer);
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:
       return loom_llvmir_bitcode_write_insert_element(
+          module, value_map, instruction, instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_SHUFFLE_VECTOR:
+      return loom_llvmir_bitcode_write_shuffle_vector(
           module, value_map, instruction, instruction_value_id, writer);
     case LOOM_LLVMIR_INST_CALL:
       return loom_llvmir_bitcode_write_call(module, value_map, instruction,

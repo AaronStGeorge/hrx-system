@@ -46,6 +46,13 @@ typedef struct loom_llvmir_value_t {
     uint64_t integer_value;
     // Floating-point constant bit pattern payload.
     uint64_t float_bits;
+    // Integer vector constant payload.
+    struct {
+      // Element values in lane order.
+      uint64_t* values;
+      // Number of entries in |values|.
+      iree_host_size_t value_count;
+    } integer_vector;
     // Parameter value location.
     struct {
       // Owning function.
@@ -88,12 +95,13 @@ typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_STORE = 8,
   LOOM_LLVMIR_INST_EXTRACT_ELEMENT = 9,
   LOOM_LLVMIR_INST_INSERT_ELEMENT = 10,
-  LOOM_LLVMIR_INST_CALL = 11,
-  LOOM_LLVMIR_INST_INLINE_ASM = 12,
-  LOOM_LLVMIR_INST_RET = 13,
-  LOOM_LLVMIR_INST_BR = 14,
-  LOOM_LLVMIR_INST_COND_BR = 15,
-  LOOM_LLVMIR_INST_UNREACHABLE = 16,
+  LOOM_LLVMIR_INST_SHUFFLE_VECTOR = 11,
+  LOOM_LLVMIR_INST_CALL = 12,
+  LOOM_LLVMIR_INST_INLINE_ASM = 13,
+  LOOM_LLVMIR_INST_RET = 14,
+  LOOM_LLVMIR_INST_BR = 15,
+  LOOM_LLVMIR_INST_COND_BR = 16,
+  LOOM_LLVMIR_INST_UNREACHABLE = 17,
 } loom_llvmir_inst_kind_t;
 
 typedef struct loom_llvmir_instruction_t {
@@ -202,6 +210,15 @@ typedef struct loom_llvmir_instruction_t {
       // Integer lane index.
       loom_llvmir_value_id_t index;
     } insert_element;
+    // Vector shuffle operands.
+    struct {
+      // Left vector input.
+      loom_llvmir_value_id_t lhs;
+      // Right vector input.
+      loom_llvmir_value_id_t rhs;
+      // Constant vector mask.
+      loom_llvmir_value_id_t mask;
+    } shuffle_vector;
     // Function call operands.
     struct {
       // Callee function id.

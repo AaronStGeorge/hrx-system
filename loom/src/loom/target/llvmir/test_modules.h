@@ -37,13 +37,15 @@ typedef enum loom_llvmir_test_module_scenario_e {
   LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP = 5,
   // Vector lane extraction and insertion.
   LOOM_LLVMIR_TEST_MODULE_VECTOR_ELEMENTS = 6,
+  // Vector shuffling with a constant mask.
+  LOOM_LLVMIR_TEST_MODULE_SHUFFLE_VECTOR = 7,
   // Host function using target-independent memory intrinsics.
-  LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS = 7,
+  LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS = 8,
   // Scalar compare and select function.
-  LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT = 8,
+  LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT = 9,
   // Scalar cast function covering integer, float, pointer, and address-space
   // casts.
-  LOOM_LLVMIR_TEST_MODULE_CASTS = 9,
+  LOOM_LLVMIR_TEST_MODULE_CASTS = 10,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);

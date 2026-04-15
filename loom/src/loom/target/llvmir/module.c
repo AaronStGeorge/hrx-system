@@ -271,6 +271,50 @@ iree_status_t loom_llvmir_module_add_integer_constant(
   return iree_ok_status();
 }
 
+iree_status_t loom_llvmir_module_add_integer_vector_constant(
+    loom_llvmir_module_t* module, loom_llvmir_type_id_t vector_type_id,
+    const uint64_t* values, iree_host_size_t value_count,
+    loom_llvmir_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(module);
+  if (vector_type_id >= module->type_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM integer vector constant references unknown type");
+  }
+  const loom_llvmir_type_t* vector_type = &module->types[vector_type_id];
+  if (vector_type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+      vector_type->element_type >= module->type_count ||
+      module->types[vector_type->element_type].kind !=
+          LOOM_LLVMIR_TYPE_INTEGER) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM integer vector constant type must be an integer vector");
+  }
+  if (value_count != vector_type->element_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM integer vector constant element count does not match type");
+  }
+  if (value_count > 0 && values == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM integer vector constant has null value storage");
+  }
+  loom_llvmir_value_t* constant = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_define_value(
+      module, LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR, vector_type_id,
+      iree_string_view_empty(), &constant, out_value_id));
+  if (value_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        &module->arena, value_count, sizeof(*constant->integer_vector.values),
+        (void**)&constant->integer_vector.values));
+    memcpy(constant->integer_vector.values, values,
+           value_count * sizeof(*constant->integer_vector.values));
+  }
+  constant->integer_vector.value_count = value_count;
+  return iree_ok_status();
+}
+
 iree_status_t loom_llvmir_module_add_float_bits_constant(
     loom_llvmir_module_t* module, loom_llvmir_type_id_t type_id, uint64_t bits,
     loom_llvmir_value_id_t* out_value_id) {

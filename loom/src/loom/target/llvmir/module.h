@@ -57,7 +57,8 @@ typedef enum loom_llvmir_value_kind_e {
   LOOM_LLVMIR_VALUE_CONSTANT_INTEGER = 1,
   LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS = 2,
   LOOM_LLVMIR_VALUE_CONSTANT_NULL = 3,
-  LOOM_LLVMIR_VALUE_INSTRUCTION = 4,
+  LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR = 4,
+  LOOM_LLVMIR_VALUE_INSTRUCTION = 5,
 } loom_llvmir_value_kind_t;
 
 typedef enum loom_llvmir_function_kind_e {
@@ -195,6 +196,11 @@ iree_status_t loom_llvmir_module_get_vector_type(
 
 iree_status_t loom_llvmir_module_add_integer_constant(
     loom_llvmir_module_t* module, loom_llvmir_type_id_t type_id, uint64_t value,
+    loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_module_add_integer_vector_constant(
+    loom_llvmir_module_t* module, loom_llvmir_type_id_t vector_type_id,
+    const uint64_t* values, iree_host_size_t value_count,
     loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_module_add_float_bits_constant(

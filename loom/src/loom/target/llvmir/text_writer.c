@@ -128,6 +128,31 @@ static iree_status_t loom_llvmir_write_fallback_value_name(
   return loom_output_stream_write_format(stream, "%%v%u", value_id);
 }
 
+static iree_status_t loom_llvmir_write_integer_vector_constant(
+    const loom_llvmir_module_t* module, const loom_llvmir_value_t* value,
+    loom_output_stream_t* stream) {
+  const loom_llvmir_type_t* vector_type =
+      loom_llvmir_text_type(module, value->type_id);
+  if (!vector_type || vector_type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+      vector_type->element_type >= module->type_count ||
+      value->integer_vector.value_count != vector_type->element_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM text writer saw invalid integer vector constant");
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '<'));
+  for (iree_host_size_t i = 0; i < value->integer_vector.value_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_write_type(module, vector_type->element_type, stream));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, " %" PRIu64, value->integer_vector.values[i]));
+  }
+  return loom_output_stream_write_char(stream, '>');
+}
+
 static iree_status_t loom_llvmir_write_value_ref(
     const loom_llvmir_module_t* module, loom_llvmir_value_id_t value_id,
     loom_output_stream_t* stream) {
@@ -145,6 +170,8 @@ static iree_status_t loom_llvmir_write_value_ref(
                                              value->float_bits);
     case LOOM_LLVMIR_VALUE_CONSTANT_NULL:
       return loom_output_stream_write_cstring(stream, "null");
+    case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR:
+      return loom_llvmir_write_integer_vector_constant(module, value, stream);
     case LOOM_LLVMIR_VALUE_PARAMETER:
     case LOOM_LLVMIR_VALUE_INSTRUCTION:
       if (!iree_string_view_is_empty(value->name)) {
@@ -634,6 +661,20 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
       return loom_llvmir_write_typed_value_ref(
           module, instruction->insert_element.index, stream);
+    }
+    case LOOM_LLVMIR_INST_SHUFFLE_VECTOR: {
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "shufflevector "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->shuffle_vector.lhs, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->shuffle_vector.rhs, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      return loom_llvmir_write_typed_value_ref(
+          module, instruction->shuffle_vector.mask, stream);
     }
     case LOOM_LLVMIR_INST_CALL: {
       loom_llvmir_function_t* callee =

@@ -8,7 +8,7 @@
 
 #include "loom/target/llvmir/llvmir.h"
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 10
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 11
 
 static loom_llvmir_attr_t loom_llvmir_test_attr(loom_llvmir_attr_kind_t kind) {
   return (loom_llvmir_attr_t){
@@ -857,6 +857,72 @@ static iree_status_t loom_llvmir_test_populate_vector_elements(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_test_populate_shuffle_vector(
+    loom_llvmir_module_t* module) {
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t v4i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t v4f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_float_type(
+      module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_vector_type(module, 4, i32_type, &v4i32_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_vector_type(module, 4, f32_type, &v4f32_type));
+
+  uint64_t mask_values[] = {0, 4, 1, 5};
+  loom_llvmir_value_id_t mask = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_vector_constant(
+      module, v4i32_type, mask_values, IREE_ARRAYSIZE(mask_values), &mask));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("shuffle_vector"),
+          .return_type = v4f32_type,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+
+  loom_llvmir_value_id_t lhs = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t rhs = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = v4f32_type,
+                                             .name = IREE_SV("lhs"),
+                                         },
+                                         &lhs));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = v4f32_type,
+                                             .name = IREE_SV("rhs"),
+                                         },
+                                         &rhs));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  loom_llvmir_value_id_t interleaved = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_shuffle_vector(
+      entry,
+      &(loom_llvmir_shuffle_vector_desc_t){
+          .result_name = IREE_SV("interleaved"),
+          .result_type = v4f32_type,
+          .lhs = lhs,
+          .rhs = rhs,
+          .mask = mask,
+      },
+      &interleaved));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, interleaved));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_test_populate_compare_select(
     loom_llvmir_module_t* module) {
   loom_llvmir_type_id_t i1_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -1600,6 +1666,15 @@ static const char kVectorElementsText[] =
     "  ret <4 x float> %updated\n"
     "}\n";
 
+static const char kShuffleVectorText[] =
+    "define <4 x float> @shuffle_vector(<4 x float> %lhs, <4 x float> %rhs) "
+    "{\n"
+    "entry:\n"
+    "  %interleaved = shufflevector <4 x float> %lhs, <4 x float> %rhs, "
+    "<4 x i32> <i32 0, i32 4, i32 1, i32 5>\n"
+    "  ret <4 x float> %interleaved\n"
+    "}\n";
+
 static const char kCompareSelectText[] =
     "define i32 @compare_select(i32 %x, i32 %lower, i32 %upper, float "
     "%xf, float %yf) {\n"
@@ -1710,6 +1785,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
       return IREE_SV("scalar_binop");
     case LOOM_LLVMIR_TEST_MODULE_VECTOR_ELEMENTS:
       return IREE_SV("vector_elements");
+    case LOOM_LLVMIR_TEST_MODULE_SHUFFLE_VECTOR:
+      return IREE_SV("shuffle_vector");
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
       return IREE_SV("builtin_intrinsics");
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
@@ -1763,6 +1840,7 @@ static iree_status_t loom_llvmir_test_module_target_config(
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
     case LOOM_LLVMIR_TEST_MODULE_VECTOR_ELEMENTS:
+    case LOOM_LLVMIR_TEST_MODULE_SHUFFLE_VECTOR:
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
     case LOOM_LLVMIR_TEST_MODULE_CASTS:
       return iree_ok_status();
@@ -1791,6 +1869,8 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_scalar_binop(module);
     case LOOM_LLVMIR_TEST_MODULE_VECTOR_ELEMENTS:
       return loom_llvmir_test_populate_vector_elements(module);
+    case LOOM_LLVMIR_TEST_MODULE_SHUFFLE_VECTOR:
+      return loom_llvmir_test_populate_shuffle_vector(module);
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return loom_llvmir_test_populate_compare_select(module);
     case LOOM_LLVMIR_TEST_MODULE_CASTS:
@@ -1853,6 +1933,9 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_VECTOR_ELEMENTS:
       return iree_make_string_view(kVectorElementsText,
                                    IREE_ARRAYSIZE(kVectorElementsText) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_SHUFFLE_VECTOR:
+      return iree_make_string_view(kShuffleVectorText,
+                                   IREE_ARRAYSIZE(kShuffleVectorText) - 1);
     case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return iree_make_string_view(kCompareSelectText,
                                    IREE_ARRAYSIZE(kCompareSelectText) - 1);
