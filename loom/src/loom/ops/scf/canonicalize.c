@@ -423,6 +423,58 @@ iree_status_t loom_scf_lookup_canonicalize(loom_op_t* op,
 }
 
 //===----------------------------------------------------------------------===//
+// scf.switch
+//===----------------------------------------------------------------------===//
+
+static bool loom_scf_switch_selected_region(loom_rewriter_t* rewriter,
+                                            loom_op_t* op,
+                                            loom_region_t** out_region) {
+  *out_region = NULL;
+  int64_t selector = 0;
+  if (!loom_scf_value_facts_are_exact_i64(
+          rewriter, loom_scf_switch_selector(op), &selector)) {
+    return false;
+  }
+
+  loom_attribute_t case_keys = loom_scf_switch_case_keys(op);
+  if (case_keys.kind != LOOM_ATTR_I64_ARRAY ||
+      (case_keys.count > 0 && !case_keys.i64_array)) {
+    return false;
+  }
+  loom_region_slice_t case_regions = loom_scf_switch_case_regions(op);
+  if (case_regions.count != case_keys.count) return false;
+
+  for (uint16_t i = 0; i < case_keys.count; ++i) {
+    if (case_keys.i64_array[i] == selector) {
+      *out_region = case_regions.regions[i];
+      return true;
+    }
+  }
+  *out_region = loom_scf_switch_default_region(op);
+  return true;
+}
+
+iree_status_t loom_scf_switch_canonicalize(loom_op_t* op,
+                                           loom_rewriter_t* rewriter) {
+  loom_region_t* selected_region = NULL;
+  if (!loom_scf_switch_selected_region(rewriter, op, &selected_region)) {
+    return iree_ok_status();
+  }
+
+  loom_op_t* yield = loom_scf_region_terminator(selected_region);
+  if (!yield) return iree_ok_status();
+
+  loom_value_slice_t yielded_values = loom_scf_yield_values(yield);
+  if (yielded_values.count != op->result_count) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
+      rewriter, selected_region, yield, op));
+
+  return loom_scf_replace_results_and_erase(op, rewriter, yielded_values.values,
+                                            yielded_values.count);
+}
+
+//===----------------------------------------------------------------------===//
 // scf.if
 //===----------------------------------------------------------------------===//
 

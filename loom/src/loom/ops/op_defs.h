@@ -50,6 +50,12 @@ typedef struct loom_value_slice_t {
   uint16_t count;
 } loom_value_slice_t;
 
+// A typed range of region pointers. Returned by variadic region accessors.
+typedef struct loom_region_slice_t {
+  loom_region_t** regions;
+  uint8_t count;
+} loom_region_slice_t;
+
 // Returns the value ID at |index| in the slice.
 static inline loom_value_id_t loom_value_slice_get(loom_value_slice_t slice,
                                                    uint16_t index) {
@@ -194,8 +200,23 @@ typedef enum loom_format_kind_e {
   // storing the row keys. The operand field stores row payloads flattened in
   // row-major order, followed by one default row.
   LOOM_FORMAT_KIND_ATTR_TABLE = 23,
+
+  // Static-attribute-keyed region table:
+  // { case 0 { ... } case 1 { ... } default { ... } }.
+  // field_index = variadic case region start. data packs the i64 array attr
+  // field index storing row keys and the fixed default region index using
+  // LOOM_FORMAT_REGION_TABLE_DATA.
+  LOOM_FORMAT_KIND_REGION_TABLE = 24,
 };
 typedef uint8_t loom_format_kind_t;
+
+#define LOOM_FORMAT_REGION_TABLE_DATA(keys_attr_index, default_region_index) \
+  ((uint16_t)(((uint16_t)(default_region_index) << 8) |                      \
+              (uint16_t)(keys_attr_index)))
+#define LOOM_FORMAT_REGION_TABLE_KEYS_ATTR_INDEX(data) \
+  ((uint8_t)((data) & 0xFF))
+#define LOOM_FORMAT_REGION_TABLE_DEFAULT_REGION_INDEX(data) \
+  ((uint8_t)(((data) >> 8) & 0xFF))
 
 // A 4-byte printer/parser instruction. An op with 12 format elements uses
 // 48 bytes of .rodata. For 200 ops, total format tables are ~10KB.
@@ -207,6 +228,7 @@ typedef uint8_t loom_format_kind_t;
 //   INDEX_LIST:     static attribute field index.
 //   OPERAND_DICT:   dict attribute field index storing key -> operand ordinal.
 //   ATTR_TABLE:     i64 array attr field index storing row keys.
+//   REGION_TABLE:   packed keys attr index and fixed default region index.
 //   BINDING_LIST:   binding kind (CAPTURE=0, ELEMENT=1).
 //   OPTIONAL_GROUP: (skip_count << 2) | anchor_category.
 typedef struct loom_format_element_t {
@@ -579,14 +601,38 @@ static inline iree_string_view_t loom_attr_descriptor_name(
 
 // Per-region metadata in the op vtable.
 typedef struct loom_region_descriptor_t {
-  loom_region_flags_t flags;
+  // Required explicit terminator kind, or LOOM_OP_KIND_UNKNOWN if any
+  // terminator kind is allowed. The implicit terminator kind is also accepted
+  // when present.
+  loom_op_kind_t terminator;
+
   // Op kind of the implicit terminator for this region, or
   // LOOM_OP_KIND_UNKNOWN if every block must end with an explicit terminator.
   loom_op_kind_t implicit_terminator;
+
+  // Region structure flags such as single-block enforcement.
+  loom_region_flags_t flags;
 } loom_region_descriptor_t;
 
-static_assert(sizeof(loom_region_descriptor_t) == 4,
-              "loom_region_descriptor_t must be 4 bytes");
+static_assert(sizeof(loom_region_descriptor_t) == 6,
+              "loom_region_descriptor_t must be 6 bytes");
+
+// Returns the descriptor for an actual region slot. For ops with a trailing
+// variadic region field, fixed slots use their exact descriptor and every
+// variadic slot reuses the final descriptor entry.
+static inline const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
+    const loom_op_vtable_t* vtable, uint8_t region_index) {
+  if (!vtable || !vtable->region_descriptors || vtable->region_count == 0) {
+    return NULL;
+  }
+  if (region_index < vtable->region_count) {
+    return &vtable->region_descriptors[region_index];
+  }
+  if (iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_VARIADIC_REGIONS)) {
+    return &vtable->region_descriptors[vtable->region_count - 1];
+  }
+  return NULL;
+}
 
 // Binding kind for BindingList format elements.
 typedef enum loom_binding_kind_e {
@@ -999,6 +1045,16 @@ static inline loom_value_id_t loom_region_branch_selector(
 #define LOOM_DEFINE_REGION(func_name, index)                    \
   static inline loom_region_t* func_name(const loom_op_t* op) { \
     return loom_op_regions(op)[(index)];                        \
+  }
+
+// Defines a function that returns the variadic region tail as a slice.
+// |fixed_count| is the number of non-variadic regions before the tail.
+#define LOOM_DEFINE_VARIADIC_REGIONS(func_name, fixed_count)         \
+  static inline loom_region_slice_t func_name(const loom_op_t* op) { \
+    loom_region_slice_t slice;                                       \
+    slice.regions = loom_op_regions(op) + (fixed_count);             \
+    slice.count = (uint8_t)(op->region_count - (fixed_count));       \
+    return slice;                                                    \
   }
 
 // Each LOOM_DEFINE_ATTR_* macro defines both a typed accessor function

@@ -1287,11 +1287,20 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
   }
 
   // Check region count.
-  if (op->region_count != vtable->region_count) {
+  bool has_variadic_regions =
+      iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_VARIADIC_REGIONS);
+  uint8_t minimum_region_count =
+      has_variadic_regions && vtable->region_count > 0
+          ? (uint8_t)(vtable->region_count - 1)
+          : vtable->region_count;
+  bool region_count_matches = has_variadic_regions
+                                  ? op->region_count >= minimum_region_count
+                                  : op->region_count == vtable->region_count;
+  if (!region_count_matches) {
     loom_diagnostic_param_t params[] = {
         loom_param_string(op_name),
         loom_param_u32(op->region_count),
-        loom_param_u32(vtable->region_count),
+        loom_param_u32(minimum_region_count),
     };
     loom_verify_emit_structured(state, op, &loom_err_structure_004, params,
                                 IREE_ARRAYSIZE(params));
@@ -2901,6 +2910,16 @@ static bool loom_verify_op_is_terminator(loom_verify_state_t* state,
   return vtable && iree_any_bit_set(vtable->traits, LOOM_TRAIT_TERMINATOR);
 }
 
+static bool loom_verify_region_terminator_matches(
+    const loom_region_descriptor_t* region_descriptor,
+    const loom_op_t* terminator) {
+  if (!terminator || region_descriptor->terminator == LOOM_OP_KIND_UNKNOWN) {
+    return true;
+  }
+  return terminator->kind == region_descriptor->terminator ||
+         terminator->kind == region_descriptor->implicit_terminator;
+}
+
 static bool loom_verify_region_entry_yield(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, uint8_t region_index,
@@ -2909,18 +2928,19 @@ static bool loom_verify_region_entry_yield(
   if (out_yield_operands) {
     *out_yield_operands = NULL;
   }
-  if (region_index >= op->region_count ||
-      region_index >= vtable->region_count || !vtable->region_descriptors) {
+  if (region_index >= op->region_count) {
     return false;
   }
+  const loom_region_descriptor_t* region_descriptor =
+      loom_op_vtable_region_descriptor(vtable, region_index);
+  if (!region_descriptor) return false;
   loom_region_t* region = loom_op_regions(op)[region_index];
   if (!region || region->block_count == 0) return false;
 
-  const loom_region_descriptor_t* region_descriptor =
-      &vtable->region_descriptors[region_index];
   const loom_block_t* entry = loom_region_const_entry_block(region);
   const loom_op_t* terminator = loom_verify_block_last_live_op(entry);
-  if (terminator && loom_verify_op_is_terminator(state, terminator)) {
+  if (terminator && loom_verify_op_is_terminator(state, terminator) &&
+      loom_verify_region_terminator_matches(region_descriptor, terminator)) {
     *out_yield_count = terminator->operand_count;
     if (out_yield_operands) {
       *out_yield_operands = loom_op_const_operands(terminator);
@@ -2930,19 +2950,49 @@ static bool loom_verify_region_entry_yield(
   return region_descriptor->implicit_terminator != LOOM_OP_KIND_UNKNOWN;
 }
 
+static iree_string_view_t loom_verify_op_kind_name(loom_verify_state_t* state,
+                                                   loom_op_kind_t kind) {
+  const loom_op_vtable_t* vtable = loom_verify_lookup_vtable(state, kind);
+  if (!vtable) return IREE_SV("<unknown op>");
+  return loom_op_vtable_name(vtable);
+}
+
+static void loom_verify_region_terminator_kind(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, uint8_t region_index,
+    const loom_region_descriptor_t* region_descriptor,
+    const loom_op_t* terminator_op) {
+  if (!terminator_op ||
+      loom_verify_region_terminator_matches(region_descriptor, terminator_op)) {
+    return;
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_vtable_name(vtable)),
+      loom_param_u32(region_index),
+      loom_param_string(
+          loom_verify_op_kind_name(state, region_descriptor->terminator)),
+      loom_param_string(loom_verify_op_kind_name(state, terminator_op->kind)),
+  };
+  loom_verify_emit_structured(state, op, &loom_err_structure_018, params,
+                              IREE_ARRAYSIZE(params));
+}
+
 static void loom_verify_region_structure(loom_verify_state_t* state,
                                          const loom_op_t* op,
                                          const loom_op_vtable_t* vtable) {
   if (!vtable->region_descriptors) return;
   iree_string_view_t op_name = loom_op_vtable_name(vtable);
   loom_region_t** regions = loom_op_regions(op);
-  for (uint8_t i = 0; i < vtable->region_count && i < op->region_count; ++i) {
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    const loom_region_descriptor_t* region_descriptor =
+        loom_op_vtable_region_descriptor(vtable, i);
+    if (!region_descriptor) return;
     loom_region_t* region = regions[i];
     if (!region) {
       // NULL region is only valid for optional regions.
       continue;
     }
-    if ((vtable->region_descriptors[i].flags & LOOM_REGION_SINGLE_BLOCK) &&
+    if ((region_descriptor->flags & LOOM_REGION_SINGLE_BLOCK) &&
         region->block_count != 1) {
       loom_diagnostic_param_t params[] = {
           loom_param_string(op_name),
@@ -2952,8 +3002,6 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
       loom_verify_emit_structured(state, op, &loom_err_structure_006, params,
                                   IREE_ARRAYSIZE(params));
     }
-    const loom_region_descriptor_t* region_descriptor =
-        &vtable->region_descriptors[i];
     for (uint16_t b = 0; b < region->block_count; ++b) {
       const loom_block_t* block = loom_region_const_block(region, b);
       const loom_op_t* terminator_op = NULL;
@@ -2996,6 +3044,8 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
         loom_verify_emit_structured(state, op, &loom_err_structure_005, params,
                                     IREE_ARRAYSIZE(params));
       }
+      loom_verify_region_terminator_kind(state, op, vtable, i,
+                                         region_descriptor, terminator_op);
     }
   }
 }

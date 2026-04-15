@@ -51,6 +51,8 @@ typedef enum loom_func_purity_e {
 
 // LOOM_OP_FUNC_DEF: Function definition. Callable by name via func.call.
 // func.def @negate(%input: f32) -> (f32) {
+//   func.return %input : f32
+// }
 LOOM_DEFINE_ISA(loom_func_def_isa, LOOM_OP_FUNC_DEF)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_func_def_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_func_def_callee, 0)
@@ -122,6 +124,8 @@ iree_status_t loom_func_decl_build(
 
 // LOOM_OP_FUNC_TEMPLATE: Constraint-matched visible implementation of an abstract op.
 // func.template<tile.contract> device @vnni_q8(%w: tensor<[%M]xi8>, %x: tensor<[%K]xf32>) -> (tensor<[%M]xf32>) where [mul(%M, 16)] {
+//   func.return %x : tensor<[%K]xf32>
+// }
 LOOM_DEFINE_ISA(loom_func_template_isa, LOOM_OP_FUNC_TEMPLATE)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_func_template_results, 0)
 LOOM_DEFINE_ATTR_STRING(loom_func_template_implements, 0)

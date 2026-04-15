@@ -457,8 +457,39 @@ class TestPrintAttrTable:
         )
         assert (
             _printer().print_operation(op, module)
-            == "%x, %y = test.attr_table %selector "
-            "{0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32"
+            == "%x, %y = test.attr_table %selector {\n"
+            "  0 = (%a0, %b0),\n"
+            "  1 = (%a1, %b1)\n"
+            "} default(%ad, %bd) : i32, f32"
+        )
+
+
+class TestPrintRegionTable:
+    """Exercises: RegionTable over a variadic region tail."""
+
+    def test_basic(self) -> None:
+        module, [selector] = _module_with(("selector", INDEX))
+        case0 = Region(blocks=[Block(ops=[Operation(name="test.yield")])])
+        case1 = Region(blocks=[Block(ops=[Operation(name="test.yield")])])
+        default = Region(blocks=[Block(ops=[Operation(name="test.yield")])])
+        op = Operation(
+            name="test.region_table",
+            operands=[selector],
+            attributes={"case_keys": [0, 1]},
+            regions=[default, case0, case1],
+        )
+        assert _printer().print_operation(op, module) == (
+            "test.region_table %selector {\n"
+            "  case 0 {\n"
+            "    test.yield\n"
+            "  }\n"
+            "  case 1 {\n"
+            "    test.yield\n"
+            "  }\n"
+            "  default {\n"
+            "    test.yield\n"
+            "  }\n"
+            "}"
         )
 
 

@@ -77,6 +77,13 @@ static void loom_scf_format_lookup_field_name(char* buffer,
   iree_snprintf(buffer, buffer_capacity, "%s[%" PRIhsz "]", prefix, index);
 }
 
+static void loom_scf_format_switch_region_field_name(
+    char* buffer, iree_host_size_t buffer_capacity, iree_string_view_t prefix,
+    iree_host_size_t region_index, iree_host_size_t value_index) {
+  iree_snprintf(buffer, buffer_capacity, "%.*s[%" PRIhsz "].yield[%" PRIhsz "]",
+                (int)prefix.size, prefix.data, region_index, value_index);
+}
+
 static iree_status_t loom_scf_emit_lookup_type_mismatch(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, iree_host_size_t value_index,
@@ -152,5 +159,98 @@ iree_status_t loom_scf_lookup_verify(const loom_module_t* module,
     }
   }
 
+  return iree_ok_status();
+}
+
+static iree_status_t loom_scf_emit_switch_type_mismatch(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t yield_field_name,
+    loom_value_id_t yield_value, iree_host_size_t result_index) {
+  loom_value_slice_t results = loom_scf_switch_results(op);
+  char result_name[32];
+  loom_scf_format_lookup_field_name(result_name, sizeof(result_name), "results",
+                                    result_index);
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(yield_field_name),
+      loom_param_type(loom_module_value_type(module, yield_value)),
+      loom_param_string(iree_make_cstring_view(result_name)),
+      loom_param_type(
+          loom_module_value_type(module, results.values[result_index])),
+  };
+  return loom_scf_emit(emitter, op, &loom_err_type_001, params,
+                       IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_scf_switch_verify_region_yield(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter, loom_region_t* region,
+    iree_string_view_t field_name, iree_host_size_t region_ordinal) {
+  if (!region || region->block_count == 0) return iree_ok_status();
+  const loom_block_t* entry = loom_region_const_entry_block(region);
+  const loom_op_t* terminator = entry->last_op;
+  if (!terminator || !loom_scf_yield_isa(terminator)) {
+    return iree_ok_status();
+  }
+
+  loom_value_slice_t yielded_values = loom_scf_yield_values(terminator);
+  if (yielded_values.count != op->result_count) {
+    return loom_scf_emit_count_mismatch(emitter, op, field_name,
+                                        yielded_values.count,
+                                        IREE_SV("results"), op->result_count);
+  }
+
+  loom_value_slice_t results = loom_scf_switch_results(op);
+  for (uint16_t i = 0; i < yielded_values.count; ++i) {
+    loom_type_t yield_type =
+        loom_module_value_type(module, yielded_values.values[i]);
+    loom_type_t result_type = loom_module_value_type(module, results.values[i]);
+    if (loom_type_equal(yield_type, result_type)) continue;
+    char yield_name[48];
+    loom_scf_format_switch_region_field_name(yield_name, sizeof(yield_name),
+                                             field_name, region_ordinal, i);
+    return loom_scf_emit_switch_type_mismatch(
+        module, emitter, op, iree_make_cstring_view(yield_name),
+        yielded_values.values[i], i);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_scf_switch_verify(const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     iree_diagnostic_emitter_t emitter) {
+  loom_attribute_t case_keys = loom_scf_switch_case_keys(op);
+  if (case_keys.kind != LOOM_ATTR_I64_ARRAY) {
+    return loom_scf_emit_attribute_kind_mismatch(
+        emitter, op, IREE_SV("case_keys"), case_keys.kind, LOOM_ATTR_I64_ARRAY);
+  }
+  if (case_keys.count > 0 && !case_keys.i64_array) {
+    return loom_scf_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("case_keys"), case_keys.count,
+        IREE_SV("non-null i64_array storage when count is non-zero"));
+  }
+
+  for (uint16_t i = 1; i < case_keys.count; ++i) {
+    if (case_keys.i64_array[i] <= case_keys.i64_array[i - 1]) {
+      return loom_scf_emit_attribute_value_constraint(
+          emitter, op, IREE_SV("case_keys"), case_keys.i64_array[i],
+          IREE_SV("strictly increasing sorted unique case key"));
+    }
+  }
+
+  loom_region_slice_t case_regions = loom_scf_switch_case_regions(op);
+  if (case_regions.count != case_keys.count) {
+    return loom_scf_emit_count_mismatch(emitter, op, IREE_SV("case_regions"),
+                                        case_regions.count,
+                                        IREE_SV("case_keys"), case_keys.count);
+  }
+
+  IREE_RETURN_IF_ERROR(loom_scf_switch_verify_region_yield(
+      module, op, emitter, loom_scf_switch_default_region(op),
+      IREE_SV("default_region"), 0));
+  for (uint8_t i = 0; i < case_regions.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_scf_switch_verify_region_yield(
+        module, op, emitter, case_regions.regions[i], IREE_SV("case_regions"),
+        i));
+  }
   return iree_ok_status();
 }

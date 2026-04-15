@@ -555,6 +555,13 @@ iree_status_t loom_parsed_op_add_region(loom_parsed_op_t* parsed,
                                         iree_arena_allocator_t* arena,
                                         loom_region_t* region);
 
+// Sets a parsed region by storage index, growing the parsed region list and
+// filling any intervening slots with NULL. This lets assembly formats print
+// regions in a different order than the op storage layout.
+iree_status_t loom_parsed_op_set_region(loom_parsed_op_t* parsed,
+                                        iree_arena_allocator_t* arena,
+                                        uint8_t index, loom_region_t* region);
+
 // Appends a tied result entry. Spills to arena on overflow.
 iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
                                              iree_arena_allocator_t* arena,

@@ -62,6 +62,7 @@ __all__ = [
     "Keyword",
     "AttrDict",
     "AttrTable",
+    "RegionTable",
     "Region",
     "IndexList",
     "OperandDict",
@@ -307,6 +308,26 @@ class AttrTable:
 
     keys: str
     values: str
+
+
+@dataclass(frozen=True, slots=True)
+class RegionTable:
+    """A static-attribute-keyed region table with a default branch.
+
+    Prints/parses::
+
+      {case 0 { ... } case 1 { ... } default { ... }}
+
+    |keys| names an i64-array attribute field containing sorted case keys.
+    |case_regions| names a variadic region field containing one region per key.
+    |default_region| names the fixed fallback region field. The default region
+    is stored separately from the variadic case tail even though it prints last,
+    so generated accessors can expose both concepts directly.
+    """
+
+    keys: str
+    case_regions: str
+    default_region: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -665,6 +686,7 @@ type FormatElement = (
     | Keyword
     | AttrDict
     | AttrTable
+    | RegionTable
     | Region
     | IndexList
     | OperandDict

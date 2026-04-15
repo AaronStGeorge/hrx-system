@@ -43,6 +43,7 @@ from loom.assembly import (
     PredicateList,
     Ref,
     Refs,
+    RegionTable,
     ResultType,
     ResultTypeList,
     Scope,
@@ -105,6 +106,7 @@ KEYWORD_MAP: dict[str, str] = {
     "layout": "LOOM_KW_LAYOUT",
     "into": "LOOM_KW_INTO",
     "default": "LOOM_KW_DEFAULT",
+    "case": "LOOM_KW_CASE",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.
@@ -801,8 +803,29 @@ def _translate_format_elements(
                         raise ValueError(f"Op '{op.name}': AttrTable keys field '{keys_field}' must be an i64_array attr")
                     elements.append(("LOOM_FORMAT_KIND_ATTR_TABLE", values_index, str(keys_index)))
 
+                case RegionTable(keys=keys_field, case_regions=case_regions_field, default_region=default_region_field):
+                    case_kind, case_index = _resolve_field(case_regions_field)
+                    default_kind, default_index = _resolve_field(default_region_field)
+                    keys_kind, keys_index = _resolve_field(keys_field)
+                    if case_kind != FieldKind.REGION:
+                        raise ValueError(f"Op '{op.name}': RegionTable case field '{case_regions_field}' is not a region field")
+                    if default_kind != FieldKind.REGION:
+                        raise ValueError(f"Op '{op.name}': RegionTable default field '{default_region_field}' is not a region field")
+                    if keys_kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': RegionTable keys field '{keys_field}' is not an attr field")
+                    case_desc = layout.fields[case_regions_field]
+                    if not case_desc.variadic:
+                        raise ValueError(f"Op '{op.name}': RegionTable case field '{case_regions_field}' must be variadic")
+                    attr_def = op.attr(keys_field)
+                    if attr_def is None or attr_def.attr_type != "i64_array":
+                        raise ValueError(f"Op '{op.name}': RegionTable keys field '{keys_field}' must be an i64_array attr")
+                    payload = f"LOOM_FORMAT_REGION_TABLE_DATA({keys_index}, {default_index})"
+                    elements.append(("LOOM_FORMAT_KIND_REGION_TABLE", case_index, payload))
+
                 case RegionFmt(field=name):
                     kind, index = _resolve_field(name)
+                    if layout.fields[name].variadic:
+                        raise ValueError(f"Op '{op.name}': variadic Region '{name}' must use RegionTable or another table format")
                     elements.append(("LOOM_FORMAT_KIND_REGION", index, "0"))
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
@@ -916,6 +939,18 @@ def _implicit_terminator_kind(op: Op, ops_by_name: dict[str, Op]) -> str:
     terminator_layout = compute_layout(terminator_op)
     if terminator_layout.fixed_operand_count != 0 or terminator_layout.fixed_result_count != 0 or terminator_op.attrs or terminator_op.regions:
         raise ValueError(f"Op '{op.name}': ImplicitTerminator '{terminator_name}' must be instantiable with zero operands, results, attrs, and regions")
+    return _c_enum_name(terminator_op)
+
+
+def _region_terminator_kind(op: Op, region: RegionDef, ops_by_name: dict[str, Op]) -> str:
+    """Returns the C op kind required for explicit terminators in a region."""
+    if region.terminator is None:
+        return "LOOM_OP_KIND_UNKNOWN"
+    terminator_op = ops_by_name.get(region.terminator)
+    if terminator_op is None:
+        raise ValueError(f"Op '{op.name}' region '{region.name}': terminator '{region.terminator}' must name a registered op")
+    if not any(trait.name == "Terminator" for trait in terminator_op.traits):
+        raise ValueError(f"Op '{op.name}' region '{region.name}': terminator '{region.terminator}' is not marked with the Terminator trait")
     return _c_enum_name(terminator_op)
 
 
@@ -1238,6 +1273,25 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "c_type": "const loom_value_id_t*",
                             "may_consume": has_result_type_list,
                             "index": values_desc.index,
+                        }
+                    )
+                    covered_attrs.add(keys_field)
+
+                case RegionTable(keys=keys_field, case_regions=case_regions_field, default_region=default_region_field):
+                    append_attr_param(keys_field)
+                    case_region_def = _find_region_def(op, case_regions_field)
+                    default_region_def = _find_region_def(op, default_region_field)
+                    params.append(
+                        {
+                            "name": "region_table",
+                            "kind": "auto_region_table",
+                            "case_region_index": layout.fields[case_regions_field].index,
+                            "default_region_index": layout.fields[default_region_field].index,
+                            "case_region_name": case_regions_field,
+                            "default_region_name": default_region_field,
+                            "keys_field": keys_field,
+                            "case_implicit_args": (case_region_def.implicit_args if case_region_def else ()),
+                            "default_implicit_args": (default_region_def.implicit_args if default_region_def else ()),
                         }
                     )
                     covered_attrs.add(keys_field)
@@ -1603,6 +1657,14 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             max_value="UINT16_MAX",
             message=f"{op.name} result count exceeds uint16_t range",
         )
+    for param in params:
+        if param["kind"] == "auto_region_table":
+            _emit_builder_count_check(
+                lines,
+                count=f"{param['keys_field']}_count",
+                max_value=f"UINT8_MAX - {layout.fixed_region_count}",
+                message=f"{op.name} region count exceeds uint8_t range",
+            )
     if any(param["kind"] == "tied_results" for param in params):
         _emit_builder_count_check(
             lines,
@@ -1645,7 +1707,11 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
     else:
         result_count_expr = str(layout.fixed_result_count)
 
-    region_count = len(op.regions)
+    region_count_expr = str(len(op.regions))
+    for param in params:
+        if param["kind"] == "auto_region_table":
+            region_count_expr = f"{layout.fixed_region_count} + (uint8_t){param['keys_field']}_count"
+            break
     attr_count = len(_non_flags_attrs(op))
 
     # Compute tied result count expression.
@@ -1660,7 +1726,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
 
     lines.append("  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(")
     lines.append(f"      builder, {enum_name}, {operand_count_expr},")
-    lines.append(f"      {result_count_expr}, {region_count}, {tied_count_expr},")
+    lines.append(f"      {result_count_expr}, {region_count_expr}, {tied_count_expr},")
     lines.append(f"      {attr_count}, location, out_op));")
     lines.extend(f"  (*out_op)->instance_flags = {param['name']};" for param in params if param["kind"] == "instance_flags")
 
@@ -1696,6 +1762,28 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             lines.append("        loom_builder_define_value(builder, arg_types[_i], &_arg_id));")
             lines.append(f"    loom_op_operands(*out_op)[{fixed_operand_count} + _i] = _arg_id;")
             lines.append("  }")
+
+    def emit_auto_region(slot_expr: str, name: str, implicit_args: tuple[tuple[str, str], ...]) -> None:
+        has_block_args = bool(implicit_args)
+        lines.append(f"  // Auto-create {name} region with entry block.")
+        lines.append("  {")
+        lines.append("    loom_region_t* _region = NULL;")
+        lines.append("    IREE_RETURN_IF_ERROR(")
+        lines.append("        loom_module_allocate_region(builder->module, 1, &_region));")
+        if has_block_args:
+            lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
+        for _arg_name, arg_type_kw in implicit_args:
+            scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
+            if scalar_type is None:
+                raise ValueError(f"Unknown implicit arg type: {arg_type_kw}")
+            lines.append("    {")
+            lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+            lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+            lines.append("          builder, _block,")
+            lines.append(f"          loom_type_scalar({scalar_type}), &_arg_id));")
+            lines.append("    }")
+        lines.append(f"    loom_op_regions(*out_op)[{slot_expr}] = _region;")
+        lines.append("  }")
 
     # Auto-create regions with typed entry block args.
     for param in params:
@@ -1757,6 +1845,33 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             lines.append("    }")
 
         lines.append(f"    loom_op_regions(*out_op)[{idx}] = _region;")
+        lines.append("  }")
+
+    for param in params:
+        if param["kind"] != "auto_region_table":
+            continue
+        emit_auto_region(
+            str(param["default_region_index"]),
+            param["default_region_name"],
+            param["default_implicit_args"],
+        )
+        lines.append(f"  for (iree_host_size_t _case = 0; _case < {param['keys_field']}_count; ++_case) {{")
+        lines.append("    loom_region_t* _region = NULL;")
+        lines.append("    IREE_RETURN_IF_ERROR(")
+        lines.append("        loom_module_allocate_region(builder->module, 1, &_region));")
+        if param["case_implicit_args"]:
+            lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
+            for _arg_name, arg_type_kw in param["case_implicit_args"]:
+                scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
+                if scalar_type is None:
+                    raise ValueError(f"Unknown implicit arg type: {arg_type_kw}")
+                lines.append("    {")
+                lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+                lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+                lines.append("          builder, _block,")
+                lines.append(f"          loom_type_scalar({scalar_type}), &_arg_id));")
+                lines.append("    }")
+        lines.append(f"    loom_op_regions(*out_op)[{param['case_region_index']} + _case] = _region;")
         lines.append("  }")
 
     # Fill in attributes.
@@ -1980,13 +2095,13 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
 
         # Assembly format comment from first example, or synthesized.
         if op.examples:
-            asm_fmt = op.examples[0].split("\n")[0]
+            asm_fmt_lines = op.examples[0].split("\n")
         else:
-            asm_fmt = op.name
+            asm_fmt_lines = [op.name]
         doc = op.doc or f"{op.name} operation."
 
         lines.append(f"// {enum_name}: {doc}")
-        lines.append(f"// {asm_fmt}")
+        lines.extend(f"// {line}" for line in asm_fmt_lines)
 
         # ISA check.
         lines.append(f"LOOM_DEFINE_ISA({prefix}_isa, {enum_name})")
@@ -2032,7 +2147,10 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
 
         for region_def in op.regions:
             desc = layout.fields[region_def.name]
-            lines.append(f"LOOM_DEFINE_REGION({prefix}_{region_def.name}, {desc.index})")
+            if region_def.variadic:
+                lines.append(f"LOOM_DEFINE_VARIADIC_REGIONS({prefix}_{region_def.name}, {desc.index})")
+            else:
+                lines.append(f"LOOM_DEFINE_REGION({prefix}_{region_def.name}, {desc.index})")
 
         # Builder declaration.
         build_params = _extract_c_params(op)
@@ -2309,7 +2427,8 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         lines.append(f"static const loom_region_descriptor_t {prefix}_region_desc[] = {{")
         for region_def in op.regions:
             flags = "LOOM_REGION_SINGLE_BLOCK" if region_def.single_block else "0"
-            lines.append(f"    {{{flags}, {implicit_terminator}}},")
+            terminator = _region_terminator_kind(op, region_def, ops_by_name)
+            lines.append(f"    {{{terminator}, {implicit_terminator}, {flags}}},")
         lines.append("};")
     lines.append("")
 
@@ -2380,6 +2499,8 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_OPERANDS")
         if layout.variadic_result:
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_RESULTS")
+        if layout.variadic_region:
+            vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_REGIONS")
         if has_flags:
             vtable_flag_bits.append("LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS")
         vtable_flags_str = " | ".join(vtable_flag_bits) if vtable_flag_bits else "0"

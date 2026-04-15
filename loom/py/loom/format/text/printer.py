@@ -50,6 +50,7 @@ from loom.assembly import (
     PredicateList,
     Ref,
     Refs,
+    RegionTable,
     ResultType,
     ResultTypeList,
     Scope,
@@ -975,11 +976,33 @@ class Printer:
                 case AttrTable(keys=keys_field, values=values_field):
                     assert isinstance(fields, ResolvedFields)
                     covered_attrs.add(keys_field)
-                    stream.emit(
-                        self._format_attr_table(
-                            fields, keys_field, values_field, module
-                        )
+                    stream = self._emit_attr_table(
+                        stream, fields, keys_field, values_field
                     )
+
+                case RegionTable(
+                    keys=keys_field,
+                    case_regions=case_regions_field,
+                    default_region=default_region_field,
+                ):
+                    assert isinstance(fields, ResolvedFields)
+                    covered_attrs.add(keys_field)
+                    if not print_regions:
+                        stream.emit("{ ... }")
+                    else:
+                        self._emit(stream.join() + " {")
+                        self._indent += 1
+                        self._format_region_table(
+                            fields,
+                            keys_field,
+                            case_regions_field,
+                            default_region_field,
+                            op_decl,
+                            module,
+                        )
+                        self._indent -= 1
+                        stream = TokenStream()
+                        stream.emit("}")
 
                 case OperandDict(operands=operand_field, names=names_field):
                     assert isinstance(fields, ResolvedFields)
@@ -1239,14 +1262,13 @@ class Printer:
             parts.append(f"{key} = {operand_name} : {operand_type}")
         return "{" + ", ".join(parts) + "}"
 
-    def _format_attr_table(
+    def _attr_table_rows(
         self,
         fields: ResolvedFields,
         keys_field: str,
         values_field: str,
-        _module: Module,
-    ) -> str:
-        """Format {key = (%row), ...} default(%row) from flattened operands."""
+    ) -> tuple[list[int], list[list[int]], list[int]]:
+        """Return normalized rows for a static-keyed value table."""
         keys = fields.attr(keys_field)
         if keys is None:
             keys = []
@@ -1272,16 +1294,118 @@ class Printer:
             )
         row_width = len(value_ids) // row_count
 
-        def format_row(row_index: int) -> str:
-            start = row_index * row_width
-            row_value_ids = value_ids[start : start + row_width]
-            return "(" + ", ".join(self._value_name(v) for v in row_value_ids) + ")"
+        rows = [
+            value_ids[row_index * row_width : (row_index + 1) * row_width]
+            for row_index in range(len(key_values))
+        ]
+        default_row = value_ids[len(key_values) * row_width : row_count * row_width]
+        return key_values, rows, default_row
+
+    def _format_attr_table_row(self, value_ids: Sequence[int]) -> str:
+        return "(" + ", ".join(self._value_name(v) for v in value_ids) + ")"
+
+    def _format_attr_table(
+        self,
+        fields: ResolvedFields,
+        keys_field: str,
+        values_field: str,
+        _module: Module,
+    ) -> str:
+        """Format {key = (%row), ...} default(%row) from flattened operands."""
+        key_values, rows, default_row = self._attr_table_rows(
+            fields, keys_field, values_field
+        )
 
         parts = [
-            f"{key} = {format_row(row_index)}"
-            for row_index, key in enumerate(key_values)
+            f"{key} = {self._format_attr_table_row(row)}"
+            for key, row in zip(key_values, rows, strict=True)
         ]
-        return "{" + ", ".join(parts) + "} default" + format_row(len(key_values))
+        return (
+            "{"
+            + ", ".join(parts)
+            + "} default"
+            + self._format_attr_table_row(default_row)
+        )
+
+    def _emit_attr_table(
+        self,
+        stream: TokenStream,
+        fields: ResolvedFields,
+        keys_field: str,
+        values_field: str,
+    ) -> TokenStream:
+        """Emit a value table, using one line per non-empty case row."""
+        key_values, rows, default_row = self._attr_table_rows(
+            fields, keys_field, values_field
+        )
+        if not key_values:
+            stream.emit("{} default" + self._format_attr_table_row(default_row))
+            return stream
+
+        self._emit(stream.join() + " {")
+        self._indent += 1
+        for row_index, (key, row) in enumerate(zip(key_values, rows, strict=True)):
+            suffix = "," if row_index + 1 < len(key_values) else ""
+            self._emit(f"{key} = {self._format_attr_table_row(row)}{suffix}")
+        self._indent -= 1
+        stream = TokenStream()
+        stream.emit("} default" + self._format_attr_table_row(default_row))
+        return stream
+
+    def _format_region_table(
+        self,
+        fields: ResolvedFields,
+        keys_field: str,
+        case_regions_field: str,
+        default_region_field: str,
+        op_decl: Op,
+        module: Module,
+    ) -> None:
+        """Format case/default regions inside an enclosing table block."""
+        keys = fields.attr(keys_field)
+        if keys is None:
+            keys = []
+        if not isinstance(keys, Sequence) or isinstance(keys, str | bytes):
+            raise TypeError(
+                f"RegionTable keys field '{keys_field}' must be a sequence of "
+                f"ints, got {type(keys).__name__}."
+            )
+        key_values = list(keys)
+        for key in key_values:
+            if not isinstance(key, int):
+                raise TypeError(
+                    f"RegionTable key field '{keys_field}' contains "
+                    f"{type(key).__name__}, expected int."
+                )
+
+        case_regions = fields.regions(case_regions_field)
+        if len(case_regions) != len(key_values):
+            raise ValueError(
+                f"RegionTable case region field '{case_regions_field}' has "
+                f"{len(case_regions)} regions for {len(key_values)} keys."
+            )
+
+        implicit_terminator_name = _implicit_terminator_name(op_decl)
+        for key, region in zip(key_values, case_regions, strict=True):
+            self._emit(f"case {key} {{")
+            self._indent += 1
+            self._print_region_body(
+                region,
+                module,
+                implicit_terminator_name=implicit_terminator_name,
+            )
+            self._indent -= 1
+            self._emit("}")
+
+        self._emit("default {")
+        self._indent += 1
+        self._print_region_body(
+            fields.region(default_region_field),
+            module,
+            implicit_terminator_name=implicit_terminator_name,
+        )
+        self._indent -= 1
+        self._emit("}")
 
     def _format_named_dict(self, dict_value: Mapping[str, Any], op_decl: Op) -> str:
         """Format {key = value, ...} from a named dict attribute."""

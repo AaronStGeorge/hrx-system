@@ -31,3 +31,4 @@
   LOOM_KW_LAYOUT = 22,  // "layout"
   LOOM_KW_INTO = 23,  // "into"
   LOOM_KW_DEFAULT = 24,  // "default"
+  LOOM_KW_CASE = 25,  // "case"

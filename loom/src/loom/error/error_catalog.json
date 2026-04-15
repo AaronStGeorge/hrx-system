@@ -1442,6 +1442,39 @@
     "fix_hint_template": "Remove the pure modifier or remove the observable effects"
   },
   {
+    "error_id": "ERR_STRUCTURE_018",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 18,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Region terminator has the wrong op kind.",
+    "message_template": "block in '{op_name}' region {region_index} must terminate with '{expected_terminator}' but found '{actual_terminator}'",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "region_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_terminator",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_terminator",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use '{expected_terminator}' as the region terminator"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",

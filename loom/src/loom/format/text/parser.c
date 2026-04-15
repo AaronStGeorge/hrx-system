@@ -1196,6 +1196,24 @@ iree_status_t loom_parsed_op_add_region(loom_parsed_op_t* parsed,
   return iree_ok_status();
 }
 
+iree_status_t loom_parsed_op_set_region(loom_parsed_op_t* parsed,
+                                        iree_arena_allocator_t* arena,
+                                        uint8_t index, loom_region_t* region) {
+  iree_host_size_t required_capacity = (iree_host_size_t)index + 1;
+  if (required_capacity > parsed->region_capacity) {
+    iree_host_size_t capacity = parsed->region_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, parsed->region_count, required_capacity, sizeof(loom_region_t*),
+        &capacity, (void**)&parsed->regions));
+    parsed->region_capacity = (uint8_t)capacity;
+  }
+  while (parsed->region_count <= index) {
+    parsed->regions[parsed->region_count++] = NULL;
+  }
+  parsed->regions[index] = region;
+  return iree_ok_status();
+}
+
 iree_status_t loom_parsed_op_add_tied_result(loom_parsed_op_t* parsed,
                                              iree_arena_allocator_t* arena,
                                              loom_tied_result_t tied) {

@@ -413,6 +413,9 @@ class RegionDef:
     name: Field name, used in format specs.
     doc: Human-readable description.
     single_block: If True, the region must have exactly one block.
+    variadic: If True, this is a trailing zero-or-more region field.
+    terminator: If set, explicit region terminators must have this op name,
+        except that an explicit implicit-terminator op is also valid.
     implicit_args: Implicit block arguments created by the builder
         but not derived from operands. Each entry is (name, type_keyword)
         where type_keyword is a scalar type name (e.g., "index").
@@ -423,6 +426,8 @@ class RegionDef:
     name: str
     doc: str = ""
     single_block: bool = False
+    variadic: bool = False
+    terminator: str | None = None
     implicit_args: tuple[tuple[str, str], ...] = ()
 
 

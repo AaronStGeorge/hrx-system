@@ -39,6 +39,7 @@ from loom.assembly import (
     PredicateList,
     Ref,
     Refs,
+    RegionTable,
     ResultType,
     ResultTypeList,
     Scope,
@@ -195,6 +196,30 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             "kind": "operand_variadic",
                             "type_hint": "list[ValueRef]",
                             "doc": f"Attribute-keyed table values: {values_field}",
+                        }
+                    )
+                    covered_attrs.add(keys_field)
+
+                case RegionTable(
+                    keys=keys_field,
+                    case_regions=case_regions_field,
+                    default_region=default_region_field,
+                ):
+                    append_attr_param(keys_field)
+                    params.append(
+                        {
+                            "name": default_region_field,
+                            "kind": "region_table_default",
+                            "type_hint": "Region",
+                            "doc": f"Default region: {default_region_field}",
+                        }
+                    )
+                    params.append(
+                        {
+                            "name": case_regions_field,
+                            "kind": "region_table_cases",
+                            "type_hint": "list[Region]",
+                            "doc": f"Case regions: {case_regions_field}",
                         }
                     )
                     covered_attrs.add(keys_field)
@@ -430,6 +455,8 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
             keyword_param_strs.append(f"{param['name']}: {param['type_hint']}")
         elif param["kind"] == "region":
             keyword_param_strs.append(f"{param['name']}: {param['type_hint']} = None")
+        elif param["kind"] in ("region_table_default", "region_table_cases"):
+            keyword_param_strs.append(f"{param['name']}: {param['type_hint']}")
         elif param.get("optional"):
             keyword_param_strs.append(f"{param['name']}: {param['type_hint']} | None = None")
         else:
@@ -519,6 +546,10 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
             case "region":
                 lines.append(f"        if {param['name']} is not None:")
                 lines.append(f"            _regions.append({param['name']})")
+            case "region_table_default":
+                lines.append(f"        _regions.append({param['name']})")
+            case "region_table_cases":
+                lines.append(f"        _regions.extend({param['name']})")
 
     for operand in op.operands:
         operand_param = params_by_name.get(operand.name)

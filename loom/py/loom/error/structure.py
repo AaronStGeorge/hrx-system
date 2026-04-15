@@ -256,6 +256,25 @@ ERR_STRUCTURE_017 = ErrorDef(
     fix_hint="Remove the pure modifier or remove the observable effects",
 )
 
+# ERR_STRUCTURE_018: Region terminator has the wrong op kind.
+ERR_STRUCTURE_018 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=18,
+    severity=Severity.ERROR,
+    summary="Region terminator has the wrong op kind.",
+    message=(
+        "block in '{op_name}' region {region_index} must terminate with "
+        "'{expected_terminator}' but found '{actual_terminator}'"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("region_index", ParamKind.U32),
+        ErrorParam("expected_terminator", ParamKind.STRING),
+        ErrorParam("actual_terminator", ParamKind.STRING),
+    ),
+    fix_hint="Use '{expected_terminator}' as the region terminator",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -274,4 +293,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_015,
     ERR_STRUCTURE_016,
     ERR_STRUCTURE_017,
+    ERR_STRUCTURE_018,
 )

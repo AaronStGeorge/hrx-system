@@ -1072,6 +1072,28 @@ static iree_status_t loom_print_operand_dict(
   return iree_ok_status();
 }
 
+static iree_status_t loom_print_attr_table_row_values(loom_print_context_t* ctx,
+                                                      const loom_op_t* op,
+                                                      uint16_t start,
+                                                      uint16_t row_index,
+                                                      uint16_t row_width) {
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '('));
+  for (uint16_t column = 0; column < row_width; ++column) {
+    if (column > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
+    }
+    uint16_t operand_index = (uint16_t)(start + row_index * row_width + column);
+    iree_host_size_t value_start = ctx->stream->offset;
+    IREE_RETURN_IF_ERROR(loom_print_value_ref(ctx->stream, ctx->module,
+                                              operands[operand_index]));
+    loom_print_report_field(
+        ctx, loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index),
+        value_start, ctx->stream->offset);
+  }
+  return loom_output_stream_write_char(ctx->stream, ')');
+}
+
 static iree_status_t loom_print_attr_table(
     loom_print_context_t* ctx, const loom_op_t* op,
     const loom_format_element_t* element) {
@@ -1113,46 +1135,32 @@ static iree_status_t loom_print_attr_table(
 
   IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
   iree_host_size_t table_start = ctx->stream->offset;
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '{'));
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  for (uint16_t row = 0; row < keys_attr.count; ++row) {
-    if (row > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
-    }
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        ctx->stream, "%" PRId64 " = (", keys_attr.i64_array[row]));
-    for (uint16_t column = 0; column < row_width; ++column) {
-      if (column > 0) {
-        IREE_RETURN_IF_ERROR(
-            loom_output_stream_write_cstring(ctx->stream, ", "));
+
+  if (keys_attr.count == 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "{}"));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "{\n"));
+    ++ctx->indent;
+    for (uint16_t row = 0; row < keys_attr.count; ++row) {
+      IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          ctx->stream, "%" PRId64 " = ", keys_attr.i64_array[row]));
+      IREE_RETURN_IF_ERROR(
+          loom_print_attr_table_row_values(ctx, op, start, row, row_width));
+      if (row + 1 < keys_attr.count) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ','));
       }
-      uint16_t operand_index = (uint16_t)(start + row * row_width + column);
-      iree_host_size_t value_start = ctx->stream->offset;
-      IREE_RETURN_IF_ERROR(loom_print_value_ref(ctx->stream, ctx->module,
-                                                operands[operand_index]));
-      loom_print_report_field(
-          ctx, loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index),
-          value_start, ctx->stream->offset);
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
     }
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
+    --ctx->indent;
+    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
   }
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(ctx->stream, "} default("));
+      loom_output_stream_write_cstring(ctx->stream, " default"));
   uint16_t default_row = keys_attr.count;
-  for (uint16_t column = 0; column < row_width; ++column) {
-    if (column > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ", "));
-    }
-    uint16_t operand_index =
-        (uint16_t)(start + default_row * row_width + column);
-    iree_host_size_t value_start = ctx->stream->offset;
-    IREE_RETURN_IF_ERROR(loom_print_value_ref(ctx->stream, ctx->module,
-                                              operands[operand_index]));
-    loom_print_report_field(
-        ctx, loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index),
-        value_start, ctx->stream->offset);
-  }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
+  IREE_RETURN_IF_ERROR(
+      loom_print_attr_table_row_values(ctx, op, start, default_row, row_width));
   loom_print_did_write(ctx);
   loom_print_report_field(
       ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, element->data),
@@ -1286,6 +1294,136 @@ static bool loom_print_value_has_name(const loom_module_t* module,
   if (value_id >= module->values.count) return false;
   loom_string_id_t name_id = module->values.entries[value_id].name_id;
   return name_id != LOOM_STRING_ID_INVALID && name_id < module->strings.count;
+}
+
+static iree_status_t loom_print_braced_region(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "{\n"));
+  if (region) {
+    ++ctx->indent;
+    IREE_RETURN_IF_ERROR(
+        loom_print_region_body(ctx, region, region_descriptor));
+    --ctx->indent;
+  }
+  IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+  ctx->has_previous_token = true;
+  ctx->last_char = '}';
+  ctx->glue_next = false;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_region_table(
+    loom_print_context_t* ctx, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_format_element_t* element) {
+  uint8_t keys_attr_index =
+      LOOM_FORMAT_REGION_TABLE_KEYS_ATTR_INDEX(element->data);
+  uint8_t default_region_index =
+      LOOM_FORMAT_REGION_TABLE_DEFAULT_REGION_INDEX(element->data);
+  uint8_t case_region_index = (uint8_t)element->field_index;
+  if (keys_attr_index >= op->attribute_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE attr index %u out of range (op has %u "
+        "attributes)",
+        keys_attr_index, op->attribute_count);
+  }
+  loom_attribute_t keys_attr = loom_op_attrs(op)[keys_attr_index];
+  if (keys_attr.kind != LOOM_ATTR_I64_ARRAY) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE attr index %u expected I64_ARRAY attr but found "
+        "%d",
+        keys_attr_index, (int)keys_attr.kind);
+  }
+  if (keys_attr.count > 0 && !keys_attr.i64_array) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "REGION_TABLE keys attr has count %u but NULL values", keys_attr.count);
+  }
+  if (default_region_index >= op->region_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE default region index %u out of range (op has %u "
+        "regions)",
+        default_region_index, op->region_count);
+  }
+  if (case_region_index > op->region_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE case region index %u out of range (op has %u "
+        "regions)",
+        case_region_index, op->region_count);
+  }
+  iree_host_size_t expected_region_count =
+      (iree_host_size_t)case_region_index + keys_attr.count;
+  if (expected_region_count != op->region_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE has %u case keys but %u case regions",
+        keys_attr.count, (uint8_t)(op->region_count - case_region_index));
+  }
+
+  const loom_region_descriptor_t* default_descriptor =
+      loom_op_vtable_region_descriptor(vtable, default_region_index);
+  const loom_region_descriptor_t* case_descriptor =
+      loom_op_vtable_region_descriptor(vtable, case_region_index);
+  if (!default_descriptor || !case_descriptor) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE region descriptors are unavailable");
+  }
+
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  iree_host_size_t table_start = ctx->stream->offset;
+  if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(ctx->stream, "{ ... }"));
+    loom_print_did_write(ctx);
+    loom_print_report_field(
+        ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, keys_attr_index),
+        table_start, ctx->stream->offset);
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "{\n"));
+  ++ctx->indent;
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint16_t row = 0; row < keys_attr.count; ++row) {
+    uint8_t region_index = (uint8_t)(case_region_index + row);
+    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+    iree_host_size_t region_start = ctx->stream->offset;
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        ctx->stream, "case %" PRId64 " ", keys_attr.i64_array[row]));
+    IREE_RETURN_IF_ERROR(
+        loom_print_braced_region(ctx, regions[region_index], case_descriptor));
+    loom_print_report_field(
+        ctx, loom_print_field_ref(LOOM_PRINT_FIELD_REGION, region_index),
+        region_start, ctx->stream->offset);
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
+  }
+
+  IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+  iree_host_size_t default_start = ctx->stream->offset;
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(ctx->stream, "default "));
+  IREE_RETURN_IF_ERROR(loom_print_braced_region(
+      ctx, regions[default_region_index], default_descriptor));
+  loom_print_report_field(
+      ctx, loom_print_field_ref(LOOM_PRINT_FIELD_REGION, default_region_index),
+      default_start, ctx->stream->offset);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
+  --ctx->indent;
+  IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+  ctx->has_previous_token = true;
+  ctx->last_char = '}';
+  ctx->glue_next = false;
+  loom_print_report_field(
+      ctx, loom_print_field_ref(LOOM_PRINT_FIELD_ATTR, keys_attr_index),
+      table_start, ctx->stream->offset);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
@@ -1498,8 +1636,9 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               "format REGION field_index %u out of range (op has %u regions)",
               element->field_index, op->region_count);
         }
-        if (!vtable->region_descriptors ||
-            element->field_index >= vtable->region_count) {
+        const loom_region_descriptor_t* region_descriptor =
+            loom_op_vtable_region_descriptor(vtable, element->field_index);
+        if (!region_descriptor) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
               "format REGION field_index %u out of range (vtable has %u "
@@ -1507,8 +1646,6 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
               element->field_index, vtable->region_count);
         }
         loom_region_t* region = loom_op_regions(op)[element->field_index];
-        const loom_region_descriptor_t* region_descriptor =
-            &vtable->region_descriptors[element->field_index];
         IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
         iree_host_size_t region_start = ctx->stream->offset;
         if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
@@ -1516,17 +1653,8 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
           IREE_RETURN_IF_ERROR(
               loom_output_stream_write_cstring(ctx->stream, "{ ... }"));
         } else {
-          // Print region inline: " {\n" body "}" (indented).
           IREE_RETURN_IF_ERROR(
-              loom_output_stream_write_cstring(ctx->stream, "{\n"));
-          if (region) {
-            ++ctx->indent;
-            IREE_RETURN_IF_ERROR(
-                loom_print_region_body(ctx, region, region_descriptor));
-            --ctx->indent;
-          }
-          IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+              loom_print_braced_region(ctx, region, region_descriptor));
         }
         ctx->has_previous_token = true;
         ctx->last_char = '}';
@@ -1696,6 +1824,10 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
       }
       case LOOM_FORMAT_KIND_ATTR_TABLE: {
         IREE_RETURN_IF_ERROR(loom_print_attr_table(ctx, op, element));
+        break;
+      }
+      case LOOM_FORMAT_KIND_REGION_TABLE: {
+        IREE_RETURN_IF_ERROR(loom_print_region_table(ctx, op, vtable, element));
         break;
       }
       case LOOM_FORMAT_KIND_PREDICATE_LIST: {

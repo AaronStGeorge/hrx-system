@@ -82,8 +82,31 @@ func.def @if_multi(%cond: i1, %a: f32, %b: f32, %x: i32, %y: i32) -> (f32, i32) 
 // scf.lookup selects a whole row of SSA values from sorted explicit cases or
 // the default row.
 func.def @lookup_dispatch(%variant: index, %gemm0: index, %gemm1: index, %fallback: index, %x0: index, %x1: index, %x2: index, %xf: index, %y0: index, %y1: index, %y2: index, %yf: index, %z0: index, %z1: index, %z2: index, %zf: index) -> (index, index, index, index) {
-  %ordinal, %wgx, %wgy, %wgz = scf.lookup %variant {0 = (%gemm0, %x0, %y0, %z0), 1 = (%gemm1, %x1, %y1, %z1), 2 = (%gemm1, %x2, %y2, %z2)} default(%fallback, %xf, %yf, %zf) : index, index, index, index
+  %ordinal, %wgx, %wgy, %wgz = scf.lookup %variant {
+    0 = (%gemm0, %x0, %y0, %z0),
+    1 = (%gemm1, %x1, %y1, %z1),
+    2 = (%gemm1, %x2, %y2, %z2)
+  } default(%fallback, %xf, %yf, %zf) : index, index, index, index
   func.return %ordinal, %wgx, %wgy, %wgz : index, index, index, index
+}
+
+// ====
+
+// scf.switch selects a whole region by sorted explicit cases or the mandatory
+// default region.
+func.def @switch_dispatch(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
+  %result = scf.switch %variant -> (index) {
+    case 0 {
+      scf.yield %a : index
+    }
+    case 1 {
+      scf.yield %b : index
+    }
+    default {
+      scf.yield %fallback : index
+    }
+  }
+  func.return %result : index
 }
 
 // ====

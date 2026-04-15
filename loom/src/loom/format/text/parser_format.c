@@ -1100,6 +1100,91 @@ static iree_status_t loom_parse_format_attr_table(
                                           (uint8_t)element->data, start_token);
 }
 
+static iree_status_t loom_parse_format_region_table(
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* element, loom_parsed_op_t* parsed) {
+  uint32_t errors_before = parser->error_count;
+  loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_LBRACE, NULL);
+
+  uint8_t keys_attr_index =
+      LOOM_FORMAT_REGION_TABLE_KEYS_ATTR_INDEX(element->data);
+  uint8_t default_region_index =
+      LOOM_FORMAT_REGION_TABLE_DEFAULT_REGION_INDEX(element->data);
+  if (keys_attr_index >= vtable->attribute_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE attr index %u out of range (op has %u "
+        "attributes)",
+        keys_attr_index, vtable->attribute_count);
+  }
+  if (default_region_index >= vtable->region_count ||
+      element->field_index >= vtable->region_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format REGION_TABLE region indices default=%u cases=%u out of range "
+        "(vtable has %u region descriptors)",
+        default_region_index, element->field_index, vtable->region_count);
+  }
+
+  const loom_region_descriptor_t* case_descriptor =
+      loom_op_vtable_region_descriptor(vtable, element->field_index);
+  const loom_region_descriptor_t* default_descriptor =
+      loom_op_vtable_region_descriptor(vtable, default_region_index);
+
+  loom_parsed_attr_table_keys_t keys;
+  loom_parsed_attr_table_keys_initialize(&keys);
+  while (
+      loom_tokenizer_try_consume_keyword(&parser->tokenizer, IREE_SV("case"))) {
+    loom_token_t key_token = loom_token_none();
+    int64_t key = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_parse_format_i64_attr_table_key(parser, &key_token, &key));
+    IREE_RETURN_IF_ERROR(loom_parsed_attr_table_keys_add(parser, &keys, key));
+
+    loom_region_t* case_region = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_parse_region(parser, case_descriptor, &case_region));
+    if (parser->error_count > errors_before) {
+      loom_parser_sync_to_brace(parser);
+      return iree_ok_status();
+    }
+    uint8_t region_index = (uint8_t)(element->field_index + keys.count - 1);
+    IREE_RETURN_IF_ERROR(loom_parsed_op_set_region(
+        parsed, &parser->parser_arena, region_index, case_region));
+    IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+        parser, parsed, LOOM_LOCATION_FIELD_REGION, region_index, key_token));
+  }
+
+  IREE_RETURN_IF_ERROR(loom_parse_keyword(parser, LOOM_KW_DEFAULT));
+  loom_token_t default_token = loom_tokenizer_peek(&parser->tokenizer);
+  loom_region_t* default_region = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_parse_region(parser, default_descriptor, &default_region));
+  if (parser->error_count > errors_before) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_region(
+      parsed, &parser->parser_arena, default_region_index, default_region));
+  IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
+      parser, parsed, LOOM_LOCATION_FIELD_REGION, default_region_index,
+      default_token));
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACE, NULL);
+
+  int64_t* arena_keys = NULL;
+  if (keys.count > 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(&parser->module->arena, keys.count,
+                                  sizeof(*arena_keys), (void**)&arena_keys));
+    memcpy(arena_keys, keys.keys, keys.count * sizeof(*arena_keys));
+  }
+  loom_attribute_t key_attr =
+      loom_attr_i64_array(arena_keys, (uint16_t)keys.count);
+  IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
+      parsed, &parser->parser_arena, keys_attr_index, key_attr));
+  return loom_parse_format_add_field_span(parser, parsed,
+                                          LOOM_LOCATION_FIELD_ATTRIBUTE,
+                                          keys_attr_index, start_token);
+}
+
 static iree_status_t loom_parse_format_operand_dict(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
@@ -1463,17 +1548,17 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
 
       case LOOM_FORMAT_KIND_REGION: {
         loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
-        if (!vtable->region_descriptors ||
-            element->field_index >= vtable->region_count) {
+        const loom_region_descriptor_t* region_descriptor =
+            loom_op_vtable_region_descriptor(vtable, element->field_index);
+        if (!region_descriptor) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
               "format REGION field_index %u out of range (op has %u regions)",
               element->field_index, vtable->region_count);
         }
         loom_region_t* region = NULL;
-        IREE_RETURN_IF_ERROR(loom_parse_region(
-            parser, &vtable->region_descriptors[element->field_index],
-            &region));
+        IREE_RETURN_IF_ERROR(
+            loom_parse_region(parser, region_descriptor, &region));
         IREE_RETURN_IF_ERROR(
             loom_parsed_op_add_region(parsed, &parser->parser_arena, region));
         IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
@@ -1568,6 +1653,12 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       case LOOM_FORMAT_KIND_ATTR_TABLE: {
         IREE_RETURN_IF_ERROR(
             loom_parse_format_attr_table(parser, element, parsed));
+        break;
+      }
+
+      case LOOM_FORMAT_KIND_REGION_TABLE: {
+        IREE_RETURN_IF_ERROR(
+            loom_parse_format_region_table(parser, vtable, element, parsed));
         break;
       }
 

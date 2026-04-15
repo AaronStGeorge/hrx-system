@@ -26,6 +26,7 @@ from loom.assembly import (
     Ref,
     Refs,
     Region,
+    RegionTable,
     ResultType,
     ResultTypeList,
     Scope,
@@ -52,6 +53,7 @@ from loom.dialect.test import (
     test_neg,
     test_operand_dict,
     test_ops,
+    test_region_table,
     test_slice,
     test_update,
     test_yield,
@@ -121,6 +123,17 @@ class TestFormatFieldsMatchDeclarations:
                 case OperandDict(operands=operands, names=names):
                     fields.add(operands)
                     fields.add(names)
+                case AttrTable(keys=keys, values=values):
+                    fields.add(keys)
+                    fields.add(values)
+                case RegionTable(
+                    keys=keys,
+                    case_regions=case_regions,
+                    default_region=default_region,
+                ):
+                    fields.add(keys)
+                    fields.add(case_regions)
+                    fields.add(default_region)
                 case PredicateList(field=f):
                     fields.add(f)
                 case IndexList(dynamic=d, static=s):
@@ -216,7 +229,9 @@ class TestFormatElementCoverage:
             ResultTypeList,
             Keyword,
             AttrDict,
+            AttrTable,
             OperandDict,
+            RegionTable,
             Region,
             IndexList,
             BindingList,
@@ -364,6 +379,16 @@ class TestSpecificOps:
         assert case_keys_attr.attr_type == "i64_array"
         has_attr_table = any(isinstance(e, AttrTable) for e in test_attr_table.format)
         assert has_attr_table
+
+    def test_region_table(self) -> None:
+        assert test_region_table.operand("selector") is not None
+        case_keys_attr = test_region_table.attr("case_keys")
+        assert case_keys_attr is not None
+        assert case_keys_attr.attr_type == "i64_array"
+        assert len(test_region_table.regions) == 2
+        assert test_region_table.regions[1].variadic
+        has_region_table = any(isinstance(e, RegionTable) for e in test_region_table.format)
+        assert has_region_table
 
     def test_convert(self) -> None:
         assert test_convert.is_pure

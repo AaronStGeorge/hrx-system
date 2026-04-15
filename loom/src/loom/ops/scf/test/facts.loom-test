@@ -163,7 +163,11 @@ func.def @lookup_facts_prune_default_from_covered_range(%variant: index) -> (i64
   %v1 = scalar.constant 20 : i64
   %v2 = scalar.constant 100 : i64
   %fallback = scalar.constant 1000 : i64
-  %result = scf.lookup %bounded {0 = (%v0), 1 = (%v1), 2 = (%v2)} default(%fallback) : i64
+  %result = scf.lookup %bounded {
+    0 = (%v0),
+    1 = (%v1),
+    2 = (%v2)
+  } default(%fallback) : i64
   %fact_lo = test.fact_range_lo %result : i64 -> i64
   %fact_hi = test.fact_range_hi %result : i64 -> i64
   %fact_div = test.fact_divisor %result : i64 -> i64
@@ -187,7 +191,10 @@ func.def @lookup_facts_include_default_for_uncovered_range(%variant: index) -> (
   %v0 = scalar.constant 10 : i64
   %v1 = scalar.constant 20 : i64
   %fallback = scalar.constant 100 : i64
-  %result = scf.lookup %bounded {0 = (%v0), 1 = (%v1)} default(%fallback) : i64
+  %result = scf.lookup %bounded {
+    0 = (%v0),
+    1 = (%v1)
+  } default(%fallback) : i64
   %fact_lo = test.fact_range_lo %result : i64 -> i64
   %fact_hi = test.fact_range_hi %result : i64 -> i64
   func.return %fact_lo, %fact_hi : i64, i64
@@ -212,7 +219,13 @@ func.def @lookup_facts_prune_by_divisor(%variant: index) -> (i64, i64) {
   %v3 = scalar.constant 21 : i64
   %v4 = scalar.constant 30 : i64
   %fallback = scalar.constant 100 : i64
-  %result = scf.lookup %bounded {0 = (%v0), 1 = (%v1), 2 = (%v2), 3 = (%v3), 4 = (%v4)} default(%fallback) : i64
+  %result = scf.lookup %bounded {
+    0 = (%v0),
+    1 = (%v1),
+    2 = (%v2),
+    3 = (%v3),
+    4 = (%v4)
+  } default(%fallback) : i64
   %fact_lo = test.fact_range_lo %result : i64 -> i64
   %fact_hi = test.fact_range_hi %result : i64 -> i64
   func.return %fact_lo, %fact_hi : i64, i64

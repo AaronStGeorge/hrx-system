@@ -30,6 +30,7 @@ from loom.assembly import (
     Ref,
     Refs,
     Region,
+    RegionTable,
     ResultTypeList,
     SymbolRef,
     TypeOf,
@@ -143,6 +144,14 @@ class TestAttrTable:
         attr_table = AttrTable("case_keys", "values")
         assert attr_table.keys == "case_keys"
         assert attr_table.values == "values"
+
+
+class TestRegionTable:
+    def test_construct(self) -> None:
+        region_table = RegionTable("case_keys", "case_regions", "default_region")
+        assert region_table.keys == "case_keys"
+        assert region_table.case_regions == "case_regions"
+        assert region_table.default_region == "default_region"
 
 
 class TestRegion:

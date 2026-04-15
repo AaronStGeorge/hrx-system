@@ -1231,8 +1231,10 @@ class TestAttrTable:
         assert printed == (
             "func.def @attr_table(%selector: index, %a0: i32, %b0: f32, "
             "%a1: i32, %b1: f32, %ad: i32, %bd: f32) -> (i32, f32) {\n"
-            "  %x, %y = test.attr_table %selector "
-            "{0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32\n"
+            "  %x, %y = test.attr_table %selector {\n"
+            "    0 = (%a0, %b0),\n"
+            "    1 = (%a1, %b1)\n"
+            "  } default(%ad, %bd) : i32, f32\n"
             "  test.yield %x, %y : i32, f32\n"
             "}\n"
         )
@@ -1273,6 +1275,66 @@ class TestAttrTable:
                 "  test.yield %x, %y : i32, i32\n"
                 "}\n"
             )
+
+
+class TestRegionTable:
+    def test_grouped_regions_roundtrip(self) -> None:
+        module = _op_parser().parse(
+            "func.def @region_table(%selector: index) {\n"
+            "  test.region_table %selector {\n"
+            "    case 0 {\n"
+            "      test.yield\n"
+            "    }\n"
+            "    case 1 {\n"
+            "      test.yield\n"
+            "    }\n"
+            "    default {\n"
+            "      test.yield\n"
+            "    }\n"
+            "  }\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        printed = _op_printer().print_module(module)
+        assert printed == (
+            "func.def @region_table(%selector: index) {\n"
+            "  test.region_table %selector {\n"
+            "    case 0 {\n"
+            "      test.yield\n"
+            "    }\n"
+            "    case 1 {\n"
+            "      test.yield\n"
+            "    }\n"
+            "    default {\n"
+            "      test.yield\n"
+            "    }\n"
+            "  }\n"
+            "  test.yield\n"
+            "}\n"
+        )
+
+    def test_empty_cases_roundtrip(self) -> None:
+        module = _op_parser().parse(
+            "func.def @region_table_empty(%selector: index) {\n"
+            "  test.region_table %selector {\n"
+            "    default {\n"
+            "      test.yield\n"
+            "    }\n"
+            "  }\n"
+            "  test.yield\n"
+            "}\n"
+        )
+        printed = _op_printer().print_module(module)
+        assert printed == (
+            "func.def @region_table_empty(%selector: index) {\n"
+            "  test.region_table %selector {\n"
+            "    default {\n"
+            "      test.yield\n"
+            "    }\n"
+            "  }\n"
+            "  test.yield\n"
+            "}\n"
+        )
 
 
 # ============================================================================

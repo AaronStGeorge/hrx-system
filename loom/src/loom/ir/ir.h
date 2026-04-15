@@ -699,6 +699,7 @@ enum loom_op_vtable_flag_bits_e {
   LOOM_OP_VTABLE_VARIADIC_OPERANDS = 1u << 0,
   LOOM_OP_VTABLE_VARIADIC_RESULTS = 1u << 1,
   LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS = 1u << 2,
+  LOOM_OP_VTABLE_VARIADIC_REGIONS = 1u << 3,
 };
 typedef uint8_t loom_op_vtable_flags_t;
 

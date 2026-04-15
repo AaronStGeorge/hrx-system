@@ -193,7 +193,7 @@ func_def = Op(
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
     attrs=list(_MODIFIER_ATTRS),
     results=[Result("results", ANY, variadic=True)],
-    regions=[RegionDef("body", doc="Function body.")],
+    regions=[RegionDef("body", doc="Function body.", terminator="func.return")],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body")],
     format=[
         *_MODIFIER_FORMAT,
@@ -249,7 +249,7 @@ func_template = Op(
         AttrDef("priority", "i64", optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
-    regions=[RegionDef("body", doc="Template body.")],
+    regions=[RegionDef("body", doc="Template body.", terminator="func.return")],
     interfaces=[
         FuncLikeInterface(
             **_FUNC_LIKE_COMMON,

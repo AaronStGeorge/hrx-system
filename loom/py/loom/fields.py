@@ -77,6 +77,7 @@ class FormatFields(Protocol):
     def attr(self, name: str) -> Any: ...
     def is_present(self, name: str) -> bool: ...
     def region(self, name: str) -> Region | None: ...
+    def regions(self, name: str) -> list[Region]: ...
     def tied_result_map(self) -> dict[int, TiedResult]: ...
     def operand_name_for_tied(self, tied: TiedResult) -> str: ...
     def value_id(self, name: str) -> int: ...
@@ -142,8 +143,10 @@ class FieldLayout:
     fields: dict[str, FieldDesc]
     fixed_operand_count: int
     fixed_result_count: int
+    fixed_region_count: int
     variadic_operand: str | None  # Name of the variadic operand, if any.
     variadic_result: str | None  # Name of the variadic result, if any.
+    variadic_region: str | None  # Name of the variadic region, if any.
 
 
 def compute_layout(op_decl: Op) -> FieldLayout:
@@ -155,8 +158,10 @@ def compute_layout(op_decl: Op) -> FieldLayout:
     fields: dict[str, FieldDesc] = {}
     fixed_operand_count = 0
     fixed_result_count = 0
+    fixed_region_count = 0
     variadic_operand: str | None = None
     variadic_result: str | None = None
+    variadic_region: str | None = None
 
     # Operands: sequential indices, variadic must be last.
     for i, operand in enumerate(op_decl.operands):
@@ -201,16 +206,33 @@ def compute_layout(op_decl: Op) -> FieldLayout:
     for i, attr in enumerate(op_decl.attrs):
         fields[attr.name] = FieldDesc(FieldKind.ATTR, i)
 
-    # Regions: sequential indices.
+    # Regions: sequential indices, variadic must be last.
     for i, region in enumerate(op_decl.regions):
-        fields[region.name] = FieldDesc(FieldKind.REGION, i)
+        if region.variadic:
+            if variadic_region is not None:
+                raise ValueError(
+                    f"Op '{op_decl.name}': multiple variadic regions "
+                    f"('{variadic_region}' and '{region.name}')."
+                )
+            if i != len(op_decl.regions) - 1:
+                raise ValueError(
+                    f"Op '{op_decl.name}': variadic region '{region.name}' "
+                    f"must be the last region."
+                )
+            variadic_region = region.name
+            fields[region.name] = FieldDesc(FieldKind.REGION, i, variadic=True)
+        else:
+            fields[region.name] = FieldDesc(FieldKind.REGION, i)
+            fixed_region_count += 1
 
     return FieldLayout(
         fields=fields,
         fixed_operand_count=fixed_operand_count,
         fixed_result_count=fixed_result_count,
+        fixed_region_count=fixed_region_count,
         variadic_operand=variadic_operand,
         variadic_result=variadic_result,
+        variadic_region=variadic_region,
     )
 
 
@@ -325,6 +347,15 @@ class ResolvedFields:
             raise TypeError(f"Field '{name}' is {desc.kind.name}, not a region.")
         return self._op.regions[desc.index]
 
+    def regions(self, name: str) -> list[Region]:
+        """Get regions for a variadic region field."""
+        desc = self._desc(name)
+        if desc.kind != FieldKind.REGION:
+            raise TypeError(f"Field '{name}' is {desc.kind.name}, not a region.")
+        if desc.variadic:
+            return self._op.regions[desc.index :]
+        return [self._op.regions[desc.index]]
+
     # --- Tied results ---
 
     def tied_result_map(self) -> dict[int, TiedResult]:
@@ -405,9 +436,10 @@ class ResolvedFields:
             value = self._op.attributes.get(name)
             return value is not None
         if desc.kind == FieldKind.REGION:
-            return (
-                desc.index < len(self._op.regions)
-                and len(self._op.regions[desc.index].blocks) > 0
+            if desc.variadic:
+                return len(self._op.regions) > desc.index
+            return desc.index < len(self._op.regions) and (
+                len(self._op.regions[desc.index].blocks) > 0
             )
         return False
 

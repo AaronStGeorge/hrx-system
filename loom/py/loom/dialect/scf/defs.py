@@ -12,6 +12,7 @@ Core ops:
   scf.if      — Conditional execution with both regions required.
   scf.lookup  — Keyed whole-value table selection.
   scf.select  — Scalar-condition whole-value selection.
+  scf.switch  — Multi-way index branch with explicit case regions.
   scf.yield   — Variadic terminator for all scf op regions.
 
 Always-explicit yield (no implicit terminator). Every scf op region
@@ -32,6 +33,7 @@ from loom.assembly import (
     Ref,
     Refs,
     Region,
+    RegionTable,
     ResultType,
     ResultTypeList,
     TypesOf,
@@ -186,7 +188,7 @@ scf_lookup = Op(
         ResultTypeList("results", parens=False),
     ],
     examples=[
-        "%ordinal, %wgx = scf.lookup %variant {0 = (%gemm0, %x0), 1 = (%gemm1, %x1)} default(%fallback, %xf) : index, index",
+        "%ordinal, %wgx = scf.lookup %variant {\n  0 = (%gemm0, %x0),\n  1 = (%gemm1, %x1)\n} default(%fallback, %xf) : index, index",
     ],
 )
 
@@ -229,6 +231,7 @@ scf_for = Op(
             "body",
             doc="Loop body. Terminated by scf.yield.",
             single_block=True,
+            terminator="scf.yield",
             implicit_args=(("iv", "index"),),
         ),
     ],
@@ -295,11 +298,13 @@ scf_if = Op(
             "then_region",
             doc="Executed when condition is true. Terminated by scf.yield.",
             single_block=True,
+            terminator="scf.yield",
         ),
         RegionDef(
             "else_region",
             doc="Executed when condition is false. Terminated by scf.yield.",
             single_block=True,
+            terminator="scf.yield",
         ),
     ],
     interfaces=[
@@ -328,12 +333,74 @@ scf_if = Op(
 )
 
 # ============================================================================
+# scf.switch — multi-way branch with explicit default
+# ============================================================================
+#
+# Branches on an index selector. Each explicit case owns a full region, and the
+# default region is mandatory so the op is total. The printed case table is
+# block-shaped instead of row-shaped because each entry may contain arbitrary
+# side-effecting IR before yielding the parent results.
+
+scf_switch = Op(
+    "scf.switch",
+    group=scf_ops,
+    doc=(
+        "Multi-way branch over an index selector. Case keys are sorted unique "
+        "i64 literals. The default region is mandatory and is selected when "
+        "the selector does not equal any explicit case key. Every region must "
+        "terminate with scf.yield matching the switch result tuple."
+    ),
+    canonicalize="loom_scf_switch_canonicalize",
+    verify="loom_scf_switch_verify",
+    operands=[Operand("selector", INDEX)],
+    results=[Result("results", ANY, variadic=True)],
+    attrs=[
+        AttrDef(
+            "case_keys",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Sorted unique selector values for explicit switch cases.",
+        ),
+    ],
+    regions=[
+        RegionDef(
+            "default_region",
+            doc="Executed when no explicit case key matches. Terminated by scf.yield.",
+            single_block=True,
+            terminator="scf.yield",
+        ),
+        RegionDef(
+            "case_regions",
+            doc="Case regions in the same order as case_keys. Terminated by scf.yield.",
+            single_block=True,
+            variadic=True,
+            terminator="scf.yield",
+        ),
+    ],
+    interfaces=[
+        RegionBranchInterface(selector="selector"),
+    ],
+    format=[
+        Ref("selector"),
+        OptionalGroup(
+            [ARROW, ResultTypeList("results")],
+            anchor="results",
+        ),
+        RegionTable("case_keys", "case_regions", "default_region"),
+    ],
+    examples=[
+        "scf.switch %selector {\n  case 0 {\n    scf.yield\n  }\n  default {\n    scf.yield\n  }\n}",
+        "%result = scf.switch %selector -> (f32) {\n  case 0 {\n    scf.yield %a : f32\n  }\n  case 1 {\n    scf.yield %b : f32\n  }\n  default {\n    scf.yield %fallback : f32\n  }\n}",
+    ],
+)
+
+# ============================================================================
 # All ops
 # ============================================================================
 
 ALL_SCF_OPS: tuple[Op, ...] = (
     scf_for,
     scf_if,
+    scf_switch,
     scf_yield,
     scf_select,
     scf_lookup,

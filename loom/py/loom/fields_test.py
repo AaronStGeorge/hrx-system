@@ -262,6 +262,33 @@ class TestResolveSingular:
         resolved_region = fields.region("then_region")
         assert len(resolved_region.blocks) == 1
 
+    def test_variadic_region(self) -> None:
+        module = Module(name="test")
+        case0 = Region(blocks=[Block(ops=[Operation(kind=0, name="test.yield")])])
+        case1 = Region(blocks=[Block(ops=[Operation(kind=0, name="test.yield")])])
+        default = Region(blocks=[Block(ops=[Operation(kind=0, name="test.yield")])])
+        decl = Op(
+            "test.region_table",
+            operands=[Operand("selector", INTEGER)],
+            regions=[
+                RegionDef("default_region"),
+                RegionDef("case_regions", variadic=True),
+            ],
+        )
+        cond_id = module.add_value(Value(name="cond", type=I32))
+        op = Operation(
+            kind=1,
+            name="test.region_table",
+            operands=[cond_id],
+            regions=[default, case0, case1],
+        )
+        layout = compute_layout(decl)
+        assert layout.fixed_region_count == 1
+        assert layout.variadic_region == "case_regions"
+        fields = resolve_fields(layout, op, module)
+        assert fields.region("default_region") is default
+        assert fields.regions("case_regions") == [case0, case1]
+
     def test_unknown_field_raises(self) -> None:
         module, [vid] = _make_module_with_values(("x", I32))
         decl = unary_op(

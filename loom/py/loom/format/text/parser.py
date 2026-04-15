@@ -40,6 +40,7 @@ from loom.assembly import (
     PredicateList,
     Ref,
     Refs,
+    RegionTable,
     ResultType,
     ResultTypeList,
     Scope,
@@ -1613,6 +1614,19 @@ class Parser:
                 case AttrTable(keys=keys_field, values=values_field):
                     self._parse_attr_table(parsed, keys_field, values_field)
 
+                case RegionTable(
+                    keys=keys_field,
+                    case_regions=case_regions_field,
+                    default_region=default_region_field,
+                ):
+                    self._parse_region_table(
+                        parsed,
+                        op_decl,
+                        keys_field,
+                        case_regions_field,
+                        default_region_field,
+                    )
+
                 case OperandDict(operands=operand_field, names=names_field):
                     if tok.at(TokenKind.LBRACE):
                         self._parse_operand_dict(parsed, operand_field, names_field)
@@ -2487,3 +2501,43 @@ class Parser:
         values.extend(default_row)
         parsed.attributes[keys_field] = keys
         parsed.operand_ids.extend(values)
+
+    def _parse_region_table(
+        self,
+        parsed: ParsedFields,
+        op_decl: Op,
+        keys_field: str,
+        case_regions_field: str,
+        default_region_field: str,
+    ) -> None:
+        """Parse {case key region... default region} into keyed regions."""
+        tok = self._tokenizer
+        layout = self._layout(op_decl)
+        case_desc = layout.fields[case_regions_field]
+        default_desc = layout.fields[default_region_field]
+        implicit_terminator_decl = self._implicit_terminator_decl(op_decl)
+
+        tok.expect(TokenKind.LBRACE)
+        keys: list[int] = []
+        case_regions: list[Region] = []
+        while tok.at(TokenKind.BARE_IDENT, "case"):
+            tok.next()
+            key_tok = tok.expect(TokenKind.INTEGER)
+            keys.append(int(key_tok.text))
+            case_regions.append(
+                self._parse_region(implicit_terminator_decl=implicit_terminator_decl)
+            )
+
+        _expect_keyword(tok, "default")
+        default_region = self._parse_region(
+            implicit_terminator_decl=implicit_terminator_decl
+        )
+        tok.expect(TokenKind.RBRACE)
+
+        while len(parsed.regions) <= default_desc.index:
+            parsed.regions.append(Region(blocks=[]))
+        parsed.regions[default_desc.index] = default_region
+        while len(parsed.regions) < case_desc.index:
+            parsed.regions.append(Region(blocks=[]))
+        parsed.regions.extend(case_regions)
+        parsed.attributes[keys_field] = keys

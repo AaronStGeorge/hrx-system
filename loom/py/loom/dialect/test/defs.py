@@ -39,6 +39,7 @@ from loom.assembly import (
     Ref,
     Refs,
     Region,
+    RegionTable,
     ResultType,
     ResultTypeList,
     Scope,
@@ -554,7 +555,14 @@ test_map = Op(
     doc="Test region-capture elementwise op.",
     operands=[Operand("inputs", TILE, variadic=True)],
     results=[Result("result", TILE)],
-    regions=[RegionDef("body", doc="Element-wise body.", single_block=True)],
+    regions=[
+        RegionDef(
+            "body",
+            doc="Element-wise body.",
+            single_block=True,
+            terminator="test.yield",
+        )
+    ],
     constraints=[
         AllShapesMatch("inputs"),
         BlockArgCount("body", "inputs"),
@@ -700,6 +708,7 @@ test_loop = Op(
             "body",
             doc="Loop body.",
             single_block=True,
+            terminator="test.yield",
             implicit_args=(("iv", "index"),),
         )
     ],
@@ -738,8 +747,18 @@ test_branch = Op(
     operands=[Operand("condition", INTEGER)],
     results=[Result("results", ANY, variadic=True)],
     regions=[
-        RegionDef("then_region", doc="Then branch.", single_block=True),
-        RegionDef("else_region", doc="Else branch.", single_block=True),
+        RegionDef(
+            "then_region",
+            doc="Then branch.",
+            single_block=True,
+            terminator="test.yield",
+        ),
+        RegionDef(
+            "else_region",
+            doc="Else branch.",
+            single_block=True,
+            terminator="test.yield",
+        ),
     ],
     traits=[ImplicitTerminator("test.implicit_yield")],
     format=[
@@ -805,7 +824,7 @@ test_func = Op(
         AttrDef("predicates", "predicate_list", optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
-    regions=[RegionDef("body", doc="Function body.")],
+    regions=[RegionDef("body", doc="Function body.", terminator="test.yield")],
     format=[
         OptionalGroup([Attr("visibility")], anchor="visibility"),
         OptionalGroup([Attr("cc")], anchor="cc"),
@@ -955,6 +974,46 @@ test_attr_table = Op(
     ],
     examples=[
         "%a, %b = test.attr_table %selector {0 = (%a0, %b0), 1 = (%a1, %b1)} default(%ad, %bd) : i32, f32",
+    ],
+)
+
+# ============================================================================
+# test.region_table — op with static-attribute-keyed region table
+# ============================================================================
+
+test_region_table = Op(
+    "test.region_table",
+    group=test_ops,
+    doc="Test op with a static-attribute-keyed region table.",
+    operands=[Operand("selector", INDEX)],
+    attrs=[
+        AttrDef(
+            "case_keys",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Sorted selector values for explicit region rows.",
+        ),
+    ],
+    regions=[
+        RegionDef(
+            "default_region",
+            doc="Fallback region.",
+            single_block=True,
+            terminator="test.yield",
+        ),
+        RegionDef(
+            "case_regions",
+            doc="Case regions in the same order as case_keys.",
+            single_block=True,
+            variadic=True,
+            terminator="test.yield",
+        ),
+    ],
+    format=[
+        Ref("selector"),
+        RegionTable("case_keys", "case_regions", "default_region"),
+    ],
+    examples=[
+        "test.region_table %selector {\n  case 0 {\n    test.yield\n  }\n  default {\n    test.yield\n  }\n}",
     ],
 )
 
@@ -1165,7 +1224,12 @@ test_isolated_region = Op(
     doc="Test op with an isolated single-block region. Values from the enclosing scope are not visible inside the body.",
     results=[Result("results", ANY, variadic=True)],
     regions=[
-        RegionDef("body", doc="Isolated region body.", single_block=True),
+        RegionDef(
+            "body",
+            doc="Isolated region body.",
+            single_block=True,
+            terminator="test.yield",
+        ),
     ],
     traits=[ISOLATED_FROM_ABOVE],
     format=[
@@ -1253,6 +1317,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_attrs,
     test_operand_dict,
     test_attr_table,
+    test_region_table,
     test_deflate,
     test_assume,
     test_convert,

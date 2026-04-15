@@ -331,6 +331,28 @@ class TestBuilders:
         _operands.extend(values)
         return cast(list[ValueRef], self._b.build("test.attr_table", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def region_table(self, *, selector: ValueRef, case_keys: list[int], default_region: Region, case_regions: list[Region]) -> None:
+        """Test op with a static-attribute-keyed region table.
+
+        Example::
+            test.region_table %selector {
+              case 0 {
+                test.yield
+              }
+              default {
+                test.yield
+              }
+            }
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["case_keys"] = case_keys
+        _regions.append(default_region)
+        _regions.extend(case_regions)
+        _operands.append(selector)
+        self._b.build("test.region_table", _operands, attributes=_attributes, regions=_regions)
+
     def deflate(self, *, input: ValueRef, results: list[Type | TiedResultSpec]) -> list[ValueRef]:
         """Test op with result type referencing a co-result dim.
 

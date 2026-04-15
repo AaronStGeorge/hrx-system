@@ -60,7 +60,10 @@ func.def @for_iter_args_second_type_mismatch(%lo: index, %hi: index, %step: inde
 // order so the verifier owns the structured key-order diagnostic.
 func.def @lookup_unsorted_case_keys(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
   // ERROR@+1: STRUCTURE/014 "case_keys" "1" "strictly increasing sorted unique case key"
-  %r = scf.lookup %variant {2 = (%a), 1 = (%b)} default(%fallback) : index
+  %r = scf.lookup %variant {
+    2 = (%a),
+    1 = (%b)
+  } default(%fallback) : index
   func.return %r : index
 }
 
@@ -69,7 +72,10 @@ func.def @lookup_unsorted_case_keys(%variant: index, %a: index, %b: index, %fall
 // Duplicate keys violate the same strict-increase contract as unsorted keys.
 func.def @lookup_duplicate_case_keys(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
   // ERROR@+1: STRUCTURE/014 "case_keys" "1" "strictly increasing sorted unique case key"
-  %r = scf.lookup %variant {1 = (%a), 1 = (%b)} default(%fallback) : index
+  %r = scf.lookup %variant {
+    1 = (%a),
+    1 = (%b)
+  } default(%fallback) : index
   func.return %r : index
 }
 
@@ -79,7 +85,10 @@ func.def @lookup_duplicate_case_keys(%variant: index, %a: index, %b: index, %fal
 // result columns and two explicit keys, six payload operands are required.
 func.def @lookup_wrong_payload_count(%variant: index, %a: index, %b: index, %c: index, %d: index) -> (index, index) {
   // ERROR@+1: STRUCTURE/013 "table" "3" "(case key count + default row) * result count" "6"
-  %x, %y = scf.lookup %variant {0 = (%a), 1 = (%b)} default(%c) : index, index
+  %x, %y = scf.lookup %variant {
+    0 = (%a),
+    1 = (%b)
+  } default(%c) : index, index
   func.return %x, %y : index, index
 }
 
@@ -88,16 +97,21 @@ func.def @lookup_wrong_payload_count(%variant: index, %a: index, %b: index, %c: 
 // The grouped assembly rejects ragged source rows before the verifier sees the
 // flattened payload operands.
 func.def @lookup_ragged_case_row(%variant: index, %a: index, %b: index) -> (index, index) {
-  // ERROR@+1: PARSE/030 "1" "2"
-  %x, %y = scf.lookup %variant {0 = (%a, %b), 1 = (%a)} default(%a, %b) : index, index
+  %x, %y = scf.lookup %variant {
+    0 = (%a, %b),
+    // ERROR@+1: PARSE/030 "1" "2"
+    1 = (%a)
+  } default(%a, %b) : index, index
   func.return %x, %y : index, index
 }
 
 // ====
 
 func.def @lookup_ragged_default_row(%variant: index, %a: index, %b: index) -> (index, index) {
-  // ERROR@+1: PARSE/030 "1" "2"
-  %x, %y = scf.lookup %variant {0 = (%a, %b)} default(%a) : index, index
+  %x, %y = scf.lookup %variant {
+    0 = (%a, %b)
+    // ERROR@+1: PARSE/030 "1" "2"
+  } default(%a) : index, index
   func.return %x, %y : index, index
 }
 
@@ -107,6 +121,90 @@ func.def @lookup_ragged_default_row(%variant: index, %a: index, %b: index) -> (i
 // refactors that accidentally swap one row element across typed columns.
 func.def @lookup_payload_type_mismatch(%variant: index, %a: index, %b: f32, %fallback: index, %fallback_i32: i32) -> (index, i32) {
   // ERROR@+1: TYPE/001 "table[1]" "results[1]"
-  %x, %y = scf.lookup %variant {0 = (%a, %b)} default(%fallback, %fallback_i32) : index, i32
+  %x, %y = scf.lookup %variant {
+    0 = (%a, %b)
+  } default(%fallback, %fallback_i32) : index, i32
   func.return %x, %y : index, i32
+}
+
+// ====
+
+// scf.switch uses the same sorted unique key contract as scf.lookup.
+func.def @switch_unsorted_case_keys(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {
+  // ERROR@+1: STRUCTURE/014 "case_keys" "1" "strictly increasing sorted unique case key"
+  %r = scf.switch %variant -> (index) {
+    case 2 {
+      scf.yield %a : index
+    }
+    case 1 {
+      scf.yield %b : index
+    }
+    default {
+      scf.yield %fallback : index
+    }
+  }
+  func.return %r : index
+}
+
+// ====
+
+// Every switch region must yield exactly the parent result tuple.
+func.def @switch_yield_count_mismatch(%variant: index, %a: index, %fallback: index) -> (index) {
+  // ERROR@+1: STRUCTURE/013 "case_regions" "0" "results" "1"
+  %r = scf.switch %variant -> (index) {
+    case 0 {
+      scf.yield
+    }
+    default {
+      scf.yield %fallback : index
+    }
+  }
+  func.return %r : index
+}
+
+// ====
+
+// Yielded values must have the same type as the corresponding switch result.
+func.def @switch_yield_type_mismatch(%variant: index, %a: f32, %fallback: index) -> (index) {
+  // ERROR@+1: TYPE/001 "case_regions[0].yield[0]" "results[0]"
+  %r = scf.switch %variant -> (index) {
+    case 0 {
+      scf.yield %a : f32
+    }
+    default {
+      scf.yield %fallback : index
+    }
+  }
+  func.return %r : index
+}
+
+// ====
+
+// scf regions require scf.yield specifically, not just any terminator with the
+// right operand shape.
+func.def @if_wrong_terminator(%cond: i1, %a: index) -> (index) {
+  // ERROR@+1: STRUCTURE/018 "scf.if" "0" "scf.yield" "func.return"
+  %r = scf.if %cond -> (index) {
+    func.return %a : index
+  } else {
+    scf.yield %a : index
+  }
+  func.return %r : index
+}
+
+// ====
+
+// Variadic region tables use the same descriptor for every case region, so a
+// wrong case terminator is diagnosed on the actual expanded region index.
+func.def @switch_wrong_case_terminator(%variant: index, %a: index) -> (index) {
+  // ERROR@+1: STRUCTURE/018 "scf.switch" "1" "scf.yield" "func.return"
+  %r = scf.switch %variant -> (index) {
+    case 0 {
+      func.return %a : index
+    }
+    default {
+      scf.yield %a : index
+    }
+  }
+  func.return %r : index
 }
