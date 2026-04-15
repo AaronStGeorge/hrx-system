@@ -902,7 +902,7 @@ typedef struct loom_value_fact_region_frame_t {
 } loom_value_fact_region_frame_t;
 
 iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
-                                            loom_module_t* module,
+                                            const loom_module_t* module,
                                             loom_func_like_t function) {
   loom_region_t* body = loom_func_like_body(function);
   if (!body) return iree_ok_status();

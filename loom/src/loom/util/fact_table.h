@@ -290,7 +290,7 @@ iree_status_t loom_value_fact_table_compute_op(loom_value_fact_table_t* table,
 // Visits ops in dominance order so operand facts are available
 // before use.
 iree_status_t loom_value_fact_table_compute(loom_value_fact_table_t* table,
-                                            loom_module_t* module,
+                                            const loom_module_t* module,
                                             loom_func_like_t function);
 
 // Returns a facts scratch buffer with at least |count| entries.

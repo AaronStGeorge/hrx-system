@@ -6,8 +6,10 @@
 
 #include "loom/target/llvmir/lower.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <string>
 
@@ -16,10 +18,13 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
+#include "loom/ir/encoding.h"
 #include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/text_writer.h"
 #include "loom/target/llvmir/tool.h"
 #include "loom/target/llvmir/verify.h"
@@ -107,9 +112,11 @@ class LlvmIrLowerTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("lower_test"),
@@ -151,6 +158,18 @@ class LlvmIrLowerTest : public ::testing::Test {
     loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
     IREE_CHECK_OK(loom_module_intern_string(module_, name, &name_id));
     module_->values.entries[value_id].name_id = name_id;
+  }
+
+  uint16_t AddDenseEncoding() {
+    loom_string_id_t dense_name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_module_intern_string(module_, IREE_SV("dense"), &dense_name_id));
+    loom_encoding_t encoding;
+    memset(&encoding, 0, sizeof(encoding));
+    encoding.name_id = dense_name_id;
+    uint16_t encoding_id = 0;
+    IREE_CHECK_OK(loom_module_add_encoding(module_, &encoding, &encoding_id));
+    return encoding_id;
   }
 
   loom_builder_t BodyBuilder(loom_op_t* func_op) {
@@ -381,6 +400,150 @@ TEST_F(LlvmIrLowerTest, LowersIndexCastUsingTargetIndexWidth) {
   EXPECT_NE(text.find("  %extended = sext i32 %n to i64\n"), std::string::npos)
       << text;
   EXPECT_NE(text.find("  ret i64 %extended\n"), std::string::npos) << text;
+}
+
+TEST_F(LlvmIrLowerTest, LowersDenseBufferViewLoadStore) {
+  uint16_t dense_encoding = AddDenseEncoding();
+  loom_type_t buffer = loom_type_buffer();
+  loom_type_t offset = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t view_type = loom_type_shaped_2d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4),
+      loom_dim_pack_static(8), dense_encoding);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("dense_memory"));
+  loom_type_t arg_types[5] = {buffer, offset, index, index, f32};
+  loom_type_t result_types[1] = {f32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types, 5, result_types, 1,
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 5);
+  SetValueName(args[0], IREE_SV("buffer"));
+  SetValueName(args[1], IREE_SV("offset"));
+  SetValueName(args[2], IREE_SV("row"));
+  SetValueName(args[3], IREE_SV("col"));
+  SetValueName(args[4], IREE_SV("value"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* view_op = NULL;
+  IREE_ASSERT_OK(loom_buffer_view_build(&body_builder, args[0], args[1],
+                                        view_type, LOOM_LOCATION_UNKNOWN,
+                                        &view_op));
+  loom_value_id_t view = loom_buffer_view_result(view_op);
+  SetValueName(view, IREE_SV("view"));
+
+  int64_t dynamic_load_indices[2] = {INT64_MIN, INT64_MIN};
+  loom_value_id_t load_indices[2] = {args[2], args[3]};
+  loom_op_t* load_op = NULL;
+  IREE_ASSERT_OK(loom_view_load_build(&body_builder, view, load_indices, 2,
+                                      dynamic_load_indices, 2, f32,
+                                      LOOM_LOCATION_UNKNOWN, &load_op));
+  loom_value_id_t loaded = loom_view_load_result(load_op);
+  SetValueName(loaded, IREE_SV("loaded"));
+
+  int64_t mixed_store_indices[2] = {0, INT64_MIN};
+  loom_value_id_t store_indices[1] = {args[3]};
+  loom_op_t* store_op = NULL;
+  IREE_ASSERT_OK(loom_view_store_build(&body_builder, args[4], view,
+                                       store_indices, 1, mixed_store_indices, 2,
+                                       LOOM_LOCATION_UNKNOWN, &store_op));
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &loaded, 1,
+                                        LOOM_LOCATION_UNKNOWN, &store_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define dso_local float @dense_memory(ptr %buffer, "
+                      "i64 %offset, i64 %row, i64 %col, float %value) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %view = getelementptr i8, ptr %buffer, i64 %offset\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find(" = mul i64 %row, 8\n"), std::string::npos) << text;
+  EXPECT_NE(text.find(" = getelementptr float, ptr %view, i64 "),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %loaded = load float, ptr "), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  store float %value, ptr "), std::string::npos) << text;
+  VerifyTextWithLlvmTools(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersBufferAllocaWithAlignedScalarAccess) {
+  uint16_t dense_encoding = AddDenseEncoding();
+  loom_type_t offset = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t buffer = loom_type_buffer();
+  loom_type_t view_type =
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(1), dense_encoding);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("stack_memory"));
+  loom_type_t arg_types[2] = {offset, f32};
+  loom_type_t result_types[1] = {f32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types, 2, result_types, 1,
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 2);
+  SetValueName(args[0], IREE_SV("bytes"));
+  SetValueName(args[1], IREE_SV("value"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* alloca_op = NULL;
+  IREE_ASSERT_OK(loom_buffer_alloca_build(
+      &body_builder, args[0], 16, LOOM_BUFFER_MEMORY_SPACE_PRIVATE, buffer,
+      LOOM_LOCATION_UNKNOWN, &alloca_op));
+  loom_value_id_t scratch = loom_buffer_alloca_result(alloca_op);
+  SetValueName(scratch, IREE_SV("scratch"));
+
+  loom_op_t* zero_op = NULL;
+  IREE_ASSERT_OK(loom_index_constant_build(&body_builder, loom_attr_i64(0),
+                                           offset, LOOM_LOCATION_UNKNOWN,
+                                           &zero_op));
+  loom_value_id_t zero = loom_index_constant_result(zero_op);
+
+  loom_op_t* view_op = NULL;
+  IREE_ASSERT_OK(loom_buffer_view_build(&body_builder, scratch, zero, view_type,
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  loom_value_id_t view = loom_buffer_view_result(view_op);
+  SetValueName(view, IREE_SV("view"));
+
+  int64_t static_index[1] = {0};
+  loom_op_t* store_op = NULL;
+  IREE_ASSERT_OK(loom_view_store_build(&body_builder, args[1], view, NULL, 0,
+                                       static_index, 1, LOOM_LOCATION_UNKNOWN,
+                                       &store_op));
+  loom_op_t* load_op = NULL;
+  IREE_ASSERT_OK(loom_view_load_build(&body_builder, view, NULL, 0,
+                                      static_index, 1, f32,
+                                      LOOM_LOCATION_UNKNOWN, &load_op));
+  loom_value_id_t loaded = loom_view_load_result(load_op);
+  SetValueName(loaded, IREE_SV("loaded"));
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &loaded, 1,
+                                        LOOM_LOCATION_UNKNOWN, &load_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("  %scratch = alloca i8, i64 %bytes, align 16\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %view = getelementptr i8, ptr %scratch, i64 0\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  store float %value, ptr "), std::string::npos) << text;
+  EXPECT_NE(text.find(", align 4\n"), std::string::npos) << text;
+  EXPECT_NE(text.find("  %loaded = load float, ptr "), std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
 }
 
 TEST_F(LlvmIrLowerTest, ReportsUnsupportedOpName) {

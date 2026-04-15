@@ -77,9 +77,14 @@ loom_cc_library(
     ::llvmir
     iree::base
     loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::view
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 
@@ -171,9 +176,11 @@ loom_cc_test(
     iree::base::internal::arena
     iree::io::file_handle
     loom::src::loom::ir
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::view
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
