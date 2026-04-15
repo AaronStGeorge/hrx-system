@@ -9,18 +9,19 @@
 #include "loom/target/llvmir/llvmir.h"
 
 #define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 13
+#define TEST_X86_64_DATALAYOUT_TEXT                                   \
+  "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:" \
+  "64-i128:128-f80:128-n8:16:32:64-S128\"\n"
+#define TEST_AMDGPU_DATALAYOUT_TEXT                                 \
+  "target datalayout = \"e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:"  \
+  "64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:" \
+  "192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:" \
+  "256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-"   \
+  "ni:7:8:9\"\n"
 
 static loom_llvmir_attr_t loom_llvmir_test_attr(loom_llvmir_attr_kind_t kind) {
   return (loom_llvmir_attr_t){
       .kind = kind,
-      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-  };
-}
-
-static loom_llvmir_attr_t loom_llvmir_test_align_attr(uint64_t value) {
-  return (loom_llvmir_attr_t){
-      .kind = LOOM_LLVMIR_ATTR_ALIGN,
-      .value = value,
       .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
   };
 }
@@ -32,24 +33,6 @@ static loom_llvmir_attr_t loom_llvmir_test_range_attr(
       .value = lower,
       .value2 = upper,
       .type_id = type_id,
-  };
-}
-
-static loom_llvmir_attr_t loom_llvmir_test_string_key_attr(const char* key) {
-  return (loom_llvmir_attr_t){
-      .kind = LOOM_LLVMIR_ATTR_STRING_KEY,
-      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-      .key = IREE_SV(key),
-  };
-}
-
-static loom_llvmir_attr_t loom_llvmir_test_string_key_value_attr(
-    const char* key, const char* value) {
-  return (loom_llvmir_attr_t){
-      .kind = LOOM_LLVMIR_ATTR_STRING_KEY_VALUE,
-      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-      .key = IREE_SV(key),
-      .string_value = IREE_SV(value),
   };
 }
 
@@ -1487,8 +1470,9 @@ static iree_status_t loom_llvmir_test_populate_inline_asm(
 
 static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
     loom_llvmir_module_t* module) {
-  const loom_llvmir_target_env_t* target_env =
-      loom_llvmir_target_env_amdgcn_amd_amdhsa();
+  const loom_llvmir_target_profile_t* profile =
+      loom_llvmir_target_profile_amdgpu_hal();
+  const loom_llvmir_target_env_t* target_env = profile->target_env;
 
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -1511,25 +1495,10 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
       module, target_env->address_spaces.buffer_resource, &fat_ptr_type));
 
-  loom_llvmir_attr_t kernel_attrs[] = {
-      loom_llvmir_test_attr(LOOM_LLVMIR_ATTR_ALWAYSINLINE),
-      loom_llvmir_test_string_key_value_attr("amdgpu-flat-work-group-size",
-                                             "64,64"),
-      loom_llvmir_test_string_key_attr("uniform-work-group-size"),
-  };
   loom_llvmir_attr_group_id_t kernel_attr_group =
       LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_attr_group(
-      module, kernel_attrs, IREE_ARRAYSIZE(kernel_attrs), &kernel_attr_group));
-  int32_t workgroup_size_values[] = {64, 1, 1};
-  loom_llvmir_metadata_id_t workgroup_size = LOOM_LLVMIR_METADATA_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_metadata_i32_tuple(
-      module,
-      &(loom_llvmir_metadata_i32_tuple_t){
-          .values = workgroup_size_values,
-          .value_count = IREE_ARRAYSIZE(workgroup_size_values),
-      },
-      &workgroup_size));
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_add_kernel_attr_group(
+      module, profile, &kernel_attr_group));
 
   loom_llvmir_function_t* kernel = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
@@ -1538,22 +1507,13 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
           .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
           .name = IREE_SV("add_dispatch"),
           .return_type = void_type,
-          .calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL,
+          .linkage = profile->exported_linkage,
+          .calling_convention = profile->kernel_calling_convention,
           .attr_group_id = kernel_attr_group,
       },
       &kernel));
-  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_metadata_attachment(
-      kernel, &(loom_llvmir_metadata_attachment_t){
-                  .name = IREE_SV("reqd_work_group_size"),
-                  .metadata_id = workgroup_size,
-              }));
-  loom_llvmir_attr_t binding_attrs[] = {
-      loom_llvmir_test_attr(LOOM_LLVMIR_ATTR_INREG),
-      loom_llvmir_test_attr(LOOM_LLVMIR_ATTR_NOALIAS),
-      loom_llvmir_test_attr(LOOM_LLVMIR_ATTR_NOUNDEF),
-      loom_llvmir_test_attr(LOOM_LLVMIR_ATTR_NONNULL),
-      loom_llvmir_test_align_attr(16),
-  };
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_target_profile_attach_kernel_metadata(kernel, profile));
   loom_llvmir_value_id_t x = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t y = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t z = LOOM_LLVMIR_VALUE_ID_INVALID;
@@ -1562,8 +1522,8 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
       &(loom_llvmir_parameter_desc_t){
           .type_id = global_ptr_type,
           .name = IREE_SV("x"),
-          .attrs = binding_attrs,
-          .attr_count = IREE_ARRAYSIZE(binding_attrs),
+          .attrs = profile->kernel_binding_attrs,
+          .attr_count = profile->kernel_binding_attr_count,
       },
       &x));
   IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
@@ -1571,8 +1531,8 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
       &(loom_llvmir_parameter_desc_t){
           .type_id = global_ptr_type,
           .name = IREE_SV("y"),
-          .attrs = binding_attrs,
-          .attr_count = IREE_ARRAYSIZE(binding_attrs),
+          .attrs = profile->kernel_binding_attrs,
+          .attr_count = profile->kernel_binding_attr_count,
       },
       &y));
   IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
@@ -1580,8 +1540,8 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
       &(loom_llvmir_parameter_desc_t){
           .type_id = global_ptr_type,
           .name = IREE_SV("z"),
-          .attrs = binding_attrs,
-          .attr_count = IREE_ARRAYSIZE(binding_attrs),
+          .attrs = profile->kernel_binding_attrs,
+          .attr_count = profile->kernel_binding_attr_count,
       },
       &z));
 
@@ -1597,10 +1557,11 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
   loom_llvmir_value_id_t flags = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i16_type, 0, &stride_zero));
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_module_add_integer_constant(module, i32_type, 64, &records));
-  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(module, i32_type,
-                                                               159744, &flags));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i32_type, profile->amdgpu_hal.required_workgroup_size.x,
+      &records));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i32_type, profile->amdgpu_hal.buffer_resource_flags, &flags));
 
   loom_llvmir_block_t* entry = NULL;
   IREE_RETURN_IF_ERROR(
@@ -1731,7 +1692,7 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
 }
 
 static const char kObjectVadd4Text[] =
-    "source_filename = \"loom-object\"\n"
+    "source_filename = \"loom-object\"\n" TEST_X86_64_DATALAYOUT_TEXT
     "target triple = \"x86_64-unknown-linux-gnu\"\n"
     "\n"
     "define dso_local void @vadd4_object(ptr noalias noundef readonly "
@@ -1749,7 +1710,7 @@ static const char kObjectVadd4Text[] =
     "}\n";
 
 static const char kCallConstantsText[] =
-    "source_filename = \"loom-call-constants\"\n"
+    "source_filename = \"loom-call-constants\"\n" TEST_X86_64_DATALAYOUT_TEXT
     "target triple = \"x86_64-unknown-linux-gnu\"\n"
     "\n"
     "declare i32 @callee_i32(i32 %value)\n"
@@ -1764,7 +1725,7 @@ static const char kCallConstantsText[] =
     "}\n";
 
 static const char kBuiltinIntrinsicsText[] =
-    "source_filename = \"loom-builtins\"\n"
+    "source_filename = \"loom-builtins\"\n" TEST_X86_64_DATALAYOUT_TEXT
     "target triple = \"x86_64-unknown-linux-gnu\"\n"
     "\n"
     "declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, "
@@ -1788,7 +1749,7 @@ static const char kBuiltinIntrinsicsText[] =
     "}\n";
 
 static const char kStackAllocaText[] =
-    "source_filename = \"loom-stack\"\n"
+    "source_filename = \"loom-stack\"\n" TEST_X86_64_DATALAYOUT_TEXT
     "target triple = \"x86_64-unknown-linux-gnu\"\n"
     "\n"
     "declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)\n"
@@ -1806,7 +1767,7 @@ static const char kStackAllocaText[] =
     "}\n";
 
 static const char kGlobalConstantText[] =
-    "source_filename = \"loom-global\"\n"
+    "source_filename = \"loom-global\"\n" TEST_X86_64_DATALAYOUT_TEXT
     "target triple = \"x86_64-unknown-linux-gnu\"\n"
     "\n"
     "@answer = private constant i32 42, align 4\n"
@@ -1916,7 +1877,7 @@ static const char kInlineAsmText[] =
     "}\n";
 
 static const char kAmdgpuIntrinsicsText[] =
-    "source_filename = \"loom-amdgpu\"\n"
+    "source_filename = \"loom-amdgpu\"\n" TEST_AMDGPU_DATALAYOUT_TEXT
     "target triple = \"amdgcn-amd-amdhsa\"\n"
     "\n"
     "define amdgpu_kernel void @add_dispatch(ptr addrspace(1) inreg "
@@ -2008,50 +1969,50 @@ static iree_status_t loom_llvmir_test_module_target_config(
   *out_target_config_ptr = NULL;
   switch (scenario) {
     case LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4: {
-      const loom_llvmir_target_env_t* target_env =
-          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
-          target_env, IREE_SV("loom-object"), out_target_config));
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_target_profile_x86_64_object();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-object"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS: {
-      const loom_llvmir_target_env_t* target_env =
-          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
-          target_env, IREE_SV("loom-call-constants"), out_target_config));
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_target_profile_x86_64_object();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-call-constants"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS: {
-      const loom_llvmir_target_env_t* target_env =
-          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
-          target_env, IREE_SV("loom-builtins"), out_target_config));
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_target_profile_x86_64_object();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-builtins"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA: {
-      const loom_llvmir_target_env_t* target_env =
-          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
-          target_env, IREE_SV("loom-stack"), out_target_config));
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_target_profile_x86_64_object();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-stack"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT: {
-      const loom_llvmir_target_env_t* target_env =
-          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
-          target_env, IREE_SV("loom-global"), out_target_config));
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_target_profile_x86_64_object();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-global"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
     case LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS: {
-      const loom_llvmir_target_env_t* target_env =
-          loom_llvmir_target_env_amdgcn_amd_amdhsa();
-      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
-          target_env, IREE_SV("loom-amdgpu"), out_target_config));
+      const loom_llvmir_target_profile_t* profile =
+          loom_llvmir_target_profile_amdgpu_hal();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_module_config(
+          profile, IREE_SV("loom-amdgpu"), out_target_config));
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }

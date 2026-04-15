@@ -112,6 +112,17 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    target_env_test
+  SRCS
+    "target_env_test.cc"
+  DEPS
+    ::llvmir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     verify_test
   SRCS
     "verify_test.cc"

@@ -1091,19 +1091,19 @@ iree_status_t loom_llvmir_text_write_module(const loom_llvmir_module_t* module,
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
     wrote_header = true;
   }
-  if (!iree_string_view_is_empty(module->target_config.target_triple)) {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, "target triple = "));
-    IREE_RETURN_IF_ERROR(loom_llvmir_write_escaped_string(
-        stream, module->target_config.target_triple));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
-    wrote_header = true;
-  }
   if (!iree_string_view_is_empty(module->target_config.data_layout)) {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, "target datalayout = "));
     IREE_RETURN_IF_ERROR(loom_llvmir_write_escaped_string(
         stream, module->target_config.data_layout));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
+    wrote_header = true;
+  }
+  if (!iree_string_view_is_empty(module->target_config.target_triple)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "target triple = "));
+    IREE_RETURN_IF_ERROR(loom_llvmir_write_escaped_string(
+        stream, module->target_config.target_triple));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
     wrote_header = true;
   }
