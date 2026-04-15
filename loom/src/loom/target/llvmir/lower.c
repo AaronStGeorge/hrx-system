@@ -411,10 +411,15 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
     parameter_desc.type_id = arg_type;
     parameter_desc.name = loom_llvmir_lowering_value_name(state, arg_ids[i]);
     uint64_t pointer_alignment = 0;
+    loom_llvmir_attr_t kernel_binding_attrs
+        [LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
+    iree_host_size_t kernel_binding_attr_count = 0;
     if (is_kernel_entry && loom_type_is_buffer(source_arg_type)) {
-      parameter_desc.attrs = state->target_profile->kernel_binding_attrs;
-      parameter_desc.attr_count =
-          state->target_profile->kernel_binding_attr_count;
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_kernel_binding_attrs(
+          state->target_profile, kernel_binding_attrs,
+          IREE_ARRAYSIZE(kernel_binding_attrs), &kernel_binding_attr_count));
+      parameter_desc.attrs = kernel_binding_attrs;
+      parameter_desc.attr_count = kernel_binding_attr_count;
       pointer_alignment = state->target_profile->amdgpu_hal.binding_alignment;
     }
     loom_llvmir_value_id_t parameter_value = LOOM_LLVMIR_VALUE_ID_INVALID;

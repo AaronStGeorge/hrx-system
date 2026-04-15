@@ -1604,36 +1604,42 @@ static iree_status_t loom_llvmir_test_populate_amdgpu_intrinsics(
       &kernel));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_target_profile_attach_kernel_metadata(kernel, profile));
+  loom_llvmir_attr_t
+      binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
+  iree_host_size_t binding_attr_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_kernel_binding_attrs(
+      profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
+      &binding_attr_count));
   loom_llvmir_value_id_t x = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t y = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t z = LOOM_LLVMIR_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
-      kernel,
-      &(loom_llvmir_parameter_desc_t){
-          .type_id = global_ptr_type,
-          .name = IREE_SV("x"),
-          .attrs = profile->kernel_binding_attrs,
-          .attr_count = profile->kernel_binding_attr_count,
-      },
-      &x));
-  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
-      kernel,
-      &(loom_llvmir_parameter_desc_t){
-          .type_id = global_ptr_type,
-          .name = IREE_SV("y"),
-          .attrs = profile->kernel_binding_attrs,
-          .attr_count = profile->kernel_binding_attr_count,
-      },
-      &y));
-  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
-      kernel,
-      &(loom_llvmir_parameter_desc_t){
-          .type_id = global_ptr_type,
-          .name = IREE_SV("z"),
-          .attrs = profile->kernel_binding_attrs,
-          .attr_count = profile->kernel_binding_attr_count,
-      },
-      &z));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(kernel,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = global_ptr_type,
+                                             .name = IREE_SV("x"),
+                                             .attrs = binding_attrs,
+                                             .attr_count = binding_attr_count,
+                                         },
+                                         &x));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(kernel,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = global_ptr_type,
+                                             .name = IREE_SV("y"),
+                                             .attrs = binding_attrs,
+                                             .attr_count = binding_attr_count,
+                                         },
+                                         &y));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(kernel,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = global_ptr_type,
+                                             .name = IREE_SV("z"),
+                                             .attrs = binding_attrs,
+                                             .attr_count = binding_attr_count,
+                                         },
+                                         &z));
 
   loom_llvmir_function_t* workitem_id = NULL;
   IREE_RETURN_IF_ERROR(

@@ -6,6 +6,8 @@
 
 #include "loom/target/llvmir/target_env.h"
 
+#include <stdio.h>
+
 #include "loom/target/llvmir/types.h"
 
 static const loom_llvmir_target_env_t kX86_64UnknownLinuxGnuTargetEnv = {
@@ -52,48 +54,6 @@ static const loom_llvmir_target_env_t kAmdgcnAmdAmdhsaTargetEnv = {
         },
 };
 
-static const loom_llvmir_attr_t kAmdgpuHalKernelBindingAttrs[] = {
-    {
-        .kind = LOOM_LLVMIR_ATTR_INREG,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-    },
-    {
-        .kind = LOOM_LLVMIR_ATTR_NOALIAS,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-    },
-    {
-        .kind = LOOM_LLVMIR_ATTR_NOUNDEF,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-    },
-    {
-        .kind = LOOM_LLVMIR_ATTR_NONNULL,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-    },
-    {
-        .kind = LOOM_LLVMIR_ATTR_ALIGN,
-        .value = 16,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-    },
-};
-
-static const loom_llvmir_attr_t kAmdgpuHalKernelFunctionAttrs[] = {
-    {
-        .kind = LOOM_LLVMIR_ATTR_ALWAYSINLINE,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-    },
-    {
-        .kind = LOOM_LLVMIR_ATTR_STRING_KEY_VALUE,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-        .key = IREE_SVL("amdgpu-flat-work-group-size"),
-        .string_value = IREE_SVL("64,64"),
-    },
-    {
-        .kind = LOOM_LLVMIR_ATTR_STRING_KEY,
-        .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-        .key = IREE_SVL("uniform-work-group-size"),
-    },
-};
-
 static const loom_llvmir_target_profile_t kX86_64ObjectProfile = {
     .name = IREE_SVL("x86_64-object"),
     .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
@@ -108,10 +68,6 @@ static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
     .kind = LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL,
     .exported_linkage = LOOM_LLVMIR_LINKAGE_DEFAULT,
     .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL,
-    .kernel_binding_attrs = kAmdgpuHalKernelBindingAttrs,
-    .kernel_binding_attr_count = IREE_ARRAYSIZE(kAmdgpuHalKernelBindingAttrs),
-    .kernel_function_attrs = kAmdgpuHalKernelFunctionAttrs,
-    .kernel_function_attr_count = IREE_ARRAYSIZE(kAmdgpuHalKernelFunctionAttrs),
     .required_workgroup_size_metadata_name = IREE_SVL("reqd_work_group_size"),
     .amdgpu_hal =
         {
@@ -165,6 +121,26 @@ const loom_llvmir_target_profile_t* loom_llvmir_target_profile_amdgpu_hal(
   return &kAmdgpuHalProfile;
 }
 
+iree_status_t loom_llvmir_target_profile_initialize_x86_64_object(
+    loom_llvmir_target_profile_t* out_profile) {
+  if (out_profile == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM target profile output is required");
+  }
+  *out_profile = kX86_64ObjectProfile;
+  return iree_ok_status();
+}
+
+iree_status_t loom_llvmir_target_profile_initialize_amdgpu_hal(
+    loom_llvmir_target_profile_t* out_profile) {
+  if (out_profile == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM target profile output is required");
+  }
+  *out_profile = kAmdgpuHalProfile;
+  return iree_ok_status();
+}
+
 iree_status_t loom_llvmir_target_profile_module_config(
     const loom_llvmir_target_profile_t* profile, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config) {
@@ -174,6 +150,83 @@ iree_status_t loom_llvmir_target_profile_module_config(
   }
   return loom_llvmir_target_env_module_config(profile->target_env, source_name,
                                               out_config);
+}
+
+iree_status_t loom_llvmir_target_profile_kernel_binding_attrs(
+    const loom_llvmir_target_profile_t* profile, loom_llvmir_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count) {
+  if (out_attr_count == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binding attr count output is required");
+  }
+  *out_attr_count = 0;
+  if (profile == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM target profile is required");
+  }
+  if (attrs == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binding attr storage is required");
+  }
+  if (profile->kind != LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM target profile is not a HAL kernel profile");
+  }
+  if (attr_capacity <
+      LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "LLVM binding attr storage is too small");
+  }
+  if (profile->amdgpu_hal.binding_alignment == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU HAL binding alignment must be non-zero");
+  }
+
+  attrs[0] = (loom_llvmir_attr_t){
+      .kind = LOOM_LLVMIR_ATTR_INREG,
+      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+  };
+  attrs[1] = (loom_llvmir_attr_t){
+      .kind = LOOM_LLVMIR_ATTR_NOALIAS,
+      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+  };
+  attrs[2] = (loom_llvmir_attr_t){
+      .kind = LOOM_LLVMIR_ATTR_NOUNDEF,
+      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+  };
+  attrs[3] = (loom_llvmir_attr_t){
+      .kind = LOOM_LLVMIR_ATTR_NONNULL,
+      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+  };
+  attrs[4] = (loom_llvmir_attr_t){
+      .kind = LOOM_LLVMIR_ATTR_ALIGN,
+      .value = profile->amdgpu_hal.binding_alignment,
+      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+  };
+  *out_attr_count = LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_target_profile_flat_workgroup_size_attr(
+    const loom_llvmir_target_profile_t* profile, char* storage,
+    iree_host_size_t storage_capacity, iree_string_view_t* out_value) {
+  if (profile->amdgpu_hal.flat_workgroup_size_min == 0 ||
+      profile->amdgpu_hal.flat_workgroup_size_max == 0 ||
+      profile->amdgpu_hal.flat_workgroup_size_min >
+          profile->amdgpu_hal.flat_workgroup_size_max) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU HAL flat workgroup size range must be non-zero and ordered");
+  }
+  int length = snprintf(storage, storage_capacity, "%u,%u",
+                        profile->amdgpu_hal.flat_workgroup_size_min,
+                        profile->amdgpu_hal.flat_workgroup_size_max);
+  if (length <= 0 || (iree_host_size_t)length >= storage_capacity) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU HAL flat workgroup size attr overflow");
+  }
+  *out_value = iree_make_string_view(storage, (iree_host_size_t)length);
+  return iree_ok_status();
 }
 
 iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
@@ -186,13 +239,34 @@ iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM target profile is required");
   }
-  if (profile->kernel_function_attr_count == 0) {
+  if (profile->kind != LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM target profile has no kernel attrs");
+                            "LLVM target profile is not a HAL kernel profile");
   }
-  return loom_llvmir_module_add_attr_group(
-      module, profile->kernel_function_attrs,
-      profile->kernel_function_attr_count, out_group_id);
+  char flat_workgroup_size_storage[32];
+  iree_string_view_t flat_workgroup_size = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_flat_workgroup_size_attr(
+      profile, flat_workgroup_size_storage,
+      IREE_ARRAYSIZE(flat_workgroup_size_storage), &flat_workgroup_size));
+  loom_llvmir_attr_t attrs[] = {
+      {
+          .kind = LOOM_LLVMIR_ATTR_ALWAYSINLINE,
+          .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+      },
+      {
+          .kind = LOOM_LLVMIR_ATTR_STRING_KEY_VALUE,
+          .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+          .key = IREE_SVL("amdgpu-flat-work-group-size"),
+          .string_value = flat_workgroup_size,
+      },
+      {
+          .kind = LOOM_LLVMIR_ATTR_STRING_KEY,
+          .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
+          .key = IREE_SVL("uniform-work-group-size"),
+      },
+  };
+  return loom_llvmir_module_add_attr_group(module, attrs, IREE_ARRAYSIZE(attrs),
+                                           out_group_id);
 }
 
 iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
@@ -208,6 +282,13 @@ iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "LLVM target profile has no required workgroup size metadata");
+  }
+  if (profile->amdgpu_hal.required_workgroup_size.x == 0 ||
+      profile->amdgpu_hal.required_workgroup_size.y == 0 ||
+      profile->amdgpu_hal.required_workgroup_size.z == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM target profile workgroup size dimensions must be non-zero");
   }
   if (profile->amdgpu_hal.required_workgroup_size.x > INT32_MAX ||
       profile->amdgpu_hal.required_workgroup_size.y > INT32_MAX ||

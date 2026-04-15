@@ -154,6 +154,7 @@ loom_cc_test(
     "target_env_test.cc"
   DEPS
     ::llvmir
+    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )

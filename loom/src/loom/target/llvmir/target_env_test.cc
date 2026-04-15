@@ -12,7 +12,9 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/target/llvmir/builder.h"
+#include "loom/target/llvmir/text_writer.h"
 #include "loom/target/llvmir/verify.h"
+#include "loom/util/stream.h"
 
 namespace loom {
 namespace {
@@ -22,6 +24,18 @@ using ModulePtr =
 
 std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
+}
+
+std::string WriteText(const loom_llvmir_module_t* module) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_CHECK_OK(loom_llvmir_text_write_module(module, &stream));
+  std::string text(iree_string_builder_buffer(&builder),
+                   iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+  return text;
 }
 
 TEST(LlvmIrTargetEnvTest, X86ObjectProfileNamesObjectAbi) {
@@ -42,7 +56,6 @@ TEST(LlvmIrTargetEnvTest, X86ObjectProfileNamesObjectAbi) {
   EXPECT_EQ(profile->target_env->address_spaces.global, 0u);
   EXPECT_EQ(profile->target_env->address_spaces.buffer_resource, UINT32_MAX);
   EXPECT_EQ(profile->exported_linkage, LOOM_LLVMIR_LINKAGE_DSO_LOCAL);
-  EXPECT_EQ(profile->kernel_function_attr_count, 0u);
 
   loom_llvmir_target_config_t config = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
@@ -54,6 +67,12 @@ TEST(LlvmIrTargetEnvTest, X86ObjectProfileNamesObjectAbi) {
   EXPECT_EQ(config.default_pointer_bitwidth, 64u);
   EXPECT_EQ(config.index_bitwidth, 64u);
   EXPECT_EQ(config.offset_bitwidth, 64u);
+
+  loom_llvmir_target_profile_t profile_copy = {};
+  IREE_ASSERT_OK(
+      loom_llvmir_target_profile_initialize_x86_64_object(&profile_copy));
+  EXPECT_EQ(ToString(profile_copy.name), ToString(profile->name));
+  EXPECT_EQ(profile_copy.target_env, profile->target_env);
 }
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
@@ -79,8 +98,6 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   EXPECT_EQ(profile->target_env->address_spaces.buffer_resource, 7u);
   EXPECT_EQ(profile->kernel_calling_convention,
             LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL);
-  EXPECT_EQ(profile->kernel_binding_attr_count, 5u);
-  EXPECT_EQ(profile->kernel_function_attr_count, 3u);
   EXPECT_EQ(profile->amdgpu_hal.binding_alignment, 16u);
   EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.x, 64u);
   EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.y, 1u);
@@ -88,6 +105,16 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_min, 64u);
   EXPECT_EQ(profile->amdgpu_hal.flat_workgroup_size_max, 64u);
   EXPECT_EQ(profile->amdgpu_hal.buffer_resource_flags, 159744u);
+
+  loom_llvmir_attr_t
+      binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
+  iree_host_size_t binding_attr_count = 0;
+  IREE_ASSERT_OK(loom_llvmir_target_profile_kernel_binding_attrs(
+      profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
+      &binding_attr_count));
+  EXPECT_EQ(binding_attr_count, 5u);
+  EXPECT_EQ(binding_attrs[4].kind, LOOM_LLVMIR_ATTR_ALIGN);
+  EXPECT_EQ(binding_attrs[4].value, 16u);
 }
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
@@ -127,6 +154,136 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
       loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
   IREE_ASSERT_OK(loom_llvmir_build_ret_void(entry));
   IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+}
+
+TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileCopyControlsKernelDecorations) {
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
+  profile.name = IREE_SV("amdgpu-hal-variant");
+  profile.target_cpu = IREE_SV("gfx1100");
+  profile.target_features = IREE_SV("+wavefrontsize64");
+  profile.amdgpu_hal.binding_alignment = 32;
+  profile.amdgpu_hal.required_workgroup_size.x = 128;
+  profile.amdgpu_hal.required_workgroup_size.y = 2;
+  profile.amdgpu_hal.required_workgroup_size.z = 1;
+  profile.amdgpu_hal.flat_workgroup_size_min = 128;
+  profile.amdgpu_hal.flat_workgroup_size_max = 256;
+
+  loom_llvmir_target_config_t config = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
+      &profile, IREE_SV("kernel-variant-source"), &config));
+  loom_llvmir_module_t* module = nullptr;
+  IREE_ASSERT_OK(
+      loom_llvmir_module_allocate(&config, iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+
+  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_llvmir_module_get_void_type(module_ptr.get(), &void_type));
+  loom_llvmir_attr_group_id_t attr_group = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  IREE_ASSERT_OK(loom_llvmir_target_profile_add_kernel_attr_group(
+      module_ptr.get(), &profile, &attr_group));
+
+  loom_llvmir_function_desc_t function_desc = {};
+  function_desc.kind = LOOM_LLVMIR_FUNCTION_DEFINITION;
+  function_desc.name = IREE_SV("dispatch");
+  function_desc.return_type = void_type;
+  function_desc.linkage = profile.exported_linkage;
+  function_desc.calling_convention = profile.kernel_calling_convention;
+  function_desc.attr_group_id = attr_group;
+  loom_llvmir_function_t* function = nullptr;
+  IREE_ASSERT_OK(loom_llvmir_module_add_function(module_ptr.get(),
+                                                 &function_desc, &function));
+
+  loom_llvmir_type_id_t global_pointer_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(loom_llvmir_module_get_pointer_type(
+      module_ptr.get(), profile.target_env->address_spaces.global,
+      &global_pointer_type));
+  loom_llvmir_attr_t
+      binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
+  iree_host_size_t binding_attr_count = 0;
+  IREE_ASSERT_OK(loom_llvmir_target_profile_kernel_binding_attrs(
+      &profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
+      &binding_attr_count));
+  loom_llvmir_value_id_t parameter = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_parameter_desc_t parameter_desc = {};
+  parameter_desc.type_id = global_pointer_type;
+  parameter_desc.name = IREE_SV("input");
+  parameter_desc.attrs = binding_attrs;
+  parameter_desc.attr_count = binding_attr_count;
+  IREE_ASSERT_OK(loom_llvmir_function_add_parameter(function, &parameter_desc,
+                                                    &parameter));
+  IREE_ASSERT_OK(
+      loom_llvmir_target_profile_attach_kernel_metadata(function, &profile));
+
+  loom_llvmir_block_t* entry = nullptr;
+  IREE_ASSERT_OK(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  IREE_ASSERT_OK(loom_llvmir_build_ret_void(entry));
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+
+  std::string text = WriteText(module_ptr.get());
+  EXPECT_NE(text.find("ptr addrspace(1) inreg noalias noundef nonnull align "
+                      "32 %input"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("\"amdgpu-flat-work-group-size\"=\"128,256\""),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("!0 = !{i32 128, i32 2, i32 1}\n"), std::string::npos)
+      << text;
+}
+
+TEST(LlvmIrTargetEnvTest, RejectsInvalidAmdgpuHalProfileValues) {
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
+  loom_llvmir_attr_t
+      binding_attrs[LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT];
+  iree_host_size_t binding_attr_count = 0;
+
+  profile.amdgpu_hal.binding_alignment = 0;
+  iree_status_t status = loom_llvmir_target_profile_kernel_binding_attrs(
+      &profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
+      &binding_attr_count);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
+  loom_llvmir_target_config_t config = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
+      &profile, IREE_SV("bad-kernel-profile"), &config));
+  loom_llvmir_module_t* module = nullptr;
+  IREE_ASSERT_OK(
+      loom_llvmir_module_allocate(&config, iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+
+  profile.amdgpu_hal.flat_workgroup_size_min = 256;
+  profile.amdgpu_hal.flat_workgroup_size_max = 128;
+  loom_llvmir_attr_group_id_t attr_group = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  status = loom_llvmir_target_profile_add_kernel_attr_group(
+      module_ptr.get(), &profile, &attr_group);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
+  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_llvmir_module_get_void_type(module_ptr.get(), &void_type));
+  loom_llvmir_function_desc_t function_desc = {};
+  function_desc.kind = LOOM_LLVMIR_FUNCTION_DEFINITION;
+  function_desc.name = IREE_SV("dispatch");
+  function_desc.return_type = void_type;
+  function_desc.linkage = profile.exported_linkage;
+  function_desc.calling_convention = profile.kernel_calling_convention;
+  function_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  loom_llvmir_function_t* function = nullptr;
+  IREE_ASSERT_OK(loom_llvmir_module_add_function(module_ptr.get(),
+                                                 &function_desc, &function));
+  profile.amdgpu_hal.required_workgroup_size.x = 0;
+  status =
+      loom_llvmir_target_profile_attach_kernel_metadata(function, &profile);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
 }
 
 }  // namespace

@@ -33,6 +33,10 @@ typedef enum loom_llvmir_target_profile_kind_e {
   LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL = 1,
 } loom_llvmir_target_profile_kind_t;
 
+enum {
+  LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT = 5,
+};
+
 typedef struct loom_llvmir_target_address_spaces_t {
   // Generic/default pointer address space.
   uint32_t generic;
@@ -105,14 +109,6 @@ typedef struct loom_llvmir_target_profile_t {
   loom_llvmir_linkage_t exported_linkage;
   // ABI-required calling convention for kernel entry points.
   loom_llvmir_calling_convention_t kernel_calling_convention;
-  // ABI-required parameter attributes for HAL kernel binding pointers.
-  const loom_llvmir_attr_t* kernel_binding_attrs;
-  // Number of entries in |kernel_binding_attrs|.
-  iree_host_size_t kernel_binding_attr_count;
-  // ABI and optimization attributes for kernel entry point functions.
-  const loom_llvmir_attr_t* kernel_function_attrs;
-  // Number of entries in |kernel_function_attrs|.
-  iree_host_size_t kernel_function_attr_count;
   // ABI-required metadata attachment name for fixed workgroup size.
   iree_string_view_t required_workgroup_size_metadata_name;
   // AMDGPU HAL-specific ABI parameters.
@@ -129,6 +125,18 @@ const loom_llvmir_target_profile_t* loom_llvmir_target_profile_x86_64_object(
 
 const loom_llvmir_target_profile_t* loom_llvmir_target_profile_amdgpu_hal(void);
 
+// Initializes |out_profile| with a shallow copy of the built-in x86_64 object
+// profile. String views and |target_env| point at immutable static storage;
+// callers may overwrite profile fields for one lowering invocation.
+iree_status_t loom_llvmir_target_profile_initialize_x86_64_object(
+    loom_llvmir_target_profile_t* out_profile);
+
+// Initializes |out_profile| with a shallow copy of the built-in AMDGPU HAL
+// profile. String views and |target_env| point at immutable static storage;
+// callers may overwrite profile fields for one lowering invocation.
+iree_status_t loom_llvmir_target_profile_initialize_amdgpu_hal(
+    loom_llvmir_target_profile_t* out_profile);
+
 iree_status_t loom_llvmir_target_env_module_config(
     const loom_llvmir_target_env_t* target_env, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config);
@@ -137,10 +145,22 @@ iree_status_t loom_llvmir_target_profile_module_config(
     const loom_llvmir_target_profile_t* profile, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config);
 
+// Writes the ABI-required parameter attrs for a HAL kernel binding pointer.
+// The caller provides temporary storage; loom_llvmir_function_add_parameter()
+// copies the attrs into the target module when attaching them to a parameter.
+iree_status_t loom_llvmir_target_profile_kernel_binding_attrs(
+    const loom_llvmir_target_profile_t* profile, loom_llvmir_attr_t* attrs,
+    iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count);
+
+// Adds the ABI and optimization attr group for a HAL kernel entry point.
+// Attribute values are derived from |profile| at materialization time so
+// profile copies can safely customize workgroup-size policy.
 iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
     loom_llvmir_module_t* module, const loom_llvmir_target_profile_t* profile,
     loom_llvmir_attr_group_id_t* out_group_id);
 
+// Attaches the fixed-workgroup-size metadata required by a HAL kernel entry
+// point.
 iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
     loom_llvmir_function_t* function,
     const loom_llvmir_target_profile_t* profile);
