@@ -429,16 +429,29 @@ iree_status_t loom_rewriter_replace_all_uses_and_erase(
   loom_value_id_t* results = loom_op_results(op);
   for (uint16_t i = 0; i < count; ++i) {
     if (results[i] == LOOM_VALUE_ID_INVALID) continue;
-    // Add users of the replacement value to the worklist (they may
-    // now be simplifiable with the new operand).
-    IREE_RETURN_IF_ERROR(
-        loom_rewriter_add_users_to_worklist(rewriter, results[i]));
-    IREE_RETURN_IF_ERROR(loom_value_replace_all_uses_with(
-        rewriter->module, results[i], replacements[i]));
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(
+        rewriter, results[i], replacements[i]));
   }
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_subtree_providers_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(loom_op_erase(rewriter->module, op));
+  rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
+  return iree_ok_status();
+}
+
+iree_status_t loom_rewriter_replace_all_uses_with(loom_rewriter_t* rewriter,
+                                                  loom_value_id_t old_value,
+                                                  loom_value_id_t new_value) {
+  if (old_value == new_value) return iree_ok_status();
+  if (old_value == LOOM_VALUE_ID_INVALID ||
+      new_value == LOOM_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "replacement values must be valid");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_add_users_to_worklist(rewriter, old_value));
+  IREE_RETURN_IF_ERROR(
+      loom_value_replace_all_uses_with(rewriter->module, old_value, new_value));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
 }

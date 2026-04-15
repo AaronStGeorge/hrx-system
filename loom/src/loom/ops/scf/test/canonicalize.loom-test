@@ -121,3 +121,120 @@ func.def @for_void_empty_body(%lo: index, %hi: index) {
 func.def @for_void_empty_body(%lo: index, %hi: index) {
   func.return
 }
+
+// ====
+
+// A mixed loop forwards unchanged carried results independently and keeps only
+// the state that is actually updated by the loop.
+func.def @for_forwards_one_of_two_results(%lo: index, %hi: index, %init: f32, %acc: f32) -> (f32, f32) {
+  %step = index.constant 1 : index
+  %same, %sum = scf.for %iv = [%lo to %hi step %step](%same_arg = %init : f32, %acc_arg = %acc : f32) -> (f32, f32) {
+    %next = scalar.addf %acc_arg, %acc_arg : f32
+    scf.yield %same_arg, %next : f32, f32
+  }
+  func.return %same, %sum : f32, f32
+}
+
+// ----
+func.def @for_forwards_one_of_two_results(%lo: index, %hi: index, %init: f32, %acc: f32) -> (f32, f32) {
+  %step = index.constant 1 : index
+  %sum = scf.for %iv = [%lo to %hi step %step](%acc_arg = %acc : f32) -> (f32) {
+    %next = scalar.addf %acc_arg, %acc_arg : f32
+    scf.yield %next : f32
+  }
+  func.return %init, %sum : f32, f32
+}
+
+// ====
+
+// Forwarding does not discard side effects. The forwarded carried value becomes
+// a direct capture of the original iter_arg inside the compacted loop body.
+func.def @for_forwards_mixed_effectful_result(%buffer: buffer, %offset: offset, %lo: index, %hi: index, %init: f32, %acc: f32) -> (f32, f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %step = index.constant 1 : index
+  %same, %sum = scf.for %iv = [%lo to %hi step %step](%same_arg = %init : f32, %acc_arg = %acc : f32) -> (f32, f32) {
+    view.store %same_arg, %view[0] : f32, view<1xf32, %layout>
+    %next = scalar.addf %acc_arg, %acc_arg : f32
+    scf.yield %same_arg, %next : f32, f32
+  }
+  func.return %same, %sum : f32, f32
+}
+
+// ----
+func.def @for_forwards_mixed_effectful_result(%buffer: buffer, %offset: offset, %lo: index, %hi: index, %init: f32, %acc: f32) -> (f32, f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %step = index.constant 1 : index
+  %sum = scf.for %iv = [%lo to %hi step %step](%acc_arg = %acc : f32) -> (f32) {
+    view.store %init, %view[0] : f32, view<1xf32, %layout>
+    %next = scalar.addf %acc_arg, %acc_arg : f32
+    scf.yield %next : f32
+  }
+  func.return %init, %sum : f32, f32
+}
+
+// ====
+
+// A single forwarded result with side effects becomes a resultless loop, so the
+// effect remains ordered but the function result reads directly from the input.
+func.def @for_single_forwarded_result_keeps_effect(%buffer: buffer, %offset: offset, %lo: index, %hi: index, %init: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %step = index.constant 1 : index
+  %same = scf.for %iv = [%lo to %hi step %step](%same_arg = %init : f32) -> (f32) {
+    view.store %same_arg, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %same_arg : f32
+  }
+  func.return %same : f32
+}
+
+// ----
+func.def @for_single_forwarded_result_keeps_effect(%buffer: buffer, %offset: offset, %lo: index, %hi: index, %init: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %step = index.constant 1 : index
+  scf.for %iv = [%lo to %hi step %step] {
+    view.store %init, %view[0] : f32, view<1xf32, %layout>
+    scf.yield
+  }
+  func.return %init : f32
+}
+
+// ====
+
+// All-result identity still erases the whole loop when the body is otherwise
+// empty.
+func.def @for_identity_multiple_results(%lo: index, %hi: index, %a: f32, %b: i32) -> (f32, i32) {
+  %step = index.constant 1 : index
+  %ra, %rb = scf.for %iv = [%lo to %hi step %step](%aa = %a : f32, %bb = %b : i32) -> (f32, i32) {
+    scf.yield %aa, %bb : f32, i32
+  }
+  func.return %ra, %rb : f32, i32
+}
+
+// ----
+func.def @for_identity_multiple_results(%lo: index, %hi: index, %a: f32, %b: i32) -> (f32, i32) {
+  func.return %a, %b : f32, i32
+}
+
+// ====
+
+// Unknown steps are not rewritten: if a loop may be malformed or nonterminating,
+// forwarding an externally visible result would be a semantic change.
+func.def @for_forward_unknown_step_is_preserved(%lo: index, %hi: index, %step: index, %init: f32, %acc: f32) -> (f32, f32) {
+  %same, %sum = scf.for %iv = [%lo to %hi step %step](%same_arg = %init : f32, %acc_arg = %acc : f32) -> (f32, f32) {
+    %next = scalar.addf %acc_arg, %acc_arg : f32
+    scf.yield %same_arg, %next : f32, f32
+  }
+  func.return %same, %sum : f32, f32
+}
+
+// ----
+func.def @for_forward_unknown_step_is_preserved(%lo: index, %hi: index, %step: index, %init: f32, %acc: f32) -> (f32, f32) {
+  %same, %sum = scf.for %iv = [%lo to %hi step %step](%same_arg = %init : f32, %acc_arg = %acc : f32) -> (f32, f32) {
+    %next = scalar.addf %acc_arg, %acc_arg : f32
+    scf.yield %same_arg, %next : f32, f32
+  }
+  func.return %same, %sum : f32, f32
+}
