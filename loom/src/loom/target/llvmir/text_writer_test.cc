@@ -70,6 +70,7 @@ TEST_P(LlvmIrTextWriterTest, EmitsExpectedText) {
 INSTANTIATE_TEST_SUITE_P(
     All, LlvmIrTextWriterTest,
     testing::Values(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4,
+                    LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS,
                     LOOM_LLVMIR_TEST_MODULE_CFG_PHI,
                     LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP,
                     LOOM_LLVMIR_TEST_MODULE_INLINE_ASM,

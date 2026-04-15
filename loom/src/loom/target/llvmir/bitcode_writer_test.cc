@@ -213,6 +213,25 @@ TEST(LlvmIrBitcodeWriterTest, WritesObjectVadd4MemoryFunctionBody) {
   EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
 }
 
+TEST(LlvmIrBitcodeWriterTest, WritesCallConstantsFunctionBodies) {
+  loom_llvmir_module_t* module = NULL;
+  IREE_ASSERT_OK(
+      loom_llvmir_test_module_build(LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS,
+                                    iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+
+  StreamPtr stream = CreateStream();
+  IREE_EXPECT_OK(
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
+  std::string bytes = StreamBytes(stream.get());
+  ASSERT_GE(bytes.size(), 8u);
+  EXPECT_EQ((uint8_t)bytes[0], LOOM_LLVMIR_BITCODE_MAGIC_0);
+  EXPECT_EQ((uint8_t)bytes[1], LOOM_LLVMIR_BITCODE_MAGIC_1);
+  EXPECT_EQ((uint8_t)bytes[2], LOOM_LLVMIR_BITCODE_MAGIC_2);
+  EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
+}
+
 TEST(LlvmIrBitcodeWriterTest, RejectsUnsupportedParameterAttrsBeforeWriting) {
   const loom_llvmir_target_env_t* target_env =
       loom_llvmir_target_env_x86_64_unknown_linux_gnu();

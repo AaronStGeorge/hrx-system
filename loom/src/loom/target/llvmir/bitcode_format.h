@@ -83,6 +83,13 @@ typedef enum loom_llvmir_bitcode_type_code_e {
   LOOM_LLVMIR_BITCODE_TYPE_CODE_OPAQUE_POINTER = 25,
 } loom_llvmir_bitcode_type_code_t;
 
+typedef enum loom_llvmir_bitcode_constant_code_e {
+  LOOM_LLVMIR_BITCODE_CONSTANT_CODE_SETTYPE = 1,
+  LOOM_LLVMIR_BITCODE_CONSTANT_CODE_NULL = 2,
+  LOOM_LLVMIR_BITCODE_CONSTANT_CODE_INTEGER = 4,
+  LOOM_LLVMIR_BITCODE_CONSTANT_CODE_FLOAT = 6,
+} loom_llvmir_bitcode_constant_code_t;
+
 typedef enum loom_llvmir_bitcode_parameter_attr_code_e {
   LOOM_LLVMIR_BITCODE_PARAMETER_ATTR_CODE_ENTRY = 2,
   LOOM_LLVMIR_BITCODE_PARAMETER_ATTR_GROUP_CODE_ENTRY = 3,
@@ -108,6 +115,7 @@ typedef enum loom_llvmir_bitcode_function_code_e {
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_UNREACHABLE = 15,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_PHI = 16,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_LOAD = 20,
+  LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_CALL = 34,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_GEP = 43,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_STORE = 44,
 } loom_llvmir_bitcode_function_code_t;
@@ -124,12 +132,18 @@ typedef enum loom_llvmir_bitcode_binary_op_e {
   LOOM_LLVMIR_BITCODE_BINOP_XOR = 12,
 } loom_llvmir_bitcode_binary_op_t;
 
+typedef enum loom_llvmir_bitcode_call_flag_bit_e {
+  LOOM_LLVMIR_BITCODE_CALL_FLAG_CCONV = 1,
+  LOOM_LLVMIR_BITCODE_CALL_FLAG_EXPLICIT_TYPE = 15,
+} loom_llvmir_bitcode_call_flag_bit_t;
+
 typedef enum loom_llvmir_bitcode_strtab_code_e {
   LOOM_LLVMIR_BITCODE_STRTAB_CODE_BLOB = 1,
 } loom_llvmir_bitcode_strtab_code_t;
 
 #define LOOM_LLVMIR_BITCODE_MODULE_VERSION 2
 #define LOOM_LLVMIR_BITCODE_MODULE_ABBREV_WIDTH 3
+#define LOOM_LLVMIR_BITCODE_CONSTANT_ABBREV_WIDTH 4
 #define LOOM_LLVMIR_BITCODE_FUNCTION_ABBREV_WIDTH 5
 #define LOOM_LLVMIR_BITCODE_PARAMETER_ATTR_ABBREV_WIDTH 3
 #define LOOM_LLVMIR_BITCODE_PARAMETER_ATTR_GROUP_ABBREV_WIDTH 3

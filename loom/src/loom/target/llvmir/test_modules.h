@@ -25,14 +25,16 @@ typedef enum loom_llvmir_test_module_scenario_e {
   // Host object-style vector add function with parameter attrs and
   // GEP/load/store.
   LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4 = 0,
+  // Host function calling imported functions with literal constants.
+  LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS = 1,
   // CFG-shaped scalar function with conditional branches and a phi.
-  LOOM_LLVMIR_TEST_MODULE_CFG_PHI = 1,
+  LOOM_LLVMIR_TEST_MODULE_CFG_PHI = 2,
   // Function using structured inline asm.
-  LOOM_LLVMIR_TEST_MODULE_INLINE_ASM = 2,
+  LOOM_LLVMIR_TEST_MODULE_INLINE_ASM = 3,
   // AMDGPU kernel boundary using attrs, metadata, and AMDGCN intrinsics.
-  LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS = 3,
+  LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS = 4,
   // Scalar arithmetic function with a value-producing binary op.
-  LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP = 4,
+  LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP = 5,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);

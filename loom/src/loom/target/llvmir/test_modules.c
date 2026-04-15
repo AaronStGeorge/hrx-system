@@ -8,7 +8,7 @@
 
 #include "loom/target/llvmir/llvmir.h"
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 5
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 6
 
 static loom_llvmir_attr_t loom_llvmir_test_attr(loom_llvmir_attr_kind_t kind) {
   return (loom_llvmir_attr_t){
@@ -213,6 +213,106 @@ static iree_status_t loom_llvmir_test_populate_object_vadd4(
                                          .alignment = 4,
                                      }));
   IREE_RETURN_IF_ERROR(loom_llvmir_build_ret_void(entry));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_test_populate_call_constants(
+    loom_llvmir_module_t* module) {
+  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_void_type(module, &void_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+
+  loom_llvmir_function_t* callee = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DECLARATION,
+          .name = IREE_SV("callee_i32"),
+          .return_type = i32_type,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &callee));
+  loom_llvmir_value_id_t callee_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(callee,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i32_type,
+                                             .name = IREE_SV("value"),
+                                         },
+                                         &callee_value));
+
+  loom_llvmir_function_t* sink = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DECLARATION,
+          .name = IREE_SV("sink_i32"),
+          .return_type = void_type,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &sink));
+  loom_llvmir_value_id_t sink_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(sink,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i32_type,
+                                             .name = IREE_SV("value"),
+                                         },
+                                         &sink_value));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("call_i32"),
+          .return_type = i32_type,
+          .linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+  loom_llvmir_attr_t noundef_attrs[] = {
+      loom_llvmir_test_attr(LOOM_LLVMIR_ATTR_NOUNDEF),
+  };
+  loom_llvmir_value_id_t x = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
+      function,
+      &(loom_llvmir_parameter_desc_t){
+          .type_id = i32_type,
+          .name = IREE_SV("x"),
+          .attrs = noundef_attrs,
+          .attr_count = IREE_ARRAYSIZE(noundef_attrs),
+      },
+      &x));
+
+  loom_llvmir_value_id_t constant_42 = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i32_type, 42, &constant_42));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  loom_llvmir_value_id_t y = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_call(entry,
+                             &(loom_llvmir_call_desc_t){
+                                 .result_name = IREE_SV("y"),
+                                 .callee = loom_llvmir_function_id(callee),
+                                 .args = &constant_42,
+                                 .arg_count = 1,
+                             },
+                             &y));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_call(entry,
+                             &(loom_llvmir_call_desc_t){
+                                 .callee = loom_llvmir_function_id(sink),
+                                 .args = &x,
+                                 .arg_count = 1,
+                             },
+                             NULL));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, y));
   return iree_ok_status();
 }
 
@@ -669,6 +769,21 @@ static const char kObjectVadd4Text[] =
     "  ret void\n"
     "}\n";
 
+static const char kCallConstantsText[] =
+    "source_filename = \"loom-call-constants\"\n"
+    "target triple = \"x86_64-unknown-linux-gnu\"\n"
+    "\n"
+    "declare i32 @callee_i32(i32 %value)\n"
+    "\n"
+    "declare void @sink_i32(i32 %value)\n"
+    "\n"
+    "define dso_local i32 @call_i32(i32 noundef %x) {\n"
+    "entry:\n"
+    "  %y = call i32 @callee_i32(i32 42)\n"
+    "  call void @sink_i32(i32 %x)\n"
+    "  ret i32 %y\n"
+    "}\n";
+
 static const char kCfgPhiText[] =
     "define i32 @select_i32(i1 %c, i32 %a, i32 %b) {\n"
     "entry:\n"
@@ -754,6 +869,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
   switch (scenario) {
     case LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4:
       return IREE_SV("object_vadd4");
+    case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS:
+      return IREE_SV("call_constants");
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return IREE_SV("cfg_phi");
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
@@ -781,6 +898,14 @@ static iree_status_t loom_llvmir_test_module_target_config(
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
+    case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS: {
+      const loom_llvmir_target_env_t* target_env =
+          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
+          target_env, IREE_SV("loom-call-constants"), out_target_config));
+      *out_target_config_ptr = out_target_config;
+      return iree_ok_status();
+    }
     case LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS: {
       const loom_llvmir_target_env_t* target_env =
           loom_llvmir_target_env_amdgcn_amd_amdhsa();
@@ -804,6 +929,8 @@ static iree_status_t loom_llvmir_test_module_populate(
   switch (scenario) {
     case LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4:
       return loom_llvmir_test_populate_object_vadd4(module);
+    case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS:
+      return loom_llvmir_test_populate_call_constants(module);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return loom_llvmir_test_populate_cfg_phi(module);
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
@@ -849,6 +976,9 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4:
       return iree_make_string_view(kObjectVadd4Text,
                                    IREE_ARRAYSIZE(kObjectVadd4Text) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS:
+      return iree_make_string_view(kCallConstantsText,
+                                   IREE_ARRAYSIZE(kCallConstantsText) - 1);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return iree_make_string_view(kCfgPhiText,
                                    IREE_ARRAYSIZE(kCfgPhiText) - 1);
