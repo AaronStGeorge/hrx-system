@@ -116,6 +116,184 @@ func.def @if_preserves_inconclusive_unsigned_cmp(%x: index, %y: index) -> (index
 
 // ====
 
+// A resultless dynamic conditional with no branch effects is dead.
+func.def @if_resultless_empty_erases(%cond: i1) {
+  scf.if %cond {
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @if_resultless_empty_erases(%cond: i1) {
+  func.return
+}
+
+// ====
+
+// When both dynamic branches yield the same value, the scf.if result forwards to
+// that value and the effect-free conditional disappears.
+func.def @if_forwards_equal_result_and_erases(%cond: i1, %value: f32) -> (f32) {
+  %result = scf.if %cond -> (f32) {
+    scf.yield %value : f32
+  } else {
+    scf.yield %value : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @if_forwards_equal_result_and_erases(%cond: i1, %value: f32) -> (f32) {
+  func.return %value : f32
+}
+
+// ====
+
+// Equal yielded results forward even when branch side effects keep the dynamic
+// conditional itself live.
+func.def @if_forwards_equal_result_keeps_effects(%buffer: buffer, %offset: offset, %cond: i1, %value: f32, %other: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %result = scf.if %cond -> (f32) {
+    view.store %value, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %value : f32
+  } else {
+    view.store %other, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %value : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @if_forwards_equal_result_keeps_effects(%buffer: buffer, %offset: offset, %cond: i1, %value: f32, %other: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  scf.if %cond {
+    view.store %value, %view[0] : f32, view<1xf32, %layout>
+    scf.yield
+  } else {
+    view.store %other, %view[0] : f32, view<1xf32, %layout>
+    scf.yield
+  }
+  func.return %value : f32
+}
+
+// ====
+
+// Hints are not semantic effects, but forwarding must still preserve them until
+// an explicit hint-stripping pass removes them.
+func.def @if_forwards_equal_result_keeps_hint(%buffer: buffer, %offset: offset, %cond: i1, %row: index, %value: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
+  %result = scf.if %cond -> (f32) {
+    view.prefetch %view[%row] {intent = read, locality = l1} : view<4xf32, %layout>
+    scf.yield %value : f32
+  } else {
+    scf.yield %value : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @if_forwards_equal_result_keeps_hint(%buffer: buffer, %offset: offset, %cond: i1, %row: index, %value: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
+  scf.if %cond {
+    view.prefetch %view[%row] {intent = read, locality = l1} : view<4xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return %value : f32
+}
+
+// ====
+
+// Partially equal branch results compact the scf.if result list and keep only
+// the value that really depends on the selected branch.
+func.def @if_forwards_one_of_two_results(%cond: i1, %a: f32, %b: f32) -> (f32, f32) {
+  %same, %selected = scf.if %cond -> (f32, f32) {
+    %then = scalar.addf %a, %b : f32
+    scf.yield %a, %then : f32, f32
+  } else {
+    %else = scalar.addf %b, %b : f32
+    scf.yield %a, %else : f32, f32
+  }
+  func.return %same, %selected : f32, f32
+}
+
+// ----
+func.def @if_forwards_one_of_two_results(%cond: i1, %a: f32, %b: f32) -> (f32, f32) {
+  %selected = scf.if %cond -> (f32) {
+    %then = scalar.addf %a, %b : f32
+    scf.yield %then : f32
+  } else {
+    %else = scalar.addf %b, %b : f32
+    scf.yield %else : f32
+  }
+  func.return %a, %selected : f32, f32
+}
+
+// ====
+
+// Unused conditional results are dropped independently of forwarding. Effects
+// remain in their original branches, and later DCE can clean now-dead pure
+// producers inside the kept conditional.
+func.def @if_drops_unused_result_keeps_effects(%buffer: buffer, %offset: offset, %cond: i1, %a: f32, %b: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %dead, %live = scf.if %cond -> (f32, f32) {
+    %then_dead = scalar.addf %a, %a : f32
+    %then_live = scalar.addf %a, %b : f32
+    view.store %then_live, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %then_dead, %then_live : f32, f32
+  } else {
+    %else_dead = scalar.addf %b, %b : f32
+    %else_live = scalar.addf %b, %a : f32
+    view.store %else_live, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %else_dead, %else_live : f32, f32
+  }
+  func.return %live : f32
+}
+
+// ----
+func.def @if_drops_unused_result_keeps_effects(%buffer: buffer, %offset: offset, %cond: i1, %a: f32, %b: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %live = scf.if %cond -> (f32) {
+    %then_live = scalar.addf %a, %b : f32
+    view.store %then_live, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %then_live : f32
+  } else {
+    %else_live = scalar.addf %b, %a : f32
+    view.store %else_live, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %else_live : f32
+  }
+  func.return %live : f32
+}
+
+// ====
+
+// Result compaction must respect type-use references. %layout has no ordinary
+// operand uses, but the view type references it and must keep the conditional
+// result alive.
+func.def @if_keeps_result_used_by_type(%buffer: buffer, %offset: offset, %cond: i1) -> (f32) {
+  %layout = scf.if %cond -> (encoding<layout>) {
+    %dense = encoding.layout.dense : encoding<layout>
+    scf.yield %dense : encoding<layout>
+  } else {
+    %strided = encoding.layout.strided [1] : encoding<layout>
+    scf.yield %strided : encoding<layout>
+  }
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %loaded = view.load %view[0] : view<1xf32, %layout> -> f32
+  func.return %loaded : f32
+}
+
+// ====
+
 // A zero-trip loop returns its iter_args and drops the body, even when the body
 // would have written memory if it executed.
 func.def @for_zero_trip_returns_initial_value(%buffer: buffer, %offset: offset, %init: f32) -> (f32) {

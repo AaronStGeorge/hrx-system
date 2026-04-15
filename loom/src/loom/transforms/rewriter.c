@@ -264,6 +264,7 @@ bool loom_rewriter_is_trivially_dead(const loom_rewriter_t* rewriter,
   loom_trait_flags_t traits = loom_op_effective_traits(rewriter->module, op);
   if (traits & LOOM_REWRITER_RETAINED_TRAITS) return false;
   if (loom_op_regions_have_write_effects(op)) return false;
+  if (loom_op_regions_have_hints(rewriter->module, op)) return false;
   return loom_op_results_unused(rewriter->module, op);
 }
 

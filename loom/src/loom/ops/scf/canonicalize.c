@@ -47,6 +47,21 @@ static loom_op_t* loom_scf_region_terminator(loom_region_t* region) {
   return block->last_op;
 }
 
+static iree_status_t loom_scf_move_region_body_before_op(
+    loom_rewriter_t* rewriter, loom_region_t* region, loom_op_t* old_yield,
+    loom_op_t* before_op) {
+  loom_block_t* block = loom_region_entry_block(region);
+  if (!block) return iree_ok_status();
+  loom_op_t* child_op = block->first_op;
+  while (child_op && child_op != old_yield) {
+    loom_op_t* next_child_op = child_op->next_op;
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_move_before(rewriter, child_op, before_op));
+    child_op = next_child_op;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_scf_replace_results_and_erase(
     loom_op_t* op, loom_rewriter_t* rewriter,
     const loom_value_id_t* replacements, uint16_t replacement_count) {
@@ -76,12 +91,175 @@ static void loom_scf_preserve_value_name(loom_module_t* module,
 // scf.if
 //===----------------------------------------------------------------------===//
 
+static bool loom_scf_if_regions_are_discardable(const loom_module_t* module,
+                                                loom_op_t* op) {
+  // Read-only branch work with no yielded observer is dead. Writes and hints
+  // are retained because they affect memory or requested code-generation shape.
+  if (loom_op_regions_have_write_effects(op)) return false;
+  return !loom_op_regions_have_hints(module, op);
+}
+
+static bool loom_scf_value_has_no_uses(const loom_module_t* module,
+                                       loom_value_id_t value_id) {
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return false;
+  }
+  return loom_value_has_no_uses(loom_module_value(module, value_id)) &&
+         !loom_module_value_has_type_uses(module, value_id);
+}
+
+static iree_status_t loom_scf_if_erase_if_effect_free_resultless(
+    loom_op_t* op, loom_rewriter_t* rewriter, bool* out_erased) {
+  *out_erased = false;
+  if (op->result_count != 0) return iree_ok_status();
+  if (!loom_scf_if_regions_are_discardable(rewriter->module, op)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_rewriter_erase(rewriter, op));
+  *out_erased = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_scf_if_compact_results(loom_op_t* op,
+                                                 loom_rewriter_t* rewriter) {
+  if (op->result_count == 0 || op->tied_result_count != 0) {
+    return iree_ok_status();
+  }
+
+  loom_op_t* then_yield =
+      loom_scf_region_terminator(loom_scf_if_then_region(op));
+  loom_op_t* else_yield =
+      loom_scf_region_terminator(loom_scf_if_else_region(op));
+  if (!then_yield || !else_yield) return iree_ok_status();
+
+  loom_value_slice_t then_values = loom_scf_yield_values(then_yield);
+  loom_value_slice_t else_values = loom_scf_yield_values(else_yield);
+  if (then_values.count != op->result_count ||
+      else_values.count != op->result_count) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t* old_results = loom_op_const_results(op);
+  bool* forwarded_results = NULL;
+  bool* dropped_results = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, op->result_count, sizeof(*forwarded_results),
+      (void**)&forwarded_results));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      rewriter->arena, op->result_count, sizeof(*dropped_results),
+      (void**)&dropped_results));
+  uint16_t dropped_count = 0;
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    forwarded_results[i] = then_values.values[i] == else_values.values[i];
+    dropped_results[i] =
+        forwarded_results[i] ||
+        loom_scf_value_has_no_uses(rewriter->module, old_results[i]);
+    if (dropped_results[i]) ++dropped_count;
+  }
+  if (dropped_count == 0) return iree_ok_status();
+
+  loom_value_id_t* replacements = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(rewriter->arena, op->result_count,
+                                sizeof(*replacements), (void**)&replacements));
+
+  if (dropped_count == op->result_count &&
+      loom_scf_if_regions_are_discardable(rewriter->module, op)) {
+    for (uint16_t i = 0; i < op->result_count; ++i) {
+      replacements[i] =
+          forwarded_results[i] ? then_values.values[i] : old_results[i];
+    }
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+        rewriter, op, replacements, op->result_count));
+    return iree_ok_status();
+  }
+
+  uint16_t kept_count = (uint16_t)(op->result_count - dropped_count);
+  loom_type_t* kept_result_types = NULL;
+  loom_value_id_t* kept_then_values = NULL;
+  loom_value_id_t* kept_else_values = NULL;
+  if (kept_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, kept_count,
+                                                   sizeof(*kept_result_types),
+                                                   (void**)&kept_result_types));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, kept_count,
+                                                   sizeof(*kept_then_values),
+                                                   (void**)&kept_then_values));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, kept_count,
+                                                   sizeof(*kept_else_values),
+                                                   (void**)&kept_else_values));
+  }
+
+  uint16_t kept_ordinal = 0;
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (dropped_results[i]) continue;
+    kept_result_types[kept_ordinal] =
+        loom_module_value_type(rewriter->module, old_results[i]);
+    kept_then_values[kept_ordinal] = then_values.values[i];
+    kept_else_values[kept_ordinal] = else_values.values[i];
+    ++kept_ordinal;
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* new_if = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_scf_if_build(&rewriter->builder, loom_scf_if_condition(op),
+                        kept_result_types, kept_count, /*tied_results=*/NULL,
+                        /*tied_result_count=*/0, op->location, &new_if));
+
+  loom_region_t* new_then_region = loom_scf_if_then_region(new_if);
+  loom_builder_ip_t saved_ip =
+      loom_builder_enter_region(&rewriter->builder, new_if, new_then_region);
+  loom_op_t* new_then_yield = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&rewriter->builder,
+                                            kept_then_values, kept_count,
+                                            op->location, &new_then_yield));
+  loom_builder_restore(&rewriter->builder, saved_ip);
+
+  loom_region_t* new_else_region = loom_scf_if_else_region(new_if);
+  saved_ip =
+      loom_builder_enter_region(&rewriter->builder, new_if, new_else_region);
+  loom_op_t* new_else_yield = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&rewriter->builder,
+                                            kept_else_values, kept_count,
+                                            op->location, &new_else_yield));
+  loom_builder_restore(&rewriter->builder, saved_ip);
+
+  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
+      rewriter, loom_scf_if_then_region(op), then_yield, new_then_yield));
+  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
+      rewriter, loom_scf_if_else_region(op), else_yield, new_else_yield));
+
+  kept_ordinal = 0;
+  loom_value_slice_t new_results = loom_scf_if_results(new_if);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (!dropped_results[i]) {
+      replacements[i] = new_results.values[kept_ordinal++];
+    } else if (forwarded_results[i]) {
+      replacements[i] = then_values.values[i];
+    } else {
+      replacements[i] = old_results[i];
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, replacements, op->result_count, value_checkpoint));
+  IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
+      rewriter, op, replacements, op->result_count));
+  return iree_ok_status();
+}
+
 iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
                                        loom_rewriter_t* rewriter) {
   bool condition = false;
   if (!loom_scf_value_facts_are_exact_bool(rewriter, loom_scf_if_condition(op),
                                            &condition)) {
-    return iree_ok_status();
+    bool erased = false;
+    IREE_RETURN_IF_ERROR(
+        loom_scf_if_erase_if_effect_free_resultless(op, rewriter, &erased));
+    if (erased) return iree_ok_status();
+    return loom_scf_if_compact_results(op, rewriter);
   }
 
   loom_region_t* selected_region =
@@ -92,13 +270,8 @@ iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
   loom_value_slice_t yielded_values = loom_scf_yield_values(yield);
   if (yielded_values.count != op->result_count) return iree_ok_status();
 
-  loom_block_t* selected_block = loom_region_entry_block(selected_region);
-  loom_op_t* child_op = selected_block->first_op;
-  while (child_op && child_op != yield) {
-    loom_op_t* next_child_op = child_op->next_op;
-    IREE_RETURN_IF_ERROR(loom_rewriter_move_before(rewriter, child_op, op));
-    child_op = next_child_op;
-  }
+  IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(
+      rewriter, selected_region, yield, op));
 
   return loom_scf_replace_results_and_erase(op, rewriter, yielded_values.values,
                                             yielded_values.count);
@@ -212,12 +385,8 @@ static iree_status_t loom_scf_for_inline_single_trip(
         iter_args.values[i]));
   }
 
-  loom_op_t* child_op = block->first_op;
-  while (child_op && child_op != yield) {
-    loom_op_t* next_child_op = child_op->next_op;
-    IREE_RETURN_IF_ERROR(loom_rewriter_move_before(rewriter, child_op, op));
-    child_op = next_child_op;
-  }
+  IREE_RETURN_IF_ERROR(
+      loom_scf_move_region_body_before_op(rewriter, body, yield, op));
 
   loom_value_id_t* replacements = NULL;
   if (op->result_count > 0) {

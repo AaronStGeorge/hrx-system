@@ -645,6 +645,12 @@ loom_trait_flags_t loom_op_effective_traits(const loom_module_t* module,
 // Returns true if |op| may write to a resource or has unknown effects.
 bool loom_op_may_write(const loom_module_t* module, const loom_op_t* op);
 
+// Returns true if any live op nested under |op|'s regions is a compiler hint.
+// Hints are not semantic memory effects, but ordinary DCE and canonicalization
+// must preserve them until an explicit hint-stripping pass removes them.
+bool loom_op_regions_have_hints(const loom_module_t* module,
+                                const loom_op_t* op);
+
 // Returns true if every result of |op| has zero operand uses and no external
 // value type references. Type references carried by another result of |op| do
 // not keep the whole op alive.
