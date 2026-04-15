@@ -36,6 +36,10 @@ typedef enum loom_llvmir_binop_e {
   LOOM_LLVMIR_BINOP_FREM = 17,
 } loom_llvmir_binop_t;
 
+typedef enum loom_llvmir_unop_e {
+  LOOM_LLVMIR_UNOP_FNEG = 0,
+} loom_llvmir_unop_t;
+
 typedef enum loom_llvmir_icmp_predicate_e {
   LOOM_LLVMIR_ICMP_EQ = 0,
   LOOM_LLVMIR_ICMP_NE = 1,
@@ -113,6 +117,17 @@ typedef struct loom_llvmir_binop_desc_t {
   // Right operand value.
   loom_llvmir_value_id_t rhs;
 } loom_llvmir_binop_desc_t;
+
+typedef struct loom_llvmir_unop_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Result type and expected operand type.
+  loom_llvmir_type_id_t result_type;
+  // Unary operation opcode.
+  loom_llvmir_unop_t op;
+  // Operand value.
+  loom_llvmir_value_id_t value;
+} loom_llvmir_unop_desc_t;
 
 typedef struct loom_llvmir_phi_desc_t {
   // Optional result name without the leading percent sign.
@@ -290,6 +305,10 @@ iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_binop(loom_llvmir_block_t* block,
                                       const loom_llvmir_binop_desc_t* desc,
                                       loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_unop(loom_llvmir_block_t* block,
+                                     const loom_llvmir_unop_desc_t* desc,
+                                     loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_icmp(loom_llvmir_block_t* block,
                                      const loom_llvmir_icmp_desc_t* desc,

@@ -920,6 +920,9 @@ static iree_status_t loom_llvmir_bitcode_map_mark_instruction_constants(
       return loom_llvmir_bitcode_map_mark_constant(module, map,
                                                    instruction->binop.rhs);
     }
+    case LOOM_LLVMIR_INST_UNOP:
+      return loom_llvmir_bitcode_map_mark_constant(module, map,
+                                                   instruction->unop.value);
     case LOOM_LLVMIR_INST_ICMP: {
       IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->icmp.lhs));
@@ -1469,6 +1472,12 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
       return iree_ok_status();
     case LOOM_LLVMIR_INST_BINOP:
       return iree_ok_status();
+    case LOOM_LLVMIR_INST_UNOP:
+      if (instruction->unop.op != LOOM_LLVMIR_UNOP_FNEG) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM unary op");
+      }
+      return iree_ok_status();
     case LOOM_LLVMIR_INST_ICMP: {
       uint64_t predicate = 0;
       return loom_llvmir_bitcode_icmp_predicate(instruction->icmp.predicate,
@@ -1715,6 +1724,18 @@ static iree_status_t loom_llvmir_bitcode_function_calling_convention(
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown LLVM calling convention");
+  }
+}
+
+static iree_status_t loom_llvmir_bitcode_unary_opcode(loom_llvmir_unop_t op,
+                                                      uint64_t* out_opcode) {
+  switch (op) {
+    case LOOM_LLVMIR_UNOP_FNEG:
+      *out_opcode = LOOM_LLVMIR_BITCODE_UNOP_FNEG;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown LLVM unary op");
   }
 }
 
@@ -2333,6 +2354,25 @@ static iree_status_t loom_llvmir_bitcode_write_binop(
       operand_count);
 }
 
+static iree_status_t loom_llvmir_bitcode_write_unop(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t opcode = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_bitcode_unary_opcode(instruction->unop.op, &opcode));
+  uint64_t operands[3];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->unop.value, instruction_value_id,
+      operands, &operand_count));
+  operands[operand_count++] = opcode;
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_UNOP, operands,
+      operand_count);
+}
+
 static iree_status_t loom_llvmir_bitcode_write_icmp(
     const loom_llvmir_module_t* module,
     const loom_llvmir_bitcode_function_value_map_t* value_map,
@@ -2777,6 +2817,9 @@ static iree_status_t loom_llvmir_bitcode_write_instruction(
     case LOOM_LLVMIR_INST_BINOP:
       return loom_llvmir_bitcode_write_binop(module, value_map, instruction,
                                              instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_UNOP:
+      return loom_llvmir_bitcode_write_unop(module, value_map, instruction,
+                                            instruction_value_id, writer);
     case LOOM_LLVMIR_INST_ICMP:
       return loom_llvmir_bitcode_write_icmp(module, value_map, instruction,
                                             instruction_value_id, writer);

@@ -345,6 +345,15 @@ static const char* loom_llvmir_binop_spelling(loom_llvmir_binop_t op) {
   }
 }
 
+static const char* loom_llvmir_unop_spelling(loom_llvmir_unop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_UNOP_FNEG:
+      return "fneg";
+    default:
+      return NULL;
+  }
+}
+
 static const char* loom_llvmir_icmp_predicate_spelling(
     loom_llvmir_icmp_predicate_t predicate) {
   switch (predicate) {
@@ -510,6 +519,19 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
       return loom_llvmir_write_value_ref(module, instruction->binop.rhs,
                                          stream);
+    }
+    case LOOM_LLVMIR_INST_UNOP: {
+      const char* op = loom_llvmir_unop_spelling(instruction->unop.op);
+      if (!op) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM unary op");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, op));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      return loom_llvmir_write_typed_value_ref(module, instruction->unop.value,
+                                               stream);
     }
     case LOOM_LLVMIR_INST_ICMP: {
       const char* predicate =

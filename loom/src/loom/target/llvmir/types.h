@@ -102,6 +102,7 @@ typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_BR = 15,
   LOOM_LLVMIR_INST_COND_BR = 16,
   LOOM_LLVMIR_INST_UNREACHABLE = 17,
+  LOOM_LLVMIR_INST_UNOP = 18,
 } loom_llvmir_inst_kind_t;
 
 typedef struct loom_llvmir_instruction_t {
@@ -127,6 +128,13 @@ typedef struct loom_llvmir_instruction_t {
       // Right operand.
       loom_llvmir_value_id_t rhs;
     } binop;
+    // Unary operation operand.
+    struct {
+      // Unary operation opcode.
+      loom_llvmir_unop_t op;
+      // Operand.
+      loom_llvmir_value_id_t value;
+    } unop;
     // Integer comparison operands.
     struct {
       // Integer comparison predicate.

@@ -765,7 +765,17 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
                                   .rhs = yf,
                               },
                               &float_remainder));
-  (void)float_remainder;
+  loom_llvmir_value_id_t float_negated = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_unop(entry,
+                             &(loom_llvmir_unop_desc_t){
+                                 .result_name = IREE_SV("float_negated"),
+                                 .result_type = f32_type,
+                                 .op = LOOM_LLVMIR_UNOP_FNEG,
+                                 .value = float_remainder,
+                             },
+                             &float_negated));
+  (void)float_negated;
   IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, arithmetic_shifted));
   return iree_ok_status();
 }
@@ -1653,6 +1663,7 @@ static const char kScalarBinopText[] =
     "  %float_product = fmul float %float_difference, %xf\n"
     "  %float_quotient = fdiv float %float_product, %yf\n"
     "  %float_remainder = frem float %float_quotient, %yf\n"
+    "  %float_negated = fneg float %float_remainder\n"
     "  ret i32 %arithmetic_shifted\n"
     "}\n";
 

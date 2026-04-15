@@ -255,6 +255,17 @@ static bool loom_llvmir_verify_binop_accepts_type(
   }
 }
 
+static bool loom_llvmir_verify_unop_accepts_type(
+    const loom_llvmir_module_t* module, loom_llvmir_unop_t op,
+    const loom_llvmir_type_t* type) {
+  switch (op) {
+    case LOOM_LLVMIR_UNOP_FNEG:
+      return loom_llvmir_verify_type_is_float_like(module, type);
+    default:
+      return false;
+  }
+}
+
 static bool loom_llvmir_verify_type_same_pointer_address_space(
     const loom_llvmir_module_t* module, const loom_llvmir_type_t* lhs,
     const loom_llvmir_type_t* rhs) {
@@ -620,6 +631,23 @@ static iree_status_t loom_llvmir_verify_instruction(
                               module, instruction->result_value_id)))) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "LLVM binop opcode is invalid for result type");
+      }
+      return iree_ok_status();
+    case LOOM_LLVMIR_INST_UNOP:
+      if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM unop has no result value");
+      }
+      IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+          module, instruction->unop.value,
+          loom_llvmir_verify_value_type(module, instruction->result_value_id)));
+      if (!loom_llvmir_verify_unop_accepts_type(
+              module, instruction->unop.op,
+              loom_llvmir_verify_type(
+                  module, loom_llvmir_verify_value_type(
+                              module, instruction->result_value_id)))) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM unop opcode is invalid for result type");
       }
       return iree_ok_status();
     case LOOM_LLVMIR_INST_ICMP:

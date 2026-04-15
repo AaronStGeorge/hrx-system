@@ -137,7 +137,12 @@ typedef enum loom_llvmir_bitcode_function_code_e {
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_CALL = 34,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_GEP = 43,
   LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_STORE = 44,
+  LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_UNOP = 56,
 } loom_llvmir_bitcode_function_code_t;
+
+typedef enum loom_llvmir_bitcode_unary_op_e {
+  LOOM_LLVMIR_BITCODE_UNOP_FNEG = 0,
+} loom_llvmir_bitcode_unary_op_t;
 
 typedef enum loom_llvmir_bitcode_binary_op_e {
   LOOM_LLVMIR_BITCODE_BINOP_ADD = 0,
