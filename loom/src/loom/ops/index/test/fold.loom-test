@@ -186,7 +186,8 @@ func.def @mul_identities(%x: index) -> (index, index) {
 
 // ====
 
-// index.madd simplifies the common address form a*1 + c to add.
+// index.madd simplifies the common address form a*1 + c to add, keeping the
+// addend first because it is usually the base address.
 func.def @madd_identity_multiplier(%a: index, %c: index) -> (index) {
   %one = index.constant 1 : index
   %r = index.madd %a, %one, %c : index
@@ -194,7 +195,147 @@ func.def @madd_identity_multiplier(%a: index, %c: index) -> (index) {
 }
 // ----
 func.def @madd_identity_multiplier(%a: index, %c: index) -> (index) {
-  %r = index.add %a, %c : index
+  %r = index.add %c, %a : index
+  func.return %r : index
+}
+
+// ====
+
+// index.add absorbs a multiply into index.madd so address expressions stay as a
+// single explicit a*b+c op instead of a loose mul/add pair.
+func.def @add_mul_canonicalizes_to_madd(%i: index, %j: index) -> (index) {
+  %c4 = index.constant 4 : index
+  %scaled = index.mul %i, %c4 : index
+  %r = index.add %scaled, %j : index
+  func.return %r : index
+}
+// ----
+func.def @add_mul_canonicalizes_to_madd(%i: index, %j: index) -> (index) {
+  %c4 = index.constant 4 : index
+  %r = index.madd %i, %c4, %j : index
+  func.return %r : index
+}
+
+// ====
+
+// Dividing a scaled non-negative coordinate by an exact positive divisor keeps
+// the address expression in multiplication form when the scale divides evenly.
+func.def @div_scaled_coordinate(%i: index) -> (index) {
+  %i2 = index.assume %i [range(%i, 0, 1024)] : index
+  %c64 = index.constant 64 : index
+  %c8 = index.constant 8 : index
+  %scaled = index.mul %i2, %c64 : index
+  %q = index.div %scaled, %c8 : index
+  func.return %q : index
+}
+// ----
+func.def @div_scaled_coordinate(%i: index) -> (index) {
+  %i2 = index.assume %i [range(%i, 0, 1024)] : index
+  %c8 = index.constant 8 : index
+  %q = index.mul %i2, %c8 : index
+  func.return %q : index
+}
+
+// ====
+
+// Without a bounded non-negative numerator, scaled division stays conservative:
+// the multiply may overflow before the quotient is taken.
+func.def @div_scaled_unknown_range_is_preserved(%i: index) -> (index) {
+  %c64 = index.constant 64 : index
+  %c8 = index.constant 8 : index
+  %scaled = index.mul %i, %c64 : index
+  %q = index.div %scaled, %c8 : index
+  func.return %q : index
+}
+
+// ====
+
+// The same rule applies to madd when both the scale and exact addend are
+// divisible by the quotient divisor.
+func.def @div_scaled_offset_coordinate(%i: index) -> (index) {
+  %i2 = index.assume %i [range(%i, 0, 1024)] : index
+  %c64 = index.constant 64 : index
+  %c16 = index.constant 16 : index
+  %c8 = index.constant 8 : index
+  %scaled = index.madd %i2, %c64, %c16 : index
+  %q = index.div %scaled, %c8 : index
+  func.return %q : index
+}
+// ----
+func.def @div_scaled_offset_coordinate(%i: index) -> (index) {
+  %i2 = index.assume %i [range(%i, 0, 1024)] : index
+  %c8 = index.constant 8 : index
+  %8 = index.constant 2 : index
+  %q = index.madd %i2, %c8, %8 : index
+  func.return %q : index
+}
+
+// ====
+
+// Positive self-division is exact.
+func.def @div_self_positive(%x: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 1, 1024)] : index
+  %q = index.div %x2, %x2 : index
+  func.return %q : index
+}
+// ----
+func.def @div_self_positive(%x: index) -> (index) {
+  %q = index.constant 1 : index
+  func.return %q : index
+}
+
+// ====
+
+// index.rem materializes zero when divisibility facts prove it.
+func.def @rem_divisible_coordinate(%x: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 0, 4096), mul(%x, 64)] : index
+  %c8 = index.constant 8 : index
+  %r = index.rem %x2, %c8 : index
+  func.return %r : index
+}
+// ----
+func.def @rem_divisible_coordinate(%x: index) -> (index) {
+  %r = index.constant 0 : index
+  func.return %r : index
+}
+
+// ====
+
+// Zero modulo any fact-proven positive divisor is zero, even when the divisor
+// itself is dynamic.
+func.def @rem_zero_dynamic_positive_divisor(%d: index) -> (index) {
+  %zero = index.constant 0 : index
+  %d2 = index.assume %d [range(%d, 1, 64)] : index
+  %r = index.rem %zero, %d2 : index
+  func.return %r : index
+}
+// ----
+func.def @rem_zero_dynamic_positive_divisor(%d: index) -> (index) {
+  %r = index.constant 0 : index
+  func.return %r : index
+}
+
+// ====
+
+// x % x only folds when the divisor is known positive, avoiding the x=0 case.
+func.def @rem_self_positive(%x: index) -> (index) {
+  %x2 = index.assume %x [range(%x, 1, 1024)] : index
+  %r = index.rem %x2, %x2 : index
+  func.return %r : index
+}
+// ----
+func.def @rem_self_positive(%x: index) -> (index) {
+  %r = index.constant 0 : index
+  func.return %r : index
+}
+
+// ====
+
+// Without non-negative dividend facts, remainder by a positive literal stays
+// conservative.
+func.def @rem_maybe_negative_is_preserved(%x: index) -> (index) {
+  %c8 = index.constant 8 : index
+  %r = index.rem %x, %c8 : index
   func.return %r : index
 }
 

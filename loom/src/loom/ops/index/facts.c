@@ -83,7 +83,24 @@ LOOM_INDEX_BINARY_FACTS(loom_index_add_facts, loom_value_facts_addi)
 LOOM_INDEX_BINARY_FACTS(loom_index_sub_facts, loom_value_facts_subi)
 LOOM_INDEX_BINARY_FACTS(loom_index_mul_facts, loom_value_facts_muli)
 LOOM_INDEX_BINARY_FACTS(loom_index_div_facts, loom_value_facts_divui)
-LOOM_INDEX_BINARY_FACTS(loom_index_rem_facts, loom_value_facts_remui)
+
+iree_status_t loom_index_rem_facts(loom_fact_context_t* context,
+                                   const loom_module_t* module,
+                                   const loom_op_t* op,
+                                   const loom_value_facts_t* operand_facts,
+                                   loom_value_facts_t* result_facts) {
+  if (!loom_value_facts_is_float(operand_facts[0]) &&
+      !loom_value_facts_is_float(operand_facts[1]) &&
+      loom_value_facts_is_exact(operand_facts[0]) &&
+      operand_facts[0].range_lo == 0 &&
+      loom_value_facts_is_positive(operand_facts[1])) {
+    result_facts[0] = loom_value_facts_exact_i64(0);
+    return iree_ok_status();
+  }
+  loom_value_facts_remui(&operand_facts[0], &operand_facts[1],
+                         &result_facts[0]);
+  return iree_ok_status();
+}
 
 iree_status_t loom_index_madd_facts(loom_fact_context_t* context,
                                     const loom_module_t* module,

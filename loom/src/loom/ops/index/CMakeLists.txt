@@ -29,6 +29,7 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::transforms::rewriter
+    loom::src::loom::util::math
   PUBLIC
 )
 
