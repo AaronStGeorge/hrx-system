@@ -26,6 +26,7 @@
 //   // RUN: verify          Parse -> verify -> match annotations.
 //   // RUN: pass <pipeline> Parse -> run pipeline -> print -> compare.
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
+//   // RUN: emit <target>   Parse -> lower to target text -> compare.
 //   // XFAIL: <reason>      Mark case as expected failure.
 //
 // Separators:
@@ -88,6 +89,7 @@ typedef enum loom_check_mode_e {
   LOOM_CHECK_MODE_VERIFY = 1,     // Parse -> verify -> match annotations.
   LOOM_CHECK_MODE_PASS = 2,       // Parse -> run pipeline -> print -> compare.
   LOOM_CHECK_MODE_FORMAT = 3,  // Parse -> convert format -> print -> compare.
+  LOOM_CHECK_MODE_EMIT = 4,    // Parse -> lower to target text -> compare.
 } loom_check_mode_t;
 
 // Returns a human-readable name for the mode.
@@ -101,6 +103,8 @@ static inline const char* loom_check_mode_name(loom_check_mode_t mode) {
       return "pass";
     case LOOM_CHECK_MODE_FORMAT:
       return "format";
+    case LOOM_CHECK_MODE_EMIT:
+      return "emit";
     default:
       return "unknown";
   }
@@ -186,6 +190,8 @@ typedef struct loom_check_case_t {
   iree_string_view_t pipeline;
   // For FORMAT mode: target format name (e.g. "bytecode").
   iree_string_view_t format_target;
+  // For EMIT mode: target emission request (e.g. "llvmir amdgpu-hal").
+  iree_string_view_t emit_target;
   // Whether this case is expected to fail.
   bool xfail;
   // Source range of the // XFAIL: directive line. Empty when absent.
@@ -231,6 +237,7 @@ typedef struct loom_check_file_t {
   loom_check_mode_t default_mode;
   iree_string_view_t default_pipeline;
   iree_string_view_t default_format_target;
+  iree_string_view_t default_emit_target;
 } loom_check_file_t;
 
 //===----------------------------------------------------------------------===//

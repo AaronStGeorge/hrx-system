@@ -708,6 +708,47 @@ TEST_F(ExecuteTest, PassModeCapturesPassDiagnostic) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitModeLlvmIrText) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: emit llvmir\n"
+      "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n"
+      "// ----\n"
+      "source_filename = \"test.loom-test\"\n"
+      "target datalayout = "
+      "\"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:"
+      "128-n8:16:32:64-S128\"\n"
+      "target triple = \"x86_64-unknown-linux-gnu\"\n"
+      "\n"
+      "define internal i32 @add(i32 %lhs, i32 %rhs) {\n"
+      "entry:\n"
+      "  %sum = add i32 %lhs, %rhs\n"
+      "  ret i32 %sum\n"
+      "}\n",
+      &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
+      << "detail: " << DetailString(result)
+      << "\nactual: " << ActualOutputString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitModeReportsLoweringFailure) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit llvmir\n"
+                   "func.def @bad() -> (i32) {\n"
+                   "  %poison = scalar.poison : i32\n"
+                   "  func.return %poison : i32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("scalar.poison"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, FormatModeUnimplemented) {
   loom_check_result_t result;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,

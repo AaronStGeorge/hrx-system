@@ -7,7 +7,7 @@
 // Execution engine for loom-check test cases.
 //
 // Dispatches parsed test cases to mode-specific execution functions
-// (roundtrip, verify, pass, format), applies XFAIL inversion, and
+// (roundtrip, verify, pass, format, emit), applies XFAIL inversion, and
 // produces structured results with diff output and actual printed IR.
 //
 // The result type carries test-level verdicts: diffs, annotation match
@@ -66,7 +66,7 @@ typedef struct loom_check_result_t {
   // Number of objects in diff_hunk_json.
   iree_host_size_t diff_hunk_count;
 
-  // Printed IR from roundtrip/pass/format modes. Empty for verify
+  // Printed IR from roundtrip/pass/format/emit modes. Empty for verify
   // mode. Used by --update to rewrite expected sections in test files.
   iree_string_builder_t actual_output;
 
@@ -195,6 +195,16 @@ iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
                                         iree_arena_block_pool_t* block_pool,
                                         iree_allocator_t allocator,
                                         loom_check_result_t* result);
+
+// Strips comments from input, parses, lowers to the target specified in
+// test_case->emit_target, writes the target's textual form, and compares
+// against the expected section. Same diff/update behavior as roundtrip.
+iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
+                                      iree_string_view_t filename,
+                                      loom_context_t* context,
+                                      iree_arena_block_pool_t* block_pool,
+                                      iree_allocator_t allocator,
+                                      loom_check_result_t* result);
 
 #ifdef __cplusplus
 }

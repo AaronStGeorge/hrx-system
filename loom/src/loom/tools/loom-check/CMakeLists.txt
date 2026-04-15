@@ -30,6 +30,7 @@ loom_cc_library(
   HDRS
     "execute.h"
   SRCS
+    "emit.c"
     "execute.c"
     "roundtrip.c"
     "verify.c"
@@ -59,6 +60,8 @@ loom_cc_library(
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::target::llvmir
+    loom::src::loom::target::llvmir::lower
     loom::src::loom::testing::diff
     loom::src::loom::transforms::canonicalize
     loom::src::loom::transforms::cse

@@ -46,7 +46,7 @@
         },
         {
           "name": "comment.line.double-slash.directive.run.loom-test",
-          "match": "^\\s*(//)\\s*(RUN)(:)\\s*(roundtrip|verify|pass|format)\\b(?:\\s+(.*))?$",
+          "match": "^\\s*(//)\\s*(RUN)(:)\\s*(roundtrip|verify|pass|format|emit)\\b(?:\\s+(.*))?$",
           "captures": {
             "1": {
               "name": "punctuation.definition.comment.loom-test"

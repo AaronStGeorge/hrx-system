@@ -316,7 +316,7 @@ def _loom_test_repository() -> dict[str, object]:
                 },
                 {
                     "name": "comment.line.double-slash.directive.run.loom-test",
-                    "match": r"^\s*(//)\s*(RUN)(:)\s*(roundtrip|verify|pass|format)\b(?:\s+(.*))?$",
+                    "match": r"^\s*(//)\s*(RUN)(:)\s*(roundtrip|verify|pass|format|emit)\b(?:\s+(.*))?$",
                     "captures": {
                         "1": {"name": "punctuation.definition.comment.loom-test"},
                         "2": {"name": "keyword.control.directive.run.loom-test"},

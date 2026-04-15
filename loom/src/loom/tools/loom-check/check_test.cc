@@ -98,6 +98,14 @@ TEST_F(CheckParseTest, FormatMode) {
                                      iree_make_cstring_view("bytecode")));
 }
 
+TEST_F(CheckParseTest, EmitMode) {
+  IREE_ASSERT_OK(Parse("// RUN: emit llvmir amdgpu-hal\nfunc.def @f() {}\n"));
+  ASSERT_EQ(file_.case_count, 1);
+  EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.cases[0].emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
+}
+
 TEST_F(CheckParseTest, XfailDirective) {
   IREE_ASSERT_OK(
       Parse("// XFAIL: parser does not support this yet\n"
@@ -147,6 +155,10 @@ TEST_F(CheckParseTest, PassWithoutPipelineErrors) {
 TEST_F(CheckParseTest, FormatWithoutTargetErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("// RUN: format \n"));
+}
+
+TEST_F(CheckParseTest, EmitWithoutTargetErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, Parse("// RUN: emit \n"));
 }
 
 TEST_F(CheckParseTest, RunDirectiveWithoutSpaceAfterColonErrors) {
@@ -1337,6 +1349,25 @@ TEST_F(CheckParseTest, PreamblePassModeInherited) {
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_PASS);
   EXPECT_TRUE(iree_string_view_equal(file_.cases[1].pipeline,
                                      iree_make_cstring_view("dce")));
+}
+
+TEST_F(CheckParseTest, PreambleEmitModeInherited) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: emit llvmir amdgpu-hal\n"
+            "// ====\n"
+            "func.def @a() {}\n"
+            "// ====\n"
+            "func.def @b() {}\n"));
+  ASSERT_EQ(file_.case_count, 2);
+  EXPECT_EQ(file_.default_mode, LOOM_CHECK_MODE_EMIT);
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.default_emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
+  EXPECT_EQ(file_.cases[0].mode, LOOM_CHECK_MODE_EMIT);
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.cases[0].emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
+  EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_EMIT);
+  EXPECT_TRUE(iree_string_view_equal(
+      file_.cases[1].emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
 }
 
 TEST_F(CheckParseTest, NoPreambleDefaultIsRoundtrip) {

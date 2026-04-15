@@ -19,6 +19,7 @@
 //     "default_mode": "roundtrip",
 //     "default_pipeline": null,
 //     "default_format_target": null,
+//     "default_emit_target": null,
 //     "cases": [
 //       {
 //         "index": 1,
@@ -26,6 +27,7 @@
 //         "has_run_directive": true,
 //         "pipeline": null,
 //         "format_target": null,
+//         "emit_target": null,
 //         "source_range": {"start_byte": 0, "end_byte": 42},
 //         "separator_range": null,
 //         "run_directive_range": {"start_byte": 0, "end_byte": 17},
