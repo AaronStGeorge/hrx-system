@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "arithmeticf_structural"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/arithmeticf_structural.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "arithmetici"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/arithmetici.loom-test"
@@ -37,6 +48,17 @@ iree_executable_test(
     "bitwisei"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "bitwisei_structural"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/bitwisei_structural.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

@@ -27,6 +27,7 @@ scalar_andi = binary_op(
     doc="Bitwise AND.",
     commutative=True,
     facts="loom_scalar_andi_facts",
+    canonicalize="loom_scalar_andi_canonicalize",
     examples=["%result = scalar.andi %lhs, %rhs : i32"],
 )
 scalar_ori = binary_op(
@@ -36,6 +37,7 @@ scalar_ori = binary_op(
     doc="Bitwise OR.",
     commutative=True,
     facts="loom_scalar_ori_facts",
+    canonicalize="loom_scalar_ori_canonicalize",
     examples=["%result = scalar.ori %lhs, %rhs : i32"],
 )
 scalar_xori = binary_op(
@@ -45,6 +47,7 @@ scalar_xori = binary_op(
     doc="Bitwise XOR.",
     commutative=True,
     facts="loom_scalar_xori_facts",
+    canonicalize="loom_scalar_xori_canonicalize",
     examples=["%result = scalar.xori %lhs, %rhs : i32"],
 )
 
@@ -59,6 +62,7 @@ scalar_shli = binary_op(
     doc="Left shift.",
     flags=("overflow", IntOverflowFlags),
     facts="loom_scalar_shli_facts",
+    canonicalize="loom_scalar_shli_canonicalize",
     examples=["%result = scalar.shli %lhs, %rhs : i32"],
 )
 scalar_shrsi = binary_op(
@@ -67,6 +71,7 @@ scalar_shrsi = binary_op(
     type_constraint=INTEGER,
     doc="Arithmetic right shift (sign-extending).",
     facts="loom_scalar_shrsi_facts",
+    canonicalize="loom_scalar_shrsi_canonicalize",
     examples=["%result = scalar.shrsi %lhs, %rhs : i32"],
 )
 scalar_shrui = binary_op(
@@ -75,6 +80,7 @@ scalar_shrui = binary_op(
     type_constraint=INTEGER,
     doc="Logical right shift (zero-extending).",
     facts="loom_scalar_shrui_facts",
+    canonicalize="loom_scalar_shrui_canonicalize",
     examples=["%result = scalar.shrui %lhs, %rhs : i32"],
 )
 
@@ -88,6 +94,7 @@ scalar_rotli = binary_op(
     type_constraint=INTEGER,
     doc="Left rotate.",
     facts="loom_scalar_rotli_facts",
+    canonicalize="loom_scalar_rotli_canonicalize",
     examples=["%result = scalar.rotli %lhs, %rhs : i32"],
 )
 scalar_rotri = binary_op(
@@ -96,6 +103,7 @@ scalar_rotri = binary_op(
     type_constraint=INTEGER,
     doc="Right rotate.",
     facts="loom_scalar_rotri_facts",
+    canonicalize="loom_scalar_rotri_canonicalize",
     examples=["%result = scalar.rotri %lhs, %rhs : i32"],
 )
 

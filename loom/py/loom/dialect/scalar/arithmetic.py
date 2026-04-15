@@ -253,6 +253,7 @@ scalar_addf = binary_op(
     commutative=True,
     flags=("fastmath", FastMathFlags),
     facts="loom_scalar_addf_facts",
+    canonicalize="loom_scalar_addf_canonicalize",
     examples=[
         "%result = scalar.addf %lhs, %rhs : f32",
         "%result = scalar.addf<fast> %lhs, %rhs : f32",
@@ -266,6 +267,7 @@ scalar_subf = binary_op(
     doc="Floating-point subtraction.",
     flags=("fastmath", FastMathFlags),
     facts="loom_scalar_subf_facts",
+    canonicalize="loom_scalar_subf_canonicalize",
     examples=["%result = scalar.subf %lhs, %rhs : f32"],
 )
 
@@ -277,6 +279,7 @@ scalar_mulf = binary_op(
     commutative=True,
     flags=("fastmath", FastMathFlags),
     facts="loom_scalar_mulf_facts",
+    canonicalize="loom_scalar_mulf_canonicalize",
     examples=["%result = scalar.mulf %lhs, %rhs : f32"],
 )
 
@@ -287,6 +290,7 @@ scalar_divf = binary_op(
     doc="Floating-point division.",
     flags=("fastmath", FastMathFlags),
     facts="loom_scalar_divf_facts",
+    canonicalize="loom_scalar_divf_canonicalize",
     examples=["%result = scalar.divf %lhs, %rhs : f32"],
 )
 
@@ -308,6 +312,7 @@ scalar_negf = unary_op(
     traits=[INVOLUTION],
     flags=("fastmath", FastMathFlags),
     facts="loom_scalar_negf_facts",
+    canonicalize="loom_scalar_negf_canonicalize",
     examples=["%result = scalar.negf %input : f32"],
 )
 
@@ -319,6 +324,7 @@ scalar_absf = unary_op(
     traits=[IDEMPOTENT],
     flags=("fastmath", FastMathFlags),
     facts="loom_scalar_absf_facts",
+    canonicalize="loom_scalar_absf_canonicalize",
     examples=["%result = scalar.absf %input : f32"],
 )
 
@@ -372,6 +378,7 @@ scalar_copysignf = binary_op(
     type_constraint=FLOAT,
     doc="Copy sign of rhs onto magnitude of lhs.",
     facts="loom_scalar_copysignf_facts",
+    canonicalize="loom_scalar_copysignf_canonicalize",
     examples=["%result = scalar.copysignf %lhs, %rhs : f32"],
 )
 

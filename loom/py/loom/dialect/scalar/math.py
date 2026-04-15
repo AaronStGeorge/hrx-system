@@ -315,6 +315,7 @@ scalar_fmaf = Op(
         TypeOf("result"),
     ],
     facts="loom_scalar_fmaf_facts",
+    canonicalize="loom_scalar_fmaf_canonicalize",
     examples=["%result = scalar.fmaf %a, %b, %c : f32"],
 )
 
