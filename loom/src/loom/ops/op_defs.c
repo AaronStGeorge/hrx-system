@@ -731,6 +731,27 @@ static void loom_block_drop_arg_type_uses(loom_module_t* module,
   block->arg_count = 0;
 }
 
+static void loom_module_unlink_symbol_defining_op(
+    loom_module_t* module, loom_op_t* op, const loom_op_vtable_t* vtable) {
+  if (!vtable || !iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE) ||
+      !vtable->attr_descriptors) {
+    return;
+  }
+  const loom_attribute_t* attrs = loom_op_const_attrs(op);
+  for (uint8_t i = 0; i < vtable->attribute_count && i < op->attribute_count;
+       ++i) {
+    if (vtable->attr_descriptors[i].attr_kind != LOOM_ATTR_SYMBOL) continue;
+    loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[i]);
+    if (loom_symbol_ref_is_valid(ref) && ref.module_id == 0 &&
+        ref.symbol_id < module->symbols.count &&
+        module->symbols.entries[ref.symbol_id].defining_op == op) {
+      module->symbols.entries[ref.symbol_id].defining_op = NULL;
+      module->symbols.entries[ref.symbol_id].kind = LOOM_SYMBOL_NONE;
+    }
+    return;
+  }
+}
+
 // Erases |op| and every operation nested in its regions. The root op must have
 // unused results; nested ops are removed as part of the dead subtree and may
 // still have uses from sibling ops that will be erased by the same walk.
@@ -770,6 +791,7 @@ static iree_status_t loom_op_erase_subtree(loom_module_t* module, loom_op_t* op,
       module->values.entries[results[i]].def = loom_value_def_make_none();
     }
   }
+  loom_module_unlink_symbol_defining_op(module, op, loom_op_vtable(module, op));
   loom_block_unlink_op(module, op);
   op->flags |= LOOM_OP_FLAG_DEAD;
   return iree_ok_status();
