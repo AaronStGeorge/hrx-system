@@ -71,11 +71,15 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
+    "lower_internal.h"
   SRCS
     "lower.c"
+    "lower_memory.c"
+    "lower_scalar.c"
   DEPS
     ::llvmir
     iree::base
+    iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::buffer
