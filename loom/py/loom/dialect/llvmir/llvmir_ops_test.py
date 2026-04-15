@@ -92,4 +92,8 @@ class TestLlvmIrDialect:
             ("llvm.amdgcn.workitem.id.x", 2),
             ("llvm.amdgcn.workitem.id.y", 3),
             ("llvm.amdgcn.workitem.id.z", 4),
+            ("llvm.memcpy", 5),
+            ("llvm.memset", 6),
+            ("llvm.lifetime.start", 7),
+            ("llvm.lifetime.end", 8),
         ]

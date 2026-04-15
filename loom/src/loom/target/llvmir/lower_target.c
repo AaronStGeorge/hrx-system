@@ -7,7 +7,9 @@
 // Lowering for target punch-through Loom ops into structured LLVMIR.
 
 #include "loom/ir/context.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/llvmir/ops.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/target/llvmir/intrinsics.h"
 #include "loom/target/llvmir/lower_internal.h"
 
@@ -161,6 +163,104 @@ static iree_status_t loom_llvmir_lowering_expect_scalar_result(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_lowering_expect_scalar_operand(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    iree_host_size_t operand_ordinal, loom_scalar_type_t expected_type,
+    const char* detail) {
+  if (operand_ordinal >= op->operand_count) {
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  loom_value_id_t operand_id = loom_op_const_operands(op)[operand_ordinal];
+  loom_type_t operand_type =
+      loom_module_value_type(state->source_module, operand_id);
+  if (!loom_type_is_scalar(operand_type) ||
+      loom_type_element_type(operand_type) != expected_type) {
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  return iree_ok_status();
+}
+
+static bool loom_llvmir_lowering_integer_bit_width(
+    const loom_llvmir_lowering_state_t* state, loom_type_t type,
+    uint32_t* out_bit_width) {
+  if (!loom_type_is_scalar(type)) return false;
+  switch (loom_type_element_type(type)) {
+    case LOOM_SCALAR_TYPE_INDEX:
+      *out_bit_width = state->target_profile->target_env->index_bitwidth;
+      return true;
+    case LOOM_SCALAR_TYPE_OFFSET:
+      *out_bit_width = state->target_profile->target_env->offset_bitwidth;
+      return true;
+    case LOOM_SCALAR_TYPE_I1:
+    case LOOM_SCALAR_TYPE_I8:
+    case LOOM_SCALAR_TYPE_I16:
+    case LOOM_SCALAR_TYPE_I32:
+    case LOOM_SCALAR_TYPE_I64:
+      *out_bit_width =
+          (uint32_t)loom_scalar_type_bitwidth(loom_type_element_type(type));
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_llvmir_lowering_expect_integer_operand_bit_width(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    iree_host_size_t operand_ordinal, const char* detail,
+    uint32_t* out_bit_width) {
+  if (operand_ordinal >= op->operand_count) {
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  loom_value_id_t operand_id = loom_op_const_operands(op)[operand_ordinal];
+  loom_type_t operand_type =
+      loom_module_value_type(state->source_module, operand_id);
+  if (!loom_llvmir_lowering_integer_bit_width(state, operand_type,
+                                              out_bit_width)) {
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  return iree_ok_status();
+}
+
+static bool loom_llvmir_lowering_value_is_source_constant(
+    const loom_llvmir_lowering_state_t* state, loom_value_id_t value_id) {
+  const loom_value_t* value = loom_module_value(state->source_module, value_id);
+  if (!value || loom_value_is_block_arg(value)) return false;
+  const loom_op_t* def_op = loom_value_def_op(value);
+  return def_op &&
+         (loom_scalar_constant_isa(def_op) || loom_index_constant_isa(def_op));
+}
+
+static iree_status_t loom_llvmir_lowering_expect_constant_operand(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    iree_host_size_t operand_ordinal, const char* detail) {
+  if (operand_ordinal >= op->operand_count) {
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  loom_value_id_t operand_id = loom_op_const_operands(op)[operand_ordinal];
+  if (!loom_llvmir_lowering_value_is_source_constant(state, operand_id)) {
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_expect_pointer_operand_address_space(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    iree_host_size_t operand_ordinal, const char* detail,
+    uint32_t* out_address_space) {
+  if (operand_ordinal >= op->operand_count) {
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  loom_value_id_t operand_id = loom_op_const_operands(op)[operand_ordinal];
+  loom_llvmir_value_id_t ignored = LOOM_LLVMIR_VALUE_ID_INVALID;
+  iree_status_t status = loom_llvmir_lowering_lookup_pointer(
+      state, operand_id, &ignored, out_address_space, NULL);
+  if (!iree_status_is_ok(status)) {
+    iree_status_free(status);
+    return loom_llvmir_lowering_unsupported_op(state, op, detail);
+  }
+  return iree_ok_status();
+}
+
 static bool loom_llvmir_lowering_intrinsic_is_x86(uint8_t kind) {
   return kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC ||
          kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE;
@@ -199,7 +299,10 @@ static iree_status_t loom_llvmir_lowering_validate_intrinsic_target(
 
 static iree_status_t loom_llvmir_lowering_validate_intrinsic(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
-    uint8_t kind) {
+    uint8_t kind, loom_llvmir_lowering_intrinsic_cache_key_t* out_key) {
+  *out_key = (loom_llvmir_lowering_intrinsic_cache_key_t){
+      .kind = kind,
+  };
   IREE_RETURN_IF_ERROR(
       loom_llvmir_lowering_validate_intrinsic_target(state, op, kind));
   switch (kind) {
@@ -232,6 +335,63 @@ static iree_status_t loom_llvmir_lowering_validate_intrinsic(
       return loom_llvmir_lowering_expect_scalar_result(
           state, op, LOOM_SCALAR_TYPE_I32,
           "llvm.amdgcn.workitem.id.z expects () -> i32");
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY: {
+      const char* detail =
+          "llvm.memcpy expects (ptr target, ptr source, integer length, "
+          "i1 constant volatile) -> ()";
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_intrinsic_shape(state, op, 4, 0, detail));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_pointer_operand_address_space(
+              state, op, 0, detail, &out_key->discriminator0));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_pointer_operand_address_space(
+              state, op, 1, detail, &out_key->discriminator1));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_integer_operand_bit_width(
+              state, op, 2, detail, &out_key->discriminator2));
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
+          state, op, 3, LOOM_SCALAR_TYPE_I1, detail));
+      return loom_llvmir_lowering_expect_constant_operand(state, op, 3, detail);
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMSET: {
+      const char* detail =
+          "llvm.memset expects (ptr target, i8 value, integer length, "
+          "i1 constant volatile) -> ()";
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_intrinsic_shape(state, op, 4, 0, detail));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_pointer_operand_address_space(
+              state, op, 0, detail, &out_key->discriminator0));
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
+          state, op, 1, LOOM_SCALAR_TYPE_I8, detail));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_integer_operand_bit_width(
+              state, op, 2, detail, &out_key->discriminator1));
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
+          state, op, 3, LOOM_SCALAR_TYPE_I1, detail));
+      return loom_llvmir_lowering_expect_constant_operand(state, op, 3, detail);
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START:
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_END: {
+      const char* detail =
+          kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START
+              ? "llvm.lifetime.start expects (i64 constant size, ptr) -> ()"
+              : "llvm.lifetime.end expects (i64 constant size, ptr) -> ()";
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_intrinsic_shape(state, op, 2, 0, detail));
+      uint32_t size_bit_width = 0;
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_integer_operand_bit_width(
+              state, op, 0, detail, &size_bit_width));
+      if (size_bit_width != 64) {
+        return loom_llvmir_lowering_unsupported_op(state, op, detail);
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_expect_constant_operand(state, op, 0, detail));
+      return loom_llvmir_lowering_expect_pointer_operand_address_space(
+          state, op, 1, detail, &out_key->discriminator0);
     }
     default:
       return loom_llvmir_lowering_unsupported_op(
@@ -283,6 +443,28 @@ static iree_status_t loom_llvmir_lowering_declare_intrinsic(
           state->target_module, &function));
       break;
     }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_declare_memcpy(
+          state->target_module, key->discriminator0, key->discriminator1,
+          key->discriminator2, &function));
+      break;
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMSET: {
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_declare_memset(state->target_module, key->discriminator0,
+                                     key->discriminator1, &function));
+      break;
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_start(
+          state->target_module, key->discriminator0, &function));
+      break;
+    }
+    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_END: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_end(
+          state->target_module, key->discriminator0, &function));
+      break;
+    }
     default:
       return loom_llvmir_lowering_unsupported_op(
           state, op, "unknown llvmir.intrinsic kind");
@@ -299,12 +481,9 @@ iree_status_t loom_llvmir_lowering_lower_intrinsic(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op) {
   uint8_t kind = loom_llvmir_intrinsic_kind(op);
+  loom_llvmir_lowering_intrinsic_cache_key_t key;
   IREE_RETURN_IF_ERROR(
-      loom_llvmir_lowering_validate_intrinsic(state, op, kind));
-
-  loom_llvmir_lowering_intrinsic_cache_key_t key = {
-      .kind = kind,
-  };
+      loom_llvmir_lowering_validate_intrinsic(state, op, kind, &key));
   loom_llvmir_function_t* function = NULL;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_lowering_declare_intrinsic(state, op, &key, &function));

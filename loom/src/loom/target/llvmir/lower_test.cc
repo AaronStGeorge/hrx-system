@@ -1536,6 +1536,171 @@ TEST_F(LlvmIrLowerTest, LowersViewPrefetchToBuiltinIntrinsic) {
   VerifyTextWithLlvmTools(text);
 }
 
+TEST_F(LlvmIrLowerTest, LowersSourceMemoryIntrinsics) {
+  loom_type_t buffer = loom_type_buffer();
+  loom_type_t offset = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_type_t i8 = loom_type_scalar(LOOM_SCALAR_TYPE_I8);
+  loom_type_t i64 = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("source_memory_intrinsics"));
+  loom_type_t arg_types[3] = {buffer, buffer, offset};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types,
+      IREE_ARRAYSIZE(arg_types), NULL, 0, NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3);
+  SetValueName(args[0], IREE_SV("target"));
+  SetValueName(args[1], IREE_SV("source"));
+  SetValueName(args[2], IREE_SV("length"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* fill_value_op = NULL;
+  IREE_ASSERT_OK(loom_scalar_constant_build(&body_builder, loom_attr_i64(0), i8,
+                                            LOOM_LOCATION_UNKNOWN,
+                                            &fill_value_op));
+  loom_value_id_t fill_value = loom_scalar_constant_result(fill_value_op);
+
+  loom_op_t* is_volatile_op = NULL;
+  IREE_ASSERT_OK(
+      loom_scalar_constant_build(&body_builder, loom_attr_bool(false), i1,
+                                 LOOM_LOCATION_UNKNOWN, &is_volatile_op));
+  loom_value_id_t is_volatile = loom_scalar_constant_result(is_volatile_op);
+
+  loom_op_t* lifetime_size_op = NULL;
+  IREE_ASSERT_OK(loom_scalar_constant_build(&body_builder, loom_attr_i64(16),
+                                            i64, LOOM_LOCATION_UNKNOWN,
+                                            &lifetime_size_op));
+  loom_value_id_t lifetime_size = loom_scalar_constant_result(lifetime_size_op);
+
+  loom_value_id_t lifetime_args[2] = {lifetime_size, args[0]};
+  loom_op_t* lifetime_start_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START,
+      lifetime_args, IREE_ARRAYSIZE(lifetime_args), NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &lifetime_start_op));
+
+  loom_value_id_t memset_args[4] = {args[0], fill_value, args[2], is_volatile};
+  loom_op_t* memset_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMSET, memset_args,
+      IREE_ARRAYSIZE(memset_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
+      &memset_op));
+
+  loom_value_id_t memcpy_args[4] = {args[0], args[1], args[2], is_volatile};
+  loom_op_t* first_memcpy_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY, memcpy_args,
+      IREE_ARRAYSIZE(memcpy_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
+      &first_memcpy_op));
+  loom_op_t* second_memcpy_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY, memcpy_args,
+      IREE_ARRAYSIZE(memcpy_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
+      &second_memcpy_op));
+
+  loom_op_t* lifetime_end_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_END,
+      lifetime_args, IREE_ARRAYSIZE(lifetime_args), NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &lifetime_end_op));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText();
+  const char* memcpy_decl =
+      "declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, "
+      "ptr noalias nocapture readonly, i64, i1 immarg)\n";
+  size_t memcpy_decl_pos = text.find(memcpy_decl);
+  ASSERT_NE(memcpy_decl_pos, std::string::npos) << text;
+  EXPECT_EQ(text.find(memcpy_decl, memcpy_decl_pos + 1), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare void @llvm.memset.p0.i64(ptr nocapture "
+                      "writeonly, i8, i64, i1 immarg)\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare void @llvm.lifetime.start.p0(i64 immarg, "
+                      "ptr nocapture)\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare void @llvm.lifetime.end.p0(i64 immarg, "
+                      "ptr nocapture)\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  call void @llvm.lifetime.start.p0(i64 16, "
+                      "ptr %target)\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  call void @llvm.memset.p0.i64(ptr %target, i8 0, "
+                      "i64 %length, i1 0)\n"),
+            std::string::npos)
+      << text;
+  const char* memcpy_call =
+      "  call void @llvm.memcpy.p0.p0.i64(ptr %target, ptr %source, "
+      "i64 %length, i1 0)\n";
+  size_t first_memcpy_call_pos = text.find(memcpy_call);
+  ASSERT_NE(first_memcpy_call_pos, std::string::npos) << text;
+  EXPECT_NE(text.find(memcpy_call, first_memcpy_call_pos + 1),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  call void @llvm.lifetime.end.p0(i64 16, "
+                      "ptr %target)\n"),
+            std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
+}
+
+TEST_F(LlvmIrLowerTest, RejectsMemoryIntrinsicDynamicImmarg) {
+  loom_type_t buffer = loom_type_buffer();
+  loom_type_t offset = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("bad_memory_intrinsic"));
+  loom_type_t arg_types[4] = {buffer, buffer, offset, i1};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types,
+      IREE_ARRAYSIZE(arg_types), NULL, 0, NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 4);
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_value_id_t memcpy_args[4] = {args[0], args[1], args[2], args[3]};
+  loom_op_t* memcpy_op = NULL;
+  IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
+      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY, memcpy_args,
+      IREE_ARRAYSIZE(memcpy_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
+      &memcpy_op));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  loom_llvmir_lowering_options_t options;
+  options.target_profile = loom_llvmir_target_profile_x86_64_object();
+  options.source_name = IREE_SV("lower_test");
+  loom_llvmir_module_t* lowered = NULL;
+  iree_status_t status = loom_llvmir_lower_module(
+      module_, &options, iree_allocator_system(), &lowered);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_UNIMPLEMENTED);
+  std::string message = StatusToString(status);
+  EXPECT_NE(message.find("llvm.memcpy expects"), std::string::npos) << message;
+  iree_status_free(status);
+  if (lowered) {
+    loom_llvmir_module_free(lowered);
+  }
+}
+
 TEST_F(LlvmIrLowerTest, LowersInlineAsmToStructuredLlvmIr) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_symbol_ref_t callee = MakeSymbol(IREE_SV("inline_asm_add"));

@@ -73,6 +73,26 @@ IntrinsicKind = EnumDef(
             4,
             doc="Returns the AMDGPU workitem id in the z dimension.",
         ),
+        EnumCase(
+            "llvm.memcpy",
+            5,
+            doc="Copies bytes between pointer operands using LLVM's overloaded memcpy intrinsic.",
+        ),
+        EnumCase(
+            "llvm.memset",
+            6,
+            doc="Fills bytes through a pointer operand using LLVM's overloaded memset intrinsic.",
+        ),
+        EnumCase(
+            "llvm.lifetime.start",
+            7,
+            doc="Marks the start of a pointer object's lifetime.",
+        ),
+        EnumCase(
+            "llvm.lifetime.end",
+            8,
+            doc="Marks the end of a pointer object's lifetime.",
+        ),
     ],
     doc="LLVM intrinsic selected by llvmir.intrinsic.",
 )
@@ -140,6 +160,7 @@ llvmir_intrinsic = Op(
     examples=[
         "%ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64",
         "llvmir.intrinsic<llvm.x86.sse2.pause> () : ()",
+        "llvmir.intrinsic<llvm.memcpy> (%target, %source, %length, %is_volatile) : (!buffer, !buffer, offset, i1)",
     ],
 )
 
