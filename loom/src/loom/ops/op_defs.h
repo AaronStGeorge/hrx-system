@@ -985,6 +985,28 @@ static inline loom_value_id_t loom_region_branch_selector(
   return loom_op_operands(branch.op)[branch.vtable->selector_operand_index];
 }
 
+// Returns the branch region at |region_index|, or NULL for malformed inputs.
+// Region 0 is the first physical region on the op; dialect-specific accessors
+// define whether that is a default, then, or other semantic branch.
+loom_region_t* loom_region_branch_region(const loom_module_t* module,
+                                         loom_region_branch_t branch,
+                                         uint8_t region_index);
+
+// Returns the single-block terminator for a branch region when it matches the
+// region descriptor's required terminator kind. Returns NULL for malformed
+// inputs, multi-block regions, missing terminators, or wrong terminator kinds.
+loom_op_t* loom_region_branch_region_terminator(const loom_module_t* module,
+                                                loom_region_branch_t branch,
+                                                uint8_t region_index);
+
+// Returns true when a branch region consists only of its terminator and that
+// terminator forwards exactly |expected_count| operands. The returned slice
+// aliases the terminator operands and is valid until the op is rewritten.
+bool loom_region_branch_region_yield_only_operands(
+    const loom_module_t* module, loom_region_branch_t branch,
+    uint8_t region_index, uint16_t expected_count,
+    loom_value_slice_t* out_values);
+
 //===----------------------------------------------------------------------===//
 // Op definition macros
 //===----------------------------------------------------------------------===//

@@ -281,6 +281,74 @@ loom_region_branch_t loom_region_branch_cast(const loom_module_t* module,
   return (loom_region_branch_t){.op = op, .vtable = vtable->region_branch};
 }
 
+loom_region_t* loom_region_branch_region(const loom_module_t* module,
+                                         loom_region_branch_t branch,
+                                         uint8_t region_index) {
+  if (!module || !loom_region_branch_isa(branch) ||
+      region_index >= branch.op->region_count) {
+    return NULL;
+  }
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, branch.op);
+  if (!loom_op_vtable_region_descriptor(vtable, region_index)) return NULL;
+  return loom_op_regions(branch.op)[region_index];
+}
+
+static bool loom_region_branch_terminator_matches(
+    const loom_region_descriptor_t* region_descriptor,
+    const loom_op_t* terminator) {
+  if (!terminator || region_descriptor->terminator == LOOM_OP_KIND_UNKNOWN) {
+    return false;
+  }
+  return terminator->kind == region_descriptor->terminator ||
+         terminator->kind == region_descriptor->implicit_terminator;
+}
+
+loom_op_t* loom_region_branch_region_terminator(const loom_module_t* module,
+                                                loom_region_branch_t branch,
+                                                uint8_t region_index) {
+  if (!module || !loom_region_branch_isa(branch) ||
+      region_index >= branch.op->region_count) {
+    return NULL;
+  }
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, branch.op);
+  const loom_region_descriptor_t* region_descriptor =
+      loom_op_vtable_region_descriptor(vtable, region_index);
+  if (!region_descriptor) return NULL;
+
+  loom_region_t* region = loom_op_regions(branch.op)[region_index];
+  if (!region || region->block_count != 1) return NULL;
+  loom_block_t* block = loom_region_entry_block(region);
+  if (!block || !block->last_op) return NULL;
+  return loom_region_branch_terminator_matches(region_descriptor,
+                                               block->last_op)
+             ? block->last_op
+             : NULL;
+}
+
+bool loom_region_branch_region_yield_only_operands(
+    const loom_module_t* module, loom_region_branch_t branch,
+    uint8_t region_index, uint16_t expected_count,
+    loom_value_slice_t* out_values) {
+  if (out_values) *out_values = (loom_value_slice_t){0};
+  loom_op_t* terminator =
+      loom_region_branch_region_terminator(module, branch, region_index);
+  if (!terminator) return false;
+
+  loom_region_t* region =
+      loom_region_branch_region(module, branch, region_index);
+  if (!region) return false;
+  loom_block_t* block = loom_region_entry_block(region);
+  if (!block || block->first_op != terminator) return false;
+  if (terminator->operand_count != expected_count) return false;
+  if (out_values) {
+    *out_values = (loom_value_slice_t){
+        .values = loom_op_operands(terminator),
+        .count = terminator->operand_count,
+    };
+  }
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 // Builder
 //===----------------------------------------------------------------------===//

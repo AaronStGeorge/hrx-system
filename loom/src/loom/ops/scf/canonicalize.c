@@ -428,8 +428,10 @@ iree_status_t loom_scf_lookup_canonicalize(loom_op_t* op,
 
 static bool loom_scf_switch_selected_region(loom_rewriter_t* rewriter,
                                             loom_op_t* op,
-                                            loom_region_t** out_region) {
+                                            loom_region_t** out_region,
+                                            uint8_t* out_region_index) {
   *out_region = NULL;
+  *out_region_index = UINT8_MAX;
   int64_t selector = 0;
   if (!loom_scf_value_facts_are_exact_i64(
           rewriter, loom_scf_switch_selector(op), &selector)) {
@@ -447,24 +449,148 @@ static bool loom_scf_switch_selected_region(loom_rewriter_t* rewriter,
   for (uint16_t i = 0; i < case_keys.count; ++i) {
     if (case_keys.i64_array[i] == selector) {
       *out_region = case_regions.regions[i];
+      *out_region_index = (uint8_t)(i + 1);
       return true;
     }
   }
   *out_region = loom_scf_switch_default_region(op);
+  *out_region_index = 0;
   return true;
+}
+
+static bool loom_scf_switch_yielded_value_types_match_results(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_value_slice_t yielded_values) {
+  const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (results[i] == LOOM_VALUE_ID_INVALID ||
+        results[i] >= module->values.count) {
+      return false;
+    }
+    loom_value_id_t yielded_value = yielded_values.values[i];
+    if (yielded_value == LOOM_VALUE_ID_INVALID ||
+        yielded_value >= module->values.count) {
+      return false;
+    }
+    loom_type_t result_type = loom_module_value_type(module, results[i]);
+    loom_type_t yielded_type = loom_module_value_type(module, yielded_value);
+    if (!loom_type_equal(result_type, yielded_type)) return false;
+  }
+  return true;
+}
+
+static iree_status_t loom_scf_switch_selectify_yield_only(
+    loom_op_t* op, loom_rewriter_t* rewriter) {
+  if (op->result_count == 0 || op->tied_result_count != 0) {
+    return iree_ok_status();
+  }
+  loom_region_branch_t branch = loom_region_branch_cast(rewriter->module, op);
+  if (!loom_region_branch_isa(branch)) return iree_ok_status();
+
+  loom_attribute_t case_keys = loom_scf_switch_case_keys(op);
+  if (case_keys.kind != LOOM_ATTR_I64_ARRAY ||
+      (case_keys.count > 0 && !case_keys.i64_array)) {
+    return iree_ok_status();
+  }
+  loom_region_slice_t case_regions = loom_scf_switch_case_regions(op);
+  if (case_regions.count != case_keys.count) return iree_ok_status();
+
+  iree_host_size_t row_count = (iree_host_size_t)case_keys.count + 1;
+  iree_host_size_t value_count = 0;
+  if (!iree_host_size_checked_mul(row_count, op->result_count, &value_count)) {
+    return iree_ok_status();
+  }
+  if (value_count > UINT16_MAX - 1) return iree_ok_status();
+
+  loom_value_slice_t yielded_values = {0};
+  for (uint16_t row = 0; row < case_regions.count; ++row) {
+    if (!loom_region_branch_region_yield_only_operands(
+            rewriter->module, branch, (uint8_t)(row + 1), op->result_count,
+            &yielded_values) ||
+        !loom_scf_switch_yielded_value_types_match_results(rewriter->module, op,
+                                                           yielded_values)) {
+      return iree_ok_status();
+    }
+  }
+
+  if (!loom_region_branch_region_yield_only_operands(
+          rewriter->module, branch, /*region_index=*/0, op->result_count,
+          &yielded_values) ||
+      !loom_scf_switch_yielded_value_types_match_results(rewriter->module, op,
+                                                         yielded_values)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t* lookup_values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(rewriter->arena, value_count,
+                                                 sizeof(*lookup_values),
+                                                 (void**)&lookup_values));
+  for (uint16_t row = 0; row < case_regions.count; ++row) {
+    if (!loom_region_branch_region_yield_only_operands(
+            rewriter->module, branch, (uint8_t)(row + 1), op->result_count,
+            &yielded_values)) {
+      return iree_ok_status();
+    }
+    memcpy(lookup_values + (iree_host_size_t)row * op->result_count,
+           yielded_values.values,
+           (iree_host_size_t)op->result_count * sizeof(*lookup_values));
+  }
+  if (!loom_region_branch_region_yield_only_operands(
+          rewriter->module, branch, /*region_index=*/0, op->result_count,
+          &yielded_values)) {
+    return iree_ok_status();
+  }
+  memcpy(lookup_values + (iree_host_size_t)case_keys.count * op->result_count,
+         yielded_values.values,
+         (iree_host_size_t)op->result_count * sizeof(*lookup_values));
+
+  loom_type_t* result_types = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(rewriter->arena, op->result_count,
+                                sizeof(*result_types), (void**)&result_types));
+  const loom_value_id_t* old_results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    if (old_results[i] == LOOM_VALUE_ID_INVALID ||
+        old_results[i] >= rewriter->module->values.count) {
+      return iree_ok_status();
+    }
+    result_types[i] = loom_module_value_type(rewriter->module, old_results[i]);
+  }
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* lookup_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_lookup_build(
+      &rewriter->builder, loom_scf_switch_selector(op), case_keys.i64_array,
+      case_keys.count, lookup_values, value_count, result_types,
+      op->result_count, /*tied_results=*/NULL, /*tied_result_count=*/0,
+      op->location, &lookup_op));
+
+  loom_value_slice_t replacements = loom_scf_lookup_results(lookup_op);
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, replacements.values, replacements.count, value_checkpoint));
+  return loom_rewriter_replace_all_uses_and_erase(
+      rewriter, op, replacements.values, replacements.count);
 }
 
 iree_status_t loom_scf_switch_canonicalize(loom_op_t* op,
                                            loom_rewriter_t* rewriter) {
   loom_region_t* selected_region = NULL;
-  if (!loom_scf_switch_selected_region(rewriter, op, &selected_region)) {
-    return iree_ok_status();
+  uint8_t selected_region_index = UINT8_MAX;
+  if (!loom_scf_switch_selected_region(rewriter, op, &selected_region,
+                                       &selected_region_index)) {
+    return loom_scf_switch_selectify_yield_only(op, rewriter);
   }
 
-  loom_op_t* yield = loom_scf_region_terminator(selected_region);
+  loom_region_branch_t branch = loom_region_branch_cast(rewriter->module, op);
+  loom_op_t* yield = loom_region_branch_region_terminator(
+      rewriter->module, branch, selected_region_index);
   if (!yield) return iree_ok_status();
 
-  loom_value_slice_t yielded_values = loom_scf_yield_values(yield);
+  loom_value_slice_t yielded_values = {
+      .values = loom_op_operands(yield),
+      .count = yield->operand_count,
+  };
   if (yielded_values.count != op->result_count) return iree_ok_status();
 
   IREE_RETURN_IF_ERROR(loom_scf_move_region_body_before_op(

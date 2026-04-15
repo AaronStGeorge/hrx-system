@@ -110,6 +110,17 @@ class InterfaceTest : public ::testing::Test {
     return op;
   }
 
+  void build_scf_yield(loom_op_t* owner_op, loom_region_t* region,
+                       const loom_value_id_t* values,
+                       iree_host_size_t value_count) {
+    loom_builder_ip_t saved_ip =
+        loom_builder_enter_region(&builder_, owner_op, region);
+    loom_op_t* yield_op = nullptr;
+    IREE_EXPECT_OK(loom_scf_yield_build(&builder_, values, value_count,
+                                        LOOM_LOCATION_UNKNOWN, &yield_op));
+    loom_builder_restore(&builder_, saved_ip);
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = nullptr;
@@ -324,6 +335,113 @@ TEST_F(InterfaceTest, RegionBranchSelectorForScfIf) {
   loom_region_branch_t branch = loom_region_branch_cast(module_, if_op);
   ASSERT_TRUE(loom_region_branch_isa(branch));
   EXPECT_EQ(loom_region_branch_selector(branch), condition_id);
+}
+
+TEST_F(InterfaceTest, RegionBranchYieldOnlyOperandsForScfIf) {
+  loom_op_t* condition = build_i1(false);
+  loom_op_t* then_value = build_i32(10);
+  loom_op_t* else_value = build_i32(20);
+  loom_value_id_t then_id = loom_op_results(then_value)[0];
+  loom_value_id_t else_id = loom_op_results(else_value)[0];
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_op_t* if_op = nullptr;
+  IREE_ASSERT_OK(loom_scf_if_build(&builder_, loom_op_results(condition)[0],
+                                   &i32, 1, nullptr, 0, LOOM_LOCATION_UNKNOWN,
+                                   &if_op));
+  build_scf_yield(if_op, loom_scf_if_then_region(if_op), &then_id, 1);
+  build_scf_yield(if_op, loom_scf_if_else_region(if_op), &else_id, 1);
+
+  loom_region_branch_t branch = loom_region_branch_cast(module_, if_op);
+  ASSERT_TRUE(loom_region_branch_isa(branch));
+  EXPECT_EQ(loom_region_branch_region(module_, branch, 0),
+            loom_scf_if_then_region(if_op));
+  EXPECT_EQ(loom_region_branch_region(module_, branch, 1),
+            loom_scf_if_else_region(if_op));
+  EXPECT_EQ(loom_region_branch_region(module_, branch, 2), nullptr);
+
+  loom_op_t* terminator =
+      loom_region_branch_region_terminator(module_, branch, 0);
+  ASSERT_NE(terminator, nullptr);
+  EXPECT_TRUE(loom_scf_yield_isa(terminator));
+
+  loom_value_slice_t yielded_values = {0};
+  EXPECT_TRUE(loom_region_branch_region_yield_only_operands(
+      module_, branch, 0, 1, &yielded_values));
+  ASSERT_EQ(yielded_values.count, 1);
+  EXPECT_EQ(yielded_values.values[0], then_id);
+  EXPECT_FALSE(loom_region_branch_region_yield_only_operands(
+      module_, branch, 0, 2, &yielded_values));
+}
+
+TEST_F(InterfaceTest, RegionBranchYieldOnlyRejectsBranchBody) {
+  loom_op_t* condition = build_i1(false);
+  loom_op_t* fallback_value = build_i32(20);
+  loom_value_id_t fallback_id = loom_op_results(fallback_value)[0];
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_op_t* if_op = nullptr;
+  IREE_ASSERT_OK(loom_scf_if_build(&builder_, loom_op_results(condition)[0],
+                                   &i32, 1, nullptr, 0, LOOM_LOCATION_UNKNOWN,
+                                   &if_op));
+
+  loom_builder_ip_t saved_ip = loom_builder_enter_region(
+      &builder_, if_op, loom_scf_if_then_region(if_op));
+  loom_op_t* local_value = build_i32(10);
+  loom_value_id_t local_id = loom_op_results(local_value)[0];
+  loom_op_t* yield_op = nullptr;
+  IREE_EXPECT_OK(loom_scf_yield_build(&builder_, &local_id, 1,
+                                      LOOM_LOCATION_UNKNOWN, &yield_op));
+  loom_builder_restore(&builder_, saved_ip);
+  build_scf_yield(if_op, loom_scf_if_else_region(if_op), &fallback_id, 1);
+
+  loom_region_branch_t branch = loom_region_branch_cast(module_, if_op);
+  ASSERT_TRUE(loom_region_branch_isa(branch));
+  EXPECT_NE(loom_region_branch_region_terminator(module_, branch, 0), nullptr);
+
+  loom_value_slice_t yielded_values = {0};
+  EXPECT_FALSE(loom_region_branch_region_yield_only_operands(
+      module_, branch, 0, 1, &yielded_values));
+}
+
+TEST_F(InterfaceTest, RegionBranchRegionsForScfSwitch) {
+  loom_op_t* selector = build_index(1);
+  loom_op_t* case0_value = build_i32(10);
+  loom_op_t* case1_value = build_i32(20);
+  loom_op_t* default_value = build_i32(30);
+  loom_value_id_t case0_id = loom_op_results(case0_value)[0];
+  loom_value_id_t case1_id = loom_op_results(case1_value)[0];
+  loom_value_id_t default_id = loom_op_results(default_value)[0];
+  int64_t case_keys[2] = {0, 1};
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_op_t* switch_op = nullptr;
+  IREE_ASSERT_OK(loom_scf_switch_build(
+      &builder_, loom_op_results(selector)[0], &i32, 1, nullptr, 0, case_keys,
+      IREE_ARRAYSIZE(case_keys), LOOM_LOCATION_UNKNOWN, &switch_op));
+  build_scf_yield(switch_op, loom_scf_switch_default_region(switch_op),
+                  &default_id, 1);
+  loom_region_slice_t case_regions = loom_scf_switch_case_regions(switch_op);
+  ASSERT_EQ(case_regions.count, 2);
+  build_scf_yield(switch_op, case_regions.regions[0], &case0_id, 1);
+  build_scf_yield(switch_op, case_regions.regions[1], &case1_id, 1);
+
+  loom_region_branch_t branch = loom_region_branch_cast(module_, switch_op);
+  ASSERT_TRUE(loom_region_branch_isa(branch));
+  EXPECT_EQ(loom_region_branch_selector(branch), loom_op_results(selector)[0]);
+  EXPECT_EQ(loom_region_branch_region(module_, branch, 0),
+            loom_scf_switch_default_region(switch_op));
+  EXPECT_EQ(loom_region_branch_region(module_, branch, 1),
+            case_regions.regions[0]);
+  EXPECT_EQ(loom_region_branch_region(module_, branch, 2),
+            case_regions.regions[1]);
+  EXPECT_EQ(loom_region_branch_region(module_, branch, 3), nullptr);
+
+  loom_value_slice_t yielded_values = {0};
+  EXPECT_TRUE(loom_region_branch_region_yield_only_operands(
+      module_, branch, 2, 1, &yielded_values));
+  ASSERT_EQ(yielded_values.count, 1);
+  EXPECT_EQ(yielded_values.values[0], case1_id);
 }
 
 }  // namespace
