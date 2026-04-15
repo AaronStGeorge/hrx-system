@@ -190,6 +190,73 @@ func.def @if_yield_only_index_value(%cond: i1, %a: index, %b: index) -> (index) 
 
 // ====
 
+// Matching pure tail ops factor out of both branches. The conditional first
+// chooses the operands, then the common op is rebuilt once after it.
+func.def @if_factors_common_pure_tail(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  %result = scf.if %cond -> (i32) {
+    %then = test.addi %a, %b : i32
+    scf.yield %then : i32
+  } else {
+    %else = test.addi %b, %a : i32
+    scf.yield %else : i32
+  }
+  func.return %result : i32
+}
+
+// ----
+func.def @if_factors_common_pure_tail(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  %10 = scf.select %cond, %a, %b : i32
+  %11 = scf.select %cond, %b, %a : i32
+  %result = test.addi %10, %11 : i32
+  func.return %result : i32
+}
+
+// ====
+
+// Branch effects remain branch-local. Only the shared pure tail is factored.
+func.def @if_factors_tail_and_preserves_branch_effects(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  %result = scf.if %cond -> (i32) {
+    test.use %a : i32
+    %then = test.addi %a, %b : i32
+    scf.yield %then : i32
+  } else {
+    test.use %b : i32
+    %else = test.addi %b, %a : i32
+    scf.yield %else : i32
+  }
+  func.return %result : i32
+}
+
+// ----
+func.def @if_factors_tail_and_preserves_branch_effects(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  %7, %8 = scf.if %cond -> (i32, i32) {
+    test.use %a : i32
+    scf.yield %a, %b : i32, i32
+  } else {
+    test.use %b : i32
+    scf.yield %b, %a : i32, i32
+  }
+  %result = test.addi %7, %8 : i32
+  func.return %result : i32
+}
+
+// ====
+
+// Different tail op kinds do not factor: the conditional still chooses between
+// two distinct computations.
+func.def @if_preserves_different_tail_kinds(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  %result = scf.if %cond -> (i32) {
+    %then = test.addi %a, %b : i32
+    scf.yield %then : i32
+  } else {
+    %else = test.constant 4 : i32
+    scf.yield %else : i32
+  }
+  func.return %result : i32
+}
+
+// ====
+
 // scf.select is a plain value op, so identical arms fold without needing
 // control-flow reasoning.
 func.def @select_identical_arms(%cond: i1, %value: vector<4xf32>) -> (vector<4xf32>) {
@@ -343,13 +410,8 @@ func.def @if_forwards_one_of_two_results(%cond: i1, %a: f32, %b: f32) -> (f32, f
 
 // ----
 func.def @if_forwards_one_of_two_results(%cond: i1, %a: f32, %b: f32) -> (f32, f32) {
-  %selected = scf.if %cond -> (f32) {
-    %then = scalar.addf %a, %b : f32
-    scf.yield %then : f32
-  } else {
-    %else = scalar.addf %b, %b : f32
-    scf.yield %else : f32
-  }
+  %14 = scf.select %cond, %a, %b : f32
+  %selected = scalar.addf %14, %b : f32
   func.return %a, %selected : f32, f32
 }
 

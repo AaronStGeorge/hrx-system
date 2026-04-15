@@ -25,7 +25,9 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
+    loom::src::loom::transforms::motion
     loom::src::loom::transforms::rewriter
+    loom::src::loom::util::dominance
     loom::src::loom::util::math
   PUBLIC
 )
