@@ -71,6 +71,81 @@ func.def @for_zero_trip_returns_initial_value(%buffer: buffer, %offset: offset, 
 
 // ====
 
+// A fact-proven single-trip resultless loop inlines its body once. The IV
+// substitution feeds ordinary index cleanup, so the add-by-zero address math
+// disappears after promotion.
+func.def @for_single_trip_resultless_inlines_effect(%buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %lo = index.constant 3 : index
+  %hi = index.constant 4 : index
+  %step = index.constant 1 : index
+  %zero = index.constant 0 : index
+  scf.for %iv = [%lo to %hi step %step] {
+    %addr = index.add %iv, %zero : index
+    view.store %value, %view[%addr] : f32, view<16xf32, %layout>
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @for_single_trip_resultless_inlines_effect(%buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %addr = index.constant 3 : index
+  view.store %value, %view[%addr] : f32, view<16xf32, %layout>
+  func.return
+}
+
+// ====
+
+// A single-trip loop with carried state turns into straight-line scalar work.
+func.def @for_single_trip_carried_result(%init: f32) -> (f32) {
+  %lo = index.constant 0 : index
+  %hi = index.constant 1 : index
+  %step = index.constant 1 : index
+  %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
+    %next = scalar.addf %acc, %acc : f32
+    scf.yield %next : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @for_single_trip_carried_result(%init: f32) -> (f32) {
+  %next = scalar.addf %init, %init : f32
+  func.return %next : f32
+}
+
+// ====
+
+// Dynamic values can still prove a single trip when their fact ranges guarantee
+// lower < upper and lower + step >= upper.
+func.def @for_single_trip_dynamic_range_inlines(%buffer: buffer, %offset: offset, %lo: index, %hi: index, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<32xf32, %layout>
+  %lo1 = index.assume %lo [range(%lo, 8, 15)] : index
+  %hi1 = index.assume %hi [range(%hi, 16, 23)] : index
+  %step = index.constant 16 : index
+  scf.for %iv = [%lo1 to %hi1 step %step] {
+    view.store %value, %view[%iv] : f32, view<32xf32, %layout>
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @for_single_trip_dynamic_range_inlines(%buffer: buffer, %offset: offset, %lo: index, %hi: index, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<32xf32, %layout>
+  %lo1 = index.assume %lo [range(%lo, 8, 15)] : index
+  view.store %value, %view[%lo1] : f32, view<32xf32, %layout>
+  func.return
+}
+
+// ====
+
 // Without a positive-step fact, even an apparently empty identity loop stays in
 // place: erasing it would also erase malformed or nonterminating control flow.
 func.def @for_identity_unknown_step_is_preserved(%lo: index, %hi: index, %step: index, %init: f32) -> (f32) {
@@ -84,6 +159,35 @@ func.def @for_identity_unknown_step_is_preserved(%lo: index, %hi: index, %step: 
 func.def @for_identity_unknown_step_is_preserved(%lo: index, %hi: index, %step: index, %init: f32) -> (f32) {
   %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
     scf.yield %acc : f32
+  }
+  func.return %result : f32
+}
+
+// ====
+
+// Static bounds that prove multiple trips must not promote the loop.
+func.def @for_single_trip_multi_trip_is_preserved(%init: f32) -> (f32) {
+  %lo = index.constant 0 : index
+  %hi = index.constant 4 : index
+  %step = index.constant 2 : index
+  %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
+    %next = scalar.addf %acc, %acc : f32
+    scf.yield %next : f32
+  }
+  func.return %result : f32
+}
+
+// ====
+
+// Non-positive steps are preserved even when the numeric bounds look like they
+// might otherwise execute once.
+func.def @for_single_trip_non_positive_step_is_preserved(%init: f32) -> (f32) {
+  %lo = index.constant 0 : index
+  %hi = index.constant 1 : index
+  %step = index.constant 0 : index
+  %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
+    %next = scalar.addf %acc, %acc : f32
+    scf.yield %next : f32
   }
   func.return %result : f32
 }

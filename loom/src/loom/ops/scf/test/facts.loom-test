@@ -70,7 +70,8 @@ func.def @for_iv_assumed_upper_bound(%n: index) -> (i64, i64, i64, i1) {
 
 // ====
 
-// When static facts prove exactly one iteration, the body IV is exact.
+// When static facts prove exactly one iteration, the body IV is exact and the
+// loop promotes to the already-folded straight-line body.
 func.def @for_iv_single_trip_exact() -> (i64, i64, i64) {
   %lo = index.constant 8 : index
   %hi = index.constant 12 : index
@@ -87,23 +88,16 @@ func.def @for_iv_single_trip_exact() -> (i64, i64, i64) {
 
 // ----
 func.def @for_iv_single_trip_exact() -> (i64, i64, i64) {
-  %lo = index.constant 8 : index
-  %hi = index.constant 12 : index
-  %step = index.constant 4 : index
-  %zero = scalar.constant 0 : i64
-  %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
-    %fact_lo = scalar.constant 8 : i64
-    %fact_hi = scalar.constant 8 : i64
-    %fact_div = scalar.constant 8 : i64
-    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
-  }
-  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+  %fact_lo = scalar.constant 8 : i64
+  %fact_hi = scalar.constant 8 : i64
+  %fact_div = scalar.constant 8 : i64
+  func.return %fact_lo, %fact_hi, %fact_div : i64, i64, i64
 }
 
 // ====
 
 // Ordinary index consumers inside the body can fold directly from seeded IV
-// facts; they do not need bespoke SCF-aware logic.
+// facts before single-trip promotion; they do not need bespoke SCF-aware logic.
 func.def @for_iv_feeds_index_consumers() -> (index, i1) {
   %lo = index.constant 8 : index
   %hi = index.constant 12 : index
@@ -122,17 +116,9 @@ func.def @for_iv_feeds_index_consumers() -> (index, i1) {
 
 // ----
 func.def @for_iv_feeds_index_consumers() -> (index, i1) {
-  %lo = index.constant 8 : index
-  %hi = index.constant 12 : index
-  %step = index.constant 4 : index
-  %zero = index.constant 0 : index
-  %false = scalar.constant false : i1
-  %sum, %is_before_limit = scf.for %iv = [%lo to %hi step %step](%carry_sum = %zero : index, %carry_cmp = %false : i1) -> (index, i1) {
-    %plus = index.constant 10 : index
-    %cmp = scalar.constant true : i1
-    scf.yield %plus, %cmp : index, i1
-  }
-  func.return %sum, %is_before_limit : index, i1
+  %plus = index.constant 10 : index
+  %cmp = scalar.constant true : i1
+  func.return %plus, %cmp : index, i1
 }
 
 // ====

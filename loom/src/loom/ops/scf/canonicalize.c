@@ -4,10 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <string.h>
+
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/transforms/rewriter.h"
+#include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -134,6 +137,29 @@ static bool loom_scf_for_step_is_positive(loom_op_t* op,
   return !loom_value_facts_is_float(step) && loom_value_facts_is_positive(step);
 }
 
+static bool loom_scf_for_has_single_trip_count(loom_op_t* op,
+                                               loom_rewriter_t* rewriter) {
+  loom_value_facts_t lower_bound =
+      loom_rewriter_value_facts(rewriter, loom_scf_for_lower_bound(op));
+  loom_value_facts_t upper_bound =
+      loom_rewriter_value_facts(rewriter, loom_scf_for_upper_bound(op));
+  loom_value_facts_t step =
+      loom_rewriter_value_facts(rewriter, loom_scf_for_step(op));
+  if (loom_value_facts_is_float(lower_bound) ||
+      loom_value_facts_is_float(upper_bound) ||
+      loom_value_facts_is_float(step) || !loom_value_facts_is_positive(step)) {
+    return false;
+  }
+
+  if (lower_bound.range_hi >= upper_bound.range_lo) return false;
+  int64_t next_iv_lower_bound = 0;
+  if (!loom_checked_add_i64(lower_bound.range_lo, step.range_lo,
+                            &next_iv_lower_bound)) {
+    return false;
+  }
+  return next_iv_lower_bound >= upper_bound.range_hi;
+}
+
 static bool loom_scf_for_yields_loop_carried_args(loom_op_t* op) {
   loom_region_t* body = loom_scf_for_body(op);
   loom_op_t* yield = loom_scf_region_terminator(body);
@@ -156,6 +182,54 @@ static bool loom_scf_for_yields_loop_carried_args(loom_op_t* op) {
     }
   }
   return true;
+}
+
+static iree_status_t loom_scf_for_inline_single_trip(
+    loom_op_t* op, loom_rewriter_t* rewriter) {
+  if (!loom_scf_for_has_single_trip_count(op, rewriter)) {
+    return iree_ok_status();
+  }
+
+  loom_region_t* body = loom_scf_for_body(op);
+  loom_op_t* yield = loom_scf_region_terminator(body);
+  if (!yield) return iree_ok_status();
+
+  loom_value_slice_t iter_args = loom_scf_for_iter_args(op);
+  loom_value_slice_t yielded_values = loom_scf_yield_values(yield);
+  if (iter_args.count != op->result_count ||
+      yielded_values.count != op->result_count) {
+    return iree_ok_status();
+  }
+
+  loom_block_t* block = loom_region_entry_block(body);
+  if (block->arg_count < 1 + iter_args.count) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(
+      rewriter, loom_block_arg_id(block, 0), loom_scf_for_lower_bound(op)));
+  for (uint16_t i = 0; i < iter_args.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(
+        rewriter, loom_block_arg_id(block, (uint16_t)(1 + i)),
+        iter_args.values[i]));
+  }
+
+  loom_op_t* child_op = block->first_op;
+  while (child_op && child_op != yield) {
+    loom_op_t* next_child_op = child_op->next_op;
+    IREE_RETURN_IF_ERROR(loom_rewriter_move_before(rewriter, child_op, op));
+    child_op = next_child_op;
+  }
+
+  loom_value_id_t* replacements = NULL;
+  if (op->result_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        rewriter->arena, op->result_count, sizeof(*replacements),
+        (void**)&replacements));
+    yielded_values = loom_scf_yield_values(yield);
+    memcpy(replacements, yielded_values.values,
+           (iree_host_size_t)op->result_count * sizeof(*replacements));
+  }
+  return loom_scf_replace_results_and_erase(op, rewriter, replacements,
+                                            op->result_count);
 }
 
 static iree_status_t loom_scf_for_adjust_tied_results(
@@ -376,6 +450,8 @@ iree_status_t loom_scf_for_canonicalize(loom_op_t* op,
     return loom_scf_replace_results_and_erase(op, rewriter, iter_args.values,
                                               iter_args.count);
   }
+  IREE_RETURN_IF_ERROR(loom_scf_for_inline_single_trip(op, rewriter));
+  if (op->flags & LOOM_OP_FLAG_DEAD) return iree_ok_status();
   if (loom_scf_for_step_is_positive(op, rewriter) &&
       loom_scf_for_yields_loop_carried_args(op)) {
     return loom_scf_replace_results_and_erase(op, rewriter, iter_args.values,
