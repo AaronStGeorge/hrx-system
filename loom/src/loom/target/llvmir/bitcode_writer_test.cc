@@ -195,6 +195,73 @@ TEST(LlvmIrBitcodeWriterTest, WritesScalarBinopFunctionBodies) {
   EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
 }
 
+TEST(LlvmIrBitcodeWriterTest, WritesObjectVadd4MemoryFunctionBody) {
+  loom_llvmir_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_llvmir_test_module_build(
+      LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+
+  StreamPtr stream = CreateStream();
+  IREE_EXPECT_OK(
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
+  std::string bytes = StreamBytes(stream.get());
+  ASSERT_GE(bytes.size(), 8u);
+  EXPECT_EQ((uint8_t)bytes[0], LOOM_LLVMIR_BITCODE_MAGIC_0);
+  EXPECT_EQ((uint8_t)bytes[1], LOOM_LLVMIR_BITCODE_MAGIC_1);
+  EXPECT_EQ((uint8_t)bytes[2], LOOM_LLVMIR_BITCODE_MAGIC_2);
+  EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
+}
+
+TEST(LlvmIrBitcodeWriterTest, RejectsUnsupportedParameterAttrsBeforeWriting) {
+  const loom_llvmir_target_env_t* target_env =
+      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+  loom_llvmir_target_config_t target_config = {};
+  IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
+      target_env, IREE_SV("loom-unsupported-param-attrs"), &target_config));
+
+  loom_llvmir_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,
+                                             iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+
+  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_llvmir_module_get_void_type(module_ptr.get(), &void_type));
+  IREE_ASSERT_OK(loom_llvmir_module_get_pointer_type(
+      module_ptr.get(), target_env->address_spaces.generic, &ptr_type));
+
+  loom_llvmir_function_desc_t function_desc = {};
+  function_desc.kind = LOOM_LLVMIR_FUNCTION_DECLARATION;
+  function_desc.name = IREE_SV("uses_string_attr");
+  function_desc.return_type = void_type;
+  function_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  loom_llvmir_function_t* function = NULL;
+  IREE_ASSERT_OK(loom_llvmir_module_add_function(module_ptr.get(),
+                                                 &function_desc, &function));
+
+  loom_llvmir_attr_t unsupported_attr = {};
+  unsupported_attr.kind = LOOM_LLVMIR_ATTR_STRING_KEY;
+  unsupported_attr.type_id = LOOM_LLVMIR_TYPE_ID_INVALID;
+  unsupported_attr.key = IREE_SV("target-features");
+  loom_llvmir_parameter_desc_t parameter_desc = {};
+  parameter_desc.type_id = ptr_type;
+  parameter_desc.name = IREE_SV("buffer");
+  parameter_desc.attrs = &unsupported_attr;
+  parameter_desc.attr_count = 1;
+  loom_llvmir_value_id_t parameter = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_llvmir_function_add_parameter(function, &parameter_desc,
+                                                    &parameter));
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+
+  StreamPtr stream = CreateStream();
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
+  EXPECT_EQ(iree_io_stream_length(stream.get()), 0);
+}
+
 class LlvmIrBitcodeWriterTest
     : public testing::TestWithParam<loom_llvmir_test_module_scenario_t> {};
 
@@ -214,8 +281,7 @@ TEST_P(LlvmIrBitcodeWriterTest, RejectsUnsupportedModulesBeforeWriting) {
 
 INSTANTIATE_TEST_SUITE_P(
     All, LlvmIrBitcodeWriterTest,
-    testing::Values(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4,
-                    LOOM_LLVMIR_TEST_MODULE_INLINE_ASM,
+    testing::Values(LOOM_LLVMIR_TEST_MODULE_INLINE_ASM,
                     LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS),
     ScenarioTestName);
 
