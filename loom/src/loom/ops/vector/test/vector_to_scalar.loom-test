@@ -176,133 +176,251 @@ func.def @dynamic_float_math(%n: index, %a: vector<[%n]xf32>, %b: vector<[%n]xf3
 
 // ====
 
-// Integer wave-2 ops use the same descriptor-driven lane lowering path.
-func.def @static_integer_wave2(%a: vector<2xi32>, %b: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>) {
-  %sub = vector.subi<nuw> %a, %b : vector<2xi32>
-  %divs = vector.divsi %sub, %c : vector<2xi32>
-  %divu = vector.divui %a, %c : vector<2xi32>
-  %rems = vector.remsi %sub, %c : vector<2xi32>
-  %remu = vector.remui %a, %c : vector<2xi32>
-  %ceilsi = vector.ceildivsi %sub, %c : vector<2xi32>
-  %ceilui = vector.ceildivui %a, %c : vector<2xi32>
-  %floorsi = vector.floordivsi %sub, %c : vector<2xi32>
-  %neg = vector.negi %floorsi : vector<2xi32>
-  %abs = vector.absi %neg : vector<2xi32>
-  %minsi = vector.minsi %abs, %rems : vector<2xi32>
-  %maxsi = vector.maxsi %minsi, %remu : vector<2xi32>
-  %minui = vector.minui %maxsi, %divu : vector<2xi32>
-  %maxui = vector.maxui %minui, %divs : vector<2xi32>
-  %fma = vector.fmai<nsw> %maxui, %b, %ceilsi : vector<2xi32>
-  %shl = vector.shli<nuw> %fma, %c : vector<2xi32>
-  %shrs = vector.shrsi %shl, %c : vector<2xi32>
-  %shru = vector.shrui %shl, %c : vector<2xi32>
-  %rotl = vector.rotli %shrs, %c : vector<2xi32>
-  %rotr = vector.rotri %shru, %c : vector<2xi32>
-  %clz = vector.ctlzi %rotl : vector<2xi32>
-  %ctz = vector.cttzi %rotr : vector<2xi32>
-  %pop = vector.ctpopi %ctz : vector<2xi32>
-  %r = vector.signi %pop : vector<2xi32>
-  test.use %ceilui : vector<2xi32>
+// Integer subtraction keeps overflow flags on the scalarized operation.
+func.def @static_integer_sub_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>) {
+  %r = vector.subi<nuw> %a, %b : vector<2xi32>
   func.return %r : vector<2xi32>
 }
 
 // ----
-func.def @static_integer_wave2(%a: vector<2xi32>, %b: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>) {
-  %115 = vector.extract %a[0] : vector<2xi32> -> i32
-  %116 = vector.extract %c[0] : vector<2xi32> -> i32
-  %117 = scalar.ceildivui %115, %116 : i32
-  %118 = vector.extract %a[1] : vector<2xi32> -> i32
-  %119 = vector.extract %c[1] : vector<2xi32> -> i32
-  %120 = scalar.ceildivui %118, %119 : i32
-  %ceilui = vector.from_elements %117, %120 : i32, i32 -> vector<2xi32>
-  %28 = vector.extract %a[0] : vector<2xi32> -> i32
-  %29 = vector.extract %b[0] : vector<2xi32> -> i32
-  %30 = scalar.subi<nuw> %28, %29 : i32
-  %31 = vector.extract %c[0] : vector<2xi32> -> i32
-  %32 = scalar.floordivsi %30, %31 : i32
-  %33 = scalar.negi %32 : i32
-  %34 = scalar.absi %33 : i32
-  %35 = vector.extract %a[0] : vector<2xi32> -> i32
-  %36 = vector.extract %b[0] : vector<2xi32> -> i32
-  %37 = scalar.subi<nuw> %35, %36 : i32
-  %38 = vector.extract %c[0] : vector<2xi32> -> i32
-  %39 = scalar.remsi %37, %38 : i32
-  %40 = scalar.minsi %34, %39 : i32
-  %41 = vector.extract %a[0] : vector<2xi32> -> i32
-  %42 = vector.extract %c[0] : vector<2xi32> -> i32
-  %43 = scalar.remui %41, %42 : i32
-  %44 = scalar.maxsi %40, %43 : i32
-  %45 = vector.extract %a[0] : vector<2xi32> -> i32
-  %46 = vector.extract %c[0] : vector<2xi32> -> i32
-  %47 = scalar.divui %45, %46 : i32
-  %48 = scalar.minui %44, %47 : i32
-  %49 = vector.extract %a[0] : vector<2xi32> -> i32
-  %50 = vector.extract %b[0] : vector<2xi32> -> i32
-  %51 = scalar.subi<nuw> %49, %50 : i32
-  %52 = vector.extract %c[0] : vector<2xi32> -> i32
-  %53 = scalar.divsi %51, %52 : i32
-  %54 = scalar.maxui %48, %53 : i32
-  %55 = vector.extract %b[0] : vector<2xi32> -> i32
-  %56 = vector.extract %a[0] : vector<2xi32> -> i32
-  %57 = vector.extract %b[0] : vector<2xi32> -> i32
-  %58 = scalar.subi<nuw> %56, %57 : i32
-  %59 = vector.extract %c[0] : vector<2xi32> -> i32
-  %60 = scalar.ceildivsi %58, %59 : i32
-  %61 = scalar.fmai<nsw> %54, %55, %60 : i32
-  %62 = vector.extract %c[0] : vector<2xi32> -> i32
-  %63 = scalar.shli<nuw> %61, %62 : i32
-  %64 = vector.extract %c[0] : vector<2xi32> -> i32
-  %65 = scalar.shrui %63, %64 : i32
-  %66 = vector.extract %c[0] : vector<2xi32> -> i32
-  %67 = scalar.rotri %65, %66 : i32
-  %68 = scalar.cttzi %67 : i32
-  %69 = scalar.ctpopi %68 : i32
-  %70 = scalar.signi %69 : i32
-  %71 = vector.extract %a[1] : vector<2xi32> -> i32
-  %72 = vector.extract %b[1] : vector<2xi32> -> i32
-  %73 = scalar.subi<nuw> %71, %72 : i32
-  %74 = vector.extract %c[1] : vector<2xi32> -> i32
-  %75 = scalar.floordivsi %73, %74 : i32
-  %76 = scalar.negi %75 : i32
-  %77 = scalar.absi %76 : i32
-  %78 = vector.extract %a[1] : vector<2xi32> -> i32
-  %79 = vector.extract %b[1] : vector<2xi32> -> i32
-  %80 = scalar.subi<nuw> %78, %79 : i32
-  %81 = vector.extract %c[1] : vector<2xi32> -> i32
-  %82 = scalar.remsi %80, %81 : i32
-  %83 = scalar.minsi %77, %82 : i32
-  %84 = vector.extract %a[1] : vector<2xi32> -> i32
-  %85 = vector.extract %c[1] : vector<2xi32> -> i32
-  %86 = scalar.remui %84, %85 : i32
-  %87 = scalar.maxsi %83, %86 : i32
-  %88 = vector.extract %a[1] : vector<2xi32> -> i32
-  %89 = vector.extract %c[1] : vector<2xi32> -> i32
-  %90 = scalar.divui %88, %89 : i32
-  %91 = scalar.minui %87, %90 : i32
-  %92 = vector.extract %a[1] : vector<2xi32> -> i32
-  %93 = vector.extract %b[1] : vector<2xi32> -> i32
-  %94 = scalar.subi<nuw> %92, %93 : i32
-  %95 = vector.extract %c[1] : vector<2xi32> -> i32
-  %96 = scalar.divsi %94, %95 : i32
-  %97 = scalar.maxui %91, %96 : i32
-  %98 = vector.extract %b[1] : vector<2xi32> -> i32
-  %99 = vector.extract %a[1] : vector<2xi32> -> i32
-  %100 = vector.extract %b[1] : vector<2xi32> -> i32
-  %101 = scalar.subi<nuw> %99, %100 : i32
-  %102 = vector.extract %c[1] : vector<2xi32> -> i32
-  %103 = scalar.ceildivsi %101, %102 : i32
-  %104 = scalar.fmai<nsw> %97, %98, %103 : i32
-  %105 = vector.extract %c[1] : vector<2xi32> -> i32
-  %106 = scalar.shli<nuw> %104, %105 : i32
-  %107 = vector.extract %c[1] : vector<2xi32> -> i32
-  %108 = scalar.shrui %106, %107 : i32
-  %109 = vector.extract %c[1] : vector<2xi32> -> i32
-  %110 = scalar.rotri %108, %109 : i32
-  %111 = scalar.cttzi %110 : i32
-  %112 = scalar.ctpopi %111 : i32
-  %113 = scalar.signi %112 : i32
-  %r = vector.from_elements %70, %113 : i32, i32 -> vector<2xi32>
-  test.use %ceilui : vector<2xi32>
+func.def @static_integer_sub_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>) {
+  %4 = vector.extract %a[0] : vector<2xi32> -> i32
+  %5 = vector.extract %b[0] : vector<2xi32> -> i32
+  %6 = scalar.subi<nuw> %4, %5 : i32
+  %7 = vector.extract %a[1] : vector<2xi32> -> i32
+  %8 = vector.extract %b[1] : vector<2xi32> -> i32
+  %9 = scalar.subi<nuw> %7, %8 : i32
+  %r = vector.from_elements %6, %9 : i32, i32 -> vector<2xi32>
+  func.return %r : vector<2xi32>
+}
+
+// ====
+
+// Integer division spelling carries signedness and rounding mode explicitly.
+func.def @static_integer_division_wave2(%a: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>) {
+  %divs = vector.divsi %a, %c : vector<2xi32>
+  %divu = vector.divui %a, %c : vector<2xi32>
+  %ceilsi = vector.ceildivsi %a, %c : vector<2xi32>
+  %ceilui = vector.ceildivui %a, %c : vector<2xi32>
+  %floorsi = vector.floordivsi %a, %c : vector<2xi32>
+  func.return %divs, %divu, %ceilsi, %ceilui, %floorsi : vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>
+}
+
+// ----
+func.def @static_integer_division_wave2(%a: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>) {
+  %40 = vector.extract %a[0] : vector<2xi32> -> i32
+  %41 = vector.extract %c[0] : vector<2xi32> -> i32
+  %42 = scalar.divsi %40, %41 : i32
+  %43 = vector.extract %a[1] : vector<2xi32> -> i32
+  %44 = vector.extract %c[1] : vector<2xi32> -> i32
+  %45 = scalar.divsi %43, %44 : i32
+  %divs = vector.from_elements %42, %45 : i32, i32 -> vector<2xi32>
+  %33 = vector.extract %a[0] : vector<2xi32> -> i32
+  %34 = vector.extract %c[0] : vector<2xi32> -> i32
+  %35 = scalar.divui %33, %34 : i32
+  %36 = vector.extract %a[1] : vector<2xi32> -> i32
+  %37 = vector.extract %c[1] : vector<2xi32> -> i32
+  %38 = scalar.divui %36, %37 : i32
+  %divu = vector.from_elements %35, %38 : i32, i32 -> vector<2xi32>
+  %26 = vector.extract %a[0] : vector<2xi32> -> i32
+  %27 = vector.extract %c[0] : vector<2xi32> -> i32
+  %28 = scalar.ceildivsi %26, %27 : i32
+  %29 = vector.extract %a[1] : vector<2xi32> -> i32
+  %30 = vector.extract %c[1] : vector<2xi32> -> i32
+  %31 = scalar.ceildivsi %29, %30 : i32
+  %ceilsi = vector.from_elements %28, %31 : i32, i32 -> vector<2xi32>
+  %19 = vector.extract %a[0] : vector<2xi32> -> i32
+  %20 = vector.extract %c[0] : vector<2xi32> -> i32
+  %21 = scalar.ceildivui %19, %20 : i32
+  %22 = vector.extract %a[1] : vector<2xi32> -> i32
+  %23 = vector.extract %c[1] : vector<2xi32> -> i32
+  %24 = scalar.ceildivui %22, %23 : i32
+  %ceilui = vector.from_elements %21, %24 : i32, i32 -> vector<2xi32>
+  %12 = vector.extract %a[0] : vector<2xi32> -> i32
+  %13 = vector.extract %c[0] : vector<2xi32> -> i32
+  %14 = scalar.floordivsi %12, %13 : i32
+  %15 = vector.extract %a[1] : vector<2xi32> -> i32
+  %16 = vector.extract %c[1] : vector<2xi32> -> i32
+  %17 = scalar.floordivsi %15, %16 : i32
+  %floorsi = vector.from_elements %14, %17 : i32, i32 -> vector<2xi32>
+  func.return %divs, %divu, %ceilsi, %ceilui, %floorsi : vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>
+}
+
+// ====
+
+// Integer remainders lower directly to the matching scalar signedness.
+func.def @static_integer_remainder_wave2(%a: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  %rems = vector.remsi %a, %c : vector<2xi32>
+  %remu = vector.remui %a, %c : vector<2xi32>
+  func.return %rems, %remu : vector<2xi32>, vector<2xi32>
+}
+
+// ----
+func.def @static_integer_remainder_wave2(%a: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  %13 = vector.extract %a[0] : vector<2xi32> -> i32
+  %14 = vector.extract %c[0] : vector<2xi32> -> i32
+  %15 = scalar.remsi %13, %14 : i32
+  %16 = vector.extract %a[1] : vector<2xi32> -> i32
+  %17 = vector.extract %c[1] : vector<2xi32> -> i32
+  %18 = scalar.remsi %16, %17 : i32
+  %rems = vector.from_elements %15, %18 : i32, i32 -> vector<2xi32>
+  %6 = vector.extract %a[0] : vector<2xi32> -> i32
+  %7 = vector.extract %c[0] : vector<2xi32> -> i32
+  %8 = scalar.remui %6, %7 : i32
+  %9 = vector.extract %a[1] : vector<2xi32> -> i32
+  %10 = vector.extract %c[1] : vector<2xi32> -> i32
+  %11 = scalar.remui %9, %10 : i32
+  %remu = vector.from_elements %8, %11 : i32, i32 -> vector<2xi32>
+  func.return %rems, %remu : vector<2xi32>, vector<2xi32>
+}
+
+// ====
+
+// Integer unary ops materialize one scalar lane per vector lane.
+func.def @static_integer_unary_wave2(%a: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  %neg = vector.negi %a : vector<2xi32>
+  %abs = vector.absi %neg : vector<2xi32>
+  func.return %neg, %abs : vector<2xi32>, vector<2xi32>
+}
+
+// ----
+func.def @static_integer_unary_wave2(%a: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  %12 = vector.extract %a[0] : vector<2xi32> -> i32
+  %13 = scalar.negi %12 : i32
+  %14 = vector.extract %a[1] : vector<2xi32> -> i32
+  %15 = scalar.negi %14 : i32
+  %neg = vector.from_elements %13, %15 : i32, i32 -> vector<2xi32>
+  %5 = vector.extract %a[0] : vector<2xi32> -> i32
+  %6 = scalar.negi %5 : i32
+  %7 = scalar.absi %6 : i32
+  %8 = vector.extract %a[1] : vector<2xi32> -> i32
+  %9 = scalar.negi %8 : i32
+  %10 = scalar.absi %9 : i32
+  %abs = vector.from_elements %7, %10 : i32, i32 -> vector<2xi32>
+  func.return %neg, %abs : vector<2xi32>, vector<2xi32>
+}
+
+// ====
+
+// Integer min/max ops keep signed and unsigned ordering distinct.
+func.def @static_integer_minmax_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>) {
+  %minsi = vector.minsi %a, %b : vector<2xi32>
+  %maxsi = vector.maxsi %a, %b : vector<2xi32>
+  %minui = vector.minui %a, %b : vector<2xi32>
+  %maxui = vector.maxui %a, %b : vector<2xi32>
+  func.return %minsi, %maxsi, %minui, %maxui : vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>
+}
+
+// ----
+func.def @static_integer_minmax_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>) {
+  %31 = vector.extract %a[0] : vector<2xi32> -> i32
+  %32 = vector.extract %b[0] : vector<2xi32> -> i32
+  %33 = scalar.minsi %31, %32 : i32
+  %34 = vector.extract %a[1] : vector<2xi32> -> i32
+  %35 = vector.extract %b[1] : vector<2xi32> -> i32
+  %36 = scalar.minsi %34, %35 : i32
+  %minsi = vector.from_elements %33, %36 : i32, i32 -> vector<2xi32>
+  %24 = vector.extract %a[0] : vector<2xi32> -> i32
+  %25 = vector.extract %b[0] : vector<2xi32> -> i32
+  %26 = scalar.maxsi %24, %25 : i32
+  %27 = vector.extract %a[1] : vector<2xi32> -> i32
+  %28 = vector.extract %b[1] : vector<2xi32> -> i32
+  %29 = scalar.maxsi %27, %28 : i32
+  %maxsi = vector.from_elements %26, %29 : i32, i32 -> vector<2xi32>
+  %17 = vector.extract %a[0] : vector<2xi32> -> i32
+  %18 = vector.extract %b[0] : vector<2xi32> -> i32
+  %19 = scalar.minui %17, %18 : i32
+  %20 = vector.extract %a[1] : vector<2xi32> -> i32
+  %21 = vector.extract %b[1] : vector<2xi32> -> i32
+  %22 = scalar.minui %20, %21 : i32
+  %minui = vector.from_elements %19, %22 : i32, i32 -> vector<2xi32>
+  %10 = vector.extract %a[0] : vector<2xi32> -> i32
+  %11 = vector.extract %b[0] : vector<2xi32> -> i32
+  %12 = scalar.maxui %10, %11 : i32
+  %13 = vector.extract %a[1] : vector<2xi32> -> i32
+  %14 = vector.extract %b[1] : vector<2xi32> -> i32
+  %15 = scalar.maxui %13, %14 : i32
+  %maxui = vector.from_elements %12, %15 : i32, i32 -> vector<2xi32>
+  func.return %minsi, %maxsi, %minui, %maxui : vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>
+}
+
+// ====
+
+// Integer fma preserves overflow flags on the scalarized operation.
+func.def @static_integer_fma_wave2(%a: vector<2xi32>, %b: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>) {
+  %fma = vector.fmai<nsw> %a, %b, %c : vector<2xi32>
+  func.return %fma : vector<2xi32>
+}
+
+// ----
+func.def @static_integer_fma_wave2(%a: vector<2xi32>, %b: vector<2xi32>, %c: vector<2xi32>) -> (vector<2xi32>) {
+  %5 = vector.extract %a[0] : vector<2xi32> -> i32
+  %6 = vector.extract %b[0] : vector<2xi32> -> i32
+  %7 = vector.extract %c[0] : vector<2xi32> -> i32
+  %8 = scalar.fmai<nsw> %5, %6, %7 : i32
+  %9 = vector.extract %a[1] : vector<2xi32> -> i32
+  %10 = vector.extract %b[1] : vector<2xi32> -> i32
+  %11 = vector.extract %c[1] : vector<2xi32> -> i32
+  %12 = scalar.fmai<nsw> %9, %10, %11 : i32
+  %fma = vector.from_elements %8, %12 : i32, i32 -> vector<2xi32>
+  func.return %fma : vector<2xi32>
+}
+
+// ====
+
+// Integer shifts preserve overflow flags independently from fma.
+func.def @static_integer_shift_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  %shl = vector.shli<nuw> %a, %b : vector<2xi32>
+  %shru = vector.shrui %a, %b : vector<2xi32>
+  func.return %shl, %shru : vector<2xi32>, vector<2xi32>
+}
+
+// ----
+func.def @static_integer_shift_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
+  %13 = vector.extract %a[0] : vector<2xi32> -> i32
+  %14 = vector.extract %b[0] : vector<2xi32> -> i32
+  %15 = scalar.shli<nuw> %13, %14 : i32
+  %16 = vector.extract %a[1] : vector<2xi32> -> i32
+  %17 = vector.extract %b[1] : vector<2xi32> -> i32
+  %18 = scalar.shli<nuw> %16, %17 : i32
+  %shl = vector.from_elements %15, %18 : i32, i32 -> vector<2xi32>
+  %6 = vector.extract %a[0] : vector<2xi32> -> i32
+  %7 = vector.extract %b[0] : vector<2xi32> -> i32
+  %8 = scalar.shrui %6, %7 : i32
+  %9 = vector.extract %a[1] : vector<2xi32> -> i32
+  %10 = vector.extract %b[1] : vector<2xi32> -> i32
+  %11 = scalar.shrui %9, %10 : i32
+  %shru = vector.from_elements %8, %11 : i32, i32 -> vector<2xi32>
+  func.return %shl, %shru : vector<2xi32>, vector<2xi32>
+}
+
+// ====
+
+// Rotate, population-count, and sign ops are still represented as a short
+// producer chain so the pass keeps exercising recursive lane materialization.
+func.def @static_integer_rotate_count_sign_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>) {
+  %rotr = vector.rotri %a, %b : vector<2xi32>
+  %ctz = vector.cttzi %rotr : vector<2xi32>
+  %pop = vector.ctpopi %ctz : vector<2xi32>
+  %r = vector.signi %pop : vector<2xi32>
+  func.return %r : vector<2xi32>
+}
+
+// ----
+func.def @static_integer_rotate_count_sign_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vector<2xi32>) {
+  %7 = vector.extract %a[0] : vector<2xi32> -> i32
+  %8 = vector.extract %b[0] : vector<2xi32> -> i32
+  %9 = scalar.rotri %7, %8 : i32
+  %10 = scalar.cttzi %9 : i32
+  %11 = scalar.ctpopi %10 : i32
+  %12 = scalar.signi %11 : i32
+  %13 = vector.extract %a[1] : vector<2xi32> -> i32
+  %14 = vector.extract %b[1] : vector<2xi32> -> i32
+  %15 = scalar.rotri %13, %14 : i32
+  %16 = scalar.cttzi %15 : i32
+  %17 = scalar.ctpopi %16 : i32
+  %18 = scalar.signi %17 : i32
+  %r = vector.from_elements %12, %18 : i32, i32 -> vector<2xi32>
   func.return %r : vector<2xi32>
 }
 
@@ -1029,8 +1147,94 @@ func.def @dynamic_dot4i(%n: index, %m: index, %lhs: vector<[%n]xi8>, %rhs: vecto
 
 // ====
 
-// Static bitpack covers odd field widths whose fields cross storage lane
-// boundaries.
+// A q4 pair is the smallest useful bitpack example: two four-bit codes become
+// one packed byte.
+func.def @static_bitpack_q4_pair(%codes: vector<2xi8>) -> (vector<1xi8>) {
+  %r = vector.bitpack<4> %codes : vector<2xi8> -> vector<1xi8>
+  func.return %r : vector<1xi8>
+}
+
+// ----
+func.def @static_bitpack_q4_pair(%codes: vector<2xi8>) -> (vector<1xi8>) {
+  %3 = scalar.constant 0 : i8
+  %4 = vector.extract %codes[0] : vector<2xi8> -> i8
+  %5 = scalar.constant 15 : i8
+  %6 = scalar.andi %4, %5 : i8
+  %7 = scalar.ori %3, %6 : i8
+  %8 = vector.extract %codes[1] : vector<2xi8> -> i8
+  %9 = scalar.constant 15 : i8
+  %10 = scalar.andi %8, %9 : i8
+  %11 = scalar.constant 4 : i8
+  %12 = scalar.shli %10, %11 : i8
+  %13 = scalar.ori %7, %12 : i8
+  %r = vector.from_elements %13 : i8 -> vector<1xi8>
+  func.return %r : vector<1xi8>
+}
+
+// ====
+
+// Unsigned q4 unpacking reverses the pair example without sign extension.
+func.def @static_bitunpacku_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
+  %r = vector.bitunpacku<4> %packed : vector<1xi8> -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ----
+func.def @static_bitunpacku_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
+  %3 = scalar.constant 0 : i8
+  %4 = vector.extract %packed[0] : vector<1xi8> -> i8
+  %5 = scalar.constant 15 : i8
+  %6 = scalar.andi %4, %5 : i8
+  %7 = scalar.ori %3, %6 : i8
+  %8 = scalar.constant 0 : i8
+  %9 = vector.extract %packed[0] : vector<1xi8> -> i8
+  %10 = scalar.constant 4 : i8
+  %11 = scalar.shrui %9, %10 : i8
+  %12 = scalar.constant 15 : i8
+  %13 = scalar.andi %11, %12 : i8
+  %14 = scalar.ori %8, %13 : i8
+  %r = vector.from_elements %7, %14 : i8, i8 -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ====
+
+// Signed q4 unpacking extracts the same fields and sign-extends each lane.
+func.def @static_bitunpacks_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
+  %r = vector.bitunpacks<4> %packed : vector<1xi8> -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ----
+func.def @static_bitunpacks_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
+  %3 = scalar.constant 0 : i8
+  %4 = vector.extract %packed[0] : vector<1xi8> -> i8
+  %5 = scalar.constant 15 : i8
+  %6 = scalar.andi %4, %5 : i8
+  %7 = scalar.ori %3, %6 : i8
+  %8 = scalar.constant 4 : i8
+  %9 = scalar.shli %7, %8 : i8
+  %10 = scalar.constant 4 : i8
+  %11 = scalar.shrsi %9, %10 : i8
+  %12 = scalar.constant 0 : i8
+  %13 = vector.extract %packed[0] : vector<1xi8> -> i8
+  %14 = scalar.constant 4 : i8
+  %15 = scalar.shrui %13, %14 : i8
+  %16 = scalar.constant 15 : i8
+  %17 = scalar.andi %15, %16 : i8
+  %18 = scalar.ori %12, %17 : i8
+  %19 = scalar.constant 4 : i8
+  %20 = scalar.shli %18, %19 : i8
+  %21 = scalar.constant 4 : i8
+  %22 = scalar.shrsi %20, %21 : i8
+  %r = vector.from_elements %11, %22 : i8, i8 -> vector<2xi8>
+  func.return %r : vector<2xi8>
+}
+
+// ====
+
+// Static bitpack stress coverage uses odd field widths whose fields cross
+// storage lane boundaries.
 func.def @static_bitpack_q3(%codes: vector<8xi8>) -> (vector<3xi8>) {
   %r = vector.bitpack<3> %codes : vector<8xi8> -> vector<3xi8>
   func.return %r : vector<3xi8>

@@ -31,8 +31,9 @@ func.def @construction(%x: f32, %i: i32, %n: index) {
 
 // ====
 
-// Lanewise arithmetic follows scalar spelling and keeps vector/vector operands.
-func.def @lanewise(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>, %i: vector<16xi32>, %j: vector<16xi32>) {
+// Float lanewise arithmetic follows scalar spelling and keeps vector/vector
+// operands.
+func.def @lanewise_float_arithmetic(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>) {
   %sum = vector.addf %a, %b : vector<16xf32>
   %diff = vector.subf %sum, %c : vector<16xf32>
   %prod = vector.mulf<nnan> %diff, %c : vector<16xf32>
@@ -46,6 +47,15 @@ func.def @lanewise(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>, %
   %maxnum = vector.maxnumf %min, %max : vector<16xf32>
   %signed = vector.copysignf %minnum, %maxnum : vector<16xf32>
   %fma = vector.fmaf %a, %b, %signed : vector<16xf32>
+  test.use %signed, %fma : vector<16xf32>, vector<16xf32>
+  func.return
+}
+
+// ====
+
+// Integer arithmetic keeps overflow and signedness semantics visible in the op
+// spelling.
+func.def @lanewise_integer_arithmetic(%i: vector<16xi32>, %j: vector<16xi32>) {
   %isum = vector.addi<nuw> %i, %j : vector<16xi32>
   %idiff = vector.subi<nsw> %isum, %j : vector<16xi32>
   %iprod = vector.muli %idiff, %j : vector<16xi32>
@@ -63,7 +73,16 @@ func.def @lanewise(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>, %
   %iminui = vector.minui %imaxsi, %iremui : vector<16xi32>
   %imaxui = vector.maxui %iminsi, %idivui : vector<16xi32>
   %ifmai = vector.fmai<nuw> %iminui, %imaxui, %idivsi : vector<16xi32>
-  %and = vector.andi %ifmai, %j : vector<16xi32>
+  test.use %idivsi, %idivui, %iceilsi, %iceilui, %ifloorsi, %iminsi, %imaxsi, %iminui, %imaxui, %ifmai : vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>
+  func.return
+}
+
+// ====
+
+// Integer bitwise operations include shifts, rotates, and bit counts.
+func.def @lanewise_integer_bits(%i: vector<16xi32>, %j: vector<16xi32>) {
+  %isum = vector.addi %i, %j : vector<16xi32>
+  %and = vector.andi %isum, %j : vector<16xi32>
   %or = vector.ori %and, %i : vector<16xi32>
   %xor = vector.xori %or, %j : vector<16xi32>
   %shl = vector.shli<nuw> %xor, %j : vector<16xi32>
@@ -74,21 +93,29 @@ func.def @lanewise(%a: vector<16xf32>, %b: vector<16xf32>, %c: vector<16xf32>, %
   %clz = vector.ctlzi %rotl : vector<16xi32>
   %ctz = vector.cttzi %rotr : vector<16xi32>
   %pop = vector.ctpopi %xor : vector<16xi32>
-  %fsign = vector.signf %signed : vector<16xf32>
-  %isign = vector.signi %xor : vector<16xi32>
-  %isnan = vector.isnanf %a : vector<16xf32> -> vector<16xi1>
-  %isinf = vector.isinff %b : vector<16xf32> -> vector<16xi1>
-  %isfinite = vector.isfinitef %c : vector<16xf32> -> vector<16xi1>
-  %root = vector.sqrtf %prod : vector<16xf32>
-  test.use %fma, %idivsi, %idivui, %iceilsi, %iceilui, %iminsi, %imaxui, %ifmai, %clz, %ctz, %pop, %fsign, %isign, %isnan, %isinf, %isfinite, %root : vector<16xf32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xf32>, vector<16xi32>, vector<16xi1>, vector<16xi1>, vector<16xi1>, vector<16xf32>
+  test.use %clz, %ctz, %pop : vector<16xi32>, vector<16xi32>, vector<16xi32>
   func.return
 }
 
 // ====
 
-// Lanewise math mirrors scalar spelling so agents can author vectorized
-// activations, softmax, normalization, and special-function reference paths.
-func.def @lanewise_math(%a: vector<16xf32>, %b: vector<16xf32>) {
+// Predicate and sign operations can change element types while preserving the
+// vector shape.
+func.def @lanewise_predicate_sign(%a: vector<16xf32>, %i: vector<16xi32>) {
+  %fsign = vector.signf %a : vector<16xf32>
+  %isign = vector.signi %i : vector<16xi32>
+  %isnan = vector.isnanf %a : vector<16xf32> -> vector<16xi1>
+  %isinf = vector.isinff %a : vector<16xf32> -> vector<16xi1>
+  %isfinite = vector.isfinitef %a : vector<16xf32> -> vector<16xi1>
+  test.use %fsign, %isign, %isnan, %isinf, %isfinite : vector<16xf32>, vector<16xi32>, vector<16xi1>, vector<16xi1>, vector<16xi1>
+  func.return
+}
+
+// ====
+
+// Exp/log math mirrors scalar spelling for activation and normalization
+// reference paths.
+func.def @lanewise_math_exp_log(%a: vector<16xf32>) {
   %exp = vector.expf %a : vector<16xf32>
   %exp2 = vector.exp2f %a : vector<16xf32>
   %expm1 = vector.expm1f %a : vector<16xf32>
@@ -96,10 +123,24 @@ func.def @lanewise_math(%a: vector<16xf32>, %b: vector<16xf32>) {
   %log2 = vector.log2f %exp2 : vector<16xf32>
   %log10 = vector.log10f %exp : vector<16xf32>
   %log1p = vector.log1pf %expm1 : vector<16xf32>
+  test.use %log, %log2, %log10, %log1p : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
+  func.return
+}
+
+// ====
+
+func.def @lanewise_math_power_roots(%a: vector<16xf32>, %b: vector<16xf32>) {
   %pow = vector.powf %a, %b : vector<16xf32>
   %sqrt = vector.sqrtf %pow : vector<16xf32>
   %rsqrt = vector.rsqrtf %pow : vector<16xf32>
   %cbrt = vector.cbrtf %pow : vector<16xf32>
+  test.use %sqrt, %rsqrt, %cbrt : vector<16xf32>, vector<16xf32>, vector<16xf32>
+  func.return
+}
+
+// ====
+
+func.def @lanewise_math_trig(%a: vector<16xf32>, %b: vector<16xf32>) {
   %sin = vector.sinf %a : vector<16xf32>
   %cos = vector.cosf %a : vector<16xf32>
   %tan = vector.tanf %a : vector<16xf32>
@@ -107,12 +148,26 @@ func.def @lanewise_math(%a: vector<16xf32>, %b: vector<16xf32>) {
   %acos = vector.acosf %a : vector<16xf32>
   %atan = vector.atanf %a : vector<16xf32>
   %atan2 = vector.atan2f %a, %b : vector<16xf32>
+  test.use %sin, %cos, %tan, %asin, %acos, %atan, %atan2 : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
+  func.return
+}
+
+// ====
+
+func.def @lanewise_math_hyperbolic(%a: vector<16xf32>) {
   %sinh = vector.sinhf %a : vector<16xf32>
   %cosh = vector.coshf %a : vector<16xf32>
   %tanh = vector.tanhf %a : vector<16xf32>
   %asinh = vector.asinhf %a : vector<16xf32>
   %acosh = vector.acoshf %a : vector<16xf32>
   %atanh = vector.atanhf %a : vector<16xf32>
+  test.use %sinh, %cosh, %tanh, %asinh, %acosh, %atanh : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
+  func.return
+}
+
+// ====
+
+func.def @lanewise_math_rounding(%a: vector<16xf32>) {
   %erf = vector.erff %a : vector<16xf32>
   %erfc = vector.erfcf %a : vector<16xf32>
   %ceil = vector.ceilf %a : vector<16xf32>
@@ -120,7 +175,7 @@ func.def @lanewise_math(%a: vector<16xf32>, %b: vector<16xf32>) {
   %round = vector.roundf %a : vector<16xf32>
   %roundeven = vector.roundevenf %a : vector<16xf32>
   %trunc = vector.truncf %a : vector<16xf32>
-  test.use %log, %log2, %log10, %log1p, %sqrt, %rsqrt, %cbrt, %sin, %cos, %tan, %asin, %acos, %atan, %atan2, %sinh, %cosh, %tanh, %asinh, %acosh, %atanh, %erf, %erfc, %ceil, %floor, %round, %roundeven, %trunc : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
+  test.use %erf, %erfc, %ceil, %floor, %round, %roundeven, %trunc : vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>
   func.return
 }
 
