@@ -148,6 +148,7 @@ TRAIT_MAP: dict[str, str] = {
     "UnknownEffects": "LOOM_TRAIT_UNKNOWN_EFFECTS",
     "UniqueIdentity": "LOOM_TRAIT_UNIQUE_IDENTITY",
     "Hint": "LOOM_TRAIT_HINT",
+    "SafeToSpeculate": "LOOM_TRAIT_SAFE_TO_SPECULATE",
 }
 
 # Maps Python constraint names to (relation, property) C enum pairs.

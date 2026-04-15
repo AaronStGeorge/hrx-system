@@ -54,7 +54,9 @@ extern "C" {
 // (just a module reference). For CFG regions it will cache dominator
 // trees allocated from the arena.
 typedef struct loom_dominance_info_t {
+  // Module containing the IR being queried.
   const loom_module_t* module;
+  // Scratch arena reserved for future CFG dominance caches.
   iree_arena_allocator_t* arena;
 } loom_dominance_info_t;
 
@@ -101,6 +103,34 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
 // all ops in nested regions (subject to isolation boundaries).
 bool loom_dominates_value(const loom_dominance_info_t* info,
                           loom_value_id_t value_id, const loom_op_t* use_op);
+
+// Returns true if |value_id| can be referenced by an op inserted immediately
+// before |before_op|.
+//
+// This differs from plain dominance for values defined by |before_op| itself:
+// an op result self-dominates for ordinary use-site queries, but it is not
+// available before the defining op. Invalid value IDs are treated as
+// unavailable so analyses can be conservative on malformed IR while verifiers
+// own structured user diagnostics.
+bool loom_value_is_available_before_op(const loom_dominance_info_t* info,
+                                       loom_value_id_t value_id,
+                                       const loom_op_t* before_op);
+
+// Returns true if every SSA value referenced by |type| can be referenced by an
+// op inserted immediately before |before_op|.
+//
+// This walks dynamic dimensions, dynamic pool sizes, SSA encodings/layouts, and
+// nested function/dialect type parameters. Static types with no SSA references
+// are always available.
+bool loom_type_is_available_before_op(const loom_dominance_info_t* info,
+                                      loom_type_t type,
+                                      const loom_op_t* before_op);
+
+// Returns true if the type of |value_id| can be materialized immediately before
+// |before_op|. Invalid value IDs are treated as unavailable.
+bool loom_value_type_is_available_before_op(const loom_dominance_info_t* info,
+                                            loom_value_id_t value_id,
+                                            const loom_op_t* before_op);
 
 #ifdef __cplusplus
 }

@@ -315,7 +315,9 @@ static loom_trait_flags_t BadHintPureEffectiveTraits(const loom_op_t* op) {
   return LOOM_TRAIT_HINT | LOOM_TRAIT_PURE;
 }
 
-static void ExpectBadHintTraitDiagnostic(const loom_op_vtable_t* bad_vtable) {
+static void ExpectBadTraitDiagnostic(const loom_op_vtable_t* bad_vtable,
+                                     const char* op_name, const char* trait_a,
+                                     const char* trait_b) {
   iree_arena_block_pool_t block_pool;
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
 
@@ -374,9 +376,9 @@ static void ExpectBadHintTraitDiagnostic(const loom_op_vtable_t* bad_vtable) {
       FindDiagnostic(capture, &loom_err_structure_016);
   ASSERT_NE(entry, nullptr)
       << "Expected STRUCTURE/016 incompatible-traits error";
-  EXPECT_EQ(GetStringParam(*entry, 0), "bad.hint");
-  EXPECT_EQ(GetStringParam(*entry, 1), "HINT");
-  EXPECT_EQ(GetStringParam(*entry, 2), "PURE");
+  EXPECT_EQ(GetStringParam(*entry, 0), op_name);
+  EXPECT_EQ(GetStringParam(*entry, 1), trait_a);
+  EXPECT_EQ(GetStringParam(*entry, 2), trait_b);
 
   loom_module_free(module);
   loom_context_deinitialize(&context);
@@ -391,7 +393,7 @@ TEST(VerifyTraitConsistencyTest, RejectsDeclaredIncompatibleHintTraits) {
       .traits = LOOM_TRAIT_HINT | LOOM_TRAIT_PURE,
       .name = kBadHintName,
   };
-  ExpectBadHintTraitDiagnostic(&kBadHintVtable);
+  ExpectBadTraitDiagnostic(&kBadHintVtable, "bad.hint", "HINT", "PURE");
 }
 
 TEST(VerifyTraitConsistencyTest, RejectsEffectiveIncompatibleHintTraits) {
@@ -403,7 +405,19 @@ TEST(VerifyTraitConsistencyTest, RejectsEffectiveIncompatibleHintTraits) {
       .effective_traits = BadHintPureEffectiveTraits,
       .name = kBadHintName,
   };
-  ExpectBadHintTraitDiagnostic(&kBadHintVtable);
+  ExpectBadTraitDiagnostic(&kBadHintVtable, "bad.hint", "HINT", "PURE");
+}
+
+TEST(VerifyTraitConsistencyTest, RejectsDeclaredIncompatibleSpeculationTraits) {
+  static const uint8_t kBadSpecName[] = {
+      8, 3, 'b', 'a', 'd', '.', 's', 'p', 'e', 'c', '\0',
+  };
+  static const loom_op_vtable_t kBadSpecVtable = {
+      .traits = LOOM_TRAIT_SAFE_TO_SPECULATE | LOOM_TRAIT_UNKNOWN_EFFECTS,
+      .name = kBadSpecName,
+  };
+  ExpectBadTraitDiagnostic(&kBadSpecVtable, "bad.spec", "SAFE_TO_SPECULATE",
+                           "UNKNOWN_EFFECTS");
 }
 
 //===----------------------------------------------------------------------===//

@@ -112,6 +112,7 @@ __all__ = [
     "NON_DETERMINISTIC",
     "UNKNOWN_EFFECTS",
     "HINT",
+    "SAFE_TO_SPECULATE",
     # Trait constructors.
     "AllTypesMatch",
     "HasParent",
@@ -547,6 +548,13 @@ UNIQUE_IDENTITY = Trait("UniqueIdentity")
 # Compiler hint with no semantic memory effects. Hint ops are preserved by
 # canonicalization/DCE and removed only by an explicit hint-stripping pass.
 HINT = Trait("Hint")
+# Op execution may be moved to a program point where it executes more often
+# than in the source IR. This is stronger than Pure: the op must not trap,
+# allocate a distinct identity, read runtime state, write memory, or rely on
+# being control-dependent. It is used for branch reduction and predication
+# rewrites, not for ordinary common-tail motion where every path already
+# executes an equivalent op exactly once.
+SAFE_TO_SPECULATE = Trait("SafeToSpeculate")
 
 
 # ============================================================================
@@ -1517,6 +1525,12 @@ def _validate_effects(
             f"A hint is not a semantic memory effect; attach policy to the "
             f"real memory op instead."
         )
+    if "SafeToSpeculate" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both SAFE_TO_SPECULATE and explicit "
+            f"effects. Speculation must not introduce additional memory "
+            f"accesses or runtime observations."
+        )
 
     for effect in effects:
         # Effect must reference an existing operand.
@@ -1577,6 +1591,27 @@ def _validate_no_effect_conflicts(
         raise ValueError(
             f"Op '{op_name}': declares both HINT and NON_DETERMINISTIC. "
             f"Hints do not produce observable values."
+        )
+    if "SafeToSpeculate" in trait_names and "Hint" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both SAFE_TO_SPECULATE and HINT. "
+            f"Hints are preserved until explicitly stripped and must not be "
+            f"introduced on additional control paths."
+        )
+    if "SafeToSpeculate" in trait_names and "UnknownEffects" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both SAFE_TO_SPECULATE and UNKNOWN_EFFECTS. "
+            f"Unknown effects cannot be executed on additional control paths."
+        )
+    if "SafeToSpeculate" in trait_names and "NonDeterministic" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both SAFE_TO_SPECULATE and NON_DETERMINISTIC. "
+            f"Speculation must not add extra runtime observations."
+        )
+    if "SafeToSpeculate" in trait_names and "UniqueIdentity" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both SAFE_TO_SPECULATE and UNIQUE_IDENTITY. "
+            f"Speculation must not create extra identities."
         )
 
 

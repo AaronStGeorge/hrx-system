@@ -640,6 +640,12 @@ enum loom_trait_bits_e {
   // canonicalization preserve hints; dedicated hint-stripping passes may erase
   // them explicitly.
   LOOM_TRAIT_HINT = 1u << 15,
+  // Op execution may be moved to a program point where it executes more often
+  // than in the source IR. This is stronger than PURE: the op must not trap,
+  // allocate a distinct identity, read runtime state, write memory, or rely on
+  // being control-dependent. Common-tail motion does not need this trait when
+  // every original control path already executed an equivalent op exactly once.
+  LOOM_TRAIT_SAFE_TO_SPECULATE = 1u << 16,
 };
 typedef uint32_t loom_trait_flags_t;
 
@@ -677,6 +683,15 @@ static inline bool loom_traits_is_isolated(loom_trait_flags_t traits) {
 // distinct identity. Prevents CSE but not DCE or LICM.
 static inline bool loom_traits_has_unique_identity(loom_trait_flags_t traits) {
   return (traits & LOOM_TRAIT_UNIQUE_IDENTITY) != 0;
+}
+
+// Returns true if the trait flags declare an op safe to execute on additional
+// control paths. This deliberately does not infer safety from PURE: partial
+// operations such as integer division may be pure but still cannot be
+// speculated without extra value facts.
+static inline bool loom_traits_are_safe_to_speculate(
+    loom_trait_flags_t traits) {
+  return (traits & LOOM_TRAIT_SAFE_TO_SPECULATE) != 0;
 }
 
 // Structural flags on the op vtable (shared by all instances of an op kind).

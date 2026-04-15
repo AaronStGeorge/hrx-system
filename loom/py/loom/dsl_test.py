@@ -48,6 +48,7 @@ from loom.dsl import (
     OFFSET,
     POOL,
     PURE,
+    SAFE_TO_SPECULATE,
     TENSOR,
     TERMINATOR,
     TILE,
@@ -321,6 +322,7 @@ class TestTraits:
             CONSTANT_LIKE,
             ELEMENTWISE,
             DECOMPOSABLE,
+            SAFE_TO_SPECULATE,
         ]
         names = [t.name for t in standard]
         assert len(set(names)) == len(names), "Duplicate trait names"
@@ -888,6 +890,31 @@ class TestEffects:
     def test_hint_with_non_deterministic_raises(self) -> None:
         with pytest.raises(ValueError, match="HINT.*NON_DETERMINISTIC"):
             Op("test.bad", traits=[HINT, NON_DETERMINISTIC])
+
+    def test_safe_to_speculate_conflicts_with_hint(self) -> None:
+        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*HINT"):
+            Op("test.bad", traits=[SAFE_TO_SPECULATE, HINT])
+
+    def test_safe_to_speculate_conflicts_with_unknown_effects(self) -> None:
+        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*UNKNOWN_EFFECTS"):
+            Op("test.bad", traits=[SAFE_TO_SPECULATE, UNKNOWN_EFFECTS])
+
+    def test_safe_to_speculate_conflicts_with_non_deterministic(self) -> None:
+        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*NON_DETERMINISTIC"):
+            Op("test.bad", traits=[SAFE_TO_SPECULATE, NON_DETERMINISTIC])
+
+    def test_safe_to_speculate_conflicts_with_unique_identity(self) -> None:
+        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*UNIQUE_IDENTITY"):
+            Op("test.bad", traits=[SAFE_TO_SPECULATE, UNIQUE_IDENTITY])
+
+    def test_safe_to_speculate_with_explicit_effects_raises(self) -> None:
+        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*explicit effects"):
+            Op(
+                "test.bad",
+                operands=[Operand("pool", POOL)],
+                traits=[SAFE_TO_SPECULATE],
+                effects=[Reads("pool")],
+            )
 
 
 # ============================================================================

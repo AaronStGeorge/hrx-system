@@ -149,6 +149,10 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
 
 bool loom_dominates_value(const loom_dominance_info_t* info,
                           loom_value_id_t value_id, const loom_op_t* use_op) {
+  if (!info || !info->module || !use_op ||
+      value_id >= info->module->values.count) {
+    return false;
+  }
   const loom_value_t* value = &info->module->values.entries[value_id];
 
   if (value->flags & LOOM_VALUE_FLAG_BLOCK_ARG) {
@@ -184,4 +188,67 @@ bool loom_dominates_value(const loom_dominance_info_t* info,
   const loom_op_t* def_op = loom_value_def_op(value);
   if (!def_op) return false;
   return loom_dominates_op(info, def_op, use_op);
+}
+
+bool loom_value_is_available_before_op(const loom_dominance_info_t* info,
+                                       loom_value_id_t value_id,
+                                       const loom_op_t* before_op) {
+  if (!info || !info->module || !before_op ||
+      value_id >= info->module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(info->module, value_id);
+  if (!loom_value_is_block_arg(value) &&
+      loom_value_def_op(value) == before_op) {
+    return false;
+  }
+  return loom_dominates_value(info, value_id, before_op);
+}
+
+typedef struct loom_type_availability_query_t {
+  // Dominance information used for value-availability queries.
+  const loom_dominance_info_t* info;
+  // Op before which the type would be materialized.
+  const loom_op_t* before_op;
+  // Cleared when any embedded SSA reference is unavailable.
+  bool available;
+} loom_type_availability_query_t;
+
+static iree_status_t loom_type_availability_check_ref(loom_value_id_t value_id,
+                                                      void* user_data) {
+  loom_type_availability_query_t* query =
+      (loom_type_availability_query_t*)user_data;
+  if (!loom_value_is_available_before_op(query->info, value_id,
+                                         query->before_op)) {
+    query->available = false;
+  }
+  return iree_ok_status();
+}
+
+bool loom_type_is_available_before_op(const loom_dominance_info_t* info,
+                                      loom_type_t type,
+                                      const loom_op_t* before_op) {
+  if (!info || !info->module || !before_op) return false;
+  loom_type_availability_query_t query = {
+      .info = info,
+      .before_op = before_op,
+      .available = true,
+  };
+  iree_status_t status =
+      loom_type_walk_value_refs(type, loom_type_availability_check_ref, &query);
+  if (!iree_status_is_ok(status)) {
+    iree_status_ignore(status);
+    return false;
+  }
+  return query.available;
+}
+
+bool loom_value_type_is_available_before_op(const loom_dominance_info_t* info,
+                                            loom_value_id_t value_id,
+                                            const loom_op_t* before_op) {
+  if (!info || !info->module || value_id >= info->module->values.count) {
+    return false;
+  }
+  return loom_type_is_available_before_op(
+      info, loom_module_value_type(info->module, value_id), before_op);
 }
