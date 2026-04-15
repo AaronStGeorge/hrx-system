@@ -26,6 +26,10 @@ iree_status_t loom_llvmir_declare_memset(loom_llvmir_module_t* module,
                                          uint32_t length_bit_width,
                                          loom_llvmir_function_t** out_function);
 
+iree_status_t loom_llvmir_declare_prefetch(
+    loom_llvmir_module_t* module, uint32_t pointer_address_space,
+    loom_llvmir_function_t** out_function);
+
 iree_status_t loom_llvmir_declare_lifetime_start(
     loom_llvmir_module_t* module, uint32_t pointer_address_space,
     loom_llvmir_function_t** out_function);

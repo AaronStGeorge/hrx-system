@@ -18,6 +18,7 @@
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/builder.h"
+#include "loom/target/llvmir/intrinsics_builtin.h"
 #include "loom/util/fact_table.h"
 
 static_assert((int)LOOM_INDEX_CMP_PREDICATE_EQ ==
@@ -76,6 +77,12 @@ typedef struct loom_llvmir_lowering_state_t {
   const loom_value_fact_table_t* fact_table;
   // Cached profile kernel attribute group, or INVALID until materialized.
   loom_llvmir_attr_group_id_t kernel_attr_group_id;
+  // Address spaces for cached llvm.prefetch declarations.
+  uint32_t prefetch_function_address_spaces[8];
+  // Cached llvm.prefetch declarations keyed by address space.
+  loom_llvmir_function_t* prefetch_functions[8];
+  // Number of cached llvm.prefetch declarations.
+  iree_host_size_t prefetch_function_count;
 } loom_llvmir_lowering_state_t;
 
 static iree_string_view_t loom_llvmir_lowering_module_name(
@@ -1743,6 +1750,126 @@ static iree_status_t loom_llvmir_lowering_lower_view_store(
                     });
 }
 
+static iree_status_t loom_llvmir_lowering_prefetch_intent(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    uint32_t* out_rw) {
+  switch ((loom_view_prefetch_intent_t)loom_view_prefetch_intent(op)) {
+    case LOOM_VIEW_PREFETCH_INTENT_READ:
+      *out_rw = 0;
+      return iree_ok_status();
+    case LOOM_VIEW_PREFETCH_INTENT_WRITE:
+      *out_rw = 1;
+      return iree_ok_status();
+    case LOOM_VIEW_PREFETCH_INTENT_COUNT_:
+      break;
+  }
+  return loom_llvmir_lowering_unsupported_op(state, op,
+                                             "unknown view.prefetch intent");
+}
+
+static iree_status_t loom_llvmir_lowering_prefetch_locality(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    uint32_t* out_locality) {
+  switch ((loom_view_prefetch_locality_t)loom_view_prefetch_locality(op)) {
+    case LOOM_VIEW_PREFETCH_LOCALITY_NONE:
+      *out_locality = 0;
+      return iree_ok_status();
+    case LOOM_VIEW_PREFETCH_LOCALITY_L1:
+      *out_locality = 1;
+      return iree_ok_status();
+    case LOOM_VIEW_PREFETCH_LOCALITY_L2:
+      *out_locality = 2;
+      return iree_ok_status();
+    case LOOM_VIEW_PREFETCH_LOCALITY_L3:
+      *out_locality = 3;
+      return iree_ok_status();
+    case LOOM_VIEW_PREFETCH_LOCALITY_COUNT_:
+      break;
+  }
+  return loom_llvmir_lowering_unsupported_op(state, op,
+                                             "unknown view.prefetch locality");
+}
+
+static iree_status_t loom_llvmir_lowering_prefetch_function(
+    loom_llvmir_lowering_state_t* state, uint32_t pointer_address_space,
+    loom_llvmir_function_t** out_function) {
+  loom_llvmir_function_t* function = NULL;
+  for (iree_host_size_t i = 0; i < state->prefetch_function_count; ++i) {
+    if (state->prefetch_function_address_spaces[i] == pointer_address_space) {
+      function = state->prefetch_functions[i];
+      break;
+    }
+  }
+  if (function) {
+    *out_function = function;
+    return iree_ok_status();
+  }
+  if (state->prefetch_function_count >=
+      IREE_ARRAYSIZE(state->prefetch_functions)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "too many llvm.prefetch address-space overloads");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_declare_prefetch(
+      state->target_module, pointer_address_space, &function));
+  iree_host_size_t ordinal = state->prefetch_function_count++;
+  state->prefetch_function_address_spaces[ordinal] = pointer_address_space;
+  state->prefetch_functions[ordinal] = function;
+  *out_function = function;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_lower_view_prefetch(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_value_id_t view_value_id = loom_view_prefetch_view(op);
+  loom_type_t view_type =
+      loom_module_value_type(state->source_module, view_value_id);
+
+  loom_llvmir_value_id_t view = LOOM_LLVMIR_VALUE_ID_INVALID;
+  uint32_t pointer_address_space = UINT32_MAX;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_pointer(
+      state, view_value_id, &view, &pointer_address_space, NULL));
+  (void)view;
+
+  loom_llvmir_value_id_t pointer = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_build_view_element_pointer(
+      state, target_block, op, view_value_id, view_type,
+      loom_view_prefetch_static_indices(op), loom_view_prefetch_indices(op),
+      IREE_SV(""), &pointer, NULL));
+
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(state->target_module, 32, &i32_type));
+  uint32_t rw = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_prefetch_intent(state, op, &rw));
+  uint32_t locality = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_prefetch_locality(state, op, &locality));
+  loom_llvmir_value_id_t rw_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t locality_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t data_cache_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      state->target_module, i32_type, rw, &rw_value));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      state->target_module, i32_type, locality, &locality_value));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      state->target_module, i32_type, 1, &data_cache_value));
+
+  loom_llvmir_function_t* prefetch_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_prefetch_function(
+      state, pointer_address_space, &prefetch_function));
+  loom_llvmir_value_id_t args[] = {pointer, rw_value, locality_value,
+                                   data_cache_value};
+  return loom_llvmir_build_call(
+      target_block,
+      &(loom_llvmir_call_desc_t){
+          .callee = loom_llvmir_function_id(prefetch_function),
+          .args = args,
+          .arg_count = IREE_ARRAYSIZE(args),
+      },
+      NULL);
+}
+
 static iree_status_t loom_llvmir_lowering_lower_call(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op) {
@@ -1885,6 +2012,8 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_view_load(state, target_block, op);
     case LOOM_OP_VIEW_STORE:
       return loom_llvmir_lowering_lower_view_store(state, target_block, op);
+    case LOOM_OP_VIEW_PREFETCH:
+      return loom_llvmir_lowering_lower_view_prefetch(state, target_block, op);
     case LOOM_OP_FUNC_CALL:
       return loom_llvmir_lowering_lower_call(state, target_block, op);
     case LOOM_OP_FUNC_RETURN:

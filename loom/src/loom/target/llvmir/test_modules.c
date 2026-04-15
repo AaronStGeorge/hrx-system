@@ -308,6 +308,7 @@ static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
   loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i1_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i8_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_void_type(module, &void_type));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
@@ -316,6 +317,8 @@ static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
       loom_llvmir_module_get_integer_type(module, 1, &i1_type));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 8, &i8_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 64, &i64_type));
 
@@ -332,6 +335,9 @@ static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
   loom_llvmir_function_t* lifetime_end = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_end(
       module, target_env->address_spaces.generic, &lifetime_end));
+  loom_llvmir_function_t* prefetch_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_declare_prefetch(
+      module, target_env->address_spaces.generic, &prefetch_function));
 
   loom_llvmir_function_t* function = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
@@ -364,12 +370,21 @@ static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
   loom_llvmir_value_id_t size = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t zero_byte = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t false_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t prefetch_read = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t prefetch_locality = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t prefetch_data_cache = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_add_integer_constant(module, i64_type, 16, &size));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_add_integer_constant(module, i8_type, 0, &zero_byte));
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
       module, i1_type, 0, &false_value));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i32_type, 0, &prefetch_read));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i32_type, 3, &prefetch_locality));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i32_type, 1, &prefetch_data_cache));
 
   loom_llvmir_block_t* entry = NULL;
   IREE_RETURN_IF_ERROR(
@@ -399,6 +414,16 @@ static iree_status_t loom_llvmir_test_populate_builtin_intrinsics(
           .callee = loom_llvmir_function_id(memcpy_function),
           .args = memcpy_args,
           .arg_count = IREE_ARRAYSIZE(memcpy_args),
+      },
+      NULL));
+  loom_llvmir_value_id_t prefetch_args[] = {
+      source, prefetch_read, prefetch_locality, prefetch_data_cache};
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
+      entry,
+      &(loom_llvmir_call_desc_t){
+          .callee = loom_llvmir_function_id(prefetch_function),
+          .args = prefetch_args,
+          .arg_count = IREE_ARRAYSIZE(prefetch_args),
       },
       NULL));
   IREE_RETURN_IF_ERROR(loom_llvmir_build_call(
@@ -1783,12 +1808,16 @@ static const char kBuiltinIntrinsicsText[] =
     "\n"
     "declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)\n"
     "\n"
+    "declare void @llvm.prefetch.p0(ptr readonly nocapture, i32 immarg, "
+    "i32 immarg, i32 immarg)\n"
+    "\n"
     "define dso_local void @memory_ops(ptr %target, ptr %source) {\n"
     "entry:\n"
     "  call void @llvm.lifetime.start.p0(i64 16, ptr %target)\n"
     "  call void @llvm.memset.p0.i64(ptr %target, i8 0, i64 16, i1 0)\n"
     "  call void @llvm.memcpy.p0.p0.i64(ptr %target, ptr %source, "
     "i64 16, i1 0)\n"
+    "  call void @llvm.prefetch.p0(ptr %source, i32 0, i32 3, i32 1)\n"
     "  call void @llvm.lifetime.end.p0(i64 16, ptr %target)\n"
     "  ret void\n"
     "}\n";

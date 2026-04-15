@@ -610,6 +610,71 @@ TEST_F(LlvmIrLowerTest, LowersBufferAllocaWithAlignedScalarAccess) {
   VerifyTextWithLlvmTools(text);
 }
 
+TEST_F(LlvmIrLowerTest, LowersViewPrefetchToBuiltinIntrinsic) {
+  uint16_t dense_encoding = AddDenseEncoding();
+  loom_type_t buffer = loom_type_buffer();
+  loom_type_t offset = loom_type_scalar(LOOM_SCALAR_TYPE_OFFSET);
+  loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t view_type =
+      loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(16), dense_encoding);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("prefetch_row"));
+  loom_type_t arg_types[3] = {buffer, offset, index};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types, 3, NULL, 0, NULL, 0,
+      NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3);
+  SetValueName(args[0], IREE_SV("buffer"));
+  SetValueName(args[1], IREE_SV("offset"));
+  SetValueName(args[2], IREE_SV("index"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* view_op = NULL;
+  IREE_ASSERT_OK(loom_buffer_view_build(&body_builder, args[0], args[1],
+                                        view_type, LOOM_LOCATION_UNKNOWN,
+                                        &view_op));
+  loom_value_id_t view = loom_buffer_view_result(view_op);
+  SetValueName(view, IREE_SV("view"));
+
+  int64_t dynamic_indices[1] = {INT64_MIN};
+  loom_op_t* prefetch_op = NULL;
+  IREE_ASSERT_OK(loom_view_prefetch_build(
+      &body_builder, view, &args[2], 1, dynamic_indices, 1,
+      LOOM_VIEW_PREFETCH_INTENT_READ, LOOM_VIEW_PREFETCH_LOCALITY_L2,
+      LOOM_LOCATION_UNKNOWN, &prefetch_op));
+  loom_op_t* second_prefetch_op = NULL;
+  IREE_ASSERT_OK(loom_view_prefetch_build(
+      &body_builder, view, &args[2], 1, dynamic_indices, 1,
+      LOOM_VIEW_PREFETCH_INTENT_WRITE, LOOM_VIEW_PREFETCH_LOCALITY_L3,
+      LOOM_LOCATION_UNKNOWN, &second_prefetch_op));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText();
+  const char* prefetch_decl =
+      "declare void @llvm.prefetch.p0(ptr readonly nocapture, i32 immarg, "
+      "i32 immarg, i32 immarg)\n";
+  size_t prefetch_decl_pos = text.find(prefetch_decl);
+  ASSERT_NE(prefetch_decl_pos, std::string::npos) << text;
+  EXPECT_EQ(text.find(prefetch_decl, prefetch_decl_pos + 1), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %view = getelementptr i8, ptr %buffer, i64 %offset\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  call void @llvm.prefetch.p0(ptr "), std::string::npos)
+      << text;
+  EXPECT_NE(text.find(", i32 0, i32 2, i32 1)\n"), std::string::npos) << text;
+  EXPECT_NE(text.find(", i32 1, i32 3, i32 1)\n"), std::string::npos) << text;
+  VerifyTextWithLlvmTools(text);
+}
+
 TEST_F(LlvmIrLowerTest, LowersPublicDeviceFunctionWithAmdgpuHalAbi) {
   loom_type_t buffer = loom_type_buffer();
   loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);

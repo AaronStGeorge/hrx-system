@@ -168,6 +168,58 @@ iree_status_t loom_llvmir_declare_memset(
       &ignored);
 }
 
+iree_status_t loom_llvmir_declare_prefetch(
+    loom_llvmir_module_t* module, uint32_t pointer_address_space,
+    loom_llvmir_function_t** out_function) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(out_function);
+  loom_llvmir_type_id_t pointer_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      module, pointer_address_space, &pointer_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+
+  char name_buffer[64];
+  int name_length = snprintf(name_buffer, sizeof(name_buffer),
+                             "llvm.prefetch.p%u", pointer_address_space);
+  if (name_length <= 0 || (size_t)name_length >= sizeof(name_buffer)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "LLVM prefetch intrinsic name overflow");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_builtin_declare_void_intrinsic(
+      module, iree_make_string_view(name_buffer, (iree_host_size_t)name_length),
+      out_function));
+
+  loom_llvmir_attr_t pointer_attrs[] = {
+      loom_llvmir_builtin_attr(LOOM_LLVMIR_ATTR_READONLY),
+      loom_llvmir_builtin_attr(LOOM_LLVMIR_ATTR_NOCAPTURE),
+  };
+  loom_llvmir_attr_t immarg_attrs[] = {
+      loom_llvmir_builtin_attr(LOOM_LLVMIR_ATTR_IMMARG),
+  };
+  loom_llvmir_value_id_t ignored = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
+      *out_function,
+      &(loom_llvmir_parameter_desc_t){
+          .type_id = pointer_type,
+          .attrs = pointer_attrs,
+          .attr_count = IREE_ARRAYSIZE(pointer_attrs),
+      },
+      &ignored));
+  loom_llvmir_parameter_desc_t immarg_param = {
+      .type_id = i32_type,
+      .attrs = immarg_attrs,
+      .attr_count = IREE_ARRAYSIZE(immarg_attrs),
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
+      *out_function, &immarg_param, &ignored));
+  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(
+      *out_function, &immarg_param, &ignored));
+  return loom_llvmir_function_add_parameter(*out_function, &immarg_param,
+                                            &ignored);
+}
+
 static iree_status_t loom_llvmir_declare_lifetime_marker(
     loom_llvmir_module_t* module, iree_string_view_t marker_name,
     uint32_t pointer_address_space, loom_llvmir_function_t** out_function) {
