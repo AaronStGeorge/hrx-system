@@ -1459,6 +1459,159 @@ static iree_status_t loom_llvmir_bitcode_cast_op(loom_llvmir_cast_op_t op,
   }
 }
 
+static bool loom_llvmir_bitcode_binop_is_float(loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_FADD:
+    case LOOM_LLVMIR_BINOP_FSUB:
+    case LOOM_LLVMIR_BINOP_FMUL:
+    case LOOM_LLVMIR_BINOP_FDIV:
+    case LOOM_LLVMIR_BINOP_FREM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_bitcode_binop_allows_no_wrap_flags(
+    loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_ADD:
+    case LOOM_LLVMIR_BINOP_SUB:
+    case LOOM_LLVMIR_BINOP_MUL:
+    case LOOM_LLVMIR_BINOP_SHL:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_bitcode_binop_allows_exact_flag(
+    loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_UDIV:
+    case LOOM_LLVMIR_BINOP_SDIV:
+    case LOOM_LLVMIR_BINOP_LSHR:
+    case LOOM_LLVMIR_BINOP_ASHR:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_llvmir_bitcode_fast_math_flags(
+    loom_llvmir_fast_math_flags_t flags, uint64_t* out_flags) {
+  const uint32_t known_flags = LOOM_LLVMIR_FAST_MATH_FAST;
+  uint32_t flags_bits = (uint32_t)flags;
+  if (flags_bits & ~known_flags) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM fast-math flags");
+  }
+  uint64_t bitcode_flags = 0;
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_ALLOW_REASSOC) {
+    bitcode_flags |= LOOM_LLVMIR_BITCODE_FAST_MATH_ALLOW_REASSOC;
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_NO_NANS) {
+    bitcode_flags |= LOOM_LLVMIR_BITCODE_FAST_MATH_NO_NANS;
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_NO_INFS) {
+    bitcode_flags |= LOOM_LLVMIR_BITCODE_FAST_MATH_NO_INFS;
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_NO_SIGNED_ZEROS) {
+    bitcode_flags |= LOOM_LLVMIR_BITCODE_FAST_MATH_NO_SIGNED_ZEROS;
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_ALLOW_RECIPROCAL) {
+    bitcode_flags |= LOOM_LLVMIR_BITCODE_FAST_MATH_ALLOW_RECIPROCAL;
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_ALLOW_CONTRACT) {
+    bitcode_flags |= LOOM_LLVMIR_BITCODE_FAST_MATH_ALLOW_CONTRACT;
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_APPROX_FUNC) {
+    bitcode_flags |= LOOM_LLVMIR_BITCODE_FAST_MATH_APPROX_FUNC;
+  }
+  *out_flags = bitcode_flags;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_bitcode_integer_arithmetic_flags(
+    loom_llvmir_binop_t op, loom_llvmir_integer_arithmetic_flags_t flags,
+    uint64_t* out_flags) {
+  const uint32_t known_flags = LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP |
+                               LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP |
+                               LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT;
+  uint32_t flags_bits = (uint32_t)flags;
+  if (flags_bits & ~known_flags) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM integer arithmetic flags");
+  }
+  const uint32_t no_wrap_flags =
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP |
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP;
+  if ((flags_bits & no_wrap_flags) &&
+      !loom_llvmir_bitcode_binop_allows_no_wrap_flags(op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop cannot carry no-wrap flags");
+  }
+  if ((flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT) &&
+      !loom_llvmir_bitcode_binop_allows_exact_flag(op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop cannot carry exact flag");
+  }
+  uint64_t bitcode_flags = 0;
+  if (flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP) {
+    bitcode_flags |= UINT64_C(1)
+                     << LOOM_LLVMIR_BITCODE_OVERFLOWING_BINOP_NO_UNSIGNED_WRAP;
+  }
+  if (flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP) {
+    bitcode_flags |= UINT64_C(1)
+                     << LOOM_LLVMIR_BITCODE_OVERFLOWING_BINOP_NO_SIGNED_WRAP;
+  }
+  if (flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT) {
+    bitcode_flags |= UINT64_C(1) << LOOM_LLVMIR_BITCODE_EXACT_BINOP_EXACT;
+  }
+  *out_flags = bitcode_flags;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_bitcode_binop_flags(
+    const loom_llvmir_instruction_t* instruction, uint64_t* out_flags) {
+  if (instruction->binop.integer_flags != LOOM_LLVMIR_INTEGER_ARITHMETIC_NONE &&
+      instruction->binop.fast_math_flags != LOOM_LLVMIR_FAST_MATH_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop mixes integer and fast-math flags");
+  }
+  if (instruction->binop.fast_math_flags != LOOM_LLVMIR_FAST_MATH_NONE) {
+    if (!loom_llvmir_bitcode_binop_is_float(instruction->binop.op)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVM integer binop cannot carry fast-math "
+                              "flags");
+    }
+    return loom_llvmir_bitcode_fast_math_flags(
+        instruction->binop.fast_math_flags, out_flags);
+  }
+  if (instruction->binop.integer_flags != LOOM_LLVMIR_INTEGER_ARITHMETIC_NONE) {
+    if (loom_llvmir_bitcode_binop_is_float(instruction->binop.op)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVM floating-point binop cannot carry integer "
+                              "arithmetic flags");
+    }
+    return loom_llvmir_bitcode_integer_arithmetic_flags(
+        instruction->binop.op, instruction->binop.integer_flags, out_flags);
+  }
+  *out_flags = 0;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_bitcode_unop_flags(
+    const loom_llvmir_instruction_t* instruction, uint64_t* out_flags) {
+  if (instruction->unop.fast_math_flags != LOOM_LLVMIR_FAST_MATH_NONE &&
+      instruction->unop.op != LOOM_LLVMIR_UNOP_FNEG) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM unary op cannot carry fast-math flags");
+  }
+  return loom_llvmir_bitcode_fast_math_flags(instruction->unop.fast_math_flags,
+                                             out_flags);
+}
+
 static iree_status_t loom_llvmir_bitcode_check_instruction(
     const loom_llvmir_module_t* module,
     const loom_llvmir_instruction_t* instruction) {
@@ -1470,14 +1623,18 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
       return iree_ok_status();
     case LOOM_LLVMIR_INST_PHI:
       return iree_ok_status();
-    case LOOM_LLVMIR_INST_BINOP:
-      return iree_ok_status();
-    case LOOM_LLVMIR_INST_UNOP:
+    case LOOM_LLVMIR_INST_BINOP: {
+      uint64_t binop_flags = 0;
+      return loom_llvmir_bitcode_binop_flags(instruction, &binop_flags);
+    }
+    case LOOM_LLVMIR_INST_UNOP: {
       if (instruction->unop.op != LOOM_LLVMIR_UNOP_FNEG) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "unknown LLVM unary op");
       }
-      return iree_ok_status();
+      uint64_t unop_flags = 0;
+      return loom_llvmir_bitcode_unop_flags(instruction, &unop_flags);
+    }
     case LOOM_LLVMIR_INST_ICMP: {
       uint64_t predicate = 0;
       return loom_llvmir_bitcode_icmp_predicate(instruction->icmp.predicate,
@@ -2340,7 +2497,9 @@ static iree_status_t loom_llvmir_bitcode_write_binop(
   uint64_t opcode = 0;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_bitcode_binary_opcode(instruction->binop.op, &opcode));
-  uint64_t operands[4];
+  uint64_t flags = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_binop_flags(instruction, &flags));
+  uint64_t operands[5];
   iree_host_size_t operand_count = 0;
   IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
       module, value_map, instruction->binop.lhs, instruction_value_id, operands,
@@ -2349,6 +2508,9 @@ static iree_status_t loom_llvmir_bitcode_write_binop(
       value_map, instruction->binop.rhs, instruction_value_id, operands,
       &operand_count));
   operands[operand_count++] = opcode;
+  if (flags != 0) {
+    operands[operand_count++] = flags;
+  }
   return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
       writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_BINOP, operands,
       operand_count);
@@ -2362,12 +2524,17 @@ static iree_status_t loom_llvmir_bitcode_write_unop(
   uint64_t opcode = 0;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_bitcode_unary_opcode(instruction->unop.op, &opcode));
-  uint64_t operands[3];
+  uint64_t flags = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_unop_flags(instruction, &flags));
+  uint64_t operands[4];
   iree_host_size_t operand_count = 0;
   IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
       module, value_map, instruction->unop.value, instruction_value_id,
       operands, &operand_count));
   operands[operand_count++] = opcode;
+  if (flags != 0) {
+    operands[operand_count++] = flags;
+  }
   return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
       writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_UNOP, operands,
       operand_count);

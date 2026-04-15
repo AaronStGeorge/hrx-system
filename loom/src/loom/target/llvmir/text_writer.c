@@ -354,6 +354,135 @@ static const char* loom_llvmir_unop_spelling(loom_llvmir_unop_t op) {
   }
 }
 
+static bool loom_llvmir_binop_is_float(loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_FADD:
+    case LOOM_LLVMIR_BINOP_FSUB:
+    case LOOM_LLVMIR_BINOP_FMUL:
+    case LOOM_LLVMIR_BINOP_FDIV:
+    case LOOM_LLVMIR_BINOP_FREM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_binop_allows_no_wrap_flags(loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_ADD:
+    case LOOM_LLVMIR_BINOP_SUB:
+    case LOOM_LLVMIR_BINOP_MUL:
+    case LOOM_LLVMIR_BINOP_SHL:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_binop_allows_exact_flag(loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_UDIV:
+    case LOOM_LLVMIR_BINOP_SDIV:
+    case LOOM_LLVMIR_BINOP_LSHR:
+    case LOOM_LLVMIR_BINOP_ASHR:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_llvmir_write_integer_arithmetic_flags(
+    loom_llvmir_binop_t op, loom_llvmir_integer_arithmetic_flags_t flags,
+    loom_output_stream_t* stream) {
+  const uint32_t known_flags = LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP |
+                               LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP |
+                               LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT;
+  uint32_t flags_bits = (uint32_t)flags;
+  if (flags_bits & ~known_flags) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM integer arithmetic flags");
+  }
+  const uint32_t no_wrap_flags =
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP |
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP;
+  if ((flags_bits & no_wrap_flags) &&
+      !loom_llvmir_binop_allows_no_wrap_flags(op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop cannot carry no-wrap flags");
+  }
+  if ((flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT) &&
+      !loom_llvmir_binop_allows_exact_flag(op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop cannot carry exact flag");
+  }
+  if (flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " nuw"));
+  }
+  if (flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " nsw"));
+  }
+  if (flags_bits & LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " exact"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_write_fast_math_flags(
+    loom_llvmir_fast_math_flags_t flags, loom_output_stream_t* stream) {
+  const uint32_t known_flags = LOOM_LLVMIR_FAST_MATH_FAST;
+  uint32_t flags_bits = (uint32_t)flags;
+  if (flags_bits & ~known_flags) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM fast-math flags");
+  }
+  if (flags_bits == LOOM_LLVMIR_FAST_MATH_FAST) {
+    return loom_output_stream_write_cstring(stream, " fast");
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_ALLOW_REASSOC) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " reassoc"));
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_NO_NANS) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " nnan"));
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_NO_INFS) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " ninf"));
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_NO_SIGNED_ZEROS) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " nsz"));
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_ALLOW_RECIPROCAL) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " arcp"));
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_ALLOW_CONTRACT) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " contract"));
+  }
+  if (flags_bits & LOOM_LLVMIR_FAST_MATH_APPROX_FUNC) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " afn"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_write_binop_flags(
+    const loom_llvmir_instruction_t* instruction,
+    loom_output_stream_t* stream) {
+  if (instruction->binop.integer_flags != LOOM_LLVMIR_INTEGER_ARITHMETIC_NONE &&
+      instruction->binop.fast_math_flags != LOOM_LLVMIR_FAST_MATH_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop mixes integer and fast-math flags");
+  }
+  if (instruction->binop.fast_math_flags != LOOM_LLVMIR_FAST_MATH_NONE) {
+    if (!loom_llvmir_binop_is_float(instruction->binop.op)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVM integer binop cannot carry fast-math "
+                              "flags");
+    }
+    return loom_llvmir_write_fast_math_flags(instruction->binop.fast_math_flags,
+                                             stream);
+  }
+  return loom_llvmir_write_integer_arithmetic_flags(
+      instruction->binop.op, instruction->binop.integer_flags, stream);
+}
+
 static const char* loom_llvmir_icmp_predicate_spelling(
     loom_llvmir_icmp_predicate_t predicate) {
   switch (predicate) {
@@ -509,6 +638,7 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(
           loom_llvmir_write_result_prefix(module, instruction, stream));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, op));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_binop_flags(instruction, stream));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
       IREE_RETURN_IF_ERROR(loom_llvmir_write_type(
           module, loom_llvmir_text_value_type(module, instruction->binop.lhs),
@@ -529,6 +659,14 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(
           loom_llvmir_write_result_prefix(module, instruction, stream));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, op));
+      if (instruction->unop.fast_math_flags != LOOM_LLVMIR_FAST_MATH_NONE) {
+        if (instruction->unop.op != LOOM_LLVMIR_UNOP_FNEG) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "LLVM unary op cannot carry fast-math flags");
+        }
+        IREE_RETURN_IF_ERROR(loom_llvmir_write_fast_math_flags(
+            instruction->unop.fast_math_flags, stream));
+      }
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
       return loom_llvmir_write_typed_value_ref(module, instruction->unop.value,
                                                stream);

@@ -255,6 +255,92 @@ static bool loom_llvmir_verify_binop_accepts_type(
   }
 }
 
+static bool loom_llvmir_verify_binop_is_float(loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_FADD:
+    case LOOM_LLVMIR_BINOP_FSUB:
+    case LOOM_LLVMIR_BINOP_FMUL:
+    case LOOM_LLVMIR_BINOP_FDIV:
+    case LOOM_LLVMIR_BINOP_FREM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_verify_binop_allows_no_wrap_flags(
+    loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_ADD:
+    case LOOM_LLVMIR_BINOP_SUB:
+    case LOOM_LLVMIR_BINOP_MUL:
+    case LOOM_LLVMIR_BINOP_SHL:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_verify_binop_allows_exact_flag(loom_llvmir_binop_t op) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_UDIV:
+    case LOOM_LLVMIR_BINOP_SDIV:
+    case LOOM_LLVMIR_BINOP_LSHR:
+    case LOOM_LLVMIR_BINOP_ASHR:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_llvmir_verify_binop_flags(
+    const loom_llvmir_instruction_t* instruction) {
+  const uint32_t known_integer_flags =
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP |
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP |
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT;
+  uint32_t integer_flags = (uint32_t)instruction->binop.integer_flags;
+  if (integer_flags & ~known_integer_flags) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM integer arithmetic flags");
+  }
+  const uint32_t known_fast_math_flags = LOOM_LLVMIR_FAST_MATH_FAST;
+  uint32_t fast_math_flags = (uint32_t)instruction->binop.fast_math_flags;
+  if (fast_math_flags & ~known_fast_math_flags) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM fast-math flags");
+  }
+  if (integer_flags != 0 && fast_math_flags != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop mixes integer and fast-math flags");
+  }
+  if (fast_math_flags != 0 &&
+      !loom_llvmir_verify_binop_is_float(instruction->binop.op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM integer binop cannot carry fast-math flags");
+  }
+  if (integer_flags != 0 &&
+      loom_llvmir_verify_binop_is_float(instruction->binop.op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM floating-point binop cannot carry integer "
+                            "arithmetic flags");
+  }
+  const uint32_t no_wrap_flags =
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP |
+      LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP;
+  if ((integer_flags & no_wrap_flags) &&
+      !loom_llvmir_verify_binop_allows_no_wrap_flags(instruction->binop.op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop cannot carry no-wrap flags");
+  }
+  if ((integer_flags & LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT) &&
+      !loom_llvmir_verify_binop_allows_exact_flag(instruction->binop.op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM binop cannot carry exact flag");
+  }
+  return iree_ok_status();
+}
+
 static bool loom_llvmir_verify_unop_accepts_type(
     const loom_llvmir_module_t* module, loom_llvmir_unop_t op,
     const loom_llvmir_type_t* type) {
@@ -264,6 +350,21 @@ static bool loom_llvmir_verify_unop_accepts_type(
     default:
       return false;
   }
+}
+
+static iree_status_t loom_llvmir_verify_unop_flags(
+    const loom_llvmir_instruction_t* instruction) {
+  const uint32_t known_fast_math_flags = LOOM_LLVMIR_FAST_MATH_FAST;
+  uint32_t fast_math_flags = (uint32_t)instruction->unop.fast_math_flags;
+  if (fast_math_flags & ~known_fast_math_flags) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM fast-math flags");
+  }
+  if (fast_math_flags != 0 && instruction->unop.op != LOOM_LLVMIR_UNOP_FNEG) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM unary op cannot carry fast-math flags");
+  }
+  return iree_ok_status();
 }
 
 static bool loom_llvmir_verify_type_same_pointer_address_space(
@@ -632,7 +733,7 @@ static iree_status_t loom_llvmir_verify_instruction(
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "LLVM binop opcode is invalid for result type");
       }
-      return iree_ok_status();
+      return loom_llvmir_verify_binop_flags(instruction);
     case LOOM_LLVMIR_INST_UNOP:
       if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -649,7 +750,7 @@ static iree_status_t loom_llvmir_verify_instruction(
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "LLVM unop opcode is invalid for result type");
       }
-      return iree_ok_status();
+      return loom_llvmir_verify_unop_flags(instruction);
     case LOOM_LLVMIR_INST_ICMP:
       if (!loom_llvmir_verify_icmp_predicate(instruction->icmp.predicate)) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

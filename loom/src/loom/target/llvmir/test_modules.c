@@ -568,16 +568,18 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
   IREE_RETURN_IF_ERROR(
       loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
   loom_llvmir_value_id_t sum = LOOM_LLVMIR_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_build_binop(entry,
-                              &(loom_llvmir_binop_desc_t){
-                                  .result_name = IREE_SV("sum"),
-                                  .result_type = i32_type,
-                                  .op = LOOM_LLVMIR_BINOP_ADD,
-                                  .lhs = lhs,
-                                  .rhs = rhs,
-                              },
-                              &sum));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_binop(
+      entry,
+      &(loom_llvmir_binop_desc_t){
+          .result_name = IREE_SV("sum"),
+          .result_type = i32_type,
+          .op = LOOM_LLVMIR_BINOP_ADD,
+          .lhs = lhs,
+          .rhs = rhs,
+          .integer_flags = LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP |
+                           LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP,
+      },
+      &sum));
   loom_llvmir_value_id_t difference = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_build_binop(entry,
@@ -612,16 +614,17 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
                               },
                               &unsigned_quotient));
   loom_llvmir_value_id_t signed_quotient = LOOM_LLVMIR_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_build_binop(entry,
-                              &(loom_llvmir_binop_desc_t){
-                                  .result_name = IREE_SV("signed_quotient"),
-                                  .result_type = i32_type,
-                                  .op = LOOM_LLVMIR_BINOP_SDIV,
-                                  .lhs = product,
-                                  .rhs = rhs,
-                              },
-                              &signed_quotient));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_binop(
+      entry,
+      &(loom_llvmir_binop_desc_t){
+          .result_name = IREE_SV("signed_quotient"),
+          .result_type = i32_type,
+          .op = LOOM_LLVMIR_BINOP_SDIV,
+          .lhs = product,
+          .rhs = rhs,
+          .integer_flags = LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT,
+      },
+      &signed_quotient));
   loom_llvmir_value_id_t unsigned_remainder = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_build_binop(entry,
@@ -719,6 +722,7 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
                                   .op = LOOM_LLVMIR_BINOP_FADD,
                                   .lhs = xf,
                                   .rhs = yf,
+                                  .fast_math_flags = LOOM_LLVMIR_FAST_MATH_FAST,
                               },
                               &float_sum));
   loom_llvmir_value_id_t float_difference = LOOM_LLVMIR_VALUE_ID_INVALID;
@@ -766,15 +770,16 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
                               },
                               &float_remainder));
   loom_llvmir_value_id_t float_negated = LOOM_LLVMIR_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_build_unop(entry,
-                             &(loom_llvmir_unop_desc_t){
-                                 .result_name = IREE_SV("float_negated"),
-                                 .result_type = f32_type,
-                                 .op = LOOM_LLVMIR_UNOP_FNEG,
-                                 .value = float_remainder,
-                             },
-                             &float_negated));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_unop(
+      entry,
+      &(loom_llvmir_unop_desc_t){
+          .result_name = IREE_SV("float_negated"),
+          .result_type = f32_type,
+          .op = LOOM_LLVMIR_UNOP_FNEG,
+          .value = float_remainder,
+          .fast_math_flags = LOOM_LLVMIR_FAST_MATH_NO_SIGNED_ZEROS,
+      },
+      &float_negated));
   (void)float_negated;
   IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, arithmetic_shifted));
   return iree_ok_status();
@@ -1645,11 +1650,11 @@ static const char kCfgPhiText[] =
 static const char kScalarBinopText[] =
     "define i32 @binops(i32 %lhs, i32 %rhs, float %xf, float %yf) {\n"
     "entry:\n"
-    "  %sum = add i32 %lhs, %rhs\n"
+    "  %sum = add nuw nsw i32 %lhs, %rhs\n"
     "  %difference = sub i32 %sum, %rhs\n"
     "  %product = mul i32 %difference, %lhs\n"
     "  %unsigned_quotient = udiv i32 %product, %rhs\n"
-    "  %signed_quotient = sdiv i32 %product, %rhs\n"
+    "  %signed_quotient = sdiv exact i32 %product, %rhs\n"
     "  %unsigned_remainder = urem i32 %unsigned_quotient, %rhs\n"
     "  %signed_remainder = srem i32 %signed_quotient, %rhs\n"
     "  %bits = and i32 %unsigned_remainder, %signed_remainder\n"
@@ -1658,12 +1663,12 @@ static const char kScalarBinopText[] =
     "  %shifted = shl i32 %toggled, %rhs\n"
     "  %logical_shifted = lshr i32 %shifted, %rhs\n"
     "  %arithmetic_shifted = ashr i32 %logical_shifted, %rhs\n"
-    "  %float_sum = fadd float %xf, %yf\n"
+    "  %float_sum = fadd fast float %xf, %yf\n"
     "  %float_difference = fsub float %float_sum, %yf\n"
     "  %float_product = fmul float %float_difference, %xf\n"
     "  %float_quotient = fdiv float %float_product, %yf\n"
     "  %float_remainder = frem float %float_quotient, %yf\n"
-    "  %float_negated = fneg float %float_remainder\n"
+    "  %float_negated = fneg nsz float %float_remainder\n"
     "  ret i32 %arithmetic_shifted\n"
     "}\n";
 

@@ -144,6 +144,25 @@ typedef enum loom_llvmir_bitcode_unary_op_e {
   LOOM_LLVMIR_BITCODE_UNOP_FNEG = 0,
 } loom_llvmir_bitcode_unary_op_t;
 
+typedef enum loom_llvmir_bitcode_overflowing_binop_flag_bits_e {
+  LOOM_LLVMIR_BITCODE_OVERFLOWING_BINOP_NO_UNSIGNED_WRAP = 0,
+  LOOM_LLVMIR_BITCODE_OVERFLOWING_BINOP_NO_SIGNED_WRAP = 1,
+} loom_llvmir_bitcode_overflowing_binop_flags_t;
+
+typedef enum loom_llvmir_bitcode_exact_binop_flag_bits_e {
+  LOOM_LLVMIR_BITCODE_EXACT_BINOP_EXACT = 0,
+} loom_llvmir_bitcode_exact_binop_flags_t;
+
+typedef enum loom_llvmir_bitcode_fast_math_flag_bits_e {
+  LOOM_LLVMIR_BITCODE_FAST_MATH_NO_NANS = 1u << 1,
+  LOOM_LLVMIR_BITCODE_FAST_MATH_NO_INFS = 1u << 2,
+  LOOM_LLVMIR_BITCODE_FAST_MATH_NO_SIGNED_ZEROS = 1u << 3,
+  LOOM_LLVMIR_BITCODE_FAST_MATH_ALLOW_RECIPROCAL = 1u << 4,
+  LOOM_LLVMIR_BITCODE_FAST_MATH_ALLOW_CONTRACT = 1u << 5,
+  LOOM_LLVMIR_BITCODE_FAST_MATH_APPROX_FUNC = 1u << 6,
+  LOOM_LLVMIR_BITCODE_FAST_MATH_ALLOW_REASSOC = 1u << 7,
+} loom_llvmir_bitcode_fast_math_flags_t;
+
 typedef enum loom_llvmir_bitcode_binary_op_e {
   LOOM_LLVMIR_BITCODE_BINOP_ADD = 0,
   LOOM_LLVMIR_BITCODE_BINOP_SUB = 1,

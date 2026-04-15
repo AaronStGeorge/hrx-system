@@ -209,6 +209,8 @@ iree_status_t loom_llvmir_build_binop(loom_llvmir_block_t* block,
               .op = desc->op,
               .lhs = desc->lhs,
               .rhs = desc->rhs,
+              .integer_flags = desc->integer_flags,
+              .fast_math_flags = desc->fast_math_flags,
           },
   };
   IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
@@ -232,6 +234,7 @@ iree_status_t loom_llvmir_build_unop(loom_llvmir_block_t* block,
           {
               .op = desc->op,
               .value = desc->value,
+              .fast_math_flags = desc->fast_math_flags,
           },
   };
   IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(

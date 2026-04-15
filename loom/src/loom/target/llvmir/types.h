@@ -127,6 +127,10 @@ typedef struct loom_llvmir_instruction_t {
       loom_llvmir_value_id_t lhs;
       // Right operand.
       loom_llvmir_value_id_t rhs;
+      // Integer arithmetic flags such as no-wrap and exact.
+      loom_llvmir_integer_arithmetic_flags_t integer_flags;
+      // Fast-math flags for floating-point binary operations.
+      loom_llvmir_fast_math_flags_t fast_math_flags;
     } binop;
     // Unary operation operand.
     struct {
@@ -134,6 +138,8 @@ typedef struct loom_llvmir_instruction_t {
       loom_llvmir_unop_t op;
       // Operand.
       loom_llvmir_value_id_t value;
+      // Fast-math flags for floating-point unary operations.
+      loom_llvmir_fast_math_flags_t fast_math_flags;
     } unop;
     // Integer comparison operands.
     struct {

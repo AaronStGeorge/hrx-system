@@ -40,6 +40,31 @@ typedef enum loom_llvmir_unop_e {
   LOOM_LLVMIR_UNOP_FNEG = 0,
 } loom_llvmir_unop_t;
 
+typedef uint32_t loom_llvmir_integer_arithmetic_flags_t;
+typedef enum loom_llvmir_integer_arithmetic_flag_bits_e {
+  LOOM_LLVMIR_INTEGER_ARITHMETIC_NONE = 0u,
+  LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_UNSIGNED_WRAP = 1u << 0,
+  LOOM_LLVMIR_INTEGER_ARITHMETIC_NO_SIGNED_WRAP = 1u << 1,
+  LOOM_LLVMIR_INTEGER_ARITHMETIC_EXACT = 1u << 2,
+} loom_llvmir_integer_arithmetic_flag_bits_t;
+
+typedef uint32_t loom_llvmir_fast_math_flags_t;
+typedef enum loom_llvmir_fast_math_flag_bits_e {
+  LOOM_LLVMIR_FAST_MATH_NONE = 0u,
+  LOOM_LLVMIR_FAST_MATH_ALLOW_REASSOC = 1u << 0,
+  LOOM_LLVMIR_FAST_MATH_NO_NANS = 1u << 1,
+  LOOM_LLVMIR_FAST_MATH_NO_INFS = 1u << 2,
+  LOOM_LLVMIR_FAST_MATH_NO_SIGNED_ZEROS = 1u << 3,
+  LOOM_LLVMIR_FAST_MATH_ALLOW_RECIPROCAL = 1u << 4,
+  LOOM_LLVMIR_FAST_MATH_ALLOW_CONTRACT = 1u << 5,
+  LOOM_LLVMIR_FAST_MATH_APPROX_FUNC = 1u << 6,
+  LOOM_LLVMIR_FAST_MATH_FAST =
+      LOOM_LLVMIR_FAST_MATH_ALLOW_REASSOC | LOOM_LLVMIR_FAST_MATH_NO_NANS |
+      LOOM_LLVMIR_FAST_MATH_NO_INFS | LOOM_LLVMIR_FAST_MATH_NO_SIGNED_ZEROS |
+      LOOM_LLVMIR_FAST_MATH_ALLOW_RECIPROCAL |
+      LOOM_LLVMIR_FAST_MATH_ALLOW_CONTRACT | LOOM_LLVMIR_FAST_MATH_APPROX_FUNC,
+} loom_llvmir_fast_math_flag_bits_t;
+
 typedef enum loom_llvmir_icmp_predicate_e {
   LOOM_LLVMIR_ICMP_EQ = 0,
   LOOM_LLVMIR_ICMP_NE = 1,
@@ -116,6 +141,10 @@ typedef struct loom_llvmir_binop_desc_t {
   loom_llvmir_value_id_t lhs;
   // Right operand value.
   loom_llvmir_value_id_t rhs;
+  // Integer arithmetic flags such as no-wrap and exact.
+  loom_llvmir_integer_arithmetic_flags_t integer_flags;
+  // Fast-math flags for floating-point binary operations.
+  loom_llvmir_fast_math_flags_t fast_math_flags;
 } loom_llvmir_binop_desc_t;
 
 typedef struct loom_llvmir_unop_desc_t {
@@ -127,6 +156,8 @@ typedef struct loom_llvmir_unop_desc_t {
   loom_llvmir_unop_t op;
   // Operand value.
   loom_llvmir_value_id_t value;
+  // Fast-math flags for floating-point unary operations.
+  loom_llvmir_fast_math_flags_t fast_math_flags;
 } loom_llvmir_unop_desc_t;
 
 typedef struct loom_llvmir_phi_desc_t {
