@@ -7,6 +7,7 @@
 #include "loom/target/llvmir/text_writer.h"
 
 #include <cctype>
+#include <memory>
 #include <string>
 
 #include "iree/testing/gtest.h"
@@ -16,6 +17,9 @@
 
 namespace loom {
 namespace {
+
+using ModulePtr =
+    std::unique_ptr<loom_llvmir_module_t, void (*)(loom_llvmir_module_t*)>;
 
 iree_status_t EmitText(loom_llvmir_module_t* module, std::string* out_text) {
   IREE_RETURN_IF_ERROR(loom_llvmir_verify_module(module));
@@ -55,10 +59,10 @@ TEST_P(LlvmIrTextWriterTest, EmitsExpectedText) {
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_test_module_build(
       GetParam(), iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
 
   std::string text;
-  iree_status_t status = EmitText(module, &text);
-  loom_llvmir_module_free(module);
+  iree_status_t status = EmitText(module_ptr.get(), &text);
   IREE_ASSERT_OK(status);
   EXPECT_EQ(text, ToString(loom_llvmir_test_module_expected_text(GetParam())));
 }
@@ -67,6 +71,7 @@ INSTANTIATE_TEST_SUITE_P(
     All, LlvmIrTextWriterTest,
     testing::Values(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4,
                     LOOM_LLVMIR_TEST_MODULE_CFG_PHI,
+                    LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP,
                     LOOM_LLVMIR_TEST_MODULE_INLINE_ASM,
                     LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS),
     ScenarioTestName);

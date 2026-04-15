@@ -31,6 +31,8 @@ typedef enum loom_llvmir_test_module_scenario_e {
   LOOM_LLVMIR_TEST_MODULE_INLINE_ASM = 2,
   // AMDGPU kernel boundary using attrs, metadata, and AMDGCN intrinsics.
   LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS = 3,
+  // Scalar arithmetic function with a value-producing binary op.
+  LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP = 4,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);

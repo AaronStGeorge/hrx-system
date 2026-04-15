@@ -40,6 +40,8 @@ std::string ScenarioTestName(
 
 using StreamPtr =
     std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
+using ModulePtr =
+    std::unique_ptr<loom_llvmir_module_t, void (*)(loom_llvmir_module_t*)>;
 
 StreamPtr CreateStream() {
   iree_io_stream_t* stream = NULL;
@@ -69,30 +71,33 @@ TEST(LlvmIrBitcodeWriterTest, WritesModuleHeaderAndTypeBlock) {
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,
                                              iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t v4f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
-  IREE_ASSERT_OK(loom_llvmir_module_get_void_type(module, &void_type));
-  IREE_ASSERT_OK(loom_llvmir_module_get_integer_type(module, 32, &i32_type));
-  IREE_ASSERT_OK(loom_llvmir_module_get_pointer_type(
-      module, target_env->address_spaces.generic, &ptr_type));
-  IREE_ASSERT_OK(loom_llvmir_module_get_float_type(
-      module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
   IREE_ASSERT_OK(
-      loom_llvmir_module_get_vector_type(module, 4, f32_type, &v4f32_type));
-  IREE_ASSERT_OK(loom_llvmir_verify_module(module));
+      loom_llvmir_module_get_void_type(module_ptr.get(), &void_type));
+  IREE_ASSERT_OK(
+      loom_llvmir_module_get_integer_type(module_ptr.get(), 32, &i32_type));
+  IREE_ASSERT_OK(loom_llvmir_module_get_pointer_type(
+      module_ptr.get(), target_env->address_spaces.generic, &ptr_type));
+  IREE_ASSERT_OK(loom_llvmir_module_get_float_type(
+      module_ptr.get(), LOOM_LLVMIR_FLOAT_F32, &f32_type));
+  IREE_ASSERT_OK(loom_llvmir_module_get_vector_type(module_ptr.get(), 4,
+                                                    f32_type, &v4f32_type));
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
 
   StreamPtr stream = CreateStream();
-  IREE_EXPECT_OK(loom_llvmir_bitcode_write_module(module, stream.get()));
+  IREE_EXPECT_OK(
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
   std::string bytes = StreamBytes(stream.get());
   ASSERT_GE(bytes.size(), 8u);
   EXPECT_EQ((uint8_t)bytes[0], LOOM_LLVMIR_BITCODE_MAGIC_0);
   EXPECT_EQ((uint8_t)bytes[1], LOOM_LLVMIR_BITCODE_MAGIC_1);
   EXPECT_EQ((uint8_t)bytes[2], LOOM_LLVMIR_BITCODE_MAGIC_2);
   EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
-  loom_llvmir_module_free(module);
 }
 
 TEST(LlvmIrBitcodeWriterTest, WritesFunctionDeclarationsAndRetVoidBodies) {
@@ -105,11 +110,13 @@ TEST(LlvmIrBitcodeWriterTest, WritesFunctionDeclarationsAndRetVoidBodies) {
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,
                                              iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
-  IREE_ASSERT_OK(loom_llvmir_module_get_void_type(module, &void_type));
+  IREE_ASSERT_OK(
+      loom_llvmir_module_get_void_type(module_ptr.get(), &void_type));
   IREE_ASSERT_OK(loom_llvmir_module_get_pointer_type(
-      module, target_env->address_spaces.generic, &ptr_type));
+      module_ptr.get(), target_env->address_spaces.generic, &ptr_type));
 
   loom_llvmir_function_desc_t import_desc = {};
   import_desc.kind = LOOM_LLVMIR_FUNCTION_DECLARATION;
@@ -117,8 +124,8 @@ TEST(LlvmIrBitcodeWriterTest, WritesFunctionDeclarationsAndRetVoidBodies) {
   import_desc.return_type = void_type;
   import_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
   loom_llvmir_function_t* imported = NULL;
-  IREE_ASSERT_OK(
-      loom_llvmir_module_add_function(module, &import_desc, &imported));
+  IREE_ASSERT_OK(loom_llvmir_module_add_function(module_ptr.get(), &import_desc,
+                                                 &imported));
   loom_llvmir_parameter_desc_t parameter_desc = {};
   parameter_desc.type_id = ptr_type;
   parameter_desc.name = IREE_SV("buffer");
@@ -133,23 +140,59 @@ TEST(LlvmIrBitcodeWriterTest, WritesFunctionDeclarationsAndRetVoidBodies) {
   definition_desc.linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL;
   definition_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
   loom_llvmir_function_t* entry = NULL;
-  IREE_ASSERT_OK(
-      loom_llvmir_module_add_function(module, &definition_desc, &entry));
+  IREE_ASSERT_OK(loom_llvmir_module_add_function(module_ptr.get(),
+                                                 &definition_desc, &entry));
   loom_llvmir_block_t* block = NULL;
   IREE_ASSERT_OK(
       loom_llvmir_function_add_block(entry, IREE_SV("entry"), &block));
   IREE_ASSERT_OK(loom_llvmir_build_ret_void(block));
-  IREE_ASSERT_OK(loom_llvmir_verify_module(module));
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
 
   StreamPtr stream = CreateStream();
-  IREE_EXPECT_OK(loom_llvmir_bitcode_write_module(module, stream.get()));
+  IREE_EXPECT_OK(
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
   std::string bytes = StreamBytes(stream.get());
   ASSERT_GE(bytes.size(), 8u);
   EXPECT_EQ((uint8_t)bytes[0], LOOM_LLVMIR_BITCODE_MAGIC_0);
   EXPECT_EQ((uint8_t)bytes[1], LOOM_LLVMIR_BITCODE_MAGIC_1);
   EXPECT_EQ((uint8_t)bytes[2], LOOM_LLVMIR_BITCODE_MAGIC_2);
   EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
-  loom_llvmir_module_free(module);
+}
+
+TEST(LlvmIrBitcodeWriterTest, WritesCfgPhiFunctionBodies) {
+  loom_llvmir_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_llvmir_test_module_build(
+      LOOM_LLVMIR_TEST_MODULE_CFG_PHI, iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+
+  StreamPtr stream = CreateStream();
+  IREE_EXPECT_OK(
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
+  std::string bytes = StreamBytes(stream.get());
+  ASSERT_GE(bytes.size(), 8u);
+  EXPECT_EQ((uint8_t)bytes[0], LOOM_LLVMIR_BITCODE_MAGIC_0);
+  EXPECT_EQ((uint8_t)bytes[1], LOOM_LLVMIR_BITCODE_MAGIC_1);
+  EXPECT_EQ((uint8_t)bytes[2], LOOM_LLVMIR_BITCODE_MAGIC_2);
+  EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
+}
+
+TEST(LlvmIrBitcodeWriterTest, WritesScalarBinopFunctionBodies) {
+  loom_llvmir_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_llvmir_test_module_build(
+      LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP, iree_allocator_system(), &module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
+
+  StreamPtr stream = CreateStream();
+  IREE_EXPECT_OK(
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
+  std::string bytes = StreamBytes(stream.get());
+  ASSERT_GE(bytes.size(), 8u);
+  EXPECT_EQ((uint8_t)bytes[0], LOOM_LLVMIR_BITCODE_MAGIC_0);
+  EXPECT_EQ((uint8_t)bytes[1], LOOM_LLVMIR_BITCODE_MAGIC_1);
+  EXPECT_EQ((uint8_t)bytes[2], LOOM_LLVMIR_BITCODE_MAGIC_2);
+  EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
 }
 
 class LlvmIrBitcodeWriterTest
@@ -159,19 +202,19 @@ TEST_P(LlvmIrBitcodeWriterTest, RejectsUnsupportedModulesBeforeWriting) {
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_test_module_build(
       GetParam(), iree_allocator_system(), &module));
-  IREE_ASSERT_OK(loom_llvmir_verify_module(module));
+  ModulePtr module_ptr(module, loom_llvmir_module_free);
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
 
   StreamPtr stream = CreateStream();
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        loom_llvmir_bitcode_write_module(module, stream.get()));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      loom_llvmir_bitcode_write_module(module_ptr.get(), stream.get()));
   EXPECT_EQ(iree_io_stream_length(stream.get()), 0);
-  loom_llvmir_module_free(module);
 }
 
 INSTANTIATE_TEST_SUITE_P(
     All, LlvmIrBitcodeWriterTest,
     testing::Values(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4,
-                    LOOM_LLVMIR_TEST_MODULE_CFG_PHI,
                     LOOM_LLVMIR_TEST_MODULE_INLINE_ASM,
                     LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS),
     ScenarioTestName);
