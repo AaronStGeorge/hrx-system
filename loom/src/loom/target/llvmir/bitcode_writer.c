@@ -960,6 +960,20 @@ static iree_status_t loom_llvmir_bitcode_map_mark_instruction_constants(
       return loom_llvmir_bitcode_map_mark_constant(module, map,
                                                    instruction->store.pointer);
     }
+    case LOOM_LLVMIR_INST_EXTRACT_ELEMENT: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->extract_element.vector));
+      return loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->extract_element.index);
+    }
+    case LOOM_LLVMIR_INST_INSERT_ELEMENT: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->insert_element.vector));
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->insert_element.element));
+      return loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->insert_element.index);
+    }
     case LOOM_LLVMIR_INST_CALL: {
       for (iree_host_size_t i = 0; i < instruction->call.arg_count; ++i) {
         IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
@@ -1472,6 +1486,9 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
       return loom_llvmir_bitcode_memory_volatile(instruction->store.flags,
                                                  &is_volatile);
     }
+    case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
+    case LOOM_LLVMIR_INST_INSERT_ELEMENT:
+      return iree_ok_status();
     case LOOM_LLVMIR_INST_CALL:
       if (instruction->call.result_attrs.attr_count != 0 &&
           instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
@@ -2470,6 +2487,45 @@ static iree_status_t loom_llvmir_bitcode_write_store(
       operand_count);
 }
 
+static iree_status_t loom_llvmir_bitcode_write_extract_element(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t operands[4];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->extract_element.vector,
+      instruction_value_id, operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->extract_element.index,
+      instruction_value_id, operands, &operand_count));
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_EXTRACTELT, operands,
+      operand_count);
+}
+
+static iree_status_t loom_llvmir_bitcode_write_insert_element(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t operands[6];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->insert_element.vector,
+      instruction_value_id, operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->insert_element.element, instruction_value_id,
+      operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->insert_element.index,
+      instruction_value_id, operands, &operand_count));
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_INSERTELT, operands,
+      operand_count);
+}
+
 static iree_status_t loom_llvmir_bitcode_write_call(
     const loom_llvmir_module_t* module,
     const loom_llvmir_bitcode_function_value_map_t* value_map,
@@ -2693,6 +2749,12 @@ static iree_status_t loom_llvmir_bitcode_write_instruction(
     case LOOM_LLVMIR_INST_STORE:
       return loom_llvmir_bitcode_write_store(module, value_map, instruction,
                                              instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
+      return loom_llvmir_bitcode_write_extract_element(
+          module, value_map, instruction, instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_INSERT_ELEMENT:
+      return loom_llvmir_bitcode_write_insert_element(
+          module, value_map, instruction, instruction_value_id, writer);
     case LOOM_LLVMIR_INST_CALL:
       return loom_llvmir_bitcode_write_call(module, value_map, instruction,
                                             instruction_value_id, writer);

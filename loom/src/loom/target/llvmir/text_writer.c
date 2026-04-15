@@ -610,6 +610,31 @@ static iree_status_t loom_llvmir_write_instruction(
       }
       return iree_ok_status();
     }
+    case LOOM_LLVMIR_INST_EXTRACT_ELEMENT: {
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "extractelement "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->extract_element.vector, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      return loom_llvmir_write_typed_value_ref(
+          module, instruction->extract_element.index, stream);
+    }
+    case LOOM_LLVMIR_INST_INSERT_ELEMENT: {
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, "insertelement "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->insert_element.vector, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->insert_element.element, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      return loom_llvmir_write_typed_value_ref(
+          module, instruction->insert_element.index, stream);
+    }
     case LOOM_LLVMIR_INST_CALL: {
       loom_llvmir_function_t* callee =
           loom_llvmir_text_function(module, instruction->call.callee);

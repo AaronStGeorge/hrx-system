@@ -246,6 +246,30 @@ typedef struct loom_llvmir_select_desc_t {
   loom_llvmir_value_id_t false_value;
 } loom_llvmir_select_desc_t;
 
+typedef struct loom_llvmir_extract_element_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Extracted scalar result type.
+  loom_llvmir_type_id_t result_type;
+  // Vector value to extract from.
+  loom_llvmir_value_id_t vector;
+  // Integer lane index.
+  loom_llvmir_value_id_t index;
+} loom_llvmir_extract_element_desc_t;
+
+typedef struct loom_llvmir_insert_element_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Updated vector result type.
+  loom_llvmir_type_id_t result_type;
+  // Original vector value.
+  loom_llvmir_value_id_t vector;
+  // Scalar element value to insert.
+  loom_llvmir_value_id_t element;
+  // Integer lane index.
+  loom_llvmir_value_id_t index;
+} loom_llvmir_insert_element_desc_t;
+
 iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
                                     const loom_llvmir_phi_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id);
@@ -288,6 +312,14 @@ iree_status_t loom_llvmir_build_inline_asm(
 iree_status_t loom_llvmir_build_select(loom_llvmir_block_t* block,
                                        const loom_llvmir_select_desc_t* desc,
                                        loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_extract_element(
+    loom_llvmir_block_t* block, const loom_llvmir_extract_element_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_insert_element(
+    loom_llvmir_block_t* block, const loom_llvmir_insert_element_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_ret_void(loom_llvmir_block_t* block);
 

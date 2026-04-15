@@ -59,6 +59,12 @@ static bool loom_llvmir_verify_type_is_i1(const loom_llvmir_module_t* module,
   return type && type->kind == LOOM_LLVMIR_TYPE_INTEGER && type->bit_width == 1;
 }
 
+static bool loom_llvmir_verify_type_is_scalar_integer(
+    const loom_llvmir_module_t* module, loom_llvmir_type_id_t type_id) {
+  const loom_llvmir_type_t* type = loom_llvmir_verify_type(module, type_id);
+  return type && type->kind == LOOM_LLVMIR_TYPE_INTEGER;
+}
+
 static const loom_llvmir_type_t* loom_llvmir_verify_scalar_type(
     const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
   if (!type) return NULL;
@@ -455,6 +461,60 @@ static iree_status_t loom_llvmir_verify_select(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_verify_extract_element(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractelement has no result value");
+  }
+  loom_llvmir_type_id_t vector_type_id = loom_llvmir_verify_value_type(
+      module, instruction->extract_element.vector);
+  const loom_llvmir_type_t* vector_type =
+      loom_llvmir_verify_type(module, vector_type_id);
+  if (!vector_type || vector_type->kind != LOOM_LLVMIR_TYPE_VECTOR) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractelement vector must be a vector");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->result_value_id, vector_type->element_type));
+  if (!loom_llvmir_verify_type_is_scalar_integer(
+          module, loom_llvmir_verify_value_type(
+                      module, instruction->extract_element.index))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM extractelement index must be an integer");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_verify_insert_element(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM insertelement has no result value");
+  }
+  loom_llvmir_type_id_t vector_type_id =
+      loom_llvmir_verify_value_type(module, instruction->insert_element.vector);
+  const loom_llvmir_type_t* vector_type =
+      loom_llvmir_verify_type(module, vector_type_id);
+  if (!vector_type || vector_type->kind != LOOM_LLVMIR_TYPE_VECTOR) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM insertelement vector must be a vector");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->result_value_id, vector_type_id));
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->insert_element.element, vector_type->element_type));
+  if (!loom_llvmir_verify_type_is_scalar_integer(
+          module, loom_llvmir_verify_value_type(
+                      module, instruction->insert_element.index))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM insertelement index must be an integer");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_verify_instruction(
     const loom_llvmir_module_t* module, const loom_llvmir_function_t* function,
     const loom_llvmir_block_t* block,
@@ -550,6 +610,10 @@ static iree_status_t loom_llvmir_verify_instruction(
                                 "LLVM store references unknown value");
       }
       return iree_ok_status();
+    case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
+      return loom_llvmir_verify_extract_element(module, instruction);
+    case LOOM_LLVMIR_INST_INSERT_ELEMENT:
+      return loom_llvmir_verify_insert_element(module, instruction);
     case LOOM_LLVMIR_INST_CALL: {
       loom_llvmir_function_t* callee =
           loom_llvmir_verify_function_ref(module, instruction->call.callee);

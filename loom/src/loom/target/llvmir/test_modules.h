@@ -35,13 +35,15 @@ typedef enum loom_llvmir_test_module_scenario_e {
   LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS = 4,
   // Scalar arithmetic function with a value-producing binary op.
   LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP = 5,
+  // Vector lane extraction and insertion.
+  LOOM_LLVMIR_TEST_MODULE_VECTOR_ELEMENTS = 6,
   // Host function using target-independent memory intrinsics.
-  LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS = 6,
+  LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS = 7,
   // Scalar compare and select function.
-  LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT = 7,
+  LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT = 8,
   // Scalar cast function covering integer, float, pointer, and address-space
   // casts.
-  LOOM_LLVMIR_TEST_MODULE_CASTS = 8,
+  LOOM_LLVMIR_TEST_MODULE_CASTS = 9,
 } loom_llvmir_test_module_scenario_t;
 
 iree_host_size_t loom_llvmir_test_module_scenario_count(void);

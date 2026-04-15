@@ -86,12 +86,14 @@ typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_GEP = 6,
   LOOM_LLVMIR_INST_LOAD = 7,
   LOOM_LLVMIR_INST_STORE = 8,
-  LOOM_LLVMIR_INST_CALL = 9,
-  LOOM_LLVMIR_INST_INLINE_ASM = 10,
-  LOOM_LLVMIR_INST_RET = 11,
-  LOOM_LLVMIR_INST_BR = 12,
-  LOOM_LLVMIR_INST_COND_BR = 13,
-  LOOM_LLVMIR_INST_UNREACHABLE = 14,
+  LOOM_LLVMIR_INST_EXTRACT_ELEMENT = 9,
+  LOOM_LLVMIR_INST_INSERT_ELEMENT = 10,
+  LOOM_LLVMIR_INST_CALL = 11,
+  LOOM_LLVMIR_INST_INLINE_ASM = 12,
+  LOOM_LLVMIR_INST_RET = 13,
+  LOOM_LLVMIR_INST_BR = 14,
+  LOOM_LLVMIR_INST_COND_BR = 15,
+  LOOM_LLVMIR_INST_UNREACHABLE = 16,
 } loom_llvmir_inst_kind_t;
 
 typedef struct loom_llvmir_instruction_t {
@@ -184,6 +186,22 @@ typedef struct loom_llvmir_instruction_t {
       // Memory operation flags.
       uint32_t flags;
     } store;
+    // Vector lane extraction operands.
+    struct {
+      // Vector value to extract from.
+      loom_llvmir_value_id_t vector;
+      // Integer lane index.
+      loom_llvmir_value_id_t index;
+    } extract_element;
+    // Vector lane insertion operands.
+    struct {
+      // Original vector value.
+      loom_llvmir_value_id_t vector;
+      // Scalar element value to insert.
+      loom_llvmir_value_id_t element;
+      // Integer lane index.
+      loom_llvmir_value_id_t index;
+    } insert_element;
     // Function call operands.
     struct {
       // Callee function id.

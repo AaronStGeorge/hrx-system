@@ -522,6 +522,56 @@ iree_status_t loom_llvmir_build_select(loom_llvmir_block_t* block,
   return loom_llvmir_builder_append_instruction(block, &instruction);
 }
 
+iree_status_t loom_llvmir_build_extract_element(
+    loom_llvmir_block_t* block, const loom_llvmir_extract_element_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(block);
+  IREE_ASSERT_ARGUMENT(desc);
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->vector));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->index));
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_EXTRACT_ELEMENT,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .extract_element =
+          {
+              .vector = desc->vector,
+              .index = desc->index,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
+iree_status_t loom_llvmir_build_insert_element(
+    loom_llvmir_block_t* block, const loom_llvmir_insert_element_desc_t* desc,
+    loom_llvmir_value_id_t* out_value_id) {
+  IREE_ASSERT_ARGUMENT(block);
+  IREE_ASSERT_ARGUMENT(desc);
+  IREE_ASSERT_ARGUMENT(out_value_id);
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->vector));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->element));
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->index));
+  loom_llvmir_instruction_t instruction = {
+      .kind = LOOM_LLVMIR_INST_INSERT_ELEMENT,
+      .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
+      .insert_element =
+          {
+              .vector = desc->vector,
+              .element = desc->element,
+              .index = desc->index,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
+      block, desc->result_type, desc->result_name, out_value_id));
+  instruction.result_value_id = *out_value_id;
+  return loom_llvmir_builder_append_instruction(block, &instruction);
+}
+
 iree_status_t loom_llvmir_build_ret_void(loom_llvmir_block_t* block) {
   IREE_ASSERT_ARGUMENT(block);
   loom_llvmir_instruction_t instruction = {
