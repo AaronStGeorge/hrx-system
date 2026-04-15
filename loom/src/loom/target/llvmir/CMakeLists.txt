@@ -14,6 +14,8 @@ loom_cc_library(
   NAME
     llvmir
   HDRS
+    "bitcode_format.h"
+    "bitcode_record_writer.h"
     "bitcode_writer.h"
     "bitstream_writer.h"
     "builder.h"
@@ -24,6 +26,7 @@ loom_cc_library(
     "text_writer.h"
     "verify.h"
   SRCS
+    "bitcode_record_writer.c"
     "bitcode_writer.c"
     "bitstream_writer.c"
     "builder.c"
@@ -53,6 +56,18 @@ loom_cc_library(
     iree::base
   TESTONLY
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    bitcode_record_writer_test
+  SRCS
+    "bitcode_record_writer_test.cc"
+  DEPS
+    ::llvmir
+    iree::io::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

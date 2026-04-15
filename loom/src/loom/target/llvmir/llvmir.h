@@ -9,6 +9,8 @@
 #ifndef LOOM_TARGET_LLVMIR_LLVMIR_H_
 #define LOOM_TARGET_LLVMIR_LLVMIR_H_
 
+#include "loom/target/llvmir/bitcode_format.h"
+#include "loom/target/llvmir/bitcode_record_writer.h"
 #include "loom/target/llvmir/bitcode_writer.h"
 #include "loom/target/llvmir/bitstream_writer.h"
 #include "loom/target/llvmir/builder.h"

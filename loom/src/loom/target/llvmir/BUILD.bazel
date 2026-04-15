@@ -15,6 +15,7 @@ package(
 loom_cc_library(
     name = "llvmir",
     srcs = [
+        "bitcode_record_writer.c",
         "bitcode_writer.c",
         "bitstream_writer.c",
         "builder.c",
@@ -26,6 +27,8 @@ loom_cc_library(
         "verify.c",
     ],
     hdrs = [
+        "bitcode_format.h",
+        "bitcode_record_writer.h",
         "bitcode_writer.h",
         "bitstream_writer.h",
         "builder.h",
@@ -52,6 +55,17 @@ loom_cc_library(
     deps = [
         ":llvmir",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "bitcode_record_writer_test",
+    srcs = ["bitcode_record_writer_test.cc"],
+    deps = [
+        ":llvmir",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

@@ -164,6 +164,40 @@ iree_status_t loom_llvmir_bitstream_writer_write_bytes(
   return iree_ok_status();
 }
 
+iree_status_t loom_llvmir_bitstream_writer_patch_u32(
+    loom_llvmir_bitstream_writer_t* writer, uint64_t bit_offset,
+    uint32_t value) {
+  IREE_ASSERT_ARGUMENT(writer);
+  if ((bit_offset & 7) != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM bitstream patch offset is not byte-aligned");
+  }
+  if (writer->pending_bit_count != 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "LLVM bitstream has pending partial-byte bits");
+  }
+  if (bit_offset > writer->bit_offset || writer->bit_offset - bit_offset < 32) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "LLVM bitstream patch offset is outside output");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_flush(writer));
+
+  iree_io_stream_pos_t patch_offset = (iree_io_stream_pos_t)(bit_offset / 8);
+  iree_io_stream_pos_t current_offset = iree_io_stream_offset(writer->stream);
+  uint8_t bytes[4] = {
+      (uint8_t)value,
+      (uint8_t)(value >> 8),
+      (uint8_t)(value >> 16),
+      (uint8_t)(value >> 24),
+  };
+  IREE_RETURN_IF_ERROR(iree_io_stream_seek(
+      writer->stream, IREE_IO_STREAM_SEEK_SET, patch_offset));
+  IREE_RETURN_IF_ERROR(
+      iree_io_stream_write(writer->stream, sizeof(bytes), bytes));
+  return iree_io_stream_seek(writer->stream, IREE_IO_STREAM_SEEK_SET,
+                             current_offset);
+}
+
 iree_status_t loom_llvmir_bitstream_writer_flush(
     loom_llvmir_bitstream_writer_t* writer) {
   IREE_ASSERT_ARGUMENT(writer);

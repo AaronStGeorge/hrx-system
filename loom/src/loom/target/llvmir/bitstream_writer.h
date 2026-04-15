@@ -67,6 +67,13 @@ iree_status_t loom_llvmir_bitstream_writer_write_bytes(
     loom_llvmir_bitstream_writer_t* writer, const void* data,
     iree_host_size_t length);
 
+// Patches a little-endian u32 at |bit_offset|. The offset must be byte-aligned,
+// the writer must not have pending partial-byte state, and the destination
+// stream must be seekable.
+iree_status_t loom_llvmir_bitstream_writer_patch_u32(
+    loom_llvmir_bitstream_writer_t* writer, uint64_t bit_offset,
+    uint32_t value);
+
 // Flushes complete bytes to the destination stream while preserving any pending
 // partial byte in the writer.
 iree_status_t loom_llvmir_bitstream_writer_flush(
