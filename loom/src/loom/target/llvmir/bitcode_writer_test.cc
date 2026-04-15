@@ -7,8 +7,10 @@
 #include "loom/target/llvmir/bitcode_writer.h"
 
 #include <cctype>
+#include <memory>
 #include <string>
 
+#include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/target/llvmir/test_modules.h"
@@ -33,6 +35,18 @@ std::string ScenarioTestName(
   return name;
 }
 
+using StreamPtr =
+    std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
+
+StreamPtr CreateStream() {
+  iree_io_stream_t* stream = NULL;
+  IREE_CHECK_OK(iree_io_vec_stream_create(
+      IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_WRITABLE |
+          IREE_IO_STREAM_MODE_SEEKABLE,
+      1024, iree_allocator_system(), &stream));
+  return StreamPtr(stream, iree_io_stream_release);
+}
+
 class LlvmIrBitcodeWriterTest
     : public testing::TestWithParam<loom_llvmir_test_module_scenario_t> {};
 
@@ -42,14 +56,10 @@ TEST_P(LlvmIrBitcodeWriterTest, FailsLoudBeforeEncodingIsImplemented) {
       GetParam(), iree_allocator_system(), &module));
   IREE_ASSERT_OK(loom_llvmir_verify_module(module));
 
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(iree_allocator_system(), &builder);
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&builder, &stream);
+  StreamPtr stream = CreateStream();
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
-                        loom_llvmir_bitcode_write_module(module, &stream));
-  EXPECT_EQ(iree_string_builder_size(&builder), 0u);
-  iree_string_builder_deinitialize(&builder);
+                        loom_llvmir_bitcode_write_module(module, stream.get()));
+  EXPECT_EQ(iree_io_stream_length(stream.get()), 0);
   loom_llvmir_module_free(module);
 }
 

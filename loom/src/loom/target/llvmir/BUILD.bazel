@@ -40,6 +40,7 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
     ],
 )
 
@@ -59,6 +60,7 @@ loom_cc_test(
     srcs = ["bitstream_writer_test.cc"],
     deps = [
         ":llvmir",
+        "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
@@ -70,6 +72,7 @@ loom_cc_test(
     deps = [
         ":llvmir",
         ":test_modules",
+        "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

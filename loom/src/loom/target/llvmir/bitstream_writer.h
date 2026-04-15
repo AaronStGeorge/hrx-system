@@ -15,7 +15,7 @@
 #ifndef LOOM_TARGET_LLVMIR_BITSTREAM_WRITER_H_
 #define LOOM_TARGET_LLVMIR_BITSTREAM_WRITER_H_
 
-#include "loom/util/stream.h"
+#include "iree/io/stream.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,7 +25,7 @@ extern "C" {
 
 typedef struct loom_llvmir_bitstream_writer_t {
   // Destination stream for completed bytes.
-  loom_output_stream_t* stream;
+  iree_io_stream_t* stream;
   // Buffered complete bytes waiting for the next stream write.
   uint8_t page[LOOM_LLVMIR_BITSTREAM_PAGE_SIZE];
   // Number of complete bytes currently stored in |page|.
@@ -41,7 +41,7 @@ typedef struct loom_llvmir_bitstream_writer_t {
 // Initializes |out_writer| to append to |stream|. The stream must outlive the
 // writer and must not be written directly until the writer is finished.
 void loom_llvmir_bitstream_writer_initialize(
-    loom_output_stream_t* stream, loom_llvmir_bitstream_writer_t* out_writer);
+    iree_io_stream_t* stream, loom_llvmir_bitstream_writer_t* out_writer);
 
 // Returns the current physical bit offset.
 uint64_t loom_llvmir_bitstream_writer_bit_offset(

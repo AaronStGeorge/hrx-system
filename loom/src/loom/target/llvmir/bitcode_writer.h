@@ -13,15 +13,15 @@
 #ifndef LOOM_TARGET_LLVMIR_BITCODE_WRITER_H_
 #define LOOM_TARGET_LLVMIR_BITCODE_WRITER_H_
 
+#include "iree/io/stream.h"
 #include "loom/target/llvmir/module.h"
-#include "loom/util/stream.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 iree_status_t loom_llvmir_bitcode_write_module(
-    const loom_llvmir_module_t* module, loom_output_stream_t* stream);
+    const loom_llvmir_module_t* module, iree_io_stream_t* stream);
 
 #ifdef __cplusplus
 }

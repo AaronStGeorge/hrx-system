@@ -45,7 +45,7 @@ static iree_status_t loom_llvmir_bitstream_writer_emit_complete_bytes(
 }
 
 void loom_llvmir_bitstream_writer_initialize(
-    loom_output_stream_t* stream, loom_llvmir_bitstream_writer_t* out_writer) {
+    iree_io_stream_t* stream, loom_llvmir_bitstream_writer_t* out_writer) {
   IREE_ASSERT_ARGUMENT(stream);
   IREE_ASSERT_ARGUMENT(out_writer);
   memset(out_writer, 0, sizeof(*out_writer));
@@ -168,9 +168,8 @@ iree_status_t loom_llvmir_bitstream_writer_flush(
     loom_llvmir_bitstream_writer_t* writer) {
   IREE_ASSERT_ARGUMENT(writer);
   if (writer->page_position == 0) return iree_ok_status();
-  IREE_RETURN_IF_ERROR(loom_output_stream_write(
-      writer->stream,
-      iree_make_string_view((const char*)writer->page, writer->page_position)));
+  IREE_RETURN_IF_ERROR(iree_io_stream_write(
+      writer->stream, writer->page_position, writer->page));
   writer->page_position = 0;
   return iree_ok_status();
 }

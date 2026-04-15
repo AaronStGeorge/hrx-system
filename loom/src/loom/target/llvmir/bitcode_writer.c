@@ -7,7 +7,7 @@
 #include "loom/target/llvmir/bitcode_writer.h"
 
 iree_status_t loom_llvmir_bitcode_write_module(
-    const loom_llvmir_module_t* module, loom_output_stream_t* stream) {
+    const loom_llvmir_module_t* module, iree_io_stream_t* stream) {
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(stream);
   (void)module;

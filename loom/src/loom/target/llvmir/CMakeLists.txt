@@ -36,6 +36,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    iree::io::stream
     loom::src::loom::util::stream
   PUBLIC
 )
@@ -61,6 +62,7 @@ loom_cc_test(
     "bitstream_writer_test.cc"
   DEPS
     ::llvmir
+    iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -73,6 +75,7 @@ loom_cc_test(
   DEPS
     ::llvmir
     ::test_modules
+    iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )
