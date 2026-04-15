@@ -25,6 +25,8 @@ extern "C" {
 typedef struct loom_llvmir_bitcode_block_frame_t {
   // Abbreviation ID width used by the parent block.
   uint32_t parent_abbrev_width;
+  // Number of block-local application abbreviations in the parent block.
+  uint32_t parent_application_abbrev_count;
   // Bit offset of the 32-bit block-size field to patch at block exit.
   uint64_t size_field_bit_offset;
   // Bit offset of the first bit in the block body.
@@ -36,6 +38,8 @@ typedef struct loom_llvmir_bitcode_record_writer_t {
   loom_llvmir_bitstream_writer_t* bitstream;
   // Current abbreviation ID width in bits.
   uint32_t abbrev_width;
+  // Number of block-local application abbreviations defined in this block.
+  uint32_t application_abbrev_count;
   // Number of active entries in |block_stack|.
   uint32_t block_depth;
   // Active nested block frames.
@@ -61,6 +65,19 @@ iree_status_t loom_llvmir_bitcode_record_writer_exit_block(
 iree_status_t loom_llvmir_bitcode_record_writer_write_unabbrev_record(
     loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
     const uint64_t* operands, iree_host_size_t operand_count);
+
+// Defines a block-local abbreviation for records whose only payload is a blob.
+// The returned abbreviation id can be used with
+// loom_llvmir_bitcode_record_writer_write_blob_record().
+iree_status_t loom_llvmir_bitcode_record_writer_define_blob_abbrev(
+    loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
+    uint32_t* out_abbrev_id);
+
+// Emits a record using a blob abbreviation previously returned from
+// loom_llvmir_bitcode_record_writer_define_blob_abbrev().
+iree_status_t loom_llvmir_bitcode_record_writer_write_blob_record(
+    loom_llvmir_bitcode_record_writer_t* writer, uint32_t abbrev_id,
+    iree_string_view_t value);
 
 // Emits an unabbreviated record whose operands are bytes from |value| encoded
 // as VBR6 integers. This is the canonical fallback for LLVM string records.

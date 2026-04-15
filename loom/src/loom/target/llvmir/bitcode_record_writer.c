@@ -51,10 +51,12 @@ iree_status_t loom_llvmir_bitcode_record_writer_enter_subblock(
   loom_llvmir_bitcode_block_frame_t* frame =
       &writer->block_stack[writer->block_depth++];
   frame->parent_abbrev_width = writer->abbrev_width;
+  frame->parent_application_abbrev_count = writer->application_abbrev_count;
   frame->size_field_bit_offset = size_field_bit_offset;
   frame->body_start_bit_offset =
       loom_llvmir_bitstream_writer_bit_offset(writer->bitstream);
   writer->abbrev_width = child_abbrev_width;
+  writer->application_abbrev_count = 0;
   return iree_ok_status();
 }
 
@@ -90,6 +92,7 @@ iree_status_t loom_llvmir_bitcode_record_writer_exit_block(
       (uint32_t)body_word_count));
 
   writer->abbrev_width = frame->parent_abbrev_width;
+  writer->application_abbrev_count = frame->parent_application_abbrev_count;
   --writer->block_depth;
   return iree_ok_status();
 }
@@ -116,6 +119,64 @@ iree_status_t loom_llvmir_bitcode_record_writer_write_unabbrev_record(
         LOOM_LLVMIR_BITCODE_RECORD_OPERAND_WIDTH));
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_llvmir_bitcode_record_writer_define_blob_abbrev(
+    loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
+    uint32_t* out_abbrev_id) {
+  IREE_ASSERT_ARGUMENT(writer);
+  IREE_ASSERT_ARGUMENT(out_abbrev_id);
+  uint32_t abbrev_id = LOOM_LLVMIR_BITCODE_ABBREV_FIRST_APPLICATION +
+                       writer->application_abbrev_count;
+  if (writer->abbrev_width < 32 && (abbrev_id >> writer->abbrev_width) != 0) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "LLVM bitcode abbrev id exceeds block width");
+  }
+
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_bits(
+      writer->bitstream, LOOM_LLVMIR_BITCODE_ABBREV_DEFINE_ABBREV,
+      writer->abbrev_width));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_vbr(
+      writer->bitstream, 2, LOOM_LLVMIR_BITCODE_ABBREV_OPERAND_COUNT_WIDTH));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_bitstream_writer_write_bits(writer->bitstream, 1, 1));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_vbr(
+      writer->bitstream, code, LOOM_LLVMIR_BITCODE_ABBREV_LITERAL_WIDTH));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_bitstream_writer_write_bits(writer->bitstream, 0, 1));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_bits(
+      writer->bitstream, LOOM_LLVMIR_BITCODE_ABBREV_ENCODING_BLOB,
+      LOOM_LLVMIR_BITCODE_ABBREV_ENCODING_WIDTH));
+
+  writer->application_abbrev_count += 1;
+  *out_abbrev_id = abbrev_id;
+  return iree_ok_status();
+}
+
+iree_status_t loom_llvmir_bitcode_record_writer_write_blob_record(
+    loom_llvmir_bitcode_record_writer_t* writer, uint32_t abbrev_id,
+    iree_string_view_t value) {
+  IREE_ASSERT_ARGUMENT(writer);
+  if (value.size != 0 && value.data == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "non-empty LLVM bitcode blob is null");
+  }
+  uint32_t max_abbrev_id = LOOM_LLVMIR_BITCODE_ABBREV_FIRST_APPLICATION +
+                           writer->application_abbrev_count;
+  if (abbrev_id < LOOM_LLVMIR_BITCODE_ABBREV_FIRST_APPLICATION ||
+      abbrev_id >= max_abbrev_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM bitcode blob abbrev is not defined");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_bits(
+      writer->bitstream, abbrev_id, writer->abbrev_width));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_vbr(
+      writer->bitstream, value.size,
+      LOOM_LLVMIR_BITCODE_RECORD_OPERAND_COUNT_WIDTH));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_align32(writer->bitstream));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_bytes(
+      writer->bitstream, value.data, value.size));
+  return loom_llvmir_bitstream_writer_align32(writer->bitstream);
 }
 
 iree_status_t loom_llvmir_bitcode_record_writer_write_string_record(

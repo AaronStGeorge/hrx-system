@@ -86,6 +86,23 @@ TEST_F(LlvmIrBitcodeRecordWriterTest, WritesUnabbreviatedRecords) {
   EXPECT_EQ((uint8_t)bytes[7], 0x00);
 }
 
+TEST_F(LlvmIrBitcodeRecordWriterTest, WritesBlobRecords) {
+  IREE_ASSERT_OK(loom_llvmir_bitcode_record_writer_enter_subblock(
+      &record_writer_, LOOM_LLVMIR_BITCODE_STRTAB_BLOCK, 3));
+  uint32_t blob_abbrev = 0;
+  IREE_ASSERT_OK(loom_llvmir_bitcode_record_writer_define_blob_abbrev(
+      &record_writer_, LOOM_LLVMIR_BITCODE_STRTAB_CODE_BLOB, &blob_abbrev));
+  EXPECT_EQ(blob_abbrev, LOOM_LLVMIR_BITCODE_ABBREV_FIRST_APPLICATION);
+  IREE_ASSERT_OK(loom_llvmir_bitcode_record_writer_write_blob_record(
+      &record_writer_, blob_abbrev, IREE_SV("abc")));
+  IREE_ASSERT_OK(loom_llvmir_bitcode_record_writer_exit_block(&record_writer_));
+  IREE_ASSERT_OK(loom_llvmir_bitstream_writer_finish(&bitstream_));
+
+  std::string bytes = StreamBytes(stream_.get());
+  ASSERT_GE(bytes.size(), 16u);
+  EXPECT_NE(bytes.find("abc"), std::string::npos);
+}
+
 TEST_F(LlvmIrBitcodeRecordWriterTest, RejectsUnbalancedExit) {
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,

@@ -14,6 +14,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/target/llvmir/bitcode_format.h"
+#include "loom/target/llvmir/builder.h"
 #include "loom/target/llvmir/target_env.h"
 #include "loom/target/llvmir/test_modules.h"
 #include "loom/target/llvmir/verify.h"
@@ -94,10 +95,67 @@ TEST(LlvmIrBitcodeWriterTest, WritesModuleHeaderAndTypeBlock) {
   loom_llvmir_module_free(module);
 }
 
+TEST(LlvmIrBitcodeWriterTest, WritesFunctionDeclarationsAndRetVoidBodies) {
+  const loom_llvmir_target_env_t* target_env =
+      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+  loom_llvmir_target_config_t target_config = {};
+  IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
+      target_env, IREE_SV("loom-functions"), &target_config));
+
+  loom_llvmir_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_llvmir_module_allocate(&target_config,
+                                             iree_allocator_system(), &module));
+  loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(loom_llvmir_module_get_void_type(module, &void_type));
+  IREE_ASSERT_OK(loom_llvmir_module_get_pointer_type(
+      module, target_env->address_spaces.generic, &ptr_type));
+
+  loom_llvmir_function_desc_t import_desc = {};
+  import_desc.kind = LOOM_LLVMIR_FUNCTION_DECLARATION;
+  import_desc.name = IREE_SV("imported");
+  import_desc.return_type = void_type;
+  import_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  loom_llvmir_function_t* imported = NULL;
+  IREE_ASSERT_OK(
+      loom_llvmir_module_add_function(module, &import_desc, &imported));
+  loom_llvmir_parameter_desc_t parameter_desc = {};
+  parameter_desc.type_id = ptr_type;
+  parameter_desc.name = IREE_SV("buffer");
+  loom_llvmir_value_id_t parameter = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_llvmir_function_add_parameter(imported, &parameter_desc,
+                                                    &parameter));
+
+  loom_llvmir_function_desc_t definition_desc = {};
+  definition_desc.kind = LOOM_LLVMIR_FUNCTION_DEFINITION;
+  definition_desc.name = IREE_SV("entry");
+  definition_desc.return_type = void_type;
+  definition_desc.linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL;
+  definition_desc.attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  loom_llvmir_function_t* entry = NULL;
+  IREE_ASSERT_OK(
+      loom_llvmir_module_add_function(module, &definition_desc, &entry));
+  loom_llvmir_block_t* block = NULL;
+  IREE_ASSERT_OK(
+      loom_llvmir_function_add_block(entry, IREE_SV("entry"), &block));
+  IREE_ASSERT_OK(loom_llvmir_build_ret_void(block));
+  IREE_ASSERT_OK(loom_llvmir_verify_module(module));
+
+  StreamPtr stream = CreateStream();
+  IREE_EXPECT_OK(loom_llvmir_bitcode_write_module(module, stream.get()));
+  std::string bytes = StreamBytes(stream.get());
+  ASSERT_GE(bytes.size(), 8u);
+  EXPECT_EQ((uint8_t)bytes[0], LOOM_LLVMIR_BITCODE_MAGIC_0);
+  EXPECT_EQ((uint8_t)bytes[1], LOOM_LLVMIR_BITCODE_MAGIC_1);
+  EXPECT_EQ((uint8_t)bytes[2], LOOM_LLVMIR_BITCODE_MAGIC_2);
+  EXPECT_EQ((uint8_t)bytes[3], LOOM_LLVMIR_BITCODE_MAGIC_3);
+  loom_llvmir_module_free(module);
+}
+
 class LlvmIrBitcodeWriterTest
     : public testing::TestWithParam<loom_llvmir_test_module_scenario_t> {};
 
-TEST_P(LlvmIrBitcodeWriterTest, RejectsFunctionModulesBeforeWriting) {
+TEST_P(LlvmIrBitcodeWriterTest, RejectsUnsupportedModulesBeforeWriting) {
   loom_llvmir_module_t* module = NULL;
   IREE_ASSERT_OK(loom_llvmir_test_module_build(
       GetParam(), iree_allocator_system(), &module));
