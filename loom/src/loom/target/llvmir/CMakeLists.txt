@@ -27,6 +27,7 @@ loom_cc_library(
     "module.h"
     "target_env.h"
     "text_writer.h"
+    "tool.h"
     "verify.h"
   SRCS
     "bitcode_record_writer.c"
@@ -39,11 +40,13 @@ loom_cc_library(
     "module.c"
     "target_env.c"
     "text_writer.c"
+    "tool.c"
     "types.h"
     "verify.c"
   DEPS
     iree::base
     iree::base::internal::arena
+    iree::base::internal::path
     iree::io::stream
     loom::src::loom::util::stream
   PUBLIC
@@ -121,6 +124,23 @@ loom_cc_test(
     ::llvmir
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    tool_test
+  SRCS
+    "tool_test.cc"
+  DEPS
+    ::llvmir
+    ::test_modules
+    iree::io::file_handle
+    iree::io::stream
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "requires-filesystem"
 )
 
 loom_cc_test(

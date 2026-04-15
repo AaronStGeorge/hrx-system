@@ -18,6 +18,7 @@
 #include "loom/target/llvmir/module.h"
 #include "loom/target/llvmir/target_env.h"
 #include "loom/target/llvmir/text_writer.h"
+#include "loom/target/llvmir/tool.h"
 #include "loom/target/llvmir/verify.h"
 
 #endif  // LOOM_TARGET_LLVMIR_LLVMIR_H_

@@ -25,6 +25,7 @@ loom_cc_library(
         "module.c",
         "target_env.c",
         "text_writer.c",
+        "tool.c",
         "types.h",
         "verify.c",
     ],
@@ -42,12 +43,14 @@ loom_cc_library(
         "module.h",
         "target_env.h",
         "text_writer.h",
+        "tool.h",
         "verify.h",
     ],
     deps = [
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:path",
         "//runtime/src/iree/io:stream",
     ],
 )
@@ -113,6 +116,21 @@ loom_cc_test(
     srcs = ["target_env_test.cc"],
     deps = [
         ":llvmir",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "tool_test",
+    srcs = ["tool_test.cc"],
+    tags = ["requires-filesystem"],
+    deps = [
+        ":llvmir",
+        ":test_modules",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
