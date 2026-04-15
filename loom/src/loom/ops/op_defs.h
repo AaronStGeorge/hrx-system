@@ -1223,11 +1223,11 @@ void loom_builder_initialize(loom_module_t* module,
                              iree_arena_allocator_t* arena, loom_block_t* block,
                              loom_builder_t* out_builder);
 
-// Moves the insertion point to before |op| in the current block.
+// Moves the insertion point to before |op| and inherits |op|'s parent op.
 // Used during rewrites: insert replacement ops, then erase the original.
 void loom_builder_set_before(loom_builder_t* builder, const loom_op_t* op);
 
-// Moves the insertion point to after |op| in the current block.
+// Moves the insertion point to after |op| and inherits |op|'s parent op.
 void loom_builder_set_after(loom_builder_t* builder, const loom_op_t* op);
 
 // Moves the insertion point to the end of |block| (append mode).

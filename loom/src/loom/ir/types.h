@@ -324,6 +324,10 @@ enum loom_type_flags_e {
   LOOM_TYPE_FLAG_ALL_STATIC = (1 << 1),
 };
 
+// Maximum rank representable in the type header. Rank is packed into four bits
+// so well-formed shaped types are rank 0-15.
+#define LOOM_TYPE_MAX_RANK 15
+
 // Encoding flag bits for the encoding_flags field of loom_type_t.
 //
 // When LOOM_ENCODING_FLAG_SSA is set, encoding_id holds a value_id
@@ -349,7 +353,7 @@ typedef struct loom_type_t {
   //   [0:7]   loom_type_kind_t
   //   [8:15]  loom_scalar_type_t (shaped types), loom_group_scope_t (group),
   //           or loom_encoding_role_t (encoding)
-  //   [16:19] rank (0-15 for shaped types, 0 otherwise)
+  //   [16:19] rank (0-LOOM_TYPE_MAX_RANK for shaped types, 0 otherwise)
   //   [20:23] loom_type_flags_e (inline_dims, all_static)
   //   [24:31] reserved
   uint32_t header;

@@ -1,0 +1,286 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/transforms/callable.h"
+
+#include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
+#include "loom/transforms/materialize.h"
+
+static bool loom_callable_get_call_symbol_ref(const loom_op_t* call_op,
+                                              loom_symbol_ref_t* out_ref) {
+  if (loom_func_call_isa(call_op)) {
+    *out_ref = loom_func_call_callee(call_op);
+    return true;
+  }
+  if (loom_func_apply_isa(call_op)) {
+    *out_ref = loom_func_apply_callee(call_op);
+    return true;
+  }
+  *out_ref = loom_symbol_ref_null();
+  return false;
+}
+
+iree_status_t loom_callable_resolve_direct_callee(
+    const loom_module_t* module, const loom_op_t* call_op,
+    loom_func_like_t* out_callee) {
+  if (!module || !call_op || !out_callee) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "module, call op, and callee output are required");
+  }
+  *out_callee = (loom_func_like_t){0};
+  loom_symbol_ref_t ref = loom_symbol_ref_null();
+  if (!loom_callable_get_call_symbol_ref(call_op, &ref)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "op is not a direct callable op");
+  }
+  if (!loom_symbol_ref_is_valid(ref) || ref.module_id != 0 ||
+      ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "call target symbol ref {module=%u, symbol=%u} is invalid",
+        (unsigned)ref.module_id, (unsigned)ref.symbol_id);
+  }
+  loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
+  if (!symbol->defining_op) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "call target symbol has no defining op");
+  }
+  loom_func_like_t callee = loom_func_like_cast(module, symbol->defining_op);
+  if (!loom_func_like_isa(callee)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "call target symbol does not define a function-like op");
+  }
+  *out_callee = callee;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_callable_validate_same_module_callee(
+    const loom_module_t* module, loom_func_like_t callee) {
+  if (!loom_func_like_isa(callee)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "callee must be a function-like op");
+  }
+  loom_symbol_ref_t callee_ref = loom_func_like_callee(callee);
+  if (!loom_symbol_ref_is_valid(callee_ref) || callee_ref.module_id != 0 ||
+      callee_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "callee symbol ref {module=%u, symbol=%u} is invalid in target module",
+        (unsigned)callee_ref.module_id, (unsigned)callee_ref.symbol_id);
+  }
+  if (module->symbols.entries[callee_ref.symbol_id].defining_op != callee.op) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "callee does not belong to the target module symbol table");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_callable_validate_call_targets_callee(
+    const loom_op_t* call_op, loom_func_like_t callee) {
+  loom_symbol_ref_t call_ref = loom_symbol_ref_null();
+  if (!loom_callable_get_call_symbol_ref(call_op, &call_ref)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "op is not a direct callable op");
+  }
+  loom_symbol_ref_t callee_ref = loom_func_like_callee(callee);
+  if (call_ref.module_id != callee_ref.module_id ||
+      call_ref.symbol_id != callee_ref.symbol_id) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "call target does not match the requested callee");
+  }
+  return iree_ok_status();
+}
+
+static bool loom_callable_op_is_inside_region(const loom_op_t* op,
+                                              const loom_region_t* region) {
+  for (const loom_op_t* current = op; current; current = current->parent_op) {
+    const loom_region_t* parent_region =
+        current->parent_block ? current->parent_block->parent_region : NULL;
+    if (parent_region == region) return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_callable_validate_inline_body(
+    const loom_op_t* call_op, loom_func_like_t callee,
+    loom_block_t** out_entry_block, loom_op_t** out_return_op) {
+  loom_region_t* body = loom_func_like_body(callee);
+  if (!body) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "callee has no inlineable body");
+  }
+  if (body->block_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "callable inlining requires a single-block callee body");
+  }
+  if (loom_callable_op_is_inside_region(call_op, body)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "cannot inline a call from inside its callee body");
+  }
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  if (entry_block->op_count == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "callee body has no terminator");
+  }
+  loom_op_t* return_op = loom_block_op(entry_block, entry_block->op_count - 1);
+  if (!loom_func_return_isa(return_op)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "callee body must end with func.return to inline");
+  }
+  *out_entry_block = entry_block;
+  *out_return_op = return_op;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_callable_bind_entry_args(loom_ir_remap_t* remap,
+                                                   loom_func_like_t callee,
+                                                   const loom_op_t* call_op) {
+  uint16_t arg_count = 0;
+  const loom_value_id_t* arg_ids = loom_func_like_arg_ids(callee, &arg_count);
+  if (arg_count != call_op->operand_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "call operand count %u does not match callee argument count %u",
+        (unsigned)call_op->operand_count, (unsigned)arg_count);
+  }
+  const loom_value_id_t* operands = loom_op_const_operands(call_op);
+  for (uint16_t i = 0; i < arg_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_ir_remap_map_value(remap, arg_ids[i], operands[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_callable_resolve_return_replacements(
+    loom_rewriter_t* rewriter, loom_op_t* call_op, loom_op_t* return_op,
+    loom_ir_remap_t* remap, loom_value_id_t* replacements) {
+  loom_value_slice_t return_operands = loom_func_return_operands(return_op);
+  if (return_operands.count != call_op->result_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "func.return operand count %u does not match call result count %u",
+        (unsigned)return_operands.count, (unsigned)call_op->result_count);
+  }
+  const loom_value_id_t* call_results = loom_op_const_results(call_op);
+  for (uint16_t i = 0; i < call_op->result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_ir_remap_resolve_value(
+        remap, return_operands.values[i], &replacements[i]));
+    if (call_results[i] == LOOM_VALUE_ID_INVALID ||
+        replacements[i] == LOOM_VALUE_ID_INVALID) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "call result and replacement must be valid");
+    }
+    loom_type_t result_type =
+        loom_module_value_type(rewriter->module, call_results[i]);
+    loom_type_t replacement_type =
+        loom_module_value_type(rewriter->module, replacements[i]);
+    if (!loom_type_equal(result_type, replacement_type)) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "inline replacement type does not match call result type");
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_callable_preserve_call_result_names(
+    loom_rewriter_t* rewriter, const loom_op_t* call_op,
+    const loom_value_id_t* replacements, uint16_t count,
+    loom_value_id_t value_checkpoint) {
+  const loom_value_id_t* call_results = loom_op_const_results(call_op);
+  for (uint16_t i = 0; i < count; ++i) {
+    loom_value_id_t old_result = call_results[i];
+    loom_value_id_t replacement = replacements[i];
+    if (old_result == LOOM_VALUE_ID_INVALID ||
+        replacement == LOOM_VALUE_ID_INVALID) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "call result and replacement must be valid");
+    }
+    if (replacement < value_checkpoint) continue;
+    if ((iree_host_size_t)replacement >= rewriter->module->values.count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "inline replacement value %%%u is out of range",
+                              (unsigned)replacement);
+    }
+    loom_string_id_t old_name =
+        loom_module_value(rewriter->module, old_result)->name_id;
+    if (old_name == LOOM_STRING_ID_INVALID) continue;
+    loom_module_value(rewriter->module, replacement)->name_id = old_name;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_callable_inline_call(loom_rewriter_t* rewriter,
+                                        loom_op_t* call_op,
+                                        loom_func_like_t callee) {
+  if (!rewriter || !rewriter->module || !call_op) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "rewriter, module, and call op are required");
+  }
+  if (!call_op->parent_block ||
+      iree_any_bit_set(call_op->flags, LOOM_OP_FLAG_DEAD)) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "call op must be live and linked");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_callable_validate_same_module_callee(rewriter->module, callee));
+  IREE_RETURN_IF_ERROR(
+      loom_callable_validate_call_targets_callee(call_op, callee));
+
+  loom_block_t* entry_block = NULL;
+  loom_op_t* return_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_callable_validate_inline_body(
+      call_op, callee, &entry_block, &return_op));
+
+  loom_ir_remap_t remap = {0};
+  IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(
+      rewriter->module, rewriter->module, rewriter->arena, NULL, &remap));
+  IREE_RETURN_IF_ERROR(loom_callable_bind_entry_args(&remap, callee, call_op));
+
+  loom_value_id_t* replacements = NULL;
+  if (call_op->result_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        rewriter->arena, call_op->result_count, sizeof(loom_value_id_t),
+        (void**)&replacements));
+  }
+
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
+  loom_builder_set_before(&rewriter->builder, call_op);
+  loom_ir_clone_block_options_t clone_options = {
+      .omit_terminators = true,
+  };
+  iree_status_t status = loom_ir_clone_block_ops(
+      &rewriter->builder, entry_block, &remap, &clone_options);
+  if (iree_status_is_ok(status)) {
+    status = loom_callable_resolve_return_replacements(
+        rewriter, call_op, return_op, &remap, replacements);
+  }
+  loom_builder_restore(&rewriter->builder, saved_ip);
+  IREE_RETURN_IF_ERROR(status);
+
+  IREE_RETURN_IF_ERROR(loom_callable_preserve_call_result_names(
+      rewriter, call_op, replacements, call_op->result_count,
+      value_checkpoint));
+  return loom_rewriter_replace_all_uses_and_erase(
+      rewriter, call_op, replacements, call_op->result_count);
+}
+
+iree_status_t loom_callable_inline_direct_call(loom_rewriter_t* rewriter,
+                                               loom_op_t* call_op) {
+  if (!rewriter || !rewriter->module) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "rewriter with module is required");
+  }
+  loom_func_like_t callee = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_callable_resolve_direct_callee(rewriter->module, call_op, &callee));
+  return loom_callable_inline_call(rewriter, call_op, callee);
+}

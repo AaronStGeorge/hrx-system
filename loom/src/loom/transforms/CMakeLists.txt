@@ -68,6 +68,41 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    callable
+  HDRS
+    "callable.h"
+  SRCS
+    "callable.c"
+  DEPS
+    ::materialize
+    ::remap
+    ::rewriter
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    callable_test
+  SRCS
+    "callable_test.cc"
+  DEPS
+    ::callable
+    ::rewriter
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     cse
   HDRS
     "cse.h"
@@ -148,6 +183,38 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    materialize
+  HDRS
+    "materialize.h"
+  SRCS
+    "materialize.c"
+  DEPS
+    ::remap
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    materialize_test
+  SRCS
+    "materialize_test.cc"
+  DEPS
+    ::materialize
+    ::remap
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     pass
   HDRS
     "pass.h"
@@ -173,6 +240,33 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
+    remap
+  HDRS
+    "remap.h"
+  SRCS
+    "remap.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    remap_test
+  SRCS
+    "remap_test.cc"
+  DEPS
+    ::remap
+    iree::base::internal::arena
+    loom::src::loom::ir
     iree::testing::gtest
     iree::testing::gtest_main
 )

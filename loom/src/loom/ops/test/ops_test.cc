@@ -860,6 +860,35 @@ TEST_F(BuilderTest, SetBeforePreservesConsecutiveInsertionOrder) {
   EXPECT_LT(inserted_b->block_ordinal, anchor->block_ordinal);
 }
 
+TEST_F(BuilderTest, SetBeforeInheritsNestedParentOp) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_op_t* input_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32,
+                                          LOOM_LOCATION_UNKNOWN, &input_op));
+  loom_value_id_t input = loom_test_constant_result(input_op);
+
+  loom_op_t* map_op = NULL;
+  IREE_ASSERT_OK(loom_test_map_build(&builder_, &input, 1, i32, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &map_op));
+  loom_region_t* body = loom_test_map_body(map_op);
+  loom_builder_ip_t saved_ip =
+      loom_builder_enter_region(&builder_, map_op, body);
+  loom_op_t* anchor = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(3), i32,
+                                          LOOM_LOCATION_UNKNOWN, &anchor));
+  loom_builder_restore(&builder_, saved_ip);
+
+  loom_builder_set_before(&builder_, anchor);
+  loom_op_t* inserted = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), i32,
+                                          LOOM_LOCATION_UNKNOWN, &inserted));
+
+  EXPECT_EQ(inserted->parent_op, map_op);
+  EXPECT_EQ(inserted->parent_block, loom_region_entry_block(body));
+  EXPECT_EQ(loom_block_op(loom_region_entry_block(body), 0), inserted);
+  EXPECT_EQ(loom_block_op(loom_region_entry_block(body), 1), anchor);
+}
+
 TEST_F(BuilderTest, SaveRestore) {
   loom_builder_ip_t saved = loom_builder_save(&builder_);
   EXPECT_EQ(saved.block, loom_module_block(module_));

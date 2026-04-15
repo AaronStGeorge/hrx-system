@@ -62,6 +62,37 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "callable",
+    srcs = ["callable.c"],
+    hdrs = ["callable.h"],
+    deps = [
+        ":materialize",
+        ":remap",
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "callable_test",
+    srcs = ["callable_test.cc"],
+    deps = [
+        ":callable",
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "cse",
     srcs = ["cse.c"],
     hdrs = ["cse.h"],
@@ -131,6 +162,34 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "materialize",
+    srcs = ["materialize.c"],
+    hdrs = ["materialize.h"],
+    deps = [
+        ":remap",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "materialize_test",
+    srcs = ["materialize_test.cc"],
+    deps = [
+        ":materialize",
+        ":remap",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "pass",
     srcs = ["pass.c"],
     hdrs = ["pass.h"],
@@ -151,6 +210,29 @@ loom_cc_test(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "remap",
+    srcs = ["remap.c"],
+    hdrs = ["remap.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "remap_test",
+    srcs = ["remap_test.cc"],
+    deps = [
+        ":remap",
+        "//loom/src/loom/ir",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

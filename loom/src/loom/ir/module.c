@@ -1897,11 +1897,13 @@ static iree_status_t loom_module_clone_type_payload(loom_module_t* module,
 static iree_status_t loom_module_intern_type_impl(
     loom_module_t* module, uint32_t hash, loom_intern_equal_fn_t equal_fn,
     const void* equal_context, loom_module_type_clone_fn_t clone_fn,
-    const void* clone_context, loom_type_t* out_interned_type) {
+    const void* clone_context, loom_type_t* out_interned_type,
+    loom_type_id_t* out_type_id) {
   uint32_t existing_index = loom_intern_table_lookup(&module->type_intern, hash,
                                                      equal_fn, equal_context);
   if (existing_index != UINT32_MAX) {
     *out_interned_type = module->types.entries[existing_index];
+    if (out_type_id) *out_type_id = (loom_type_id_t)existing_index;
     return iree_ok_status();
   }
 
@@ -1930,12 +1932,14 @@ static iree_status_t loom_module_intern_type_impl(
 
   if (result_index != new_index) {
     *out_interned_type = module->types.entries[result_index];
+    if (out_type_id) *out_type_id = (loom_type_id_t)result_index;
     return iree_ok_status();
   }
 
   module->types.entries[new_index] = type;
   module->types.count++;
   *out_interned_type = type;
+  if (out_type_id) *out_type_id = (loom_type_id_t)new_index;
   return iree_ok_status();
 }
 
@@ -1946,7 +1950,24 @@ iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
 
   return loom_module_intern_type_impl(
       module, hash, loom_type_equal_fn, &equal_context,
-      loom_module_clone_type_from_context, &type, out_interned_type);
+      loom_module_clone_type_from_context, &type, out_interned_type,
+      /*out_type_id=*/NULL);
+}
+
+iree_status_t loom_module_intern_type_id(loom_module_t* module,
+                                         loom_type_t type,
+                                         loom_type_id_t* out_type_id) {
+  if (!out_type_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type id output is NULL");
+  }
+  *out_type_id = LOOM_TYPE_ID_INVALID;
+  uint32_t hash = loom_type_hash(type);
+  loom_type_equal_context_t equal_context = {module, type};
+  loom_type_t interned_type = {0};
+  return loom_module_intern_type_impl(
+      module, hash, loom_type_equal_fn, &equal_context,
+      loom_module_clone_type_from_context, &type, &interned_type, out_type_id);
 }
 
 iree_status_t loom_module_intern_function_type(loom_module_t* module,
@@ -1977,7 +1998,7 @@ iree_status_t loom_module_intern_function_type(loom_module_t* module,
   return loom_module_intern_type_impl(
       module, hash, loom_function_type_equal_fn, &equal_context,
       loom_module_clone_function_type_from_context, &equal_context,
-      out_interned_type);
+      out_interned_type, /*out_type_id=*/NULL);
 }
 
 //===----------------------------------------------------------------------===//

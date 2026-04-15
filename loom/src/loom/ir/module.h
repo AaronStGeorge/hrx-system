@@ -204,6 +204,11 @@ const loom_encoding_vtable_t* loom_module_encoding_vtable(
 iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
                                       loom_type_t* out_interned_type);
 
+// Interns a type and returns its canonical type-table ID.
+iree_status_t loom_module_intern_type_id(loom_module_t* module,
+                                         loom_type_t type,
+                                         loom_type_id_t* out_type_id);
+
 // Interns a function type directly from argument and result type arrays. If a
 // structurally identical function type already exists, returns the canonical
 // module-owned entry without cloning. Otherwise, recursively clones the

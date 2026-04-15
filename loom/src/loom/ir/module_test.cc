@@ -887,6 +887,28 @@ TEST_F(ModuleTest, InternTypeDedup) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, InternTypeIdReturnsCanonicalId) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_id_t f32_id = LOOM_TYPE_ID_INVALID;
+  loom_type_id_t duplicate_f32_id = LOOM_TYPE_ID_INVALID;
+  loom_type_id_t i32_id = LOOM_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_type_id(module, f32, &f32_id));
+  IREE_ASSERT_OK(loom_module_intern_type_id(module, f32, &duplicate_f32_id));
+  IREE_ASSERT_OK(loom_module_intern_type_id(module, i32, &i32_id));
+
+  EXPECT_EQ(f32_id, 0u);
+  EXPECT_EQ(duplicate_f32_id, f32_id);
+  EXPECT_EQ(i32_id, 1u);
+  EXPECT_EQ(module->types.count, 2u);
+  EXPECT_TRUE(loom_type_equal(module->types.entries[f32_id], f32));
+  EXPECT_TRUE(loom_type_equal(module->types.entries[i32_id], i32));
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, InternDifferentTypes) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

@@ -438,11 +438,13 @@ loom_builder_ip_t loom_builder_enter_region(loom_builder_t* builder,
 
 void loom_builder_set_before(loom_builder_t* builder, const loom_op_t* op) {
   builder->ip.block = op->parent_block;
+  builder->ip.parent_op = op->parent_op;
   builder->ip.before_op = (loom_op_t*)op;
 }
 
 void loom_builder_set_after(loom_builder_t* builder, const loom_op_t* op) {
   builder->ip.block = op->parent_block;
+  builder->ip.parent_op = op->parent_op;
   builder->ip.before_op = op->next_op;
 }
 
