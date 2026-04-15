@@ -258,12 +258,12 @@ iree_status_t loom_rewriter_preserve_result_names_on_new_values(
 
 bool loom_rewriter_is_trivially_dead(const loom_rewriter_t* rewriter,
                                      const loom_op_t* op) {
-  // Terminators, ops with effects, compiler hints, and ops with regions are
-  // never trivially dead. Region ops require recursive erasure which is not
-  // handled by the simple DCE path.
+  // Terminators, direct effects, and compiler hints are never trivially dead.
+  // Nested writes also make the parent observable. Region ops with no nested
+  // writes can be erased as a subtree by loom_op_erase.
   loom_trait_flags_t traits = loom_op_effective_traits(rewriter->module, op);
   if (traits & LOOM_REWRITER_RETAINED_TRAITS) return false;
-  if (op->region_count > 0) return false;
+  if (loom_op_regions_have_write_effects(op)) return false;
   return loom_op_results_unused(rewriter->module, op);
 }
 
@@ -365,6 +365,29 @@ static iree_status_t loom_rewriter_add_result_type_ref_providers_to_worklist(
   return iree_ok_status();
 }
 
+static iree_status_t loom_rewriter_add_subtree_providers_to_worklist(
+    loom_rewriter_t* rewriter, loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_add_operand_providers_to_worklist(rewriter, op));
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_add_result_type_ref_providers_to_worklist(rewriter, op));
+
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    loom_region_t* region = regions[i];
+    if (!region) continue;
+    loom_block_t* block = NULL;
+    loom_region_for_each_block(region, block) {
+      loom_op_t* child_op = NULL;
+      loom_block_for_each_op(block, child_op) {
+        IREE_RETURN_IF_ERROR(loom_rewriter_add_subtree_providers_to_worklist(
+            rewriter, child_op));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 // Adds all users of a value to the worklist.
 static iree_status_t loom_rewriter_add_users_to_worklist(
     loom_rewriter_t* rewriter, loom_value_id_t value_id) {
@@ -414,9 +437,7 @@ iree_status_t loom_rewriter_replace_all_uses_and_erase(
         rewriter->module, results[i], replacements[i]));
   }
   IREE_RETURN_IF_ERROR(
-      loom_rewriter_add_operand_providers_to_worklist(rewriter, op));
-  IREE_RETURN_IF_ERROR(
-      loom_rewriter_add_result_type_ref_providers_to_worklist(rewriter, op));
+      loom_rewriter_add_subtree_providers_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(loom_op_erase(rewriter->module, op));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
@@ -460,9 +481,7 @@ iree_status_t loom_rewriter_replace_results_with_materialized_values_and_erase(
 
 iree_status_t loom_rewriter_erase(loom_rewriter_t* rewriter, loom_op_t* op) {
   IREE_RETURN_IF_ERROR(
-      loom_rewriter_add_operand_providers_to_worklist(rewriter, op));
-  IREE_RETURN_IF_ERROR(
-      loom_rewriter_add_result_type_ref_providers_to_worklist(rewriter, op));
+      loom_rewriter_add_subtree_providers_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(loom_op_erase(rewriter->module, op));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
@@ -551,7 +570,12 @@ iree_status_t loom_rewriter_set_attr(loom_rewriter_t* rewriter, loom_op_t* op,
                                      loom_attribute_t value) {
   IREE_RETURN_IF_ERROR(
       loom_rewriter_validate_attr_write(rewriter, op, attr_index, value));
+  loom_trait_flags_t old_traits =
+      loom_op_effective_traits(rewriter->module, op);
   loom_op_attrs(op)[attr_index] = value;
+  loom_trait_flags_t new_traits =
+      loom_op_effective_traits(rewriter->module, op);
+  loom_module_update_op_direct_effects(op, old_traits, new_traits);
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_result_users_to_worklist(rewriter, op));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
@@ -588,7 +612,12 @@ iree_status_t loom_rewriter_replace_attr_dict(
 iree_status_t loom_rewriter_set_instance_flags(loom_rewriter_t* rewriter,
                                                loom_op_t* op, uint8_t flags) {
   if (op->instance_flags == flags) return iree_ok_status();
+  loom_trait_flags_t old_traits =
+      loom_op_effective_traits(rewriter->module, op);
   op->instance_flags = flags;
+  loom_trait_flags_t new_traits =
+      loom_op_effective_traits(rewriter->module, op);
+  loom_module_update_op_direct_effects(op, old_traits, new_traits);
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_result_users_to_worklist(rewriter, op));
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;

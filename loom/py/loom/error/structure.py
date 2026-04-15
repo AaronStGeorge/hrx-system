@@ -238,6 +238,24 @@ ERR_STRUCTURE_016 = ErrorDef(
     fix_hint="Remove one of the incompatible traits from '{op_name}'",
 )
 
+# ERR_STRUCTURE_017: Pure function body has effects.
+ERR_STRUCTURE_017 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=17,
+    severity=Severity.ERROR,
+    summary="Pure function body has effects.",
+    message=(
+        "'{op_name}' declares pure but its body has {read_count} read-like "
+        "and {write_count} write-like effect(s)"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("read_count", ParamKind.U32),
+        ErrorParam("write_count", ParamKind.U32),
+    ),
+    fix_hint="Remove the pure modifier or remove the observable effects",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -255,4 +273,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_014,
     ERR_STRUCTURE_015,
     ERR_STRUCTURE_016,
+    ERR_STRUCTURE_017,
 )

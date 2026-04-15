@@ -583,6 +583,12 @@ enum loom_op_flag_bits_e {
   // (O(1) dedup instead of hash set lookup). Harmless if stale —
   // overwritten on the next driver invocation.
   LOOM_OP_FLAG_ON_WORKLIST = 1u << 1,
+
+  // The operation's direct effects have been added to the transitive counters
+  // on its containing region and ancestor regions. Nested operations carry
+  // their own counted flags. Set when an op is finalized or use-def data is
+  // recomputed, and cleared when the op is erased.
+  LOOM_OP_FLAG_EFFECTS_COUNTED = 1u << 2,
 };
 typedef uint8_t loom_op_flags_t;
 
@@ -642,6 +648,15 @@ typedef uint32_t loom_trait_flags_t;
 static inline bool loom_traits_may_write(loom_trait_flags_t traits) {
   return (traits & (LOOM_TRAIT_WRITES_MEMORY | LOOM_TRAIT_UNKNOWN_EFFECTS)) !=
          0;
+}
+
+// Returns true if the trait flags indicate the op may observe memory or
+// external state in a way that prevents pure/deterministic reasoning.
+// NON_DETERMINISTIC is counted with read-like effects because CSE and purity
+// checks must treat it as an observation even when it does not read memory.
+static inline bool loom_traits_may_read(loom_trait_flags_t traits) {
+  return (traits & (LOOM_TRAIT_READS_MEMORY | LOOM_TRAIT_UNKNOWN_EFFECTS |
+                    LOOM_TRAIT_NON_DETERMINISTIC)) != 0;
 }
 
 // Returns true if the trait flags indicate the op may produce different
@@ -1084,6 +1099,10 @@ static inline loom_attribute_t* loom_op_attrs(const loom_op_t* op) {
   return (loom_attribute_t*)iree_host_align(after_use_indices,
                                             iree_alignof(loom_attribute_t));
 }
+// Returns a const pointer to the attribute array.
+static inline const loom_attribute_t* loom_op_const_attrs(const loom_op_t* op) {
+  return (const loom_attribute_t*)loom_op_attrs(op);
+}
 
 //===----------------------------------------------------------------------===//
 // Block
@@ -1114,9 +1133,12 @@ typedef struct loom_block_t {
   loom_op_t* first_op;
   // Last live operation in block order.
   loom_op_t* last_op;
+  // Region that owns this block. NULL only for manually allocated blocks that
+  // have not been attached to a region.
+  loom_region_t* parent_region;
 } loom_block_t;
 
-static_assert(sizeof(loom_block_t) == 40, "loom_block_t must be 40 bytes");
+static_assert(sizeof(loom_block_t) == 48, "loom_block_t must be 48 bytes");
 
 // Returns the |arg_index|-th block argument value ID.
 static inline loom_value_id_t loom_block_arg_id(const loom_block_t* block,
@@ -1187,8 +1209,14 @@ typedef struct loom_region_t {
   uint16_t block_capacity;
   // Per-region structural flags.
   loom_region_instance_flags_t flags;
-  // Reserved for future flags while keeping entry_block aligned.
+  // Reserved for future flags while keeping effect counters aligned.
   uint16_t reserved;
+  // Transitive count of read-like effects in all live ops nested in this
+  // region. READS_MEMORY, NON_DETERMINISTIC, and UNKNOWN_EFFECTS contribute.
+  uint32_t read_effect_count;
+  // Transitive count of write-like effects in all live ops nested in this
+  // region. WRITES_MEMORY and UNKNOWN_EFFECTS contribute.
+  uint32_t write_effect_count;
   // Inline storage for the entry block.
   loom_block_t entry_block;
   // Ordered block pointer table. Points at inline_blocks for one-block regions.
@@ -1197,7 +1225,7 @@ typedef struct loom_region_t {
   loom_block_t* inline_blocks[1];
 } loom_region_t;
 
-static_assert(sizeof(loom_region_t) == 64, "loom_region_t must be 64 bytes");
+static_assert(sizeof(loom_region_t) == 80, "loom_region_t must be 80 bytes");
 
 // Returns the block at |block_index| in |region|.
 static inline loom_block_t* loom_region_block(loom_region_t* region,
@@ -1218,6 +1246,34 @@ static inline loom_block_t* loom_region_entry_block(loom_region_t* region) {
 static inline const loom_block_t* loom_region_const_entry_block(
     const loom_region_t* region) {
   return loom_region_const_block(region, 0);
+}
+
+// Returns true when any live op nested in |region| has a read-like effect.
+static inline bool loom_region_has_read_effects(const loom_region_t* region) {
+  return region && region->read_effect_count != 0;
+}
+
+// Returns true when any live op nested in |region| has a write-like effect.
+static inline bool loom_region_has_write_effects(const loom_region_t* region) {
+  return region && region->write_effect_count != 0;
+}
+
+// Returns true when any child region of |op| has a read-like effect.
+static inline bool loom_op_regions_have_read_effects(const loom_op_t* op) {
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    if (loom_region_has_read_effects(regions[i])) return true;
+  }
+  return false;
+}
+
+// Returns true when any child region of |op| has a write-like effect.
+static inline bool loom_op_regions_have_write_effects(const loom_op_t* op) {
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    if (loom_region_has_write_effects(regions[i])) return true;
+  }
+  return false;
 }
 
 // Returns the number of arguments on the entry block of |region|. |region|

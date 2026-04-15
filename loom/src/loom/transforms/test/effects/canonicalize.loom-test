@@ -1,0 +1,47 @@
+// RUN: pass canonicalize
+
+// An unannotated function body with no read-like or write-like effects is pure
+// by structure. Canonicalize can stamp that fact onto call sites without a
+// recursive body walk.
+func.def @pure_by_body(%value: f32) -> (f32) {
+  %doubled = scalar.addf %value, %value : f32
+  func.return %doubled : f32
+}
+
+func.def @caller(%value: f32) -> (f32) {
+  %result = func.call @pure_by_body(%value) : (f32) -> (f32)
+  func.return %result : f32
+}
+
+// ----
+func.def @pure_by_body(%value: f32) -> (f32) {
+  %doubled = scalar.addf %value, %value : f32
+  func.return %doubled : f32
+}
+
+func.def @caller(%value: f32) -> (f32) {
+  %result = func.call pure @pure_by_body(%value) : (f32) -> (f32)
+  func.return %result : f32
+}
+
+// ====
+
+// Canonicalize's mini-DCE can erase dead region ops when their nested bodies
+// have no writes. The subtree erase removes child operand uses too, so view and
+// layout producers cascade away instead of lingering behind unreachable loads.
+func.def @dead_read_only_region_dies(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %result = scf.if %cond -> (f32) {
+    %loaded = view.load %view[0] : view<1xf32, %layout> -> f32
+    scf.yield %loaded : f32
+  } else {
+    scf.yield %value : f32
+  }
+  func.return
+}
+
+// ----
+func.def @dead_read_only_region_dies(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
+  func.return
+}

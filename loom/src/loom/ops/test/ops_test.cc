@@ -245,6 +245,84 @@ TEST_F(BuilderTest, IsaCheck) {
   EXPECT_FALSE(loom_test_neg_isa(addi));
 }
 
+//===----------------------------------------------------------------------===//
+// Effect summary maintenance
+//===----------------------------------------------------------------------===//
+
+TEST_F(BuilderTest, DirectWriteEffectSummaryUpdatesOnErase) {
+  loom_type_t pool_type = loom_type_pool(loom_dim_pack_static(4096));
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_module_block(module_), pool_type, &pool_id));
+
+  loom_op_t* data_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32,
+                                          LOOM_LOCATION_UNKNOWN, &data_op));
+  loom_op_t* write_op = NULL;
+  IREE_ASSERT_OK(loom_test_write_resource_build(
+      &builder_, pool_id, loom_test_constant_result(data_op),
+      LOOM_LOCATION_UNKNOWN, &write_op));
+
+  EXPECT_EQ(module_->body->read_effect_count, 0u);
+  EXPECT_EQ(module_->body->write_effect_count, 1u);
+
+  IREE_ASSERT_OK(loom_op_erase(module_, write_op));
+  EXPECT_EQ(module_->body->read_effect_count, 0u);
+  EXPECT_EQ(module_->body->write_effect_count, 0u);
+}
+
+TEST_F(BuilderTest, UnknownOpEffectsAreConservative) {
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_builder_allocate_op(
+      &builder_, LOOM_OP_KIND(LOOM_DIALECT_RESERVED, 0), /*operand_count=*/0,
+      /*result_count=*/0, /*region_count=*/0, /*tied_result_count=*/0,
+      /*attribute_count=*/0, LOOM_LOCATION_UNKNOWN, &op));
+  IREE_ASSERT_OK(loom_builder_finalize_op(&builder_, op));
+
+  EXPECT_EQ(loom_op_effective_traits(module_, op), LOOM_TRAIT_UNKNOWN_EFFECTS);
+  EXPECT_TRUE(loom_op_may_write(module_, op));
+  EXPECT_EQ(module_->body->read_effect_count, 1u);
+  EXPECT_EQ(module_->body->write_effect_count, 1u);
+}
+
+TEST_F(BuilderTest, NestedWriteEffectSummaryPropagatesToAncestors) {
+  loom_type_t pool_type = loom_type_pool(loom_dim_pack_static(4096));
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t pool_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_module_block(module_), pool_type, &pool_id));
+  loom_value_id_t input_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_module_block(module_), i32, &input_id));
+
+  loom_op_t* data_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), i32,
+                                          LOOM_LOCATION_UNKNOWN, &data_op));
+  loom_value_id_t data_id = loom_test_constant_result(data_op);
+
+  loom_op_t* map_op = NULL;
+  IREE_ASSERT_OK(loom_test_map_build(&builder_, &input_id, 1, i32, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &map_op));
+  loom_region_t* map_body = loom_test_map_body(map_op);
+  loom_builder_ip_t saved_ip =
+      loom_builder_enter_region(&builder_, map_op, map_body);
+  loom_op_t* write_op = NULL;
+  IREE_ASSERT_OK(loom_test_write_resource_build(
+      &builder_, pool_id, data_id, LOOM_LOCATION_UNKNOWN, &write_op));
+  loom_builder_restore(&builder_, saved_ip);
+
+  EXPECT_EQ(map_body->write_effect_count, 1u);
+  EXPECT_EQ(module_->body->write_effect_count, 1u);
+
+  IREE_ASSERT_OK(loom_op_erase(module_, map_op));
+  EXPECT_EQ(map_body->write_effect_count, 0u);
+  EXPECT_EQ(module_->body->write_effect_count, 0u);
+  EXPECT_EQ(write_op->flags & LOOM_OP_FLAG_EFFECTS_COUNTED, 0u);
+}
+
 TEST_F(BuilderTest, VariadicOperands) {
   // test.yield has variadic operands.
   loom_op_t* op = NULL;

@@ -54,6 +54,7 @@ extern const loom_error_def_t loom_err_structure_013;
 extern const loom_error_def_t loom_err_structure_014;
 extern const loom_error_def_t loom_err_structure_015;
 extern const loom_error_def_t loom_err_structure_016;
+extern const loom_error_def_t loom_err_structure_017;
 extern const loom_error_def_t loom_err_dominance_001;
 extern const loom_error_def_t loom_err_dominance_002;
 extern const loom_error_def_t loom_err_dominance_003;

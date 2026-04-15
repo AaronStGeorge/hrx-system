@@ -309,6 +309,108 @@ static iree_status_t loom_module_initialize_block(loom_module_t* module,
   return iree_ok_status();
 }
 
+//===----------------------------------------------------------------------===//
+// Region effect summaries
+//===----------------------------------------------------------------------===//
+
+static loom_trait_flags_t loom_module_effective_traits(
+    const loom_module_t* module, const loom_op_t* op) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable) return LOOM_TRAIT_UNKNOWN_EFFECTS;
+  return vtable->effective_traits ? vtable->effective_traits(op)
+                                  : vtable->traits;
+}
+
+static void loom_region_adjust_effect_count(uint32_t* count, int32_t delta) {
+  if (delta < 0) {
+    uint32_t decrement = (uint32_t)(-delta);
+    IREE_ASSERT(*count >= decrement);
+    *count -= decrement;
+  } else {
+    *count += (uint32_t)delta;
+  }
+}
+
+static void loom_region_adjust_effect_counts(loom_region_t* region,
+                                             int32_t read_delta,
+                                             int32_t write_delta) {
+  if (read_delta == 0 && write_delta == 0) return;
+  if (read_delta != 0) {
+    loom_region_adjust_effect_count(&region->read_effect_count, read_delta);
+  }
+  if (write_delta != 0) {
+    loom_region_adjust_effect_count(&region->write_effect_count, write_delta);
+  }
+}
+
+static void loom_module_adjust_op_ancestor_effect_counts(loom_op_t* op,
+                                                         int32_t read_delta,
+                                                         int32_t write_delta) {
+  if (read_delta == 0 && write_delta == 0) return;
+  loom_region_t* region =
+      op->parent_block ? op->parent_block->parent_region : NULL;
+  loom_op_t* parent_op = op->parent_op;
+  while (region) {
+    loom_region_adjust_effect_counts(region, read_delta, write_delta);
+    if (!parent_op) break;
+    region =
+        parent_op->parent_block ? parent_op->parent_block->parent_region : NULL;
+    parent_op = parent_op->parent_op;
+  }
+}
+
+static void loom_module_adjust_op_direct_effect_counts(
+    loom_op_t* op, loom_trait_flags_t traits, int32_t direction) {
+  int32_t read_delta = loom_traits_may_read(traits) ? direction : 0;
+  int32_t write_delta = loom_traits_may_write(traits) ? direction : 0;
+  loom_module_adjust_op_ancestor_effect_counts(op, read_delta, write_delta);
+}
+
+void loom_module_record_op_effects(loom_module_t* module, loom_op_t* op) {
+  if (!op || iree_any_bit_set(
+                 op->flags, LOOM_OP_FLAG_DEAD | LOOM_OP_FLAG_EFFECTS_COUNTED)) {
+    return;
+  }
+  loom_module_adjust_op_direct_effect_counts(
+      op, loom_module_effective_traits(module, op), +1);
+  op->flags |= LOOM_OP_FLAG_EFFECTS_COUNTED;
+}
+
+void loom_module_drop_op_effects(loom_module_t* module, loom_op_t* op) {
+  if (!op) return;
+  if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_EFFECTS_COUNTED)) {
+    loom_module_adjust_op_direct_effect_counts(
+        op, loom_module_effective_traits(module, op), -1);
+    op->flags &= ~LOOM_OP_FLAG_EFFECTS_COUNTED;
+  }
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    loom_region_t* region = regions[i];
+    if (!region) continue;
+    loom_block_t* block = NULL;
+    loom_region_for_each_block(region, block) {
+      loom_op_t* child_op = NULL;
+      loom_block_for_each_op(block, child_op) {
+        loom_module_drop_op_effects(module, child_op);
+      }
+    }
+  }
+}
+
+void loom_module_update_op_direct_effects(loom_op_t* op,
+                                          loom_trait_flags_t old_traits,
+                                          loom_trait_flags_t new_traits) {
+  if (!op || !iree_all_bits_set(op->flags, LOOM_OP_FLAG_EFFECTS_COUNTED)) {
+    return;
+  }
+  int32_t old_read = loom_traits_may_read(old_traits) ? 1 : 0;
+  int32_t old_write = loom_traits_may_write(old_traits) ? 1 : 0;
+  int32_t new_read = loom_traits_may_read(new_traits) ? 1 : 0;
+  int32_t new_write = loom_traits_may_write(new_traits) ? 1 : 0;
+  loom_module_adjust_op_ancestor_effect_counts(op, new_read - old_read,
+                                               new_write - old_write);
+}
+
 static iree_status_t loom_region_blocks_ensure_capacity(loom_module_t* module,
                                                         loom_region_t* region) {
   if (region->block_count < region->block_capacity) return iree_ok_status();
@@ -2087,6 +2189,7 @@ iree_status_t loom_module_allocate_region(loom_module_t* module,
     region->inline_blocks[0] = &region->entry_block;
     region->block_capacity = 1;
     status = loom_module_initialize_block(module, &region->entry_block);
+    region->entry_block.parent_region = region;
   }
   if (iree_status_is_ok(status) && block_count > 1) {
     region->block_capacity = block_count;
@@ -2100,6 +2203,9 @@ iree_status_t loom_module_allocate_region(loom_module_t* module,
     }
     for (uint16_t i = 1; i < block_count && iree_status_is_ok(status); ++i) {
       status = loom_module_allocate_block(module, &region->blocks[i]);
+      if (iree_status_is_ok(status)) {
+        region->blocks[i]->parent_region = region;
+      }
     }
   }
   if (iree_status_is_ok(status)) {
@@ -2118,6 +2224,7 @@ iree_status_t loom_region_append_block(loom_module_t* module,
   if (region->block_count > 0) {
     IREE_RETURN_IF_ERROR(loom_module_allocate_block(module, &block));
   }
+  block->parent_region = region;
   region->blocks[region->block_count] = block;
   ++region->block_count;
   *out_block = block;
@@ -2297,9 +2404,10 @@ iree_status_t loom_block_insert_op(loom_module_t* module, loom_block_t* block,
   return loom_block_insert_before_op(module, block, before_op, op);
 }
 
-void loom_block_unlink_op(loom_op_t* op) {
+void loom_block_unlink_op(loom_module_t* module, loom_op_t* op) {
   loom_block_t* block = op->parent_block;
   if (!block || iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) return;
+  loom_module_drop_op_effects(module, op);
 
   if (op->prev_op) {
     op->prev_op->next_op = op->next_op;

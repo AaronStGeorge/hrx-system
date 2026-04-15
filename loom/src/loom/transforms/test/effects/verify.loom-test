@@ -1,0 +1,17 @@
+// RUN: verify
+
+// Pure functions cannot hide observable work inside nested regions. This is a
+// function-level contract: the body may contain structured control flow, but
+// its transitive effect summary must still be empty.
+// ERROR@+1: STRUCTURE/017
+func.def pure @pure_body_rejects_nested_store(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  scf.if %cond {
+    view.store %value, %view[0] : f32, view<1xf32, %layout>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return
+}

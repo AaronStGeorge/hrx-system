@@ -8,17 +8,24 @@
 // dialect. These are hand-written (not generated) and linked into the
 // func dialect library so the vtable function pointers resolve.
 //
-// Purity propagation: the canonicalizer reads the callee's purity from
-// the symbol table (populated by loom_module_build_symbols) and sets
-// the call-site purity attr to match. The effective_traits callback
-// then reports LOOM_TRAIT_PURE instead of LOOM_TRAIT_UNKNOWN_EFFECTS,
-// enabling CSE and DCE across call boundaries.
+// Purity propagation: the canonicalizer reads the callee's explicit purity or
+// body effect summary from the symbol table and sets the call-site purity attr
+// to match. The effective_traits callback then reports LOOM_TRAIT_PURE instead
+// of LOOM_TRAIT_UNKNOWN_EFFECTS, enabling CSE and DCE across call boundaries.
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/transforms/rewriter.h"
+
+static bool loom_func_like_is_pure(const loom_func_like_t func) {
+  if (!loom_func_like_isa(func)) return false;
+  if (loom_func_like_purity(func) != 0) return true;
+  loom_region_t* body = loom_func_like_body(func);
+  return body && !loom_region_has_read_effects(body) &&
+         !loom_region_has_write_effects(body);
+}
 
 // Propagates callee purity to the call site. If the callee is a pure
 // function and the call doesn't already have the purity attr set,
@@ -42,9 +49,8 @@ static iree_status_t loom_func_propagate_callee_purity(
       &rewriter->module->symbols.entries[callee.symbol_id];
   loom_func_like_t callee_func =
       loom_func_like_cast(rewriter->module, symbol->defining_op);
-  if (!loom_func_like_isa(callee_func)) return iree_ok_status();
 
-  if (loom_func_like_purity(callee_func) != 0) {
+  if (loom_func_like_is_pure(callee_func)) {
     return loom_rewriter_set_attr(rewriter, op, purity_attr_index,
                                   loom_attr_enum(LOOM_FUNC_PURITY_PURE));
   }

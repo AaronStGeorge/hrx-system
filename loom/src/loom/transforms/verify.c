@@ -1074,6 +1074,30 @@ static void loom_verify_op_effective_trait_consistency(
   loom_verify_op_trait_flags_consistency(state, op, vtable, effective_traits);
 }
 
+static void loom_verify_func_purity_body_effects(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable) {
+  const loom_func_like_vtable_t* func_vtable = vtable->func_like;
+  if (!func_vtable) return;
+  if (func_vtable->purity_attr_index == LOOM_ATTR_INDEX_NONE) return;
+  if (func_vtable->body_region_index == LOOM_REGION_INDEX_NONE) return;
+  if (func_vtable->body_region_index >= op->region_count) return;
+  const loom_attribute_t* attrs = loom_op_const_attrs(op);
+  if (loom_attr_as_enum(attrs[func_vtable->purity_attr_index]) == 0) return;
+  loom_region_t* body = loom_op_regions(op)[func_vtable->body_region_index];
+  if (!loom_region_has_read_effects(body) &&
+      !loom_region_has_write_effects(body)) {
+    return;
+  }
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_op_vtable_name(vtable)),
+      loom_param_u32(body ? body->read_effect_count : 0),
+      loom_param_u32(body ? body->write_effect_count : 0),
+  };
+  loom_verify_emit_structured(state, op, &loom_err_structure_017, params,
+                              IREE_ARRAYSIZE(params));
+}
+
 //===----------------------------------------------------------------------===//
 // Value type resolution
 //===----------------------------------------------------------------------===//
@@ -3101,6 +3125,8 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
     if (loom_verify_at_error_limit(state)) break;
     IREE_RETURN_IF_ERROR(loom_verify_region(state, regions[i]));
   }
+  loom_verify_func_purity_body_effects(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Op-specific verification callback. Runs last — all table-driven checks
   // have passed, so the op is structurally sound and type-correct.

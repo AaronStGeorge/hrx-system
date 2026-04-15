@@ -505,7 +505,8 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
       // Write barrier: a write or unknown-effect op invalidates all
       // non-PURE entries up the scope chain. This must happen before
       // any other checks because result-less writes still invalidate.
-      if (loom_traits_may_write(traits)) {
+      if (loom_traits_may_write(traits) ||
+          loom_op_regions_have_write_effects(op)) {
         loom_cse_scope_invalidate_reads(frame->scope);
       }
 

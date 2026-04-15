@@ -198,6 +198,33 @@ static iree_status_t loom_dce_add_result_type_ref_providers_to_worklist(
   return iree_ok_status();
 }
 
+// Queues providers that may become dead after erasing |op| and its nested
+// regions. Region operands are ordinary uses, so erasing only the parent op's
+// operands would leave captured values live through unreachable child ops.
+static iree_status_t loom_dce_add_subtree_providers_to_worklist(
+    iree_arena_allocator_t* arena, loom_module_t* module,
+    loom_dce_worklist_t* worklist, loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(
+      loom_dce_add_operand_providers_to_worklist(arena, module, worklist, op));
+  IREE_RETURN_IF_ERROR(loom_dce_add_result_type_ref_providers_to_worklist(
+      arena, module, worklist, op));
+
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    loom_region_t* region = regions[i];
+    if (!region) continue;
+    loom_block_t* block = NULL;
+    loom_region_for_each_block(region, block) {
+      loom_op_t* child_op = NULL;
+      loom_block_for_each_op(block, child_op) {
+        IREE_RETURN_IF_ERROR(loom_dce_add_subtree_providers_to_worklist(
+            arena, module, worklist, child_op));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Implementation
 //===----------------------------------------------------------------------===//
@@ -218,11 +245,8 @@ iree_status_t loom_dce_run(loom_pass_t* pass, loom_module_t* module,
     if (!op) break;
     if (!loom_op_is_trivially_dead(module, op)) continue;
 
-    status = loom_dce_add_operand_providers_to_worklist(pass->arena, module,
+    status = loom_dce_add_subtree_providers_to_worklist(pass->arena, module,
                                                         &worklist, op);
-    if (!iree_status_is_ok(status)) break;
-    status = loom_dce_add_result_type_ref_providers_to_worklist(
-        pass->arena, module, &worklist, op);
     if (!iree_status_is_ok(status)) break;
     status = loom_op_erase(module, op);
     if (!iree_status_is_ok(status)) break;
