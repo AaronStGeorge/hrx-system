@@ -14,16 +14,22 @@ loom_cc_library(
   NAME
     llvmir
   HDRS
+    "bitcode_writer.h"
+    "bitstream_writer.h"
     "builder.h"
     "intrinsics.h"
     "llvmir.h"
     "module.h"
+    "target_env.h"
     "text_writer.h"
     "verify.h"
   SRCS
+    "bitcode_writer.c"
+    "bitstream_writer.c"
     "builder.c"
     "intrinsics.c"
     "module.c"
+    "target_env.c"
     "text_writer.c"
     "types.h"
     "verify.c"
@@ -46,6 +52,29 @@ loom_cc_library(
     iree::base
   TESTONLY
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    bitstream_writer_test
+  SRCS
+    "bitstream_writer_test.cc"
+  DEPS
+    ::llvmir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    bitcode_writer_test
+  SRCS
+    "bitcode_writer_test.cc"
+  DEPS
+    ::llvmir
+    ::test_modules
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

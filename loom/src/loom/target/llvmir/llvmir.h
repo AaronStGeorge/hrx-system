@@ -9,9 +9,12 @@
 #ifndef LOOM_TARGET_LLVMIR_LLVMIR_H_
 #define LOOM_TARGET_LLVMIR_LLVMIR_H_
 
+#include "loom/target/llvmir/bitcode_writer.h"
+#include "loom/target/llvmir/bitstream_writer.h"
 #include "loom/target/llvmir/builder.h"
 #include "loom/target/llvmir/intrinsics.h"
 #include "loom/target/llvmir/module.h"
+#include "loom/target/llvmir/target_env.h"
 #include "loom/target/llvmir/text_writer.h"
 #include "loom/target/llvmir/verify.h"
 

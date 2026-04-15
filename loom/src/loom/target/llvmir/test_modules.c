@@ -77,17 +77,15 @@ static iree_status_t loom_llvmir_test_build_object_vadd4(
   IREE_ASSERT_ARGUMENT(out_module);
   *out_module = NULL;
 
-  loom_llvmir_target_config_t target_config = {
-      .source_name = IREE_SV("loom-object"),
-      .target_triple = IREE_SV("x86_64-unknown-linux-gnu"),
-      .default_pointer_bitwidth = 64,
-      .index_bitwidth = 64,
-      .offset_bitwidth = 64,
-  };
   loom_llvmir_module_t* module = NULL;
-  iree_status_t status =
-      loom_llvmir_module_allocate(&target_config, allocator, &module);
-  if (!iree_status_is_ok(status)) goto cleanup;
+  iree_status_t status = iree_ok_status();
+  const loom_llvmir_target_env_t* target_env =
+      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+  loom_llvmir_target_config_t target_config = {0};
+  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(loom_llvmir_target_env_module_config(
+      target_env, IREE_SV("loom-object"), &target_config));
+  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
+      loom_llvmir_module_allocate(&target_config, allocator, &module));
 
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i64_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -98,8 +96,8 @@ static iree_status_t loom_llvmir_test_build_object_vadd4(
       loom_llvmir_module_get_void_type(module, &void_type));
   LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 64, &i64_type));
-  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
-      loom_llvmir_module_get_pointer_type(module, 0, &ptr_type));
+  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      module, target_env->address_spaces.generic, &ptr_type));
   LOOM_LLVMIR_TEST_GOTO_IF_ERROR(loom_llvmir_module_get_float_type(
       module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
   LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
@@ -410,17 +408,15 @@ static iree_status_t loom_llvmir_test_build_amdgpu_intrinsics(
   IREE_ASSERT_ARGUMENT(out_module);
   *out_module = NULL;
 
-  loom_llvmir_target_config_t target_config = {
-      .source_name = IREE_SV("loom-amdgpu"),
-      .target_triple = IREE_SV("amdgcn-amd-amdhsa"),
-      .default_pointer_bitwidth = 64,
-      .index_bitwidth = 32,
-      .offset_bitwidth = 64,
-  };
   loom_llvmir_module_t* module = NULL;
-  iree_status_t status =
-      loom_llvmir_module_allocate(&target_config, allocator, &module);
-  if (!iree_status_is_ok(status)) goto cleanup;
+  iree_status_t status = iree_ok_status();
+  const loom_llvmir_target_env_t* target_env =
+      loom_llvmir_target_env_amdgcn_amd_amdhsa();
+  loom_llvmir_target_config_t target_config = {0};
+  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(loom_llvmir_target_env_module_config(
+      target_env, IREE_SV("loom-amdgpu"), &target_config));
+  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
+      loom_llvmir_module_allocate(&target_config, allocator, &module));
 
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -442,10 +438,10 @@ static iree_status_t loom_llvmir_test_build_amdgpu_intrinsics(
       module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
   LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
       loom_llvmir_module_get_vector_type(module, 1, f32_type, &v1f32_type));
-  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
-      loom_llvmir_module_get_pointer_type(module, 1, &global_ptr_type));
-  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(
-      loom_llvmir_module_get_pointer_type(module, 7, &fat_ptr_type));
+  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      module, target_env->address_spaces.global, &global_ptr_type));
+  LOOM_LLVMIR_TEST_GOTO_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      module, target_env->address_spaces.buffer_resource, &fat_ptr_type));
 
   loom_llvmir_attr_t kernel_attrs[] = {
       loom_llvmir_test_attr(LOOM_LLVMIR_ATTR_ALWAYSINLINE),
