@@ -151,6 +151,123 @@ func.def @if_forwards_equal_result_and_erases(%cond: i1, %value: f32) -> (f32) {
 
 // ====
 
+// A dynamic yield-only conditional over scalar values canonicalizes to a generic
+// whole-value select. No region body work remains, so control flow is
+// unnecessary.
+func.def @if_yield_only_f32_value(%cond: i1, %a: f32, %b: f32) -> (f32) {
+  %result = scf.if %cond -> (f32) {
+    scf.yield %a : f32
+  } else {
+    scf.yield %b : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @if_yield_only_f32_value(%cond: i1, %a: f32, %b: f32) -> (f32) {
+  %result = scf.select %cond, %a, %b : f32
+  func.return %result : f32
+}
+
+// ====
+
+// The same generic select handles address-domain values without making scf
+// canonicalization depend on the index dialect.
+func.def @if_yield_only_index_value(%cond: i1, %a: index, %b: index) -> (index) {
+  %result = scf.if %cond -> (index) {
+    scf.yield %a : index
+  } else {
+    scf.yield %b : index
+  }
+  func.return %result : index
+}
+
+// ----
+func.def @if_yield_only_index_value(%cond: i1, %a: index, %b: index) -> (index) {
+  %result = scf.select %cond, %a, %b : index
+  func.return %result : index
+}
+
+// ====
+
+// scf.select is a plain value op, so identical arms fold without needing
+// control-flow reasoning.
+func.def @select_identical_arms(%cond: i1, %value: vector<4xf32>) -> (vector<4xf32>) {
+  %result = scf.select %cond, %value, %value : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ----
+func.def @select_identical_arms(%cond: i1, %value: vector<4xf32>) -> (vector<4xf32>) {
+  func.return %value : vector<4xf32>
+}
+
+// ====
+
+// Exact condition facts fold scf.select to the chosen arm even for non-scalar
+// aggregate values.
+func.def @select_constant_condition(%value: tile<4xf32>, %other: tile<4xf32>) -> (tile<4xf32>) {
+  %cond = scalar.constant false : i1
+  %result = scf.select %cond, %value, %other : tile<4xf32>
+  func.return %result : tile<4xf32>
+}
+
+// ----
+func.def @select_constant_condition(%value: tile<4xf32>, %other: tile<4xf32>) -> (tile<4xf32>) {
+  func.return %other : tile<4xf32>
+}
+
+// ====
+
+// Exact condition facts fold scalar scf.select values to the selected arm.
+func.def @select_true_scalar() -> (i32) {
+  %cond = scalar.constant true : i1
+  %a = scalar.constant 42 : i32
+  %b = scalar.constant 99 : i32
+  %result = scf.select %cond, %a, %b : i32
+  func.return %result : i32
+}
+
+// ----
+func.def @select_true_scalar() -> (i32) {
+  %result = scalar.constant 42 : i32
+  func.return %result : i32
+}
+
+// ====
+
+func.def @select_false_scalar() -> (i32) {
+  %cond = scalar.constant false : i1
+  %a = scalar.constant 42 : i32
+  %b = scalar.constant 99 : i32
+  %result = scf.select %cond, %a, %b : i32
+  func.return %result : i32
+}
+
+// ----
+func.def @select_false_scalar() -> (i32) {
+  %result = scalar.constant 99 : i32
+  func.return %result : i32
+}
+
+// ====
+
+// Boolean identity select folds without making scf depend on scalar xori for
+// the complement form.
+func.def @select_boolean_identity(%condition: i1) -> (i1) {
+  %true = scalar.constant true : i1
+  %false = scalar.constant false : i1
+  %result = scf.select %condition, %true, %false : i1
+  func.return %result : i1
+}
+
+// ----
+func.def @select_boolean_identity(%condition: i1) -> (i1) {
+  func.return %condition : i1
+}
+
+// ====
+
 // Equal yielded results forward even when branch side effects keep the dynamic
 // conditional itself live.
 func.def @if_forwards_equal_result_keeps_effects(%buffer: buffer, %offset: offset, %cond: i1, %value: f32, %other: f32) -> (f32) {

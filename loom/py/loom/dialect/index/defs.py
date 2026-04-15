@@ -19,14 +19,12 @@ from loom.assembly import (
     PredicateList,
     Ref,
     Refs,
-    ResultType,
     TypeOf,
     TypesOf,
 )
 from loom.dsl import (
     ADDRESS,
     CONSTANT_LIKE,
-    I1,
     INDEX,
     PURE,
     SCALAR,
@@ -238,7 +236,7 @@ index_madd = Op(
 )
 
 # ============================================================================
-# Predicates and selection
+# Predicates
 # ============================================================================
 
 index_cmp = comparison_op(
@@ -252,35 +250,6 @@ index_cmp = comparison_op(
     examples=[
         "%p = index.cmp slt, %i, %n : index",
         "%inside = index.cmp ule, %byte_offset, %limit : offset",
-    ],
-)
-
-index_select = Op(
-    "index.select",
-    group=index_ops,
-    doc="Select between two same-typed address-domain values using an i1 condition.",
-    operands=[
-        Operand("condition", I1),
-        Operand("true_value", ADDRESS),
-        Operand("false_value", ADDRESS),
-    ],
-    results=[Result("result", ADDRESS)],
-    constraints=[SameType("true_value", "false_value", "result")],
-    traits=[PURE],
-    canonicalize="loom_index_select_canonicalize",
-    format=[
-        Ref("condition"),
-        COMMA,
-        Ref("true_value"),
-        COMMA,
-        Ref("false_value"),
-        COLON,
-        ResultType("result"),
-    ],
-    facts="loom_index_select_facts",
-    examples=[
-        "%r = index.select %cond, %t, %f : index",
-        "%bytes = index.select %cond, %base, %limit : offset",
     ],
 )
 
@@ -299,5 +268,4 @@ ALL_INDEX_OPS: tuple[Op, ...] = (
     index_rem,
     index_madd,
     index_cmp,
-    index_select,
 )

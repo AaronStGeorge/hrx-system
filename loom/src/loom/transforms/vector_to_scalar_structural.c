@@ -157,7 +157,7 @@ iree_status_t loom_vector_to_scalar_build_insert_lane(
   loom_value_id_t dest_lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
       state, loom_vector_insert_dest(state->op), indices, &dest_lane));
-  return loom_vector_to_scalar_build_scalar_select_lane(
+  return loom_vector_to_scalar_build_select_lane(
       state, dynamic_condition, value_lane, dest_lane, out_lane);
 }
 
@@ -449,7 +449,7 @@ iree_status_t loom_vector_to_scalar_build_interleave_lane(
       &state->rewriter->builder, LOOM_INDEX_CMP_PREDICATE_EQ, remainder_value,
       zero, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
       loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location, &is_even_op));
-  return loom_vector_to_scalar_build_scalar_select_lane(
+  return loom_vector_to_scalar_build_select_lane(
       state, loom_index_cmp_result(is_even_op), even_lane, odd_lane, out_lane);
 }
 

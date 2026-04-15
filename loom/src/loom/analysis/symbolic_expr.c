@@ -12,6 +12,7 @@
 #include "loom/ir/attribute.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/util/math.h"
 
 //===----------------------------------------------------------------------===//
@@ -501,12 +502,6 @@ static iree_status_t loom_symbolic_expr_from_value_uncached(
           loom_index_madd_b(defining_op), loom_index_madd_c(defining_op),
           out_expression);
       break;
-    case LOOM_OP_INDEX_SELECT:
-      status = loom_symbolic_expr_from_select_value(
-          context, value_id, loom_index_select_condition(defining_op),
-          loom_index_select_true_value(defining_op),
-          loom_index_select_false_value(defining_op), out_expression);
-      break;
     case LOOM_OP_SCALAR_CONSTANT: {
       loom_attribute_t value_attr = loom_scalar_constant_value(defining_op);
       if (value_attr.kind == LOOM_ATTR_I64) {
@@ -553,11 +548,11 @@ static iree_status_t loom_symbolic_expr_from_value_uncached(
           context, loom_scalar_assume_values(defining_op),
           loom_value_def_index(value), out_expression);
       break;
-    case LOOM_OP_SCALAR_SELECT:
+    case LOOM_OP_SCF_SELECT:
       status = loom_symbolic_expr_from_select_value(
-          context, value_id, loom_scalar_select_condition(defining_op),
-          loom_scalar_select_true_value(defining_op),
-          loom_scalar_select_false_value(defining_op), out_expression);
+          context, value_id, loom_scf_select_condition(defining_op),
+          loom_scf_select_true_value(defining_op),
+          loom_scf_select_false_value(defining_op), out_expression);
       break;
     default:
       status = loom_symbolic_expr_value(context, value_id, out_expression);

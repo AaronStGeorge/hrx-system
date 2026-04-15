@@ -10,7 +10,7 @@ func.def @index_arithmetic(%i: index, %j: index, %cond: i1) -> (index, index, i1
   %div = index.div %madd, %c4 : index
   %rem = index.rem %madd, %c4 : index
   %cmp = index.cmp slt, %madd, %j : index
-  %sel = index.select %cond, %madd, %j : index
+  %sel = scf.select %cond, %madd, %j : index
   %payload = index.cast %sel : index to i64
   func.return %div, %rem, %cmp, %payload : index, index, i1, i64
 }
@@ -31,7 +31,7 @@ func.def @offset_address_ops(%base: offset, %delta: offset, %limit: offset, %con
   %sum = index.add %base, %delta : offset
   %back = index.sub %sum, %delta : offset
   %inside = index.cmp ule, %back, %limit : offset
-  %selected = index.select %cond, %back, %limit : offset
+  %selected = scf.select %cond, %back, %limit : offset
   func.return %selected, %inside : offset, i1
 }
 

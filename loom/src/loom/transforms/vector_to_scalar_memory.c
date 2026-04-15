@@ -7,7 +7,6 @@
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
-#include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
@@ -269,10 +268,10 @@ static iree_status_t loom_vector_to_scalar_build_mask_increment(
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
       &state->rewriter->builder, index_type, state->location, 1, &one));
   loom_op_t* select_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scalar_select_build(&state->rewriter->builder, condition, one, zero,
-                               index_type, state->location, &select_op));
-  *out_increment = loom_scalar_select_result(select_op);
+  IREE_RETURN_IF_ERROR(loom_scf_select_build(&state->rewriter->builder,
+                                             condition, one, zero, index_type,
+                                             state->location, &select_op));
+  *out_increment = loom_scf_select_result(select_op);
   return iree_ok_status();
 }
 

@@ -18,6 +18,7 @@ loom_cc_library(
   SRCS
     "builders.c"
     "canonicalize.c"
+    "facts.c"
     "tables.c"
   DEPS
     loom::src::loom::error::error_defs

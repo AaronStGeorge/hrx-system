@@ -512,19 +512,3 @@ iree_status_t loom_index_cmp_canonicalize(loom_op_t* op,
   }
   return iree_ok_status();
 }
-
-iree_status_t loom_index_select_canonicalize(loom_op_t* op,
-                                             loom_rewriter_t* rewriter) {
-  loom_value_id_t true_value = loom_index_select_true_value(op);
-  loom_value_id_t false_value = loom_index_select_false_value(op);
-  if (true_value == false_value) {
-    return loom_index_replace_single_result_with_value(op, rewriter,
-                                                       true_value);
-  }
-
-  loom_value_facts_t condition_facts =
-      loom_rewriter_value_facts(rewriter, loom_index_select_condition(op));
-  if (!loom_value_facts_is_exact(condition_facts)) return iree_ok_status();
-  return loom_index_replace_single_result_with_value(
-      op, rewriter, condition_facts.range_lo ? true_value : false_value);
-}

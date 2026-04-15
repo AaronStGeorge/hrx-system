@@ -9,6 +9,7 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/transforms/vector_to_scalar_internal.h"
 
@@ -81,7 +82,7 @@ iree_status_t loom_vector_to_scalar_build_vector_zero(
   return iree_ok_status();
 }
 
-iree_status_t loom_vector_to_scalar_build_generic_scalar_op(
+iree_status_t loom_vector_to_scalar_build_generic_lane_op(
     loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
     uint8_t instance_flags, const loom_value_id_t* operands,
     uint16_t operand_count, const loom_attribute_t* attrs, uint8_t attr_count,
@@ -90,7 +91,7 @@ iree_status_t loom_vector_to_scalar_build_generic_scalar_op(
       loom_context_resolve_op(state->rewriter->module->context, kind);
   if (!vtable) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "no vtable registered for scalar op kind %u",
+                            "no vtable registered for lane op kind %u",
                             (unsigned)kind);
   }
   if (operand_count != vtable->fixed_operand_count ||
@@ -99,7 +100,7 @@ iree_status_t loom_vector_to_scalar_build_generic_scalar_op(
       (vtable->vtable_flags & (LOOM_OP_VTABLE_VARIADIC_OPERANDS |
                                LOOM_OP_VTABLE_VARIADIC_RESULTS)) != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "scalar op %.*s is not a fixed one-result lane op",
+                            "op %.*s is not a fixed one-result lane op",
                             (int)loom_op_vtable_name(vtable).size,
                             loom_op_vtable_name(vtable).data);
   }
@@ -209,15 +210,15 @@ iree_status_t loom_vector_to_scalar_build_i1_and(
   return iree_ok_status();
 }
 
-iree_status_t loom_vector_to_scalar_build_scalar_select_lane(
+iree_status_t loom_vector_to_scalar_build_select_lane(
     loom_vector_to_scalar_state_t* state, loom_value_id_t condition,
     loom_value_id_t true_lane, loom_value_id_t false_lane,
     loom_value_id_t* out_lane) {
   loom_op_t* select_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_select_build(
+  IREE_RETURN_IF_ERROR(loom_scf_select_build(
       &state->rewriter->builder, condition, true_lane, false_lane,
       state->result_scalar_type, state->location, &select_op));
-  *out_lane = loom_scalar_select_result(select_op);
+  *out_lane = loom_scf_select_result(select_op);
   return iree_ok_status();
 }
 
@@ -229,7 +230,7 @@ static iree_status_t loom_vector_to_scalar_build_coordinate_binary(
     return loom_vector_to_scalar_build_index_binary(state, index_kind, lhs, rhs,
                                                     out_result);
   }
-  return loom_vector_to_scalar_build_generic_scalar_op(
+  return loom_vector_to_scalar_build_generic_lane_op(
       state, integer_kind, 0, (loom_value_id_t[]){lhs, rhs}, 2, NULL, 0, type,
       out_result);
 }
@@ -282,7 +283,7 @@ static iree_status_t loom_vector_to_scalar_build_mask_range_lane(
     *out_lane = loom_index_cmp_result(cmp_op);
     return iree_ok_status();
   }
-  return loom_vector_to_scalar_build_generic_scalar_op(
+  return loom_vector_to_scalar_build_generic_lane_op(
       state, LOOM_OP_SCALAR_CMPI, 0,
       (loom_value_id_t[]){coordinate, upper_bound}, 2,
       (loom_attribute_t[]){loom_attr_enum(LOOM_SCALAR_CMPI_PREDICATE_SLT)}, 1,
@@ -329,8 +330,8 @@ static iree_status_t loom_vector_to_scalar_build_generic_lane(
   uint8_t instance_flags =
       descriptor->forward_instance_flags ? state->op->instance_flags : 0;
   const loom_attribute_t* attrs = loom_op_attrs(state->op);
-  return loom_vector_to_scalar_build_generic_scalar_op(
-      state, descriptor->scalar_kind, instance_flags, lane_operands,
+  return loom_vector_to_scalar_build_generic_lane_op(
+      state, descriptor->lane_op_kind, instance_flags, lane_operands,
       descriptor->lane_operand_count, attrs, descriptor->copied_attr_count,
       state->result_scalar_type, out_lane);
 }

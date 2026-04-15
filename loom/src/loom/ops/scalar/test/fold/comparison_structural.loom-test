@@ -78,20 +78,3 @@ func.def @cmpf_same_value(%x: f32) -> (i1, i1, i1) {
   %nan_sensitive = scalar.cmpf oeq, %x, %x : f32
   func.return %eq, %uno, %nan_sensitive : i1, i1, i1
 }
-
-// ====
-
-// select on i1 can become the condition or its boolean complement.
-func.def @select_boolean_identity(%c: i1) -> (i1, i1) {
-  %true = scalar.constant true : i1
-  %false = scalar.constant false : i1
-  %id = scalar.select %c, %true, %false : i1
-  %not = scalar.select %c, %false, %true : i1
-  func.return %id, %not : i1, i1
-}
-// ----
-func.def @select_boolean_identity(%c: i1) -> (i1, i1) {
-  %true = scalar.constant true : i1
-  %not = scalar.xori %c, %true : i1
-  func.return %c, %not : i1, i1
-}

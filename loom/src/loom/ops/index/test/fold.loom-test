@@ -523,11 +523,11 @@ func.def @cmp_unsigned_maybe_negative_is_preserved(%x: index, %y: index) -> (i1)
 
 // ====
 
-// index.select folds exact conditions and identical arms.
+// scf.select folds exact conditions and identical arms for index values.
 func.def @select_identities(%x: index, %y: index) -> (index, index) {
   %false = scalar.constant 0 : i1
-  %a = index.select %false, %x, %y : index
-  %b = index.select %false, %x, %x : index
+  %a = scf.select %false, %x, %y : index
+  %b = scf.select %false, %x, %x : index
   func.return %a, %b : index, index
 }
 // ----

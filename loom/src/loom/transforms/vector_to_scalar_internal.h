@@ -65,8 +65,8 @@ typedef enum loom_vector_to_scalar_lane_kind_e {
 typedef struct loom_vector_to_scalar_descriptor_t {
   // Vector op kind matched by this descriptor.
   loom_op_kind_t vector_kind;
-  // Scalar op kind emitted per lane for generic mechanical lowering.
-  loom_op_kind_t scalar_kind;
+  // Op kind emitted per lane for generic mechanical lowering.
+  loom_op_kind_t lane_op_kind;
   // Lane program family.
   loom_vector_to_scalar_lane_kind_t lane_kind;
   // Number of vector operands consumed as lane inputs.
@@ -145,7 +145,7 @@ iree_status_t loom_vector_to_scalar_build_vector_zero(
     loom_vector_to_scalar_state_t* state, loom_type_t result_type,
     loom_value_id_t* out_value_id);
 
-iree_status_t loom_vector_to_scalar_build_generic_scalar_op(
+iree_status_t loom_vector_to_scalar_build_generic_lane_op(
     loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
     uint8_t instance_flags, const loom_value_id_t* operands,
     uint16_t operand_count, const loom_attribute_t* attrs, uint8_t attr_count,
@@ -234,7 +234,7 @@ void loom_vector_to_scalar_indices_from_ordinal(loom_type_t vector_type,
                                                 iree_host_size_t ordinal,
                                                 int64_t* indices);
 
-iree_status_t loom_vector_to_scalar_build_scalar_select_lane(
+iree_status_t loom_vector_to_scalar_build_select_lane(
     loom_vector_to_scalar_state_t* state, loom_value_id_t condition,
     loom_value_id_t true_lane, loom_value_id_t false_lane,
     loom_value_id_t* out_lane);

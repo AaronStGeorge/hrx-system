@@ -479,10 +479,10 @@ TEST_F(LlvmIrLowerTest, LowersCallsComparisonsSelectAndCasts) {
   SetValueName(predicate, IREE_SV("predicate"));
 
   loom_op_t* select_op = NULL;
-  IREE_ASSERT_OK(loom_scalar_select_build(&body_builder, predicate, called,
-                                          caller_args[0], i32,
-                                          LOOM_LOCATION_UNKNOWN, &select_op));
-  loom_value_id_t selected = loom_scalar_select_result(select_op);
+  IREE_ASSERT_OK(loom_scf_select_build(&body_builder, predicate, called,
+                                       caller_args[0], i32,
+                                       LOOM_LOCATION_UNKNOWN, &select_op));
+  loom_value_id_t selected = loom_scf_select_result(select_op);
   SetValueName(selected, IREE_SV("selected"));
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, &selected, 1,
                                         LOOM_LOCATION_UNKNOWN, &select_op));
@@ -503,6 +503,53 @@ TEST_F(LlvmIrLowerTest, LowersCallsComparisonsSelectAndCasts) {
       text.find("  %selected = select i1 %predicate, i32 %called, i32 %lhs\n"),
       std::string::npos)
       << text;
+}
+
+TEST_F(LlvmIrLowerTest, LowersScfSelectAsWholeValueSelect) {
+  loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_type_t v4i32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
+
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("choose_vector"));
+  loom_type_t arg_types[3] = {i1, v4i32, v4i32};
+  loom_type_t result_types[1] = {v4i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types,
+      IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3);
+  SetValueName(args[0], IREE_SV("cond"));
+  SetValueName(args[1], IREE_SV("lhs"));
+  SetValueName(args[2], IREE_SV("rhs"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* select_op = NULL;
+  IREE_ASSERT_OK(loom_scf_select_build(&body_builder, args[0], args[1], args[2],
+                                       v4i32, LOOM_LOCATION_UNKNOWN,
+                                       &select_op));
+  loom_value_id_t selected = loom_scf_select_result(select_op);
+  SetValueName(selected, IREE_SV("selected"));
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &selected, 1,
+                                        LOOM_LOCATION_UNKNOWN, &select_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define dso_local <4 x i32> @choose_vector(i1 %cond, "
+                      "<4 x i32> %lhs, <4 x i32> %rhs) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %selected = select i1 %cond, <4 x i32> %lhs, "
+                      "<4 x i32> %rhs\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  ret <4 x i32> %selected\n"), std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
 }
 
 TEST_F(LlvmIrLowerTest, LowersVectorNumericOps) {

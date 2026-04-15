@@ -905,20 +905,6 @@ class ScalarBuilders:
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("scalar.cmpf", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
-    def select(self, *, condition: ValueRef, true_value: ValueRef, false_value: ValueRef, result_types: list[Type]) -> ValueRef:
-        """Conditional select: returns true_value if condition is true, else false_value.
-
-        Example::
-            %result = scalar.select %cond, %t, %f : f32
-        """
-        _operands: list[ValueRef | int] = []
-        _attributes: builtins.dict[str, Any] = {}
-        _regions: list[Region] = []
-        _operands.append(condition)
-        _operands.append(true_value)
-        _operands.append(false_value)
-        return cast(ValueRef, self._b.build("scalar.select", _operands, results=result_types, attributes=_attributes, regions=_regions))
-
     def isnanf(self, *, input: ValueRef, result_types: list[Type]) -> ValueRef:
         """Returns true (i1) if the operand is NaN.
 

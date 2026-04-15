@@ -6,22 +6,22 @@
 
 """SCF dialect op definitions.
 
-Three ops in this initial cut:
+Core ops:
 
   scf.for     — Bounded counted loop with bracketed range syntax.
   scf.if      — Conditional execution with both regions required.
+  scf.select  — Scalar-condition whole-value selection.
   scf.yield   — Variadic terminator for all scf op regions.
 
 Always-explicit yield (no implicit terminator). Every scf op region
 ends with a literal scf.yield, so passes walking region terminators
 have a single uniform op kind to handle.
-
-Design doc: .notes/loom/scf-dialect.md
 """
 
 from loom.assembly import (
     ARROW,
     COLON,
+    COMMA,
     EQUALS,
     LBRACKET,
     RBRACKET,
@@ -30,6 +30,7 @@ from loom.assembly import (
     Ref,
     Refs,
     Region,
+    ResultType,
     ResultTypeList,
     TypesOf,
     kw,
@@ -38,6 +39,8 @@ from loom.dsl import (
     ANY,
     I1,
     INDEX,
+    PURE,
+    SAFE_TO_SPECULATE,
     TERMINATOR,
     Dialect,
     IterArgsMatchResults,
@@ -47,6 +50,7 @@ from loom.dsl import (
     RegionBranchInterface,
     RegionDef,
     Result,
+    SameType,
     YieldCountMatchesResults,
     YieldTypesMatchResults,
 )
@@ -86,6 +90,51 @@ scf_yield = Op(
     examples=[
         "scf.yield",
         "scf.yield %first, %second : f32, i32",
+    ],
+)
+
+# ============================================================================
+# scf.select — scalar-condition whole-value select
+# ============================================================================
+#
+# Chooses one of two already-computed SSA values using a scalar i1 condition.
+# This is deliberately different from vector.select, which is a lanewise
+# vector-mask operation. scf.select is the generic result of reducing
+# yield-only scf.if regions and can select scalars, address-domain values,
+# vectors, tiles, views, encodings, or any other same-typed SSA value without
+# making the scf dialect depend on every value dialect.
+
+scf_select = Op(
+    "scf.select",
+    group=scf_ops,
+    doc=(
+        "Select between two same-typed SSA values using a scalar i1 condition. "
+        "This is whole-value selection: if the selected values are vectors or "
+        "tiles, the entire aggregate is chosen as one value. Lanewise vector "
+        "masking remains vector.select."
+    ),
+    operands=[
+        Operand("condition", I1),
+        Operand("true_value", ANY),
+        Operand("false_value", ANY),
+    ],
+    results=[Result("result", ANY)],
+    constraints=[SameType("true_value", "false_value", "result")],
+    traits=[PURE, SAFE_TO_SPECULATE],
+    canonicalize="loom_scf_select_canonicalize",
+    facts="loom_scf_select_facts",
+    format=[
+        Ref("condition"),
+        COMMA,
+        Ref("true_value"),
+        COMMA,
+        Ref("false_value"),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%r = scf.select %cond, %a, %b : f32",
+        "%v = scf.select %cond, %then_vec, %else_vec : vector<16xf32>",
     ],
 )
 
@@ -234,4 +283,5 @@ ALL_SCF_OPS: tuple[Op, ...] = (
     scf_for,
     scf_if,
     scf_yield,
+    scf_select,
 )

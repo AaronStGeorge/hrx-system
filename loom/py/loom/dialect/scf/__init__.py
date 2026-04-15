@@ -6,12 +6,10 @@
 
 """SCF dialect: structured control flow operations.
 
-Provides counted loops (scf.for), conditionals (scf.if), and region
-terminators (scf.yield). Used at every IR abstraction level — model
-(layer loops, conditional architecture dispatch), tile (pipelined
-K-reduction), and vector (unrolled inner loops).
-
-Design doc: .notes/loom/scf-dialect.md
+Provides counted loops (scf.for), conditionals (scf.if), whole-value
+selection (scf.select), and region terminators (scf.yield). Used at every IR
+abstraction level: model (layer loops, conditional architecture dispatch), tile
+(pipelined K-reduction), and vector (unrolled inner loops).
 """
 
 from loom.dialect.scf.defs import (
@@ -19,6 +17,7 @@ from loom.dialect.scf.defs import (
     scf_for,
     scf_if,
     scf_ops,
+    scf_select,
     scf_yield,
 )
 
@@ -26,6 +25,7 @@ __all__ = [
     "scf_ops",
     "scf_for",
     "scf_if",
+    "scf_select",
     "scf_yield",
     "ALL_SCF_OPS",
 ]

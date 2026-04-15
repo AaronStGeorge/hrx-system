@@ -7,7 +7,7 @@ from __future__ import annotations
 import builtins
 from typing import Any, cast
 
-from loom.builder import IRBuilder, TiedResultSpec, ValueRef
+from loom.builder import IRBuilder, ValueRef
 from loom.ir import Predicate, Region, Type
 
 
@@ -148,17 +148,3 @@ class IndexBuilders:
         _operands.append(lhs)
         _operands.append(rhs)
         return cast(ValueRef, self._b.build("index.cmp", _operands, results=result_types, attributes=_attributes, regions=_regions))
-
-    def select(self, *, condition: ValueRef, true_value: ValueRef, false_value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Select between two same-typed address-domain values using an i1 condition.
-
-        Example::
-            %r = index.select %cond, %t, %f : index
-        """
-        _operands: list[ValueRef | int] = []
-        _attributes: builtins.dict[str, Any] = {}
-        _regions: list[Region] = []
-        _operands.append(condition)
-        _operands.append(true_value)
-        _operands.append(false_value)
-        return cast(ValueRef, self._b.build("index.select", _operands, results=results, attributes=_attributes, regions=_regions))

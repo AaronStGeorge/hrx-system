@@ -1507,42 +1507,6 @@ iree_status_t loom_scalar_cmpf_canonicalize(loom_op_t* op,
   return iree_ok_status();
 }
 
-iree_status_t loom_scalar_select_canonicalize(loom_op_t* op,
-                                              loom_rewriter_t* rewriter) {
-  loom_value_id_t condition = loom_scalar_select_condition(op);
-  loom_value_id_t true_value = loom_scalar_select_true_value(op);
-  loom_value_id_t false_value = loom_scalar_select_false_value(op);
-  if (true_value == false_value) {
-    return loom_scalar_replace_single_result_with_value(op, rewriter,
-                                                        true_value);
-  }
-
-  int64_t condition_value = 0;
-  if (loom_scalar_query_exact_i64(rewriter, condition, &condition_value)) {
-    return loom_scalar_replace_single_result_with_value(
-        op, rewriter, condition_value ? true_value : false_value);
-  }
-
-  loom_type_t condition_type =
-      loom_module_value_type(rewriter->module, condition);
-  if (!loom_scalar_type_is_i1(condition_type) ||
-      !loom_scalar_type_is_i1(loom_scalar_single_result_type(rewriter, op))) {
-    return iree_ok_status();
-  }
-  if (loom_scalar_value_facts_are_exact_i64(rewriter, true_value, 1) &&
-      loom_scalar_value_facts_are_exact_i64(rewriter, false_value, 0)) {
-    return loom_scalar_replace_single_result_with_value(op, rewriter,
-                                                        condition);
-  }
-  if (loom_scalar_value_facts_are_exact_i64(rewriter, true_value, 0) &&
-      loom_scalar_value_facts_are_exact_i64(rewriter, false_value, 1)) {
-    return loom_scalar_replace_single_result_with_binary_op(
-        op, rewriter, LOOM_OP_SCALAR_XORI, /*instance_flags=*/0, condition,
-        false_value);
-  }
-  return iree_ok_status();
-}
-
 //===----------------------------------------------------------------------===//
 // Conversions
 //===----------------------------------------------------------------------===//

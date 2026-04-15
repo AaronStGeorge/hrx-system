@@ -21,7 +21,7 @@ static iree_status_t loom_vector_to_scalar_build_scalar_binary(
     loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
     loom_value_id_t lhs, loom_value_id_t rhs, loom_type_t result_type,
     loom_value_id_t* out_result) {
-  return loom_vector_to_scalar_build_generic_scalar_op(
+  return loom_vector_to_scalar_build_generic_lane_op(
       state, kind, 0, (loom_value_id_t[]){lhs, rhs}, 2, NULL, 0, result_type,
       out_result);
 }
@@ -126,8 +126,8 @@ static iree_status_t loom_vector_to_scalar_build_table_quantize_step(
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_binary(
       state, LOOM_OP_SCALAR_ADDI, accumulator, one, state->result_scalar_type,
       &incremented));
-  return loom_vector_to_scalar_build_scalar_select_lane(
-      state, condition, incremented, accumulator, out_next);
+  return loom_vector_to_scalar_build_select_lane(state, condition, incremented,
+                                                 accumulator, out_next);
 }
 
 static iree_status_t loom_vector_to_scalar_apply_table_quantize_nan_policy(
@@ -148,7 +148,7 @@ static iree_status_t loom_vector_to_scalar_apply_table_quantize_nan_policy(
   IREE_RETURN_IF_ERROR(loom_scalar_isnanf_build(
       &state->rewriter->builder, input_lane,
       loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location, &isnan_op));
-  return loom_vector_to_scalar_build_scalar_select_lane(
+  return loom_vector_to_scalar_build_select_lane(
       state, loom_scalar_isnanf_result(isnan_op), max_code, quantized_lane,
       out_lane);
 }

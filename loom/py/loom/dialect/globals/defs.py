@@ -20,8 +20,6 @@ Global definitions are module-private today. If we need externally stored
 read-only blobs or target artifacts, model those as additional global-defining
 ops (for example `global.rodata`) instead of introducing a separate executable
 symbol object before the target pipeline proves one is necessary.
-
-Design document: .notes/loom/globals.md
 """
 
 from loom.assembly import (

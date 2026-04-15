@@ -87,12 +87,12 @@ static iree_status_t loom_vector_to_scalar_build_accumulator_lane(
     loom_value_id_t rhs_lane = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
         &state->lane_state, state->rhs, indices, &rhs_lane));
-    return loom_vector_to_scalar_build_generic_scalar_op(
+    return loom_vector_to_scalar_build_generic_lane_op(
         &state->lane_state, LOOM_OP_SCALAR_FMAF, 0,
         (loom_value_id_t[]){lhs_lane, rhs_lane, accumulator}, 3, NULL, 0,
         state->lane_state.result_scalar_type, out_next);
   }
-  return loom_vector_to_scalar_build_generic_scalar_op(
+  return loom_vector_to_scalar_build_generic_lane_op(
       &state->lane_state, state->scalar_kind, 0,
       (loom_value_id_t[]){accumulator, lhs_lane}, 2, NULL, 0,
       state->lane_state.result_scalar_type, out_next);

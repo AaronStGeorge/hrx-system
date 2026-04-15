@@ -16,28 +16,28 @@ func.def @static_add_select_cast(%a: vector<4xi32>, %b: vector<4xi32>, %mask: ve
   %9 = vector.extract %b[0] : vector<4xi32> -> i32
   %10 = scalar.addi %8, %9 : i32
   %11 = vector.extract %a[0] : vector<4xi32> -> i32
-  %12 = scalar.select %7, %10, %11 : i32
+  %12 = scf.select %7, %10, %11 : i32
   %13 = scalar.sitofp %12 : i32 to f32
   %14 = vector.extract %mask[1] : vector<4xi1> -> i1
   %15 = vector.extract %a[1] : vector<4xi32> -> i32
   %16 = vector.extract %b[1] : vector<4xi32> -> i32
   %17 = scalar.addi %15, %16 : i32
   %18 = vector.extract %a[1] : vector<4xi32> -> i32
-  %19 = scalar.select %14, %17, %18 : i32
+  %19 = scf.select %14, %17, %18 : i32
   %20 = scalar.sitofp %19 : i32 to f32
   %21 = vector.extract %mask[2] : vector<4xi1> -> i1
   %22 = vector.extract %a[2] : vector<4xi32> -> i32
   %23 = vector.extract %b[2] : vector<4xi32> -> i32
   %24 = scalar.addi %22, %23 : i32
   %25 = vector.extract %a[2] : vector<4xi32> -> i32
-  %26 = scalar.select %21, %24, %25 : i32
+  %26 = scf.select %21, %24, %25 : i32
   %27 = scalar.sitofp %26 : i32 to f32
   %28 = vector.extract %mask[3] : vector<4xi1> -> i1
   %29 = vector.extract %a[3] : vector<4xi32> -> i32
   %30 = vector.extract %b[3] : vector<4xi32> -> i32
   %31 = scalar.addi %29, %30 : i32
   %32 = vector.extract %a[3] : vector<4xi32> -> i32
-  %33 = scalar.select %28, %31, %32 : i32
+  %33 = scf.select %28, %31, %32 : i32
   %34 = scalar.sitofp %33 : i32 to f32
   %r = vector.from_elements %13, %20, %27, %34 : f32, f32, f32, f32 -> vector<4xf32>
   func.return %r : vector<4xf32>
@@ -931,7 +931,7 @@ func.def @dynamic_interleave(%full: index, %half: index, %even: vector<[%half]xi
     %17 = index.rem %9, %16 : index
     %18 = index.constant 0 : index
     %19 = index.cmp eq, %17, %18 : index
-    %20 = scalar.select %19, %14, %15 : i32
+    %20 = scf.select %19, %14, %15 : i32
     %21 = vector.insert %20 into %10[%9] : i32, vector<[%full]xi32> -> vector<[%full]xi32>
     scf.yield %21 : vector<[%full]xi32>
   }
@@ -956,7 +956,7 @@ func.def @dynamic_insert_consumed(%n: index, %lane: index, %dest: vector<[%n]xi3
   %r = scf.for %10 = [%8 to %n step %9](%11 = %7 : vector<[%n]xi32>) -> (vector<[%n]xi32>) {
     %13 = index.cmp eq, %10, %lane : index
     %14 = vector.extract %dest[%10] : vector<[%n]xi32> -> i32
-    %15 = scalar.select %13, %value, %14 : i32
+    %15 = scf.select %13, %value, %14 : i32
     %16 = scalar.negi %15 : i32
     %17 = vector.insert %16 into %11[%10] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
     scf.yield %17 : vector<[%n]xi32>
@@ -1546,35 +1546,35 @@ func.def @static_table_quantize(%values: vector<2xf32>) -> (vector<2xi8>) {
   %9 = scalar.cmpf ole, %t0, %7 : f32
   %10 = scalar.constant 1 : i8
   %11 = scalar.addi %8, %10 : i8
-  %12 = scalar.select %9, %11, %8 : i8
+  %12 = scf.select %9, %11, %8 : i8
   %13 = scalar.cmpf ole, %t1, %7 : f32
   %14 = scalar.constant 1 : i8
   %15 = scalar.addi %12, %14 : i8
-  %16 = scalar.select %13, %15, %12 : i8
+  %16 = scf.select %13, %15, %12 : i8
   %17 = scalar.cmpf ole, %t2, %7 : f32
   %18 = scalar.constant 1 : i8
   %19 = scalar.addi %16, %18 : i8
-  %20 = scalar.select %17, %19, %16 : i8
+  %20 = scf.select %17, %19, %16 : i8
   %21 = scalar.constant 3 : i8
   %22 = scalar.isnanf %7 : f32
-  %23 = scalar.select %22, %21, %20 : i8
+  %23 = scf.select %22, %21, %20 : i8
   %24 = vector.extract %values[1] : vector<2xf32> -> f32
   %25 = scalar.constant 0 : i8
   %26 = scalar.cmpf ole, %t0, %24 : f32
   %27 = scalar.constant 1 : i8
   %28 = scalar.addi %25, %27 : i8
-  %29 = scalar.select %26, %28, %25 : i8
+  %29 = scf.select %26, %28, %25 : i8
   %30 = scalar.cmpf ole, %t1, %24 : f32
   %31 = scalar.constant 1 : i8
   %32 = scalar.addi %29, %31 : i8
-  %33 = scalar.select %30, %32, %29 : i8
+  %33 = scf.select %30, %32, %29 : i8
   %34 = scalar.cmpf ole, %t2, %24 : f32
   %35 = scalar.constant 1 : i8
   %36 = scalar.addi %33, %35 : i8
-  %37 = scalar.select %34, %36, %33 : i8
+  %37 = scf.select %34, %36, %33 : i8
   %38 = scalar.constant 3 : i8
   %39 = scalar.isnanf %24 : f32
-  %40 = scalar.select %39, %38, %37 : i8
+  %40 = scf.select %39, %38, %37 : i8
   %r = vector.from_elements %23, %40 : i8, i8 -> vector<2xi8>
   func.return %r : vector<2xi8>
 }
@@ -1604,12 +1604,12 @@ func.def @dynamic_table_quantize(%n: index, %k: index, %values: vector<[%n]xf32>
       %20 = scalar.cmpf olt, %19, %12 : f32
       %21 = scalar.constant 1 : i8
       %22 = scalar.addi %17, %21 : i8
-      %23 = scalar.select %20, %22, %17 : i8
+      %23 = scf.select %20, %22, %17 : i8
       scf.yield %23 : i8
     }
     %24 = index.cast %k : index to i8
     %25 = scalar.isnanf %12 : f32
-    %26 = scalar.select %25, %24, %18 : i8
+    %26 = scf.select %25, %24, %18 : i8
     %27 = vector.insert %26 into %10[%9] : i8, vector<[%n]xi8> -> vector<[%n]xi8>
     scf.yield %27 : vector<[%n]xi8>
   }

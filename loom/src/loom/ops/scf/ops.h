@@ -21,7 +21,8 @@ enum {
   LOOM_OP_SCF_FOR = LOOM_OP_KIND(LOOM_DIALECT_SCF, 0),
   LOOM_OP_SCF_IF = LOOM_OP_KIND(LOOM_DIALECT_SCF, 1),
   LOOM_OP_SCF_YIELD = LOOM_OP_KIND(LOOM_DIALECT_SCF, 2),
-  LOOM_OP_SCF_COUNT_ = 3,
+  LOOM_OP_SCF_SELECT = LOOM_OP_KIND(LOOM_DIALECT_SCF, 3),
+  LOOM_OP_SCF_COUNT_ = 4,
 };
 
 // LOOM_OP_SCF_FOR: Bounded counted loop with optional loop-carried state.
@@ -76,6 +77,28 @@ iree_status_t loom_scf_yield_build(
     iree_host_size_t values_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+
+// LOOM_OP_SCF_SELECT: Select between two same-typed SSA values using a scalar i1 condition. This is whole-value selection: if the selected values are vectors or tiles, the entire aggregate is chosen as one value. Lanewise vector masking remains vector.select.
+// %r = scf.select %cond, %a, %b : f32
+LOOM_DEFINE_ISA(loom_scf_select_isa, LOOM_OP_SCF_SELECT)
+LOOM_DEFINE_OPERAND(loom_scf_select_condition, 0)
+LOOM_DEFINE_OPERAND(loom_scf_select_true_value, 1)
+LOOM_DEFINE_OPERAND(loom_scf_select_false_value, 2)
+LOOM_DEFINE_RESULT(loom_scf_select_result, 0)
+iree_status_t loom_scf_select_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t condition,
+    loom_may_consume loom_value_id_t true_value,
+    loom_may_consume loom_value_id_t false_value,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_scf_select_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_scf_select_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
 
 // Returns the vtable array for the scf dialect.
 const loom_op_vtable_t* const* loom_scf_dialect_vtables(

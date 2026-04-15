@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/transforms/vector_to_scalar_internal.h"
 
@@ -13,7 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 static const loom_vector_to_scalar_descriptor_t kVectorToScalarDescriptors[] = {
-    {LOOM_OP_VECTOR_SELECT, LOOM_OP_SCALAR_SELECT,
+    {LOOM_OP_VECTOR_SELECT, LOOM_OP_SCF_SELECT,
      LOOM_VECTOR_TO_SCALAR_LANE_GENERIC, 3, 0, false, false, false, 1},
     {LOOM_OP_VECTOR_CMPI, LOOM_OP_SCALAR_CMPI,
      LOOM_VECTOR_TO_SCALAR_LANE_GENERIC, 2, 1, false, false, true, UINT8_MAX},

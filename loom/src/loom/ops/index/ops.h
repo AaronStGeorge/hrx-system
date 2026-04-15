@@ -28,8 +28,7 @@ enum {
   LOOM_OP_INDEX_REM = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 7),
   LOOM_OP_INDEX_MADD = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 8),
   LOOM_OP_INDEX_CMP = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 9),
-  LOOM_OP_INDEX_SELECT = LOOM_OP_KIND(LOOM_DIALECT_INDEX, 10),
-  LOOM_OP_INDEX_COUNT_ = 11,
+  LOOM_OP_INDEX_COUNT_ = 10,
 };
 
 // Address-domain comparison predicates.
@@ -231,28 +230,6 @@ iree_status_t loom_index_cmp_build(
     loom_location_id_t location, loom_op_t** out_op);
 iree_status_t loom_index_cmp_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_cmp_facts(
-    loom_fact_context_t* context,
-    const loom_module_t* module, const loom_op_t* op,
-    const loom_value_facts_t* operand_facts,
-    loom_value_facts_t* result_facts);
-
-// LOOM_OP_INDEX_SELECT: Select between two same-typed address-domain values using an i1 condition.
-// %r = index.select %cond, %t, %f : index
-LOOM_DEFINE_ISA(loom_index_select_isa, LOOM_OP_INDEX_SELECT)
-LOOM_DEFINE_OPERAND(loom_index_select_condition, 0)
-LOOM_DEFINE_OPERAND(loom_index_select_true_value, 1)
-LOOM_DEFINE_OPERAND(loom_index_select_false_value, 2)
-LOOM_DEFINE_RESULT(loom_index_select_result, 0)
-iree_status_t loom_index_select_build(
-    loom_builder_t* builder,
-    loom_may_consume loom_value_id_t condition,
-    loom_may_consume loom_value_id_t true_value,
-    loom_may_consume loom_value_id_t false_value,
-    loom_type_t result_type,
-    loom_location_id_t location,
-    loom_op_t** out_op);
-iree_status_t loom_index_select_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
-iree_status_t loom_index_select_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

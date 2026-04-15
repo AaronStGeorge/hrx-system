@@ -130,7 +130,7 @@ func.def @load_expand_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
   %12 = vector.extract %mask[0] : vector<3xi1> -> i1
   %13 = index.constant 0 : index
   %14 = index.constant 1 : index
-  %15 = scalar.select %12, %14, %13 : index
+  %15 = scf.select %12, %14, %13 : index
   %16 = vector.extract %mask[1] : vector<3xi1> -> i1
   %17 = scf.if %16 -> (f32) {
     %18 = index.constant 3 : index
@@ -144,11 +144,11 @@ func.def @load_expand_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
   %22 = vector.extract %mask[0] : vector<3xi1> -> i1
   %23 = index.constant 0 : index
   %24 = index.constant 1 : index
-  %25 = scalar.select %22, %24, %23 : index
+  %25 = scf.select %22, %24, %23 : index
   %26 = vector.extract %mask[1] : vector<3xi1> -> i1
   %27 = index.constant 0 : index
   %28 = index.constant 1 : index
-  %29 = scalar.select %26, %28, %27 : index
+  %29 = scf.select %26, %28, %27 : index
   %30 = index.add %25, %29 : index
   %31 = vector.extract %mask[2] : vector<3xi1> -> i1
   %32 = scf.if %31 -> (f32) {
@@ -186,7 +186,7 @@ func.def @load_expand_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, 
       %20 = vector.extract %mask[%17] : vector<[%n]xi1> -> i1
       %21 = index.constant 0 : index
       %22 = index.constant 1 : index
-      %23 = scalar.select %20, %22, %21 : index
+      %23 = scf.select %20, %22, %21 : index
       %24 = index.add %18, %23 : index
       scf.yield %24 : index
     }
@@ -459,7 +459,7 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
   %8 = vector.extract %mask[0] : vector<3xi1> -> i1
   %9 = index.constant 0 : index
   %10 = index.constant 1 : index
-  %11 = scalar.select %8, %10, %9 : index
+  %11 = scf.select %8, %10, %9 : index
   %12 = vector.extract %mask[1] : vector<3xi1> -> i1
   scf.if %12 {
     %13 = vector.extract %value[1] : vector<3xf32> -> f32
@@ -473,11 +473,11 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
   %16 = vector.extract %mask[0] : vector<3xi1> -> i1
   %17 = index.constant 0 : index
   %18 = index.constant 1 : index
-  %19 = scalar.select %16, %18, %17 : index
+  %19 = scf.select %16, %18, %17 : index
   %20 = vector.extract %mask[1] : vector<3xi1> -> i1
   %21 = index.constant 0 : index
   %22 = index.constant 1 : index
-  %23 = scalar.select %20, %22, %21 : index
+  %23 = scf.select %20, %22, %21 : index
   %24 = index.add %19, %23 : index
   %25 = vector.extract %mask[2] : vector<3xi1> -> i1
   scf.if %25 {
@@ -514,7 +514,7 @@ func.def @store_compress_dynamic(%n: index, %buffer: buffer, %byte_offset: offse
       %16 = vector.extract %mask[%13] : vector<[%n]xi1> -> i1
       %17 = index.constant 0 : index
       %18 = index.constant 1 : index
-      %19 = scalar.select %16, %18, %17 : index
+      %19 = scf.select %16, %18, %17 : index
       %20 = index.add %14, %19 : index
       scf.yield %20 : index
     }

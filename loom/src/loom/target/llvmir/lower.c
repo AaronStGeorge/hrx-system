@@ -621,8 +621,7 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_fcmp(state, target_block, op);
     case LOOM_OP_VECTOR_CMPF:
       return loom_llvmir_lowering_lower_vector_fcmp(state, target_block, op);
-    case LOOM_OP_SCALAR_SELECT:
-    case LOOM_OP_INDEX_SELECT:
+    case LOOM_OP_SCF_SELECT:
       return loom_llvmir_lowering_lower_select(state, target_block, op);
     case LOOM_OP_VECTOR_SELECT:
       return loom_llvmir_lowering_lower_vector_select(state, target_block, op);

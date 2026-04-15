@@ -6,8 +6,8 @@
 
 // Scalar dialect op generation hooks for the test IR generator.
 //
-// Generates integer and float arithmetic, bitwise, comparison,
-// conversion, select, and constant ops from the scalar dialect.
+// Generates integer and float arithmetic, bitwise, comparison, conversion, and
+// constant ops from the scalar dialect.
 
 #include "loom/ops/scalar/ops.h"
 #include "loom/testing/gen.h"
@@ -412,46 +412,6 @@ static iree_status_t loom_test_gen_hook_scalar_conversion(
 }
 
 //===----------------------------------------------------------------------===//
-// Select ops
-//===----------------------------------------------------------------------===//
-
-static iree_status_t loom_test_gen_hook_scalar_select(
-    const loom_test_gen_hook_context_t* context, void* user_data,
-    loom_test_gen_hook_result_t* out_result) {
-  (void)user_data;
-  loom_value_id_t condition = loom_test_gen_values_pick_typed(
-      context->gen, context->values, LOOM_SCALAR_TYPE_I1);
-  if (condition == LOOM_VALUE_ID_INVALID) {
-    *out_result = LOOM_TEST_GEN_HOOK_SKIPPED;
-    return iree_ok_status();
-  }
-  loom_value_id_t lhs, rhs;
-  loom_type_t type;
-  bool found = loom_test_gen_next_bool(context->gen)
-                   ? loom_test_gen_values_pick_binary_integer(
-                         context->gen, context->values, &lhs, &rhs, &type)
-                   : loom_test_gen_values_pick_binary_float(
-                         context->gen, context->values, &lhs, &rhs, &type);
-  if (!found) {
-    found = loom_test_gen_values_pick_binary_integer(
-                context->gen, context->values, &lhs, &rhs, &type) ||
-            loom_test_gen_values_pick_binary_float(
-                context->gen, context->values, &lhs, &rhs, &type);
-  }
-  if (!found) {
-    *out_result = LOOM_TEST_GEN_HOOK_SKIPPED;
-    return iree_ok_status();
-  }
-
-  loom_op_t* op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_select_build(
-      context->builder, condition, lhs, rhs, type, LOOM_LOCATION_UNKNOWN, &op));
-  loom_test_gen_values_add(context->values, loom_op_results(op)[0], type);
-  *out_result = LOOM_TEST_GEN_HOOK_EMITTED;
-  return iree_ok_status();
-}
-
-//===----------------------------------------------------------------------===//
 // Constant ops
 //===----------------------------------------------------------------------===//
 
@@ -520,7 +480,6 @@ static const loom_test_gen_op_hook_t loom_test_gen_scalar_hooks_table[] = {
     {6, loom_test_gen_hook_scalar_float_unary, NULL, NULL},
     {4, loom_test_gen_hook_scalar_comparison, NULL, NULL},
     {3, loom_test_gen_hook_scalar_conversion, NULL, NULL},
-    {2, loom_test_gen_hook_scalar_select, NULL, NULL},
     {2, loom_test_gen_hook_scalar_constant, NULL, NULL},
 };
 

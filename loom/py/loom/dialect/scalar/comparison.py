@@ -4,17 +4,15 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Scalar comparison: cmpi, cmpf, select, float predicates, sign."""
+"""Scalar comparison: cmpi, cmpf, float predicates, sign."""
 
 from loom.assembly import (
     COLON,
-    COMMA,
     Ref,
     TypeOf,
 )
 from loom.dialect.scalar import FastMathFlags, scalar_ops
 from loom.dsl import (
-    ANY,
     FLOAT,
     I1,
     INTEGER,
@@ -103,32 +101,6 @@ scalar_cmpf = comparison_op(
     examples=["%result = scalar.cmpf olt, %lhs, %rhs : f32"],
 )
 
-scalar_select = Op(
-    "scalar.select",
-    group=scalar_ops,
-    doc="Conditional select: returns true_value if condition is true, else false_value.",
-    operands=[
-        Operand("condition", INTEGER),
-        Operand("true_value", ANY),
-        Operand("false_value", ANY),
-    ],
-    results=[Result("result", ANY)],
-    constraints=[SameType("true_value", "false_value", "result")],
-    traits=[PURE],
-    format=[
-        Ref("condition"),
-        COMMA,
-        Ref("true_value"),
-        COMMA,
-        Ref("false_value"),
-        COLON,
-        TypeOf("result"),
-    ],
-    canonicalize="loom_scalar_select_canonicalize",
-    facts="loom_scalar_select_facts",
-    examples=["%result = scalar.select %cond, %t, %f : f32"],
-)
-
 scalar_isnanf = Op(
     "scalar.isnanf",
     group=scalar_ops,
@@ -198,7 +170,6 @@ scalar_signi = Op(
 ALL_COMPARISON_OPS: tuple[Op, ...] = (
     scalar_cmpi,
     scalar_cmpf,
-    scalar_select,
     scalar_isnanf,
     scalar_isinff,
     scalar_isfinitef,

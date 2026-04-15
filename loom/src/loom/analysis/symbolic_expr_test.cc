@@ -16,6 +16,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/util/fact_table.h"
 
 namespace loom {
@@ -41,6 +42,11 @@ class SymbolicExprTest : public ::testing::Test {
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_SCALAR, scalar_vtables,
         (uint16_t)scalar_vtable_count));
+    iree_host_size_t scf_vtable_count = 0;
+    const loom_op_vtable_t* const* scf_vtables =
+        loom_scf_dialect_vtables(&scf_vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_SCF, scf_vtables, (uint16_t)scf_vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
@@ -341,14 +347,14 @@ TEST_F(SymbolicExprTest, SelectUsesExactConditionFacts) {
   loom_value_id_t false_value = DefineIndexValue();
   DefineFacts(condition, loom_value_facts_exact_i64(1));
   loom_op_t* select_op = nullptr;
-  IREE_ASSERT_OK(
-      loom_index_select_build(&builder_, condition, true_value, false_value,
-                              loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
-                              LOOM_LOCATION_UNKNOWN, &select_op));
+  IREE_ASSERT_OK(loom_scf_select_build(&builder_, condition, true_value,
+                                       false_value,
+                                       loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                       LOOM_LOCATION_UNKNOWN, &select_op));
 
   loom_symbolic_expr_t expression = {0};
   IREE_ASSERT_OK(loom_symbolic_expr_from_value(
-      &expression_context_, loom_index_select_result(select_op), &expression));
+      &expression_context_, loom_scf_select_result(select_op), &expression));
 
   ASSERT_EQ(expression.term_count, 1);
   EXPECT_EQ(expression.terms[0].value_id, true_value);
@@ -359,14 +365,14 @@ TEST_F(SymbolicExprTest, SelectUsesConstantConditionExpression) {
   loom_value_id_t true_value = DefineIndexValue();
   loom_value_id_t false_value = DefineIndexValue();
   loom_op_t* select_op = nullptr;
-  IREE_ASSERT_OK(
-      loom_index_select_build(&builder_, condition, true_value, false_value,
-                              loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
-                              LOOM_LOCATION_UNKNOWN, &select_op));
+  IREE_ASSERT_OK(loom_scf_select_build(&builder_, condition, true_value,
+                                       false_value,
+                                       loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+                                       LOOM_LOCATION_UNKNOWN, &select_op));
 
   loom_symbolic_expr_t expression = {0};
   IREE_ASSERT_OK(loom_symbolic_expr_from_value(
-      &expression_context_, loom_index_select_result(select_op), &expression));
+      &expression_context_, loom_scf_select_result(select_op), &expression));
 
   ASSERT_EQ(expression.term_count, 1);
   EXPECT_EQ(expression.terms[0].value_id, false_value);

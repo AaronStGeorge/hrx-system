@@ -34,7 +34,6 @@ class TestIndexDialect:
             "index.rem",
             "index.madd",
             "index.cmp",
-            "index.select",
         ]
 
     def test_constant_is_address_only(self) -> None:
@@ -96,10 +95,3 @@ class TestIndexDialect:
             "ugt",
             "uge",
         ]
-
-    def test_select_is_address_typed(self) -> None:
-        op = _ops()["index.select"]
-        assert op.operands[0].type_constraint == I1
-        assert op.operands[1].type_constraint == ADDRESS
-        assert op.operands[2].type_constraint == ADDRESS
-        assert op.results[0].type_constraint == ADDRESS
