@@ -439,6 +439,18 @@ static iree_status_t RemapSymbolByName(void* user_data,
   return iree_ok_status();
 }
 
+static iree_status_t RemapSymbolToMissingTarget(
+    void* user_data, const loom_module_t* source_module,
+    loom_module_t* target_module, loom_symbol_ref_t source_ref,
+    loom_symbol_ref_t* out_target_ref) {
+  (void)user_data;
+  (void)source_module;
+  (void)target_module;
+  (void)source_ref;
+  *out_target_ref = {.module_id = 0, .symbol_id = 42};
+  return iree_ok_status();
+}
+
 TEST_F(RemapTest, CrossModuleSymbolRefsRequirePolicy) {
   loom_string_id_t source_name_id = LOOM_STRING_ID_INVALID;
   IREE_ASSERT_OK(
@@ -470,6 +482,27 @@ TEST_F(RemapTest, CrossModuleSymbolRefsRequirePolicy) {
       target_->symbols.entries[target_attr.symbol.symbol_id].name_id;
   EXPECT_TRUE(iree_string_view_equal(target_->strings.entries[target_name_id],
                                      IREE_SV("callee")));
+}
+
+TEST_F(RemapTest, CrossModuleSymbolPolicyMustReturnTargetSymbol) {
+  loom_string_id_t source_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(source_, IREE_SV("callee"), &source_name_id));
+  uint16_t source_symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_add_symbol(source_, source_name_id, &source_symbol_id));
+  loom_symbol_ref_t source_ref = {.module_id = 0,
+                                  .symbol_id = source_symbol_id};
+
+  loom_ir_remap_options_t options = {
+      .remap_symbol = RemapSymbolToMissingTarget,
+  };
+  loom_ir_remap_t remap = InitializeRemap(&options);
+  loom_attribute_t target_attr = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_ir_remap_attribute(&remap, loom_attr_symbol(source_ref),
+                              &target_attr));
 }
 
 }  // namespace

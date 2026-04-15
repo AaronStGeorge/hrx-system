@@ -306,9 +306,19 @@ static iree_status_t loom_ir_remap_symbol_ref(
         IREE_STATUS_FAILED_PRECONDITION,
         "cross-module symbol reference remapping requires a symbol policy");
   }
-  return remap->remap_symbol(remap->remap_symbol_user_data,
-                             remap->source_module, remap->target_module,
-                             source_ref, out_target_ref);
+  loom_symbol_ref_t target_ref = loom_symbol_ref_null();
+  IREE_RETURN_IF_ERROR(
+      remap->remap_symbol(remap->remap_symbol_user_data, remap->source_module,
+                          remap->target_module, source_ref, &target_ref));
+  if (!loom_symbol_ref_is_valid(target_ref) || target_ref.module_id != 0 ||
+      target_ref.symbol_id >= remap->target_module->symbols.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "target symbol ref {module=%u, symbol=%u} is out of range",
+        (unsigned)target_ref.module_id, (unsigned)target_ref.symbol_id);
+  }
+  *out_target_ref = target_ref;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_ir_remap_type_sequence(
