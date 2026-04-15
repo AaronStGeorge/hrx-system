@@ -8,7 +8,7 @@
 
 #include "loom/target/llvmir/llvmir.h"
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 7
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 8
 
 static loom_llvmir_attr_t loom_llvmir_test_attr(loom_llvmir_attr_kind_t kind) {
   return (loom_llvmir_attr_t){
@@ -563,6 +563,143 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_test_populate_compare_select(
+    loom_llvmir_module_t* module) {
+  loom_llvmir_type_id_t i1_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 1, &i1_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_float_type(
+      module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("compare_select"),
+          .return_type = i32_type,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+
+  loom_llvmir_value_id_t x = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t lower = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t upper = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t xf = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t yf = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i32_type,
+                                             .name = IREE_SV("x"),
+                                         },
+                                         &x));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i32_type,
+                                             .name = IREE_SV("lower"),
+                                         },
+                                         &lower));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = i32_type,
+                                             .name = IREE_SV("upper"),
+                                         },
+                                         &upper));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = f32_type,
+                                             .name = IREE_SV("xf"),
+                                         },
+                                         &xf));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = f32_type,
+                                             .name = IREE_SV("yf"),
+                                         },
+                                         &yf));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  loom_llvmir_value_id_t below = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_icmp(entry,
+                             &(loom_llvmir_icmp_desc_t){
+                                 .result_name = IREE_SV("below"),
+                                 .result_type = i1_type,
+                                 .predicate = LOOM_LLVMIR_ICMP_SLT,
+                                 .lhs = x,
+                                 .rhs = lower,
+                             },
+                             &below));
+  loom_llvmir_value_id_t above = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_icmp(entry,
+                             &(loom_llvmir_icmp_desc_t){
+                                 .result_name = IREE_SV("above"),
+                                 .result_type = i1_type,
+                                 .predicate = LOOM_LLVMIR_ICMP_SGT,
+                                 .lhs = x,
+                                 .rhs = upper,
+                             },
+                             &above));
+  loom_llvmir_value_id_t ordered = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_fcmp(entry,
+                             &(loom_llvmir_fcmp_desc_t){
+                                 .result_name = IREE_SV("ordered"),
+                                 .result_type = i1_type,
+                                 .predicate = LOOM_LLVMIR_FCMP_OLT,
+                                 .lhs = xf,
+                                 .rhs = yf,
+                             },
+                             &ordered));
+  loom_llvmir_value_id_t at_least_lower = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_select(entry,
+                               &(loom_llvmir_select_desc_t){
+                                   .result_name = IREE_SV("at_least_lower"),
+                                   .result_type = i32_type,
+                                   .condition = below,
+                                   .true_value = lower,
+                                   .false_value = x,
+                               },
+                               &at_least_lower));
+  loom_llvmir_value_id_t clamped = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_select(entry,
+                               &(loom_llvmir_select_desc_t){
+                                   .result_name = IREE_SV("clamped"),
+                                   .result_type = i32_type,
+                                   .condition = above,
+                                   .true_value = upper,
+                                   .false_value = at_least_lower,
+                               },
+                               &clamped));
+  loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_select(entry,
+                               &(loom_llvmir_select_desc_t){
+                                   .result_name = IREE_SV("result"),
+                                   .result_type = i32_type,
+                                   .condition = ordered,
+                                   .true_value = clamped,
+                                   .false_value = x,
+                               },
+                               &result));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, result));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_test_populate_inline_asm(
     loom_llvmir_module_t* module) {
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -939,6 +1076,19 @@ static const char kScalarBinopText[] =
     "  ret i32 %sum\n"
     "}\n";
 
+static const char kCompareSelectText[] =
+    "define i32 @compare_select(i32 %x, i32 %lower, i32 %upper, float "
+    "%xf, float %yf) {\n"
+    "entry:\n"
+    "  %below = icmp slt i32 %x, %lower\n"
+    "  %above = icmp sgt i32 %x, %upper\n"
+    "  %ordered = fcmp olt float %xf, %yf\n"
+    "  %at_least_lower = select i1 %below, i32 %lower, i32 %x\n"
+    "  %clamped = select i1 %above, i32 %upper, i32 %at_least_lower\n"
+    "  %result = select i1 %ordered, i32 %clamped, i32 %x\n"
+    "  ret i32 %result\n"
+    "}\n";
+
 static const char kInlineAsmText[] =
     "define i32 @inline_asm_add(i32 %lhs, i32 %rhs) {\n"
     "entry:\n"
@@ -1016,6 +1166,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
       return IREE_SV("scalar_binop");
     case LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS:
       return IREE_SV("builtin_intrinsics");
+    case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
+      return IREE_SV("compare_select");
     default:
       return IREE_SV("unknown");
   }
@@ -1062,6 +1214,7 @@ static iree_status_t loom_llvmir_test_module_target_config(
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
+    case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
       return iree_ok_status();
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1086,6 +1239,8 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_amdgpu_intrinsics(module);
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
       return loom_llvmir_test_populate_scalar_binop(module);
+    case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
+      return loom_llvmir_test_populate_compare_select(module);
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown LLVM IR test module scenario");
@@ -1141,6 +1296,9 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_SCALAR_BINOP:
       return iree_make_string_view(kScalarBinopText,
                                    IREE_ARRAYSIZE(kScalarBinopText) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT:
+      return iree_make_string_view(kCompareSelectText,
+                                   IREE_ARRAYSIZE(kCompareSelectText) - 1);
     default:
       return iree_string_view_empty();
   }

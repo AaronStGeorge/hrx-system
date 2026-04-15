@@ -30,6 +30,38 @@ typedef enum loom_llvmir_binop_e {
   LOOM_LLVMIR_BINOP_FMUL = 11,
 } loom_llvmir_binop_t;
 
+typedef enum loom_llvmir_icmp_predicate_e {
+  LOOM_LLVMIR_ICMP_EQ = 0,
+  LOOM_LLVMIR_ICMP_NE = 1,
+  LOOM_LLVMIR_ICMP_UGT = 2,
+  LOOM_LLVMIR_ICMP_UGE = 3,
+  LOOM_LLVMIR_ICMP_ULT = 4,
+  LOOM_LLVMIR_ICMP_ULE = 5,
+  LOOM_LLVMIR_ICMP_SGT = 6,
+  LOOM_LLVMIR_ICMP_SGE = 7,
+  LOOM_LLVMIR_ICMP_SLT = 8,
+  LOOM_LLVMIR_ICMP_SLE = 9,
+} loom_llvmir_icmp_predicate_t;
+
+typedef enum loom_llvmir_fcmp_predicate_e {
+  LOOM_LLVMIR_FCMP_FALSE = 0,
+  LOOM_LLVMIR_FCMP_OEQ = 1,
+  LOOM_LLVMIR_FCMP_OGT = 2,
+  LOOM_LLVMIR_FCMP_OGE = 3,
+  LOOM_LLVMIR_FCMP_OLT = 4,
+  LOOM_LLVMIR_FCMP_OLE = 5,
+  LOOM_LLVMIR_FCMP_ONE = 6,
+  LOOM_LLVMIR_FCMP_ORD = 7,
+  LOOM_LLVMIR_FCMP_UNO = 8,
+  LOOM_LLVMIR_FCMP_UEQ = 9,
+  LOOM_LLVMIR_FCMP_UGT = 10,
+  LOOM_LLVMIR_FCMP_UGE = 11,
+  LOOM_LLVMIR_FCMP_ULT = 12,
+  LOOM_LLVMIR_FCMP_ULE = 13,
+  LOOM_LLVMIR_FCMP_UNE = 14,
+  LOOM_LLVMIR_FCMP_TRUE = 15,
+} loom_llvmir_fcmp_predicate_t;
+
 typedef enum loom_llvmir_memory_flag_bits_e {
   LOOM_LLVMIR_MEMORY_VOLATILE = 1u << 0,
 } loom_llvmir_memory_flags_t;
@@ -70,6 +102,32 @@ typedef struct loom_llvmir_phi_desc_t {
   // Number of entries in |incoming|.
   iree_host_size_t incoming_count;
 } loom_llvmir_phi_desc_t;
+
+typedef struct loom_llvmir_icmp_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Scalar i1 or vector-of-i1 result type.
+  loom_llvmir_type_id_t result_type;
+  // Integer comparison predicate.
+  loom_llvmir_icmp_predicate_t predicate;
+  // Left operand value.
+  loom_llvmir_value_id_t lhs;
+  // Right operand value.
+  loom_llvmir_value_id_t rhs;
+} loom_llvmir_icmp_desc_t;
+
+typedef struct loom_llvmir_fcmp_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Scalar i1 or vector-of-i1 result type.
+  loom_llvmir_type_id_t result_type;
+  // Floating-point comparison predicate.
+  loom_llvmir_fcmp_predicate_t predicate;
+  // Left operand value.
+  loom_llvmir_value_id_t lhs;
+  // Right operand value.
+  loom_llvmir_value_id_t rhs;
+} loom_llvmir_fcmp_desc_t;
 
 typedef struct loom_llvmir_gep_desc_t {
   // Optional result name without the leading percent sign.
@@ -142,6 +200,19 @@ typedef struct loom_llvmir_inline_asm_desc_t {
   iree_host_size_t arg_count;
 } loom_llvmir_inline_asm_desc_t;
 
+typedef struct loom_llvmir_select_desc_t {
+  // Optional result name without the leading percent sign.
+  iree_string_view_t result_name;
+  // Selected result type.
+  loom_llvmir_type_id_t result_type;
+  // Scalar i1 or vector-of-i1 condition.
+  loom_llvmir_value_id_t condition;
+  // Value returned when |condition| is true.
+  loom_llvmir_value_id_t true_value;
+  // Value returned when |condition| is false.
+  loom_llvmir_value_id_t false_value;
+} loom_llvmir_select_desc_t;
+
 iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
                                     const loom_llvmir_phi_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id);
@@ -149,6 +220,14 @@ iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_binop(loom_llvmir_block_t* block,
                                       const loom_llvmir_binop_desc_t* desc,
                                       loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_icmp(loom_llvmir_block_t* block,
+                                     const loom_llvmir_icmp_desc_t* desc,
+                                     loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_fcmp(loom_llvmir_block_t* block,
+                                     const loom_llvmir_fcmp_desc_t* desc,
+                                     loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_gep(loom_llvmir_block_t* block,
                                     const loom_llvmir_gep_desc_t* desc,
@@ -168,6 +247,10 @@ iree_status_t loom_llvmir_build_call(loom_llvmir_block_t* block,
 iree_status_t loom_llvmir_build_inline_asm(
     loom_llvmir_block_t* block, const loom_llvmir_inline_asm_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id);
+
+iree_status_t loom_llvmir_build_select(loom_llvmir_block_t* block,
+                                       const loom_llvmir_select_desc_t* desc,
+                                       loom_llvmir_value_id_t* out_value_id);
 
 iree_status_t loom_llvmir_build_ret_void(loom_llvmir_block_t* block);
 

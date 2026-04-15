@@ -919,6 +919,26 @@ static iree_status_t loom_llvmir_bitcode_map_mark_instruction_constants(
       return loom_llvmir_bitcode_map_mark_constant(module, map,
                                                    instruction->binop.rhs);
     }
+    case LOOM_LLVMIR_INST_ICMP: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->icmp.lhs));
+      return loom_llvmir_bitcode_map_mark_constant(module, map,
+                                                   instruction->icmp.rhs);
+    }
+    case LOOM_LLVMIR_INST_FCMP: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->fcmp.lhs));
+      return loom_llvmir_bitcode_map_mark_constant(module, map,
+                                                   instruction->fcmp.rhs);
+    }
+    case LOOM_LLVMIR_INST_SELECT: {
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->select.condition));
+      IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->select.true_value));
+      return loom_llvmir_bitcode_map_mark_constant(
+          module, map, instruction->select.false_value);
+    }
     case LOOM_LLVMIR_INST_GEP: {
       IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_map_mark_constant(
           module, map, instruction->gep.base));
@@ -1284,6 +1304,72 @@ static iree_status_t loom_llvmir_bitcode_check_attr_list(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_bitcode_icmp_predicate(
+    loom_llvmir_icmp_predicate_t predicate, uint64_t* out_predicate) {
+  switch (predicate) {
+    case LOOM_LLVMIR_ICMP_EQ:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_EQ;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_NE:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_NE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_UGT:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_UGT;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_UGE:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_UGE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_ULT:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_ULT;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_ULE:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_ULE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_SGT:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_SGT;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_SGE:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_SGE;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_SLT:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_SLT;
+      return iree_ok_status();
+    case LOOM_LLVMIR_ICMP_SLE:
+      *out_predicate = LOOM_LLVMIR_BITCODE_ICMP_SLE;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown LLVM icmp predicate");
+  }
+}
+
+static iree_status_t loom_llvmir_bitcode_fcmp_predicate(
+    loom_llvmir_fcmp_predicate_t predicate, uint64_t* out_predicate) {
+  switch (predicate) {
+    case LOOM_LLVMIR_FCMP_FALSE:
+    case LOOM_LLVMIR_FCMP_OEQ:
+    case LOOM_LLVMIR_FCMP_OGT:
+    case LOOM_LLVMIR_FCMP_OGE:
+    case LOOM_LLVMIR_FCMP_OLT:
+    case LOOM_LLVMIR_FCMP_OLE:
+    case LOOM_LLVMIR_FCMP_ONE:
+    case LOOM_LLVMIR_FCMP_ORD:
+    case LOOM_LLVMIR_FCMP_UNO:
+    case LOOM_LLVMIR_FCMP_UEQ:
+    case LOOM_LLVMIR_FCMP_UGT:
+    case LOOM_LLVMIR_FCMP_UGE:
+    case LOOM_LLVMIR_FCMP_ULT:
+    case LOOM_LLVMIR_FCMP_ULE:
+    case LOOM_LLVMIR_FCMP_UNE:
+    case LOOM_LLVMIR_FCMP_TRUE:
+      *out_predicate = (uint64_t)predicate;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown LLVM fcmp predicate");
+  }
+}
+
 static iree_status_t loom_llvmir_bitcode_check_instruction(
     const loom_llvmir_module_t* module,
     const loom_llvmir_instruction_t* instruction) {
@@ -1296,6 +1382,18 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
     case LOOM_LLVMIR_INST_PHI:
       return iree_ok_status();
     case LOOM_LLVMIR_INST_BINOP:
+      return iree_ok_status();
+    case LOOM_LLVMIR_INST_ICMP: {
+      uint64_t predicate = 0;
+      return loom_llvmir_bitcode_icmp_predicate(instruction->icmp.predicate,
+                                                &predicate);
+    }
+    case LOOM_LLVMIR_INST_FCMP: {
+      uint64_t predicate = 0;
+      return loom_llvmir_bitcode_fcmp_predicate(instruction->fcmp.predicate,
+                                                &predicate);
+    }
+    case LOOM_LLVMIR_INST_SELECT:
       return iree_ok_status();
     case LOOM_LLVMIR_INST_GEP:
       if (instruction->gep.index_count > (IREE_HOST_SIZE_MAX - 4) / 2) {
@@ -2121,6 +2219,71 @@ static iree_status_t loom_llvmir_bitcode_write_binop(
       operand_count);
 }
 
+static iree_status_t loom_llvmir_bitcode_write_icmp(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t predicate = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_icmp_predicate(
+      instruction->icmp.predicate, &predicate));
+  uint64_t operands[4];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->icmp.lhs, instruction_value_id, operands,
+      &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->icmp.rhs, instruction_value_id, operands,
+      &operand_count));
+  operands[operand_count++] = predicate;
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_CMP2, operands,
+      operand_count);
+}
+
+static iree_status_t loom_llvmir_bitcode_write_fcmp(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t predicate = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_fcmp_predicate(
+      instruction->fcmp.predicate, &predicate));
+  uint64_t operands[4];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->fcmp.lhs, instruction_value_id, operands,
+      &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->fcmp.rhs, instruction_value_id, operands,
+      &operand_count));
+  operands[operand_count++] = predicate;
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_CMP2, operands,
+      operand_count);
+}
+
+static iree_status_t loom_llvmir_bitcode_write_select(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_bitcode_function_value_map_t* value_map,
+    const loom_llvmir_instruction_t* instruction, uint64_t instruction_value_id,
+    loom_llvmir_bitcode_record_writer_t* writer) {
+  uint64_t operands[5];
+  iree_host_size_t operand_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->select.true_value, instruction_value_id,
+      operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value(
+      value_map, instruction->select.false_value, instruction_value_id,
+      operands, &operand_count));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_push_value_type_pair(
+      module, value_map, instruction->select.condition, instruction_value_id,
+      operands, &operand_count));
+  return loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+      writer, LOOM_LLVMIR_BITCODE_FUNCTION_CODE_INST_VSELECT, operands,
+      operand_count);
+}
+
 static iree_status_t loom_llvmir_bitcode_write_gep(
     const loom_llvmir_module_t* module,
     const loom_llvmir_bitcode_function_value_map_t* value_map,
@@ -2420,6 +2583,15 @@ static iree_status_t loom_llvmir_bitcode_write_instruction(
     case LOOM_LLVMIR_INST_BINOP:
       return loom_llvmir_bitcode_write_binop(module, value_map, instruction,
                                              instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_ICMP:
+      return loom_llvmir_bitcode_write_icmp(module, value_map, instruction,
+                                            instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_FCMP:
+      return loom_llvmir_bitcode_write_fcmp(module, value_map, instruction,
+                                            instruction_value_id, writer);
+    case LOOM_LLVMIR_INST_SELECT:
+      return loom_llvmir_bitcode_write_select(module, value_map, instruction,
+                                              instruction_value_id, writer);
     case LOOM_LLVMIR_INST_GEP:
       return loom_llvmir_bitcode_write_gep(module, value_map, instruction,
                                            instruction_value_id, writer);

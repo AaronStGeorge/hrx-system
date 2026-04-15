@@ -306,6 +306,74 @@ static const char* loom_llvmir_binop_spelling(loom_llvmir_binop_t op) {
   }
 }
 
+static const char* loom_llvmir_icmp_predicate_spelling(
+    loom_llvmir_icmp_predicate_t predicate) {
+  switch (predicate) {
+    case LOOM_LLVMIR_ICMP_EQ:
+      return "eq";
+    case LOOM_LLVMIR_ICMP_NE:
+      return "ne";
+    case LOOM_LLVMIR_ICMP_UGT:
+      return "ugt";
+    case LOOM_LLVMIR_ICMP_UGE:
+      return "uge";
+    case LOOM_LLVMIR_ICMP_ULT:
+      return "ult";
+    case LOOM_LLVMIR_ICMP_ULE:
+      return "ule";
+    case LOOM_LLVMIR_ICMP_SGT:
+      return "sgt";
+    case LOOM_LLVMIR_ICMP_SGE:
+      return "sge";
+    case LOOM_LLVMIR_ICMP_SLT:
+      return "slt";
+    case LOOM_LLVMIR_ICMP_SLE:
+      return "sle";
+    default:
+      return NULL;
+  }
+}
+
+static const char* loom_llvmir_fcmp_predicate_spelling(
+    loom_llvmir_fcmp_predicate_t predicate) {
+  switch (predicate) {
+    case LOOM_LLVMIR_FCMP_FALSE:
+      return "false";
+    case LOOM_LLVMIR_FCMP_OEQ:
+      return "oeq";
+    case LOOM_LLVMIR_FCMP_OGT:
+      return "ogt";
+    case LOOM_LLVMIR_FCMP_OGE:
+      return "oge";
+    case LOOM_LLVMIR_FCMP_OLT:
+      return "olt";
+    case LOOM_LLVMIR_FCMP_OLE:
+      return "ole";
+    case LOOM_LLVMIR_FCMP_ONE:
+      return "one";
+    case LOOM_LLVMIR_FCMP_ORD:
+      return "ord";
+    case LOOM_LLVMIR_FCMP_UNO:
+      return "uno";
+    case LOOM_LLVMIR_FCMP_UEQ:
+      return "ueq";
+    case LOOM_LLVMIR_FCMP_UGT:
+      return "ugt";
+    case LOOM_LLVMIR_FCMP_UGE:
+      return "uge";
+    case LOOM_LLVMIR_FCMP_ULT:
+      return "ult";
+    case LOOM_LLVMIR_FCMP_ULE:
+      return "ule";
+    case LOOM_LLVMIR_FCMP_UNE:
+      return "une";
+    case LOOM_LLVMIR_FCMP_TRUE:
+      return "true";
+    default:
+      return NULL;
+  }
+}
+
 static iree_status_t loom_llvmir_write_result_prefix(
     const loom_llvmir_module_t* module,
     const loom_llvmir_instruction_t* instruction,
@@ -370,6 +438,61 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
       return loom_llvmir_write_value_ref(module, instruction->binop.rhs,
                                          stream);
+    }
+    case LOOM_LLVMIR_INST_ICMP: {
+      const char* predicate =
+          loom_llvmir_icmp_predicate_spelling(instruction->icmp.predicate);
+      if (!predicate) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM icmp predicate");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "icmp "));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, predicate));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_type(
+          module, loom_llvmir_text_value_type(module, instruction->icmp.lhs),
+          stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_value_ref(module, instruction->icmp.lhs, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      return loom_llvmir_write_value_ref(module, instruction->icmp.rhs, stream);
+    }
+    case LOOM_LLVMIR_INST_FCMP: {
+      const char* predicate =
+          loom_llvmir_fcmp_predicate_spelling(instruction->fcmp.predicate);
+      if (!predicate) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM fcmp predicate");
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "fcmp "));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, predicate));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_type(
+          module, loom_llvmir_text_value_type(module, instruction->fcmp.lhs),
+          stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_value_ref(module, instruction->fcmp.lhs, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      return loom_llvmir_write_value_ref(module, instruction->fcmp.rhs, stream);
+    }
+    case LOOM_LLVMIR_INST_SELECT: {
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_write_result_prefix(module, instruction, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "select "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->select.condition, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
+          module, instruction->select.true_value, stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+      return loom_llvmir_write_typed_value_ref(
+          module, instruction->select.false_value, stream);
     }
     case LOOM_LLVMIR_INST_GEP: {
       IREE_RETURN_IF_ERROR(

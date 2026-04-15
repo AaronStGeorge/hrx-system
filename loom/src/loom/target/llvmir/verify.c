@@ -53,6 +53,180 @@ static iree_status_t loom_llvmir_verify_expected_value_type(
   return iree_ok_status();
 }
 
+static bool loom_llvmir_verify_type_is_i1(const loom_llvmir_module_t* module,
+                                          loom_llvmir_type_id_t type_id) {
+  const loom_llvmir_type_t* type = loom_llvmir_verify_type(module, type_id);
+  return type && type->kind == LOOM_LLVMIR_TYPE_INTEGER && type->bit_width == 1;
+}
+
+static iree_status_t loom_llvmir_verify_mask_result_type(
+    const loom_llvmir_module_t* module, loom_llvmir_type_id_t operand_type_id,
+    loom_llvmir_type_id_t result_type_id) {
+  const loom_llvmir_type_t* operand_type =
+      loom_llvmir_verify_type(module, operand_type_id);
+  const loom_llvmir_type_t* result_type =
+      loom_llvmir_verify_type(module, result_type_id);
+  if (!operand_type || !result_type) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM compare references unknown type");
+  }
+  if (operand_type->kind != LOOM_LLVMIR_TYPE_VECTOR) {
+    if (!loom_llvmir_verify_type_is_i1(module, result_type_id)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVM scalar compare result must be i1");
+    }
+    return iree_ok_status();
+  }
+  if (result_type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+      result_type->element_count != operand_type->element_count ||
+      !loom_llvmir_verify_type_is_i1(module, result_type->element_type)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM vector compare result must be a same-lane i1 vector");
+  }
+  return iree_ok_status();
+}
+
+static bool loom_llvmir_verify_type_is_integer_or_pointer_like(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  if (!type) return false;
+  if (type->kind == LOOM_LLVMIR_TYPE_INTEGER ||
+      type->kind == LOOM_LLVMIR_TYPE_POINTER) {
+    return true;
+  }
+  if (type->kind != LOOM_LLVMIR_TYPE_VECTOR) return false;
+  const loom_llvmir_type_t* element_type =
+      loom_llvmir_verify_type(module, type->element_type);
+  return element_type && (element_type->kind == LOOM_LLVMIR_TYPE_INTEGER ||
+                          element_type->kind == LOOM_LLVMIR_TYPE_POINTER);
+}
+
+static bool loom_llvmir_verify_type_is_float_like(
+    const loom_llvmir_module_t* module, const loom_llvmir_type_t* type) {
+  if (!type) return false;
+  if (type->kind == LOOM_LLVMIR_TYPE_FLOAT) return true;
+  if (type->kind != LOOM_LLVMIR_TYPE_VECTOR) return false;
+  const loom_llvmir_type_t* element_type =
+      loom_llvmir_verify_type(module, type->element_type);
+  return element_type && element_type->kind == LOOM_LLVMIR_TYPE_FLOAT;
+}
+
+static bool loom_llvmir_verify_icmp_predicate(
+    loom_llvmir_icmp_predicate_t predicate) {
+  switch (predicate) {
+    case LOOM_LLVMIR_ICMP_EQ:
+    case LOOM_LLVMIR_ICMP_NE:
+    case LOOM_LLVMIR_ICMP_UGT:
+    case LOOM_LLVMIR_ICMP_UGE:
+    case LOOM_LLVMIR_ICMP_ULT:
+    case LOOM_LLVMIR_ICMP_ULE:
+    case LOOM_LLVMIR_ICMP_SGT:
+    case LOOM_LLVMIR_ICMP_SGE:
+    case LOOM_LLVMIR_ICMP_SLT:
+    case LOOM_LLVMIR_ICMP_SLE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_llvmir_verify_fcmp_predicate(
+    loom_llvmir_fcmp_predicate_t predicate) {
+  switch (predicate) {
+    case LOOM_LLVMIR_FCMP_FALSE:
+    case LOOM_LLVMIR_FCMP_OEQ:
+    case LOOM_LLVMIR_FCMP_OGT:
+    case LOOM_LLVMIR_FCMP_OGE:
+    case LOOM_LLVMIR_FCMP_OLT:
+    case LOOM_LLVMIR_FCMP_OLE:
+    case LOOM_LLVMIR_FCMP_ONE:
+    case LOOM_LLVMIR_FCMP_ORD:
+    case LOOM_LLVMIR_FCMP_UNO:
+    case LOOM_LLVMIR_FCMP_UEQ:
+    case LOOM_LLVMIR_FCMP_UGT:
+    case LOOM_LLVMIR_FCMP_UGE:
+    case LOOM_LLVMIR_FCMP_ULT:
+    case LOOM_LLVMIR_FCMP_ULE:
+    case LOOM_LLVMIR_FCMP_UNE:
+    case LOOM_LLVMIR_FCMP_TRUE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_llvmir_verify_compare(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction, loom_llvmir_value_id_t lhs,
+    loom_llvmir_value_id_t rhs,
+    bool (*is_valid_operand_type)(const loom_llvmir_module_t*,
+                                  const loom_llvmir_type_t*)) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM compare has no result value");
+  }
+  loom_llvmir_type_id_t lhs_type_id =
+      loom_llvmir_verify_value_type(module, lhs);
+  loom_llvmir_type_id_t rhs_type_id =
+      loom_llvmir_verify_value_type(module, rhs);
+  if (lhs_type_id == LOOM_LLVMIR_TYPE_ID_INVALID ||
+      rhs_type_id == LOOM_LLVMIR_TYPE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM compare references unknown value");
+  }
+  if (lhs_type_id != rhs_type_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM compare operand type mismatch");
+  }
+  if (!is_valid_operand_type(module,
+                             loom_llvmir_verify_type(module, lhs_type_id))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM compare has invalid operand type");
+  }
+  return loom_llvmir_verify_mask_result_type(
+      module, lhs_type_id,
+      loom_llvmir_verify_value_type(module, instruction->result_value_id));
+}
+
+static iree_status_t loom_llvmir_verify_select(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_instruction_t* instruction) {
+  if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM select has no result value");
+  }
+  loom_llvmir_type_id_t result_type_id =
+      loom_llvmir_verify_value_type(module, instruction->result_value_id);
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->select.true_value, result_type_id));
+  IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
+      module, instruction->select.false_value, result_type_id));
+
+  loom_llvmir_type_id_t condition_type_id =
+      loom_llvmir_verify_value_type(module, instruction->select.condition);
+  if (condition_type_id == LOOM_LLVMIR_TYPE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM select references unknown condition");
+  }
+  if (loom_llvmir_verify_type_is_i1(module, condition_type_id)) {
+    return iree_ok_status();
+  }
+
+  const loom_llvmir_type_t* condition_type =
+      loom_llvmir_verify_type(module, condition_type_id);
+  const loom_llvmir_type_t* result_type =
+      loom_llvmir_verify_type(module, result_type_id);
+  if (!condition_type || condition_type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+      !result_type || result_type->kind != LOOM_LLVMIR_TYPE_VECTOR ||
+      condition_type->element_count != result_type->element_count ||
+      !loom_llvmir_verify_type_is_i1(module, condition_type->element_type)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM vector select condition must be a same-lane i1 vector");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_verify_instruction(
     const loom_llvmir_module_t* module, const loom_llvmir_function_t* function,
     const loom_llvmir_block_t* block,
@@ -86,6 +260,24 @@ static iree_status_t loom_llvmir_verify_instruction(
       return loom_llvmir_verify_expected_value_type(
           module, instruction->binop.rhs,
           loom_llvmir_verify_value_type(module, instruction->result_value_id));
+    case LOOM_LLVMIR_INST_ICMP:
+      if (!loom_llvmir_verify_icmp_predicate(instruction->icmp.predicate)) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM icmp predicate");
+      }
+      return loom_llvmir_verify_compare(
+          module, instruction, instruction->icmp.lhs, instruction->icmp.rhs,
+          loom_llvmir_verify_type_is_integer_or_pointer_like);
+    case LOOM_LLVMIR_INST_FCMP:
+      if (!loom_llvmir_verify_fcmp_predicate(instruction->fcmp.predicate)) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "unknown LLVM fcmp predicate");
+      }
+      return loom_llvmir_verify_compare(
+          module, instruction, instruction->fcmp.lhs, instruction->fcmp.rhs,
+          loom_llvmir_verify_type_is_float_like);
+    case LOOM_LLVMIR_INST_SELECT:
+      return loom_llvmir_verify_select(module, instruction);
     case LOOM_LLVMIR_INST_GEP:
       if (instruction->result_value_id == LOOM_LLVMIR_VALUE_ID_INVALID) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

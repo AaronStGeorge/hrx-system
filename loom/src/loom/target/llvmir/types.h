@@ -79,15 +79,18 @@ typedef struct loom_llvmir_parameter_t {
 typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_PHI = 0,
   LOOM_LLVMIR_INST_BINOP = 1,
-  LOOM_LLVMIR_INST_GEP = 2,
-  LOOM_LLVMIR_INST_LOAD = 3,
-  LOOM_LLVMIR_INST_STORE = 4,
-  LOOM_LLVMIR_INST_CALL = 5,
-  LOOM_LLVMIR_INST_INLINE_ASM = 6,
-  LOOM_LLVMIR_INST_RET = 7,
-  LOOM_LLVMIR_INST_BR = 8,
-  LOOM_LLVMIR_INST_COND_BR = 9,
-  LOOM_LLVMIR_INST_UNREACHABLE = 10,
+  LOOM_LLVMIR_INST_ICMP = 2,
+  LOOM_LLVMIR_INST_FCMP = 3,
+  LOOM_LLVMIR_INST_SELECT = 4,
+  LOOM_LLVMIR_INST_GEP = 5,
+  LOOM_LLVMIR_INST_LOAD = 6,
+  LOOM_LLVMIR_INST_STORE = 7,
+  LOOM_LLVMIR_INST_CALL = 8,
+  LOOM_LLVMIR_INST_INLINE_ASM = 9,
+  LOOM_LLVMIR_INST_RET = 10,
+  LOOM_LLVMIR_INST_BR = 11,
+  LOOM_LLVMIR_INST_COND_BR = 12,
+  LOOM_LLVMIR_INST_UNREACHABLE = 13,
 } loom_llvmir_inst_kind_t;
 
 typedef struct loom_llvmir_instruction_t {
@@ -113,6 +116,33 @@ typedef struct loom_llvmir_instruction_t {
       // Right operand.
       loom_llvmir_value_id_t rhs;
     } binop;
+    // Integer comparison operands.
+    struct {
+      // Integer comparison predicate.
+      loom_llvmir_icmp_predicate_t predicate;
+      // Left operand.
+      loom_llvmir_value_id_t lhs;
+      // Right operand.
+      loom_llvmir_value_id_t rhs;
+    } icmp;
+    // Floating-point comparison operands.
+    struct {
+      // Floating-point comparison predicate.
+      loom_llvmir_fcmp_predicate_t predicate;
+      // Left operand.
+      loom_llvmir_value_id_t lhs;
+      // Right operand.
+      loom_llvmir_value_id_t rhs;
+    } fcmp;
+    // Select operands.
+    struct {
+      // Scalar or vector mask condition.
+      loom_llvmir_value_id_t condition;
+      // Value selected when |condition| is true.
+      loom_llvmir_value_id_t true_value;
+      // Value selected when |condition| is false.
+      loom_llvmir_value_id_t false_value;
+    } select;
     // GetElementPtr operands.
     struct {
       // Pointee element type used by LLVM's opaque-pointer GEP syntax.
