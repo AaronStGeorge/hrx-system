@@ -527,6 +527,9 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
             InterfaceFieldSpec("condition_region", "condition_region_index", "region"),
             InterfaceFieldSpec("iv", "iv_block_arg_index", "block_arg", region_field="body"),
             InterfaceFieldSpec("iter_args", "iter_args_operand_offset", "operand"),
+            InterfaceFieldSpec("lower_bound", "lower_bound_operand_index", "operand"),
+            InterfaceFieldSpec("upper_bound", "upper_bound_operand_index", "operand"),
+            InterfaceFieldSpec("step", "step_operand_index", "operand"),
         ),
     ),
     InterfaceSpec(

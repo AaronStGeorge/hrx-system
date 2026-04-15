@@ -222,6 +222,12 @@ TEST_F(InterfaceTest, LoopLikeAccessorsForScfFor) {
   loom_value_id_t iv = loom_loop_like_iv(loop);
   EXPECT_NE(iv, LOOM_VALUE_ID_INVALID);
   EXPECT_EQ(iv, loom_block_arg_id(loom_region_const_entry_block(body), 0));
+
+  // Counted-loop range operands are exposed generically.
+  EXPECT_EQ(loom_loop_like_lower_bound(loop), lower_id);
+  EXPECT_EQ(loom_loop_like_upper_bound(loop), upper_id);
+  EXPECT_EQ(loom_loop_like_step(loop), step_id);
+  EXPECT_TRUE(loom_loop_like_has_counted_range(loop));
 }
 
 TEST_F(InterfaceTest, LoopLikeIterArgsEmpty) {

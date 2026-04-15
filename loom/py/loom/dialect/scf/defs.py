@@ -132,7 +132,14 @@ scf_for = Op(
         ),
     ],
     interfaces=[
-        LoopLikeInterface(body="body", iter_args="iter_args", iv="iv"),
+        LoopLikeInterface(
+            body="body",
+            iter_args="iter_args",
+            iv="iv",
+            lower_bound="lower_bound",
+            upper_bound="upper_bound",
+            step="step",
+        ),
     ],
     constraints=[
         IterArgsMatchResults("iter_args", "results"),

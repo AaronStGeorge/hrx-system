@@ -821,6 +821,18 @@ typedef struct loom_loop_like_vtable_t {
   // loop-carried state. For scf.for this follows lower_bound,
   // upper_bound, step; for scf.while iter_args start at operand 0.
   uint8_t iter_args_operand_offset;
+
+  // Index of the inclusive lower-bound operand for counted loops.
+  // LOOM_OPERAND_INDEX_NONE for non-counted loop forms.
+  uint8_t lower_bound_operand_index;
+
+  // Index of the exclusive upper-bound operand for counted loops.
+  // LOOM_OPERAND_INDEX_NONE for non-counted loop forms.
+  uint8_t upper_bound_operand_index;
+
+  // Index of the step operand for counted loops.
+  // LOOM_OPERAND_INDEX_NONE for non-counted loop forms.
+  uint8_t step_operand_index;
 } loom_loop_like_vtable_t;
 
 // Fat reference to a loop-like op. 16 bytes, passed by value.

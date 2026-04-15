@@ -846,6 +846,48 @@ static inline loom_value_slice_t loom_loop_like_iter_args(
   return slice;
 }
 
+// Returns the lower-bound operand value ID for counted loops, or
+// LOOM_VALUE_ID_INVALID for non-counted loops or malformed op instances.
+static inline loom_value_id_t loom_loop_like_lower_bound(
+    loom_loop_like_t loop) {
+  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
+  uint8_t index = loop.vtable->lower_bound_operand_index;
+  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  return loom_op_operands(loop.op)[index];
+}
+
+// Returns the upper-bound operand value ID for counted loops, or
+// LOOM_VALUE_ID_INVALID for non-counted loops or malformed op instances.
+static inline loom_value_id_t loom_loop_like_upper_bound(
+    loom_loop_like_t loop) {
+  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
+  uint8_t index = loop.vtable->upper_bound_operand_index;
+  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  return loom_op_operands(loop.op)[index];
+}
+
+// Returns the step operand value ID for counted loops, or
+// LOOM_VALUE_ID_INVALID for non-counted loops or malformed op instances.
+static inline loom_value_id_t loom_loop_like_step(loom_loop_like_t loop) {
+  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
+  uint8_t index = loop.vtable->step_operand_index;
+  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  return loom_op_operands(loop.op)[index];
+}
+
+// Returns true when all counted-loop range operands are present.
+static inline bool loom_loop_like_has_counted_range(loom_loop_like_t loop) {
+  return loom_loop_like_lower_bound(loop) != LOOM_VALUE_ID_INVALID &&
+         loom_loop_like_upper_bound(loop) != LOOM_VALUE_ID_INVALID &&
+         loom_loop_like_step(loop) != LOOM_VALUE_ID_INVALID;
+}
+
 //===----------------------------------------------------------------------===//
 // RegionBranch interface
 //===----------------------------------------------------------------------===//

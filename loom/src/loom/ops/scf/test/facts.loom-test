@@ -1,0 +1,167 @@
+// RUN: pass canonicalize
+
+// A counted loop IV with static positive bounds has a tight inclusive range and
+// divisibility derived from the lower bound plus the step.
+func.def @for_iv_static_bounds() -> (i64, i64, i64) {
+  %lo = index.constant 4 : index
+  %hi = index.constant 12 : index
+  %step = index.constant 2 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = test.fact_range_lo %iv : index -> i64
+    %fact_hi = test.fact_range_hi %iv : index -> i64
+    %fact_div = test.fact_divisor %iv : index -> i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+}
+
+// ----
+func.def @for_iv_static_bounds() -> (i64, i64, i64) {
+  %lo = index.constant 4 : index
+  %hi = index.constant 12 : index
+  %step = index.constant 2 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = scalar.constant 4 : i64
+    %fact_hi = scalar.constant 11 : i64
+    %fact_div = scalar.constant 2 : i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+}
+
+// ====
+
+// Predicate-refined dynamic bounds still feed the IV range. Starting from zero
+// preserves step divisibility instead of degrading through exact-zero facts.
+func.def @for_iv_assumed_upper_bound(%n: index) -> (i64, i64, i64, i1) {
+  %lo = index.constant 0 : index
+  %n2 = index.assume %n [range(%n, 16, 64)] : index
+  %step = index.constant 4 : index
+  %zero = scalar.constant 0 : i64
+  %false = scalar.constant false : i1
+  %iv_lo, %iv_hi, %iv_div, %iv_non_negative = scf.for %iv = [%lo to %n2 step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64, %carry_non_negative = %false : i1) -> (i64, i64, i64, i1) {
+    %fact_lo = test.fact_range_lo %iv : index -> i64
+    %fact_hi = test.fact_range_hi %iv : index -> i64
+    %fact_div = test.fact_divisor %iv : index -> i64
+    %fact_non_negative = test.fact_non_negative %iv : index -> i1
+    scf.yield %fact_lo, %fact_hi, %fact_div, %fact_non_negative : i64, i64, i64, i1
+  }
+  func.return %iv_lo, %iv_hi, %iv_div, %iv_non_negative : i64, i64, i64, i1
+}
+
+// ----
+func.def @for_iv_assumed_upper_bound(%n: index) -> (i64, i64, i64, i1) {
+  %lo = index.constant 0 : index
+  %n2 = index.assume %n [range(%n, 16, 64)] : index
+  %step = index.constant 4 : index
+  %zero = scalar.constant 0 : i64
+  %false = scalar.constant false : i1
+  %iv_lo, %iv_hi, %iv_div, %iv_non_negative = scf.for %iv = [%lo to %n2 step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64, %carry_non_negative = %false : i1) -> (i64, i64, i64, i1) {
+    %fact_lo = scalar.constant 0 : i64
+    %fact_hi = scalar.constant 63 : i64
+    %fact_div = scalar.constant 4 : i64
+    %fact_non_negative = scalar.constant 1 : i1
+    scf.yield %fact_lo, %fact_hi, %fact_div, %fact_non_negative : i64, i64, i64, i1
+  }
+  func.return %iv_lo, %iv_hi, %iv_div, %iv_non_negative : i64, i64, i64, i1
+}
+
+// ====
+
+// When static facts prove exactly one iteration, the body IV is exact.
+func.def @for_iv_single_trip_exact() -> (i64, i64, i64) {
+  %lo = index.constant 8 : index
+  %hi = index.constant 12 : index
+  %step = index.constant 4 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = test.fact_range_lo %iv : index -> i64
+    %fact_hi = test.fact_range_hi %iv : index -> i64
+    %fact_div = test.fact_divisor %iv : index -> i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+}
+
+// ----
+func.def @for_iv_single_trip_exact() -> (i64, i64, i64) {
+  %lo = index.constant 8 : index
+  %hi = index.constant 12 : index
+  %step = index.constant 4 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = scalar.constant 8 : i64
+    %fact_hi = scalar.constant 8 : i64
+    %fact_div = scalar.constant 8 : i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+}
+
+// ====
+
+// Ordinary index consumers inside the body can fold directly from seeded IV
+// facts; they do not need bespoke SCF-aware logic.
+func.def @for_iv_feeds_index_consumers() -> (index, i1) {
+  %lo = index.constant 8 : index
+  %hi = index.constant 12 : index
+  %step = index.constant 4 : index
+  %zero = index.constant 0 : index
+  %false = scalar.constant false : i1
+  %sum, %is_before_limit = scf.for %iv = [%lo to %hi step %step](%carry_sum = %zero : index, %carry_cmp = %false : i1) -> (index, i1) {
+    %two = index.constant 2 : index
+    %limit = index.constant 12 : index
+    %plus = index.add %iv, %two : index
+    %cmp = index.cmp slt, %iv, %limit : index
+    scf.yield %plus, %cmp : index, i1
+  }
+  func.return %sum, %is_before_limit : index, i1
+}
+
+// ----
+func.def @for_iv_feeds_index_consumers() -> (index, i1) {
+  %lo = index.constant 8 : index
+  %hi = index.constant 12 : index
+  %step = index.constant 4 : index
+  %zero = index.constant 0 : index
+  %false = scalar.constant false : i1
+  %sum, %is_before_limit = scf.for %iv = [%lo to %hi step %step](%carry_sum = %zero : index, %carry_cmp = %false : i1) -> (index, i1) {
+    %plus = index.constant 10 : index
+    %cmp = scalar.constant true : i1
+    scf.yield %plus, %cmp : index, i1
+  }
+  func.return %sum, %is_before_limit : index, i1
+}
+
+// ====
+
+// A step that is not fact-proven positive leaves the IV unknown. This keeps
+// malformed or nonterminating counted loops from gaining unsound body facts.
+func.def @for_iv_unknown_step_is_unknown(%step: index) -> (i64, i64, i64) {
+  %lo = index.constant 0 : index
+  %hi = index.constant 16 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = test.fact_range_lo %iv : index -> i64
+    %fact_hi = test.fact_range_hi %iv : index -> i64
+    %fact_div = test.fact_divisor %iv : index -> i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+}
+
+// ----
+func.def @for_iv_unknown_step_is_unknown(%step: index) -> (i64, i64, i64) {
+  %lo = index.constant 0 : index
+  %hi = index.constant 16 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = scalar.constant -9223372036854775808 : i64
+    %fact_hi = scalar.constant 9223372036854775807 : i64
+    %fact_div = scalar.constant 1 : i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+}

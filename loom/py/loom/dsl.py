@@ -1647,6 +1647,15 @@ class LoopLikeInterface(NamedTuple):
     # separate from the body. For scf.for this is None; for scf.while
     # this is the "before" region that computes the loop condition.
     condition_region: str | None = None
+    # Operand name for the inclusive lower bound of a counted loop.
+    # None for non-counted loop forms.
+    lower_bound: str | None = None
+    # Operand name for the exclusive upper bound of a counted loop.
+    # None for non-counted loop forms.
+    upper_bound: str | None = None
+    # Operand name for the positive step of a counted loop. None for
+    # non-counted loop forms.
+    step: str | None = None
 
 
 class RegionBranchInterface(NamedTuple):
