@@ -31,6 +31,15 @@ typedef struct loom_ir_clone_block_options_t {
   bool omit_terminators;
 } loom_ir_clone_block_options_t;
 
+// Options for moving a source block's operation list into another location in
+// the same module.
+typedef struct loom_ir_move_block_options_t {
+  // Skips source ops whose vtable declares LOOM_TRAIT_TERMINATOR. This is used
+  // when consuming a body whose terminator is interpreted by the caller, such
+  // as callable inlining from a func.return-like terminator.
+  bool omit_terminators;
+} loom_ir_move_block_options_t;
+
 // Clones |source_op| at the builder insertion point.
 //
 // Source operands, result types, attributes, nested region payloads, locations,
@@ -52,6 +61,34 @@ iree_status_t loom_ir_clone_region(loom_builder_t* builder,
                                    const loom_region_t* source_region,
                                    loom_ir_remap_t* remap,
                                    loom_region_t** out_target_region);
+
+// Rewrites every SSA-bearing payload in an existing op subtree through |remap|.
+//
+// This mutates ordinary operands, result types, attributes, nested block
+// argument types, and nested child ops in-place through |rewriter| so use
+// lists, type-use lists, effect summaries, and worklist state remain coherent.
+// Result values and nested block arguments keep their existing IDs; this helper
+// is for same-module move/consume transforms, not cross-module cloning.
+iree_status_t loom_ir_remap_op_references(loom_rewriter_t* rewriter,
+                                          loom_op_t* op,
+                                          loom_ir_remap_t* remap);
+
+// Moves live ops from |source_block| before |before_op| in the same module.
+//
+// Each moved op subtree is first checked after applying |remap|: all remapped
+// operands, result-type references, attributes, nested block argument types,
+// and nested child captures must be available immediately before |before_op|
+// unless they are defined inside the op subtree being moved. The helper then
+// remaps the existing op subtree in-place and splices it through the rewriter.
+// This is a consuming move: callers that omit terminators are responsible for
+// erasing or otherwise repairing the source owner before verification.
+//
+// The source block must be distinct from |before_op|'s parent block. Moving an
+// entire block into itself is ambiguous because preserving order is either a
+// no-op or a rotation depending on which prefix the caller intended.
+iree_status_t loom_ir_move_block_ops_before(
+    loom_rewriter_t* rewriter, loom_block_t* source_block, loom_op_t* before_op,
+    loom_ir_remap_t* remap, const loom_ir_move_block_options_t* options);
 
 #ifdef __cplusplus
 }

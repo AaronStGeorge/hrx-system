@@ -13,6 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
+#include "loom/transforms/rewriter.h"
 
 namespace loom {
 namespace {
@@ -59,6 +60,16 @@ class MaterializeTest : public ::testing::Test {
     loom_ir_remap_t remap = {};
     IREE_CHECK_OK(loom_ir_remap_initialize(source_, target_, &remap_arena_,
                                            &local_options, &remap));
+    return remap;
+  }
+
+  loom_ir_remap_t InitializeSameModuleRemap(bool allow_unmapped_values) {
+    loom_ir_remap_options_t options = {
+        .allow_unmapped_values = allow_unmapped_values,
+    };
+    loom_ir_remap_t remap = {};
+    IREE_CHECK_OK(loom_ir_remap_initialize(source_, source_, &remap_arena_,
+                                           &options, &remap));
     return remap;
   }
 
@@ -285,6 +296,227 @@ TEST_F(MaterializeTest, ClonesBlockOpsCanOmitTerminators) {
   loom_block_t* target_block = loom_module_block(target_);
   ASSERT_EQ(target_block->op_count, 1u);
   ASSERT_TRUE(loom_test_constant_isa(loom_block_op(target_block, 0)));
+}
+
+TEST_F(MaterializeTest, MovesBlockOpsAndRemapsCapturedBlockArgs) {
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t tile_type = loom_type_shaped_1d(
+      LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+
+  loom_op_t* replacement_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&source_builder_, loom_attr_f64(1.0),
+                                          f32_type, LOOM_LOCATION_UNKNOWN,
+                                          &replacement_op));
+  loom_value_id_t replacement = loom_test_constant_result(replacement_op);
+
+  loom_op_t* input_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&source_builder_, loom_attr_i64(0),
+                                          tile_type, LOOM_LOCATION_UNKNOWN,
+                                          &input_op));
+  loom_value_id_t input = loom_test_constant_result(input_op);
+
+  loom_op_t* map_op = nullptr;
+  IREE_ASSERT_OK(loom_test_map_build(&source_builder_, &input, 1, tile_type,
+                                     nullptr, 0, LOOM_LOCATION_UNKNOWN,
+                                     &map_op));
+  loom_region_t* body = loom_test_map_body(map_op);
+  loom_builder_ip_t saved_ip =
+      loom_builder_enter_region(&source_builder_, map_op, body);
+  loom_value_id_t element = loom_region_entry_arg_id(body, 0);
+  loom_op_t* neg_op = nullptr;
+  IREE_ASSERT_OK(loom_test_neg_build(&source_builder_, element, f32_type,
+                                     LOOM_LOCATION_UNKNOWN, &neg_op));
+  loom_value_id_t negated = loom_test_neg_result(neg_op);
+  loom_op_t* yield_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&source_builder_, &negated, 1,
+                                       LOOM_LOCATION_UNKNOWN, &yield_op));
+  loom_builder_restore(&source_builder_, saved_ip);
+
+  loom_op_t* sentinel_op = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&source_builder_, &replacement, 1,
+                                     LOOM_LOCATION_UNKNOWN, &sentinel_op));
+
+  loom_rewriter_t rewriter = {};
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, source_, &remap_arena_));
+  loom_ir_remap_t remap =
+      InitializeSameModuleRemap(/*allow_unmapped_values=*/true);
+  IREE_ASSERT_OK(loom_ir_remap_map_value(&remap, element, replacement));
+  loom_ir_move_block_options_t options = {
+      .omit_terminators = true,
+  };
+  IREE_ASSERT_OK(loom_ir_move_block_ops_before(
+      &rewriter, loom_region_entry_block(body), sentinel_op, &remap, &options));
+
+  EXPECT_EQ(neg_op->parent_block, loom_module_block(source_));
+  EXPECT_EQ(neg_op->parent_op, nullptr);
+  EXPECT_EQ(loom_test_neg_input(neg_op), replacement);
+  EXPECT_EQ(neg_op->next_op, sentinel_op);
+  ASSERT_EQ(loom_region_entry_block(body)->op_count, 1u);
+  EXPECT_EQ(loom_region_entry_block(body)->first_op, yield_op);
+
+  IREE_ASSERT_OK(loom_rewriter_erase(&rewriter, map_op));
+  EXPECT_EQ(loom_module_value(source_, negated)->use_count, 0u);
+  EXPECT_TRUE(iree_any_bit_set(map_op->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_FALSE(iree_any_bit_set(neg_op->flags, LOOM_OP_FLAG_DEAD));
+  loom_rewriter_deinitialize(&rewriter);
+}
+
+TEST_F(MaterializeTest, MovesBlockOpsAndRemapsDynamicResultTypes) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t input_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  loom_region_t* source_region = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate_region(source_, 1, &source_region));
+  loom_block_t* source_block = loom_region_entry_block(source_region);
+  loom_value_id_t source_dim = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(source_, index_type, &source_dim));
+  IREE_ASSERT_OK(loom_block_add_arg(source_, source_block, source_dim));
+
+  loom_builder_t source_region_builder = {};
+  loom_builder_initialize(source_, &source_->arena, source_block,
+                          &source_region_builder);
+  loom_op_t* input_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&source_region_builder,
+                                          loom_attr_i64(0), input_type,
+                                          LOOM_LOCATION_UNKNOWN, &input_op));
+  loom_value_id_t input = loom_test_constant_result(input_op);
+  loom_type_t result_types[] = {
+      loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(source_dim), 0),
+      index_type,
+  };
+  loom_op_t* deflate_op = nullptr;
+  IREE_ASSERT_OK(loom_test_deflate_build(
+      &source_region_builder, input, result_types, IREE_ARRAYSIZE(result_types),
+      nullptr, 0, LOOM_LOCATION_UNKNOWN, &deflate_op));
+
+  loom_op_t* target_dim_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&source_builder_, loom_attr_i64(8),
+                                          index_type, LOOM_LOCATION_UNKNOWN,
+                                          &target_dim_op));
+  loom_value_id_t target_dim = loom_test_constant_result(target_dim_op);
+  loom_op_t* sentinel_op = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&source_builder_, &target_dim, 1,
+                                     LOOM_LOCATION_UNKNOWN, &sentinel_op));
+
+  loom_rewriter_t rewriter = {};
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, source_, &remap_arena_));
+  loom_ir_remap_t remap =
+      InitializeSameModuleRemap(/*allow_unmapped_values=*/true);
+  IREE_ASSERT_OK(loom_ir_remap_map_value(&remap, source_dim, target_dim));
+  IREE_ASSERT_OK(loom_ir_move_block_ops_before(
+      &rewriter, source_block, sentinel_op, &remap, /*options=*/nullptr));
+
+  EXPECT_EQ(source_block->op_count, 0u);
+  EXPECT_EQ(input_op->parent_block, loom_module_block(source_));
+  EXPECT_EQ(deflate_op->parent_block, loom_module_block(source_));
+  EXPECT_EQ(deflate_op->next_op, sentinel_op);
+  loom_value_slice_t moved_results = loom_test_deflate_results(deflate_op);
+  ASSERT_EQ(moved_results.count, 2u);
+  loom_type_t moved_output_type =
+      loom_module_value_type(source_, moved_results.values[0]);
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(moved_output_type, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(moved_output_type, 0), target_dim);
+  loom_rewriter_deinitialize(&rewriter);
+}
+
+TEST_F(MaterializeTest, MovesBlockOpsAndRemapsPredicateAttrs) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_region_t* source_region = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate_region(source_, 1, &source_region));
+  loom_block_t* source_block = loom_region_entry_block(source_region);
+  loom_value_id_t source_dim = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(source_, index_type, &source_dim));
+  IREE_ASSERT_OK(loom_block_add_arg(source_, source_block, source_dim));
+
+  loom_builder_t source_region_builder = {};
+  loom_builder_initialize(source_, &source_->arena, source_block,
+                          &source_region_builder);
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_MUL,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+      .args = {(int64_t)source_dim, 16},
+  };
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_test_assume_build(&source_region_builder, &source_dim, 1,
+                                        &predicate, 1, &index_type, 1,
+                                        LOOM_LOCATION_UNKNOWN, &assume_op));
+
+  loom_op_t* target_dim_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&source_builder_, loom_attr_i64(8),
+                                          index_type, LOOM_LOCATION_UNKNOWN,
+                                          &target_dim_op));
+  loom_value_id_t target_dim = loom_test_constant_result(target_dim_op);
+  loom_op_t* sentinel_op = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&source_builder_, &target_dim, 1,
+                                     LOOM_LOCATION_UNKNOWN, &sentinel_op));
+
+  loom_rewriter_t rewriter = {};
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, source_, &remap_arena_));
+  loom_ir_remap_t remap =
+      InitializeSameModuleRemap(/*allow_unmapped_values=*/true);
+  IREE_ASSERT_OK(loom_ir_remap_map_value(&remap, source_dim, target_dim));
+  IREE_ASSERT_OK(loom_ir_move_block_ops_before(
+      &rewriter, source_block, sentinel_op, &remap, /*options=*/nullptr));
+
+  EXPECT_EQ(source_block->op_count, 0u);
+  EXPECT_EQ(assume_op->parent_block, loom_module_block(source_));
+  EXPECT_EQ(loom_test_assume_values(assume_op).values[0], target_dim);
+  loom_attribute_t predicates = loom_op_attrs(assume_op)[0];
+  ASSERT_EQ(predicates.kind, LOOM_ATTR_PREDICATE_LIST);
+  ASSERT_EQ(predicates.count, 1u);
+  EXPECT_EQ(predicates.predicate_list[0].args[0], (int64_t)target_dim);
+  EXPECT_EQ(assume_op->next_op, sentinel_op);
+  loom_rewriter_deinitialize(&rewriter);
+}
+
+TEST_F(MaterializeTest, RejectsMoveWithUnavailableRemappedCaptures) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t input_type = loom_type_shaped_1d(
+      LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  loom_region_t* source_region = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate_region(source_, 1, &source_region));
+  loom_block_t* source_block = loom_region_entry_block(source_region);
+  loom_value_id_t source_dim = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(source_, index_type, &source_dim));
+  IREE_ASSERT_OK(loom_block_add_arg(source_, source_block, source_dim));
+
+  loom_builder_t source_region_builder = {};
+  loom_builder_initialize(source_, &source_->arena, source_block,
+                          &source_region_builder);
+  loom_op_t* input_op = nullptr;
+  IREE_ASSERT_OK(loom_test_constant_build(&source_region_builder,
+                                          loom_attr_i64(0), input_type,
+                                          LOOM_LOCATION_UNKNOWN, &input_op));
+  loom_value_id_t input = loom_test_constant_result(input_op);
+  loom_type_t result_types[] = {
+      loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(source_dim), 0),
+      index_type,
+  };
+  loom_op_t* deflate_op = nullptr;
+  IREE_ASSERT_OK(loom_test_deflate_build(
+      &source_region_builder, input, result_types, IREE_ARRAYSIZE(result_types),
+      nullptr, 0, LOOM_LOCATION_UNKNOWN, &deflate_op));
+
+  loom_op_t* sentinel_op = nullptr;
+  IREE_ASSERT_OK(loom_test_use_build(&source_builder_, nullptr, 0,
+                                     LOOM_LOCATION_UNKNOWN, &sentinel_op));
+
+  loom_rewriter_t rewriter = {};
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, source_, &remap_arena_));
+  loom_ir_remap_t remap =
+      InitializeSameModuleRemap(/*allow_unmapped_values=*/true);
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_ir_move_block_ops_before(&rewriter, source_block, sentinel_op,
+                                    &remap, /*options=*/nullptr));
+
+  EXPECT_EQ(source_block->op_count, 2u);
+  EXPECT_EQ(input_op->parent_block, source_block);
+  EXPECT_EQ(deflate_op->parent_block, source_block);
+  loom_rewriter_deinitialize(&rewriter);
 }
 
 }  // namespace

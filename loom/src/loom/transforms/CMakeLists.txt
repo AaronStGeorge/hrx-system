@@ -190,8 +190,10 @@ loom_cc_library(
     "materialize.c"
   DEPS
     ::remap
+    ::rewriter
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::availability
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
   PUBLIC
@@ -205,6 +207,7 @@ loom_cc_test(
   DEPS
     ::materialize
     ::remap
+    ::rewriter
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
