@@ -25,6 +25,14 @@ static const loom_llvmir_value_t* loom_llvmir_verify_value(
   return value_id < module->value_count ? &module->values[value_id] : NULL;
 }
 
+static bool loom_llvmir_verify_value_is_constant(
+    const loom_llvmir_value_t* value) {
+  return value && (value->kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER ||
+                   value->kind == LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS ||
+                   value->kind == LOOM_LLVMIR_VALUE_CONSTANT_NULL ||
+                   value->kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR);
+}
+
 static loom_llvmir_type_id_t loom_llvmir_verify_value_type(
     const loom_llvmir_module_t* module, loom_llvmir_value_id_t value_id) {
   const loom_llvmir_value_t* value = loom_llvmir_verify_value(module, value_id);
@@ -994,8 +1002,48 @@ static iree_status_t loom_llvmir_verify_function(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_verify_global(
+    const loom_llvmir_module_t* module, const loom_llvmir_global_t* global) {
+  if (global->value_type >= module->type_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global references unknown value type");
+  }
+  if (module->types[global->value_type].kind == LOOM_LLVMIR_TYPE_VOID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global value type must not be void");
+  }
+  const loom_llvmir_value_t* global_value =
+      loom_llvmir_verify_value(module, global->value_id);
+  if (!global_value || global_value->kind != LOOM_LLVMIR_VALUE_GLOBAL ||
+      global_value->global.global_id != global->id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global value table entry is invalid");
+  }
+  const loom_llvmir_type_t* pointer_type =
+      loom_llvmir_verify_type(module, global_value->type_id);
+  if (!pointer_type || pointer_type->kind != LOOM_LLVMIR_TYPE_POINTER ||
+      pointer_type->address_space != global->address_space) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global value must be a matching pointer");
+  }
+  const loom_llvmir_value_t* initializer =
+      loom_llvmir_verify_value(module, global->initializer);
+  if (!loom_llvmir_verify_value_is_constant(initializer)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global initializer must be a constant");
+  }
+  if (initializer->type_id != global->value_type) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global initializer type mismatch");
+  }
+  return loom_llvmir_verify_memory_alignment(global->alignment);
+}
+
 iree_status_t loom_llvmir_verify_module(const loom_llvmir_module_t* module) {
   IREE_ASSERT_ARGUMENT(module);
+  for (iree_host_size_t i = 0; i < module->global_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_verify_global(module, module->globals[i]));
+  }
   for (iree_host_size_t i = 0; i < module->function_count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_llvmir_verify_function(module, module->functions[i]));

@@ -24,6 +24,7 @@ extern "C" {
 #define LOOM_LLVMIR_VALUE_ID_INVALID ((uint32_t)UINT32_MAX)
 #define LOOM_LLVMIR_BLOCK_ID_INVALID ((uint32_t)UINT32_MAX)
 #define LOOM_LLVMIR_FUNCTION_ID_INVALID ((uint32_t)UINT32_MAX)
+#define LOOM_LLVMIR_GLOBAL_ID_INVALID ((uint32_t)UINT32_MAX)
 #define LOOM_LLVMIR_ATTR_GROUP_ID_INVALID ((uint32_t)UINT32_MAX)
 #define LOOM_LLVMIR_METADATA_ID_INVALID ((uint32_t)UINT32_MAX)
 
@@ -31,11 +32,13 @@ typedef uint32_t loom_llvmir_type_id_t;
 typedef uint32_t loom_llvmir_value_id_t;
 typedef uint32_t loom_llvmir_block_id_t;
 typedef uint32_t loom_llvmir_function_id_t;
+typedef uint32_t loom_llvmir_global_id_t;
 typedef uint32_t loom_llvmir_attr_group_id_t;
 typedef uint32_t loom_llvmir_metadata_id_t;
 
 typedef struct loom_llvmir_module_t loom_llvmir_module_t;
 typedef struct loom_llvmir_function_t loom_llvmir_function_t;
+typedef struct loom_llvmir_global_t loom_llvmir_global_t;
 typedef struct loom_llvmir_block_t loom_llvmir_block_t;
 
 typedef enum loom_llvmir_float_kind_e {
@@ -53,12 +56,13 @@ typedef enum loom_llvmir_type_kind_e {
 } loom_llvmir_type_kind_t;
 
 typedef enum loom_llvmir_value_kind_e {
-  LOOM_LLVMIR_VALUE_PARAMETER = 0,
-  LOOM_LLVMIR_VALUE_CONSTANT_INTEGER = 1,
-  LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS = 2,
-  LOOM_LLVMIR_VALUE_CONSTANT_NULL = 3,
-  LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR = 4,
-  LOOM_LLVMIR_VALUE_INSTRUCTION = 5,
+  LOOM_LLVMIR_VALUE_GLOBAL = 0,
+  LOOM_LLVMIR_VALUE_PARAMETER = 1,
+  LOOM_LLVMIR_VALUE_CONSTANT_INTEGER = 2,
+  LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS = 3,
+  LOOM_LLVMIR_VALUE_CONSTANT_NULL = 4,
+  LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR = 5,
+  LOOM_LLVMIR_VALUE_INSTRUCTION = 6,
 } loom_llvmir_value_kind_t;
 
 typedef enum loom_llvmir_function_kind_e {
@@ -153,6 +157,23 @@ typedef struct loom_llvmir_function_desc_t {
   loom_llvmir_attr_group_id_t attr_group_id;
 } loom_llvmir_function_desc_t;
 
+typedef struct loom_llvmir_global_desc_t {
+  // Global symbol name without the leading at sign.
+  iree_string_view_t name;
+  // Linkage/preemption token.
+  loom_llvmir_linkage_t linkage;
+  // Stored value type.
+  loom_llvmir_type_id_t value_type;
+  // Pointer address space for references to this global.
+  uint32_t address_space;
+  // True when the global is immutable LLVM constant storage.
+  bool is_constant;
+  // Constant initializer value.
+  loom_llvmir_value_id_t initializer;
+  // Optional byte alignment, or zero to omit the attribute.
+  uint32_t alignment;
+} loom_llvmir_global_desc_t;
+
 typedef struct loom_llvmir_metadata_i32_tuple_t {
   // Integer values in tuple order.
   const int32_t* values;
@@ -219,6 +240,16 @@ iree_status_t loom_llvmir_module_add_metadata_i32_tuple(
     loom_llvmir_module_t* module,
     const loom_llvmir_metadata_i32_tuple_t* metadata,
     loom_llvmir_metadata_id_t* out_metadata_id);
+
+iree_status_t loom_llvmir_module_add_global(
+    loom_llvmir_module_t* module, const loom_llvmir_global_desc_t* desc,
+    loom_llvmir_global_t** out_global);
+
+loom_llvmir_global_id_t loom_llvmir_global_id(
+    const loom_llvmir_global_t* global);
+
+loom_llvmir_value_id_t loom_llvmir_global_value_id(
+    const loom_llvmir_global_t* global);
 
 iree_status_t loom_llvmir_module_add_function(
     loom_llvmir_module_t* module, const loom_llvmir_function_desc_t* desc,

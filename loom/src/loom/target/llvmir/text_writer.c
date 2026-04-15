@@ -32,6 +32,11 @@ static loom_llvmir_function_t* loom_llvmir_text_function(
                                               : NULL;
 }
 
+static loom_llvmir_global_t* loom_llvmir_text_global(
+    const loom_llvmir_module_t* module, loom_llvmir_global_id_t global_id) {
+  return global_id < module->global_count ? module->globals[global_id] : NULL;
+}
+
 static iree_status_t loom_llvmir_write_label_ref(
     const loom_llvmir_function_t* function, loom_llvmir_block_id_t block_id,
     loom_output_stream_t* stream) {
@@ -172,6 +177,16 @@ static iree_status_t loom_llvmir_write_value_ref(
       return loom_output_stream_write_cstring(stream, "null");
     case LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR:
       return loom_llvmir_write_integer_vector_constant(module, value, stream);
+    case LOOM_LLVMIR_VALUE_GLOBAL: {
+      loom_llvmir_global_t* global =
+          loom_llvmir_text_global(module, value->global.global_id);
+      if (!global) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM text writer saw unknown global");
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '@'));
+      return loom_output_stream_write(stream, global->name);
+    }
     case LOOM_LLVMIR_VALUE_PARAMETER:
     case LOOM_LLVMIR_VALUE_INSTRUCTION:
       if (!iree_string_view_is_empty(value->name)) {
@@ -1013,6 +1028,32 @@ static iree_status_t loom_llvmir_write_function_signature(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_write_global(
+    const loom_llvmir_module_t* module, const loom_llvmir_global_t* global,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '@'));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, global->name));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " = "));
+  const char* linkage = loom_llvmir_linkage_spelling(global->linkage);
+  if (!linkage) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown LLVM global linkage");
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, linkage));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      stream, global->is_constant ? "constant " : "global "));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_write_type(module, global->value_type, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ' '));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_write_value_ref(module, global->initializer, stream));
+  if (global->alignment != 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(stream, ", align %u",
+                                                         global->alignment));
+  }
+  return loom_output_stream_write_char(stream, '\n');
+}
+
 static iree_status_t loom_llvmir_write_function(
     const loom_llvmir_module_t* module, const loom_llvmir_function_t* function,
     loom_output_stream_t* stream) {
@@ -1066,7 +1107,20 @@ iree_status_t loom_llvmir_text_write_module(const loom_llvmir_module_t* module,
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
     wrote_header = true;
   }
-  if (wrote_header && module->function_count > 0) {
+  if (wrote_header &&
+      (module->global_count > 0 || module->function_count > 0)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
+  }
+
+  for (iree_host_size_t i = 0; i < module->global_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_write_global(module, module->globals[i], stream));
+  }
+
+  if (module->global_count > 0 && module->function_count > 0) {
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
   }
 
@@ -1079,7 +1133,7 @@ iree_status_t loom_llvmir_text_write_module(const loom_llvmir_module_t* module,
   }
 
   if (module->attr_group_count > 0) {
-    if (module->function_count > 0) {
+    if (module->global_count > 0 || module->function_count > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
     }
     for (iree_host_size_t i = 0; i < module->attr_group_count; ++i) {
@@ -1092,7 +1146,8 @@ iree_status_t loom_llvmir_text_write_module(const loom_llvmir_module_t* module,
   }
 
   if (module->metadata_node_count > 0) {
-    if (module->function_count > 0 || module->attr_group_count > 0) {
+    if (module->global_count > 0 || module->function_count > 0 ||
+        module->attr_group_count > 0) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '\n'));
     }
     for (iree_host_size_t i = 0; i < module->metadata_node_count; ++i) {

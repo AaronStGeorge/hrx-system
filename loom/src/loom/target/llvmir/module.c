@@ -121,6 +121,32 @@ static bool loom_llvmir_type_equal(const loom_llvmir_type_t* lhs,
          lhs->float_kind == rhs->float_kind;
 }
 
+static bool loom_llvmir_module_is_constant_value_kind(
+    loom_llvmir_value_kind_t kind) {
+  return kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER ||
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_FLOAT_BITS ||
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_NULL ||
+         kind == LOOM_LLVMIR_VALUE_CONSTANT_INTEGER_VECTOR;
+}
+
+static bool loom_llvmir_module_is_power_of_two_u32(uint32_t value) {
+  return value != 0 && (value & (value - 1)) == 0;
+}
+
+static iree_status_t loom_llvmir_module_check_global_linkage(
+    loom_llvmir_linkage_t linkage) {
+  switch (linkage) {
+    case LOOM_LLVMIR_LINKAGE_DEFAULT:
+    case LOOM_LLVMIR_LINKAGE_DSO_LOCAL:
+    case LOOM_LLVMIR_LINKAGE_INTERNAL:
+    case LOOM_LLVMIR_LINKAGE_PRIVATE:
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown LLVM global linkage");
+  }
+}
+
 static iree_status_t loom_llvmir_module_get_type(
     loom_llvmir_module_t* module, const loom_llvmir_type_t* type,
     loom_llvmir_type_id_t* out_type_id) {
@@ -393,6 +419,87 @@ iree_status_t loom_llvmir_module_add_metadata_i32_tuple(
   *out_metadata_id =
       (loom_llvmir_metadata_id_t)(module->metadata_node_count - 1);
   return iree_ok_status();
+}
+
+iree_status_t loom_llvmir_module_add_global(
+    loom_llvmir_module_t* module, const loom_llvmir_global_desc_t* desc,
+    loom_llvmir_global_t** out_global) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(desc);
+  IREE_ASSERT_ARGUMENT(out_global);
+  *out_global = NULL;
+  if (iree_string_view_is_empty(desc->name)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global name must not be empty");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_check_global_linkage(desc->linkage));
+  if (desc->value_type >= module->type_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global references unknown value type");
+  }
+  if (module->types[desc->value_type].kind == LOOM_LLVMIR_TYPE_VOID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global value type must not be void");
+  }
+  if (desc->initializer >= module->value_count ||
+      !loom_llvmir_module_is_constant_value_kind(
+          module->values[desc->initializer].kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global initializer must be a constant");
+  }
+  if (module->values[desc->initializer].type_id != desc->value_type) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global initializer type mismatch");
+  }
+  if (desc->alignment != 0 &&
+      !loom_llvmir_module_is_power_of_two_u32(desc->alignment)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM global alignment is not a power of two");
+  }
+
+  loom_llvmir_type_id_t pointer_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_pointer_type(
+      module, desc->address_space, &pointer_type));
+
+  loom_llvmir_global_t* global = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(&module->arena, sizeof(*global), (void**)&global));
+  memset(global, 0, sizeof(*global));
+  global->module = module;
+  global->id = (loom_llvmir_global_id_t)module->global_count;
+  global->linkage = desc->linkage;
+  global->value_type = desc->value_type;
+  global->address_space = desc->address_space;
+  global->is_constant = desc->is_constant;
+  global->initializer = desc->initializer;
+  global->alignment = desc->alignment;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_copy_string(module, desc->name, &global->name));
+
+  loom_llvmir_global_t** global_slot = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_append_entry(
+      &module->arena, (void**)&module->globals, &module->global_count,
+      &module->global_capacity, sizeof(*module->globals),
+      (void**)&global_slot));
+  *global_slot = global;
+
+  loom_llvmir_value_t* value = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_define_value(
+      module, LOOM_LLVMIR_VALUE_GLOBAL, pointer_type, desc->name, &value,
+      &global->value_id));
+  value->global.global_id = global->id;
+  *out_global = global;
+  return iree_ok_status();
+}
+
+loom_llvmir_global_id_t loom_llvmir_global_id(
+    const loom_llvmir_global_t* global) {
+  return global ? global->id : LOOM_LLVMIR_GLOBAL_ID_INVALID;
+}
+
+loom_llvmir_value_id_t loom_llvmir_global_value_id(
+    const loom_llvmir_global_t* global) {
+  return global ? global->value_id : LOOM_LLVMIR_VALUE_ID_INVALID;
 }
 
 iree_status_t loom_llvmir_module_add_function(

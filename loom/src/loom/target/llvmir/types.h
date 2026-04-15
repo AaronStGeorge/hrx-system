@@ -60,6 +60,11 @@ typedef struct loom_llvmir_value_t {
       // Ordinal within the owning function's parameter list.
       uint32_t parameter_ordinal;
     } parameter;
+    // Global value location.
+    struct {
+      // Owning global.
+      loom_llvmir_global_id_t global_id;
+    } global;
     // Instruction result value location.
     struct {
       // Owning function.
@@ -326,6 +331,29 @@ typedef struct loom_llvmir_metadata_attachment_storage_t {
   loom_llvmir_metadata_id_t metadata_id;
 } loom_llvmir_metadata_attachment_storage_t;
 
+struct loom_llvmir_global_t {
+  // Owning module.
+  loom_llvmir_module_t* module;
+  // Module-local global id.
+  loom_llvmir_global_id_t id;
+  // Value table entry representing the global pointer.
+  loom_llvmir_value_id_t value_id;
+  // Global symbol name without the leading at sign.
+  iree_string_view_t name;
+  // Linkage/preemption option.
+  loom_llvmir_linkage_t linkage;
+  // Stored value type.
+  loom_llvmir_type_id_t value_type;
+  // Pointer address space for references to this global.
+  uint32_t address_space;
+  // True when the global is immutable LLVM constant storage.
+  bool is_constant;
+  // Constant initializer value.
+  loom_llvmir_value_id_t initializer;
+  // Optional byte alignment.
+  uint32_t alignment;
+};
+
 struct loom_llvmir_function_t {
   // Owning module.
   loom_llvmir_module_t* module;
@@ -418,6 +446,12 @@ struct loom_llvmir_module_t {
   iree_host_size_t metadata_node_count;
   // Capacity of |metadata_nodes|.
   iree_host_size_t metadata_node_capacity;
+  // Global pointer storage.
+  loom_llvmir_global_t** globals;
+  // Number of entries in |globals|.
+  iree_host_size_t global_count;
+  // Capacity of |globals|.
+  iree_host_size_t global_capacity;
   // Function pointer storage.
   loom_llvmir_function_t** functions;
   // Number of entries in |functions|.

@@ -8,7 +8,7 @@
 
 #include "loom/target/llvmir/llvmir.h"
 
-#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 12
+#define LOOM_LLVMIR_TEST_MODULE_SCENARIO_COUNT 13
 
 static loom_llvmir_attr_t loom_llvmir_test_attr(loom_llvmir_attr_kind_t kind) {
   return (loom_llvmir_attr_t){
@@ -524,6 +524,62 @@ static iree_status_t loom_llvmir_test_populate_stack_alloca(
       },
       NULL));
   IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, loaded));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_test_populate_global_constant(
+    loom_llvmir_module_t* module) {
+  const loom_llvmir_target_env_t* target_env =
+      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+
+  loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+
+  loom_llvmir_value_id_t answer_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_integer_constant(
+      module, i32_type, 42, &answer_value));
+
+  loom_llvmir_global_t* answer_global = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_global(
+      module,
+      &(loom_llvmir_global_desc_t){
+          .name = IREE_SV("answer"),
+          .linkage = LOOM_LLVMIR_LINKAGE_PRIVATE,
+          .value_type = i32_type,
+          .address_space = target_env->address_spaces.generic,
+          .is_constant = true,
+          .initializer = answer_value,
+          .alignment = 4,
+      },
+      &answer_global));
+
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
+      module,
+      &(loom_llvmir_function_desc_t){
+          .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
+          .name = IREE_SV("load_answer"),
+          .return_type = i32_type,
+          .linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+          .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
+      },
+      &function));
+
+  loom_llvmir_block_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_block(function, IREE_SV("entry"), &entry));
+  loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_load(
+      entry,
+      &(loom_llvmir_load_desc_t){
+          .result_name = IREE_SV("value"),
+          .result_type = i32_type,
+          .pointer = loom_llvmir_global_value_id(answer_global),
+          .alignment = 4,
+      },
+      &value));
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, value));
   return iree_ok_status();
 }
 
@@ -1749,6 +1805,18 @@ static const char kStackAllocaText[] =
     "  ret float %loaded\n"
     "}\n";
 
+static const char kGlobalConstantText[] =
+    "source_filename = \"loom-global\"\n"
+    "target triple = \"x86_64-unknown-linux-gnu\"\n"
+    "\n"
+    "@answer = private constant i32 42, align 4\n"
+    "\n"
+    "define dso_local i32 @load_answer() {\n"
+    "entry:\n"
+    "  %value = load i32, ptr @answer, align 4\n"
+    "  ret i32 %value\n"
+    "}\n";
+
 static const char kCfgPhiText[] =
     "define i32 @select_i32(i1 %c, i32 %a, i32 %b) {\n"
     "entry:\n"
@@ -1926,6 +1994,8 @@ iree_string_view_t loom_llvmir_test_module_scenario_name(
       return IREE_SV("casts");
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA:
       return IREE_SV("stack_alloca");
+    case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT:
+      return IREE_SV("global_constant");
     default:
       return IREE_SV("unknown");
   }
@@ -1969,6 +2039,14 @@ static iree_status_t loom_llvmir_test_module_target_config(
       *out_target_config_ptr = out_target_config;
       return iree_ok_status();
     }
+    case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT: {
+      const loom_llvmir_target_env_t* target_env =
+          loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+      IREE_RETURN_IF_ERROR(loom_llvmir_target_env_module_config(
+          target_env, IREE_SV("loom-global"), out_target_config));
+      *out_target_config_ptr = out_target_config;
+      return iree_ok_status();
+    }
     case LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS: {
       const loom_llvmir_target_env_t* target_env =
           loom_llvmir_target_env_amdgcn_amd_amdhsa();
@@ -2002,6 +2080,8 @@ static iree_status_t loom_llvmir_test_module_populate(
       return loom_llvmir_test_populate_builtin_intrinsics(module);
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA:
       return loom_llvmir_test_populate_stack_alloca(module);
+    case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT:
+      return loom_llvmir_test_populate_global_constant(module);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return loom_llvmir_test_populate_cfg_phi(module);
     case LOOM_LLVMIR_TEST_MODULE_INLINE_ASM:
@@ -2064,6 +2144,9 @@ iree_string_view_t loom_llvmir_test_module_expected_text(
     case LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA:
       return iree_make_string_view(kStackAllocaText,
                                    IREE_ARRAYSIZE(kStackAllocaText) - 1);
+    case LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT:
+      return iree_make_string_view(kGlobalConstantText,
+                                   IREE_ARRAYSIZE(kGlobalConstantText) - 1);
     case LOOM_LLVMIR_TEST_MODULE_CFG_PHI:
       return iree_make_string_view(kCfgPhiText,
                                    IREE_ARRAYSIZE(kCfgPhiText) - 1);
