@@ -38,7 +38,7 @@ typedef struct loom_llvmir_target_address_spaces_t {
   // Constant memory address space.
   uint32_t constant;
   // Per-invocation/private memory address space.
-  uint32_t private;
+  uint32_t private_memory;
   // Target-specific buffer-resource pointer address space, or UINT32_MAX.
   uint32_t buffer_resource;
 } loom_llvmir_target_address_spaces_t;

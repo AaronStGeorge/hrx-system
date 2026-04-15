@@ -117,3 +117,27 @@ iree_status_t loom_llvmir_bitcode_record_writer_write_unabbrev_record(
   }
   return iree_ok_status();
 }
+
+iree_status_t loom_llvmir_bitcode_record_writer_write_string_record(
+    loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
+    iree_string_view_t value) {
+  IREE_ASSERT_ARGUMENT(writer);
+  if (value.size != 0 && value.data == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "non-empty LLVM bitcode string is null");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_bits(
+      writer->bitstream, LOOM_LLVMIR_BITCODE_ABBREV_UNABBREV_RECORD,
+      writer->abbrev_width));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_vbr(
+      writer->bitstream, code, LOOM_LLVMIR_BITCODE_RECORD_CODE_WIDTH));
+  IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_vbr(
+      writer->bitstream, value.size,
+      LOOM_LLVMIR_BITCODE_RECORD_OPERAND_COUNT_WIDTH));
+  for (iree_host_size_t i = 0; i < value.size; ++i) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_write_vbr(
+        writer->bitstream, (uint8_t)value.data[i],
+        LOOM_LLVMIR_BITCODE_RECORD_OPERAND_WIDTH));
+  }
+  return iree_ok_status();
+}

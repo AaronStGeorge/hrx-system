@@ -26,6 +26,8 @@ extern "C" {
 typedef struct loom_llvmir_bitstream_writer_t {
   // Destination stream for completed bytes.
   iree_io_stream_t* stream;
+  // Absolute stream byte offset corresponding to bitstream bit offset zero.
+  iree_io_stream_pos_t base_offset;
   // Buffered complete bytes waiting for the next stream write.
   uint8_t page[LOOM_LLVMIR_BITSTREAM_PAGE_SIZE];
   // Number of complete bytes currently stored in |page|.

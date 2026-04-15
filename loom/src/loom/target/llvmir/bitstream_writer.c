@@ -50,6 +50,7 @@ void loom_llvmir_bitstream_writer_initialize(
   IREE_ASSERT_ARGUMENT(out_writer);
   memset(out_writer, 0, sizeof(*out_writer));
   out_writer->stream = stream;
+  out_writer->base_offset = iree_io_stream_offset(stream);
 }
 
 uint64_t loom_llvmir_bitstream_writer_bit_offset(
@@ -182,7 +183,8 @@ iree_status_t loom_llvmir_bitstream_writer_patch_u32(
   }
   IREE_RETURN_IF_ERROR(loom_llvmir_bitstream_writer_flush(writer));
 
-  iree_io_stream_pos_t patch_offset = (iree_io_stream_pos_t)(bit_offset / 8);
+  iree_io_stream_pos_t patch_offset =
+      writer->base_offset + (iree_io_stream_pos_t)(bit_offset / 8);
   iree_io_stream_pos_t current_offset = iree_io_stream_offset(writer->stream);
   uint8_t bytes[4] = {
       (uint8_t)value,

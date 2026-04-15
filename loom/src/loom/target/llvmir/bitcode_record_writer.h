@@ -62,6 +62,12 @@ iree_status_t loom_llvmir_bitcode_record_writer_write_unabbrev_record(
     loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
     const uint64_t* operands, iree_host_size_t operand_count);
 
+// Emits an unabbreviated record whose operands are bytes from |value| encoded
+// as VBR6 integers. This is the canonical fallback for LLVM string records.
+iree_status_t loom_llvmir_bitcode_record_writer_write_string_record(
+    loom_llvmir_bitcode_record_writer_t* writer, uint64_t code,
+    iree_string_view_t value);
+
 #ifdef __cplusplus
 }
 #endif

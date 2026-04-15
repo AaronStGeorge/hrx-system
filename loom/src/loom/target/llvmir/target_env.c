@@ -21,7 +21,7 @@ const loom_llvmir_target_env_t* loom_llvmir_target_env_x86_64_unknown_linux_gnu(
               .global = 0,
               .local = 0,
               .constant = 0,
-              .private = 0,
+              .private_memory = 0,
               .buffer_resource = UINT32_MAX,
           },
   };
@@ -42,7 +42,7 @@ const loom_llvmir_target_env_t* loom_llvmir_target_env_amdgcn_amd_amdhsa(void) {
               .global = 1,
               .local = 3,
               .constant = 4,
-              .private = 5,
+              .private_memory = 5,
               .buffer_resource = 7,
           },
   };
