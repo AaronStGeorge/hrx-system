@@ -1693,6 +1693,20 @@ static iree_status_t loom_llvmir_bitcode_binary_opcode(loom_llvmir_binop_t op,
     case LOOM_LLVMIR_BINOP_FMUL:
       *out_opcode = LOOM_LLVMIR_BITCODE_BINOP_MUL;
       return iree_ok_status();
+    case LOOM_LLVMIR_BINOP_UDIV:
+      *out_opcode = LOOM_LLVMIR_BITCODE_BINOP_UDIV;
+      return iree_ok_status();
+    case LOOM_LLVMIR_BINOP_SDIV:
+    case LOOM_LLVMIR_BINOP_FDIV:
+      *out_opcode = LOOM_LLVMIR_BITCODE_BINOP_SDIV;
+      return iree_ok_status();
+    case LOOM_LLVMIR_BINOP_UREM:
+      *out_opcode = LOOM_LLVMIR_BITCODE_BINOP_UREM;
+      return iree_ok_status();
+    case LOOM_LLVMIR_BINOP_SREM:
+    case LOOM_LLVMIR_BINOP_FREM:
+      *out_opcode = LOOM_LLVMIR_BITCODE_BINOP_SREM;
+      return iree_ok_status();
     case LOOM_LLVMIR_BINOP_AND:
       *out_opcode = LOOM_LLVMIR_BITCODE_BINOP_AND;
       return iree_ok_status();

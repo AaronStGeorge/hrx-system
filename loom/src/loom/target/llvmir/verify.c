@@ -220,6 +220,35 @@ static bool loom_llvmir_verify_fcmp_predicate(
   }
 }
 
+static bool loom_llvmir_verify_binop_accepts_type(
+    const loom_llvmir_module_t* module, loom_llvmir_binop_t op,
+    const loom_llvmir_type_t* type) {
+  switch (op) {
+    case LOOM_LLVMIR_BINOP_ADD:
+    case LOOM_LLVMIR_BINOP_SUB:
+    case LOOM_LLVMIR_BINOP_MUL:
+    case LOOM_LLVMIR_BINOP_UDIV:
+    case LOOM_LLVMIR_BINOP_SDIV:
+    case LOOM_LLVMIR_BINOP_UREM:
+    case LOOM_LLVMIR_BINOP_SREM:
+    case LOOM_LLVMIR_BINOP_AND:
+    case LOOM_LLVMIR_BINOP_OR:
+    case LOOM_LLVMIR_BINOP_XOR:
+    case LOOM_LLVMIR_BINOP_SHL:
+    case LOOM_LLVMIR_BINOP_LSHR:
+    case LOOM_LLVMIR_BINOP_ASHR:
+      return loom_llvmir_verify_type_is_int_like(module, type);
+    case LOOM_LLVMIR_BINOP_FADD:
+    case LOOM_LLVMIR_BINOP_FSUB:
+    case LOOM_LLVMIR_BINOP_FMUL:
+    case LOOM_LLVMIR_BINOP_FDIV:
+    case LOOM_LLVMIR_BINOP_FREM:
+      return loom_llvmir_verify_type_is_float_like(module, type);
+    default:
+      return false;
+  }
+}
+
 static bool loom_llvmir_verify_type_same_pointer_address_space(
     const loom_llvmir_module_t* module, const loom_llvmir_type_t* lhs,
     const loom_llvmir_type_t* rhs) {
@@ -456,9 +485,18 @@ static iree_status_t loom_llvmir_verify_instruction(
       IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
           module, instruction->binop.lhs,
           loom_llvmir_verify_value_type(module, instruction->result_value_id)));
-      return loom_llvmir_verify_expected_value_type(
+      IREE_RETURN_IF_ERROR(loom_llvmir_verify_expected_value_type(
           module, instruction->binop.rhs,
-          loom_llvmir_verify_value_type(module, instruction->result_value_id));
+          loom_llvmir_verify_value_type(module, instruction->result_value_id)));
+      if (!loom_llvmir_verify_binop_accepts_type(
+              module, instruction->binop.op,
+              loom_llvmir_verify_type(
+                  module, loom_llvmir_verify_value_type(
+                              module, instruction->result_value_id)))) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "LLVM binop opcode is invalid for result type");
+      }
+      return iree_ok_status();
     case LOOM_LLVMIR_INST_ICMP:
       if (!loom_llvmir_verify_icmp_predicate(instruction->icmp.predicate)) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

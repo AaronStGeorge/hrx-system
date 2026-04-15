@@ -105,3 +105,13 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
     ],
 )
+
+loom_cc_test(
+    name = "verify_test",
+    srcs = ["verify_test.cc"],
+    deps = [
+        ":llvmir",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

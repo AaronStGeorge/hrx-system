@@ -110,4 +110,15 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    verify_test
+  SRCS
+    "verify_test.cc"
+  DEPS
+    ::llvmir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

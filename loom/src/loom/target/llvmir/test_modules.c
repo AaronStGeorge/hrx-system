@@ -514,15 +514,18 @@ static iree_status_t loom_llvmir_test_populate_cfg_phi(
 static iree_status_t loom_llvmir_test_populate_scalar_binop(
     loom_llvmir_module_t* module) {
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_module_get_integer_type(module, 32, &i32_type));
+  IREE_RETURN_IF_ERROR(loom_llvmir_module_get_float_type(
+      module, LOOM_LLVMIR_FLOAT_F32, &f32_type));
 
   loom_llvmir_function_t* function = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
       module,
       &(loom_llvmir_function_desc_t){
           .kind = LOOM_LLVMIR_FUNCTION_DEFINITION,
-          .name = IREE_SV("add_i32"),
+          .name = IREE_SV("binops"),
           .return_type = i32_type,
           .attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID,
       },
@@ -530,6 +533,8 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
 
   loom_llvmir_value_id_t lhs = LOOM_LLVMIR_VALUE_ID_INVALID;
   loom_llvmir_value_id_t rhs = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t xf = LOOM_LLVMIR_VALUE_ID_INVALID;
+  loom_llvmir_value_id_t yf = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_function_add_parameter(function,
                                          &(loom_llvmir_parameter_desc_t){
@@ -544,6 +549,20 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
                                              .name = IREE_SV("rhs"),
                                          },
                                          &rhs));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = f32_type,
+                                             .name = IREE_SV("xf"),
+                                         },
+                                         &xf));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_function_add_parameter(function,
+                                         &(loom_llvmir_parameter_desc_t){
+                                             .type_id = f32_type,
+                                             .name = IREE_SV("yf"),
+                                         },
+                                         &yf));
 
   loom_llvmir_block_t* entry = NULL;
   IREE_RETURN_IF_ERROR(
@@ -559,7 +578,195 @@ static iree_status_t loom_llvmir_test_populate_scalar_binop(
                                   .rhs = rhs,
                               },
                               &sum));
-  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, sum));
+  loom_llvmir_value_id_t difference = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("difference"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_SUB,
+                                  .lhs = sum,
+                                  .rhs = rhs,
+                              },
+                              &difference));
+  loom_llvmir_value_id_t product = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("product"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_MUL,
+                                  .lhs = difference,
+                                  .rhs = lhs,
+                              },
+                              &product));
+  loom_llvmir_value_id_t unsigned_quotient = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("unsigned_quotient"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_UDIV,
+                                  .lhs = product,
+                                  .rhs = rhs,
+                              },
+                              &unsigned_quotient));
+  loom_llvmir_value_id_t signed_quotient = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("signed_quotient"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_SDIV,
+                                  .lhs = product,
+                                  .rhs = rhs,
+                              },
+                              &signed_quotient));
+  loom_llvmir_value_id_t unsigned_remainder = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("unsigned_remainder"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_UREM,
+                                  .lhs = unsigned_quotient,
+                                  .rhs = rhs,
+                              },
+                              &unsigned_remainder));
+  loom_llvmir_value_id_t signed_remainder = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("signed_remainder"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_SREM,
+                                  .lhs = signed_quotient,
+                                  .rhs = rhs,
+                              },
+                              &signed_remainder));
+  loom_llvmir_value_id_t bits = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("bits"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_AND,
+                                  .lhs = unsigned_remainder,
+                                  .rhs = signed_remainder,
+                              },
+                              &bits));
+  loom_llvmir_value_id_t either = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("either"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_OR,
+                                  .lhs = bits,
+                                  .rhs = lhs,
+                              },
+                              &either));
+  loom_llvmir_value_id_t toggled = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("toggled"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_XOR,
+                                  .lhs = either,
+                                  .rhs = rhs,
+                              },
+                              &toggled));
+  loom_llvmir_value_id_t shifted = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("shifted"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_SHL,
+                                  .lhs = toggled,
+                                  .rhs = rhs,
+                              },
+                              &shifted));
+  loom_llvmir_value_id_t logical_shifted = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("logical_shifted"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_LSHR,
+                                  .lhs = shifted,
+                                  .rhs = rhs,
+                              },
+                              &logical_shifted));
+  loom_llvmir_value_id_t arithmetic_shifted = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("arithmetic_shifted"),
+                                  .result_type = i32_type,
+                                  .op = LOOM_LLVMIR_BINOP_ASHR,
+                                  .lhs = logical_shifted,
+                                  .rhs = rhs,
+                              },
+                              &arithmetic_shifted));
+  loom_llvmir_value_id_t float_sum = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("float_sum"),
+                                  .result_type = f32_type,
+                                  .op = LOOM_LLVMIR_BINOP_FADD,
+                                  .lhs = xf,
+                                  .rhs = yf,
+                              },
+                              &float_sum));
+  loom_llvmir_value_id_t float_difference = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("float_difference"),
+                                  .result_type = f32_type,
+                                  .op = LOOM_LLVMIR_BINOP_FSUB,
+                                  .lhs = float_sum,
+                                  .rhs = yf,
+                              },
+                              &float_difference));
+  loom_llvmir_value_id_t float_product = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("float_product"),
+                                  .result_type = f32_type,
+                                  .op = LOOM_LLVMIR_BINOP_FMUL,
+                                  .lhs = float_difference,
+                                  .rhs = xf,
+                              },
+                              &float_product));
+  loom_llvmir_value_id_t float_quotient = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("float_quotient"),
+                                  .result_type = f32_type,
+                                  .op = LOOM_LLVMIR_BINOP_FDIV,
+                                  .lhs = float_product,
+                                  .rhs = yf,
+                              },
+                              &float_quotient));
+  loom_llvmir_value_id_t float_remainder = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_build_binop(entry,
+                              &(loom_llvmir_binop_desc_t){
+                                  .result_name = IREE_SV("float_remainder"),
+                                  .result_type = f32_type,
+                                  .op = LOOM_LLVMIR_BINOP_FREM,
+                                  .lhs = float_quotient,
+                                  .rhs = yf,
+                              },
+                              &float_remainder));
+  (void)float_remainder;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_ret(entry, arithmetic_shifted));
   return iree_ok_status();
 }
 
@@ -1273,10 +1480,27 @@ static const char kCfgPhiText[] =
     "}\n";
 
 static const char kScalarBinopText[] =
-    "define i32 @add_i32(i32 %lhs, i32 %rhs) {\n"
+    "define i32 @binops(i32 %lhs, i32 %rhs, float %xf, float %yf) {\n"
     "entry:\n"
     "  %sum = add i32 %lhs, %rhs\n"
-    "  ret i32 %sum\n"
+    "  %difference = sub i32 %sum, %rhs\n"
+    "  %product = mul i32 %difference, %lhs\n"
+    "  %unsigned_quotient = udiv i32 %product, %rhs\n"
+    "  %signed_quotient = sdiv i32 %product, %rhs\n"
+    "  %unsigned_remainder = urem i32 %unsigned_quotient, %rhs\n"
+    "  %signed_remainder = srem i32 %signed_quotient, %rhs\n"
+    "  %bits = and i32 %unsigned_remainder, %signed_remainder\n"
+    "  %either = or i32 %bits, %lhs\n"
+    "  %toggled = xor i32 %either, %rhs\n"
+    "  %shifted = shl i32 %toggled, %rhs\n"
+    "  %logical_shifted = lshr i32 %shifted, %rhs\n"
+    "  %arithmetic_shifted = ashr i32 %logical_shifted, %rhs\n"
+    "  %float_sum = fadd float %xf, %yf\n"
+    "  %float_difference = fsub float %float_sum, %yf\n"
+    "  %float_product = fmul float %float_difference, %xf\n"
+    "  %float_quotient = fdiv float %float_product, %yf\n"
+    "  %float_remainder = frem float %float_quotient, %yf\n"
+    "  ret i32 %arithmetic_shifted\n"
     "}\n";
 
 static const char kCompareSelectText[] =

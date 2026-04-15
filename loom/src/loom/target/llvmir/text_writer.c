@@ -283,6 +283,14 @@ static const char* loom_llvmir_binop_spelling(loom_llvmir_binop_t op) {
       return "sub";
     case LOOM_LLVMIR_BINOP_MUL:
       return "mul";
+    case LOOM_LLVMIR_BINOP_UDIV:
+      return "udiv";
+    case LOOM_LLVMIR_BINOP_SDIV:
+      return "sdiv";
+    case LOOM_LLVMIR_BINOP_UREM:
+      return "urem";
+    case LOOM_LLVMIR_BINOP_SREM:
+      return "srem";
     case LOOM_LLVMIR_BINOP_AND:
       return "and";
     case LOOM_LLVMIR_BINOP_OR:
@@ -301,6 +309,10 @@ static const char* loom_llvmir_binop_spelling(loom_llvmir_binop_t op) {
       return "fsub";
     case LOOM_LLVMIR_BINOP_FMUL:
       return "fmul";
+    case LOOM_LLVMIR_BINOP_FDIV:
+      return "fdiv";
+    case LOOM_LLVMIR_BINOP_FREM:
+      return "frem";
     default:
       return NULL;
   }
