@@ -115,6 +115,7 @@ scf_for = Op(
     "scf.for",
     group=scf_ops,
     doc="Bounded counted loop with optional loop-carried state.",
+    canonicalize="loom_scf_for_canonicalize",
     operands=[
         Operand("lower_bound", INDEX),
         Operand("upper_bound", INDEX),
@@ -178,6 +179,7 @@ scf_if = Op(
     "scf.if",
     group=scf_ops,
     doc="Conditional execution with required else region.",
+    canonicalize="loom_scf_if_canonicalize",
     operands=[Operand("condition", I1)],
     results=[Result("results", ANY, variadic=True)],
     regions=[

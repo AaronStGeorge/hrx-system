@@ -189,7 +189,7 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
     for (uint8_t axis = 0; axis < lane_indices.rank; ++axis) {
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
           state, LOOM_OP_INDEX_ADD, terms[first_vector_axis + axis],
-          loom_vector_to_scalar_lane_term(lane_indices, axis),
+          loom_vector_to_scalar_lane_term(state, lane_indices, axis),
           &terms[first_vector_axis + axis]));
     }
   }
@@ -208,7 +208,8 @@ static iree_status_t loom_vector_to_scalar_build_memory_terms(
     uint8_t last_axis = (uint8_t)(term_count - 1);
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
         state, LOOM_OP_INDEX_ADD, terms[last_axis],
-        loom_vector_to_scalar_dynamic_term(offset_index), &terms[last_axis]));
+        loom_vector_to_scalar_value_term(state, offset_index),
+        &terms[last_axis]));
   }
 
   if (add_last_axis_offset) {
@@ -287,7 +288,7 @@ static iree_status_t loom_vector_to_scalar_build_static_active_prefix(
         state, mask_vector, mask_indices, &increment));
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
         state, LOOM_OP_INDEX_ADD, prefix,
-        loom_vector_to_scalar_dynamic_term(increment), &prefix));
+        loom_vector_to_scalar_value_term(state, increment), &prefix));
   }
   *out_prefix = prefix;
   return iree_ok_status();
@@ -336,8 +337,8 @@ static iree_status_t loom_vector_to_scalar_build_dynamic_active_prefix(
                                             state->location, &yield_op));
   loom_builder_restore(&state->rewriter->builder, saved);
 
-  *out_prefix =
-      loom_vector_to_scalar_dynamic_term(loom_scf_for_results(loop).values[0]);
+  *out_prefix = loom_vector_to_scalar_value_term(
+      state, loom_scf_for_results(loop).values[0]);
   return iree_ok_status();
 }
 

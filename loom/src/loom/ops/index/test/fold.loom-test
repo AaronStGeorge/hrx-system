@@ -153,3 +153,78 @@ func.def @cast_preserves_exact() -> (i64) {
   %r = scalar.constant 100 : i64
   func.return %r : i64
 }
+
+// ====
+
+// index.add removes a fact-proven zero operand without requiring the other
+// operand to be constant.
+func.def @add_zero_identity(%x: index) -> (index) {
+  %zero = index.constant 0 : index
+  %r = index.add %x, %zero : index
+  func.return %r : index
+}
+// ----
+func.def @add_zero_identity(%x: index) -> (index) {
+  func.return %x : index
+}
+
+// ====
+
+// index.mul removes one and annihilates with zero.
+func.def @mul_identities(%x: index) -> (index, index) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %same = index.mul %x, %one : index
+  %zeroed = index.mul %x, %zero : index
+  func.return %same, %zeroed : index, index
+}
+// ----
+func.def @mul_identities(%x: index) -> (index, index) {
+  %zeroed = index.constant 0 : index
+  func.return %x, %zeroed : index, index
+}
+
+// ====
+
+// index.madd simplifies the common address form a*1 + c to add.
+func.def @madd_identity_multiplier(%a: index, %c: index) -> (index) {
+  %one = index.constant 1 : index
+  %r = index.madd %a, %one, %c : index
+  func.return %r : index
+}
+// ----
+func.def @madd_identity_multiplier(%a: index, %c: index) -> (index) {
+  %r = index.add %a, %c : index
+  func.return %r : index
+}
+
+// ====
+
+// index.cmp folds same-operand predicates and simple disjoint signed ranges.
+func.def @cmp_proven(%x: index, %y: index) -> (i1, i1) {
+  %same = index.cmp sle, %x, %x : index
+  %x2 = index.assume %x [range(%x, 0, 4)] : index
+  %y2 = index.assume %y [range(%y, 8, 16)] : index
+  %lt = index.cmp slt, %x2, %y2 : index
+  func.return %same, %lt : i1, i1
+}
+// ----
+func.def @cmp_proven(%x: index, %y: index) -> (i1, i1) {
+  %same = scalar.constant true : i1
+  %lt = scalar.constant true : i1
+  func.return %same, %lt : i1, i1
+}
+
+// ====
+
+// index.select folds exact conditions and identical arms.
+func.def @select_identities(%x: index, %y: index) -> (index, index) {
+  %false = scalar.constant 0 : i1
+  %a = index.select %false, %x, %y : index
+  %b = index.select %false, %x, %x : index
+  func.return %a, %b : index, index
+}
+// ----
+func.def @select_identities(%x: index, %y: index) -> (index, index) {
+  func.return %y, %x : index, index
+}

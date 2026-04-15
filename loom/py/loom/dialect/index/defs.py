@@ -102,6 +102,7 @@ index_cast = cast_op(
     from_constraint=SCALAR,
     to_constraint=SCALAR,
     doc=("Explicit conversion at an address boundary. At least one side must be index or offset; pure integer width changes use scalar.extsi, scalar.extui, or scalar.trunci."),
+    canonicalize="loom_index_cast_canonicalize",
     facts="loom_index_cast_facts",
     verify="loom_index_cast_verify",
     examples=[
@@ -148,6 +149,7 @@ index_add = binary_op(
     type_constraint=ADDRESS,
     doc="Address-domain addition. Operands and result must all be index or all offset.",
     commutative=True,
+    canonicalize="loom_index_add_canonicalize",
     facts="loom_index_add_facts",
     examples=[
         "%r = index.add %lhs, %rhs : index",
@@ -160,6 +162,7 @@ index_sub = binary_op(
     group=index_ops,
     type_constraint=ADDRESS,
     doc="Address-domain subtraction. Operands and result must all be index or all offset.",
+    canonicalize="loom_index_sub_canonicalize",
     facts="loom_index_sub_facts",
     examples=[
         "%r = index.sub %lhs, %rhs : index",
@@ -173,6 +176,7 @@ index_mul = binary_op(
     type_constraint=INDEX,
     doc="Logical coordinate multiplication. Offsets are physical byte counts and cannot be multiplied with this op.",
     commutative=True,
+    canonicalize="loom_index_mul_canonicalize",
     facts="loom_index_mul_facts",
     examples=["%r = index.mul %lhs, %rhs : index"],
 )
@@ -187,6 +191,7 @@ index_div = binary_op(
         "divided with this op; use an explicit layout or storage mapping "
         "before deriving physical address pieces."
     ),
+    canonicalize="loom_index_div_canonicalize",
     facts="loom_index_div_facts",
     examples=["%q = index.div %lane, %group_size : index"],
 )
@@ -201,6 +206,7 @@ index_rem = binary_op(
         "remainder with this op; use an explicit layout or storage mapping "
         "before deriving physical address pieces."
     ),
+    canonicalize="loom_index_rem_canonicalize",
     facts="loom_index_rem_facts",
     examples=["%r = index.rem %lane, %group_size : index"],
 )
@@ -217,6 +223,7 @@ index_madd = Op(
     results=[Result("result", INDEX)],
     constraints=[SameType("a", "b", "c", "result")],
     traits=[PURE],
+    canonicalize="loom_index_madd_canonicalize",
     format=[
         Ref("a"),
         COMMA,
@@ -240,6 +247,7 @@ index_cmp = comparison_op(
     type_constraint=ADDRESS,
     predicates=IndexPredicate,
     doc="Address-domain comparison. Operands must both be index or both be offset.",
+    canonicalize="loom_index_cmp_canonicalize",
     facts="loom_index_cmp_facts",
     examples=[
         "%p = index.cmp slt, %i, %n : index",
@@ -259,6 +267,7 @@ index_select = Op(
     results=[Result("result", ADDRESS)],
     constraints=[SameType("true_value", "false_value", "result")],
     traits=[PURE],
+    canonicalize="loom_index_select_canonicalize",
     format=[
         Ref("condition"),
         COMMA,

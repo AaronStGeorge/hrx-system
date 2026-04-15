@@ -173,7 +173,11 @@ loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dynamic_term(
     loom_value_id_t value);
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_lane_term(
+    loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, uint8_t axis);
+
+loom_vector_to_scalar_index_term_t loom_vector_to_scalar_value_term(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t value);
 
 iree_status_t loom_vector_to_scalar_build_term_binary(
     loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
@@ -200,7 +204,8 @@ iree_status_t loom_vector_to_scalar_terms_to_index_list(
     loom_vector_to_scalar_index_list_t* out_indices);
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dim_bound_term(
-    loom_type_t vector_type, uint8_t axis);
+    loom_vector_to_scalar_state_t* state, loom_type_t vector_type,
+    uint8_t axis);
 
 iree_status_t loom_vector_to_scalar_linear_ordinal_term(
     loom_vector_to_scalar_state_t* state, loom_type_t vector_type,

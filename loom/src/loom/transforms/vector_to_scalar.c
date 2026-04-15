@@ -431,7 +431,10 @@ iree_status_t loom_vector_to_scalar_run(loom_pass_t* pass,
   loom_rewriter_t rewriter;
   IREE_RETURN_IF_ERROR(
       loom_rewriter_initialize(&rewriter, module, pass->arena));
-  iree_status_t status = loom_rewriter_seed_function(&rewriter, function);
+  iree_status_t status = loom_rewriter_enable_analysis(&rewriter, function);
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_seed_function(&rewriter, function);
+  }
   while (iree_status_is_ok(status)) {
     loom_op_t* op = loom_rewriter_pop(&rewriter);
     if (!op) break;

@@ -262,7 +262,7 @@ iree_status_t loom_vector_to_scalar_build_table_quantize_lane(
                             "vector.table.quantize thresholds must be rank-1");
   }
   loom_vector_to_scalar_index_term_t threshold_count =
-      loom_vector_to_scalar_dim_bound_term(thresholds_type, 0);
+      loom_vector_to_scalar_dim_bound_term(state, thresholds_type, 0);
   if (threshold_count.is_dynamic) {
     return loom_vector_to_scalar_build_table_quantize_dynamic_lane(
         state, input_lane, input_scalar_type, thresholds, threshold_count,

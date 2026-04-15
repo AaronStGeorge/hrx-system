@@ -85,11 +85,22 @@ loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dynamic_term(
 }
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_lane_term(
+    loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, uint8_t axis) {
   if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
-    return loom_vector_to_scalar_dynamic_term(indices.dynamic_indices[axis]);
+    return loom_vector_to_scalar_value_term(state,
+                                            indices.dynamic_indices[axis]);
   }
   return loom_vector_to_scalar_static_term(indices.static_indices[axis]);
+}
+
+loom_vector_to_scalar_index_term_t loom_vector_to_scalar_value_term(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t value) {
+  loom_value_facts_t facts = loom_rewriter_value_facts(state->rewriter, value);
+  if (loom_value_facts_is_exact(facts) && !loom_value_facts_is_float(facts)) {
+    return loom_vector_to_scalar_static_term(facts.range_lo);
+  }
+  return loom_vector_to_scalar_dynamic_term(value);
 }
 
 static bool loom_vector_to_scalar_term_is_static_value(
@@ -214,7 +225,7 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
   loom_value_id_t result = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_binary(
       state, kind, lhs_value, rhs_value, &result));
-  *out_term = loom_vector_to_scalar_dynamic_term(result);
+  *out_term = loom_vector_to_scalar_value_term(state, result);
   return iree_ok_status();
 }
 
@@ -338,8 +349,8 @@ iree_status_t loom_vector_to_scalar_terms_from_explicit_indices(
             IREE_STATUS_INVALID_ARGUMENT,
             "dynamic index count does not match static sentinel count");
       }
-      terms[i] = loom_vector_to_scalar_dynamic_term(
-          loom_value_slice_get(dynamic_indices, dynamic_ordinal++));
+      terms[i] = loom_vector_to_scalar_value_term(
+          state, loom_value_slice_get(dynamic_indices, dynamic_ordinal++));
     } else {
       terms[i] = loom_vector_to_scalar_static_term(static_index);
     }
@@ -412,10 +423,11 @@ void loom_vector_to_scalar_indices_from_ordinal(loom_type_t vector_type,
 }
 
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dim_bound_term(
-    loom_type_t vector_type, uint8_t axis) {
+    loom_vector_to_scalar_state_t* state, loom_type_t vector_type,
+    uint8_t axis) {
   if (loom_type_dim_is_dynamic_at(vector_type, axis)) {
-    return loom_vector_to_scalar_dynamic_term(
-        loom_type_dim_value_id_at(vector_type, axis));
+    return loom_vector_to_scalar_value_term(
+        state, loom_type_dim_value_id_at(vector_type, axis));
   }
   return loom_vector_to_scalar_static_term(
       (int64_t)loom_type_dim_static_size_at(vector_type, axis));
@@ -435,11 +447,12 @@ iree_status_t loom_vector_to_scalar_linear_ordinal_term(
     if (axis > 0) {
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
           state, LOOM_OP_INDEX_MUL, ordinal,
-          loom_vector_to_scalar_dim_bound_term(vector_type, axis), &ordinal));
+          loom_vector_to_scalar_dim_bound_term(state, vector_type, axis),
+          &ordinal));
     }
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
         state, LOOM_OP_INDEX_ADD, ordinal,
-        loom_vector_to_scalar_lane_term(indices, axis), &ordinal));
+        loom_vector_to_scalar_lane_term(state, indices, axis), &ordinal));
   }
   *out_ordinal = ordinal;
   return iree_ok_status();

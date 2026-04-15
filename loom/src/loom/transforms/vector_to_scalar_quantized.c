@@ -273,7 +273,8 @@ static iree_status_t loom_vector_to_scalar_build_dot4i_source_indices(
       state->rewriter->arena, rank, sizeof(loom_vector_to_scalar_index_term_t),
       (void**)&source_terms));
   for (uint8_t axis = 0; axis < rank; ++axis) {
-    source_terms[axis] = loom_vector_to_scalar_lane_term(result_indices, axis);
+    source_terms[axis] =
+        loom_vector_to_scalar_lane_term(state, result_indices, axis);
   }
 
   uint8_t grouped_axis = (uint8_t)(rank - 1);
@@ -305,7 +306,7 @@ iree_status_t loom_vector_to_scalar_build_dot4i_lane(
   loom_vector_to_scalar_index_term_t grouped_axis_base = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
       state, LOOM_OP_INDEX_MUL,
-      loom_vector_to_scalar_lane_term(indices, grouped_axis),
+      loom_vector_to_scalar_lane_term(state, indices, grouped_axis),
       loom_vector_to_scalar_static_term(4), &grouped_axis_base));
 
   loom_type_t i8_type = loom_type_scalar(LOOM_SCALAR_TYPE_I8);
@@ -449,7 +450,7 @@ static iree_status_t loom_vector_to_scalar_indices_from_ordinal_term(
   for (uint8_t reverse_axis = 0; reverse_axis < rank; ++reverse_axis) {
     uint8_t axis = (uint8_t)(rank - reverse_axis - 1);
     loom_vector_to_scalar_index_term_t dim =
-        loom_vector_to_scalar_dim_bound_term(vector_type, axis);
+        loom_vector_to_scalar_dim_bound_term(state, vector_type, axis);
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
         state, LOOM_OP_INDEX_REM, remaining, dim, &terms[axis]));
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(

@@ -1,0 +1,123 @@
+// RUN: pass canonicalize
+
+// Constant-condition scf.if inlines the selected branch and erases the
+// unselected branch. Selected body ops keep their order and become ordinary
+// enclosing-block ops.
+func.def @if_true_inlines_selected_branch(%value: f32) -> (f32) {
+  %cond = scalar.constant true : i1
+  %result = scf.if %cond -> (f32) {
+    %doubled = scalar.addf %value, %value : f32
+    scf.yield %doubled : f32
+  } else {
+    %negated = scalar.negf %value : f32
+    scf.yield %negated : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @if_true_inlines_selected_branch(%value: f32) -> (f32) {
+  %doubled = scalar.addf %value, %value : f32
+  func.return %doubled : f32
+}
+
+// ====
+
+// Side effects in the selected branch stay live; side effects in the
+// unselected branch disappear because the branch is unreachable.
+func.def @if_false_keeps_selected_store(%buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %cond = scalar.constant false : i1
+  %zero = scalar.constant 0.0 : f32
+  scf.if %cond {
+    view.store %zero, %view[0] : f32, view<1xf32, %layout>
+    scf.yield
+  } else {
+    view.store %value, %view[0] : f32, view<1xf32, %layout>
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @if_false_keeps_selected_store(%buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  view.store %value, %view[0] : f32, view<1xf32, %layout>
+  func.return
+}
+
+// ====
+
+// A zero-trip loop returns its iter_args and drops the body, even when the body
+// would have written memory if it executed.
+func.def @for_zero_trip_returns_initial_value(%buffer: buffer, %offset: offset, %init: f32) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %bound = index.constant 4 : index
+  %step = index.constant 1 : index
+  %result = scf.for %iv = [%bound to %bound step %step](%acc = %init : f32) -> (f32) {
+    view.store %acc, %view[0] : f32, view<1xf32, %layout>
+    scf.yield %acc : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @for_zero_trip_returns_initial_value(%buffer: buffer, %offset: offset, %init: f32) -> (f32) {
+  func.return %init : f32
+}
+
+// ====
+
+// Without a positive-step fact, even an apparently empty identity loop stays in
+// place: erasing it would also erase malformed or nonterminating control flow.
+func.def @for_identity_unknown_step_is_preserved(%lo: index, %hi: index, %step: index, %init: f32) -> (f32) {
+  %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
+    scf.yield %acc : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @for_identity_unknown_step_is_preserved(%lo: index, %hi: index, %step: index, %init: f32) -> (f32) {
+  %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
+    scf.yield %acc : f32
+  }
+  func.return %result : f32
+}
+
+// ====
+
+// A loop that only yields its carried values is the identity when the step is
+// known positive.
+func.def @for_identity_body_returns_iter_arg(%lo: index, %hi: index, %init: f32) -> (f32) {
+  %step = index.constant 1 : index
+  %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
+    scf.yield %acc : f32
+  }
+  func.return %result : f32
+}
+
+// ----
+func.def @for_identity_body_returns_iter_arg(%lo: index, %hi: index, %init: f32) -> (f32) {
+  func.return %init : f32
+}
+
+// ====
+
+// A resultless loop with an empty body has no observable behavior once the step
+// is known positive.
+func.def @for_void_empty_body(%lo: index, %hi: index) {
+  %step = index.constant 1 : index
+  scf.for %iv = [%lo to %hi step %step] {
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @for_void_empty_body(%lo: index, %hi: index) {
+  func.return
+}

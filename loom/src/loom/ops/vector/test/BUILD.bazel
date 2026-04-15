@@ -20,6 +20,7 @@ loom_check_test_suite(
         "facts.loom-test",
         "roundtrip.loom-test",
         "vector_to_scalar.loom-test",
+        "vector_to_scalar_cleanup.loom-test",
         "vector_to_scalar_memory.loom-test",
         "verify.loom-test",
     ],

@@ -17,6 +17,7 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
+    "canonicalize.c"
     "facts.c"
     "tables.c"
     "verify.c"
@@ -26,6 +27,8 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scalar
+    loom::src::loom::transforms::rewriter
   PUBLIC
 )
 

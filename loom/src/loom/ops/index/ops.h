@@ -76,6 +76,7 @@ iree_status_t loom_index_cast_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_cast_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_cast_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -119,6 +120,7 @@ iree_status_t loom_index_add_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_add_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_add_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -135,6 +137,7 @@ iree_status_t loom_index_sub_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_sub_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_sub_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -151,6 +154,7 @@ iree_status_t loom_index_mul_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_mul_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_mul_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -167,6 +171,7 @@ iree_status_t loom_index_div_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_div_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_div_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -183,6 +188,7 @@ iree_status_t loom_index_rem_build(
     loom_builder_t* builder, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_rem_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_rem_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -204,6 +210,7 @@ iree_status_t loom_index_madd_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_index_madd_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_madd_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -222,6 +229,7 @@ iree_status_t loom_index_cmp_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_index_cmp_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_cmp_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -243,6 +251,7 @@ iree_status_t loom_index_select_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_index_select_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_index_select_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,

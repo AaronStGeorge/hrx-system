@@ -487,6 +487,79 @@ iree_status_t loom_rewriter_erase(loom_rewriter_t* rewriter, loom_op_t* op) {
   return iree_ok_status();
 }
 
+static bool loom_rewriter_op_is_ancestor_of(const loom_op_t* ancestor,
+                                            const loom_op_t* op) {
+  for (const loom_op_t* current = op; current; current = current->parent_op) {
+    if (current == ancestor) return true;
+  }
+  return false;
+}
+
+static void loom_rewriter_record_subtree_effects(loom_module_t* module,
+                                                 loom_op_t* op) {
+  loom_module_record_op_effects(module, op);
+  loom_region_t** regions = loom_op_regions(op);
+  for (uint8_t region_index = 0; region_index < op->region_count;
+       ++region_index) {
+    loom_region_t* region = regions[region_index];
+    if (!region) continue;
+    loom_block_t* block = NULL;
+    loom_region_for_each_block(region, block) {
+      loom_op_t* child_op = NULL;
+      loom_block_for_each_op(block, child_op) {
+        loom_rewriter_record_subtree_effects(module, child_op);
+      }
+    }
+  }
+}
+
+iree_status_t loom_rewriter_move_before(loom_rewriter_t* rewriter,
+                                        loom_op_t* op, loom_op_t* before_op) {
+  if (!op || !before_op) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "move requires live op and insertion target");
+  }
+  if (op == before_op || op->next_op == before_op) return iree_ok_status();
+  if (iree_any_bit_set(op->flags | before_op->flags, LOOM_OP_FLAG_DEAD) ||
+      !op->parent_block || !before_op->parent_block) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "cannot move dead or unlinked operation");
+  }
+  if (loom_rewriter_op_is_ancestor_of(op, before_op)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "cannot move an operation before one of its descendants");
+  }
+
+  loom_module_t* module = rewriter->module;
+  loom_block_t* original_block = op->parent_block;
+  loom_op_t* original_next_op = op->next_op;
+  loom_op_t* original_parent_op = op->parent_op;
+  loom_block_t* target_block = before_op->parent_block;
+  loom_op_t* target_parent_op = before_op->parent_op;
+
+  loom_block_unlink_op(module, op);
+  op->parent_block = NULL;
+  op->parent_op = target_parent_op;
+  iree_status_t status =
+      loom_block_insert_before_op(module, target_block, before_op, op);
+  if (!iree_status_is_ok(status)) {
+    op->parent_block = NULL;
+    op->parent_op = original_parent_op;
+    iree_status_t restore_status = loom_block_insert_before_op(
+        module, original_block, original_next_op, op);
+    if (iree_status_is_ok(restore_status)) {
+      loom_rewriter_record_subtree_effects(module, op);
+    }
+    return iree_status_join(status, restore_status);
+  }
+  loom_rewriter_record_subtree_effects(module, op);
+
+  IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, op));
+  rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
+  return iree_ok_status();
+}
+
 iree_status_t loom_rewriter_set_operand(loom_rewriter_t* rewriter,
                                         loom_op_t* op, uint16_t operand_index,
                                         loom_value_id_t new_value) {

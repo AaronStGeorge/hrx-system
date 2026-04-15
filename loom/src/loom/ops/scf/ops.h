@@ -46,6 +46,7 @@ iree_status_t loom_scf_for_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_scf_for_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 
 // LOOM_OP_SCF_IF: Conditional execution with required else region.
 // scf.if %cond {
@@ -63,6 +64,7 @@ iree_status_t loom_scf_if_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_scf_if_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 
 // LOOM_OP_SCF_YIELD: Region terminator forwarding values to the parent scf op.
 // scf.yield

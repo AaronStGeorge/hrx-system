@@ -210,6 +210,13 @@ iree_status_t loom_rewriter_replace_results_with_materialized_values_and_erase(
 // Erases an op that has no remaining uses.
 iree_status_t loom_rewriter_erase(loom_rewriter_t* rewriter, loom_op_t* op);
 
+// Moves |op| before |before_op|, preserving operands/results/regions while
+// retargeting ancestry, worklist membership, and region effect summaries.
+// Both ops must already be live in the same module. Moving an op before itself
+// or before its current immediate successor is a no-op.
+iree_status_t loom_rewriter_move_before(loom_rewriter_t* rewriter,
+                                        loom_op_t* op, loom_op_t* before_op);
+
 // Replaces one operand of an op. Adds the op to the worklist.
 iree_status_t loom_rewriter_set_operand(loom_rewriter_t* rewriter,
                                         loom_op_t* op, uint16_t operand_index,

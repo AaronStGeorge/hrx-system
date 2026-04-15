@@ -42,7 +42,7 @@ iree_status_t loom_vector_to_scalar_build_broadcast_lane(
     } else {
       uint8_t result_axis = (uint8_t)(leading_broadcast_rank + source_axis);
       source_terms[source_axis] =
-          loom_vector_to_scalar_lane_term(indices, result_axis);
+          loom_vector_to_scalar_lane_term(state, indices, result_axis);
     }
   }
 
@@ -82,7 +82,7 @@ iree_status_t loom_vector_to_scalar_build_extract_lane(
   }
   for (uint8_t i = 0; i < indices.rank; ++i) {
     source_terms[explicit_count + i] =
-        loom_vector_to_scalar_lane_term(indices, i);
+        loom_vector_to_scalar_lane_term(state, indices, i);
   }
 
   loom_vector_to_scalar_index_list_t source_indices = {0};
@@ -109,7 +109,7 @@ iree_status_t loom_vector_to_scalar_build_insert_lane(
   loom_value_id_t dynamic_condition = LOOM_VALUE_ID_INVALID;
   for (uint8_t i = 0; i < explicit_count; ++i) {
     loom_vector_to_scalar_index_term_t lane_term =
-        loom_vector_to_scalar_lane_term(indices, i);
+        loom_vector_to_scalar_lane_term(state, indices, i);
     bool equal = false;
     if (loom_vector_to_scalar_terms_equal_static(lane_term, explicit_terms[i],
                                                  &equal)) {
@@ -140,8 +140,8 @@ iree_status_t loom_vector_to_scalar_build_insert_lane(
         sizeof(loom_vector_to_scalar_index_term_t), (void**)&value_terms));
   }
   for (uint8_t i = 0; i < value_rank; ++i) {
-    value_terms[i] =
-        loom_vector_to_scalar_lane_term(indices, (uint8_t)(explicit_count + i));
+    value_terms[i] = loom_vector_to_scalar_lane_term(
+        state, indices, (uint8_t)(explicit_count + i));
   }
   loom_vector_to_scalar_index_list_t value_indices = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_to_index_list(
@@ -182,7 +182,7 @@ iree_status_t loom_vector_to_scalar_build_slice_lane(
   for (uint8_t i = 0; i < indices.rank; ++i) {
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
         state, LOOM_OP_INDEX_ADD, offset_terms[i],
-        loom_vector_to_scalar_lane_term(indices, i), &source_terms[i]));
+        loom_vector_to_scalar_lane_term(state, indices, i), &source_terms[i]));
   }
 
   loom_vector_to_scalar_index_list_t source_indices = {0};
@@ -215,9 +215,9 @@ static iree_status_t loom_vector_to_scalar_build_concat_dynamic_lane(
   loom_type_t input_type =
       loom_module_value_type(state->rewriter->module, input);
   loom_vector_to_scalar_index_term_t axis_index =
-      loom_vector_to_scalar_lane_term(indices, axis);
+      loom_vector_to_scalar_lane_term(state, indices, axis);
   loom_vector_to_scalar_index_term_t extent =
-      loom_vector_to_scalar_dim_bound_term(input_type, axis);
+      loom_vector_to_scalar_dim_bound_term(state, input_type, axis);
   loom_vector_to_scalar_index_term_t end = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
       state, LOOM_OP_INDEX_ADD, prefix, extent, &end));
@@ -235,7 +235,7 @@ static iree_status_t loom_vector_to_scalar_build_concat_dynamic_lane(
         sizeof(loom_vector_to_scalar_index_term_t), (void**)&source_terms));
   }
   for (uint8_t i = 0; i < indices.rank; ++i) {
-    source_terms[i] = loom_vector_to_scalar_lane_term(indices, i);
+    source_terms[i] = loom_vector_to_scalar_lane_term(state, indices, i);
   }
   source_terms[axis] = source_axis;
   loom_vector_to_scalar_index_list_t source_indices = {0};
@@ -351,7 +351,7 @@ iree_status_t loom_vector_to_scalar_build_transpose_lane(
                               "vector.transpose source axis out of range");
     }
     source_terms[source_axis] =
-        loom_vector_to_scalar_lane_term(indices, result_axis);
+        loom_vector_to_scalar_lane_term(state, indices, result_axis);
   }
   loom_vector_to_scalar_index_list_t source_indices = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_terms_to_index_list(
@@ -403,7 +403,7 @@ iree_status_t loom_vector_to_scalar_build_interleave_lane(
         sizeof(loom_vector_to_scalar_index_term_t), (void**)&source_terms));
   }
   for (uint8_t i = 0; i < indices.rank; ++i) {
-    source_terms[i] = loom_vector_to_scalar_lane_term(indices, i);
+    source_terms[i] = loom_vector_to_scalar_lane_term(state, indices, i);
   }
 
   loom_vector_to_scalar_index_term_t axis_index = source_terms[axis_u8];
@@ -469,7 +469,7 @@ iree_status_t loom_vector_to_scalar_build_deinterleave_lane(
         sizeof(loom_vector_to_scalar_index_term_t), (void**)&source_terms));
   }
   for (uint8_t i = 0; i < indices.rank; ++i) {
-    source_terms[i] = loom_vector_to_scalar_lane_term(indices, i);
+    source_terms[i] = loom_vector_to_scalar_lane_term(state, indices, i);
   }
 
   loom_vector_to_scalar_index_term_t scaled = {0};
