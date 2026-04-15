@@ -119,6 +119,11 @@ iree_status_t loom_llvmir_lowering_map_single_result(
     loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     loom_llvmir_value_id_t target_value_id);
 
+iree_status_t loom_llvmir_lowering_lower_source_block(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_function_t* target_function, loom_block_t* source_block,
+    loom_llvmir_block_t** current_block, const loom_op_t** out_yield_op);
+
 iree_status_t loom_llvmir_lowering_lower_binop(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
@@ -193,6 +198,11 @@ iree_status_t loom_llvmir_lowering_lower_inline_asm(
 iree_status_t loom_llvmir_lowering_lower_intrinsic(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_scf_if(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_function_t* target_function,
+    loom_llvmir_block_t** current_block, const loom_op_t* op);
 
 #ifdef __cplusplus
 }

@@ -13,6 +13,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/lower_internal.h"
 
@@ -526,8 +527,10 @@ static iree_status_t loom_llvmir_lowering_lower_return(
 }
 
 static iree_status_t loom_llvmir_lowering_lower_op(
-    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
-    const loom_op_t* op) {
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_function_t* target_function,
+    loom_llvmir_block_t** current_block, const loom_op_t* op) {
+  loom_llvmir_block_t* target_block = *current_block;
   switch (op->kind) {
     case LOOM_OP_SCALAR_ADDI:
     case LOOM_OP_SCALAR_SUBI:
@@ -608,6 +611,9 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_inline_asm(state, target_block, op);
     case LOOM_OP_LLVMIR_INTRINSIC:
       return loom_llvmir_lowering_lower_intrinsic(state, target_block, op);
+    case LOOM_OP_SCF_IF:
+      return loom_llvmir_lowering_lower_scf_if(state, target_function,
+                                               current_block, op);
     case LOOM_OP_FUNC_CALL:
       return loom_llvmir_lowering_lower_call(state, target_block, op);
     case LOOM_OP_FUNC_RETURN:
@@ -616,6 +622,31 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_unsupported_op(
           state, op, "no lowering rule is registered");
   }
+}
+
+iree_status_t loom_llvmir_lowering_lower_source_block(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_function_t* target_function, loom_block_t* source_block,
+    loom_llvmir_block_t** current_block, const loom_op_t** out_yield_op) {
+  if (out_yield_op) *out_yield_op = NULL;
+  loom_op_t* source_op = NULL;
+  loom_block_for_each_op(source_block, source_op) {
+    if (source_op->kind == LOOM_OP_SCF_YIELD) {
+      if (!out_yield_op) {
+        return loom_llvmir_lowering_unsupported_op(
+            state, source_op, "scf.yield cannot appear outside an SCF region");
+      }
+      *out_yield_op = source_op;
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_op(
+        state, target_function, current_block, source_op));
+  }
+  if (out_yield_op) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "SCF region is missing scf.yield terminator");
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_llvmir_lowering_lower_body(
@@ -647,11 +678,8 @@ static iree_status_t loom_llvmir_lowering_lower_body(
   const loom_value_fact_table_t* previous_fact_table = state->fact_table;
   if (iree_status_is_ok(status)) {
     state->fact_table = &fact_table;
-    loom_op_t* source_op = NULL;
-    loom_block_for_each_op(source_block, source_op) {
-      if (!iree_status_is_ok(status)) break;
-      status = loom_llvmir_lowering_lower_op(state, target_block, source_op);
-    }
+    status = loom_llvmir_lowering_lower_source_block(
+        state, target_function, source_block, &target_block, NULL);
     state->fact_table = previous_fact_table;
   }
   iree_arena_deinitialize(&fact_arena);

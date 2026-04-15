@@ -25,6 +25,7 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/text_writer.h"
 #include "loom/target/llvmir/tool.h"
@@ -122,6 +123,7 @@ class LlvmIrLowerTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_LLVMIR, loom_llvmir_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
 
@@ -481,6 +483,73 @@ TEST_F(LlvmIrLowerTest, LowersCallsComparisonsSelectAndCasts) {
       text.find("  %selected = select i1 %predicate, i32 %called, i32 %lhs\n"),
       std::string::npos)
       << text;
+}
+
+TEST_F(LlvmIrLowerTest, LowersScfIfToBranchesAndPhi) {
+  loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_symbol_ref_t callee = MakeSymbol(IREE_SV("select_branch"));
+  loom_type_t arg_types[3] = {i1, i32, i32};
+  loom_type_t result_types[1] = {i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, callee, arg_types, 3, result_types, 1,
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3);
+  SetValueName(args[0], IREE_SV("cond"));
+  SetValueName(args[1], IREE_SV("lhs"));
+  SetValueName(args[2], IREE_SV("rhs"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* if_op = NULL;
+  IREE_ASSERT_OK(loom_scf_if_build(&body_builder, args[0], result_types,
+                                   IREE_ARRAYSIZE(result_types), NULL, 0,
+                                   LOOM_LOCATION_UNKNOWN, &if_op));
+
+  loom_builder_t then_builder;
+  loom_builder_initialize(
+      module_, &module_->arena,
+      loom_region_entry_block(loom_scf_if_then_region(if_op)), &then_builder);
+  loom_op_t* then_yield_op = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&then_builder, &args[1], 1,
+                                      LOOM_LOCATION_UNKNOWN, &then_yield_op));
+
+  loom_builder_t else_builder;
+  loom_builder_initialize(
+      module_, &module_->arena,
+      loom_region_entry_block(loom_scf_if_else_region(if_op)), &else_builder);
+  loom_op_t* else_yield_op = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&else_builder, &args[2], 1,
+                                      LOOM_LOCATION_UNKNOWN, &else_yield_op));
+
+  loom_value_id_t selected =
+      loom_value_slice_get(loom_scf_if_results(if_op), 0);
+  SetValueName(selected, IREE_SV("selected"));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &selected, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define dso_local i32 @select_branch(i1 %cond, i32 "
+                      "%lhs, i32 %rhs) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  br i1 %cond, label %bb1, label %bb2\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("bb1:\n  br label %bb3\n"), std::string::npos) << text;
+  EXPECT_NE(text.find("bb2:\n  br label %bb3\n"), std::string::npos) << text;
+  EXPECT_NE(text.find("bb3:\n  %selected = phi i32 [ %lhs, %bb1 ], "
+                      "[ %rhs, %bb2 ]\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  ret i32 %selected\n"), std::string::npos) << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
 }
 
 TEST_F(LlvmIrLowerTest, LowersIndexCastUsingTargetIndexWidth) {
