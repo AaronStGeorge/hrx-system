@@ -814,6 +814,19 @@ TEST_F(ExecuteTest, EmitModeReportsLoweringFailure) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitModeReportsUnknownLlvmProfile) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit llvmir spirv-vulkan\n"
+                   "func.def @ok() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("unknown LLVMIR target profile"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, FormatModeUnimplemented) {
   loom_check_result_t result;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,

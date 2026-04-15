@@ -117,6 +117,31 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   EXPECT_EQ(binding_attrs[4].value, 16u);
 }
 
+TEST(LlvmIrTargetEnvTest, LooksUpBuiltinProfilesByName) {
+  const loom_llvmir_target_profile_t* profile = nullptr;
+  IREE_ASSERT_OK(loom_llvmir_target_profile_lookup(IREE_SV(""), &profile));
+  EXPECT_EQ(profile, loom_llvmir_target_profile_x86_64_object());
+
+  profile = nullptr;
+  IREE_ASSERT_OK(
+      loom_llvmir_target_profile_lookup(IREE_SV("x86_64-object"), &profile));
+  EXPECT_EQ(profile, loom_llvmir_target_profile_x86_64_object());
+
+  profile = nullptr;
+  IREE_ASSERT_OK(
+      loom_llvmir_target_profile_lookup(IREE_SV("amdgpu-hal"), &profile));
+  EXPECT_EQ(profile, loom_llvmir_target_profile_amdgpu_hal());
+}
+
+TEST(LlvmIrTargetEnvTest, RejectsUnknownBuiltinProfileName) {
+  const loom_llvmir_target_profile_t* profile = nullptr;
+  iree_status_t status =
+      loom_llvmir_target_profile_lookup(IREE_SV("spirv-vulkan"), &profile);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  EXPECT_EQ(profile, nullptr);
+  iree_status_ignore(status);
+}
+
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
   const loom_llvmir_target_profile_t* profile =
       loom_llvmir_target_profile_amdgpu_hal();

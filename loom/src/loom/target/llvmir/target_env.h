@@ -125,6 +125,12 @@ const loom_llvmir_target_profile_t* loom_llvmir_target_profile_x86_64_object(
 
 const loom_llvmir_target_profile_t* loom_llvmir_target_profile_amdgpu_hal(void);
 
+// Looks up a built-in target profile by name. Empty names resolve to the
+// default host object profile.
+iree_status_t loom_llvmir_target_profile_lookup(
+    iree_string_view_t profile_name,
+    const loom_llvmir_target_profile_t** out_profile);
+
 // Initializes |out_profile| with a shallow copy of the built-in x86_64 object
 // profile. String views and |target_env| point at immutable static storage;
 // callers may overwrite profile fields for one lowering invocation.

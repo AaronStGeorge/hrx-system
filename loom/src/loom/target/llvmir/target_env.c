@@ -79,6 +79,11 @@ static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
         },
 };
 
+static const loom_llvmir_target_profile_t* const kBuiltinTargetProfiles[] = {
+    &kX86_64ObjectProfile,
+    &kAmdgpuHalProfile,
+};
+
 const loom_llvmir_target_env_t* loom_llvmir_target_env_x86_64_unknown_linux_gnu(
     void) {
   return &kX86_64UnknownLinuxGnuTargetEnv;
@@ -119,6 +124,32 @@ const loom_llvmir_target_profile_t* loom_llvmir_target_profile_x86_64_object(
 const loom_llvmir_target_profile_t* loom_llvmir_target_profile_amdgpu_hal(
     void) {
   return &kAmdgpuHalProfile;
+}
+
+iree_status_t loom_llvmir_target_profile_lookup(
+    iree_string_view_t profile_name,
+    const loom_llvmir_target_profile_t** out_profile) {
+  if (out_profile == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM target profile output is required");
+  }
+  *out_profile = NULL;
+  profile_name = iree_string_view_trim(profile_name);
+  if (iree_string_view_is_empty(profile_name)) {
+    *out_profile = loom_llvmir_target_profile_x86_64_object();
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kBuiltinTargetProfiles);
+       ++i) {
+    const loom_llvmir_target_profile_t* profile = kBuiltinTargetProfiles[i];
+    if (iree_string_view_equal(profile_name, profile->name)) {
+      *out_profile = profile;
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown LLVMIR target profile '%.*s'",
+                          (int)profile_name.size, profile_name.data);
 }
 
 iree_status_t loom_llvmir_target_profile_initialize_x86_64_object(

@@ -60,19 +60,7 @@ static iree_status_t loom_check_emit_parse_request(
                             "unknown emit target '%.*s'", (int)target_name.size,
                             target_name.data);
   }
-
-  if (iree_string_view_is_empty(profile_name) ||
-      iree_string_view_equal(profile_name, IREE_SV("x86_64-object"))) {
-    out_request->profile = loom_llvmir_target_profile_x86_64_object();
-    return iree_ok_status();
-  }
-  if (iree_string_view_equal(profile_name, IREE_SV("amdgpu-hal"))) {
-    out_request->profile = loom_llvmir_target_profile_amdgpu_hal();
-    return iree_ok_status();
-  }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown LLVMIR target profile '%.*s'",
-                          (int)profile_name.size, profile_name.data);
+  return loom_llvmir_target_profile_lookup(profile_name, &out_request->profile);
 }
 
 static iree_status_t loom_check_emit_compare_output(
