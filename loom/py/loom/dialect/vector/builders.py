@@ -287,7 +287,7 @@ class VectorBuilders:
         _operands.append(transform)
         return cast(ValueRef, self._b.build("vector.transform", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def load(self, *, view: ValueRef, indices: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+    def load(self, *, view: ValueRef, indices: list[int | ValueRef], cache_scope: str | None = None, cache_temporal: str | None = None, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Load a vector footprint from a typed view at a full-rank logical origin. The index list addresses the origin in view coordinates; vector axes map onto the trailing view axes, so leading view axes select a slice and trailing axes describe the loaded footprint.
 
         Example::
@@ -296,6 +296,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(view)
         _sentinel = -(2**63)
         _static = []
@@ -308,7 +312,7 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("vector.load", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def store(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef]) -> None:
+    def store(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], cache_scope: str | None = None, cache_temporal: str | None = None) -> None:
         """Store a vector footprint into a typed view at a full-rank logical origin. The index list addresses the origin in view coordinates; vector axes map onto the trailing view axes, matching vector.load.
 
         Example::
@@ -317,6 +321,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _sentinel = -(2**63)
@@ -330,7 +338,17 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.store", _operands, attributes=_attributes, regions=_regions)
 
-    def load_mask(self, *, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef, passthrough: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def load_mask(
+        self,
+        *,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        mask: ValueRef,
+        passthrough: ValueRef,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
         """Masked vector load from a typed view. Mask lanes with true values perform the same access as vector.load, while false lanes do not access memory and instead take the corresponding passthrough lane.
 
         Example::
@@ -339,6 +357,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(view)
         _operands.append(mask)
         _operands.append(passthrough)
@@ -353,7 +375,7 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("vector.load.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def store_mask(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef) -> None:
+    def store_mask(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef, cache_scope: str | None = None, cache_temporal: str | None = None) -> None:
         """Masked vector store into a typed view. True mask lanes store the corresponding value lane, and false mask lanes do not access memory and leave the destination unchanged.
 
         Example::
@@ -362,6 +384,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(mask)
@@ -376,7 +402,17 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.store.mask", _operands, attributes=_attributes, regions=_regions)
 
-    def expand(self, *, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef, passthrough: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def expand(
+        self,
+        *,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        mask: ValueRef,
+        passthrough: ValueRef,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
         """Rank-1 masked expand load from consecutive view elements. Active lanes consume memory densely in increasing lane order; inactive lanes do not consume memory and take the corresponding passthrough lane.
 
         Example::
@@ -385,6 +421,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(view)
         _operands.append(mask)
         _operands.append(passthrough)
@@ -399,7 +439,7 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("vector.load.expand", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def compress(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef) -> None:
+    def compress(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], mask: ValueRef, cache_scope: str | None = None, cache_temporal: str | None = None) -> None:
         """Rank-1 masked compress store to consecutive view elements. Active lanes write densely in increasing lane order; inactive lanes do not produce memory elements.
 
         Example::
@@ -408,6 +448,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(mask)
@@ -422,7 +466,9 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.store.compress", _operands, attributes=_attributes, regions=_regions)
 
-    def gather(self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def gather(
+        self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, cache_scope: str | None = None, cache_temporal: str | None = None, results: list[Type | TiedResultSpec]
+    ) -> ValueRef:
         """Gather a vector from per-lane signed logical offsets added to the last view axis of a full-rank view origin. Each result lane reads origin with the final coordinate adjusted by offsets[lane]; the offset vector shape matches the result shape.
 
         Example::
@@ -431,6 +477,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(view)
         _operands.append(offsets)
         _sentinel = -(2**63)
@@ -444,7 +494,7 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("vector.gather", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def scatter(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef) -> None:
+    def scatter(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, cache_scope: str | None = None, cache_temporal: str | None = None) -> None:
         """Non-atomic scatter of a vector to per-lane signed logical offsets added to the last view axis of a full-rank view origin. Each lane writes origin with the final coordinate adjusted by offsets[lane], and active lane addresses must be distinct because no atomic conflict resolution is implied.
 
         Example::
@@ -453,6 +503,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(offsets)
@@ -467,7 +521,18 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.scatter", _operands, attributes=_attributes, regions=_regions)
 
-    def gather_mask(self, *, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef, passthrough: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def gather_mask(
+        self,
+        *,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        offsets: ValueRef,
+        mask: ValueRef,
+        passthrough: ValueRef,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
         """Masked vector gather from per-lane signed logical offsets added to the last view axis. True mask lanes read the adjusted coordinate, while false mask lanes do not access memory and take the corresponding passthrough lane.
 
         Example::
@@ -476,6 +541,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(view)
         _operands.append(offsets)
         _operands.append(mask)
@@ -491,7 +560,9 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("vector.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def scatter_mask(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef) -> None:
+    def scatter_mask(
+        self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef, cache_scope: str | None = None, cache_temporal: str | None = None
+    ) -> None:
         """Masked non-atomic scatter. True mask lanes write the full-rank origin with the last coordinate adjusted by offsets[lane], false mask lanes do not access memory, and active lane addresses must be distinct.
 
         Example::
@@ -500,6 +571,10 @@ class VectorBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(offsets)
@@ -515,7 +590,19 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.scatter.mask", _operands, attributes=_attributes, regions=_regions)
 
-    def atomic_reduce(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, ordering: str, scope: str) -> None:
+    def atomic_reduce(
+        self,
+        *,
+        kind: str,
+        value: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        offsets: ValueRef,
+        ordering: str,
+        scope: str,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+    ) -> None:
         """Atomic no-result scatter reduction/update into per-lane signed element offsets. Each lane atomically combines its value into origin + offsets[lane]; duplicate active addresses are valid and are serialized by the required ordering and scope attributes.
 
         Example::
@@ -527,6 +614,10 @@ class VectorBuilders:
         _attributes["kind"] = kind
         _attributes["ordering"] = ordering
         _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(offsets)
@@ -541,7 +632,20 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.atomic.reduce", _operands, attributes=_attributes, regions=_regions)
 
-    def atomic_reduce_mask(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, mask: ValueRef, ordering: str, scope: str) -> None:
+    def atomic_reduce_mask(
+        self,
+        *,
+        kind: str,
+        value: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        offsets: ValueRef,
+        mask: ValueRef,
+        ordering: str,
+        scope: str,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+    ) -> None:
         """Masked atomic no-result scatter reduction/update. True mask lanes perform vector.atomic.reduce, while false mask lanes do not access memory.
 
         Example::
@@ -553,6 +657,10 @@ class VectorBuilders:
         _attributes["kind"] = kind
         _attributes["ordering"] = ordering
         _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(offsets)
@@ -568,7 +676,20 @@ class VectorBuilders:
         _attributes["static_indices"] = _static
         self._b.build("vector.atomic.reduce.mask", _operands, attributes=_attributes, regions=_regions)
 
-    def rmw(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], offsets: ValueRef, ordering: str, scope: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def rmw(
+        self,
+        *,
+        kind: str,
+        value: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        offsets: ValueRef,
+        ordering: str,
+        scope: str,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
         """Atomic read-modify-write at per-lane signed element offsets. Each lane atomically combines its value with origin + offsets[lane] and the result lane is the old memory value observed by that atomic operation.
 
         Example::
@@ -580,6 +701,10 @@ class VectorBuilders:
         _attributes["kind"] = kind
         _attributes["ordering"] = ordering
         _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(offsets)
@@ -606,6 +731,8 @@ class VectorBuilders:
         passthrough: ValueRef,
         ordering: str,
         scope: str,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
         results: list[Type | TiedResultSpec],
     ) -> ValueRef:
         """Masked atomic read-modify-write. True mask lanes perform vector.atomic.rmw, while false mask lanes do not access memory and take the corresponding passthrough lane in the result.
@@ -619,6 +746,10 @@ class VectorBuilders:
         _attributes["kind"] = kind
         _attributes["ordering"] = ordering
         _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _operands.append(offsets)

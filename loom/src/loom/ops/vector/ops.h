@@ -162,6 +162,30 @@ enum {
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NSW ((uint8_t)1)
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NUW ((uint8_t)2)
 
+// Target-independent cache scope for memory operations.
+typedef enum loom_vector_cache_scope_e {
+  LOOM_VECTOR_CACHE_SCOPE_CU = 0,
+  LOOM_VECTOR_CACHE_SCOPE_SE = 1,
+  LOOM_VECTOR_CACHE_SCOPE_DEVICE = 2,
+  LOOM_VECTOR_CACHE_SCOPE_SYSTEM = 3,
+  LOOM_VECTOR_CACHE_SCOPE_COUNT_ = 4,
+} loom_vector_cache_scope_t;
+
+// Target-independent temporal cache policy for memory operations.
+typedef enum loom_vector_cache_temporal_e {
+  LOOM_VECTOR_CACHE_TEMPORAL_REGULAR = 0,
+  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL = 1,
+  LOOM_VECTOR_CACHE_TEMPORAL_HIGH_TEMPORAL = 2,
+  LOOM_VECTOR_CACHE_TEMPORAL_LAST_USE = 3,
+  LOOM_VECTOR_CACHE_TEMPORAL_WRITEBACK = 4,
+  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR = 5,
+  LOOM_VECTOR_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL = 6,
+  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL = 7,
+  LOOM_VECTOR_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK = 8,
+  LOOM_VECTOR_CACHE_TEMPORAL_BYPASS = 9,
+  LOOM_VECTOR_CACHE_TEMPORAL_COUNT_ = 10,
+} loom_vector_cache_temporal_t;
+
 // Read-modify-write operation kind supported by view and vector atomics.
 typedef enum loom_vector_kind_e {
   LOOM_VECTOR_KIND_XCHGI = 0,
@@ -661,14 +685,24 @@ LOOM_DEFINE_ISA(loom_vector_load_isa, LOOM_OP_VECTOR_LOAD)
 LOOM_DEFINE_OPERAND(loom_vector_load_view, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_load_indices, 1)
 LOOM_DEFINE_RESULT(loom_vector_load_result, 0)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_load_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_load_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_static_indices, 2)
+enum loom_vector_load_build_flag_bits_e {
+  LOOM_VECTOR_LOAD_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_LOAD_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_load_build_flags_t;
 iree_status_t loom_vector_load_build(
     loom_builder_t* builder,
+    loom_vector_load_build_flags_t build_flags,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -682,15 +716,25 @@ LOOM_DEFINE_ISA(loom_vector_store_isa, LOOM_OP_VECTOR_STORE)
 LOOM_DEFINE_OPERAND(loom_vector_store_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_store_view, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_store_indices, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_store_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_store_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_static_indices, 2)
+enum loom_vector_store_build_flag_bits_e {
+  LOOM_VECTOR_STORE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_STORE_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_store_build_flags_t;
 iree_status_t loom_vector_store_build(
     loom_builder_t* builder,
+    loom_vector_store_build_flags_t build_flags,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_store_verify(
@@ -705,9 +749,17 @@ LOOM_DEFINE_OPERAND(loom_vector_load_mask_mask, 1)
 LOOM_DEFINE_OPERAND(loom_vector_load_mask_passthrough, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_load_mask_indices, 3)
 LOOM_DEFINE_RESULT(loom_vector_load_mask_result, 0)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_mask_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_load_mask_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_load_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_mask_static_indices, 2)
+enum loom_vector_load_mask_build_flag_bits_e {
+  LOOM_VECTOR_LOAD_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_LOAD_MASK_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_load_mask_build_flags_t;
 iree_status_t loom_vector_load_mask_build(
     loom_builder_t* builder,
+    loom_vector_load_mask_build_flags_t build_flags,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
@@ -715,6 +767,8 @@ iree_status_t loom_vector_load_mask_build(
     iree_host_size_t static_indices_count,
     loom_may_consume loom_value_id_t mask,
     loom_may_consume loom_value_id_t passthrough,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -730,9 +784,17 @@ LOOM_DEFINE_OPERAND(loom_vector_store_mask_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_store_mask_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_store_mask_mask, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_store_mask_indices, 3)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_mask_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_store_mask_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_store_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_mask_static_indices, 2)
+enum loom_vector_store_mask_build_flag_bits_e {
+  LOOM_VECTOR_STORE_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_STORE_MASK_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_store_mask_build_flags_t;
 iree_status_t loom_vector_store_mask_build(
     loom_builder_t* builder,
+    loom_vector_store_mask_build_flags_t build_flags,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -740,6 +802,8 @@ iree_status_t loom_vector_store_mask_build(
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
     loom_value_id_t mask,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_store_mask_verify(
@@ -754,9 +818,17 @@ LOOM_DEFINE_OPERAND(loom_vector_load_expand_mask, 1)
 LOOM_DEFINE_OPERAND(loom_vector_load_expand_passthrough, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_load_expand_indices, 3)
 LOOM_DEFINE_RESULT(loom_vector_load_expand_result, 0)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_expand_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_load_expand_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_load_expand_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_load_expand_static_indices, 2)
+enum loom_vector_load_expand_build_flag_bits_e {
+  LOOM_VECTOR_LOAD_EXPAND_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_LOAD_EXPAND_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_load_expand_build_flags_t;
 iree_status_t loom_vector_load_expand_build(
     loom_builder_t* builder,
+    loom_vector_load_expand_build_flags_t build_flags,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
@@ -764,6 +836,8 @@ iree_status_t loom_vector_load_expand_build(
     iree_host_size_t static_indices_count,
     loom_may_consume loom_value_id_t mask,
     loom_may_consume loom_value_id_t passthrough,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -778,9 +852,17 @@ LOOM_DEFINE_OPERAND(loom_vector_store_compress_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_store_compress_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_store_compress_mask, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_store_compress_indices, 3)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_compress_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_store_compress_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_store_compress_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_store_compress_static_indices, 2)
+enum loom_vector_store_compress_build_flag_bits_e {
+  LOOM_VECTOR_STORE_COMPRESS_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_STORE_COMPRESS_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_store_compress_build_flags_t;
 iree_status_t loom_vector_store_compress_build(
     loom_builder_t* builder,
+    loom_vector_store_compress_build_flags_t build_flags,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -788,6 +870,8 @@ iree_status_t loom_vector_store_compress_build(
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
     loom_value_id_t mask,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_store_compress_verify(
@@ -801,15 +885,25 @@ LOOM_DEFINE_OPERAND(loom_vector_gather_view, 0)
 LOOM_DEFINE_OPERAND(loom_vector_gather_offsets, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_gather_indices, 2)
 LOOM_DEFINE_RESULT(loom_vector_gather_result, 0)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_static_indices, 2)
+enum loom_vector_gather_build_flag_bits_e {
+  LOOM_VECTOR_GATHER_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_GATHER_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_gather_build_flags_t;
 iree_status_t loom_vector_gather_build(
     loom_builder_t* builder,
+    loom_vector_gather_build_flags_t build_flags,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
     loom_may_consume loom_value_id_t offsets,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -825,9 +919,17 @@ LOOM_DEFINE_OPERAND(loom_vector_scatter_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_offsets, 2)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_scatter_indices, 3)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_static_indices, 2)
+enum loom_vector_scatter_build_flag_bits_e {
+  LOOM_VECTOR_SCATTER_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_SCATTER_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_scatter_build_flags_t;
 iree_status_t loom_vector_scatter_build(
     loom_builder_t* builder,
+    loom_vector_scatter_build_flags_t build_flags,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -835,6 +937,8 @@ iree_status_t loom_vector_scatter_build(
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
     loom_value_id_t offsets,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_scatter_verify(
@@ -850,9 +954,17 @@ LOOM_DEFINE_OPERAND(loom_vector_gather_mask_mask, 2)
 LOOM_DEFINE_OPERAND(loom_vector_gather_mask_passthrough, 3)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_gather_mask_indices, 4)
 LOOM_DEFINE_RESULT(loom_vector_gather_mask_result, 0)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_mask_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_mask_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_gather_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_gather_mask_static_indices, 2)
+enum loom_vector_gather_mask_build_flag_bits_e {
+  LOOM_VECTOR_GATHER_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_GATHER_MASK_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_gather_mask_build_flags_t;
 iree_status_t loom_vector_gather_mask_build(
     loom_builder_t* builder,
+    loom_vector_gather_mask_build_flags_t build_flags,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
@@ -861,6 +973,8 @@ iree_status_t loom_vector_gather_mask_build(
     loom_may_consume loom_value_id_t offsets,
     loom_may_consume loom_value_id_t mask,
     loom_may_consume loom_value_id_t passthrough,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -876,9 +990,17 @@ LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_view, 1)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_offsets, 2)
 LOOM_DEFINE_OPERAND(loom_vector_scatter_mask_mask, 3)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_scatter_mask_indices, 4)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_mask_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_mask_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_scatter_mask_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_scatter_mask_static_indices, 2)
+enum loom_vector_scatter_mask_build_flag_bits_e {
+  LOOM_VECTOR_SCATTER_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_SCATTER_MASK_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_scatter_mask_build_flags_t;
 iree_status_t loom_vector_scatter_mask_build(
     loom_builder_t* builder,
+    loom_vector_scatter_mask_build_flags_t build_flags,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
@@ -887,6 +1009,8 @@ iree_status_t loom_vector_scatter_mask_build(
     iree_host_size_t static_indices_count,
     loom_value_id_t offsets,
     loom_value_id_t mask,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_scatter_mask_verify(
@@ -903,9 +1027,17 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_reduce_indices, 3)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_kind, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_ordering, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_scope, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_static_indices, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_cache_scope, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_cache_temporal, 4)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_static_indices, 5)
+enum loom_vector_atomic_reduce_build_flag_bits_e {
+  LOOM_VECTOR_ATOMIC_REDUCE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_ATOMIC_REDUCE_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_atomic_reduce_build_flags_t;
 iree_status_t loom_vector_atomic_reduce_build(
     loom_builder_t* builder,
+    loom_vector_atomic_reduce_build_flags_t build_flags,
     uint8_t kind,
     loom_value_id_t value,
     loom_value_id_t view,
@@ -916,6 +1048,8 @@ iree_status_t loom_vector_atomic_reduce_build(
     loom_value_id_t offsets,
     uint8_t ordering,
     uint8_t scope,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_atomic_reduce_verify(
@@ -933,9 +1067,17 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_atomic_reduce_mask_indices, 4)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_kind, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_ordering, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_scope, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_mask_static_indices, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_cache_scope, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_reduce_mask_cache_temporal, 4)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_reduce_mask_static_indices, 5)
+enum loom_vector_atomic_reduce_mask_build_flag_bits_e {
+  LOOM_VECTOR_ATOMIC_REDUCE_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_ATOMIC_REDUCE_MASK_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_atomic_reduce_mask_build_flags_t;
 iree_status_t loom_vector_atomic_reduce_mask_build(
     loom_builder_t* builder,
+    loom_vector_atomic_reduce_mask_build_flags_t build_flags,
     uint8_t kind,
     loom_value_id_t value,
     loom_value_id_t view,
@@ -947,6 +1089,8 @@ iree_status_t loom_vector_atomic_reduce_mask_build(
     loom_value_id_t mask,
     uint8_t ordering,
     uint8_t scope,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_atomic_reduce_mask_verify(
@@ -964,9 +1108,17 @@ LOOM_DEFINE_RESULT(loom_vector_atomic_rmw_result, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_kind, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_ordering, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_scope, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_static_indices, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_cache_scope, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_cache_temporal, 4)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_static_indices, 5)
+enum loom_vector_atomic_rmw_build_flag_bits_e {
+  LOOM_VECTOR_ATOMIC_RMW_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_ATOMIC_RMW_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_atomic_rmw_build_flags_t;
 iree_status_t loom_vector_atomic_rmw_build(
     loom_builder_t* builder,
+    loom_vector_atomic_rmw_build_flags_t build_flags,
     uint8_t kind,
     loom_may_consume loom_value_id_t value,
     loom_may_consume loom_value_id_t view,
@@ -977,6 +1129,8 @@ iree_status_t loom_vector_atomic_rmw_build(
     loom_may_consume loom_value_id_t offsets,
     uint8_t ordering,
     uint8_t scope,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -997,9 +1151,17 @@ LOOM_DEFINE_RESULT(loom_vector_atomic_rmw_mask_result, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_kind, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_ordering, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_scope, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_mask_static_indices, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_cache_scope, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_atomic_rmw_mask_cache_temporal, 4)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_vector_atomic_rmw_mask_static_indices, 5)
+enum loom_vector_atomic_rmw_mask_build_flag_bits_e {
+  LOOM_VECTOR_ATOMIC_RMW_MASK_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VECTOR_ATOMIC_RMW_MASK_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_vector_atomic_rmw_mask_build_flags_t;
 iree_status_t loom_vector_atomic_rmw_mask_build(
     loom_builder_t* builder,
+    loom_vector_atomic_rmw_mask_build_flags_t build_flags,
     uint8_t kind,
     loom_may_consume loom_value_id_t value,
     loom_may_consume loom_value_id_t view,
@@ -1012,6 +1174,8 @@ iree_status_t loom_vector_atomic_rmw_mask_build(
     loom_may_consume loom_value_id_t passthrough,
     uint8_t ordering,
     uint8_t scope,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

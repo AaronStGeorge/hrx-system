@@ -950,8 +950,8 @@ TEST_F(LlvmIrLowerTest, LowersDenseBufferViewLoadStore) {
   int64_t dynamic_load_indices[2] = {INT64_MIN, INT64_MIN};
   loom_value_id_t load_indices[2] = {args[2], args[3]};
   loom_op_t* load_op = NULL;
-  IREE_ASSERT_OK(loom_view_load_build(&body_builder, view, load_indices, 2,
-                                      dynamic_load_indices, 2, f32,
+  IREE_ASSERT_OK(loom_view_load_build(&body_builder, 0, view, load_indices, 2,
+                                      dynamic_load_indices, 2, 0, 0, f32,
                                       LOOM_LOCATION_UNKNOWN, &load_op));
   loom_value_id_t loaded = loom_view_load_result(load_op);
   SetValueName(loaded, IREE_SV("loaded"));
@@ -959,9 +959,9 @@ TEST_F(LlvmIrLowerTest, LowersDenseBufferViewLoadStore) {
   int64_t mixed_store_indices[2] = {0, INT64_MIN};
   loom_value_id_t store_indices[1] = {args[3]};
   loom_op_t* store_op = NULL;
-  IREE_ASSERT_OK(loom_view_store_build(&body_builder, args[4], view,
+  IREE_ASSERT_OK(loom_view_store_build(&body_builder, 0, args[4], view,
                                        store_indices, 1, mixed_store_indices, 2,
-                                       LOOM_LOCATION_UNKNOWN, &store_op));
+                                       0, 0, LOOM_LOCATION_UNKNOWN, &store_op));
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, &loaded, 1,
                                         LOOM_LOCATION_UNKNOWN, &store_op));
 
@@ -1029,12 +1029,12 @@ TEST_F(LlvmIrLowerTest, LowersBufferAllocaWithAlignedScalarAccess) {
 
   int64_t static_index[1] = {0};
   loom_op_t* store_op = NULL;
-  IREE_ASSERT_OK(loom_view_store_build(&body_builder, args[1], view, NULL, 0,
-                                       static_index, 1, LOOM_LOCATION_UNKNOWN,
-                                       &store_op));
+  IREE_ASSERT_OK(loom_view_store_build(&body_builder, 0, args[1], view, NULL, 0,
+                                       static_index, 1, 0, 0,
+                                       LOOM_LOCATION_UNKNOWN, &store_op));
   loom_op_t* load_op = NULL;
-  IREE_ASSERT_OK(loom_view_load_build(&body_builder, view, NULL, 0,
-                                      static_index, 1, f32,
+  IREE_ASSERT_OK(loom_view_load_build(&body_builder, 0, view, NULL, 0,
+                                      static_index, 1, 0, 0, f32,
                                       LOOM_LOCATION_UNKNOWN, &load_op));
   loom_value_id_t loaded = loom_view_load_result(load_op);
   SetValueName(loaded, IREE_SV("loaded"));
@@ -1102,12 +1102,12 @@ TEST_F(LlvmIrLowerTest, LowersBufferAllocaWithAlignedVectorAccess) {
 
   int64_t static_index[1] = {0};
   loom_op_t* store_op = NULL;
-  IREE_ASSERT_OK(loom_vector_store_build(&body_builder, args[1], view, NULL, 0,
-                                         static_index, 1, LOOM_LOCATION_UNKNOWN,
-                                         &store_op));
+  IREE_ASSERT_OK(loom_vector_store_build(&body_builder, 0, args[1], view, NULL,
+                                         0, static_index, 1, 0, 0,
+                                         LOOM_LOCATION_UNKNOWN, &store_op));
   loom_op_t* load_op = NULL;
-  IREE_ASSERT_OK(loom_vector_load_build(&body_builder, view, NULL, 0,
-                                        static_index, 1, v4f32,
+  IREE_ASSERT_OK(loom_vector_load_build(&body_builder, 0, view, NULL, 0,
+                                        static_index, 1, 0, 0, v4f32,
                                         LOOM_LOCATION_UNKNOWN, &load_op));
   loom_value_id_t loaded = loom_vector_load_result(load_op);
   SetValueName(loaded, IREE_SV("loaded"));
@@ -1183,17 +1183,17 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuDenseVectorLoadStore) {
   loom_value_id_t indices[1] = {args[2]};
   loom_op_t* load_op = NULL;
   IREE_ASSERT_OK(loom_vector_load_build(
-      &body_builder, input_view, indices, IREE_ARRAYSIZE(indices),
-      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), v4f32,
+      &body_builder, 0, input_view, indices, IREE_ARRAYSIZE(indices),
+      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), 0, 0, v4f32,
       LOOM_LOCATION_UNKNOWN, &load_op));
   loom_value_id_t loaded = loom_vector_load_result(load_op);
   SetValueName(loaded, IREE_SV("loaded"));
 
   loom_op_t* store_op = NULL;
   IREE_ASSERT_OK(loom_vector_store_build(
-      &body_builder, loaded, output_view, indices, IREE_ARRAYSIZE(indices),
-      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), LOOM_LOCATION_UNKNOWN,
-      &store_op));
+      &body_builder, 0, loaded, output_view, indices, IREE_ARRAYSIZE(indices),
+      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), 0, 0,
+      LOOM_LOCATION_UNKNOWN, &store_op));
   loom_op_t* return_op = NULL;
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &return_op));
@@ -1288,8 +1288,8 @@ TEST_F(LlvmIrLowerTest, LowersX86ScalarVectorObjectFixture) {
   loom_value_id_t base_indices[1] = {args[3]};
   loom_op_t* x_load_op = NULL;
   IREE_ASSERT_OK(loom_vector_load_build(
-      &body_builder, x_view, base_indices, IREE_ARRAYSIZE(base_indices),
-      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), v4f32,
+      &body_builder, 0, x_view, base_indices, IREE_ARRAYSIZE(base_indices),
+      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), 0, 0, v4f32,
       LOOM_LOCATION_UNKNOWN, &x_load_op));
   loom_value_id_t xv = loom_vector_load_result(x_load_op);
   SetValueName(xv, IREE_SV("xv"));
@@ -1297,8 +1297,8 @@ TEST_F(LlvmIrLowerTest, LowersX86ScalarVectorObjectFixture) {
   loom_value_id_t next_indices[1] = {next};
   loom_op_t* y_load_op = NULL;
   IREE_ASSERT_OK(loom_vector_load_build(
-      &body_builder, y_view, next_indices, IREE_ARRAYSIZE(next_indices),
-      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), v4f32,
+      &body_builder, 0, y_view, next_indices, IREE_ARRAYSIZE(next_indices),
+      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), 0, 0, v4f32,
       LOOM_LOCATION_UNKNOWN, &y_load_op));
   loom_value_id_t yv = loom_vector_load_result(y_load_op);
   SetValueName(yv, IREE_SV("yv"));
@@ -1312,9 +1312,9 @@ TEST_F(LlvmIrLowerTest, LowersX86ScalarVectorObjectFixture) {
 
   loom_op_t* store_op = NULL;
   IREE_ASSERT_OK(loom_vector_store_build(
-      &body_builder, sum, out_view, next_indices, IREE_ARRAYSIZE(next_indices),
-      dynamic_indices, IREE_ARRAYSIZE(dynamic_indices), LOOM_LOCATION_UNKNOWN,
-      &store_op));
+      &body_builder, 0, sum, out_view, next_indices,
+      IREE_ARRAYSIZE(next_indices), dynamic_indices,
+      IREE_ARRAYSIZE(dynamic_indices), 0, 0, LOOM_LOCATION_UNKNOWN, &store_op));
   loom_op_t* return_op = NULL;
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &return_op));
@@ -1413,10 +1413,11 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuScalarVectorHalKernelFixture) {
   int64_t dynamic_indices[1] = {INT64_MIN};
   loom_value_id_t element_indices[1] = {element};
   loom_op_t* load_op = NULL;
-  IREE_ASSERT_OK(loom_vector_load_build(
-      &body_builder, input_view, element_indices,
-      IREE_ARRAYSIZE(element_indices), dynamic_indices,
-      IREE_ARRAYSIZE(dynamic_indices), v4f32, LOOM_LOCATION_UNKNOWN, &load_op));
+  IREE_ASSERT_OK(
+      loom_vector_load_build(&body_builder, 0, input_view, element_indices,
+                             IREE_ARRAYSIZE(element_indices), dynamic_indices,
+                             IREE_ARRAYSIZE(dynamic_indices), 0, 0, v4f32,
+                             LOOM_LOCATION_UNKNOWN, &load_op));
   loom_value_id_t loaded = loom_vector_load_result(load_op);
   SetValueName(loaded, IREE_SV("loaded"));
 
@@ -1429,9 +1430,9 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuScalarVectorHalKernelFixture) {
 
   loom_op_t* store_op = NULL;
   IREE_ASSERT_OK(loom_vector_store_build(
-      &body_builder, doubled, output_view, element_indices,
+      &body_builder, 0, doubled, output_view, element_indices,
       IREE_ARRAYSIZE(element_indices), dynamic_indices,
-      IREE_ARRAYSIZE(dynamic_indices), LOOM_LOCATION_UNKNOWN, &store_op));
+      IREE_ARRAYSIZE(dynamic_indices), 0, 0, LOOM_LOCATION_UNKNOWN, &store_op));
   loom_op_t* return_op = NULL;
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &return_op));
@@ -1498,8 +1499,8 @@ TEST_F(LlvmIrLowerTest, RejectsVectorLoadWithoutDenseEncoding) {
 
   int64_t static_index[1] = {0};
   loom_op_t* load_op = NULL;
-  IREE_ASSERT_OK(loom_vector_load_build(&body_builder, view, NULL, 0,
-                                        static_index, 1, v4f32,
+  IREE_ASSERT_OK(loom_vector_load_build(&body_builder, 0, view, NULL, 0,
+                                        static_index, 1, 0, 0, v4f32,
                                         LOOM_LOCATION_UNKNOWN, &load_op));
   loom_value_id_t loaded = loom_vector_load_result(load_op);
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, &loaded, 1,

@@ -43,6 +43,18 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    cache
+  HDRS
+    "cache.h"
+  SRCS
+    "cache.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     op_registry
   HDRS
     "op_registry.h"

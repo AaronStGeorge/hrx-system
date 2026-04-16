@@ -28,6 +28,30 @@ enum {
   LOOM_OP_VIEW_COUNT_ = 7,
 };
 
+// Target-independent cache scope for memory operations.
+typedef enum loom_view_cache_scope_e {
+  LOOM_VIEW_CACHE_SCOPE_CU = 0,
+  LOOM_VIEW_CACHE_SCOPE_SE = 1,
+  LOOM_VIEW_CACHE_SCOPE_DEVICE = 2,
+  LOOM_VIEW_CACHE_SCOPE_SYSTEM = 3,
+  LOOM_VIEW_CACHE_SCOPE_COUNT_ = 4,
+} loom_view_cache_scope_t;
+
+// Target-independent temporal cache policy for memory operations.
+typedef enum loom_view_cache_temporal_e {
+  LOOM_VIEW_CACHE_TEMPORAL_REGULAR = 0,
+  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL = 1,
+  LOOM_VIEW_CACHE_TEMPORAL_HIGH_TEMPORAL = 2,
+  LOOM_VIEW_CACHE_TEMPORAL_LAST_USE = 3,
+  LOOM_VIEW_CACHE_TEMPORAL_WRITEBACK = 4,
+  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR = 5,
+  LOOM_VIEW_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL = 6,
+  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL = 7,
+  LOOM_VIEW_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK = 8,
+  LOOM_VIEW_CACHE_TEMPORAL_BYPASS = 9,
+  LOOM_VIEW_CACHE_TEMPORAL_COUNT_ = 10,
+} loom_view_cache_temporal_t;
+
 // Read-modify-write operation kind supported by view and vector atomics.
 typedef enum loom_view_kind_e {
   LOOM_VIEW_KIND_XCHGI = 0,
@@ -140,14 +164,24 @@ LOOM_DEFINE_ISA(loom_view_load_isa, LOOM_OP_VIEW_LOAD)
 LOOM_DEFINE_OPERAND(loom_view_load_view, 0)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_load_indices, 1)
 LOOM_DEFINE_RESULT(loom_view_load_result, 0)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_load_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_load_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_load_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_load_static_indices, 2)
+enum loom_view_load_build_flag_bits_e {
+  LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_view_load_build_flags_t;
 iree_status_t loom_view_load_build(
     loom_builder_t* builder,
+    loom_view_load_build_flags_t build_flags,
     loom_may_consume loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -161,15 +195,25 @@ LOOM_DEFINE_ISA(loom_view_store_isa, LOOM_OP_VIEW_STORE)
 LOOM_DEFINE_OPERAND(loom_view_store_value, 0)
 LOOM_DEFINE_OPERAND(loom_view_store_view, 1)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_store_indices, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_store_static_indices, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_store_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_store_cache_temporal, 1)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_store_static_indices, 2)
+enum loom_view_store_build_flag_bits_e {
+  LOOM_VIEW_STORE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VIEW_STORE_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_view_store_build_flags_t;
 iree_status_t loom_view_store_build(
     loom_builder_t* builder,
+    loom_view_store_build_flags_t build_flags,
     loom_value_id_t value,
     loom_value_id_t view,
     const loom_value_id_t* indices,
     iree_host_size_t indices_count,
     const int64_t* static_indices,
     iree_host_size_t static_indices_count,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_view_store_verify(
@@ -185,9 +229,17 @@ LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_atomic_reduce_indices, 2)
 LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_kind, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_ordering, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_scope, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_reduce_static_indices, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_cache_scope, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_cache_temporal, 4)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_reduce_static_indices, 5)
+enum loom_view_atomic_reduce_build_flag_bits_e {
+  LOOM_VIEW_ATOMIC_REDUCE_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VIEW_ATOMIC_REDUCE_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_view_atomic_reduce_build_flags_t;
 iree_status_t loom_view_atomic_reduce_build(
     loom_builder_t* builder,
+    loom_view_atomic_reduce_build_flags_t build_flags,
     uint8_t kind,
     loom_value_id_t value,
     loom_value_id_t view,
@@ -197,6 +249,8 @@ iree_status_t loom_view_atomic_reduce_build(
     iree_host_size_t static_indices_count,
     uint8_t ordering,
     uint8_t scope,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_view_atomic_reduce_verify(
@@ -213,9 +267,17 @@ LOOM_DEFINE_RESULT(loom_view_atomic_rmw_result, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_kind, 0)
 LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_ordering, 1)
 LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_scope, 2)
-LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_rmw_static_indices, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_cache_scope, 3)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_cache_temporal, 4)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_rmw_static_indices, 5)
+enum loom_view_atomic_rmw_build_flag_bits_e {
+  LOOM_VIEW_ATOMIC_RMW_BUILD_FLAG_HAS_CACHE_SCOPE = 1u << 0,
+  LOOM_VIEW_ATOMIC_RMW_BUILD_FLAG_HAS_CACHE_TEMPORAL = 1u << 1,
+};
+typedef uint32_t loom_view_atomic_rmw_build_flags_t;
 iree_status_t loom_view_atomic_rmw_build(
     loom_builder_t* builder,
+    loom_view_atomic_rmw_build_flags_t build_flags,
     uint8_t kind,
     loom_may_consume loom_value_id_t value,
     loom_may_consume loom_value_id_t view,
@@ -225,6 +287,8 @@ iree_status_t loom_view_atomic_rmw_build(
     iree_host_size_t static_indices_count,
     uint8_t ordering,
     uint8_t scope,
+    loom_optional uint8_t cache_scope,
+    loom_optional uint8_t cache_temporal,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

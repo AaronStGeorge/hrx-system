@@ -32,6 +32,7 @@ from loom.assembly import (
     kw,
 )
 from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
+from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.scalar import IntOverflowFlags
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate
 from loom.dsl import (
@@ -968,6 +969,37 @@ vector_transform = Op(
 # Memory
 # ============================================================================
 
+
+def _cache_policy_attrs() -> list[AttrDef]:
+    return [
+        AttrDef(
+            "cache_scope",
+            ATTR_TYPE_ENUM,
+            optional=True,
+            enum_def=CacheScope,
+            doc="Optional cache/coherency scope required by target lowering.",
+        ),
+        AttrDef(
+            "cache_temporal",
+            ATTR_TYPE_ENUM,
+            optional=True,
+            enum_def=CacheTemporal,
+            doc="Optional temporal cache policy required by target lowering.",
+        ),
+    ]
+
+
+def _indexed_memory_attrs() -> list[AttrDef]:
+    return [
+        *_cache_policy_attrs(),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ]
+
+
 vector_load = Op(
     "vector.load",
     group=vector_ops,
@@ -982,13 +1014,7 @@ vector_load = Op(
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
     results=[Result("result", VECTOR, doc="Loaded vector value.")],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[SameElementType("view", "result")],
     traits=[REFINABLE_RESULT_TYPE_REFS],
     effects=[Reads("view")],
@@ -996,6 +1022,7 @@ vector_load = Op(
     format=[
         Ref("view"),
         IndexList("indices", "static_indices"),
+        AttrDict(),
         COLON,
         TypeOf("view"),
         ARROW,
@@ -1019,13 +1046,7 @@ vector_store = Op(
         Operand("view", VIEW, doc="Typed destination view."),
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[SameElementType("value", "view")],
     effects=[Writes("view")],
     verify="loom_vector_store_verify",
@@ -1034,6 +1055,7 @@ vector_store = Op(
         COMMA,
         Ref("view"),
         IndexList("indices", "static_indices"),
+        AttrDict(),
         COLON,
         TypeOf("value"),
         COMMA,
@@ -1059,13 +1081,7 @@ vector_load_mask = Op(
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
     results=[Result("result", VECTOR, doc="Loaded vector value.")],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
         SameElementType("view", "passthrough", "result"),
@@ -1082,6 +1098,7 @@ vector_load_mask = Op(
         Ref("mask"),
         COMMA,
         Ref("passthrough"),
+        AttrDict(),
         COLON,
         TypeOf("view"),
         COMMA,
@@ -1104,13 +1121,7 @@ vector_store_mask = Op(
         Operand("mask", VECTOR, doc="i1 vector mask selecting stored lanes."),
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
         SameElementType("value", "view"),
@@ -1126,6 +1137,7 @@ vector_store_mask = Op(
         IndexList("indices", "static_indices"),
         COMMA,
         Ref("mask"),
+        AttrDict(),
         COLON,
         TypeOf("value"),
         COMMA,
@@ -1154,13 +1166,7 @@ vector_load_expand = Op(
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
     results=[Result("result", VECTOR, doc="Expanded loaded vector value.")],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
         SameElementType("view", "passthrough", "result"),
@@ -1177,6 +1183,7 @@ vector_load_expand = Op(
         Ref("mask"),
         COMMA,
         Ref("passthrough"),
+        AttrDict(),
         COLON,
         TypeOf("view"),
         COMMA,
@@ -1199,13 +1206,7 @@ vector_store_compress = Op(
         Operand("mask", VECTOR, doc="i1 rank-1 vector mask selecting stored lanes."),
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
         SameElementType("value", "view"),
@@ -1221,6 +1222,7 @@ vector_store_compress = Op(
         IndexList("indices", "static_indices"),
         COMMA,
         Ref("mask"),
+        AttrDict(),
         COLON,
         TypeOf("value"),
         COMMA,
@@ -1248,13 +1250,7 @@ vector_gather = Op(
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
     results=[Result("result", VECTOR, doc="Gathered vector value.")],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         SameElementType("view", "result"),
         SameShape("offsets", "result"),
@@ -1269,6 +1265,7 @@ vector_gather = Op(
         LBRACKET,
         Ref("offsets"),
         RBRACKET,
+        AttrDict(),
         COLON,
         TypeOf("view"),
         COMMA,
@@ -1297,13 +1294,7 @@ vector_scatter = Op(
         Operand("offsets", VECTOR, doc="Per-lane signed element offsets from the logical origin."),
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         SameElementType("value", "view"),
         SameShape("offsets", "value"),
@@ -1320,6 +1311,7 @@ vector_scatter = Op(
         LBRACKET,
         Ref("offsets"),
         RBRACKET,
+        AttrDict(),
         COLON,
         TypeOf("value"),
         COMMA,
@@ -1349,13 +1341,7 @@ vector_gather_mask = Op(
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
     results=[Result("result", VECTOR, doc="Gathered vector value.")],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
         SameElementType("view", "passthrough", "result"),
@@ -1376,6 +1362,7 @@ vector_gather_mask = Op(
         Ref("mask"),
         COMMA,
         Ref("passthrough"),
+        AttrDict(),
         COLON,
         TypeOf("view"),
         COMMA,
@@ -1403,13 +1390,7 @@ vector_scatter_mask = Op(
         Operand("mask", VECTOR, doc="i1 vector mask selecting stored lanes."),
         Operand("indices", INDEX, doc="Dynamic logical origin indices.", variadic=True),
     ],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical origin indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
         SameElementType("value", "view"),
@@ -1429,6 +1410,7 @@ vector_scatter_mask = Op(
         RBRACKET,
         COMMA,
         Ref("mask"),
+        AttrDict(),
         COLON,
         TypeOf("value"),
         COMMA,
@@ -1459,6 +1441,7 @@ def _atomic_memory_attrs() -> list[AttrDef]:
             enum_def=AtomicScope,
             doc="Required atomic synchronization scope.",
         ),
+        *_cache_policy_attrs(),
         AttrDef(
             "static_indices",
             ATTR_TYPE_I64_ARRAY,

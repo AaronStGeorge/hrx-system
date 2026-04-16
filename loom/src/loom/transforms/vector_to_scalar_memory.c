@@ -400,9 +400,10 @@ static iree_status_t loom_vector_to_scalar_build_view_load_lane(
       &view_indices));
   loom_op_t* load_op = NULL;
   IREE_RETURN_IF_ERROR(loom_view_load_build(
-      &state->rewriter->builder, loom_vector_to_scalar_memory_view(state->op),
+      &state->rewriter->builder, 0,
+      loom_vector_to_scalar_memory_view(state->op),
       view_indices.dynamic_indices, view_indices.dynamic_index_count,
-      view_indices.static_indices, view_indices.static_index_count,
+      view_indices.static_indices, view_indices.static_index_count, 0, 0,
       state->result_scalar_type, state->location, &load_op));
   *out_lane = loom_view_load_result(load_op);
   return iree_ok_status();
@@ -507,9 +508,9 @@ iree_status_t loom_vector_to_scalar_build_load_expand_lane(
       /*add_last_axis_offset=*/true, prefix, &view_indices));
   loom_op_t* load_op = NULL;
   IREE_RETURN_IF_ERROR(loom_view_load_build(
-      &state->rewriter->builder, loom_vector_load_expand_view(state->op),
+      &state->rewriter->builder, 0, loom_vector_load_expand_view(state->op),
       view_indices.dynamic_indices, view_indices.dynamic_index_count,
-      view_indices.static_indices, view_indices.static_index_count,
+      view_indices.static_indices, view_indices.static_index_count, 0, 0,
       state->result_scalar_type, state->location, &load_op));
   loom_value_id_t loaded_lane = loom_view_load_result(load_op);
   loom_op_t* then_yield = NULL;
@@ -598,10 +599,10 @@ static iree_status_t loom_vector_to_scalar_emit_view_store_lane(
       &view_indices));
   loom_op_t* store_op = NULL;
   return loom_view_store_build(
-      &state->rewriter->builder, lane,
+      &state->rewriter->builder, 0, lane,
       loom_vector_to_scalar_memory_view(state->op),
       view_indices.dynamic_indices, view_indices.dynamic_index_count,
-      view_indices.static_indices, view_indices.static_index_count,
+      view_indices.static_indices, view_indices.static_index_count, 0, 0,
       state->location, &store_op);
 }
 
@@ -671,10 +672,10 @@ static iree_status_t loom_vector_to_scalar_emit_store_compress_lane(
       /*add_last_axis_offset=*/true, prefix, &view_indices));
   loom_op_t* store_op = NULL;
   IREE_RETURN_IF_ERROR(loom_view_store_build(
-      &state->rewriter->builder, lane,
+      &state->rewriter->builder, 0, lane,
       loom_vector_store_compress_view(state->op), view_indices.dynamic_indices,
       view_indices.dynamic_index_count, view_indices.static_indices,
-      view_indices.static_index_count, state->location, &store_op));
+      view_indices.static_index_count, 0, 0, state->location, &store_op));
   loom_op_t* then_yield = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder, NULL, 0,
                                             state->location, &then_yield));
@@ -941,14 +942,14 @@ static iree_status_t loom_vector_to_scalar_emit_view_atomic_reduce_lane(
       &view_indices));
   loom_op_t* atomic_op = NULL;
   return loom_view_atomic_reduce_build(
-      &state->rewriter->builder,
+      &state->rewriter->builder, 0,
       loom_vector_to_scalar_atomic_reduce_kind(state->op), lane,
       loom_vector_to_scalar_memory_view(state->op),
       view_indices.dynamic_indices, view_indices.dynamic_index_count,
       view_indices.static_indices, view_indices.static_index_count,
       loom_vector_to_scalar_atomic_reduce_ordering(state->op),
-      loom_vector_to_scalar_atomic_reduce_scope(state->op), state->location,
-      &atomic_op);
+      loom_vector_to_scalar_atomic_reduce_scope(state->op), 0, 0,
+      state->location, &atomic_op);
 }
 
 static iree_status_t loom_vector_to_scalar_emit_masked_view_atomic_reduce_lane(
@@ -1177,13 +1178,13 @@ static iree_status_t loom_vector_to_scalar_build_view_atomic_rmw_lane(
       &view_indices));
   loom_op_t* atomic_op = NULL;
   IREE_RETURN_IF_ERROR(loom_view_atomic_rmw_build(
-      &state->rewriter->builder,
+      &state->rewriter->builder, 0,
       loom_vector_to_scalar_atomic_rmw_kind(state->op), lane,
       loom_vector_to_scalar_memory_view(state->op),
       view_indices.dynamic_indices, view_indices.dynamic_index_count,
       view_indices.static_indices, view_indices.static_index_count,
       loom_vector_to_scalar_atomic_rmw_ordering(state->op),
-      loom_vector_to_scalar_atomic_rmw_scope(state->op),
+      loom_vector_to_scalar_atomic_rmw_scope(state->op), 0, 0,
       state->result_scalar_type, state->location, &atomic_op));
   *out_lane = loom_view_atomic_rmw_result(atomic_op);
   return iree_ok_status();

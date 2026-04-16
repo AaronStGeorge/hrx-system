@@ -18,6 +18,7 @@ from loom.assembly import (
     TypeOf,
 )
 from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
+from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dsl import (
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64_ARRAY,
@@ -72,6 +73,37 @@ PrefetchLocality = EnumDef(
     ],
     doc="Target-independent prefetch locality hint.",
 )
+
+
+def _cache_policy_attrs() -> list[AttrDef]:
+    return [
+        AttrDef(
+            "cache_scope",
+            ATTR_TYPE_ENUM,
+            optional=True,
+            enum_def=CacheScope,
+            doc="Optional cache/coherency scope required by target lowering.",
+        ),
+        AttrDef(
+            "cache_temporal",
+            ATTR_TYPE_ENUM,
+            optional=True,
+            enum_def=CacheTemporal,
+            doc="Optional temporal cache policy required by target lowering.",
+        ),
+    ]
+
+
+def _indexed_memory_attrs() -> list[AttrDef]:
+    return [
+        *_cache_policy_attrs(),
+        AttrDef(
+            "static_indices",
+            ATTR_TYPE_I64_ARRAY,
+            doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
+        ),
+    ]
+
 
 # ============================================================================
 # view.subview — logical subview with explicit offsets
@@ -162,19 +194,14 @@ view_load = Op(
         Operand("indices", INDEX, doc="Dynamic logical element indices.", variadic=True),
     ],
     results=[Result("result", SCALAR, doc="Loaded scalar element.")],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[SameElementType("view", "result")],
     effects=[Reads("view")],
     verify="loom_view_load_verify",
     format=[
         Ref("view"),
         IndexList("indices", "static_indices"),
+        AttrDict(),
         COLON,
         TypeOf("view"),
         ARROW,
@@ -194,13 +221,7 @@ view_store = Op(
         Operand("view", VIEW, doc="Typed destination view."),
         Operand("indices", INDEX, doc="Dynamic logical element indices.", variadic=True),
     ],
-    attrs=[
-        AttrDef(
-            "static_indices",
-            ATTR_TYPE_I64_ARRAY,
-            doc="Static logical element indices with INT64_MIN sentinels for dynamics.",
-        ),
-    ],
+    attrs=_indexed_memory_attrs(),
     constraints=[SameElementType("value", "view")],
     effects=[Writes("view")],
     verify="loom_view_store_verify",
@@ -209,6 +230,7 @@ view_store = Op(
         COMMA,
         Ref("view"),
         IndexList("indices", "static_indices"),
+        AttrDict(),
         COLON,
         TypeOf("value"),
         COMMA,
@@ -239,6 +261,7 @@ def _atomic_memory_attrs() -> list[AttrDef]:
             enum_def=AtomicScope,
             doc="Required atomic synchronization scope.",
         ),
+        *_cache_policy_attrs(),
         AttrDef(
             "static_indices",
             ATTR_TYPE_I64_ARRAY,

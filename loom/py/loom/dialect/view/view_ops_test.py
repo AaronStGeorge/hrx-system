@@ -6,6 +6,7 @@
 
 """Tests for the view dialect declarations."""
 
+from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.view import (
     ALL_VIEW_OPS,
     AtomicKind,
@@ -25,6 +26,17 @@ from loom.dsl import ATTR_TYPE_I64_ARRAY, INDEX, SCALAR, VIEW, EffectKind, Op
 
 def _ops() -> dict[str, Op]:
     return {op.name: op for op in ALL_VIEW_OPS}
+
+
+def _assert_optional_cache_policy_attrs(op: Op) -> None:
+    cache_scope = op.attr("cache_scope")
+    cache_temporal = op.attr("cache_temporal")
+    assert cache_scope is not None
+    assert cache_temporal is not None
+    assert cache_scope.optional
+    assert cache_temporal.optional
+    assert cache_scope.enum_def is CacheScope
+    assert cache_temporal.enum_def is CacheTemporal
 
 
 class TestViewDialect:
@@ -66,6 +78,7 @@ class TestViewLoadStore:
         static_indices = op.attr("static_indices")
         assert static_indices is not None
         assert static_indices.attr_type == ATTR_TYPE_I64_ARRAY
+        _assert_optional_cache_policy_attrs(op)
         assert len(op.effects) == 1
         assert op.effects[0].operand == "view"
         assert op.effects[0].kind is EffectKind.READ
@@ -82,6 +95,7 @@ class TestViewLoadStore:
         static_indices = op.attr("static_indices")
         assert static_indices is not None
         assert static_indices.attr_type == ATTR_TYPE_I64_ARRAY
+        _assert_optional_cache_policy_attrs(op)
         assert len(op.effects) == 1
         assert op.effects[0].operand == "view"
         assert op.effects[0].kind is EffectKind.WRITE
@@ -134,6 +148,7 @@ class TestViewAtomics:
         assert op.attr("kind") is not None
         assert op.attr("ordering") is not None
         assert op.attr("scope") is not None
+        _assert_optional_cache_policy_attrs(op)
         static_indices = op.attr("static_indices")
         assert static_indices is not None
         assert static_indices.attr_type == ATTR_TYPE_I64_ARRAY
@@ -153,6 +168,7 @@ class TestViewAtomics:
         assert op.attr("kind") is not None
         assert op.attr("ordering") is not None
         assert op.attr("scope") is not None
+        _assert_optional_cache_policy_attrs(op)
         static_indices = op.attr("static_indices")
         assert static_indices is not None
         assert static_indices.attr_type == ATTR_TYPE_I64_ARRAY

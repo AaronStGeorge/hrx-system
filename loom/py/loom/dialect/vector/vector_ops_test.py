@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.vector import (
     ALL_VECTOR_OPS,
@@ -68,6 +69,17 @@ VECTOR_TO_SCALAR_SOURCE_FILES = (
 
 def _op_by_name() -> dict[str, Op]:
     return {op.name: op for op in ALL_VECTOR_OPS}
+
+
+def _assert_optional_cache_policy_attrs(op: Op) -> None:
+    cache_scope = op.attr("cache_scope")
+    cache_temporal = op.attr("cache_temporal")
+    assert cache_scope is not None
+    assert cache_temporal is not None
+    assert cache_scope.optional
+    assert cache_temporal.optional
+    assert cache_scope.enum_def is CacheScope
+    assert cache_temporal.enum_def is CacheTemporal
 
 
 def _op_suffix(op: Op) -> str:
@@ -485,6 +497,7 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
         "vector.atomic.rmw.mask",
     ):
         assert "Pure" not in {trait.name for trait in ops[name].traits}
+        _assert_optional_cache_policy_attrs(ops[name])
 
 
 def test_vector_table_lookup_is_pure_register_lookup() -> None:

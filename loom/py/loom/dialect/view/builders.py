@@ -52,7 +52,7 @@ class ViewBuilders:
         _operands.append(source)
         return cast(ValueRef, self._b.build("view.refine", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def load(self, *, view: ValueRef, indices: list[int | ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+    def load(self, *, view: ValueRef, indices: list[int | ValueRef], cache_scope: str | None = None, cache_temporal: str | None = None, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Load one scalar element from a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis.
 
         Example::
@@ -61,6 +61,10 @@ class ViewBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(view)
         _sentinel = -(2**63)
         _static = []
@@ -73,7 +77,7 @@ class ViewBuilders:
         _attributes["static_indices"] = _static
         return cast(ValueRef, self._b.build("view.load", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def store(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef]) -> None:
+    def store(self, *, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], cache_scope: str | None = None, cache_temporal: str | None = None) -> None:
         """Store one scalar element into a typed view at a full-rank logical index. The index list is expressed in view coordinates and must name one position per view axis.
 
         Example::
@@ -82,6 +86,10 @@ class ViewBuilders:
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
         _regions: list[Region] = []
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _sentinel = -(2**63)
@@ -95,7 +103,9 @@ class ViewBuilders:
         _attributes["static_indices"] = _static
         self._b.build("view.store", _operands, attributes=_attributes, regions=_regions)
 
-    def reduce(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], ordering: str, scope: str) -> None:
+    def reduce(
+        self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], ordering: str, scope: str, cache_scope: str | None = None, cache_temporal: str | None = None
+    ) -> None:
         """Atomically combine one scalar value into a typed view element at a full-rank logical index. Atomic ordering and scope are required so the synchronization contract remains explicit after vector-to-scalar lowering.
 
         Example::
@@ -107,6 +117,10 @@ class ViewBuilders:
         _attributes["kind"] = kind
         _attributes["ordering"] = ordering
         _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _sentinel = -(2**63)
@@ -120,7 +134,19 @@ class ViewBuilders:
         _attributes["static_indices"] = _static
         self._b.build("view.atomic.reduce", _operands, attributes=_attributes, regions=_regions)
 
-    def rmw(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], ordering: str, scope: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def rmw(
+        self,
+        *,
+        kind: str,
+        value: ValueRef,
+        view: ValueRef,
+        indices: list[int | ValueRef],
+        ordering: str,
+        scope: str,
+        cache_scope: str | None = None,
+        cache_temporal: str | None = None,
+        results: list[Type | TiedResultSpec],
+    ) -> ValueRef:
         """Atomically read one scalar view element, combine it with a scalar update value, write the combined value back, and return the old value observed by that atomic operation.
 
         Example::
@@ -132,6 +158,10 @@ class ViewBuilders:
         _attributes["kind"] = kind
         _attributes["ordering"] = ordering
         _attributes["scope"] = scope
+        if cache_scope is not None:
+            _attributes["cache_scope"] = cache_scope
+        if cache_temporal is not None:
+            _attributes["cache_temporal"] = cache_temporal
         _operands.append(value)
         _operands.append(view)
         _sentinel = -(2**63)

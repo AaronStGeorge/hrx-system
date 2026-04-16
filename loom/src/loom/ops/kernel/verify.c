@@ -10,8 +10,57 @@
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/cache.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/view/ops.h"
+
+#define LOOM_ASSERT_CACHE_SCOPE_VALUE(dialect_value, shared_value) \
+  static_assert((int)(dialect_value) == (int)(shared_value),       \
+                #dialect_value " must match " #shared_value)
+
+LOOM_ASSERT_CACHE_SCOPE_VALUE(LOOM_KERNEL_CACHE_SCOPE_COUNT_,
+                              LOOM_CACHE_SCOPE_COUNT_);
+LOOM_ASSERT_CACHE_SCOPE_VALUE(LOOM_KERNEL_CACHE_SCOPE_CU, LOOM_CACHE_SCOPE_CU);
+LOOM_ASSERT_CACHE_SCOPE_VALUE(LOOM_KERNEL_CACHE_SCOPE_SE, LOOM_CACHE_SCOPE_SE);
+LOOM_ASSERT_CACHE_SCOPE_VALUE(LOOM_KERNEL_CACHE_SCOPE_DEVICE,
+                              LOOM_CACHE_SCOPE_DEVICE);
+LOOM_ASSERT_CACHE_SCOPE_VALUE(LOOM_KERNEL_CACHE_SCOPE_SYSTEM,
+                              LOOM_CACHE_SCOPE_SYSTEM);
+
+#undef LOOM_ASSERT_CACHE_SCOPE_VALUE
+
+#define LOOM_ASSERT_CACHE_TEMPORAL_VALUE(dialect_value, shared_value) \
+  static_assert((int)(dialect_value) == (int)(shared_value),          \
+                #dialect_value " must match " #shared_value)
+
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(LOOM_KERNEL_CACHE_TEMPORAL_COUNT_,
+                                 LOOM_CACHE_TEMPORAL_COUNT_);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(LOOM_KERNEL_CACHE_TEMPORAL_REGULAR,
+                                 LOOM_CACHE_TEMPORAL_REGULAR);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL,
+                                 LOOM_CACHE_TEMPORAL_NON_TEMPORAL);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(LOOM_KERNEL_CACHE_TEMPORAL_HIGH_TEMPORAL,
+                                 LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(LOOM_KERNEL_CACHE_TEMPORAL_LAST_USE,
+                                 LOOM_CACHE_TEMPORAL_LAST_USE);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(LOOM_KERNEL_CACHE_TEMPORAL_WRITEBACK,
+                                 LOOM_CACHE_TEMPORAL_WRITEBACK);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(
+    LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR,
+    LOOM_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(
+    LOOM_KERNEL_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL,
+    LOOM_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(
+    LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL,
+    LOOM_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(
+    LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK,
+    LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK);
+LOOM_ASSERT_CACHE_TEMPORAL_VALUE(LOOM_KERNEL_CACHE_TEMPORAL_BYPASS,
+                                 LOOM_CACHE_TEMPORAL_BYPASS);
+
+#undef LOOM_ASSERT_CACHE_TEMPORAL_VALUE
 
 static iree_status_t loom_kernel_emit(iree_diagnostic_emitter_t emitter,
                                       const loom_op_t* op,
@@ -358,76 +407,22 @@ static iree_status_t loom_kernel_verify_async_copy_memory_spaces(
       IREE_SV("global_to_workgroup or workgroup_to_global"));
 }
 
-static iree_status_t loom_kernel_verify_async_cache_scope(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
-    uint8_t cache_scope) {
-  switch ((loom_kernel_cache_scope_t)cache_scope) {
-    case LOOM_KERNEL_CACHE_SCOPE_CU:
-    case LOOM_KERNEL_CACHE_SCOPE_SE:
-    case LOOM_KERNEL_CACHE_SCOPE_DEVICE:
-    case LOOM_KERNEL_CACHE_SCOPE_SYSTEM:
-      return iree_ok_status();
-    case LOOM_KERNEL_CACHE_SCOPE_COUNT_:
-      break;
-  }
-  return loom_kernel_emit_attribute_value_constraint(
-      emitter, op, IREE_SV("cache_scope"), cache_scope,
-      IREE_SV("cu, se, device, or system"));
-}
-
-static iree_status_t loom_kernel_verify_async_cache_temporal(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
-    uint8_t cache_temporal, uint8_t cache_scope, bool is_store) {
-  switch ((loom_kernel_cache_temporal_t)cache_temporal) {
-    case LOOM_KERNEL_CACHE_TEMPORAL_REGULAR:
-    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL:
-    case LOOM_KERNEL_CACHE_TEMPORAL_HIGH_TEMPORAL:
-    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR:
-    case LOOM_KERNEL_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL:
-    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL:
-      return iree_ok_status();
-    case LOOM_KERNEL_CACHE_TEMPORAL_LAST_USE:
-      if (is_store) {
-        return loom_kernel_emit_attribute_value_constraint(
-            emitter, op, IREE_SV("cache_temporal"), cache_temporal,
-            IREE_SV("load-compatible temporal hint"));
-      }
-      if (cache_scope == LOOM_KERNEL_CACHE_SCOPE_SYSTEM) {
-        return loom_kernel_emit_attribute_value_constraint(
-            emitter, op, IREE_SV("cache_scope"), cache_scope,
-            IREE_SV("non-system scope for last_use temporal hint"));
-      }
-      return iree_ok_status();
-    case LOOM_KERNEL_CACHE_TEMPORAL_WRITEBACK:
-    case LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK:
-      if (!is_store) {
-        return loom_kernel_emit_attribute_value_constraint(
-            emitter, op, IREE_SV("cache_temporal"), cache_temporal,
-            IREE_SV("store-compatible temporal hint"));
-      }
-      return iree_ok_status();
-    case LOOM_KERNEL_CACHE_TEMPORAL_BYPASS:
-      if (cache_scope != LOOM_KERNEL_CACHE_SCOPE_SYSTEM) {
-        return loom_kernel_emit_attribute_value_constraint(
-            emitter, op, IREE_SV("cache_scope"), cache_scope,
-            IREE_SV("system scope for bypass temporal hint"));
-      }
-      return iree_ok_status();
-    case LOOM_KERNEL_CACHE_TEMPORAL_COUNT_:
-      break;
-  }
-  return loom_kernel_emit_attribute_value_constraint(
-      emitter, op, IREE_SV("cache_temporal"), cache_temporal,
-      IREE_SV("supported async cache temporal hint"));
-}
-
 static iree_status_t loom_kernel_verify_async_cache_policy(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint8_t cache_scope,
     uint8_t cache_temporal, bool is_store) {
-  IREE_RETURN_IF_ERROR(
-      loom_kernel_verify_async_cache_scope(emitter, op, cache_scope));
-  return loom_kernel_verify_async_cache_temporal(emitter, op, cache_temporal,
-                                                 cache_scope, is_store);
+  loom_cache_policy_error_t error =
+      loom_cache_policy_validate(cache_scope, cache_temporal,
+                                 is_store ? LOOM_CACHE_POLICY_ACCESS_STORE
+                                          : LOOM_CACHE_POLICY_ACCESS_LOAD);
+  if (error == LOOM_CACHE_POLICY_ERROR_NONE) return iree_ok_status();
+  iree_string_view_t attr_name = loom_cache_policy_error_attr_name(error);
+  int64_t actual_value =
+      iree_string_view_equal(attr_name, IREE_SV("cache_scope"))
+          ? cache_scope
+          : cache_temporal;
+  return loom_kernel_emit_attribute_value_constraint(
+      emitter, op, attr_name, actual_value,
+      loom_cache_policy_error_expected_constraint(error));
 }
 
 static iree_status_t loom_kernel_verify_copy_token_group_use(

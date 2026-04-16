@@ -391,8 +391,8 @@ func.def @numeric_transform_dynamic(%n: index, %v: vector<[%n]xf32>) -> (vector<
 func.def @memory(%buffer: buffer, %offset: offset, %row: index, %col: index, %m: index, %n: index) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
-  %loaded = vector.load %view[%row, %col] : view<[%m]x[%n]xf32, %layout> -> vector<4x8xf32>
-  vector.store %loaded, %view[%row, %col] : vector<4x8xf32>, view<[%m]x[%n]xf32, %layout>
+  %loaded = vector.load %view[%row, %col] {cache_scope = device, cache_temporal = high_temporal} : view<[%m]x[%n]xf32, %layout> -> vector<4x8xf32>
+  vector.store %loaded, %view[%row, %col] {cache_scope = system, cache_temporal = writeback} : vector<4x8xf32>, view<[%m]x[%n]xf32, %layout>
   func.return
 }
 
@@ -440,7 +440,7 @@ func.def @expanded_compressed_memory(%buffer: buffer, %offset: offset, %row: ind
 func.def @gather_scatter(%buffer: buffer, %offset: offset, %row: index, %col: index, %m: index, %n: index, %offsets: vector<4xindex>, %i32_offsets: vector<4xi32>, %old: vector<4xf32>, %mask: vector<4xi1>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
-  %gathered = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
+  %gathered = vector.gather %view[%row, %col][%offsets] {cache_scope = device, cache_temporal = non_temporal} : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
   vector.scatter %gathered, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
   %masked = vector.gather.mask %view[%row, %col][%i32_offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32>
   vector.scatter.mask %masked, %view[%row, %col][%i32_offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>
@@ -455,7 +455,7 @@ func.def @atomic_memory(%buffer: buffer, %offset: offset, %row: index, %col: ind
   %layout = encoding.layout.dense : encoding<layout>
   %iview = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xi32, %layout>
   %fview = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
-  vector.atomic.reduce<addi> %iv, %iview[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
+  vector.atomic.reduce<addi> %iv, %iview[%row, %col][%offsets] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
   vector.atomic.reduce.mask<addf> %fv, %fview[%row, %col][%i32_offsets], %mask {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>
   %oldi = vector.atomic.rmw<xchgi> %iv, %iview[%row, %col][%offsets] {ordering = acq_rel, scope = system} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
   %masked = vector.atomic.rmw.mask<addf> %fv, %fview[%row, %col][%i32_offsets], %mask, %oldf {ordering = seq_cst, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32>

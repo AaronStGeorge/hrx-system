@@ -260,14 +260,14 @@ TEST_F(ViewRegionsTest, ProvesDisjointReadAndWriteViewsInOneSlab) {
   int64_t static_indices[] = {0};
   loom_op_t* load_op = nullptr;
   IREE_ASSERT_OK(loom_vector_load_build(
-      &builder_, loom_buffer_view_result(read_view_op), NULL, 0, static_indices,
-      IREE_ARRAYSIZE(static_indices), VectorType1D(4), LOOM_LOCATION_UNKNOWN,
-      &load_op));
+      &builder_, 0, loom_buffer_view_result(read_view_op), NULL, 0,
+      static_indices, IREE_ARRAYSIZE(static_indices), 0, 0, VectorType1D(4),
+      LOOM_LOCATION_UNKNOWN, &load_op));
   loom_op_t* store_op = nullptr;
   IREE_ASSERT_OK(loom_vector_store_build(
-      &builder_, loom_vector_load_result(load_op),
+      &builder_, 0, loom_vector_load_result(load_op),
       loom_buffer_view_result(write_view_op), NULL, 0, static_indices,
-      IREE_ARRAYSIZE(static_indices), LOOM_LOCATION_UNKNOWN, &store_op));
+      IREE_ARRAYSIZE(static_indices), 0, 0, LOOM_LOCATION_UNKNOWN, &store_op));
 
   loom_value_fact_table_t facts = {0};
   ComputeFacts(&facts);

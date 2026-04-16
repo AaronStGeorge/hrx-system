@@ -94,7 +94,7 @@ func.def @async_copy_rejects_direction_memory_mismatch(%buffer: buffer, %offset:
 
 // ====
 
-func.def @async_copy_rejects_store_last_use_cache(%buffer: buffer, %offset: offset) {
+func.def @async_copy_rejects_global_store_last_use_cache(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -102,7 +102,7 @@ func.def @async_copy_rejects_store_last_use_cache(%buffer: buffer, %offset: offs
   %source_buffer = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
   %source = buffer.view %source_buffer[%zero] : buffer -> view<16xi8, %layout>
   %dest = buffer.view %global[%offset] : buffer -> view<16xi8, %layout>
-  // ERROR@+1: STRUCTURE/014 "cache_temporal" "3" "load-compatible temporal hint"
+  // ERROR@+1: STRUCTURE/014 "cache_temporal" "3" "store-compatible temporal hint"
   %copy = kernel.async.copy %source to %dest {cache_scope = cu, cache_temporal = last_use, direction = workgroup_to_global} : view<16xi8, %layout> to view<16xi8, %layout> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
@@ -111,7 +111,7 @@ func.def @async_copy_rejects_store_last_use_cache(%buffer: buffer, %offset: offs
 
 // ====
 
-func.def @async_copy_rejects_load_writeback_cache(%buffer: buffer, %offset: offset) {
+func.def @async_copy_rejects_global_load_writeback_cache(%buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : offset
   %bytes = index.constant 1024 : offset
   %layout = encoding.layout.dense : encoding<layout>
@@ -119,7 +119,7 @@ func.def @async_copy_rejects_load_writeback_cache(%buffer: buffer, %offset: offs
   %source = buffer.view %global[%offset] : buffer -> view<16xi8, %layout>
   %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
   %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, %layout>
-  // ERROR@+1: STRUCTURE/014 "cache_temporal" "4" "store-compatible temporal hint"
+  // ERROR@+1: STRUCTURE/014 "cache_temporal" "4" "load-compatible temporal hint"
   %copy = kernel.async.copy %source to %dest {cache_scope = cu, cache_temporal = writeback, direction = global_to_workgroup} : view<16xi8, %layout> to view<16xi8, %layout> -> kernel.async.token
   %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
   kernel.async.wait %group {newer_groups = 0} : kernel.async.group
