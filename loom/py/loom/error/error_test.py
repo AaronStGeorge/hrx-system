@@ -180,7 +180,7 @@ class TestCatalogIntegrity:
         assert Severity.REMARK in severities
 
     def test_param_kinds_used(self) -> None:
-        """STRING, I64, U32, and TYPE should all appear in the catalog.
+        """STRING, I64, U32, U64, and TYPE should all appear in the catalog.
 
         BOOL is defined for future use (e.g., verifier warning flags)
         but no current error naturally needs a boolean parameter.
@@ -191,7 +191,13 @@ class TestCatalogIntegrity:
         for error in ALL_ERRORS:
             for param in error.params:
                 kinds.add(param.kind)
-        for kind in (ParamKind.STRING, ParamKind.I64, ParamKind.U32, ParamKind.TYPE):
+        for kind in (
+            ParamKind.STRING,
+            ParamKind.I64,
+            ParamKind.U32,
+            ParamKind.U64,
+            ParamKind.TYPE,
+        ):
             assert kind in kinds, f"ParamKind.{kind.name} is not used by any error"
 
     def test_codes_are_sequential_within_domain(self) -> None:

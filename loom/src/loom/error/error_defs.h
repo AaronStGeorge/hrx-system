@@ -82,6 +82,7 @@ typedef enum loom_param_kind_e {
   LOOM_PARAM_U32 = 2,     // uint32_t
   LOOM_PARAM_BOOL = 3,    // bool
   LOOM_PARAM_TYPE = 4,    // loom_type_t (rendered by type printer)
+  LOOM_PARAM_U64 = 5,     // uint64_t
   LOOM_PARAM_COUNT_,
 } loom_param_kind_t;
 
@@ -133,14 +134,16 @@ typedef struct loom_error_def_t {
 // The kind is redundant with the def but avoids chasing the def pointer
 // during rendering.
 typedef struct loom_diagnostic_param_t {
-  loom_param_kind_t kind;
+  loom_param_kind_t kind;  // Active parameter value variant.
+  // Optional structured sidecar describing the op field this param names.
   loom_diagnostic_field_ref_t field_ref;
   union {
-    iree_string_view_t string;
-    int64_t i64;
-    uint32_t u32;
-    bool boolean;
-    loom_type_t type;
+    iree_string_view_t string;  // LOOM_PARAM_STRING payload.
+    int64_t i64;                // LOOM_PARAM_I64 payload.
+    uint32_t u32;               // LOOM_PARAM_U32 payload.
+    bool boolean;               // LOOM_PARAM_BOOL payload.
+    loom_type_t type;           // LOOM_PARAM_TYPE payload.
+    uint64_t u64;               // LOOM_PARAM_U64 payload.
   };
 } loom_diagnostic_param_t;
 
@@ -169,6 +172,14 @@ static inline loom_diagnostic_param_t loom_param_u32(uint32_t value) {
   memset(&param, 0, sizeof(param));
   param.kind = LOOM_PARAM_U32;
   param.u32 = value;
+  return param;
+}
+
+static inline loom_diagnostic_param_t loom_param_u64(uint64_t value) {
+  loom_diagnostic_param_t param;
+  memset(&param, 0, sizeof(param));
+  param.kind = LOOM_PARAM_U64;
+  param.u64 = value;
   return param;
 }
 

@@ -35,6 +35,34 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    diagnostic
+  HDRS
+    "diagnostic.h"
+  SRCS
+    "diagnostic.c"
+  DEPS
+    iree::base
+    loom::src::loom::error::diagnostic
+    loom::src::loom::error::error_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    diagnostic_test
+  SRCS
+    "diagnostic_test.cc"
+  DEPS
+    ::diagnostic
+    loom::src::loom::error::json_sink
+    loom::src::loom::error::renderer
+    loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     format
   HDRS
     "format.h"

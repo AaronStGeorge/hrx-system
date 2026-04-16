@@ -32,6 +32,30 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "diagnostic",
+    srcs = ["diagnostic.c"],
+    hdrs = ["diagnostic.h"],
+    deps = [
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:error_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "diagnostic_test",
+    srcs = ["diagnostic_test.cc"],
+    deps = [
+        ":diagnostic",
+        "//loom/src/loom/error:json_sink",
+        "//loom/src/loom/error:renderer",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "format",
     hdrs = ["format.h"],
     deps = [

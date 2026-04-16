@@ -68,6 +68,7 @@ class ParamKind(IntEnum):
     U32 = 2  # uint32_t / int
     BOOL = 3  # bool
     TYPE = 4  # loom_type_t (rendered by type printer)
+    U64 = 5  # uint64_t / int
 
 
 @unique

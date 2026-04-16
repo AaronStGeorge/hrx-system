@@ -2007,9 +2007,9 @@ const loom_error_def_t loom_err_bytecode_002 = {
 };
 
 static const loom_error_param_def_t loom_err_bytecode_003_params[] = {
-    {"offset", LOOM_PARAM_U32},
-    {"needed_bytes", LOOM_PARAM_U32},
-    {"available_bytes", LOOM_PARAM_U32},
+    {"offset", LOOM_PARAM_U64},
+    {"needed_bytes", LOOM_PARAM_U64},
+    {"available_bytes", LOOM_PARAM_U64},
 };
 const loom_error_def_t loom_err_bytecode_003 = {
     .error_id = "ERR_BYTECODE_003",
@@ -2027,7 +2027,7 @@ const loom_error_def_t loom_err_bytecode_003 = {
 
 static const loom_error_param_def_t loom_err_bytecode_004_params[] = {
     {"type_kind", LOOM_PARAM_U32},
-    {"offset", LOOM_PARAM_U32},
+    {"offset", LOOM_PARAM_U64},
 };
 const loom_error_def_t loom_err_bytecode_004 = {
     .error_id = "ERR_BYTECODE_004",
@@ -2043,7 +2043,7 @@ const loom_error_def_t loom_err_bytecode_004 = {
 
 static const loom_error_param_def_t loom_err_bytecode_005_params[] = {
     {"attr_kind", LOOM_PARAM_U32},
-    {"offset", LOOM_PARAM_U32},
+    {"offset", LOOM_PARAM_U64},
 };
 const loom_error_def_t loom_err_bytecode_005 = {
     .error_id = "ERR_BYTECODE_005",
@@ -2055,6 +2055,227 @@ const loom_error_def_t loom_err_bytecode_005 = {
     .fix_hint_template = NULL,
     .param_defs = loom_err_bytecode_005_params,
     .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_006_params[] = {
+    {"section_name", LOOM_PARAM_STRING}, {"table_name", LOOM_PARAM_STRING},
+    {"record_index", LOOM_PARAM_U64},    {"field_name", LOOM_PARAM_STRING},
+    {"offset", LOOM_PARAM_U64},          {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_bytecode_006 = {
+    .error_id = "ERR_BYTECODE_006",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 6,
+    .summary = "Invalid bytecode record field.",
+    .message_template =
+        "invalid field '{field_name}' in "
+        "{section_name}/{table_name}[{record_index}] at offset {offset}: "
+        "{reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_006_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_007_params[] = {
+    {"range_name", LOOM_PARAM_STRING},
+    {"offset", LOOM_PARAM_U64},
+    {"length", LOOM_PARAM_U64},
+    {"container_length", LOOM_PARAM_U64},
+};
+const loom_error_def_t loom_err_bytecode_007 = {
+    .error_id = "ERR_BYTECODE_007",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 7,
+    .summary = "Invalid bytecode range.",
+    .message_template =
+        "invalid range '{range_name}' at offset {offset} with length {length}; "
+        "container length is {container_length}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_007_params,
+    .param_count = 4,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_008_params[] = {
+    {"offset", LOOM_PARAM_U64},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_bytecode_008 = {
+    .error_id = "ERR_BYTECODE_008",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 8,
+    .summary = "Malformed varint.",
+    .message_template = "malformed varint at offset {offset}: {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_008_params,
+    .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_009_params[] = {
+    {"table_name", LOOM_PARAM_STRING},
+    {"count", LOOM_PARAM_U64},
+    {"limit", LOOM_PARAM_U64},
+};
+const loom_error_def_t loom_err_bytecode_009 = {
+    .error_id = "ERR_BYTECODE_009",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 9,
+    .summary = "Count exceeds bytecode limit.",
+    .message_template = "{table_name} count {count} exceeds limit {limit}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_009_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_010_params[] = {
+    {"field_name", LOOM_PARAM_STRING},
+    {"string_id", LOOM_PARAM_U64},
+    {"string_count", LOOM_PARAM_U64},
+};
+const loom_error_def_t loom_err_bytecode_010 = {
+    .error_id = "ERR_BYTECODE_010",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 10,
+    .summary = "Invalid string reference.",
+    .message_template =
+        "invalid string reference in field '{field_name}': id {string_id}, "
+        "string table has {string_count} entries",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_010_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_011_params[] = {
+    {"field_name", LOOM_PARAM_STRING},
+    {"actual_value", LOOM_PARAM_U64},
+    {"case_count", LOOM_PARAM_U64},
+};
+const loom_error_def_t loom_err_bytecode_011 = {
+    .error_id = "ERR_BYTECODE_011",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 11,
+    .summary = "Invalid enum value.",
+    .message_template =
+        "invalid enum value for field '{field_name}': {actual_value}; valid "
+        "case count is {case_count}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_011_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_012_params[] = {
+    {"table_name", LOOM_PARAM_STRING},
+    {"ref_id", LOOM_PARAM_U64},
+    {"table_count", LOOM_PARAM_U64},
+};
+const loom_error_def_t loom_err_bytecode_012 = {
+    .error_id = "ERR_BYTECODE_012",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 12,
+    .summary = "Invalid table reference.",
+    .message_template =
+        "invalid {table_name} reference {ref_id}; table has {table_count} "
+        "entries",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_012_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_013_params[] = {
+    {"location_id", LOOM_PARAM_U64},
+    {"offset", LOOM_PARAM_U64},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_bytecode_013 = {
+    .error_id = "ERR_BYTECODE_013",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 13,
+    .summary = "Invalid location record.",
+    .message_template =
+        "invalid location record {location_id} at offset {offset}: {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_013_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_014_params[] = {
+    {"encoding_id", LOOM_PARAM_U64},
+    {"offset", LOOM_PARAM_U64},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_bytecode_014 = {
+    .error_id = "ERR_BYTECODE_014",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 14,
+    .summary = "Invalid encoding record.",
+    .message_template =
+        "invalid encoding record {encoding_id} at offset {offset}: {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_014_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_015_params[] = {
+    {"offset", LOOM_PARAM_U64},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_bytecode_015 = {
+    .error_id = "ERR_BYTECODE_015",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 15,
+    .summary = "Invalid attribute payload.",
+    .message_template =
+        "invalid attribute payload at offset {offset}: {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_015_params,
+    .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_016_params[] = {
+    {"symbol_name", LOOM_PARAM_STRING},
+    {"offset", LOOM_PARAM_U64},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_bytecode_016 = {
+    .error_id = "ERR_BYTECODE_016",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 16,
+    .summary = "Invalid IR body.",
+    .message_template =
+        "invalid IR body for symbol '{symbol_name}' at offset {offset}: "
+        "{reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_016_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_bytecode_017_params[] = {
+    {"resource_id", LOOM_PARAM_U64},
+    {"offset", LOOM_PARAM_U64},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_bytecode_017 = {
+    .error_id = "ERR_BYTECODE_017",
+    .domain = LOOM_ERROR_DOMAIN_BYTECODE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 17,
+    .summary = "Resource payload failure.",
+    .message_template =
+        "resource {resource_id} payload at offset {offset} could not be read: "
+        "{reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_bytecode_017_params,
+    .param_count = 3,
 };
 
 static const loom_error_param_def_t loom_err_fold_001_params[] = {
@@ -2220,7 +2441,11 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_parse_026,     &loom_err_parse_027,     &loom_err_parse_028,
     &loom_err_parse_029,     &loom_err_parse_030,     &loom_err_parse_031,
     &loom_err_bytecode_001,  &loom_err_bytecode_002,  &loom_err_bytecode_003,
-    &loom_err_bytecode_004,  &loom_err_bytecode_005,  &loom_err_fold_001,
+    &loom_err_bytecode_004,  &loom_err_bytecode_005,  &loom_err_bytecode_006,
+    &loom_err_bytecode_007,  &loom_err_bytecode_008,  &loom_err_bytecode_009,
+    &loom_err_bytecode_010,  &loom_err_bytecode_011,  &loom_err_bytecode_012,
+    &loom_err_bytecode_013,  &loom_err_bytecode_014,  &loom_err_bytecode_015,
+    &loom_err_bytecode_016,  &loom_err_bytecode_017,  &loom_err_fold_001,
     &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
     &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
 };

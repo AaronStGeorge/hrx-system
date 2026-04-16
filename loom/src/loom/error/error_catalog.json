@@ -2614,18 +2614,18 @@
     "params": [
       {
         "name": "offset",
-        "kind": 2,
-        "kind_name": "U32"
+        "kind": 5,
+        "kind_name": "U64"
       },
       {
         "name": "needed_bytes",
-        "kind": 2,
-        "kind_name": "U32"
+        "kind": 5,
+        "kind_name": "U64"
       },
       {
         "name": "available_bytes",
-        "kind": 2,
-        "kind_name": "U32"
+        "kind": 5,
+        "kind_name": "U64"
       }
     ]
   },
@@ -2646,8 +2646,8 @@
       },
       {
         "name": "offset",
-        "kind": 2,
-        "kind_name": "U32"
+        "kind": 5,
+        "kind_name": "U64"
       }
     ]
   },
@@ -2668,8 +2668,342 @@
       },
       {
         "name": "offset",
-        "kind": 2,
-        "kind_name": "U32"
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_006",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid bytecode record field.",
+    "message_template": "invalid field '{field_name}' in {section_name}/{table_name}[{record_index}] at offset {offset}: {reason}",
+    "params": [
+      {
+        "name": "section_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "table_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "record_index",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_007",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid bytecode range.",
+    "message_template": "invalid range '{range_name}' at offset {offset} with length {length}; container length is {container_length}",
+    "params": [
+      {
+        "name": "range_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "length",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "container_length",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_008",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Malformed varint.",
+    "message_template": "malformed varint at offset {offset}: {reason}",
+    "params": [
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_009",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Count exceeds bytecode limit.",
+    "message_template": "{table_name} count {count} exceeds limit {limit}",
+    "params": [
+      {
+        "name": "table_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "count",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "limit",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_010",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid string reference.",
+    "message_template": "invalid string reference in field '{field_name}': id {string_id}, string table has {string_count} entries",
+    "params": [
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "string_id",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "string_count",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_011",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 11,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid enum value.",
+    "message_template": "invalid enum value for field '{field_name}': {actual_value}; valid case count is {case_count}",
+    "params": [
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_value",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "case_count",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_012",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid table reference.",
+    "message_template": "invalid {table_name} reference {ref_id}; table has {table_count} entries",
+    "params": [
+      {
+        "name": "table_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "ref_id",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "table_count",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_013",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 13,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid location record.",
+    "message_template": "invalid location record {location_id} at offset {offset}: {reason}",
+    "params": [
+      {
+        "name": "location_id",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_014",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 14,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid encoding record.",
+    "message_template": "invalid encoding record {encoding_id} at offset {offset}: {reason}",
+    "params": [
+      {
+        "name": "encoding_id",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_015",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 15,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid attribute payload.",
+    "message_template": "invalid attribute payload at offset {offset}: {reason}",
+    "params": [
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_016",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 16,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Invalid IR body.",
+    "message_template": "invalid IR body for symbol '{symbol_name}' at offset {offset}: {reason}",
+    "params": [
+      {
+        "name": "symbol_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BYTECODE_017",
+    "domain": 8,
+    "domain_name": "BYTECODE",
+    "code": 17,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Resource payload failure.",
+    "message_template": "resource {resource_id} payload at offset {offset} could not be read: {reason}",
+    "params": [
+      {
+        "name": "resource_id",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "offset",
+        "kind": 5,
+        "kind_name": "U64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
       }
     ]
   },

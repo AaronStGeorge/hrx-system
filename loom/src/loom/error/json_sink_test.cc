@@ -44,9 +44,7 @@ std::string EmitJson(const loom_diagnostic_t* diagnostic,
                      loom_type_formatter_t type_formatter = {nullptr,
                                                              nullptr}) {
   std::string result;
-  iree_status_t status = EmitJsonStatus(diagnostic, &result, type_formatter);
-  EXPECT_TRUE(iree_status_is_ok(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_OK(EmitJsonStatus(diagnostic, &result, type_formatter));
   return result;
 }
 
@@ -206,6 +204,30 @@ TEST(JsonSink, StructuredStructureError) {
   // U32 params render as numbers.
   EXPECT_NE(json.find("\"actual_count\":3"), std::string::npos);
   EXPECT_NE(json.find("\"expected_count\":2"), std::string::npos);
+}
+
+TEST(JsonSink, StructuredBytecodeRangeUsesU64Params) {
+  loom_diagnostic_param_t params[4] = {
+      loom_param_string(IREE_SV("module[0]")),
+      loom_param_u64(UINT64_C(4294967296)),
+      loom_param_u64(64),
+      loom_param_u64(UINT64_C(4294967297)),
+  };
+
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = &loom_err_bytecode_007;
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.emitter = LOOM_EMITTER_BYTECODE_READER;
+
+  std::string json = EmitJson(&diagnostic);
+
+  EXPECT_NE(json.find("\"domain\":\"BYTECODE\""), std::string::npos);
+  EXPECT_NE(json.find("\"emitter\":\"bytecode_reader\""), std::string::npos);
+  EXPECT_NE(json.find("\"offset\":4294967296"), std::string::npos);
+  EXPECT_NE(json.find("\"length\":64"), std::string::npos);
+  EXPECT_NE(json.find("\"container_length\":4294967297"), std::string::npos);
 }
 
 //===----------------------------------------------------------------------===//
@@ -441,9 +463,8 @@ TEST(JsonSink, RejectsInvalidParamFieldRefKind) {
   diagnostic.param_count = IREE_ARRAYSIZE(params);
 
   std::string json;
-  iree_status_t status = EmitJsonStatus(&diagnostic, &json);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INTERNAL);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL,
+                        EmitJsonStatus(&diagnostic, &json));
 }
 
 TEST(JsonSink, RejectsHighlightWithInvalidParamIndex) {
@@ -466,9 +487,8 @@ TEST(JsonSink, RejectsHighlightWithInvalidParamIndex) {
   diagnostic.highlight_count = IREE_ARRAYSIZE(highlights);
 
   std::string json;
-  iree_status_t status = EmitJsonStatus(&diagnostic, &json);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INTERNAL);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL,
+                        EmitJsonStatus(&diagnostic, &json));
 }
 
 //===----------------------------------------------------------------------===//

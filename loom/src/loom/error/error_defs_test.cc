@@ -32,6 +32,19 @@ TEST(ErrorDefsTest, LookupFold005) {
   EXPECT_EQ(def->param_count, 3);
 }
 
+TEST(ErrorDefsTest, LookupBytecode007) {
+  const loom_error_def_t* def =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7);
+  ASSERT_NE(def, nullptr);
+  EXPECT_EQ(def->domain, LOOM_ERROR_DOMAIN_BYTECODE);
+  EXPECT_EQ(def->code, 7);
+  EXPECT_EQ(def->severity, LOOM_DIAGNOSTIC_ERROR);
+  EXPECT_STREQ(def->summary, "Invalid bytecode range.");
+  ASSERT_EQ(def->param_count, 4);
+  EXPECT_STREQ(def->param_defs[1].name, "offset");
+  EXPECT_EQ(def->param_defs[1].kind, LOOM_PARAM_U64);
+}
+
 TEST(ErrorDefsTest, LookupNonExistentReturnsNull) {
   EXPECT_EQ(loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 999), nullptr);
   EXPECT_EQ(loom_error_def_lookup(LOOM_ERROR_DOMAIN_FOLD, 0), nullptr);
@@ -41,6 +54,8 @@ TEST(ErrorDefsTest, ExternSymbolsAccessible) {
   // Verify that extern declarations in error_defs.inc resolve.
   EXPECT_EQ(&loom_err_type_001,
             loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
+  EXPECT_EQ(&loom_err_bytecode_007,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7));
   EXPECT_EQ(&loom_err_fold_005,
             loom_error_def_lookup(LOOM_ERROR_DOMAIN_FOLD, 5));
   EXPECT_EQ(&loom_err_parse_003,

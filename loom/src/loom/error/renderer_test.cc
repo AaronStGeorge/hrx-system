@@ -114,6 +114,24 @@ TEST(Renderer, StructureOperandCount) {
 }
 
 //===----------------------------------------------------------------------===//
+// Bytecode errors: U64 offsets and lengths
+//===----------------------------------------------------------------------===//
+
+TEST(Renderer, BytecodeRangeUsesU64Params) {
+  loom_diagnostic_param_t params[4] = {
+      loom_param_string(IREE_SV("module[0]")),
+      loom_param_u64(UINT64_C(4294967296)),
+      loom_param_u64(64),
+      loom_param_u64(UINT64_C(4294967297)),
+  };
+
+  std::string message = RenderMessage(&loom_err_bytecode_007, params, 4);
+  EXPECT_EQ(message,
+            "invalid range 'module[0]' at offset 4294967296 with length 64; "
+            "container length is 4294967297");
+}
+
+//===----------------------------------------------------------------------===//
 // Dominance errors: STRING param
 //===----------------------------------------------------------------------===//
 

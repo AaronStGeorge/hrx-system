@@ -37,6 +37,8 @@ static iree_status_t loom_render_param(const loom_diagnostic_param_t* param,
       return loom_output_stream_write_format(stream, "%" PRId64, param->i64);
     case LOOM_PARAM_U32:
       return loom_output_stream_write_format(stream, "%" PRIu32, param->u32);
+    case LOOM_PARAM_U64:
+      return loom_output_stream_write_format(stream, "%" PRIu64, param->u64);
     case LOOM_PARAM_BOOL:
       return loom_output_stream_write_cstring(
           stream, param->boolean ? "true" : "false");

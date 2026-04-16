@@ -67,6 +67,7 @@ typedef struct loom_type_formatter_t {
 //   STRING → raw text
 //   I64    → decimal integer (PRId64)
 //   U32    → decimal unsigned (PRIu32)
+//   U64    → decimal unsigned (PRIu64)
 //   BOOL   → "true" / "false"
 //   TYPE   → type_formatter callback, or "<type>" when .fn is NULL
 //
