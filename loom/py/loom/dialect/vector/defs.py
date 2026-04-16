@@ -60,6 +60,7 @@ from loom.dsl import (
     AttrDef,
     Constraint,
     Dialect,
+    DimIndexInBounds,
     EnumCase,
     EnumDef,
     HasAllStaticRankOneVector,
@@ -699,7 +700,10 @@ vector_concat = Op(
             doc="Axis along which input extents concatenate.",
         ),
     ],
-    constraints=[SameElementType("inputs", "result")],
+    constraints=[
+        SameElementType("inputs", "result"),
+        DimIndexInBounds("result", "axis"),
+    ],
     verify="loom_vector_concat_verify",
     traits=[PURE],
     format=[
@@ -815,6 +819,7 @@ vector_interleave = Op(
     constraints=[
         SameType("even", "odd"),
         SameElementType("even", "result"),
+        DimIndexInBounds("even", "axis"),
     ],
     verify="loom_vector_interleave_verify",
     traits=[PURE],
@@ -857,6 +862,7 @@ vector_deinterleave = Op(
     constraints=[
         SameType("results"),
         SameElementType("source", "results"),
+        DimIndexInBounds("source", "axis"),
     ],
     verify="loom_vector_deinterleave_verify",
     traits=[PURE],

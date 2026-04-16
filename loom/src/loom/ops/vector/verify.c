@@ -1193,14 +1193,7 @@ iree_status_t loom_vector_concat_verify(const loom_module_t* module,
 
   uint8_t result_rank = loom_type_rank(result_type);
   int64_t axis = loom_vector_concat_axis(op);
-  if (axis < 0 || axis >= result_rank) {
-    loom_diagnostic_param_t params[] = {
-        loom_param_i64(axis),
-        loom_param_i64(result_rank),
-    };
-    return loom_vector_emit(emitter, op, &loom_err_subrange_002, params,
-                            IREE_ARRAYSIZE(params));
-  }
+  if (axis < 0 || axis >= result_rank) return iree_ok_status();
 
   bool concat_axis_sum_is_static =
       !loom_type_dim_is_dynamic_at(result_type, (uint8_t)axis);
@@ -1356,14 +1349,7 @@ iree_status_t loom_vector_interleave_verify(const loom_module_t* module,
   }
 
   int64_t axis = loom_vector_interleave_axis(op);
-  if (axis < 0 || axis >= even_rank) {
-    loom_diagnostic_param_t params[] = {
-        loom_param_i64(axis),
-        loom_param_i64(even_rank),
-    };
-    return loom_vector_emit(emitter, op, &loom_err_subrange_002, params,
-                            IREE_ARRAYSIZE(params));
-  }
+  if (axis < 0 || axis >= even_rank) return iree_ok_status();
 
   for (uint8_t i = 0; i < even_rank; ++i) {
     if (i == (uint8_t)axis) continue;
@@ -1419,14 +1405,7 @@ iree_status_t loom_vector_deinterleave_verify(
   }
 
   int64_t axis = loom_vector_deinterleave_axis(op);
-  if (axis < 0 || axis >= source_rank) {
-    loom_diagnostic_param_t params[] = {
-        loom_param_i64(axis),
-        loom_param_i64(source_rank),
-    };
-    return loom_vector_emit(emitter, op, &loom_err_subrange_002, params,
-                            IREE_ARRAYSIZE(params));
-  }
+  if (axis < 0 || axis >= source_rank) return iree_ok_status();
 
   for (uint8_t i = 0; i < source_rank; ++i) {
     if (i == (uint8_t)axis) continue;
