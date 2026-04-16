@@ -312,6 +312,59 @@ class LlvmIrLowerTest : public ::testing::Test {
     iree_io_file_contents_free(object_contents);
   }
 
+  void CompileX86TextToAssembly(const std::string& text,
+                                const iree_string_view_t* extra_arguments,
+                                iree_host_size_t extra_argument_count,
+                                std::string* out_assembly) {
+    ASSERT_NE(out_assembly, nullptr);
+    out_assembly->clear();
+    TempFile input_file(TempPath(".ll"));
+    TempFile bitcode_file(TempPath(".bc"));
+    TempFile assembly_file(TempPath(".s"));
+    IREE_ASSERT_OK(WriteTempFile(input_file.path(), text));
+
+    loom_llvmir_toolchain_t toolchain;
+    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+    iree_status_t status = loom_llvmir_tool_assemble_text_file(
+        &toolchain, StringView(input_file.path()),
+        StringView(bitcode_file.path()), iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    status = loom_llvmir_tool_verify_bitcode_file(
+        &toolchain, StringView(bitcode_file.path()), iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    status = loom_llvmir_tool_compile_assembly_file(
+        &toolchain, StringView(bitcode_file.path()),
+        StringView(assembly_file.path()), extra_arguments, extra_argument_count,
+        iree_allocator_system());
+    if (IsToolUnavailable(status)) {
+      std::string message = StatusToString(status);
+      iree_status_ignore(status);
+      GTEST_SKIP() << message;
+    }
+    IREE_ASSERT_OK(status);
+
+    iree_io_file_contents_t* assembly_contents = NULL;
+    IREE_ASSERT_OK(iree_io_file_contents_read(StringView(assembly_file.path()),
+                                              iree_allocator_system(),
+                                              &assembly_contents));
+    *out_assembly =
+        std::string((const char*)assembly_contents->const_buffer.data,
+                    assembly_contents->const_buffer.data_length);
+    iree_io_file_contents_free(assembly_contents);
+  }
+
   void CompileAmdgpuTextToObjectIfAvailable(const std::string& text) {
     TempFile input_file(TempPath(".ll"));
     TempFile bitcode_file(TempPath(".bc"));
@@ -395,6 +448,70 @@ class LlvmIrLowerTest : public ::testing::Test {
     SetValueName(sum, IREE_SV("sum"));
     IREE_ASSERT_OK(loom_func_return_build(&body_builder, &sum, 1,
                                           LOOM_LOCATION_UNKNOWN, &add_op));
+  }
+
+  void BuildDot2Bf16Function(iree_string_view_t function_name) {
+    loom_type_t v16bf16 = loom_type_shaped_1d(
+        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_BF16, loom_dim_pack_static(16), 0);
+    loom_type_t v8f32 = loom_type_shaped_1d(
+        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(8), 0);
+    loom_symbol_ref_t symbol = MakeSymbol(function_name);
+    loom_type_t arg_types[3] = {v16bf16, v16bf16, v8f32};
+    loom_op_t* func_op = NULL;
+    IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
+                                       arg_types, IREE_ARRAYSIZE(arg_types),
+                                       &v8f32, 1, NULL, 0, NULL, 0,
+                                       LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func = loom_func_like_cast(module_, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+    ASSERT_EQ(arg_count, 3);
+    SetValueName(args[0], IREE_SV("lhs"));
+    SetValueName(args[1], IREE_SV("rhs"));
+    SetValueName(args[2], IREE_SV("acc"));
+
+    loom_builder_t body_builder = BodyBuilder(func_op);
+    loom_op_t* dot_op = NULL;
+    IREE_ASSERT_OK(loom_vector_dot2f_build(&body_builder, args[0], args[1],
+                                           args[2], v8f32,
+                                           LOOM_LOCATION_UNKNOWN, &dot_op));
+    loom_value_id_t dot = loom_vector_dot2f_result(dot_op);
+    SetValueName(dot, IREE_SV("dot"));
+    loom_op_t* return_op = NULL;
+    IREE_ASSERT_OK(loom_func_return_build(&body_builder, &dot, 1,
+                                          LOOM_LOCATION_UNKNOWN, &return_op));
+  }
+
+  void BuildDot4S8S8Function(iree_string_view_t function_name) {
+    loom_type_t v32i8 = loom_type_shaped_1d(
+        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8, loom_dim_pack_static(32), 0);
+    loom_type_t v8i32 = loom_type_shaped_1d(
+        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
+    loom_symbol_ref_t symbol = MakeSymbol(function_name);
+    loom_type_t arg_types[3] = {v32i8, v32i8, v8i32};
+    loom_op_t* func_op = NULL;
+    IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
+                                       arg_types, IREE_ARRAYSIZE(arg_types),
+                                       &v8i32, 1, NULL, 0, NULL, 0,
+                                       LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func = loom_func_like_cast(module_, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+    ASSERT_EQ(arg_count, 3);
+    SetValueName(args[0], IREE_SV("lhs"));
+    SetValueName(args[1], IREE_SV("rhs"));
+    SetValueName(args[2], IREE_SV("acc"));
+
+    loom_builder_t body_builder = BodyBuilder(func_op);
+    loom_op_t* dot_op = NULL;
+    IREE_ASSERT_OK(loom_vector_dot4i_build(
+        &body_builder, LOOM_VECTOR_DOT4I_KIND_S8S8, args[0], args[1], args[2],
+        v8i32, LOOM_LOCATION_UNKNOWN, &dot_op));
+    loom_value_id_t dot = loom_vector_dot4i_result(dot_op);
+    SetValueName(dot, IREE_SV("dot"));
+    loom_op_t* return_op = NULL;
+    IREE_ASSERT_OK(loom_func_return_build(&body_builder, &dot, 1,
+                                          LOOM_LOCATION_UNKNOWN, &return_op));
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -612,63 +729,8 @@ TEST_F(LlvmIrLowerTest, LowersBfloatTypes) {
 }
 
 TEST_F(LlvmIrLowerTest, LowersCpuPackedDotIntrinsics) {
-  loom_type_t v16bf16 = loom_type_shaped_1d(
-      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_BF16, loom_dim_pack_static(16), 0);
-  loom_type_t v8f32 = loom_type_shaped_1d(
-      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(8), 0);
-  loom_symbol_ref_t bf16_symbol = MakeSymbol(IREE_SV("dot2_bf16"));
-  loom_type_t bf16_arg_types[3] = {v16bf16, v16bf16, v8f32};
-  loom_op_t* bf16_func_op = NULL;
-  IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, bf16_symbol, bf16_arg_types,
-      IREE_ARRAYSIZE(bf16_arg_types), &v8f32, 1, NULL, 0, NULL, 0,
-      LOOM_LOCATION_UNKNOWN, &bf16_func_op));
-  loom_func_like_t bf16_func = loom_func_like_cast(module_, bf16_func_op);
-  uint16_t bf16_arg_count = 0;
-  const loom_value_id_t* bf16_args =
-      loom_func_like_arg_ids(bf16_func, &bf16_arg_count);
-  ASSERT_EQ(bf16_arg_count, 3);
-  SetValueName(bf16_args[0], IREE_SV("lhs"));
-  SetValueName(bf16_args[1], IREE_SV("rhs"));
-  SetValueName(bf16_args[2], IREE_SV("acc"));
-  loom_builder_t bf16_body_builder = BodyBuilder(bf16_func_op);
-  loom_op_t* dot_op = NULL;
-  IREE_ASSERT_OK(loom_vector_dot2f_build(&bf16_body_builder, bf16_args[0],
-                                         bf16_args[1], bf16_args[2], v8f32,
-                                         LOOM_LOCATION_UNKNOWN, &dot_op));
-  loom_value_id_t bf16_dot = loom_vector_dot2f_result(dot_op);
-  SetValueName(bf16_dot, IREE_SV("dot"));
-  loom_op_t* return_op = NULL;
-  IREE_ASSERT_OK(loom_func_return_build(&bf16_body_builder, &bf16_dot, 1,
-                                        LOOM_LOCATION_UNKNOWN, &return_op));
-
-  loom_type_t v32i8 = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
-                                          loom_dim_pack_static(32), 0);
-  loom_type_t v8i32 = loom_type_shaped_1d(
-      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
-  loom_symbol_ref_t int8_symbol = MakeSymbol(IREE_SV("dot4_s8s8"));
-  loom_type_t int8_arg_types[3] = {v32i8, v32i8, v8i32};
-  loom_op_t* int8_func_op = NULL;
-  IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, int8_symbol, int8_arg_types,
-      IREE_ARRAYSIZE(int8_arg_types), &v8i32, 1, NULL, 0, NULL, 0,
-      LOOM_LOCATION_UNKNOWN, &int8_func_op));
-  loom_func_like_t int8_func = loom_func_like_cast(module_, int8_func_op);
-  uint16_t int8_arg_count = 0;
-  const loom_value_id_t* int8_args =
-      loom_func_like_arg_ids(int8_func, &int8_arg_count);
-  ASSERT_EQ(int8_arg_count, 3);
-  SetValueName(int8_args[0], IREE_SV("lhs"));
-  SetValueName(int8_args[1], IREE_SV("rhs"));
-  SetValueName(int8_args[2], IREE_SV("acc"));
-  loom_builder_t int8_body_builder = BodyBuilder(int8_func_op);
-  IREE_ASSERT_OK(loom_vector_dot4i_build(
-      &int8_body_builder, LOOM_VECTOR_DOT4I_KIND_S8S8, int8_args[0],
-      int8_args[1], int8_args[2], v8i32, LOOM_LOCATION_UNKNOWN, &dot_op));
-  loom_value_id_t int8_dot = loom_vector_dot4i_result(dot_op);
-  SetValueName(int8_dot, IREE_SV("dot"));
-  IREE_ASSERT_OK(loom_func_return_build(&int8_body_builder, &int8_dot, 1,
-                                        LOOM_LOCATION_UNKNOWN, &return_op));
+  BuildDot2Bf16Function(IREE_SV("dot2_bf16"));
+  BuildDot4S8S8Function(IREE_SV("dot4_s8s8"));
 
   loom_llvmir_target_profile_t profile = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
@@ -700,37 +762,33 @@ TEST_F(LlvmIrLowerTest, LowersCpuPackedDotIntrinsics) {
 }
 
 TEST_F(LlvmIrLowerTest, RejectsCpuPackedDotWithoutTargetFeatures) {
-  loom_type_t v32i8 = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
-                                          loom_dim_pack_static(32), 0);
-  loom_type_t v8i32 = loom_type_shaped_1d(
-      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
-  loom_symbol_ref_t symbol = MakeSymbol(IREE_SV("dot4_s8s8"));
-  loom_type_t arg_types[3] = {v32i8, v32i8, v8i32};
-  loom_op_t* func_op = NULL;
-  IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
-                                     arg_types, IREE_ARRAYSIZE(arg_types),
-                                     &v8i32, 1, NULL, 0, NULL, 0,
-                                     LOOM_LOCATION_UNKNOWN, &func_op));
-  loom_func_like_t func = loom_func_like_cast(module_, func_op);
-  uint16_t arg_count = 0;
-  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
-  ASSERT_EQ(arg_count, 3);
-
-  loom_builder_t body_builder = BodyBuilder(func_op);
-  loom_op_t* dot_op = NULL;
-  IREE_ASSERT_OK(loom_vector_dot4i_build(
-      &body_builder, LOOM_VECTOR_DOT4I_KIND_S8S8, args[0], args[1], args[2],
-      v8i32, LOOM_LOCATION_UNKNOWN, &dot_op));
-  loom_value_id_t dot = loom_vector_dot4i_result(dot_op);
-  loom_op_t* return_op = NULL;
-  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &dot, 1,
-                                        LOOM_LOCATION_UNKNOWN, &return_op));
+  BuildDot4S8S8Function(IREE_SV("dot4_s8s8"));
 
   loom_llvmir_module_t* lowered = NULL;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_UNIMPLEMENTED,
       LowerModule(loom_llvmir_target_profile_x86_64_object(), &lowered));
   EXPECT_EQ(lowered, nullptr);
+}
+
+TEST_F(LlvmIrLowerTest, CompilesCpuPackedBfloatDotToX86Assembly) {
+  BuildDot2Bf16Function(IREE_SV("dot2_bf16"));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits =
+      LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_BF16 |
+      LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_VL;
+  std::string text = LowerToText(&profile);
+
+  iree_string_view_t extra_arguments[] = {
+      IREE_SV("-mtriple=x86_64-unknown-linux-gnu"),
+      IREE_SV("-mattr=+avx512bf16,+avx512vl"),
+  };
+  std::string assembly;
+  CompileX86TextToAssembly(text, extra_arguments,
+                           IREE_ARRAYSIZE(extra_arguments), &assembly);
+  EXPECT_NE(assembly.find("vdpbf16ps"), std::string::npos) << assembly;
 }
 
 TEST_F(LlvmIrLowerTest, LowersVectorNumericOps) {

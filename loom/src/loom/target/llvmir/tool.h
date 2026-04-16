@@ -111,6 +111,15 @@ iree_status_t loom_llvmir_tool_compile_object_file(
     iree_string_view_t output_path, const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator);
 
+// Runs `llc <input_path> -filetype=asm -o <output_path>`.
+//
+// |extra_arguments| are appended after the standard arguments and may include
+// target-specific flags such as `-mattr=+avx512bf16`.
+iree_status_t loom_llvmir_tool_compile_assembly_file(
+    const loom_llvmir_toolchain_t* toolchain, iree_string_view_t input_path,
+    iree_string_view_t output_path, const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator);
+
 // Writes |bitcode| to a temporary file, runs `llc <temp> -filetype=obj`, and
 // returns the produced object bytes.
 //
@@ -121,6 +130,17 @@ iree_status_t loom_llvmir_tool_compile_object(
     const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
     loom_llvmir_tool_output_t* out_object);
+
+// Writes |bitcode| to a temporary file, runs `llc <temp> -filetype=asm`, and
+// returns the produced assembly text.
+//
+// |extra_arguments| are appended after the standard arguments and may include
+// target-specific flags such as `-mattr=+avx512bf16`.
+iree_status_t loom_llvmir_tool_compile_assembly(
+    const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvmir_tool_output_t* out_assembly);
 
 #ifdef __cplusplus
 }

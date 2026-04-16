@@ -331,6 +331,56 @@ TEST(LlvmIrToolTest, CompilesX86ObjectBytes) {
   loom_llvmir_tool_output_deinitialize(&object, iree_allocator_system());
 }
 
+TEST(LlvmIrToolTest, CompilesX86Assembly) {
+  std::string bitcode;
+  IREE_ASSERT_OK(
+      BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
+  TempFile bitcode_file(TempPath(".bc"));
+  TempFile assembly_file(TempPath(".s"));
+  IREE_ASSERT_OK(WriteTempFile(bitcode_file.path(), bitcode));
+
+  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
+  iree_status_t status = loom_llvmir_tool_compile_assembly_file(
+      &toolchain, StringView(bitcode_file.path()),
+      StringView(assembly_file.path()), NULL, 0, iree_allocator_system());
+  if (IsToolUnavailable(status)) {
+    std::string message = StatusToString(status);
+    iree_status_ignore(status);
+    GTEST_SKIP() << message;
+  }
+  IREE_ASSERT_OK(status);
+
+  iree_io_file_contents_t* contents = NULL;
+  IREE_ASSERT_OK(ReadTempFile(assembly_file.path(), &contents));
+  std::string assembly((const char*)contents->const_buffer.data,
+                       contents->const_buffer.data_length);
+  EXPECT_NE(assembly.find("vadd4_object"), std::string::npos) << assembly;
+  iree_io_file_contents_free(contents);
+}
+
+TEST(LlvmIrToolTest, CompilesX86AssemblyBytes) {
+  std::string bitcode;
+  IREE_ASSERT_OK(
+      BuildBitcodeFixture(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4, &bitcode));
+
+  loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
+  loom_llvmir_tool_output_t assembly = {};
+  iree_status_t status = loom_llvmir_tool_compile_assembly(
+      &toolchain, iree_make_const_byte_span(bitcode.data(), bitcode.size()),
+      NULL, 0, iree_allocator_system(), &assembly);
+  if (IsToolUnavailable(status)) {
+    std::string message = StatusToString(status);
+    iree_status_ignore(status);
+    GTEST_SKIP() << message;
+  }
+  IREE_ASSERT_OK(status);
+
+  std::string assembly_text = ToString(assembly);
+  EXPECT_NE(assembly_text.find("vadd4_object"), std::string::npos)
+      << assembly_text;
+  loom_llvmir_tool_output_deinitialize(&assembly, iree_allocator_system());
+}
+
 TEST(LlvmIrToolTest, CompilesAmdgpuObjectWhenTargetIsRegistered) {
   loom_llvmir_toolchain_t toolchain = ToolchainFromEnvironment();
   loom_llvmir_tool_output_t version_text = {};

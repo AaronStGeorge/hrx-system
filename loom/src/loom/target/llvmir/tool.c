@@ -995,9 +995,10 @@ iree_status_t loom_llvmir_tool_verify_bitcode_file(
       allocator, IREE_SV("verifying LLVM bitcode"));
 }
 
-iree_status_t loom_llvmir_tool_compile_object_file(
+static iree_status_t loom_llvmir_tool_compile_file(
     const loom_llvmir_toolchain_t* toolchain, iree_string_view_t input_path,
-    iree_string_view_t output_path, const iree_string_view_t* extra_arguments,
+    iree_string_view_t output_path, iree_string_view_t file_type_argument,
+    iree_string_view_t action, const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator) {
   if (extra_arguments == NULL && extra_argument_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -1020,30 +1021,52 @@ iree_status_t loom_llvmir_tool_compile_object_file(
   IREE_RETURN_IF_ERROR(
       iree_allocator_malloc(allocator, argument_size, (void**)&arguments));
   arguments[0] = input_path;
-  arguments[1] = IREE_SV("-filetype=obj");
+  arguments[1] = file_type_argument;
   arguments[2] = IREE_SV("-o");
   arguments[3] = output_path;
   for (iree_host_size_t i = 0; i < extra_argument_count; ++i) {
     arguments[i + 4] = extra_arguments[i];
   }
 
-  iree_status_t status = loom_llvmir_tool_run_checked(
-      toolchain, LOOM_LLVMIR_TOOL_LLC, arguments, argument_count, allocator,
-      IREE_SV("compiling LLVM bitcode to an object file"));
+  iree_status_t status =
+      loom_llvmir_tool_run_checked(toolchain, LOOM_LLVMIR_TOOL_LLC, arguments,
+                                   argument_count, allocator, action);
   iree_allocator_free(allocator, arguments);
   return status;
 }
 
-iree_status_t loom_llvmir_tool_compile_object(
+iree_status_t loom_llvmir_tool_compile_object_file(
+    const loom_llvmir_toolchain_t* toolchain, iree_string_view_t input_path,
+    iree_string_view_t output_path, const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator) {
+  return loom_llvmir_tool_compile_file(
+      toolchain, input_path, output_path, IREE_SV("-filetype=obj"),
+      IREE_SV("compiling LLVM bitcode to an object file"), extra_arguments,
+      extra_argument_count, allocator);
+}
+
+iree_status_t loom_llvmir_tool_compile_assembly_file(
+    const loom_llvmir_toolchain_t* toolchain, iree_string_view_t input_path,
+    iree_string_view_t output_path, const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator) {
+  return loom_llvmir_tool_compile_file(
+      toolchain, input_path, output_path, IREE_SV("-filetype=asm"),
+      IREE_SV("compiling LLVM bitcode to assembly"), extra_arguments,
+      extra_argument_count, allocator);
+}
+
+static iree_status_t loom_llvmir_tool_compile_output(
     const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    const char* output_suffix, iree_string_view_t file_type_argument,
+    iree_string_view_t action, const char* missing_output_message,
     const iree_string_view_t* extra_arguments,
     iree_host_size_t extra_argument_count, iree_allocator_t allocator,
-    loom_llvmir_tool_output_t* out_object) {
-  if (out_object == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "LLVM object output is required");
+    loom_llvmir_tool_output_t* out_output) {
+  if (out_output == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "%s",
+                            missing_output_message);
   }
-  *out_object = (loom_llvmir_tool_output_t){0};
+  *out_output = (loom_llvmir_tool_output_t){0};
   if (bitcode.data == NULL && bitcode.data_length != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "LLVM bitcode data is required");
@@ -1057,23 +1080,47 @@ iree_status_t loom_llvmir_tool_compile_object(
   loom_llvmir_temp_file_t output_file = {0};
   iree_status_t status = loom_llvmir_temp_file_allocate("bc", &input_file);
   if (iree_status_is_ok(status)) {
-    status = loom_llvmir_temp_file_allocate("obj", &output_file);
+    status = loom_llvmir_temp_file_allocate(output_suffix, &output_file);
   }
   if (iree_status_is_ok(status)) {
     status = iree_io_file_contents_write(
         loom_llvmir_temp_file_path(&input_file), bitcode, allocator);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_llvmir_tool_compile_object_file(
+    status = loom_llvmir_tool_compile_file(
         toolchain, loom_llvmir_temp_file_path(&input_file),
-        loom_llvmir_temp_file_path(&output_file), extra_arguments,
-        extra_argument_count, allocator);
+        loom_llvmir_temp_file_path(&output_file), file_type_argument, action,
+        extra_arguments, extra_argument_count, allocator);
   }
   if (iree_status_is_ok(status)) {
     status = loom_llvmir_tool_output_read_file(
-        loom_llvmir_temp_file_path(&output_file), allocator, out_object);
+        loom_llvmir_temp_file_path(&output_file), allocator, out_output);
   }
   loom_llvmir_temp_file_deinitialize(&output_file);
   loom_llvmir_temp_file_deinitialize(&input_file);
   return status;
+}
+
+iree_status_t loom_llvmir_tool_compile_object(
+    const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvmir_tool_output_t* out_object) {
+  return loom_llvmir_tool_compile_output(
+      toolchain, bitcode, "obj", IREE_SV("-filetype=obj"),
+      IREE_SV("compiling LLVM bitcode to an object file"),
+      "LLVM object output is required", extra_arguments, extra_argument_count,
+      allocator, out_object);
+}
+
+iree_status_t loom_llvmir_tool_compile_assembly(
+    const loom_llvmir_toolchain_t* toolchain, iree_const_byte_span_t bitcode,
+    const iree_string_view_t* extra_arguments,
+    iree_host_size_t extra_argument_count, iree_allocator_t allocator,
+    loom_llvmir_tool_output_t* out_assembly) {
+  return loom_llvmir_tool_compile_output(
+      toolchain, bitcode, "asm", IREE_SV("-filetype=asm"),
+      IREE_SV("compiling LLVM bitcode to assembly"),
+      "LLVM assembly output is required", extra_arguments, extra_argument_count,
+      allocator, out_assembly);
 }
