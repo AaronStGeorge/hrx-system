@@ -2306,6 +2306,66 @@ iree_status_t loom_block_add_arg(loom_module_t* module, loom_block_t* block,
   return iree_ok_status();
 }
 
+iree_status_t loom_block_remove_arg(loom_module_t* module, loom_block_t* block,
+                                    uint16_t arg_index) {
+  if (arg_index >= block->arg_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "block argument index %u out of range for %u argument(s)",
+        (unsigned)arg_index, (unsigned)block->arg_count);
+  }
+
+  loom_value_id_t value_id = block->arg_ids[arg_index];
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "block argument %u value %%%u is invalid",
+                            (unsigned)arg_index, (unsigned)value_id);
+  }
+
+  loom_value_t* value = loom_module_value(module, value_id);
+  if (!loom_value_is_block_arg(value) || loom_value_def_block(value) != block ||
+      loom_value_def_index(value) != arg_index) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "value %%%u is not block argument %u of the target block",
+        (unsigned)value_id, (unsigned)arg_index);
+  }
+  if (value->use_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "cannot remove block argument %%%u with %u operand use(s)",
+        (unsigned)value_id, (unsigned)value->use_count);
+  }
+  if (loom_module_value_has_type_uses(module, value_id)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "cannot remove block argument %%%u with incoming type use(s)",
+        (unsigned)value_id);
+  }
+
+  loom_module_drop_value_type_uses(module, value_id);
+  value->flags &= ~LOOM_VALUE_FLAG_BLOCK_ARG;
+  value->def = loom_value_def_make_none();
+
+  for (uint16_t i = (uint16_t)(arg_index + 1); i < block->arg_count; ++i) {
+    loom_value_id_t shifted_id = block->arg_ids[i];
+    block->arg_ids[i - 1] = shifted_id;
+    if (shifted_id == LOOM_VALUE_ID_INVALID ||
+        shifted_id >= module->values.count) {
+      continue;
+    }
+    loom_value_t* shifted = loom_module_value(module, shifted_id);
+    if (loom_value_is_block_arg(shifted) &&
+        loom_value_def_block(shifted) == block) {
+      shifted->def = loom_value_def_make_block(block, (uint16_t)(i - 1));
+    }
+  }
+
+  --block->arg_count;
+  block->arg_ids[block->arg_count] = LOOM_VALUE_ID_INVALID;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Block op insertion
 //===----------------------------------------------------------------------===//

@@ -135,6 +135,72 @@ TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, BlockRemoveArgCompactsDefinitions) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_block_t* block = loom_module_block(module);
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t dim = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, index_type, &dim));
+
+  loom_value_id_t first = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, i32_type, &first));
+  IREE_ASSERT_OK(loom_block_add_arg(module, block, first));
+
+  loom_type_t removed_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_dynamic(dim), 0);
+  loom_value_id_t removed = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, removed_type, &removed));
+  IREE_ASSERT_OK(loom_block_add_arg(module, block, removed));
+  EXPECT_TRUE(loom_module_value_has_type_uses(module, dim));
+
+  loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, i32_type, &shifted));
+  IREE_ASSERT_OK(loom_block_add_arg(module, block, shifted));
+
+  IREE_ASSERT_OK(loom_block_remove_arg(module, block, 1));
+
+  EXPECT_EQ(block->arg_count, 2u);
+  EXPECT_EQ(loom_block_arg_id(block, 0), first);
+  EXPECT_EQ(loom_block_arg_id(block, 1), shifted);
+  EXPECT_FALSE(loom_value_is_block_arg(loom_module_value(module, removed)));
+  EXPECT_EQ(loom_value_def_block(loom_module_value(module, first)), block);
+  EXPECT_EQ(loom_value_def_index(loom_module_value(module, first)), 0u);
+  EXPECT_EQ(loom_value_def_block(loom_module_value(module, shifted)), block);
+  EXPECT_EQ(loom_value_def_index(loom_module_value(module, shifted)), 1u);
+  EXPECT_FALSE(loom_module_value_has_type_uses(module, dim));
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, BlockRemoveArgRejectsLiveUses) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_block_t* block = loom_module_block(module);
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, i32_type, &arg));
+  IREE_ASSERT_OK(loom_block_add_arg(module, block, arg));
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, block, &builder);
+  loom_op_t* add = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder, arg, arg, i32_type,
+                                      LOOM_LOCATION_UNKNOWN, &add));
+
+  iree_status_t status = loom_block_remove_arg(module, block, 0);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+
+  loom_module_free(module);
+}
+
 //===----------------------------------------------------------------------===//
 // Value definition
 //===----------------------------------------------------------------------===//

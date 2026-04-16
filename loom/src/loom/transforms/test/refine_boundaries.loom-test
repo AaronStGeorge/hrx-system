@@ -25,7 +25,7 @@ func.def public @entry() -> (index) {
 }
 
 // ----
-func.def @private_extent_identity(%n: index) -> (index) {
+func.def @private_extent_identity() -> (index) {
   %13 = index.constant 32 : index
   func.return %13 : index
 }
@@ -143,7 +143,7 @@ func.def public @call_same_actual(%n: index) -> (index) {
 }
 
 // ----
-func.def @same_actual_arguments(%lhs: index, %rhs: index) -> (index) {
+func.def @same_actual_arguments() -> (index) {
   %delta = index.constant 0 : index
   func.return %delta : index
 }
@@ -168,7 +168,7 @@ func.def public @call_private_exact_arg_return() -> (index) {
 }
 
 // ----
-func.def @private_exact_arg_return(%n: index) -> (index) {
+func.def @private_exact_arg_return() -> (index) {
   %5 = index.constant 7 : index
   func.return %5 : index
 }
@@ -193,7 +193,7 @@ func.def public @call_same_actual_direct_return(%n: index) -> (index) {
 }
 
 // ----
-func.def @same_actual_direct_return(%lhs: index, %rhs: index) -> (index) {
+func.def @same_actual_direct_return() -> (index) {
   %delta = index.constant 0 : index
   func.return %delta : index
 }
@@ -281,4 +281,56 @@ func.def public @call_conflicting_actuals(%x: index, %y: index) -> (index, index
   %same = func.call pure @conflicting_actual_arguments(%x, %x) : (index, index) -> (index)
   %different = func.call pure @conflicting_actual_arguments(%x, %y) : (index, index) -> (index)
   func.return %same, %different : index, index
+}
+
+// ====
+
+// Unused private callee arguments are removed from both the callee entry block
+// and every direct call site. The side effect keeps the call live so the test
+// exercises operand filtering instead of only DCE of the call.
+func.def @effectful_use_first(%x: index, %dead: index) {
+  test.use %x : index
+  func.return
+}
+
+func.def public @call_effectful_use_first(%x: index, %y: index) {
+  func.call @effectful_use_first(%x, %y) : (index, index)
+  func.return
+}
+
+// ----
+func.def @effectful_use_first(%x: index) {
+  test.use %x : index
+  func.return
+}
+
+func.def public @call_effectful_use_first(%x: index, %y: index) {
+  func.call @effectful_use_first(%x) : (index)
+  func.return
+}
+
+// ====
+
+// Tied call operands are not pruned, and their operand indices are remapped
+// when earlier arguments disappear. Return forwarding must not replace the tied
+// result with the consumed operand value.
+func.def @effectful_return_buffer(%dead: index, %buffer: buffer) -> (buffer) {
+  test.use %buffer : buffer
+  func.return %buffer : buffer
+}
+
+func.def public @call_effectful_return_buffer(%dead: index, %buffer: buffer) -> (buffer) {
+  %result = func.call @effectful_return_buffer(%dead, %buffer) : (index, buffer) -> (%buffer as buffer)
+  func.return %result : buffer
+}
+
+// ----
+func.def @effectful_return_buffer(%buffer: buffer) -> (buffer) {
+  test.use %buffer : buffer
+  func.return %buffer : buffer
+}
+
+func.def public @call_effectful_return_buffer(%dead: index, %buffer: buffer) -> (buffer) {
+  %result = func.call @effectful_return_buffer(%buffer) : (buffer) -> (%buffer as buffer)
+  func.return %result : buffer
 }
