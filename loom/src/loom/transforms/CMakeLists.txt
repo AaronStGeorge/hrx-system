@@ -58,6 +58,7 @@ loom_cc_library(
     ::rewriter
     ::type_propagation
     iree::base
+    loom::src::loom::analysis::condition_facts
     loom::src::loom::analysis::symbolic_expr
     loom::src::loom::ir
     loom::src::loom::ir::facts

@@ -64,6 +64,23 @@ func.def @cmpi_range_proof(%x: i32, %y: i32) -> (i1, i1) {
 
 // ====
 
+// cmpi uses symbolic linear cancellation for relation proofs.
+func.def @cmpi_symbolic_order(%x: i32) -> (i1) {
+  %c4 = scalar.constant 4 : i32
+  %c8 = scalar.constant 8 : i32
+  %lhs = scalar.addi %x, %c4 : i32
+  %rhs = scalar.addi %x, %c8 : i32
+  %r = scalar.cmpi slt, %lhs, %rhs : i32
+  func.return %r : i1
+}
+// ----
+func.def @cmpi_symbolic_order(%x: i32) -> (i1) {
+  %r = scalar.constant true : i1
+  func.return %r : i1
+}
+
+// ====
+
 // cmpf same-value proofs require nnan; NaN-sensitive forms stay conservative.
 func.def @cmpf_same_value(%x: f32) -> (i1, i1, i1) {
   %eq = scalar.cmpf<nnan> oeq, %x, %x : f32

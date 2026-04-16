@@ -26,6 +26,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/integer_relation.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/ir.h"
 #include "loom/ir/module.h"
@@ -112,27 +113,6 @@ typedef enum loom_symbolic_proof_result_e {
   // The relation is proven false.
   LOOM_SYMBOLIC_PROOF_FALSE = 2,
 } loom_symbolic_proof_result_t;
-
-// Integer relations over two symbolic SSA values.
-typedef enum loom_symbolic_integer_relation_e {
-  // left == right.
-  LOOM_SYMBOLIC_INTEGER_RELATION_EQ = 0,
-
-  // left != right.
-  LOOM_SYMBOLIC_INTEGER_RELATION_NE = 1,
-
-  // left < right.
-  LOOM_SYMBOLIC_INTEGER_RELATION_LT = 2,
-
-  // left <= right.
-  LOOM_SYMBOLIC_INTEGER_RELATION_LE = 3,
-
-  // left > right.
-  LOOM_SYMBOLIC_INTEGER_RELATION_GT = 4,
-
-  // left >= right.
-  LOOM_SYMBOLIC_INTEGER_RELATION_GE = 5,
-} loom_symbolic_integer_relation_t;
 
 // Compact replacement form for a symbolic value difference.
 typedef enum loom_symbolic_value_difference_kind_e {

@@ -39,6 +39,41 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "condition_facts",
+    srcs = ["condition_facts.c"],
+    hdrs = ["condition_facts.h"],
+    deps = [
+        ":integer_relation",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "condition_facts_test",
+    srcs = ["condition_facts_test.cc"],
+    deps = [
+        ":condition_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "integer_relation",
+    hdrs = ["integer_relation.h"],
+)
+
+loom_cc_library(
     name = "loop_domain",
     srcs = ["loop_domain.c"],
     hdrs = ["loop_domain.h"],
@@ -117,6 +152,7 @@ loom_cc_library(
     srcs = ["symbolic_expr.c"],
     hdrs = ["symbolic_expr.h"],
     deps = [
+        ":integer_relation",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops/index",

@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/analysis/condition_facts.h"
 #include "loom/analysis/symbolic_expr.h"
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
@@ -430,53 +431,6 @@ static iree_status_t loom_canonicalize_try_elide_empty_vector_op(
   return iree_ok_status();
 }
 
-static bool loom_canonicalize_symbolic_relation_from_index_predicate(
-    loom_rewriter_t* rewriter, uint8_t predicate, loom_value_id_t lhs,
-    loom_value_id_t rhs, loom_symbolic_integer_relation_t* out_relation) {
-  switch ((loom_index_cmp_predicate_t)predicate) {
-    case LOOM_INDEX_CMP_PREDICATE_EQ:
-      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
-      return true;
-    case LOOM_INDEX_CMP_PREDICATE_NE:
-      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_NE;
-      return true;
-    case LOOM_INDEX_CMP_PREDICATE_SLT:
-      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT;
-      return true;
-    case LOOM_INDEX_CMP_PREDICATE_SLE:
-      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LE;
-      return true;
-    case LOOM_INDEX_CMP_PREDICATE_SGT:
-      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GT;
-      return true;
-    case LOOM_INDEX_CMP_PREDICATE_SGE:
-      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GE;
-      return true;
-    case LOOM_INDEX_CMP_PREDICATE_ULT:
-    case LOOM_INDEX_CMP_PREDICATE_ULE:
-    case LOOM_INDEX_CMP_PREDICATE_UGT:
-    case LOOM_INDEX_CMP_PREDICATE_UGE:
-      if (!loom_value_facts_is_non_negative(
-              loom_rewriter_value_facts(rewriter, lhs)) ||
-          !loom_value_facts_is_non_negative(
-              loom_rewriter_value_facts(rewriter, rhs))) {
-        return false;
-      }
-      if (predicate == LOOM_INDEX_CMP_PREDICATE_ULT) {
-        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT;
-      } else if (predicate == LOOM_INDEX_CMP_PREDICATE_ULE) {
-        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LE;
-      } else if (predicate == LOOM_INDEX_CMP_PREDICATE_UGT) {
-        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GT;
-      } else {
-        *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GE;
-      }
-      return true;
-    default:
-      return false;
-  }
-}
-
 static iree_status_t loom_canonicalize_try_symbolic_index_sub(
     loom_rewriter_t* rewriter, loom_symbolic_expr_context_t* expression_context,
     loom_op_t* op, bool* out_changed) {
@@ -514,23 +468,35 @@ static iree_status_t loom_canonicalize_try_symbolic_index_sub(
   }
 }
 
-static iree_status_t loom_canonicalize_try_symbolic_index_cmp(
+static iree_status_t loom_canonicalize_try_symbolic_integer_cmp(
     loom_rewriter_t* rewriter, loom_symbolic_expr_context_t* expression_context,
     loom_op_t* op, bool* out_changed) {
   *out_changed = false;
-  if (!loom_index_cmp_isa(op)) return iree_ok_status();
+  if (!loom_index_cmp_isa(op) && !loom_scalar_cmpi_isa(op)) {
+    return iree_ok_status();
+  }
 
-  loom_value_id_t lhs = loom_index_cmp_lhs(op);
-  loom_value_id_t rhs = loom_index_cmp_rhs(op);
-  loom_symbolic_integer_relation_t relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
-  if (!loom_canonicalize_symbolic_relation_from_index_predicate(
-          rewriter, loom_index_cmp_predicate(op), lhs, rhs, &relation)) {
+  loom_condition_integer_relation_t relation_storage[1];
+  loom_condition_fact_set_t condition_facts;
+  loom_condition_fact_set_initialize(
+      relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
+  IREE_RETURN_IF_ERROR(loom_condition_facts_query(
+      rewriter->module, &rewriter->fact_table, loom_op_const_results(op)[0],
+      /*assumed_truth=*/true, &condition_facts));
+  if (condition_facts.integer_relation_count != 1) {
+    return iree_ok_status();
+  }
+  const loom_condition_integer_relation_t* relation =
+      &condition_facts.integer_relations[0];
+  if (relation->left.kind != LOOM_CONDITION_INTEGER_OPERAND_VALUE ||
+      relation->right.kind != LOOM_CONDITION_INTEGER_OPERAND_VALUE) {
     return iree_ok_status();
   }
 
   loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
   IREE_RETURN_IF_ERROR(loom_symbolic_expr_prove_value_relation(
-      expression_context, relation, lhs, rhs, &proof));
+      expression_context, relation->relation, relation->left.value_id,
+      relation->right.value_id, &proof));
   if (proof == LOOM_SYMBOLIC_PROOF_UNKNOWN) return iree_ok_status();
 
   IREE_RETURN_IF_ERROR(loom_canonicalize_replace_single_result_with_exact_i64(
@@ -539,7 +505,7 @@ static iree_status_t loom_canonicalize_try_symbolic_index_cmp(
   return iree_ok_status();
 }
 
-static iree_status_t loom_canonicalize_try_symbolic_index_cleanup(
+static iree_status_t loom_canonicalize_try_symbolic_integer_cleanup(
     loom_rewriter_t* rewriter, loom_symbolic_expr_context_t* expression_context,
     loom_op_t* op, bool* out_changed) {
   *out_changed = false;
@@ -548,8 +514,8 @@ static iree_status_t loom_canonicalize_try_symbolic_index_cleanup(
       rewriter, expression_context, op, out_changed));
   if (*out_changed) return iree_ok_status();
 
-  return loom_canonicalize_try_symbolic_index_cmp(rewriter, expression_context,
-                                                  op, out_changed);
+  return loom_canonicalize_try_symbolic_integer_cmp(
+      rewriter, expression_context, op, out_changed);
 }
 
 struct loom_canonicalizer_state_t {
@@ -766,7 +732,7 @@ iree_status_t loom_canonicalizer_run_function(
       // op-local patterns.
       bool symbolic_changed = false;
       rewriter->flags = 0;
-      status = loom_canonicalize_try_symbolic_index_cleanup(
+      status = loom_canonicalize_try_symbolic_integer_cleanup(
           rewriter, &expression_context, op, &symbolic_changed);
       if (!iree_status_is_ok(status)) break;
       if (symbolic_changed) {

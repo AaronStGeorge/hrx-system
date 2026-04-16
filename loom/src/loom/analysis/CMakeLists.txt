@@ -42,6 +42,50 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    condition_facts
+  HDRS
+    "condition_facts.h"
+  SRCS
+    "condition_facts.c"
+  DEPS
+    ::integer_relation
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    condition_facts_test
+  SRCS
+    "condition_facts_test.cc"
+  DEPS
+    ::condition_facts
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+    loom::src::loom::util::fact_table
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
+    integer_relation
+  HDRS
+    "integer_relation.h"
+  DEPS
+
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     loop_domain
   HDRS
     "loop_domain.h"
@@ -134,6 +178,7 @@ loom_cc_library(
   SRCS
     "symbolic_expr.c"
   DEPS
+    ::integer_relation
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
