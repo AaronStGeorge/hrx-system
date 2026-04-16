@@ -113,6 +113,31 @@ static inline loom_type_t loom_block_arg_type(const loom_module_t* module,
 iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
                                        loom_value_id_t* out_value_id);
 
+// Attaches leading source comments to |op|. Comment payloads are the exact
+// source bytes after each leading // marker and are copied into |module|.
+iree_status_t loom_module_attach_op_comments(loom_module_t* module,
+                                             const loom_op_t* op,
+                                             const iree_string_view_t* comments,
+                                             iree_host_size_t comment_count);
+
+// Attaches leading source comments to |block|. Only explicit block labels need
+// comments; unlabeled entry blocks leave comments attached to the following op.
+iree_status_t loom_module_attach_block_comments(
+    loom_module_t* module, const loom_block_t* block,
+    const iree_string_view_t* comments, iree_host_size_t comment_count);
+
+// Looks up leading source comments attached to |op|. Returns NULL when |op| has
+// no comments and sets |out_comment_count| to zero.
+const iree_string_view_t* loom_module_op_comments(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_host_size_t* out_comment_count);
+
+// Looks up leading source comments attached to |block|. Returns NULL when
+// |block| has no comments and sets |out_comment_count| to zero.
+const iree_string_view_t* loom_module_block_comments(
+    const loom_module_t* module, const loom_block_t* block,
+    iree_host_size_t* out_comment_count);
+
 // Rebuilds the dense type-use side table by walking all value types.
 //
 // Most construction paths maintain the table incrementally, but bulk readers

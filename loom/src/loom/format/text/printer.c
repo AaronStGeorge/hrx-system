@@ -118,6 +118,34 @@ static iree_status_t loom_print_indent(loom_print_context_t* ctx) {
   return iree_ok_status();
 }
 
+static iree_status_t loom_print_leading_comments(
+    loom_print_context_t* ctx, const iree_string_view_t* comments,
+    iree_host_size_t comment_count) {
+  for (iree_host_size_t i = 0; i < comment_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "//"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(ctx->stream, comments[i]));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_print_op_comments(loom_print_context_t* ctx,
+                                            const loom_op_t* op) {
+  iree_host_size_t comment_count = 0;
+  const iree_string_view_t* comments =
+      loom_module_op_comments(ctx->module, op, &comment_count);
+  return loom_print_leading_comments(ctx, comments, comment_count);
+}
+
+static iree_status_t loom_print_block_comments(loom_print_context_t* ctx,
+                                               const loom_block_t* block) {
+  iree_host_size_t comment_count = 0;
+  const iree_string_view_t* comments =
+      loom_module_block_comments(ctx->module, block, &comment_count);
+  return loom_print_leading_comments(ctx, comments, comment_count);
+}
+
 // Forward declaration — defined after the type printing section.
 static iree_status_t loom_print_attr(loom_output_stream_t* stream,
                                      const loom_attribute_t* attr,
@@ -2099,6 +2127,7 @@ static iree_status_t loom_print_region_body(
     // Print block label if present: ^label(%arg: type, ...):
     if (block->label_id != LOOM_STRING_ID_INVALID &&
         block->label_id < ctx->module->strings.count) {
+      IREE_RETURN_IF_ERROR(loom_print_block_comments(ctx, block));
       IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '^'));
       IREE_RETURN_IF_ERROR(loom_output_stream_write(
@@ -2150,6 +2179,7 @@ static iree_status_t loom_print_region_body(
         }
       }
       printed_any = true;
+      IREE_RETURN_IF_ERROR(loom_print_op_comments(ctx, current_op));
       IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
       IREE_RETURN_IF_ERROR(loom_print_op(ctx, current_op));
     }
@@ -2165,6 +2195,7 @@ static iree_status_t loom_print_module_body(loom_print_context_t* ctx,
 
     if (block->label_id != LOOM_STRING_ID_INVALID &&
         block->label_id < ctx->module->strings.count) {
+      IREE_RETURN_IF_ERROR(loom_print_block_comments(ctx, block));
       IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '^'));
       IREE_RETURN_IF_ERROR(loom_output_stream_write(
@@ -2208,6 +2239,7 @@ static iree_status_t loom_print_module_body(loom_print_context_t* ctx,
         }
       }
       printed_any = true;
+      IREE_RETURN_IF_ERROR(loom_print_op_comments(ctx, current_op));
       IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
       IREE_RETURN_IF_ERROR(loom_print_op(ctx, current_op));
     }
@@ -2261,6 +2293,7 @@ iree_status_t loom_text_print_operation(const loom_module_t* module,
       .module = module,
       .flags = flags,
   };
+  IREE_RETURN_IF_ERROR(loom_print_op_comments(&ctx, op));
   return loom_print_op(&ctx, op);
 }
 
@@ -2292,5 +2325,6 @@ iree_status_t loom_text_print_operation_with_field_callback(
       .flags = flags,
       .field_callback = callback,
   };
+  IREE_RETURN_IF_ERROR(loom_print_op_comments(&ctx, op));
   return loom_print_op(&ctx, op);
 }

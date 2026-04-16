@@ -355,7 +355,9 @@ class Tokenizer:
                 self._advance()  # skip second /
                 while self._position < len(self._source) and self._char() != "\n":
                     self._advance()
-                comment_text = self._source[comment_start : self._position].strip()
+                comment_text = self._source[comment_start : self._position]
+                if comment_text.endswith("\r"):
+                    comment_text = comment_text[:-1]
                 self._comments.append(comment_text)
                 continue
 

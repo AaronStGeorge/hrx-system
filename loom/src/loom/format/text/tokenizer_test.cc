@@ -447,6 +447,20 @@ TEST(Tokenizer, SkipsComments) {
   EXPECT_TRUE(iree_string_view_equal(token1.text, IREE_SV("99")));
 }
 
+TEST(Tokenizer, CollectsPendingCommentsExactly) {
+  ScopedTokenizer t("// first\n//second\n99");
+  loom_token_t token = t.peek();
+  EXPECT_EQ(token.kind, LOOM_TOKEN_INTEGER);
+  const iree_string_view_t* comments = NULL;
+  iree_host_size_t comment_count = 0;
+  loom_tokenizer_take_pending_comments(t.get(), &comments, &comment_count);
+  ASSERT_EQ(comment_count, 2u);
+  EXPECT_TRUE(iree_string_view_equal(comments[0], IREE_SV(" first")));
+  EXPECT_TRUE(iree_string_view_equal(comments[1], IREE_SV("second")));
+  loom_tokenizer_take_pending_comments(t.get(), &comments, &comment_count);
+  EXPECT_EQ(comment_count, 0u);
+}
+
 TEST(Tokenizer, EmptyInput) {
   ScopedTokenizer t("");
   loom_token_t token = t.next();

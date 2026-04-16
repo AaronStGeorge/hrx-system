@@ -2042,6 +2042,10 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
   // Capture the start position of the op for source location tracking.
   // This is the first token — either a result name or the op name.
   loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
+  const iree_string_view_t* comments = NULL;
+  iree_host_size_t comment_count = 0;
+  loom_tokenizer_take_pending_comments(&parser->tokenizer, &comments,
+                                       &comment_count);
 
   // Parse LHS result names: %a, %b = op.name ...
   // Or just: op.name ... (for ops with no results).
@@ -2169,7 +2173,10 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
 
   // Finalize the op.
   loom_op_t* op = NULL;
-  return loom_finalize_op(parser, kind, vtable, parsed, location, &op);
+  IREE_RETURN_IF_ERROR(
+      loom_finalize_op(parser, kind, vtable, parsed, location, &op));
+  return loom_module_attach_op_comments(parser->module, op, comments,
+                                        comment_count);
 }
 
 static iree_status_t loom_parse_op(loom_parser_t* parser) {
@@ -2281,11 +2288,17 @@ static iree_status_t loom_parse_region_body(
 
     // Parse optional block label: ^label(args):
     if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_BLOCK_LABEL)) {
+      const iree_string_view_t* comments = NULL;
+      iree_host_size_t comment_count = 0;
+      loom_tokenizer_take_pending_comments(&parser->tokenizer, &comments,
+                                           &comment_count);
       loom_token_t label_token = loom_tokenizer_next(&parser->tokenizer);
       loom_string_id_t label_id = 0;
       IREE_RETURN_IF_ERROR(loom_module_intern_string(
           parser->module, label_token.text, &label_id));
       block->label_id = label_id;
+      IREE_RETURN_IF_ERROR(loom_module_attach_block_comments(
+          parser->module, block, comments, comment_count));
 
       // Parse optional block args: (arg: type, ...).
       if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
@@ -2328,6 +2341,7 @@ static iree_status_t loom_parse_region_body(
         parser, region_descriptor, loom_region_entry_block(region)));
   }
 
+  loom_tokenizer_discard_pending_comments(&parser->tokenizer);
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RBRACE, NULL);
   *out_region_end_consumed = true;
   return iree_ok_status();
@@ -2389,6 +2403,7 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
 
     // Check for attribute aliases: #alias = #encoding<params>.
     if (loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_HASH_ATTR)) {
+      loom_tokenizer_discard_pending_comments(&parser->tokenizer);
       loom_token_t alias_token = loom_tokenizer_next(&parser->tokenizer);
       if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
         uint32_t errors_before = parser->error_count;

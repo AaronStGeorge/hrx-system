@@ -1508,6 +1508,36 @@ typedef struct loom_type_use_table_t {
   loom_type_use_t* records;
 } loom_type_use_table_t;
 
+// Kind of IR object that owns source text comments.
+typedef enum loom_comment_owner_kind_e {
+  LOOM_COMMENT_OWNER_OP = 0,
+  LOOM_COMMENT_OWNER_BLOCK = 1,
+} loom_comment_owner_kind_t;
+
+// Leading comments attached to one operation or block label.
+typedef struct loom_comment_attachment_t {
+  // Operation or block pointer that owns the leading comments.
+  const void* owner;
+  // Kind tag describing the pointer stored in owner.
+  loom_comment_owner_kind_t owner_kind;
+  // Reserved padding for pointer alignment.
+  uint16_t reserved;
+  // Number of line comments stored in comments.
+  uint16_t comment_count;
+  // Module-arena-owned post-// comment payloads in source order.
+  iree_string_view_t* comments;
+} loom_comment_attachment_t;
+
+// Cold side table for source comments preserved by text parsing/printing.
+typedef struct loom_comment_table_t {
+  // Number of comment attachments stored in entries.
+  iree_host_size_t count;
+  // Allocated capacity of entries.
+  iree_host_size_t capacity;
+  // Sparse source-comment attachments keyed by IR object pointer.
+  loom_comment_attachment_t* entries;
+} loom_comment_table_t;
+
 // Open-addressing hash table for deduplicating strings and types during
 // construction. Arena-allocated, freed when the module is destroyed.
 // Lazy-initialized: capacity 0 means uninitialized, first use allocates.
@@ -1593,6 +1623,9 @@ typedef struct loom_module_t {
   // stripped (e.g., release builds), the table is empty and all ops
   // reference LOOM_LOCATION_UNKNOWN (0).
   loom_location_table_t locations;
+
+  // Source comments attached to operations and explicit block labels.
+  loom_comment_table_t comments;
 
   // Module body: a region with a single entry block. All top-level symbol ops
   // and other module-scope ops live in this block. Created automatically by

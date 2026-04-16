@@ -1150,6 +1150,17 @@ class TestRoundTrip:
             "}\n"
         )
 
+    def test_operation_and_block_comments(self) -> None:
+        self._roundtrip_text(
+            "// top-level function\n"
+            "func.def @comments() {\n"
+            "  // explicit entry block\n"
+            "  ^entry:\n"
+            "  // body terminator\n"
+            "  test.yield\n"
+            "}\n"
+        )
+
     def test_convert_bare_result_type(self) -> None:
         """test.convert uses ResultType (bare, no parens) and round-trips."""
         self._roundtrip_text(
@@ -2338,6 +2349,15 @@ class TestLocationRoundTrip:
             "func.def @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc("model.loom":42:3 to 42:58)\n'
             '  test.yield %neg0 : f32 loc("model.loom":43:3 to 43:28)\n'
+            "}\n"
+        )
+
+    def test_comments_survive_explicit_location_roundtrip(self) -> None:
+        self._roundtrip_with_locations(
+            "func.def @located() -> (i32) {\n"
+            "  // located constant\n"
+            '  %c = test.constant 42 : i32 loc("model.loom":42:3 to 42:58)\n'
+            '  test.yield %c : i32 loc("model.loom":43:3 to 43:28)\n'
             "}\n"
         )
 

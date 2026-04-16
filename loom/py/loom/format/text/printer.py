@@ -623,6 +623,11 @@ class Printer:
         else:
             self._lines.append(line)
 
+    def _emit_comments(self, comments: tuple[str, ...]) -> None:
+        """Emit leading line comments at the current indentation."""
+        for comment in comments:
+            self._emit("//" + comment)
+
     # --- Module printing ---
 
     def print_module(self, module: Module) -> str:
@@ -652,6 +657,7 @@ class Printer:
         same format walker as body ops.
         """
         self._module = module
+        self._emit_comments(op.comments)
 
         op_decl = self._registry.get(op.name)
         if op_decl is None:
@@ -691,6 +697,7 @@ class Printer:
         for block in region.blocks:
             # Block label (if named and not the entry block).
             if block.label:
+                self._emit_comments(block.comments)
                 arg_strs = ""
                 if block.arg_ids:
                     args = []
@@ -782,6 +789,7 @@ class Printer:
         self, op: Operation, module: Module, print_regions: bool | None = None
     ) -> None:
         """Print an op as one or more indented lines."""
+        self._emit_comments(op.comments)
         if print_regions is None:
             print_regions = self._print_regions
         op_decl = self._registry.get(op.name)

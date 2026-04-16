@@ -338,13 +338,13 @@ class TestComments:
         tokenizer2 = Tokenizer("// hello\n%x")
         tokenizer2.peek()  # triggers scan, collects comment
         comments = tokenizer2.collect_pending_comments()
-        assert comments == ["hello"]
+        assert comments == [" hello"]
 
     def test_multiple_comments(self) -> None:
         tokenizer = Tokenizer("// first\n// second\n%x")
         tokenizer.peek()
         comments = tokenizer.collect_pending_comments()
-        assert comments == ["first", "second"]
+        assert comments == [" first", " second"]
 
     def test_inline_comment(self) -> None:
         tokens = _tokens("%x // comment\n%y")

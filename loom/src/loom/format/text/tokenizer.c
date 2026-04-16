@@ -204,6 +204,9 @@ void loom_tokenizer_initialize(iree_string_view_t source,
   out_tokenizer->scratch_arena = scratch_arena;
   out_tokenizer->decoded_string_data = NULL;
   out_tokenizer->decoded_string_capacity = 0;
+  out_tokenizer->pending_comments = NULL;
+  out_tokenizer->pending_comment_count = 0;
+  out_tokenizer->pending_comment_capacity = 0;
   out_tokenizer->status = iree_ok_status();
   out_tokenizer->in_dim_list = false;
 }
@@ -276,6 +279,22 @@ iree_status_t loom_tokenizer_consume_status(loom_tokenizer_t* tokenizer) {
   return status;
 }
 
+void loom_tokenizer_take_pending_comments(
+    loom_tokenizer_t* tokenizer, const iree_string_view_t** out_comments,
+    iree_host_size_t* out_comment_count) {
+  *out_comments = tokenizer->pending_comments;
+  *out_comment_count = tokenizer->pending_comment_count;
+  if (tokenizer->pending_comment_count > 0) {
+    tokenizer->pending_comments = NULL;
+    tokenizer->pending_comment_capacity = 0;
+  }
+  tokenizer->pending_comment_count = 0;
+}
+
+void loom_tokenizer_discard_pending_comments(loom_tokenizer_t* tokenizer) {
+  tokenizer->pending_comment_count = 0;
+}
+
 iree_status_t loom_tokenizer_error(const loom_tokenizer_t* tokenizer,
                                    iree_string_view_t message) {
   return iree_make_status(
@@ -284,8 +303,20 @@ iree_status_t loom_tokenizer_error(const loom_tokenizer_t* tokenizer,
       tokenizer->column, (int)message.size, message.data);
 }
 
+static iree_status_t loom_tokenizer_append_pending_comment(
+    loom_tokenizer_t* t, iree_string_view_t comment) {
+  if (t->pending_comment_count >= t->pending_comment_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        t->scratch_arena, t->pending_comment_count, /*minimum_capacity=*/8,
+        sizeof(iree_string_view_t), &t->pending_comment_capacity,
+        (void**)&t->pending_comments));
+  }
+  t->pending_comments[t->pending_comment_count++] = comment;
+  return iree_ok_status();
+}
+
 // Advances past whitespace and comments.
-static void loom_tokenizer_skip_whitespace(loom_tokenizer_t* t) {
+static iree_status_t loom_tokenizer_skip_whitespace(loom_tokenizer_t* t) {
   while (t->position < t->source.size) {
     char c = t->source.data[t->position];
     if (c == ' ' || c == '\t' || c == '\r') {
@@ -297,16 +328,26 @@ static void loom_tokenizer_skip_whitespace(loom_tokenizer_t* t) {
       t->column = 1;
     } else if (c == '/' && loom_tokenizer_char_at(t, 1) == '/') {
       // Line comment: skip to end of line with UTF-8-aware column tracking.
+      iree_host_size_t comment_start = t->position + 2;
       t->position += 2;
       t->column += 2;
       while (t->position < t->source.size &&
              t->source.data[t->position] != '\n') {
         loom_tokenizer_advance_utf8(t);
       }
+      iree_host_size_t comment_end = t->position;
+      if (comment_end > comment_start &&
+          t->source.data[comment_end - 1] == '\r') {
+        --comment_end;
+      }
+      IREE_RETURN_IF_ERROR(loom_tokenizer_append_pending_comment(
+          t, iree_make_string_view(t->source.data + comment_start,
+                                   comment_end - comment_start)));
     } else {
       break;
     }
   }
+  return iree_ok_status();
 }
 
 // Creates a token whose source spelling is [source_start, t->position) and
@@ -915,7 +956,7 @@ static iree_status_t loom_tokenizer_scan_block_label(loom_tokenizer_t* t,
 // infrastructure failures still return a non-OK status.
 static iree_status_t loom_tokenizer_scan(loom_tokenizer_t* t,
                                          loom_token_t* out_token) {
-  loom_tokenizer_skip_whitespace(t);
+  IREE_RETURN_IF_ERROR(loom_tokenizer_skip_whitespace(t));
 
   if (t->position >= t->source.size) {
     *out_token = loom_tokenizer_make_eof_token(t);

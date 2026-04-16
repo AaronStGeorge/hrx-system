@@ -1085,6 +1085,7 @@ class Parser:
         while not tok.at(TokenKind.EOF):
             # Attribute alias: #name = ...
             if tok.at(TokenKind.HASH_ATTR):
+                tok.collect_pending_comments()
                 self._parse_attribute_alias()
                 continue
 
@@ -1292,7 +1293,9 @@ class Parser:
         and Operation construction.
         """
         tok = self._tokenizer
-        start_loc = tok.current_location()
+        start_token = tok.peek()
+        comments = tuple(tok.collect_pending_comments())
+        start_loc = start_token.location
 
         # 1. Result list: %r = or %a, %b =
         result_names: list[str] = []
@@ -1435,6 +1438,7 @@ class Parser:
             attributes=parsed.attributes,
             regions=parsed.regions,
             location_id=location_id,
+            comments=comments,
         )
         self._validate_operation(op, start_loc)
         return op
@@ -2484,6 +2488,7 @@ class Parser:
                 )
             )
 
+        tok.collect_pending_comments()
         tok.expect(TokenKind.RBRACE)
         self._scope = parent_scope
         return Region(blocks=blocks)
@@ -2496,9 +2501,11 @@ class Parser:
         tok = self._tokenizer
         label = ""
         arg_ids: list[int] = []
+        comments: tuple[str, ...] = ()
 
         # Block label: ^name(args):
-        if tok.at(TokenKind.BLOCK_LABEL):
+        if tok.peek().kind == TokenKind.BLOCK_LABEL:
+            comments = tuple(tok.collect_pending_comments())
             label = tok.next().text
             if tok.at(TokenKind.LPAREN):
                 tok.expect(TokenKind.LPAREN)
@@ -2542,7 +2549,7 @@ class Parser:
             if not has_terminator:
                 ops.append(Operation(name=implicit_terminator_decl.name))
 
-        return Block(label=label, arg_ids=arg_ids, ops=ops)
+        return Block(label=label, arg_ids=arg_ids, ops=ops, comments=comments)
 
     # --- Attr dict ---
 

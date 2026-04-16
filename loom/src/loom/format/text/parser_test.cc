@@ -536,6 +536,25 @@ TEST_F(ParserTest, CommentOnly) {
   loom_module_free(module);
 }
 
+TEST_F(ParserTest, OperationAndBlockCommentsRoundTrip) {
+  std::string text = RoundTrip(
+      "// top-level function\n"
+      "func.def @comments() {\n"
+      "  // explicit entry block\n"
+      "  ^entry:\n"
+      "  // body terminator\n"
+      "  test.yield\n"
+      "}\n");
+  EXPECT_EQ(text,
+            "// top-level function\n"
+            "func.def @comments() {\n"
+            "  // explicit entry block\n"
+            "  ^entry:\n"
+            "  // body terminator\n"
+            "  test.yield\n"
+            "}\n");
+}
+
 TEST_F(ParserTest, Constant) {
   std::string text = RoundTrip("%c = test.constant 42 : i32\n");
   EXPECT_NE(text.find("test.constant 42 : i32"), std::string::npos);
@@ -2008,6 +2027,18 @@ TEST_F(ParserTest, TrailingFileLocationOverridesParserSourceFallback) {
       "%c = test.constant 42 : i32 "
       "loc(\"model \\\"main\\\"\\\\v2\\n.loom\":42:3 to 42:58)\n");
   loom_module_free(module);
+}
+
+TEST_F(ParserTest, CommentSurvivesTrailingLocation) {
+  std::string text = RoundTrip(
+      "// located constant\n"
+      "%c = test.constant 42 : i32 "
+      "loc(\"model.loom\":42:3 to 42:58)\n",
+      LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_EQ(text,
+            "// located constant\n"
+            "%c = test.constant 42 : i32 "
+            "loc(\"model.loom\":42:3 to 42:58)\n");
 }
 
 TEST_F(ParserTest, TrailingLocationsReuseSourceIds) {

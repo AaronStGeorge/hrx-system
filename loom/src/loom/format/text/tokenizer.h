@@ -138,6 +138,12 @@ typedef struct loom_tokenizer_t {
   iree_arena_allocator_t* scratch_arena;
   char* decoded_string_data;
   iree_host_size_t decoded_string_capacity;
+  // Pending line comments attached to the next operation or block.
+  iree_string_view_t* pending_comments;
+  // Number of pending line comments stored in pending_comments.
+  iree_host_size_t pending_comment_count;
+  // Allocated capacity of pending_comments.
+  iree_host_size_t pending_comment_capacity;
   iree_status_t status;
 
   // Position of the most recently consumed token's end. Updated on
@@ -168,6 +174,17 @@ void loom_tokenizer_deinitialize(loom_tokenizer_t* tokenizer);
 // Malformed user input is not surfaced here; it appears as LOOM_TOKEN_ERROR
 // tokens plus |tokenizer->error| metadata.
 iree_status_t loom_tokenizer_consume_status(loom_tokenizer_t* tokenizer);
+
+// Returns pending line comments collected while scanning leading whitespace and
+// clears the tokenizer's pending list. The returned array is tokenizer-scratch
+// storage; comment payloads are slices into the original source buffer.
+void loom_tokenizer_take_pending_comments(
+    loom_tokenizer_t* tokenizer, const iree_string_view_t** out_comments,
+    iree_host_size_t* out_comment_count);
+
+// Clears pending line comments that were collected before a delimiter and do
+// not attach to any operation or block.
+void loom_tokenizer_discard_pending_comments(loom_tokenizer_t* tokenizer);
 
 // Returns the next token without consuming it. Repeated calls return
 // the same token until loom_tokenizer_next is called.
