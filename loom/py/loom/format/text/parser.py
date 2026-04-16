@@ -2356,10 +2356,20 @@ class Parser:
         tok.expect(TokenKind.LPAREN)
         args: list[PredicateArg] = []
         if not tok.at(TokenKind.RPAREN):
-            args.append(self._parse_predicate_arg())
-            while tok.try_consume(TokenKind.COMMA):
+            while True:
                 args.append(self._parse_predicate_arg())
+                if not tok.try_consume(TokenKind.COMMA):
+                    break
         tok.expect(TokenKind.RPAREN)
+        expected_argument_count = PREDICATE_KINDS[kind]
+        actual_argument_count = len(args)
+        if actual_argument_count != expected_argument_count:
+            raise ParseError(
+                f"predicate '{kind}' expects {expected_argument_count} "
+                f"arguments, got {actual_argument_count}",
+                kind_tok.location,
+                tok._filename,
+            )
         return Predicate(kind=kind, args=tuple(args))
 
     def _parse_predicate_arg(self) -> PredicateArg:

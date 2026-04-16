@@ -733,16 +733,6 @@ static iree_string_view_t loom_resolve_value_name(
 // Predicate printing
 //===----------------------------------------------------------------------===//
 
-// Predicate kind names indexed by loom_predicate_kind_t.
-static const char* const loom_predicate_kind_names[LOOM_PREDICATE_COUNT_] = {
-    [LOOM_PREDICATE_EQ] = "eq",       [LOOM_PREDICATE_NE] = "ne",
-    [LOOM_PREDICATE_LT] = "lt",       [LOOM_PREDICATE_LE] = "le",
-    [LOOM_PREDICATE_GT] = "gt",       [LOOM_PREDICATE_GE] = "ge",
-    [LOOM_PREDICATE_MUL] = "mul",     [LOOM_PREDICATE_MIN] = "min",
-    [LOOM_PREDICATE_MAX] = "max",     [LOOM_PREDICATE_POW2] = "pow2",
-    [LOOM_PREDICATE_RANGE] = "range",
-};
-
 // Prints a predicate argument based on its tag.
 static iree_status_t loom_print_predicate_arg(loom_print_context_t* ctx,
                                               uint8_t tag, int64_t value) {
@@ -776,15 +766,24 @@ static iree_status_t loom_print_predicate_list(
       IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
     }
     const loom_predicate_t* predicate = &predicates[i];
-    if (predicate->kind >= LOOM_PREDICATE_COUNT_) {
+    const char* predicate_name = loom_predicate_kind_name(predicate->kind);
+    if (!predicate_name) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "unknown predicate kind %d",
                               (int)predicate->kind);
     }
+    uint8_t expected_argument_count =
+        loom_predicate_kind_argument_count(predicate->kind);
+    if (predicate->arg_count != expected_argument_count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "predicate kind %s expects %u arguments, got %u",
+                              predicate_name, expected_argument_count,
+                              predicate->arg_count);
+    }
     // Emit kind name and opening paren: "mul("
     IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-        ctx->stream, loom_predicate_kind_names[predicate->kind]));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(ctx->stream, predicate_name));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '('));
     // Emit arguments separated by ", ".
     for (uint8_t j = 0; j < predicate->arg_count; ++j) {

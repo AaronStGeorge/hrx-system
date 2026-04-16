@@ -445,6 +445,37 @@ TEST_F(VerifyTest, ValidAddiPasses) {
   EXPECT_EQ(result.error_count, 0u);
 }
 
+TEST_F(VerifyTest, RejectsPredicateArityMismatch) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_value_id_t argument = LOOM_VALUE_ID_INVALID;
+  EnterTestFunc(&index_type, 1, &argument);
+
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_POW2,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+      .args = {(int64_t)argument, 16},
+  };
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_test_assume_build(&builder_, &argument, 1, &predicate, 1,
+                                        &index_type, 1, LOOM_LOCATION_UNKNOWN,
+                                        &assume_op));
+
+  TerminateFunc();
+  DiagnosticCapture capture;
+  auto result = VerifyStructured(&capture);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry =
+      FindDiagnostic(capture, &loom_err_structure_021);
+  ASSERT_NE(entry, nullptr)
+      << "Expected STRUCTURE/021 predicate-arity diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "predicates");
+  ExpectU32Param(*entry, 1, 0u);
+  EXPECT_EQ(GetStringParam(*entry, 2), "pow2");
+  ExpectU32Param(*entry, 3, 1u);
+  ExpectU32Param(*entry, 4, 2u);
+}
+
 TEST_F(VerifyTest, LoopBodyImplicitTerminatorPasses) {
   loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   loom_type_t arg_types[] = {index_type, index_type, index_type};

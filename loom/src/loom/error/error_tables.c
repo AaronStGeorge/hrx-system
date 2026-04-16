@@ -1153,6 +1153,86 @@ const loom_error_def_t loom_err_structure_018 = {
     .param_count = 4,
 };
 
+static const loom_error_param_def_t loom_err_structure_019_params[] = {
+    {"attr_name", LOOM_PARAM_STRING},
+    {"predicate_count", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_structure_019 = {
+    .error_id = "ERR_STRUCTURE_019",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 19,
+    .summary = "Predicate list payload is missing.",
+    .message_template =
+        "predicate list attribute '{attr_name}' has {predicate_count} entries "
+        "but no payload",
+    .fix_hint_template = "Provide a predicate payload for every list entry",
+    .param_defs = loom_err_structure_019_params,
+    .param_count = 2,
+};
+
+static const loom_error_param_def_t loom_err_structure_020_params[] = {
+    {"attr_name", LOOM_PARAM_STRING},
+    {"predicate_index", LOOM_PARAM_U32},
+    {"actual_kind", LOOM_PARAM_U32},
+    {"kind_count", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_structure_020 = {
+    .error_id = "ERR_STRUCTURE_020",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 20,
+    .summary = "Predicate kind is out of range.",
+    .message_template =
+        "predicate list attribute '{attr_name}' entry {predicate_index} has "
+        "kind {actual_kind}, but only {kind_count} kinds are defined",
+    .fix_hint_template = "Use a predicate kind from the predicate vocabulary",
+    .param_defs = loom_err_structure_020_params,
+    .param_count = 4,
+};
+
+static const loom_error_param_def_t loom_err_structure_021_params[] = {
+    {"attr_name", LOOM_PARAM_STRING},      {"predicate_index", LOOM_PARAM_U32},
+    {"predicate_name", LOOM_PARAM_STRING}, {"expected_count", LOOM_PARAM_U32},
+    {"actual_count", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_structure_021 = {
+    .error_id = "ERR_STRUCTURE_021",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 21,
+    .summary = "Predicate argument count mismatch.",
+    .message_template =
+        "predicate list attribute '{attr_name}' entry {predicate_index} "
+        "('{predicate_name}') expects {expected_count} arguments, got "
+        "{actual_count}",
+    .fix_hint_template =
+        "Use the predicate arity defined by the predicate vocabulary",
+    .param_defs = loom_err_structure_021_params,
+    .param_count = 5,
+};
+
+static const loom_error_param_def_t loom_err_structure_022_params[] = {
+    {"attr_name", LOOM_PARAM_STRING},   {"predicate_index", LOOM_PARAM_U32},
+    {"argument_index", LOOM_PARAM_U32}, {"actual_tag", LOOM_PARAM_U32},
+    {"tag_count", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_structure_022 = {
+    .error_id = "ERR_STRUCTURE_022",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 22,
+    .summary = "Predicate argument tag is out of range.",
+    .message_template =
+        "predicate list attribute '{attr_name}' entry {predicate_index} "
+        "argument {argument_index} has tag {actual_tag}, but only {tag_count} "
+        "tags are defined",
+    .fix_hint_template =
+        "Use a predicate argument tag from the predicate vocabulary",
+    .param_defs = loom_err_structure_022_params,
+    .param_count = 5,
+};
+
 static const loom_error_param_def_t loom_err_dominance_001_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
@@ -1871,6 +1951,26 @@ const loom_error_def_t loom_err_parse_030 = {
     .param_count = 2,
 };
 
+static const loom_error_param_def_t loom_err_parse_031_params[] = {
+    {"predicate_name", LOOM_PARAM_STRING},
+    {"expected_count", LOOM_PARAM_U32},
+    {"actual_count", LOOM_PARAM_U32},
+};
+const loom_error_def_t loom_err_parse_031 = {
+    .error_id = "ERR_PARSE_031",
+    .domain = LOOM_ERROR_DOMAIN_PARSE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 31,
+    .summary = "Predicate argument count mismatch.",
+    .message_template =
+        "predicate '{predicate_name}' expects {expected_count} arguments, got "
+        "{actual_count}",
+    .fix_hint_template =
+        "Use the predicate arity defined by the predicate vocabulary",
+    .param_defs = loom_err_parse_031_params,
+    .param_count = 3,
+};
+
 static const loom_error_param_def_t loom_err_bytecode_001_params[] = {
     {"expected_magic", LOOM_PARAM_STRING},
     {"actual_magic", LOOM_PARAM_STRING},
@@ -2102,26 +2202,27 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_structure_008, &loom_err_structure_009, &loom_err_structure_010,
     &loom_err_structure_011, &loom_err_structure_012, &loom_err_structure_013,
     &loom_err_structure_014, &loom_err_structure_015, &loom_err_structure_016,
-    &loom_err_structure_017, &loom_err_structure_018, &loom_err_dominance_001,
-    &loom_err_dominance_002, &loom_err_dominance_003, &loom_err_dominance_004,
-    &loom_err_dominance_005, &loom_err_dominance_006, &loom_err_dominance_007,
-    &loom_err_dominance_008, &loom_err_dominance_009, &loom_err_dominance_010,
-    &loom_err_symbol_001,    &loom_err_symbol_002,    &loom_err_symbol_003,
-    &loom_err_symbol_004,    &loom_err_parse_001,     &loom_err_parse_002,
-    &loom_err_parse_003,     &loom_err_parse_004,     &loom_err_parse_005,
-    &loom_err_parse_006,     &loom_err_parse_007,     &loom_err_parse_008,
-    &loom_err_parse_009,     &loom_err_parse_010,     &loom_err_parse_011,
-    &loom_err_parse_012,     &loom_err_parse_013,     &loom_err_parse_014,
-    &loom_err_parse_015,     &loom_err_parse_016,     &loom_err_parse_017,
-    &loom_err_parse_018,     &loom_err_parse_019,     &loom_err_parse_020,
-    &loom_err_parse_021,     &loom_err_parse_022,     &loom_err_parse_023,
-    &loom_err_parse_024,     &loom_err_parse_025,     &loom_err_parse_026,
-    &loom_err_parse_027,     &loom_err_parse_028,     &loom_err_parse_029,
-    &loom_err_parse_030,     &loom_err_bytecode_001,  &loom_err_bytecode_002,
-    &loom_err_bytecode_003,  &loom_err_bytecode_004,  &loom_err_bytecode_005,
-    &loom_err_fold_001,      &loom_err_fold_002,      &loom_err_fold_003,
-    &loom_err_fold_004,      &loom_err_fold_005,      &loom_err_lowering_001,
-    &loom_err_lowering_002,
+    &loom_err_structure_017, &loom_err_structure_018, &loom_err_structure_019,
+    &loom_err_structure_020, &loom_err_structure_021, &loom_err_structure_022,
+    &loom_err_dominance_001, &loom_err_dominance_002, &loom_err_dominance_003,
+    &loom_err_dominance_004, &loom_err_dominance_005, &loom_err_dominance_006,
+    &loom_err_dominance_007, &loom_err_dominance_008, &loom_err_dominance_009,
+    &loom_err_dominance_010, &loom_err_symbol_001,    &loom_err_symbol_002,
+    &loom_err_symbol_003,    &loom_err_symbol_004,    &loom_err_parse_001,
+    &loom_err_parse_002,     &loom_err_parse_003,     &loom_err_parse_004,
+    &loom_err_parse_005,     &loom_err_parse_006,     &loom_err_parse_007,
+    &loom_err_parse_008,     &loom_err_parse_009,     &loom_err_parse_010,
+    &loom_err_parse_011,     &loom_err_parse_012,     &loom_err_parse_013,
+    &loom_err_parse_014,     &loom_err_parse_015,     &loom_err_parse_016,
+    &loom_err_parse_017,     &loom_err_parse_018,     &loom_err_parse_019,
+    &loom_err_parse_020,     &loom_err_parse_021,     &loom_err_parse_022,
+    &loom_err_parse_023,     &loom_err_parse_024,     &loom_err_parse_025,
+    &loom_err_parse_026,     &loom_err_parse_027,     &loom_err_parse_028,
+    &loom_err_parse_029,     &loom_err_parse_030,     &loom_err_parse_031,
+    &loom_err_bytecode_001,  &loom_err_bytecode_002,  &loom_err_bytecode_003,
+    &loom_err_bytecode_004,  &loom_err_bytecode_005,  &loom_err_fold_001,
+    &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
+    &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

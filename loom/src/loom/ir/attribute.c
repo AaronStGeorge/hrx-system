@@ -30,6 +30,58 @@ bool loom_attr_matches_scalar_type(loom_attribute_t attr,
   return matches;
 }
 
+const char* loom_predicate_kind_name(uint8_t kind) {
+  switch ((loom_predicate_kind_t)kind) {
+    case LOOM_PREDICATE_EQ:
+      return "eq";
+    case LOOM_PREDICATE_NE:
+      return "ne";
+    case LOOM_PREDICATE_LT:
+      return "lt";
+    case LOOM_PREDICATE_LE:
+      return "le";
+    case LOOM_PREDICATE_GT:
+      return "gt";
+    case LOOM_PREDICATE_GE:
+      return "ge";
+    case LOOM_PREDICATE_MUL:
+      return "mul";
+    case LOOM_PREDICATE_MIN:
+      return "min";
+    case LOOM_PREDICATE_MAX:
+      return "max";
+    case LOOM_PREDICATE_POW2:
+      return "pow2";
+    case LOOM_PREDICATE_RANGE:
+      return "range";
+    case LOOM_PREDICATE_COUNT_:
+      return NULL;
+  }
+  return NULL;
+}
+
+uint8_t loom_predicate_kind_argument_count(uint8_t kind) {
+  switch ((loom_predicate_kind_t)kind) {
+    case LOOM_PREDICATE_EQ:
+    case LOOM_PREDICATE_NE:
+    case LOOM_PREDICATE_LT:
+    case LOOM_PREDICATE_LE:
+    case LOOM_PREDICATE_GT:
+    case LOOM_PREDICATE_GE:
+    case LOOM_PREDICATE_MUL:
+    case LOOM_PREDICATE_MIN:
+    case LOOM_PREDICATE_MAX:
+      return 2;
+    case LOOM_PREDICATE_POW2:
+      return 1;
+    case LOOM_PREDICATE_RANGE:
+      return 3;
+    case LOOM_PREDICATE_COUNT_:
+      return UINT8_MAX;
+  }
+  return UINT8_MAX;
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute equality and hashing
 //===----------------------------------------------------------------------===//

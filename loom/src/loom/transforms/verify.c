@@ -1319,6 +1319,75 @@ static bool loom_verify_attr_kind_matches_descriptor(
   return attr.kind == descriptor->attr_kind;
 }
 
+static void loom_verify_predicate_list_attr(loom_verify_state_t* state,
+                                            const loom_op_t* op,
+                                            iree_string_view_t name,
+                                            uint8_t attr_index,
+                                            loom_attribute_t attr) {
+  if (attr.kind != LOOM_ATTR_PREDICATE_LIST) return;
+  loom_diagnostic_param_t attr_name_param =
+      loom_verify_param_string_for_diagnostic_field(
+          name, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, attr_index);
+  if (attr.count > 0 && !attr.predicate_list) {
+    loom_diagnostic_param_t params[] = {
+        attr_name_param,
+        loom_param_u32(attr.count),
+    };
+    loom_verify_emit_structured(state, op, &loom_err_structure_019, params,
+                                IREE_ARRAYSIZE(params));
+    return;
+  }
+  for (uint16_t predicate_index = 0; predicate_index < attr.count;
+       ++predicate_index) {
+    const loom_predicate_t* predicate = &attr.predicate_list[predicate_index];
+    const char* predicate_name = loom_predicate_kind_name(predicate->kind);
+    if (!predicate_name) {
+      loom_diagnostic_param_t params[] = {
+          attr_name_param,
+          loom_param_u32(predicate_index),
+          loom_param_u32(predicate->kind),
+          loom_param_u32(LOOM_PREDICATE_COUNT_),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_structure_020, params,
+                                  IREE_ARRAYSIZE(params));
+      continue;
+    }
+
+    uint8_t expected_argument_count =
+        loom_predicate_kind_argument_count(predicate->kind);
+    if (predicate->arg_count != expected_argument_count) {
+      loom_diagnostic_param_t params[] = {
+          attr_name_param,
+          loom_param_u32(predicate_index),
+          loom_param_string(iree_make_cstring_view(predicate_name)),
+          loom_param_u32(expected_argument_count),
+          loom_param_u32(predicate->arg_count),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_structure_021, params,
+                                  IREE_ARRAYSIZE(params));
+    }
+
+    uint8_t argument_count = predicate->arg_count;
+    if (argument_count > IREE_ARRAYSIZE(predicate->arg_tags)) {
+      argument_count = (uint8_t)IREE_ARRAYSIZE(predicate->arg_tags);
+    }
+    for (uint8_t argument_index = 0; argument_index < argument_count;
+         ++argument_index) {
+      uint8_t tag = predicate->arg_tags[argument_index];
+      if (tag > LOOM_PRED_ARG_NONE && tag < LOOM_PRED_ARG_COUNT_) continue;
+      loom_diagnostic_param_t params[] = {
+          attr_name_param,
+          loom_param_u32(predicate_index),
+          loom_param_u32(argument_index),
+          loom_param_u32(tag),
+          loom_param_u32(LOOM_PRED_ARG_COUNT_),
+      };
+      loom_verify_emit_structured(state, op, &loom_err_structure_022, params,
+                                  IREE_ARRAYSIZE(params));
+    }
+  }
+}
+
 static void loom_verify_type_constraints(loom_verify_state_t* state,
                                          const loom_op_t* op,
                                          const loom_op_vtable_t* vtable) {
@@ -1432,6 +1501,7 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
                                       params, IREE_ARRAYSIZE(params));
         }
       }
+      loom_verify_predicate_list_attr(state, op, attr_name, i, attrs[i]);
     }
   }
 }

@@ -275,6 +275,84 @@ ERR_STRUCTURE_018 = ErrorDef(
     fix_hint="Use '{expected_terminator}' as the region terminator",
 )
 
+# ERR_STRUCTURE_019: Predicate list payload is missing.
+ERR_STRUCTURE_019 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=19,
+    severity=Severity.ERROR,
+    summary="Predicate list payload is missing.",
+    message=(
+        "predicate list attribute '{attr_name}' has {predicate_count} "
+        "entries but no payload"
+    ),
+    params=(
+        ErrorParam("attr_name", ParamKind.STRING),
+        ErrorParam("predicate_count", ParamKind.U32),
+    ),
+    fix_hint="Provide a predicate payload for every list entry",
+)
+
+# ERR_STRUCTURE_020: Predicate kind is out of range.
+ERR_STRUCTURE_020 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Predicate kind is out of range.",
+    message=(
+        "predicate list attribute '{attr_name}' entry {predicate_index} has "
+        "kind {actual_kind}, but only {kind_count} kinds are defined"
+    ),
+    params=(
+        ErrorParam("attr_name", ParamKind.STRING),
+        ErrorParam("predicate_index", ParamKind.U32),
+        ErrorParam("actual_kind", ParamKind.U32),
+        ErrorParam("kind_count", ParamKind.U32),
+    ),
+    fix_hint="Use a predicate kind from the predicate vocabulary",
+)
+
+# ERR_STRUCTURE_021: Predicate argument count mismatch.
+ERR_STRUCTURE_021 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Predicate argument count mismatch.",
+    message=(
+        "predicate list attribute '{attr_name}' entry {predicate_index} "
+        "('{predicate_name}') expects {expected_count} arguments, got "
+        "{actual_count}"
+    ),
+    params=(
+        ErrorParam("attr_name", ParamKind.STRING),
+        ErrorParam("predicate_index", ParamKind.U32),
+        ErrorParam("predicate_name", ParamKind.STRING),
+        ErrorParam("expected_count", ParamKind.U32),
+        ErrorParam("actual_count", ParamKind.U32),
+    ),
+    fix_hint="Use the predicate arity defined by the predicate vocabulary",
+)
+
+# ERR_STRUCTURE_022: Predicate argument tag is out of range.
+ERR_STRUCTURE_022 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=22,
+    severity=Severity.ERROR,
+    summary="Predicate argument tag is out of range.",
+    message=(
+        "predicate list attribute '{attr_name}' entry {predicate_index} "
+        "argument {argument_index} has tag {actual_tag}, but only {tag_count} "
+        "tags are defined"
+    ),
+    params=(
+        ErrorParam("attr_name", ParamKind.STRING),
+        ErrorParam("predicate_index", ParamKind.U32),
+        ErrorParam("argument_index", ParamKind.U32),
+        ErrorParam("actual_tag", ParamKind.U32),
+        ErrorParam("tag_count", ParamKind.U32),
+    ),
+    fix_hint="Use a predicate argument tag from the predicate vocabulary",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -294,4 +372,8 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_016,
     ERR_STRUCTURE_017,
     ERR_STRUCTURE_018,
+    ERR_STRUCTURE_019,
+    ERR_STRUCTURE_020,
+    ERR_STRUCTURE_021,
+    ERR_STRUCTURE_022,
 )

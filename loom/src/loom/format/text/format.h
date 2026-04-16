@@ -769,9 +769,11 @@
 // Predicate vocabulary (where clauses and assume ops)
 // ==========================================================================
 //
-// predicate ::= pred-name '(' pred-arg (',' pred-arg)* ')'
-// pred-name ::= 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge'
-//             | 'min' | 'max' | 'mul' | 'pow2' | 'range'
+// predicate ::= two-arg-pred '(' pred-arg ',' pred-arg ')'
+//             | 'pow2' '(' pred-arg ')'
+//             | 'range' '(' pred-arg ',' pred-arg ',' pred-arg ')'
+// two-arg-pred ::= 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge'
+//                | 'min' | 'max' | 'mul'
 // pred-arg  ::= SSA-VALUE | INTEGER
 //
 // Predicates constrain dim values in where clauses and assume ops.

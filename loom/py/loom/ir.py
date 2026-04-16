@@ -787,9 +787,8 @@ def _canonicalize_encoding_param_value(value: Any) -> Any:
 # Predicates
 # ============================================================================
 
-# Valid predicate kinds. Maps kind name to expected argument count
-# (None means variable, e.g., range takes 3).
-PREDICATE_KINDS: dict[str, int | None] = {
+# Valid predicate kinds. Maps kind name to expected argument count.
+PREDICATE_KINDS: dict[str, int] = {
     "eq": 2,
     "ne": 2,
     "lt": 2,

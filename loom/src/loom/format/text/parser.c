@@ -1594,6 +1594,17 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("')'"));
     }
+    uint8_t expected_argument_count =
+        loom_predicate_kind_argument_count(pred_kind);
+    if (predicate.arg_count != expected_argument_count) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(name_token.text),
+          loom_param_u32(expected_argument_count),
+          loom_param_u32(predicate.arg_count),
+      };
+      return loom_parser_emit(parser, &loom_err_parse_031, params,
+                              IREE_ARRAYSIZE(params), name_token);
+    }
 
     stack_predicates[count++] = predicate;
   }

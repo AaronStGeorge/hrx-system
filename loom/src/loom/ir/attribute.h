@@ -98,6 +98,14 @@ typedef struct loom_predicate_t {
 static_assert(sizeof(loom_predicate_t) == 32,
               "loom_predicate_t must be 32 bytes");
 
+// Returns the canonical text spelling for |kind| or NULL if |kind| is outside
+// the predicate vocabulary.
+const char* loom_predicate_kind_name(uint8_t kind);
+
+// Returns the exact arity for |kind| or UINT8_MAX if |kind| is outside the
+// predicate vocabulary.
+uint8_t loom_predicate_kind_argument_count(uint8_t kind);
+
 //===----------------------------------------------------------------------===//
 // Attributes
 //===----------------------------------------------------------------------===//

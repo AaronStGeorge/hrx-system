@@ -769,6 +769,17 @@ TEST_F(ParserTest, EmptyPredicateListPayloadRoundTripsExplicitly) {
   loom_module_free(module);
 }
 
+TEST_F(ParserTest, PredicateArityMismatchEmitsStructuredDiagnostic) {
+  const auto& diagnostics = ParseExpectErrors(
+      "%x = test.constant 0 : index\n"
+      "%y = test.assume %x [pow2(%x, 16)] : index\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0], &loom_err_parse_031);
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "pow2");
+  ExpectU32Param(diagnostics[0], 1, 1u);
+  ExpectU32Param(diagnostics[0], 2, 2u);
+}
+
 TEST_F(ParserTest, BinaryOp) {
   std::string text = RoundTrip(
       "%c0 = test.constant 1 : i32\n"

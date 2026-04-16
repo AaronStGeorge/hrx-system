@@ -348,6 +348,24 @@ ERR_PARSE_030 = ErrorDef(
     fix_hint="Every explicit row and the default row must have the same width",
 )
 
+# ERR_PARSE_031: Predicate argument count mismatch.
+ERR_PARSE_031 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=31,
+    severity=Severity.ERROR,
+    summary="Predicate argument count mismatch.",
+    message=(
+        "predicate '{predicate_name}' expects {expected_count} arguments, "
+        "got {actual_count}"
+    ),
+    params=(
+        ErrorParam("predicate_name", ParamKind.STRING),
+        ErrorParam("expected_count", ParamKind.U32),
+        ErrorParam("actual_count", ParamKind.U32),
+    ),
+    fix_hint="Use the predicate arity defined by the predicate vocabulary",
+)
+
 ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_001,
     ERR_PARSE_002,
@@ -379,4 +397,5 @@ ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_028,
     ERR_PARSE_029,
     ERR_PARSE_030,
+    ERR_PARSE_031,
 )

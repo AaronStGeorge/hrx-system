@@ -1531,6 +1531,138 @@
     "fix_hint_template": "Use '{expected_terminator}' as the region terminator"
   },
   {
+    "error_id": "ERR_STRUCTURE_019",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 19,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Predicate list payload is missing.",
+    "message_template": "predicate list attribute '{attr_name}' has {predicate_count} entries but no payload",
+    "params": [
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "predicate_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Provide a predicate payload for every list entry"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_020",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 20,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Predicate kind is out of range.",
+    "message_template": "predicate list attribute '{attr_name}' entry {predicate_index} has kind {actual_kind}, but only {kind_count} kinds are defined",
+    "params": [
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "predicate_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "kind_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Use a predicate kind from the predicate vocabulary"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_021",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 21,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Predicate argument count mismatch.",
+    "message_template": "predicate list attribute '{attr_name}' entry {predicate_index} ('{predicate_name}') expects {expected_count} arguments, got {actual_count}",
+    "params": [
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "predicate_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "predicate_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Use the predicate arity defined by the predicate vocabulary"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_022",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 22,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Predicate argument tag is out of range.",
+    "message_template": "predicate list attribute '{attr_name}' entry {predicate_index} argument {argument_index} has tag {actual_tag}, but only {tag_count} tags are defined",
+    "params": [
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "predicate_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "argument_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_tag",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "tag_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Use a predicate argument tag from the predicate vocabulary"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",
@@ -2397,6 +2529,34 @@
       }
     ],
     "fix_hint_template": "Every explicit row and the default row must have the same width"
+  },
+  {
+    "error_id": "ERR_PARSE_031",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 31,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Predicate argument count mismatch.",
+    "message_template": "predicate '{predicate_name}' expects {expected_count} arguments, got {actual_count}",
+    "params": [
+      {
+        "name": "predicate_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Use the predicate arity defined by the predicate vocabulary"
   },
   {
     "error_id": "ERR_BYTECODE_001",

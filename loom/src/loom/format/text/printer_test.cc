@@ -2057,14 +2057,20 @@ TEST_F(PrintPredicateTest, AllPredicateKinds) {
   for (int kind = 0; kind <= LOOM_PREDICATE_RANGE; ++kind) {
     loom_predicate_t predicates[1] = {};
     predicates[0].kind = (uint8_t)kind;
-    predicates[0].arg_count = 1;
-    predicates[0].arg_tags[0] = LOOM_PRED_ARG_CONST;
-    predicates[0].args[0] = 99;
+    predicates[0].arg_count = loom_predicate_kind_argument_count((uint8_t)kind);
+    for (uint8_t argument_index = 0; argument_index < predicates[0].arg_count;
+         ++argument_index) {
+      predicates[0].arg_tags[argument_index] = LOOM_PRED_ARG_CONST;
+      predicates[0].args[argument_index] = 99 + argument_index;
+    }
 
     loom_op_t* op = build_pred_op(predicates, 1);
     std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
     std::string expected =
-        std::string("test.predtest [") + expected_names[kind] + "(99)]\n";
+        std::string("test.predtest [") + expected_names[kind] + "(99";
+    if (predicates[0].arg_count > 1) expected += ", 100";
+    if (predicates[0].arg_count > 2) expected += ", 101";
+    expected += ")]\n";
     EXPECT_EQ(output, expected) << "Failed for predicate kind " << kind;
   }
 }

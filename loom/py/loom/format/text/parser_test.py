@@ -1785,6 +1785,17 @@ class TestParsePredicates:
         assert predicates[0].kind == "pow2"
         assert len(predicates[0].args) == 1
 
+    def test_predicate_arity_mismatch_rejected(self) -> None:
+        """Predicate kind names have fixed arity."""
+
+        with pytest.raises(
+            ParseError, match="predicate 'pow2' expects 1 arguments, got 2"
+        ):
+            self._parse_module(
+                "func.decl @f(%N: index, %a: tensor<[%N]xf32>) -> (tensor<[%N]xf32>)"
+                " where [pow2(%N, 16)]\n"
+            )
+
     def test_named_result_predicate(self) -> None:
         """Parse eq(%idx, %M) — result name argument."""
 
