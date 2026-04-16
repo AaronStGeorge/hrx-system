@@ -240,7 +240,7 @@ iree_status_t loom_vector_to_scalar_build_scalar_shift(
       state, kind, input, amount_value, type, out_result);
 }
 
-static iree_status_t loom_vector_to_scalar_build_index_term_as_scalar(
+iree_status_t loom_vector_to_scalar_build_index_term_as_scalar(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_term_t term, loom_type_t result_type,
     loom_value_id_t* out_value) {
@@ -248,6 +248,10 @@ static iree_status_t loom_vector_to_scalar_build_index_term_as_scalar(
     return loom_vector_to_scalar_build_scalar_constant(
         &state->rewriter->builder, result_type, state->location,
         term.static_value, out_value);
+  }
+  if (loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_INDEX) {
+    *out_value = term.dynamic_value;
+    return iree_ok_status();
   }
   loom_value_id_t index_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(

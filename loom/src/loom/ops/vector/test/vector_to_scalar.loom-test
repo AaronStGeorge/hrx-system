@@ -1853,6 +1853,83 @@ func.def @dynamic_table_quantize(%n: index, %k: index, %values: vector<[%n]xf32>
 // ====
 // RUN: pass vector-to-scalar
 
+func.def @dynamic_leading_transform_hadamard(%n: index, %v: vector<[%n]x2xf32>) -> (vector<[%n]x2xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard", input_elems=2, output_elems=2> : encoding<transform>
+  %r = vector.transform %v, %xf : vector<[%n]x2xf32>, encoding<transform> -> vector<[%n]x2xf32>
+  func.return %r : vector<[%n]x2xf32>
+}
+
+// ----
+func.def @dynamic_leading_transform_hadamard(%n: index, %v: vector<[%n]x2xf32>) -> (vector<[%n]x2xf32>) {
+  %5 = vector.constant 0.0 : vector<[%n]x2xf32>
+  %6 = index.constant 0 : index
+  %7 = index.constant 1 : index
+  %r = scf.for %8 = [%6 to %n step %7](%9 = %5 : vector<[%n]x2xf32>) -> (vector<[%n]x2xf32>) {
+    %11 = index.constant 0 : index
+    %12 = index.constant 1 : index
+    %13 = index.constant 2 : index
+    %16 = scf.for %14 = [%11 to %13 step %12](%15 = %9 : vector<[%n]x2xf32>) -> (vector<[%n]x2xf32>) {
+      %17 = index.constant 0 : index
+      %18 = vector.extract %v[%8, %17] : vector<[%n]x2xf32> -> f32
+      %19 = index.constant 1 : index
+      %20 = vector.extract %v[%8, %19] : vector<[%n]x2xf32> -> f32
+      %21 = index.cast %14 : index to i64
+      %22 = scalar.constant 1 : i64
+      %23 = scalar.andi %21, %22 : i64
+      %24 = scalar.constant 0 : i64
+      %25 = scalar.cmpi ne, %23, %24 : i64
+      %26 = scalar.negf %20 : f32
+      %27 = scf.select %25, %26, %20 : f32
+      %28 = scalar.addf %18, %27 : f32
+      %29 = vector.insert %28 into %15[%8, %14] : f32, vector<[%n]x2xf32>
+      scf.yield %29 : vector<[%n]x2xf32>
+    }
+    scf.yield %16 : vector<[%n]x2xf32>
+  }
+  func.return %r : vector<[%n]x2xf32>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+
+func.def @dynamic_leading_transform_jl_dense(%n: index, %v: vector<[%n]x2xf32>, %matrix: vector<3x2xf32>) -> (vector<[%n]x3xf32>) {
+  %xf = encoding.define #numeric_transform<family="jl_dense", input_elems=2, output_elems=3> {matrix = %matrix : vector<3x2xf32>} : encoding<transform>
+  %r = vector.transform %v, %xf : vector<[%n]x2xf32>, encoding<transform> -> vector<[%n]x3xf32>
+  func.return %r : vector<[%n]x3xf32>
+}
+
+// ----
+func.def @dynamic_leading_transform_jl_dense(%n: index, %v: vector<[%n]x2xf32>, %matrix: vector<3x2xf32>) -> (vector<[%n]x3xf32>) {
+  %6 = vector.constant 0.0 : vector<[%n]x3xf32>
+  %7 = index.constant 0 : index
+  %8 = index.constant 1 : index
+  %r = scf.for %9 = [%7 to %n step %8](%10 = %6 : vector<[%n]x3xf32>) -> (vector<[%n]x3xf32>) {
+    %12 = index.constant 0 : index
+    %13 = index.constant 1 : index
+    %14 = index.constant 3 : index
+    %17 = scf.for %15 = [%12 to %14 step %13](%16 = %10 : vector<[%n]x3xf32>) -> (vector<[%n]x3xf32>) {
+      %18 = index.constant 0 : index
+      %19 = vector.extract %v[%9, %18] : vector<[%n]x2xf32> -> f32
+      %20 = index.constant 0 : index
+      %21 = vector.extract %matrix[%15, %20] : vector<3x2xf32> -> f32
+      %22 = scalar.mulf %21, %19 : f32
+      %23 = index.constant 1 : index
+      %24 = vector.extract %v[%9, %23] : vector<[%n]x2xf32> -> f32
+      %25 = index.constant 1 : index
+      %26 = vector.extract %matrix[%15, %25] : vector<3x2xf32> -> f32
+      %27 = scalar.mulf %26, %24 : f32
+      %28 = scalar.addf %22, %27 : f32
+      %29 = vector.insert %28 into %16[%9, %15] : f32, vector<[%n]x3xf32>
+      scf.yield %29 : vector<[%n]x3xf32>
+    }
+    scf.yield %17 : vector<[%n]x3xf32>
+  }
+  func.return %r : vector<[%n]x3xf32>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+
 func.def @transform_hadamard(%v: vector<4xf32>) -> (vector<4xf32>) {
   %xf = encoding.define #numeric_transform<family="hadamard", input_elems=4, output_elems=4> : encoding<transform>
   %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>

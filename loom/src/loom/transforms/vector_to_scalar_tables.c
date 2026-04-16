@@ -15,28 +15,6 @@
 // Table lane programs
 //===----------------------------------------------------------------------===//
 
-static iree_status_t loom_vector_to_scalar_build_index_term_as_scalar(
-    loom_vector_to_scalar_state_t* state,
-    loom_vector_to_scalar_index_term_t term, loom_type_t scalar_type,
-    loom_value_id_t* out_value) {
-  if (!term.is_dynamic) {
-    return loom_vector_to_scalar_build_scalar_constant(
-        &state->rewriter->builder, scalar_type, state->location,
-        term.static_value, out_value);
-  }
-  if (loom_type_element_type(scalar_type) == LOOM_SCALAR_TYPE_INDEX) {
-    *out_value = term.dynamic_value;
-    return iree_ok_status();
-  }
-  loom_op_t* cast_op = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_index_cast_build(&state->rewriter->builder, term.dynamic_value,
-                            loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
-                            scalar_type, state->location, &cast_op));
-  *out_value = loom_index_cast_result(cast_op);
-  return iree_ok_status();
-}
-
 static iree_status_t loom_vector_to_scalar_build_zero_lane(
     loom_vector_to_scalar_state_t* state, loom_type_t result_type,
     loom_value_id_t* out_lane) {

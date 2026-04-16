@@ -185,6 +185,11 @@ iree_status_t loom_vector_to_scalar_build_scalar_shift(
     loom_value_id_t input, loom_type_t type, int64_t amount,
     loom_value_id_t* out_result);
 
+iree_status_t loom_vector_to_scalar_build_index_term_as_scalar(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_term_t term, loom_type_t result_type,
+    loom_value_id_t* out_value);
+
 iree_status_t loom_vector_to_scalar_build_scalar_shift_term(
     loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
     loom_value_id_t input, loom_type_t type,
