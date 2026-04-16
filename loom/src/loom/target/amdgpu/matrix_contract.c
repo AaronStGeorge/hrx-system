@@ -369,6 +369,36 @@ static const loom_amdgpu_matrix_contract_descriptor_t
             LOOM_AMDGPU_MATRIX_NUMERIC_F32, 16, 16,
             LOOM_AMDGPU_MATRIX_NUMERIC_F32, 16, 16,
             LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR("mfma.f32.4x4x1.f32",
+                          "llvm.amdgcn.mfma.f32.4x4x1.f32",
+                          LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 4, 4, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 1, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 1, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR("mfma.f32.4x4x2.bf16",
+                          "llvm.amdgcn.mfma.f32.4x4x2.bf16",
+                          LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 4, 4, 2,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_BF16, 1, 2,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_BF16, 1, 2,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR("mfma.f32.4x4x4.f16",
+                          "llvm.amdgcn.mfma.f32.4x4x4.f16",
+                          LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 4, 4, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F16, 2, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F16, 2, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
         MATRIX_DESCRIPTOR("mfma.f32.4x4x4.bf16.1k",
                           "llvm.amdgcn.mfma.f32.4x4x4.bf16.1k",
                           LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
@@ -379,6 +409,53 @@ static const loom_amdgpu_matrix_contract_descriptor_t
                           LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
                           LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
                           LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR("mfma.f64.16x16x4.f64",
+                          "llvm.amdgcn.mfma.f64.16x16x4.f64",
+                          LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64,
+                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 2, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 2, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 8, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 8, 4,
+                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR("mfma.f64.4x4x4.f64",
+                          "llvm.amdgcn.mfma.f64.4x4x4.f64",
+                          LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64,
+                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 4, 4, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 2, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 2, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 2, 1,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_F64, 2, 1,
+                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR("mfma.i32.4x4x4.i8", "llvm.amdgcn.mfma.i32.4x4x4.i8",
+                          LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 4, 4, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_I8, 1, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_I8, 1, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_I32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_NUMERIC_I32, 4, 4,
+                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR(
+            "mfma.i32.16x16x4.i8", "llvm.amdgcn.mfma.i32.16x16x4.i8",
+            LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 4,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I8, 1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I8,
+            1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I32, 16, 16,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 16, 16,
+            LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR(
+            "mfma.i32.16x16x16.i8", "llvm.amdgcn.mfma.i32.16x16x16.i8",
+            LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 16,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I8, 1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I8,
+            1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I32, 4, 4,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 4, 4,
+            LOOM_AMDGPU_MATRIX_SCALE_NONE),
         MATRIX_DESCRIPTOR(
             "mfma.i32.16x16x32.i8", "llvm.amdgcn.mfma.i32.16x16x32.i8",
             LOOM_AMDGPU_MATRIX_FAMILY_MFMA, MFMA_GFX940_FP8_FEATURES,
@@ -394,6 +471,24 @@ static const loom_amdgpu_matrix_contract_descriptor_t
             LOOM_AMDGPU_MATRIX_NUMERIC_I8, 4, 16, LOOM_AMDGPU_MATRIX_NUMERIC_I8,
             4, 16, LOOM_AMDGPU_MATRIX_NUMERIC_I32, 4, 4,
             LOOM_AMDGPU_MATRIX_NUMERIC_I32, 4, 4,
+            LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR(
+            "mfma.i32.32x32x4.i8", "llvm.amdgcn.mfma.i32.32x32x4.i8",
+            LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 32, 32, 4,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I8, 1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I8,
+            1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I32, 32, 32,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 32, 32,
+            LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR(
+            "mfma.i32.32x32x8.i8", "llvm.amdgcn.mfma.i32.32x32x8.i8",
+            LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 32, 32, 8,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I8, 1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I8,
+            1, 4, LOOM_AMDGPU_MATRIX_NUMERIC_I32, 16, 16,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32, 16, 16,
             LOOM_AMDGPU_MATRIX_SCALE_NONE),
         MATRIX_DESCRIPTOR(
             "mfma.i32.32x32x16.i8", "llvm.amdgcn.mfma.i32.32x32x16.i8",
@@ -1053,13 +1148,15 @@ iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
   if (loom_amdgpu_matrix_processor_is_any(processor, gfx90a_processors,
                                           IREE_ARRAYSIZE(gfx90a_processors))) {
     *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
-                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K;
+                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
+                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64;
     return iree_ok_status();
   }
   if (loom_amdgpu_matrix_processor_is_any(processor, gfx940_processors,
                                           IREE_ARRAYSIZE(gfx940_processors))) {
     *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
                         LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
+                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 |
                         MFMA_GFX940_FP8_FEATURES |
                         LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940;
     return iree_ok_status();
@@ -1068,6 +1165,7 @@ iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
                                           IREE_ARRAYSIZE(gfx950_processors))) {
     *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
                         LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
+                        LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 |
                         MFMA_GFX940_FP8_FEATURES | MFMA_GFX950_SCALE_FEATURES |
                         LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940 |
                         LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX950;

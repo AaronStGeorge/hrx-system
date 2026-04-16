@@ -97,6 +97,76 @@ TEST(MatrixContractTest, Gfx908LegacyMfmaDescriptor) {
   EXPECT_EQ(descriptor->result_payload.register_count, 16);
 }
 
+TEST(MatrixContractTest, Gfx908SmallLegacyMfmaDescriptor) {
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      FindDescriptor("mfma.f32.4x4x2.bf16");
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
+  EXPECT_EQ(descriptor->required_feature_bits,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908);
+  EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
+            "llvm.amdgcn.mfma.f32.4x4x2.bf16");
+  EXPECT_EQ(descriptor->tile_shape.result_row_count, 4);
+  EXPECT_EQ(descriptor->tile_shape.result_column_count, 4);
+  EXPECT_EQ(descriptor->tile_shape.reduction_count, 2);
+  EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF16);
+  EXPECT_EQ(descriptor->lhs_payload.register_count, 1);
+  EXPECT_EQ(descriptor->lhs_payload.element_count, 2);
+  EXPECT_EQ(descriptor->result_payload.register_count, 4);
+}
+
+TEST(MatrixContractTest, Gfx908LegacyIntegerMfmaDescriptor) {
+  const loom_amdgpu_matrix_contract_descriptor_t* small_descriptor =
+      FindDescriptor("mfma.i32.4x4x4.i8");
+  ASSERT_NE(small_descriptor, nullptr);
+  EXPECT_EQ(small_descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
+  EXPECT_EQ(small_descriptor->required_feature_bits,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908);
+  EXPECT_EQ(small_descriptor->tile_shape.result_row_count, 4);
+  EXPECT_EQ(small_descriptor->tile_shape.result_column_count, 4);
+  EXPECT_EQ(small_descriptor->tile_shape.reduction_count, 4);
+  EXPECT_EQ(small_descriptor->lhs_payload.register_count, 1);
+  EXPECT_EQ(small_descriptor->result_payload.register_count, 4);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      FindDescriptor("mfma.i32.16x16x16.i8");
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
+  EXPECT_EQ(descriptor->required_feature_bits,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908);
+  EXPECT_EQ(descriptor->tile_shape.result_row_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.result_column_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.reduction_count, 16);
+  EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I8);
+  EXPECT_EQ(descriptor->lhs_payload.register_count, 1);
+  EXPECT_EQ(descriptor->lhs_payload.element_count, 4);
+  EXPECT_EQ(descriptor->accumulator_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32);
+  EXPECT_EQ(descriptor->result_payload.register_count, 4);
+}
+
+TEST(MatrixContractTest, Gfx90aDoubleMfmaDescriptor) {
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      FindDescriptor("mfma.f64.16x16x4.f64");
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
+  EXPECT_EQ(descriptor->required_feature_bits,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64);
+  EXPECT_EQ(descriptor->tile_shape.result_row_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.result_column_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.reduction_count, 4);
+  EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F64);
+  EXPECT_EQ(descriptor->lhs_payload.register_count, 2);
+  EXPECT_EQ(descriptor->lhs_payload.element_count, 1);
+  EXPECT_EQ(descriptor->result_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F64);
+  EXPECT_EQ(descriptor->result_payload.register_count, 8);
+  EXPECT_EQ(descriptor->result_payload.element_count, 4);
+}
+
 TEST(MatrixContractTest, Gfx950ScaledMfmaDescriptor) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       FindDescriptor("mfma.scale.f32.32x32x64.f8f6f4");
@@ -182,9 +252,15 @@ TEST(MatrixContractTest, WmmaFp8CrossProductDescriptors) {
 }
 
 TEST(MatrixContractTest, ProcessorFeatureBitsGateAvailability) {
+  loom_amdgpu_matrix_feature_bits_t gfx908_features = 0;
+  IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
+      IREE_SV("gfx908"), &gfx908_features));
   loom_amdgpu_matrix_feature_bits_t gfx942_features = 0;
   IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
       IREE_SV("gfx942"), &gfx942_features));
+  loom_amdgpu_matrix_feature_bits_t gfx90a_features = 0;
+  IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
+      IREE_SV("gfx90a"), &gfx90a_features));
   loom_amdgpu_matrix_feature_bits_t gfx950_features = 0;
   IREE_ASSERT_OK(loom_amdgpu_matrix_feature_bits_for_processor(
       IREE_SV("gfx950"), &gfx950_features));
@@ -197,6 +273,14 @@ TEST(MatrixContractTest, ProcessorFeatureBitsGateAvailability) {
   ASSERT_NE(fp8_mfma, nullptr);
   EXPECT_TRUE(
       loom_amdgpu_matrix_contract_is_available(fp8_mfma, gfx942_features, 64));
+
+  const loom_amdgpu_matrix_contract_descriptor_t* double_mfma =
+      FindDescriptor("mfma.f64.16x16x4.f64");
+  ASSERT_NE(double_mfma, nullptr);
+  EXPECT_FALSE(loom_amdgpu_matrix_contract_is_available(double_mfma,
+                                                        gfx908_features, 64));
+  EXPECT_TRUE(loom_amdgpu_matrix_contract_is_available(double_mfma,
+                                                       gfx90a_features, 64));
 
   const loom_amdgpu_matrix_contract_descriptor_t* scaled_mfma =
       FindDescriptor("mfma.scale.f32.16x16x128.f8f6f4");
