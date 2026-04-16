@@ -74,6 +74,7 @@ from loom.dsl import (
     HasIndexOrNonI1IntegerScalar,
     HasIntegerElement,
     HasRankOneVector,
+    LastAxisGroupedBy,
     Op,
     Operand,
     Reads,
@@ -2922,8 +2923,8 @@ vector_dot2f = Op(
         SameShape("lhs", "rhs"),
         SameElementType("lhs", "rhs"),
         SameType("acc", "result"),
+        LastAxisGroupedBy("lhs", "result", 2),
     ],
-    verify="loom_vector_dot2f_verify",
     traits=[PURE],
     format=[
         Ref("lhs"),
@@ -2966,8 +2967,8 @@ vector_dot4i = Op(
         HasI32Element("acc"),
         SameShape("lhs", "rhs"),
         SameType("acc", "result"),
+        LastAxisGroupedBy("lhs", "result", 4),
     ],
-    verify="loom_vector_dot4i_verify",
     traits=[PURE],
     format=[
         TemplateParam("kind"),

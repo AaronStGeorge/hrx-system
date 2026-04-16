@@ -156,6 +156,7 @@ __all__ = [
     "OffsetCountMatchesRank",
     "DimIndexInBounds",
     "AllShapesMatch",
+    "LastAxisGroupedBy",
     "BlockArgCount",
     "BlockArgsMatchTypes",
     "BlockArgsMatchElementTypes",
@@ -711,6 +712,7 @@ class Constraint:
       args: Field names this constraint references.
       error: Structured error definition emitted on failure.
       validate: Optional Python predicate for the oracle/validator.
+      data: Optional small integer payload interpreted by the named constraint.
 
     Constraints are defined as module-level constructor functions
     (SameType, RanksMatch, etc.) that return Constraint instances
@@ -721,6 +723,7 @@ class Constraint:
     args: tuple[str, ...]
     error: ErrorDef | None = None
     validate: ValidateFn | None = None
+    data: int | None = None
 
     def __init__(
         self,
@@ -728,11 +731,13 @@ class Constraint:
         args: tuple[str, ...],
         error: ErrorDef | None = None,
         validate: ValidateFn | None = None,
+        data: int | None = None,
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "args", args)
         object.__setattr__(self, "error", error)
         object.__setattr__(self, "validate", validate)
+        object.__setattr__(self, "data", data)
 
     def check(self, fields: dict[str, Any]) -> tuple[bool, str]:
         """Run the validation predicate. Returns (ok, message)."""
@@ -1264,6 +1269,75 @@ def AllShapesMatch(field: str) -> Constraint:
         "AllShapesMatch",
         (field,),
         error=ERR_SHAPE_003,
+        validate=_validate,
+    )
+
+
+def LastAxisGroupedBy(source: str, result: str, group_size: int) -> Constraint:
+    """Result shape equals source shape with the last axis divided by group_size."""
+
+    if group_size <= 0 or group_size > 255:
+        raise ValueError("group_size must be in [1, 255]")
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        from loom.ir import DynamicDim, ShapedType, StaticDim, TypeKind
+
+        source_value_type = _field_value_type(values.get(source))
+        result_value_type = _field_value_type(values.get(result))
+        if not isinstance(source_value_type, ShapedType) or not isinstance(
+            result_value_type, ShapedType
+        ):
+            return (True, "")
+        if (
+            source_value_type.type_kind != TypeKind.VECTOR
+            or result_value_type.type_kind != TypeKind.VECTOR
+        ):
+            return (True, "")
+        if source_value_type.rank != result_value_type.rank:
+            return (
+                False,
+                f"'{result}' rank {result_value_type.rank} != "
+                f"'{source}' rank {source_value_type.rank}",
+            )
+        if source_value_type.rank == 0:
+            return (True, "")
+        leading_source_dims = source_value_type.dims[:-1]
+        leading_result_dims = result_value_type.dims[:-1]
+        if leading_source_dims != leading_result_dims:
+            return (
+                False,
+                f"'{result}' leading shape {leading_result_dims} != "
+                f"'{source}' leading shape {leading_source_dims}",
+            )
+        source_last_dim = source_value_type.dims[-1]
+        result_last_dim = result_value_type.dims[-1]
+        if isinstance(source_last_dim, DynamicDim):
+            return (True, "")
+        if not isinstance(source_last_dim, StaticDim):
+            return (True, "")
+        if source_last_dim.size % group_size != 0:
+            return (
+                False,
+                f"'{source}' last axis {source_last_dim.size} is not divisible "
+                f"by {group_size}",
+            )
+        if isinstance(result_last_dim, DynamicDim):
+            return (True, "")
+        if not isinstance(result_last_dim, StaticDim):
+            return (True, "")
+        expected_last_dim = source_last_dim.size // group_size
+        if result_last_dim.size == expected_last_dim:
+            return (True, "")
+        return (
+            False,
+            f"'{result}' last axis {result_last_dim.size} != "
+            f"'{source}' last axis {source_last_dim.size} divided by {group_size}",
+        )
+
+    return Constraint(
+        "LastAxisGroupedBy",
+        (source, result),
+        data=group_size,
         validate=_validate,
     )
 

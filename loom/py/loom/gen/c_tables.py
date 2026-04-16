@@ -231,6 +231,7 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
     ),
     "DimIndexInBounds": ("LOOM_RELATION_ATTR_IN_RANGE_RANK", "LOOM_PROPERTY_RANK"),
     "AllShapesMatch": ("LOOM_RELATION_ALL_SAME", "LOOM_PROPERTY_SHAPE"),
+    "LastAxisGroupedBy": ("LOOM_RELATION_LAST_AXIS_GROUPED_BY", "$data"),
     "BlockArgCount": ("LOOM_RELATION_REGION_ARG_COUNT", "LOOM_PROPERTY_TYPE"),
     "BlockArgsMatchTypes": (
         "LOOM_RELATION_REGION_ARG_MATCH",
@@ -2530,6 +2531,12 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             if constraint_entry is None:
                 raise ValueError(f"Op '{op.name}': unknown constraint '{constraint.name}'")
             relation_name, property_name = constraint_entry
+            if property_name == "$data":
+                if constraint.data is None:
+                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: missing data payload")
+                if constraint.data < 0 or constraint.data > 255:
+                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload out of uint8_t range")
+                property_name = str(constraint.data)
             # Resolve field name args to packed field references.
             arg_refs: list[str] = []
             for arg_name in constraint.args:

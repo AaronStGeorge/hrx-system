@@ -402,44 +402,44 @@ enum loom_constraint_relation_e {
 
   // All elements of a single variadic value field share the same
   // property. Args: 1 variadic value field. Used by AllShapesMatch.
-  LOOM_RELATION_ALL_SAME = 1,
+  LOOM_RELATION_ALL_SAME,
 
   // Every value in every listed field satisfies a type constraint.
   // The property slot stores a loom_type_constraint_t. Args: 1+ value
   // fields. Used by Has*Element and Has*Vector constraints.
-  LOOM_RELATION_FIELD_SATISFIES = 2,
+  LOOM_RELATION_FIELD_SATISFIES,
 
   // The element count of a variadic value field equals the rank of a
   // shaped value field. Args: (shaped value field, variadic value
   // field). Used by OffsetCountMatchesRank.
-  LOOM_RELATION_COUNT_MATCHES_RANK = 3,
+  LOOM_RELATION_COUNT_MATCHES_RANK,
 
   // An i64 attribute's value falls within [0, rank) of a shaped value
   // field. Args: (shaped value field, i64 attr field). Used by
   // DimIndexInBounds.
-  LOOM_RELATION_ATTR_IN_RANGE_RANK = 4,
+  LOOM_RELATION_ATTR_IN_RANGE_RANK,
 
   // A region's entry block argument count matches the element count
   // of a variadic value field. Args: (region field, variadic value
   // field). Used by BlockArgCount.
-  LOOM_RELATION_REGION_ARG_COUNT = 5,
+  LOOM_RELATION_REGION_ARG_COUNT,
 
   // Each region entry block argument's property matches the
   // corresponding element of a variadic value field at the same
   // position. Args: (region field, variadic value field). Used by
   // BlockArgsMatchElementTypes.
-  LOOM_RELATION_REGION_ARG_MATCH = 6,
+  LOOM_RELATION_REGION_ARG_MATCH,
 
   // A region's terminator (yield) operand count matches the element
   // count of a variadic value field. Args: (region field, variadic
   // value field). Used by YieldCountMatchesResults.
-  LOOM_RELATION_YIELD_COUNT = 7,
+  LOOM_RELATION_YIELD_COUNT,
 
   // Each region terminator (yield) operand's property matches the
   // corresponding element of a variadic value field at the same
   // position. Args: (region field, variadic value field). Used by
   // YieldTypesMatchResults and YieldElementTypesMatchResults.
-  LOOM_RELATION_YIELD_MATCH = 8,
+  LOOM_RELATION_YIELD_MATCH,
 
   // Two variadic value fields agree position-by-position. The two
   // fields must have the same element count, and the property at
@@ -447,7 +447,13 @@ enum loom_constraint_relation_e {
   // error and per-position property mismatches with one error each.
   // Args: (variadic value field, variadic value field). Used by
   // IterArgsMatchResults.
-  LOOM_RELATION_VARIADIC_MATCH = 9,
+  LOOM_RELATION_VARIADIC_MATCH,
+
+  // Result vector shape equals source vector shape with the last axis divided
+  // by a small static group size stored in the property slot.
+  // Args: (source vector field, result vector field). Used by
+  // LastAxisGroupedBy.
+  LOOM_RELATION_LAST_AXIS_GROUPED_BY,
 
   LOOM_RELATION_COUNT_,
 };

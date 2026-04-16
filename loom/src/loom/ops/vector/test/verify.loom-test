@@ -1208,7 +1208,7 @@ func.def @dot2f_source_last_axis_not_multiple_of_two(%lhs: vector<5xf16>, %rhs: 
 
 // Static accumulator/result lanes must be the grouped last-axis source extent.
 func.def @dot2f_result_axis_mismatch(%lhs: vector<6xbf16>, %rhs: vector<6xbf16>, %acc: vector<4xf32>) {
-  // ERROR@+1: TYPE/004 "last axis extent equal to lhs last axis extent divided by 2"
+  // ERROR@+1: TYPE/004 "last axis extent equal to source last axis extent divided by 2"
   %r = vector.dot2f %lhs, %rhs, %acc : vector<6xbf16>, vector<6xbf16>, vector<4xf32>
   func.return
 }
@@ -1254,7 +1254,7 @@ func.def @dot4i_source_last_axis_not_multiple_of_four(%lhs: vector<10xi8>, %rhs:
 
 // Static accumulator/result lanes must be the grouped last-axis source extent.
 func.def @dot4i_result_axis_mismatch(%lhs: vector<16xi8>, %rhs: vector<16xi8>, %acc: vector<5xi32>) {
-  // ERROR@+1: TYPE/004 "last axis extent equal to lhs last axis extent divided by 4"
+  // ERROR@+1: TYPE/004 "last axis extent equal to source last axis extent divided by 4"
   %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<5xi32>
   func.return
 }

@@ -2069,6 +2069,130 @@ static void loom_verify_relation_field_satisfies(
   }
 }
 
+static iree_string_view_t loom_verify_grouped_last_axis_divisibility_constraint(
+    int64_t group_size) {
+  switch (group_size) {
+    case 2:
+      return IREE_SV("last axis extent divisible by 2");
+    case 4:
+      return IREE_SV("last axis extent divisible by 4");
+    case 8:
+      return IREE_SV("last axis extent divisible by 8");
+    default:
+      return IREE_SV("last axis extent divisible by group size");
+  }
+}
+
+static iree_string_view_t loom_verify_grouped_last_axis_result_constraint(
+    int64_t group_size) {
+  switch (group_size) {
+    case 2:
+      return IREE_SV(
+          "last axis extent equal to source last axis extent divided by 2");
+    case 4:
+      return IREE_SV(
+          "last axis extent equal to source last axis extent divided by 4");
+    case 8:
+      return IREE_SV(
+          "last axis extent equal to source last axis extent divided by 8");
+    default:
+      return IREE_SV(
+          "last axis extent equal to source last axis extent divided by group "
+          "size");
+  }
+}
+
+// LAST_AXIS_GROUPED_BY: result vector shape equals source vector shape with
+// the last axis divided by a small static group size stored in the property
+// slot. Args: (source vector field, result vector field).
+static void loom_verify_relation_last_axis_grouped_by(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2 || constraint->property == 0) return;
+  uint8_t source_ref = constraint->args[0];
+  uint8_t result_ref = constraint->args[1];
+  loom_value_id_t source_id = loom_verify_resolve_value_field(op, source_ref);
+  loom_value_id_t result_id = loom_verify_resolve_value_field(op, result_ref);
+  if (source_id == LOOM_VALUE_ID_INVALID ||
+      result_id == LOOM_VALUE_ID_INVALID) {
+    return;
+  }
+
+  loom_type_t source_type = loom_verify_value_type(state, source_id);
+  loom_type_t result_type = loom_verify_value_type(state, result_id);
+  if (!loom_type_is_vector(source_type) || !loom_type_is_vector(result_type)) {
+    return;
+  }
+
+  char source_name_buffer[32];
+  char result_name_buffer[32];
+  iree_string_view_t source_name = loom_verify_field_name(
+      op, vtable, source_ref, source_name_buffer, sizeof(source_name_buffer));
+  iree_string_view_t result_name = loom_verify_field_name(
+      op, vtable, result_ref, result_name_buffer, sizeof(result_name_buffer));
+
+  uint8_t source_rank = loom_type_rank(source_type);
+  uint8_t result_rank = loom_type_rank(result_type);
+  if (source_rank == 0 || result_rank == 0) return;
+  if (result_rank != source_rank) {
+    loom_diagnostic_param_t params[] = {
+        loom_verify_param_string_for_field(result_name, result_ref),
+        loom_param_i64(result_rank),
+        loom_verify_param_string_for_field(source_name, source_ref),
+        loom_param_i64(source_rank),
+    };
+    loom_verify_emit_structured(state, op, &loom_err_shape_001, params,
+                                IREE_ARRAYSIZE(params));
+    return;
+  }
+
+  uint8_t grouped_axis = source_rank - 1;
+  for (uint8_t axis = 0; axis < grouped_axis; ++axis) {
+    if (loom_type_dim(source_type, axis) == loom_type_dim(result_type, axis)) {
+      continue;
+    }
+    loom_diagnostic_param_t params[] = {
+        loom_verify_param_string_for_field(result_name, result_ref),
+        loom_verify_param_string_for_field(source_name, source_ref),
+    };
+    loom_verify_emit_structured(state, op, &loom_err_shape_002, params,
+                                IREE_ARRAYSIZE(params));
+    return;
+  }
+
+  if (loom_type_dim_is_dynamic_at(source_type, grouped_axis)) return;
+
+  int64_t source_axis_size =
+      loom_type_dim_static_size_at(source_type, grouped_axis);
+  int64_t group_size = constraint->property;
+  if ((source_axis_size % group_size) != 0) {
+    loom_diagnostic_param_t params[] = {
+        loom_verify_param_string_for_field(source_name, source_ref),
+        loom_param_type(source_type),
+        loom_param_string(
+            loom_verify_grouped_last_axis_divisibility_constraint(group_size)),
+    };
+    loom_verify_emit_structured(state, op, &loom_err_type_003, params,
+                                IREE_ARRAYSIZE(params));
+    return;
+  }
+
+  if (loom_type_dim_is_dynamic_at(result_type, grouped_axis)) return;
+
+  int64_t result_axis_size =
+      loom_type_dim_static_size_at(result_type, grouped_axis);
+  if (result_axis_size == source_axis_size / group_size) return;
+
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(result_name, result_ref),
+      loom_param_type(result_type),
+      loom_param_string(
+          loom_verify_grouped_last_axis_result_constraint(group_size)),
+  };
+  loom_verify_emit_structured(state, op, &loom_err_type_004, params,
+                              IREE_ARRAYSIZE(params));
+}
+
 // COUNT_MATCHES_RANK: a variadic value field's element count equals
 // the rank of a shaped value field. Args: (shaped value field,
 // variadic value field).
@@ -2370,6 +2494,8 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_YIELD_COUNT] = loom_verify_relation_yield_count,
     [LOOM_RELATION_YIELD_MATCH] = loom_verify_relation_yield_match,
     [LOOM_RELATION_VARIADIC_MATCH] = loom_verify_relation_variadic_match,
+    [LOOM_RELATION_LAST_AXIS_GROUPED_BY] =
+        loom_verify_relation_last_axis_grouped_by,
 };
 static_assert(IREE_ARRAYSIZE(kVerifyRelationFns) == LOOM_RELATION_COUNT_,
               "verify relation dispatch table out of sync with enum");

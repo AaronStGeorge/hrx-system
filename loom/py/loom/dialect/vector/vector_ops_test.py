@@ -668,6 +668,7 @@ def test_vector_bitpack_ops_are_pure_register_pack_ops() -> None:
 def test_vector_dot4i_is_pure_grouped_i8_to_i32_dot() -> None:
     op = _op_by_name()["vector.dot4i"]
     constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    grouped_constraints = {(constraint.name, constraint.args, constraint.data) for constraint in op.constraints}
     trait_names = {trait.name for trait in op.traits}
 
     assert [case.keyword for case in IntegerDot4Kind.cases] == [
@@ -681,6 +682,7 @@ def test_vector_dot4i_is_pure_grouped_i8_to_i32_dot() -> None:
     assert ("HasI32Element", ("acc",)) in constraints
     assert ("SameShape", ("lhs", "rhs")) in constraints
     assert ("SameType", ("acc", "result")) in constraints
+    assert ("LastAxisGroupedBy", ("lhs", "result"), 4) in grouped_constraints
     assert "Pure" in trait_names
     assert "Elementwise" not in trait_names
     assert op.effects == ()
@@ -732,6 +734,7 @@ def test_vector_dot4f8_is_pure_packed_f8_to_f32_dot() -> None:
 def test_vector_dot2f_is_pure_grouped_f16_bf16_to_f32_dot() -> None:
     op = _op_by_name()["vector.dot2f"]
     constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    grouped_constraints = {(constraint.name, constraint.args, constraint.data) for constraint in op.constraints}
     trait_names = {trait.name for trait in op.traits}
 
     assert ("HasF16OrBf16Element", ("lhs",)) in constraints
@@ -740,6 +743,7 @@ def test_vector_dot2f_is_pure_grouped_f16_bf16_to_f32_dot() -> None:
     assert ("SameShape", ("lhs", "rhs")) in constraints
     assert ("SameElementType", ("lhs", "rhs")) in constraints
     assert ("SameType", ("acc", "result")) in constraints
+    assert ("LastAxisGroupedBy", ("lhs", "result"), 2) in grouped_constraints
     assert "fdot2" in op.doc
     assert "scalar.fmaf" in op.doc
     assert "Pure" in trait_names

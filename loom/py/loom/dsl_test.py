@@ -80,6 +80,7 @@ from loom.dsl import (
     HasParent,
     HasRankOneVector,
     ImplicitTerminator,
+    LastAxisGroupedBy,
     OffsetCountMatchesRank,
     Op,
     Operand,
@@ -526,6 +527,46 @@ class TestConstraints:
         c = AllShapesMatch("inputs")
         assert c.error is not None
         assert c.error.error_id == "ERR_SHAPE_003"
+
+    def test_last_axis_grouped_by(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        def vector_type(*sizes: int) -> ShapedType:
+            return ShapedType(
+                TypeKind.VECTOR, F32, tuple(StaticDim(size) for size in sizes)
+            )
+
+        constraint = LastAxisGroupedBy("lhs", "result", 4)
+
+        assert constraint.name == "LastAxisGroupedBy"
+        assert constraint.args == ("lhs", "result")
+        assert constraint.data == 4
+        assert constraint.check(
+            {
+                "lhs": FakeValue(vector_type(2, 16)),
+                "result": FakeValue(vector_type(2, 4)),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "lhs": FakeValue(vector_type(2, 10)),
+                "result": FakeValue(vector_type(2, 2)),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "lhs": FakeValue(vector_type(2, 16)),
+                "result": FakeValue(vector_type(3, 4)),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "lhs": FakeValue(vector_type(2, 16)),
+                "result": FakeValue(vector_type(2, 5)),
+            }
+        )[0]
 
     def test_region_constraints(self) -> None:
         block_arg_count = BlockArgCount("body", "inputs")

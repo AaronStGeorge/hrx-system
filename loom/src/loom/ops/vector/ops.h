@@ -2755,9 +2755,6 @@ iree_status_t loom_vector_dot2f_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_dot2f_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_DOT4I: Group adjacent four-lane i8 products along the last axis and add each four-product sum into an i32 accumulator lane. The signedness template chooses how lhs and rhs i8 lanes are interpreted, matching dp4a/VNNI-style hardware operations.
 // %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>
@@ -2776,9 +2773,6 @@ iree_status_t loom_vector_dot4i_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_dot4i_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_DOT8I4: Treat each i32 source lane as a little-endian pack of eight 4-bit integer fields, multiply corresponding packed fields using the signedness template, and add the eight-product sum into the matching i32 accumulator lane. This is a packed-storage register dot: use vector.bitpack<4> when starting from unpacked byte lanes. The semantics match AMDGPU sdot8/udot8/sudot8 with clamp disabled.
 // %r = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi32>

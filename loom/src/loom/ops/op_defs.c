@@ -186,6 +186,7 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_YIELD_COUNT] = "YieldCount",
       [LOOM_RELATION_YIELD_MATCH] = "YieldMatch",
       [LOOM_RELATION_VARIADIC_MATCH] = "VariadicMatch",
+      [LOOM_RELATION_LAST_AXIS_GROUPED_BY] = "LastAxisGroupedBy",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_RELATION_COUNT_,
                 "relation names out of sync with enum");
