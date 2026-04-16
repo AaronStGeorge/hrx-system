@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "block_quant_canonicalize"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/block_quant_canonicalize.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "block_quant_samples"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/block_quant_samples.loom-test"

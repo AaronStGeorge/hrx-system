@@ -1,0 +1,34 @@
+// RUN: pass canonicalize
+
+// Q4_0 stores offset-binary 4-bit codes: logical signed value is code - 8.
+// Xoring each nibble with 8 converts that offset-binary representation into
+// two's-complement signed i4 fields that vector.dot8i4 can consume directly.
+// This tiny two-row GEMV-style fixture proves the repack path computes the same
+// integer contribution a scalar reference decode would produce when scale=1.
+func.def @q4_0_repack_to_dot8i4_micro_gemv() -> (i32, i32) {
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %row0_storage = scalar.constant 1985229328 : i32
+  %row1_storage = scalar.constant -19088744 : i32
+  %rows = vector.from_elements %row0_storage, %row1_storage : vector<2xi32>
+
+  %q4_offset_to_signed_mask = vector.constant -2004318072 : vector<2xi32>
+  %signed_rows = vector.xori %rows, %q4_offset_to_signed_mask : vector<2xi32>
+
+  %rhs_storage = scalar.constant 124076833 : i32
+  %rhs = vector.splat %rhs_storage : vector<2xi32>
+  %acc = vector.constant 0 : vector<2xi32>
+  %dot = vector.dot8i4<s4u4> %signed_rows, %rhs, %acc : vector<2xi32>
+  %r0 = vector.extract %dot[0] : vector<2xi32> -> i32
+  %r1 = vector.extract %dot[1] : vector<2xi32> -> i32
+  func.return %r0, %r1 : i32, i32
+}
+// ----
+func.def @q4_0_repack_to_dot8i4_micro_gemv() -> (i32, i32) {
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %r0 = scalar.constant -112 : i32
+  %r1 = scalar.constant 112 : i32
+  func.return %r0, %r1 : i32, i32
+}
