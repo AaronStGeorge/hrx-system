@@ -229,6 +229,24 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    kernel_resources
+  HDRS
+    "kernel_resources.h"
+  SRCS
+    "kernel_resources.c"
+  DEPS
+    ::pass
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     licm
   HDRS
     "licm.h"

@@ -32,6 +32,7 @@
 #include "loom/transforms/cse.h"
 #include "loom/transforms/dce.h"
 #include "loom/transforms/kernel_async_legality.h"
+#include "loom/transforms/kernel_resources.h"
 #include "loom/transforms/licm.h"
 #include "loom/transforms/loop_fusion.h"
 #include "loom/transforms/pass.h"
@@ -321,6 +322,12 @@ static iree_status_t loom_check_run_pipeline(
       status = loom_pass_manager_add_function_pass(
           &manager, loom_kernel_async_legality_pass_info(),
           loom_kernel_async_legality_run, NULL, NULL, iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name,
+                                      IREE_SV("normalize-kernel-resources"))) {
+      status = loom_pass_manager_add_function_pass(
+          &manager, loom_normalize_kernel_resources_pass_info(),
+          loom_normalize_kernel_resources_run, NULL, NULL,
+          iree_string_view_empty());
     } else if (iree_string_view_equal(pass_name, IREE_SV("cse"))) {
       status = loom_pass_manager_add_function_pass(
           &manager, loom_cse_pass_info(), loom_cse_run, NULL, NULL,

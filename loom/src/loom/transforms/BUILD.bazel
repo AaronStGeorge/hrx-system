@@ -206,6 +206,21 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "kernel_resources",
+    srcs = ["kernel_resources.c"],
+    hdrs = ["kernel_resources.h"],
+    deps = [
+        ":pass",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "licm",
     srcs = ["licm.c"],
     hdrs = ["licm.h"],
