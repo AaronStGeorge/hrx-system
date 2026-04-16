@@ -204,8 +204,24 @@ class BytecodeWriter:
             f.write(data)
     """
 
-    def __init__(self, module: Module) -> None:
+    def __init__(
+        self,
+        module: Module,
+        *,
+        location_mode: int = LOCATION_MODE_SOURCE_LOCATIONS,
+    ) -> None:
+        if location_mode not in (
+            LOCATION_MODE_SOURCE_LOCATIONS,
+            LOCATION_MODE_NO_LOCATIONS,
+            LOCATION_MODE_FULL_LOCATIONS,
+        ):
+            raise ValueError(f"unsupported location mode: {location_mode}")
+        if location_mode == LOCATION_MODE_FULL_LOCATIONS:
+            raise NotImplementedError(
+                "FULL_LOCATIONS bytecode mode requires field span emission"
+            )
         self._module = module
+        self._location_mode = location_mode
         self._ctx = NumberingContext()
         self._number_module()
 
@@ -363,7 +379,8 @@ class BytecodeWriter:
         sections[SECTION_ENCODINGS] = self._write_encodings()
         sections[SECTION_TYPES] = self._write_types()
         sections[SECTION_OPS] = self._write_ops()
-        sections[SECTION_LOCATIONS] = self._write_locations()
+        if self._location_mode != LOCATION_MODE_NO_LOCATIONS:
+            sections[SECTION_LOCATIONS] = self._write_locations()
         ir_bytes, ir_offsets = self._write_ir()
         sections[SECTION_IR] = ir_bytes
         sections[SECTION_SYMBOLS] = self._write_symbols(ir_offsets)
@@ -691,7 +708,10 @@ class BytecodeWriter:
         """Write a single operation."""
         buf.write_varint(self._ctx.ops[op.name] + 1)
         buf.write_u8(0)  # flags
-        buf.write_varint(op.location_id)
+        location_id = (
+            0 if self._location_mode == LOCATION_MODE_NO_LOCATIONS else op.location_id
+        )
+        buf.write_varint(location_id)
 
         # Operands.
         buf.write_varint(len(op.operands))
@@ -953,7 +973,7 @@ class BytecodeWriter:
         # File header.
         buf.write_bytes(MAGIC)
         buf.write_u8(FORMAT_VERSION)
-        buf.write_u8(LOCATION_MODE_SOURCE_LOCATIONS)
+        buf.write_u8(self._location_mode)
         buf.write_u16_le(1)  # module_count = 1
         # File string pool: just the module name for now.
         module_name = self._module.name.encode("utf-8")
@@ -1022,6 +1042,8 @@ class BytecodeWriter:
 # ============================================================================
 
 
-def write_module(module: Module) -> bytes:
+def write_module(
+    module: Module, *, location_mode: int = LOCATION_MODE_SOURCE_LOCATIONS
+) -> bytes:
     """Write a module to .loombc bytes."""
-    return BytecodeWriter(module).write()
+    return BytecodeWriter(module, location_mode=location_mode).write()

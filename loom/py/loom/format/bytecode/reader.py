@@ -1054,4 +1054,7 @@ class BytecodeReader:
 
 def read_module(data: bytes) -> Module:
     """Read a module from .loombc bytes."""
-    return BytecodeReader(data).read()
+    try:
+        return BytecodeReader(data).read()
+    except ValueError as err:
+        raise BytecodeError(str(err)) from err

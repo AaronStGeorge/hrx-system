@@ -82,6 +82,18 @@ class TestVarint:
         with pytest.raises(ValueError, match="unterminated"):
             decode_varint(b"\x80\x80")  # No terminating byte.
 
+    def test_non_canonical_zero_fails(self) -> None:
+        with pytest.raises(ValueError, match="non-canonical"):
+            decode_varint(b"\x80\x00")
+
+    def test_non_canonical_small_value_fails(self) -> None:
+        with pytest.raises(ValueError, match="non-canonical"):
+            decode_varint(b"\x81\x00")
+
+    def test_too_large_fails(self) -> None:
+        with pytest.raises(ValueError, match="too large"):
+            decode_varint(b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x02")
+
 
 class TestSignedVarint:
     def test_zero(self) -> None:
@@ -107,6 +119,10 @@ class TestSignedVarint:
         assert encode_signed_varint(1) == encode_varint(2)
         assert encode_signed_varint(-2) == encode_varint(3)
         assert encode_signed_varint(2) == encode_varint(4)
+
+    def test_non_canonical_fails(self) -> None:
+        with pytest.raises(ValueError, match="non-canonical"):
+            decode_signed_varint(b"\x80\x00")
 
 
 # ============================================================================

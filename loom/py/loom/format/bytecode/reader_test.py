@@ -12,12 +12,22 @@ for malformed input. The reader is the first consumer of the writer's
 output — these tests prove both are correct.
 """
 
+import struct
 from typing import Any
 
 import pytest
 
+from loom.format.bytecode.encoding import decode_varint
 from loom.format.bytecode.reader import BytecodeError, BytecodeReader, read_module
-from loom.format.bytecode.writer import BYTECODE_TYPE_KIND_BY_IR_KIND, write_module
+from loom.format.bytecode.writer import (
+    BYTECODE_TYPE_KIND_BY_IR_KIND,
+    LOCATION_MODE_FULL_LOCATIONS,
+    LOCATION_MODE_NO_LOCATIONS,
+    SECTION_ENCODINGS,
+    SECTION_IR,
+    SECTION_LOCATIONS,
+    write_module,
+)
 from loom.ir import (
     BF16,
     BUFFER_TYPE,
@@ -146,6 +156,102 @@ def _make_func(
     module.add_symbol(Symbol(name=name, kind=sym_kind, flags=flags, op=op))
 
 
+def _module_range(data: bytes | bytearray) -> tuple[int, int]:
+    """Return the absolute offset and length of the first module."""
+    producer_end = data.index(0, 16)
+    directory_offset = (producer_end + 1 + 7) & ~7
+    module_offset = struct.unpack_from("<Q", data, directory_offset + 8)[0]
+    module_length = struct.unpack_from("<Q", data, directory_offset + 16)[0]
+    return module_offset, module_length
+
+
+def _section_entries(data: bytes | bytearray) -> list[tuple[int, int, int, int]]:
+    """Return (entry_offset, kind, section_offset, length) directory entries."""
+    module_offset, _module_length = _module_range(data)
+    offset = module_offset
+    section_count, offset = decode_varint(data, offset)
+    for _ in range(4):
+        _count, offset = decode_varint(data, offset)
+
+    entries = []
+    for _ in range(section_count):
+        kind = struct.unpack_from("<H", data, offset)[0]
+        section_offset = struct.unpack_from("<Q", data, offset + 8)[0]
+        length = struct.unpack_from("<Q", data, offset + 16)[0]
+        entries.append((offset, kind, section_offset, length))
+        offset += 32
+    return entries
+
+
+def _find_section_entry(
+    data: bytes | bytearray, section_kind: int
+) -> tuple[int, int, int]:
+    """Return (entry_offset, section_offset, length) for a section kind."""
+    for entry_offset, kind, section_offset, length in _section_entries(data):
+        if kind == section_kind:
+            return entry_offset, section_offset, length
+    raise AssertionError(f"missing section kind {section_kind}")
+
+
+def _make_single_op_body_module(op_name: str = "test.yield") -> Module:
+    """Return a module with one function body containing one zero-operand op."""
+    module = Module(name="test")
+    block = Block(ops=[Operation(name=op_name)])
+    body = Region(blocks=[block])
+    module.add_symbol(
+        Symbol(
+            name="f",
+            kind=SymbolKind.FUNC_DEF,
+            op=Operation(
+                name="func.def",
+                attributes={"callee": "f"},
+                regions=[body],
+            ),
+        )
+    )
+    return module
+
+
+def _single_op_offset(data: bytes | bytearray) -> int:
+    """Return the absolute offset of the first op in _make_single_op_body_module."""
+    module_offset, _module_length = _module_range(data)
+    _entry_offset, section_offset, _section_length = _find_section_entry(
+        data, SECTION_IR
+    )
+    body_offset = module_offset + section_offset
+    offset = body_offset
+    for _ in range(4):
+        _count, offset = decode_varint(data, offset)
+    _block_count, offset = decode_varint(data, offset)
+    offset += 1  # block has_label byte.
+    _arg_count, offset = decode_varint(data, offset)
+    _op_count, offset = decode_varint(data, offset)
+    return offset
+
+
+def _make_encoding_alias_module() -> Module:
+    """Return a module with one aliased encoding instance."""
+    enc = EncodingInstance(name="q8_0", alias="enc", params=(("block", 32),))
+    module = Module(name="test")
+    module.add_encoding(enc)
+    tile_type = ShapedType(TypeKind.TILE, I8, (StaticDim(128),), encoding=enc)
+    value_id = module.add_value(Value(name="v", type=tile_type))
+    block = Block(arg_ids=[value_id], ops=[Operation(name="test.yield")])
+    body = Region(blocks=[block])
+    module.add_symbol(
+        Symbol(
+            name="f",
+            kind=SymbolKind.FUNC_DEF,
+            op=Operation(
+                name="func.def",
+                attributes={"callee": "f"},
+                regions=[body],
+            ),
+        )
+    )
+    return module
+
+
 # ============================================================================
 # Validation — malformed input
 # ============================================================================
@@ -187,6 +293,127 @@ class TestTruncatedInput:
         data = write_module(Module(name="test"))
         with pytest.raises((BytecodeError, Exception)):
             read_module(data[:24])
+
+
+class TestMalformedSectionDirectory:
+    def test_non_canonical_section_count_varint_is_rejected(self) -> None:
+        data = bytearray(write_module(Module(name="test")))
+        module_offset, _module_length = _module_range(data)
+
+        data[module_offset : module_offset + 1] = b"\x88\x00"
+
+        with pytest.raises(BytecodeError, match="non-canonical"):
+            read_module(bytes(data))
+
+    def test_duplicate_section_kind_is_rejected(self) -> None:
+        data = bytearray(write_module(Module(name="test")))
+        entries = _section_entries(data)
+        assert len(entries) >= 2
+
+        struct.pack_into("<H", data, entries[1][0], entries[0][1])
+
+        with pytest.raises(BytecodeError, match="duplicate section kind"):
+            read_module(bytes(data))
+
+    def test_overlapping_section_range_is_rejected(self) -> None:
+        data = bytearray(write_module(Module(name="test")))
+        entries = _section_entries(data)
+        assert len(entries) >= 2
+        target_index = next(
+            index for index in range(1, len(entries)) if entries[index - 1][3] > 0
+        )
+
+        struct.pack_into(
+            "<Q", data, entries[target_index][0] + 8, entries[target_index - 1][2]
+        )
+
+        with pytest.raises(BytecodeError, match="section directory is not sorted"):
+            read_module(bytes(data))
+
+    def test_unsupported_section_flags_are_rejected(self) -> None:
+        data = bytearray(write_module(Module(name="test")))
+        entry_offset, _kind, _section_offset, _length = _section_entries(data)[0]
+
+        struct.pack_into("<H", data, entry_offset + 2, 1)
+
+        with pytest.raises(BytecodeError, match="unsupported flags"):
+            read_module(bytes(data))
+
+
+class TestMalformedLocationMode:
+    def test_full_locations_mode_is_rejected_until_implemented(self) -> None:
+        data = bytearray(write_module(Module(name="test")))
+        data[5] = LOCATION_MODE_FULL_LOCATIONS
+
+        with pytest.raises(BytecodeError, match="FULL_LOCATIONS"):
+            read_module(bytes(data))
+
+    def test_no_locations_mode_rejects_locations_section(self) -> None:
+        data = bytearray(write_module(Module(name="test")))
+        data[5] = LOCATION_MODE_NO_LOCATIONS
+
+        with pytest.raises(BytecodeError, match="NO_LOCATIONS bytecode"):
+            read_module(bytes(data))
+
+    def test_source_locations_mode_requires_locations_section(self) -> None:
+        data = bytearray(write_module(Module(name="test")))
+        locations_entry_offset, _section_offset, _length = _find_section_entry(
+            data, SECTION_LOCATIONS
+        )
+
+        struct.pack_into("<H", data, locations_entry_offset, 0xFF)
+
+        with pytest.raises(BytecodeError, match="source locations"):
+            read_module(bytes(data))
+
+
+class TestMalformedIrSection:
+    def test_op_table_index_plus1_zero_is_rejected(self) -> None:
+        data = bytearray(write_module(_make_single_op_body_module()))
+        op_offset = _single_op_offset(data)
+
+        data[op_offset] = 0
+
+        with pytest.raises(BytecodeError, match="op_table_index_plus1"):
+            read_module(bytes(data))
+
+    def test_function_body_summary_mismatch_is_rejected(self) -> None:
+        data = bytearray(write_module(_make_single_op_body_module()))
+        module_offset, _module_length = _module_range(data)
+        _entry_offset, section_offset, _section_length = _find_section_entry(
+            data, SECTION_IR
+        )
+
+        # The valid fixture has one operation. Claim the body has zero operations
+        # so the local body summary fails before the module summary is checked.
+        body_offset = module_offset + section_offset
+        op_count_offset = body_offset + 3
+        data[op_count_offset] = 0
+
+        with pytest.raises(BytecodeError, match="function body allocation summary"):
+            read_module(bytes(data))
+
+
+class TestMalformedEncodingSection:
+    def test_alias_string_id_plus1_out_of_range_is_rejected(self) -> None:
+        data = bytearray(write_module(_make_encoding_alias_module()))
+        module_offset, _module_length = _module_range(data)
+        _entry_offset, section_offset, _section_length = _find_section_entry(
+            data, SECTION_ENCODINGS
+        )
+        offset = module_offset + section_offset
+
+        family_count, offset = decode_varint(data, offset)
+        for _ in range(family_count):
+            _name_id, offset = decode_varint(data, offset)
+        instance_count, offset = decode_varint(data, offset)
+        assert instance_count == 1
+        _family_index, offset = decode_varint(data, offset)
+
+        data[offset] = 0x7F
+
+        with pytest.raises(BytecodeError, match="encoding alias string_id"):
+            read_module(bytes(data))
 
 
 class TestMalformedTypeSection:

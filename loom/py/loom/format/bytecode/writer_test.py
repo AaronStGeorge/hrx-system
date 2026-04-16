@@ -15,6 +15,8 @@ is the oracle for the C reader — these tests must be exhaustive.
 import struct
 from typing import TypeVar
 
+import pytest
+
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.encoding import ALL_ENCODING_OPS
@@ -24,10 +26,14 @@ from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
+from loom.format.bytecode.encoding import decode_varint
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import (
     FORMAT_VERSION,
+    LOCATION_MODE_FULL_LOCATIONS,
+    LOCATION_MODE_NO_LOCATIONS,
     LOCATION_MODE_SOURCE_LOCATIONS,
+    SECTION_LOCATIONS,
     write_module,
 )
 from loom.format.text.parser import Parser
@@ -53,6 +59,7 @@ from loom.ir import (
     DynamicDim,
     DynamicEncoding,
     EncodingInstance,
+    FileLocation,
     FunctionType,
     GroupScope,
     GroupType,
@@ -88,6 +95,27 @@ def _append_unique(items: list[_T], additions: tuple[_T, ...]) -> None:
             continue
         seen_ids.add(item_id)
         items.append(item)
+
+
+def _module_range(data: bytes | bytearray) -> tuple[int, int]:
+    producer_end = data.index(0, 16)
+    directory_offset = (producer_end + 1 + 7) & ~7
+    module_offset = struct.unpack_from("<Q", data, directory_offset + 8)[0]
+    module_length = struct.unpack_from("<Q", data, directory_offset + 16)[0]
+    return module_offset, module_length
+
+
+def _section_kinds(data: bytes | bytearray) -> list[int]:
+    module_offset, _module_length = _module_range(data)
+    offset = module_offset
+    section_count, offset = decode_varint(data, offset)
+    for _ in range(4):
+        _count, offset = decode_varint(data, offset)
+    section_kinds = []
+    for _ in range(section_count):
+        section_kinds.append(struct.unpack_from("<H", data, offset)[0])
+        offset += 32
+    return section_kinds
 
 
 def _text_parser(
@@ -337,6 +365,54 @@ class TestFileHeader:
         data = write_module(Module(name="test"))
         assert data[5] == LOCATION_MODE_SOURCE_LOCATIONS
 
+    def test_location_mode_no_locations(self) -> None:
+        data = write_module(
+            Module(name="test"), location_mode=LOCATION_MODE_NO_LOCATIONS
+        )
+        assert data[5] == LOCATION_MODE_NO_LOCATIONS
+        assert SECTION_LOCATIONS not in _section_kinds(data)
+        read_module(data)
+
+    def test_location_mode_no_locations_strips_op_locations(self) -> None:
+        module = Module(name="test")
+        module.sources.append("model.loom")
+        loc_id = module.locations.add(
+            FileLocation(
+                source_id=0, start_line=42, start_col=3, end_line=42, end_col=58
+            )
+        )
+        value_id = module.add_value(Value(name="x", type=F32))
+        block = Block(
+            arg_ids=[value_id],
+            ops=[Operation(name="test.yield", operands=[value_id], location_id=loc_id)],
+        )
+        body = Region(blocks=[block])
+        module.add_symbol(
+            Symbol(
+                name="f",
+                kind=SymbolKind.FUNC_DEF,
+                op=Operation(
+                    name="func.def",
+                    attributes={"callee": "f"},
+                    regions=[body],
+                ),
+            )
+        )
+
+        loaded = read_module(
+            write_module(module, location_mode=LOCATION_MODE_NO_LOCATIONS)
+        )
+        loaded_sym_op = loaded.symbols[0].op
+        assert loaded_sym_op is not None
+        loaded_op = loaded_sym_op.regions[0].blocks[0].ops[0]
+        assert loaded_op.location_id == 0
+
+    def test_location_mode_full_rejected_until_field_spans_exist(self) -> None:
+        with pytest.raises(NotImplementedError, match="FULL_LOCATIONS"):
+            write_module(
+                Module(name="test"), location_mode=LOCATION_MODE_FULL_LOCATIONS
+            )
+
     def test_module_count_one(self) -> None:
         data = write_module(Module(name="test"))
         assert struct.unpack_from("<H", data, 6)[0] == 1
@@ -510,8 +586,6 @@ class TestTypesSection:
 
     def test_dynamic_dim_missing_binding_raises(self) -> None:
         """Dynamic dims without dim_bindings are invalid IR."""
-        import pytest
-
         module = Module(name="test")
         vid = module.add_value(
             Value(name="v", type=ShapedType(TypeKind.TILE, F32, (DynamicDim(),)))

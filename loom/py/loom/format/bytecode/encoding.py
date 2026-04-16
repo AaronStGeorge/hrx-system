@@ -64,8 +64,13 @@ def decode_varint(data: bytes | bytearray, offset: int = 0) -> tuple[int, int]:
     while offset < len(data):
         byte = data[offset]
         offset += 1
-        value |= (byte & 0x7F) << shift
+        payload = byte & 0x7F
+        if shift == 63 and payload > 1:
+            raise ValueError("varint too large (> 64 bits)")
+        value |= payload << shift
         if (byte & 0x80) == 0:
+            if shift > 0 and payload == 0:
+                raise ValueError("non-canonical varint encoding")
             return value, offset
         shift += 7
         if shift >= 64:
