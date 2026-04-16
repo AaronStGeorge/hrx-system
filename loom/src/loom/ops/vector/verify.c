@@ -703,18 +703,6 @@ static iree_status_t loom_vector_verify_memory_access(
   return iree_ok_status();
 }
 
-static iree_status_t loom_vector_verify_rank_one_vector(
-    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
-    iree_string_view_t vector_name, bool vector_is_result,
-    loom_type_t vector_type) {
-  if (!loom_type_is_vector(vector_type) || loom_type_rank(vector_type) == 1) {
-    return iree_ok_status();
-  }
-  return loom_vector_emit_field_constraint(emitter, op, vector_is_result,
-                                           vector_name, vector_type,
-                                           IREE_SV("rank-1 vector"));
-}
-
 static iree_status_t loom_vector_verify_gather_scatter_access(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     loom_type_t view_type, loom_type_t offsets_type,
@@ -905,11 +893,9 @@ iree_status_t loom_vector_from_elements_verify(
   loom_type_t result_type =
       loom_module_value_type(module, loom_vector_from_elements_result(op));
   if (!loom_type_is_vector(result_type)) return iree_ok_status();
-
-  if (!loom_type_is_all_static(result_type)) {
-    return loom_vector_emit_result_constraint(
-        emitter, op, IREE_SV("result"), result_type,
-        IREE_SV("all-static vector shape"));
+  if (!loom_type_satisfies_constraint(result_type,
+                                      LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR)) {
+    return iree_ok_status();
   }
 
   uint64_t expected_count = 0;
@@ -1037,8 +1023,10 @@ iree_status_t loom_vector_load_expand_verify(
       loom_module_value_type(module, loom_vector_load_expand_view(op));
   loom_type_t result_type =
       loom_module_value_type(module, loom_vector_load_expand_result(op));
-  IREE_RETURN_IF_ERROR(loom_vector_verify_rank_one_vector(
-      emitter, op, IREE_SV("result"), /*vector_is_result=*/true, result_type));
+  if (!loom_type_satisfies_constraint(result_type,
+                                      LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR)) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_vector_verify_memory_access(
       module, emitter, op, IREE_SV("result"), /*vector_is_result=*/true,
       view_type, result_type, loom_vector_load_expand_static_indices(op),
@@ -1056,8 +1044,10 @@ iree_status_t loom_vector_store_compress_verify(
       loom_module_value_type(module, loom_vector_store_compress_view(op));
   loom_type_t value_type =
       loom_module_value_type(module, loom_vector_store_compress_value(op));
-  IREE_RETURN_IF_ERROR(loom_vector_verify_rank_one_vector(
-      emitter, op, IREE_SV("value"), /*vector_is_result=*/false, value_type));
+  if (!loom_type_satisfies_constraint(value_type,
+                                      LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR)) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(loom_vector_verify_memory_access(
       module, emitter, op, IREE_SV("value"), /*vector_is_result=*/false,
       view_type, value_type, loom_vector_store_compress_static_indices(op),
@@ -1484,12 +1474,9 @@ iree_status_t loom_vector_shuffle_verify(const loom_module_t* module,
   loom_type_t source_type =
       loom_module_value_type(module, loom_vector_shuffle_source(op));
   if (!loom_type_is_vector(source_type)) return iree_ok_status();
-
-  uint8_t source_rank = loom_type_rank(source_type);
-  if (source_rank != 1 || !loom_type_is_all_static(source_type)) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("source"), source_type,
-        IREE_SV("all-static rank-1 vector"));
+  if (!loom_type_satisfies_constraint(
+          source_type, LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR)) {
+    return iree_ok_status();
   }
 
   int64_t source_lane_count = loom_type_dim_static_size_at(source_type, 0);
@@ -1767,11 +1754,11 @@ iree_status_t loom_vector_table_lookup_verify(
   if (!loom_type_is_vector(table_type) || !loom_type_is_vector(indices_type)) {
     return iree_ok_status();
   }
-
-  if (loom_type_rank(table_type) != 1) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("table"), table_type, IREE_SV("rank-1 vector"));
+  if (!loom_type_satisfies_constraint(table_type,
+                                      LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR)) {
+    return iree_ok_status();
   }
+
   if (!loom_vector_type_has_index_or_non_i1_integer_element(indices_type)) {
     return loom_vector_emit_operand_constraint(
         emitter, op, IREE_SV("indices"), indices_type,
@@ -1807,11 +1794,9 @@ iree_status_t loom_vector_table_quantize_verify(
       !loom_type_is_vector(result_type)) {
     return iree_ok_status();
   }
-
-  if (loom_type_rank(thresholds_type) != 1) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("thresholds"), thresholds_type,
-        IREE_SV("rank-1 vector"));
+  if (!loom_type_satisfies_constraint(thresholds_type,
+                                      LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR)) {
+    return iree_ok_status();
   }
 
   IREE_RETURN_IF_ERROR(loom_vector_verify_quantize_result_capacity(

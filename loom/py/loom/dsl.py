@@ -52,6 +52,9 @@ __all__ = [
     "TILE",
     "TENSOR",
     "VECTOR",
+    "RANK_ONE_VECTOR",
+    "ALL_STATIC_VECTOR",
+    "ALL_STATIC_RANK_ONE_VECTOR",
     "VIEW",
     "BUFFER",
     "INTEGER",
@@ -143,6 +146,9 @@ __all__ = [
     "HasI32Element",
     "HasF16OrBf16Element",
     "HasF32Element",
+    "HasRankOneVector",
+    "HasAllStaticVector",
+    "HasAllStaticRankOneVector",
     "OffsetCountMatchesRank",
     "DimIndexInBounds",
     "AllShapesMatch",
@@ -192,6 +198,9 @@ class TypeConstraint(Enum):
       TILE     → ShapedType with type_kind=TILE
       TENSOR   → ShapedType with type_kind=TENSOR
       VECTOR   → ShapedType with type_kind=VECTOR
+      RANK_ONE_VECTOR → vector type with rank 1
+      ALL_STATIC_VECTOR → vector type with all-static shape
+      ALL_STATIC_RANK_ONE_VECTOR → vector type with all-static rank-1 shape
       VIEW     → ShapedType with type_kind=VIEW
       BUFFER   → BufferType
       INTEGER  → ScalarType with kind in {I1, I8, I16, I32, I64}
@@ -220,11 +229,16 @@ class TypeConstraint(Enum):
     and view types can satisfy them, while scalar values continue to use
     INTEGER/FLOAT/I1. Combine a shaped kind constraint with SameElementType
     when an op needs both a specific shaped kind and a shared element family.
+    Vector shape constraints additionally require type_kind=VECTOR so ops can
+    declare common register-shape invariants without custom verifier code.
     """
 
     TILE = "tile"
     TENSOR = "tensor"
     VECTOR = "vector"
+    RANK_ONE_VECTOR = "rank_one_vector"
+    ALL_STATIC_VECTOR = "all_static_vector"
+    ALL_STATIC_RANK_ONE_VECTOR = "all_static_rank_one_vector"
     VIEW = "view"
     BUFFER = "buffer"
     INTEGER = "integer"
@@ -255,6 +269,9 @@ class TypeConstraint(Enum):
 TILE = TypeConstraint.TILE
 TENSOR = TypeConstraint.TENSOR
 VECTOR = TypeConstraint.VECTOR
+RANK_ONE_VECTOR = TypeConstraint.RANK_ONE_VECTOR
+ALL_STATIC_VECTOR = TypeConstraint.ALL_STATIC_VECTOR
+ALL_STATIC_RANK_ONE_VECTOR = TypeConstraint.ALL_STATIC_RANK_ONE_VECTOR
 VIEW = TypeConstraint.VIEW
 BUFFER = TypeConstraint.BUFFER
 INTEGER = TypeConstraint.INTEGER
@@ -977,11 +994,30 @@ def RanksMatch(a: str, b: str) -> Constraint:
     )
 
 
-def _type_satisfies_element_constraint(
+def _type_satisfies_field_constraint(
     value_type: Any, constraint: TypeConstraint
 ) -> bool:
-    from loom.ir import ScalarTypeKind, ShapedType
+    from loom.ir import ScalarTypeKind, ShapedType, TypeKind
 
+    if constraint == RANK_ONE_VECTOR:
+        return (
+            isinstance(value_type, ShapedType)
+            and value_type.type_kind == TypeKind.VECTOR
+            and value_type.rank == 1
+        )
+    if constraint == ALL_STATIC_VECTOR:
+        return (
+            isinstance(value_type, ShapedType)
+            and value_type.type_kind == TypeKind.VECTOR
+            and value_type.is_all_static
+        )
+    if constraint == ALL_STATIC_RANK_ONE_VECTOR:
+        return (
+            isinstance(value_type, ShapedType)
+            and value_type.type_kind == TypeKind.VECTOR
+            and value_type.rank == 1
+            and value_type.is_all_static
+        )
     if not isinstance(value_type, ShapedType):
         return False
     element_kind = value_type.element_type.kind
@@ -1018,13 +1054,13 @@ def _type_satisfies_element_constraint(
     return False
 
 
-def _has_element_constraint(name: str, constraint: TypeConstraint) -> Constraint:
-    """A shaped field's element type must satisfy a family constraint."""
+def _has_field_constraint(name: str, constraint: TypeConstraint) -> Constraint:
+    """A field's type must satisfy an abstract type constraint."""
 
     def _validate(values: dict[str, Any]) -> tuple[bool, str]:
         for display_name, item in _flatten_field(name, values.get(name)):
             value_type = _field_value_type(item)
-            if _type_satisfies_element_constraint(value_type, constraint):
+            if _type_satisfies_field_constraint(value_type, constraint):
                 continue
             return (
                 False,
@@ -1041,6 +1077,12 @@ def _has_element_constraint(name: str, constraint: TypeConstraint) -> Constraint
         error=ERR_TYPE_003,
         validate=_validate,
     )
+
+
+def _has_element_constraint(name: str, constraint: TypeConstraint) -> Constraint:
+    """A shaped field's element type must satisfy a family constraint."""
+
+    return _has_field_constraint(name, constraint)
 
 
 def HasIntegerElement(field: str) -> Constraint:
@@ -1083,6 +1125,24 @@ def HasF32Element(field: str) -> Constraint:
     """A shaped field must have an f32 element type."""
 
     return _has_element_constraint(field, F32_ELEMENT)
+
+
+def HasRankOneVector(field: str) -> Constraint:
+    """A field must have a vector type with rank 1."""
+
+    return _has_field_constraint(field, RANK_ONE_VECTOR)
+
+
+def HasAllStaticVector(field: str) -> Constraint:
+    """A field must have a vector type with an all-static shape."""
+
+    return _has_field_constraint(field, ALL_STATIC_VECTOR)
+
+
+def HasAllStaticRankOneVector(field: str) -> Constraint:
+    """A field must have a vector type with an all-static rank-1 shape."""
+
+    return _has_field_constraint(field, ALL_STATIC_RANK_ONE_VECTOR)
 
 
 def OffsetCountMatchesRank(shaped: str, offsets: str) -> Constraint:

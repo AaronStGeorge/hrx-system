@@ -297,46 +297,52 @@ loom_bstring_t loom_keyword_bstring(loom_keyword_id_t keyword_id);
 // checks that the actual type of a value satisfies the constraint.
 typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_TILE = 0,
-  LOOM_TYPE_CONSTRAINT_TENSOR = 1,
-  LOOM_TYPE_CONSTRAINT_INTEGER = 2,
-  LOOM_TYPE_CONSTRAINT_FLOAT = 3,
-  LOOM_TYPE_CONSTRAINT_SCALAR = 4,
-  LOOM_TYPE_CONSTRAINT_INDEX = 5,
-  LOOM_TYPE_CONSTRAINT_OFFSET = 6,
-  LOOM_TYPE_CONSTRAINT_ADDRESS = 7,
-  LOOM_TYPE_CONSTRAINT_ANY = 8,
-  LOOM_TYPE_CONSTRAINT_GROUP = 9,
-  LOOM_TYPE_CONSTRAINT_ANY_ENCODING = 10,
-  LOOM_TYPE_CONSTRAINT_POOL = 11,
+  LOOM_TYPE_CONSTRAINT_TENSOR,
+  LOOM_TYPE_CONSTRAINT_INTEGER,
+  LOOM_TYPE_CONSTRAINT_FLOAT,
+  LOOM_TYPE_CONSTRAINT_SCALAR,
+  LOOM_TYPE_CONSTRAINT_INDEX,
+  LOOM_TYPE_CONSTRAINT_OFFSET,
+  LOOM_TYPE_CONSTRAINT_ADDRESS,
+  LOOM_TYPE_CONSTRAINT_ANY,
+  LOOM_TYPE_CONSTRAINT_GROUP,
+  LOOM_TYPE_CONSTRAINT_ANY_ENCODING,
+  LOOM_TYPE_CONSTRAINT_POOL,
   // Exactly i1. Used for comparison results and boolean predicates.
   // Unlike INTEGER (which accepts any integer width), this requires
   // the type to be specifically i1.
-  LOOM_TYPE_CONSTRAINT_I1 = 12,
-  LOOM_TYPE_CONSTRAINT_VECTOR = 13,
-  LOOM_TYPE_CONSTRAINT_VIEW = 14,
-  LOOM_TYPE_CONSTRAINT_BUFFER = 15,
+  LOOM_TYPE_CONSTRAINT_I1,
+  LOOM_TYPE_CONSTRAINT_VECTOR,
+  // Vector type with rank 1.
+  LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR,
+  // Vector type with an all-static shape.
+  LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR,
+  // Vector type with an all-static rank-1 shape.
+  LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR,
+  LOOM_TYPE_CONSTRAINT_VIEW,
+  LOOM_TYPE_CONSTRAINT_BUFFER,
   // Shaped type with an integer element type.
-  LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT = 16,
+  LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT,
   // Shaped type with a floating-point element type.
-  LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT = 17,
+  LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT,
   // Shaped type with element type i1.
-  LOOM_TYPE_CONSTRAINT_I1_ELEMENT = 18,
+  LOOM_TYPE_CONSTRAINT_I1_ELEMENT,
   // Shaped type with element type i8.
-  LOOM_TYPE_CONSTRAINT_I8_ELEMENT = 19,
+  LOOM_TYPE_CONSTRAINT_I8_ELEMENT,
   // Shaped type with element type i32.
-  LOOM_TYPE_CONSTRAINT_I32_ELEMENT = 20,
+  LOOM_TYPE_CONSTRAINT_I32_ELEMENT,
   // Shaped type with element type f16 or bf16.
-  LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT = 21,
+  LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT,
   // Shaped type with element type f32.
-  LOOM_TYPE_CONSTRAINT_F32_ELEMENT = 22,
+  LOOM_TYPE_CONSTRAINT_F32_ELEMENT,
   // Encoding type with address-layout role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT = 23,
+  LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT,
   // Encoding type with storage-schema role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA = 24,
+  LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA,
   // Encoding type with physical-storage role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE = 25,
+  LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE,
   // Encoding type with numeric-transform role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM = 26,
+  LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM,
   LOOM_TYPE_CONSTRAINT_COUNT_,
 } loom_type_constraint_t;
 
@@ -357,6 +363,19 @@ static inline bool loom_type_satisfies_constraint(
       return loom_type_is_tensor(type);
     case LOOM_TYPE_CONSTRAINT_VECTOR:
       return loom_type_is_vector(type);
+    case LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR:
+      return loom_type_is_vector(type) && loom_type_rank(type) == 1;
+    case LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR:
+      if (!loom_type_is_vector(type)) return false;
+      for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
+        if (loom_type_dim_is_dynamic_at(type, i)) return false;
+      }
+      return true;
+    case LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR:
+      if (!loom_type_is_vector(type) || loom_type_rank(type) != 1) {
+        return false;
+      }
+      return !loom_type_dim_is_dynamic_at(type, 0);
     case LOOM_TYPE_CONSTRAINT_VIEW:
       return loom_type_is_view(type);
     case LOOM_TYPE_CONSTRAINT_BUFFER:
@@ -474,9 +493,9 @@ enum loom_constraint_relation_e {
   // property. Args: 1 variadic value field. Used by AllShapesMatch.
   LOOM_RELATION_ALL_SAME = 1,
 
-  // Every element of every listed field satisfies a type constraint.
+  // Every value in every listed field satisfies a type constraint.
   // The property slot stores a loom_type_constraint_t. Args: 1+ value
-  // fields. Used by HasIntegerElement, HasFloatElement, HasI1Element.
+  // fields. Used by Has*Element and Has*Vector constraints.
   LOOM_RELATION_FIELD_SATISFIES = 2,
 
   // The element count of a variadic value field equals the rank of a

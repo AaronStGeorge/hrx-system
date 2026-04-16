@@ -224,6 +224,50 @@ TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
       vector_f16, LOOM_TYPE_CONSTRAINT_F32_ELEMENT));
 }
 
+TEST(TypeConstraint, VectorShapeFamiliesRequireVectorTypes) {
+  loom_type_t vector_1d = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  loom_type_t vector_dynamic_1d = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_dynamic(0), 0);
+  loom_type_t vector_2d =
+      loom_type_shaped_2d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(2), loom_dim_pack_static(2), 0);
+  loom_type_t tile_1d = loom_type_shaped_1d(
+      LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+
+  EXPECT_STREQ("rank-1 vector",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR));
+  EXPECT_STREQ(
+      "all-static vector shape",
+      loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR));
+  EXPECT_STREQ("all-static rank-1 vector",
+               loom_type_constraint_name(
+                   LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_1d, LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_dynamic_1d, LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_2d, LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      tile_1d, LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_2d, LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_dynamic_1d, LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      tile_1d, LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR));
+
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_1d, LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_2d, LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_dynamic_1d, LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR));
+}
+
 TEST(TypeConstraint, EncodingRolesAreExplicit) {
   loom_type_t any_encoding = loom_type_encoding();
   loom_type_t layout =

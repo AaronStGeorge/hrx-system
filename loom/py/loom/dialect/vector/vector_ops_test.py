@@ -465,6 +465,10 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
     assert ops["vector.load.expand"].effects[0].kind == EffectKind.READ
     assert ops["vector.store.compress"].effects[0].operand == "view"
     assert ops["vector.store.compress"].effects[0].kind == EffectKind.WRITE
+    load_expand_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.load.expand"].constraints}
+    store_compress_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.store.compress"].constraints}
+    assert ("HasRankOneVector", ("result",)) in load_expand_constraints
+    assert ("HasRankOneVector", ("value",)) in store_compress_constraints
     assert ops["vector.gather"].effects[0].operand == "view"
     assert ops["vector.gather"].effects[0].kind == EffectKind.READ
     assert ops["vector.gather.mask"].effects[0].operand == "view"
@@ -502,10 +506,22 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
         _assert_optional_cache_policy_attrs(ops[name])
 
 
+def test_vector_static_construction_ops_declare_shape_constraints() -> None:
+    ops = _op_by_name()
+    from_elements_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.from_elements"].constraints}
+    shuffle_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.shuffle"].constraints}
+
+    assert ("HasAllStaticVector", ("result",)) in from_elements_constraints
+    assert ("SameElementType", ("elements", "result")) in from_elements_constraints
+    assert ("HasAllStaticRankOneVector", ("source",)) in shuffle_constraints
+    assert ("SameType", ("source", "result")) in shuffle_constraints
+
+
 def test_vector_table_lookup_is_pure_register_lookup() -> None:
     op = _op_by_name()["vector.table.lookup"]
     constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
 
+    assert ("HasRankOneVector", ("table",)) in constraints
     assert ("SameElementType", ("table", "result")) in constraints
     assert ("SameShape", ("indices", "result")) in constraints
     assert "Pure" in {trait.name for trait in op.traits}
@@ -520,6 +536,7 @@ def test_vector_table_quantize_is_explicit_register_encode() -> None:
     assert [case.keyword for case in QuantizeTie.cases] == ["lower", "upper"]
     assert ("HasFloatElement", ("input",)) in constraints
     assert ("HasFloatElement", ("thresholds",)) in constraints
+    assert ("HasRankOneVector", ("thresholds",)) in constraints
     assert ("HasIntegerElement", ("result",)) in constraints
     assert ("SameElementType", ("input", "thresholds")) in constraints
     assert ("SameShape", ("input", "result")) in constraints

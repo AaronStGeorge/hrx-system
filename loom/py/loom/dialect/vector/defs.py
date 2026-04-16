@@ -62,6 +62,8 @@ from loom.dsl import (
     Dialect,
     EnumCase,
     EnumDef,
+    HasAllStaticRankOneVector,
+    HasAllStaticVector,
     HasF16OrBf16Element,
     HasF32Element,
     HasFloatElement,
@@ -69,6 +71,7 @@ from loom.dsl import (
     HasI8Element,
     HasI32Element,
     HasIntegerElement,
+    HasRankOneVector,
     Op,
     Operand,
     Reads,
@@ -534,7 +537,10 @@ vector_from_elements = Op(
     ),
     operands=[Operand("elements", SCALAR, variadic=True)],
     results=[Result("result", VECTOR)],
-    constraints=[SameElementType("elements", "result")],
+    constraints=[
+        HasAllStaticVector("result"),
+        SameElementType("elements", "result"),
+    ],
     verify="loom_vector_from_elements_verify",
     facts="loom_vector_from_elements_facts",
     canonicalize="loom_vector_from_elements_canonicalize",
@@ -760,7 +766,10 @@ vector_shuffle = Op(
             doc="Source lane index for each result lane.",
         ),
     ],
-    constraints=[SameType("source", "result")],
+    constraints=[
+        HasAllStaticRankOneVector("source"),
+        SameType("source", "result"),
+    ],
     verify="loom_vector_shuffle_verify",
     facts="loom_vector_shuffle_facts",
     canonicalize="loom_vector_shuffle_canonicalize",
@@ -877,6 +886,7 @@ vector_table_lookup = Op(
     ],
     results=[Result("result", VECTOR)],
     constraints=[
+        HasRankOneVector("table"),
         SameElementType("table", "result"),
         SameShape("indices", "result"),
     ],
@@ -922,6 +932,7 @@ vector_table_quantize = Op(
     constraints=[
         HasFloatElement("input"),
         HasFloatElement("thresholds"),
+        HasRankOneVector("thresholds"),
         HasIntegerElement("result"),
         SameElementType("input", "thresholds"),
         SameShape("input", "result"),
@@ -1194,6 +1205,7 @@ vector_load_expand = Op(
     results=[Result("result", VECTOR, doc="Expanded loaded vector value.")],
     attrs=_indexed_memory_attrs(),
     constraints=[
+        HasRankOneVector("result"),
         HasI1Element("mask"),
         SameElementType("view", "passthrough", "result"),
         SameShape("mask", "passthrough", "result"),
@@ -1234,6 +1246,7 @@ vector_store_compress = Op(
     ],
     attrs=_indexed_memory_attrs(),
     constraints=[
+        HasRankOneVector("value"),
         HasI1Element("mask"),
         SameElementType("value", "view"),
         SameShape("mask", "value"),

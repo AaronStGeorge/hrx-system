@@ -692,7 +692,7 @@ func.def @deinterleave_axis_shape_mismatch(%source: vector<8xi8>) {
 
 // Register table lookup uses a rank-1 table vector.
 func.def @table_lookup_table_rank_mismatch(%table: vector<2x2xf32>, %indices: vector<4xi8>) {
-  // ERROR@+1: TYPE/003 "table" "vector<2x2xf32>" "rank-1 vector"
+  // ERROR@+1: TYPE/003 "operand 0" "rank-1 vector"
   %r = vector.table.lookup %table[%indices] : vector<2x2xf32>, vector<4xi8> -> vector<4xf32>
   func.return
 }
@@ -750,7 +750,7 @@ func.def @table_lookup_static_negative_index() {
 
 // Table quantize threshold tables are rank-1 register vectors.
 func.def @table_quantize_threshold_rank_mismatch(%values: vector<4xf32>, %thresholds: vector<2x2xf32>) {
-  // ERROR@+1: TYPE/003 "thresholds" "vector<2x2xf32>" "rank-1 vector"
+  // ERROR@+1: TYPE/003 "operand 1" "rank-1 vector"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xf32>, vector<2x2xf32> -> vector<4xi8>
   func.return
 }

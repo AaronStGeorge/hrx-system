@@ -65,6 +65,8 @@ from loom.dsl import (
     DimIndexInBounds,
     EnumCase,
     EnumDef,
+    HasAllStaticRankOneVector,
+    HasAllStaticVector,
     HasF16OrBf16Element,
     HasF32Element,
     HasFloatElement,
@@ -73,6 +75,7 @@ from loom.dsl import (
     HasI32Element,
     HasIntegerElement,
     HasParent,
+    HasRankOneVector,
     ImplicitTerminator,
     OffsetCountMatchesRank,
     Op,
@@ -103,6 +106,7 @@ from loom.ir import (
     I8,
     I16,
     I32,
+    DynamicDim,
     ScalarType,
     ShapedType,
     StaticDim,
@@ -427,6 +431,9 @@ class TestConstraints:
         assert HasI32Element("x").name == "HasI32Element"
         assert HasF16OrBf16Element("x").name == "HasF16OrBf16Element"
         assert HasF32Element("x").name == "HasF32Element"
+        assert HasRankOneVector("x").name == "HasRankOneVector"
+        assert HasAllStaticVector("x").name == "HasAllStaticVector"
+        assert HasAllStaticRankOneVector("x").name == "HasAllStaticRankOneVector"
 
     def test_exact_element_constraints_validate_shaped_types(self) -> None:
         class FakeValue:
@@ -445,6 +452,27 @@ class TestConstraints:
         assert not HasF16OrBf16Element("x").check({"x": FakeValue(vector_type(F32))})[0]
         assert HasF32Element("x").check({"x": FakeValue(vector_type(F32))})[0]
         assert not HasF32Element("x").check({"x": FakeValue(I32)})[0]
+
+    def test_vector_shape_constraints_validate_vector_shape(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        vector_1d = ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),))
+        vector_2d = ShapedType(TypeKind.VECTOR, F32, (StaticDim(2), StaticDim(2)))
+        vector_dynamic = ShapedType(TypeKind.VECTOR, F32, (DynamicDim(),))
+        tile_1d = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
+
+        assert HasRankOneVector("x").check({"x": FakeValue(vector_1d)})[0]
+        assert not HasRankOneVector("x").check({"x": FakeValue(vector_2d)})[0]
+        assert not HasRankOneVector("x").check({"x": FakeValue(tile_1d)})[0]
+        assert HasAllStaticVector("x").check({"x": FakeValue(vector_2d)})[0]
+        assert not HasAllStaticVector("x").check({"x": FakeValue(vector_dynamic)})[0]
+        assert HasAllStaticRankOneVector("x").check({"x": FakeValue(vector_1d)})[0]
+        assert not HasAllStaticRankOneVector("x").check({"x": FakeValue(vector_2d)})[0]
+        assert not HasAllStaticRankOneVector("x").check(
+            {"x": FakeValue(vector_dynamic)}
+        )[0]
 
     def test_offset_count_matches_rank(self) -> None:
         c = OffsetCountMatchesRank("src", "offsets")

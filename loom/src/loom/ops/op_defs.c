@@ -32,6 +32,10 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint) {
       [LOOM_TYPE_CONSTRAINT_POOL] = "pool",
       [LOOM_TYPE_CONSTRAINT_I1] = "i1",
       [LOOM_TYPE_CONSTRAINT_VECTOR] = "vector",
+      [LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR] = "rank-1 vector",
+      [LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR] = "all-static vector shape",
+      [LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR] =
+          "all-static rank-1 vector",
       [LOOM_TYPE_CONSTRAINT_VIEW] = "view",
       [LOOM_TYPE_CONSTRAINT_BUFFER] = "buffer",
       [LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT] = "integer_element",
