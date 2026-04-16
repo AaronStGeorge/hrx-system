@@ -76,16 +76,6 @@ class ReaderCorpusTest : public ::testing::Test {
     return printed;
   }
 
-  bool ModuleHasUnsupportedBytecodeSymbols(const loom_module_t* module) {
-    for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
-      loom_symbol_kind_t kind = module->symbols.entries[i].kind;
-      if (kind == LOOM_SYMBOL_GLOBAL || kind == LOOM_SYMBOL_EXECUTABLE) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   iree_status_t WriteModule(const loom_module_t* module,
                             std::vector<uint8_t>* out_bytes) {
     iree_io_stream_t* stream = nullptr;
@@ -143,7 +133,6 @@ TEST_F(ReaderCorpusTest, CorpusIsNotEmpty) {
 TEST_F(ReaderCorpusTest, TextCorpusBytecodeRoundTripsCanonically) {
   const iree_file_toc_t* corpus = loom_test_corpus_text_create();
   size_t supported_count = 0;
-  size_t unsupported_count = 0;
   for (size_t i = 0; i < loom_test_corpus_text_size(); ++i) {
     const iree_file_toc_t& file = corpus[i];
     SCOPED_TRACE(file.name);
@@ -156,17 +145,10 @@ TEST_F(ReaderCorpusTest, TextCorpusBytecodeRoundTripsCanonically) {
     std::vector<uint8_t> first;
     iree_status_t write_status = WriteModule(module, &first);
     if (!iree_status_is_ok(write_status)) {
-      if (ModuleHasUnsupportedBytecodeSymbols(module)) {
-        IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, write_status);
-        loom_module_free(module);
-        ++unsupported_count;
-        continue;
-      }
       IREE_EXPECT_OK(write_status);
       loom_module_free(module);
       continue;
     }
-    IREE_EXPECT_OK(write_status);
     std::string source_text = Print(module);
     loom_module_free(module);
     ++supported_count;
@@ -190,7 +172,6 @@ TEST_F(ReaderCorpusTest, TextCorpusBytecodeRoundTripsCanonically) {
     EXPECT_EQ(first, second);
   }
   EXPECT_GT(supported_count, 0u);
-  EXPECT_GT(unsupported_count, 0u);
 }
 
 }  // namespace

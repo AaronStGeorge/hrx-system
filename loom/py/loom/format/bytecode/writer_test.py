@@ -1293,6 +1293,56 @@ class TestCrossFormatRoundTrip:
 
         assert _roundtrip_text_through_bytecode(text, include_global=True) == text
 
+    def test_static_encoding_global_symbols_survive_bytecode(self) -> None:
+        text = (
+            "global.constant @weights : tile<[%m]x[%k]xi8, #q8_0<block=32>> "
+            "where [mul(%m, 16)]\n"
+            "\n"
+            "func.def @load_weights() {\n"
+            "  %tile, %m, %k = global.load @weights : "
+            "tile<[%m]x[%k]xi8, #q8_0<block=32>>\n"
+            "  test.use %tile, %m, %k : "
+            "tile<[%m]x[%k]xi8, #q8_0<block=32>>, index, index\n"
+            "  func.return\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_global=True) == text
+
+    def test_global_variable_store_survives_bytecode(self) -> None:
+        text = (
+            "global.variable @state : f32 = 0.0\n"
+            "\n"
+            "func.def @set_state(%value: f32) {\n"
+            "  global.store %value, @state : f32\n"
+            "  func.return\n"
+            "}\n"
+            "\n"
+            "func.def @load_state() -> (f32) {\n"
+            "  %value = global.load @state : f32\n"
+            "  func.return %value : f32\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_global=True) == text
+
+    def test_ssa_encoding_global_symbols_survive_bytecode(self) -> None:
+        text = (
+            "global.variable @scratch_view : view<[%n]xf32, %layout> "
+            "where [mul(%n, 16)]\n"
+            "\n"
+            "func.def @roundtrip_scratch_view() {\n"
+            "  %view, %n, %layout = global.load @scratch_view : "
+            "view<[%n]xf32, %layout>\n"
+            "  test.use %view, %n, %layout : view<[%n]xf32, %layout>, index, "
+            "encoding\n"
+            "  global.store %view, @scratch_view : view<[%n]xf32, %layout>\n"
+            "  func.return\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_global=True) == text
+
     def test_vector_iota_and_range_mask_survive_bytecode(self) -> None:
         text = (
             "func.def @vector_coords(%lo: index, %hi: index, %step: index, "
