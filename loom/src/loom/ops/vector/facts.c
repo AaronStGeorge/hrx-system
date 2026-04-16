@@ -662,16 +662,8 @@ static bool loom_vector_transform_query_seed_sign(
       !loom_vector_facts_query_exact_i64(seed_facts, &seed)) {
     return false;
   }
-
-  uint64_t mixed = (uint64_t)seed + (uint64_t)input_index;
-  mixed += UINT64_C(0x9E3779B97F4A7C15);
-  mixed ^= mixed >> 30;
-  mixed *= UINT64_C(0xBF58476D1CE4E5B9);
-  mixed ^= mixed >> 27;
-  mixed *= UINT64_C(0x94D049BB133111EB);
-  mixed ^= mixed >> 31;
-  *out_negate = (mixed & 1) != 0;
-  return true;
+  return loom_encoding_numeric_transform_seed_sign_bit(seed, input_index,
+                                                       out_negate);
 }
 
 static bool loom_vector_transform_hadamard_lane_value(

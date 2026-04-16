@@ -125,6 +125,13 @@ bool loom_encoding_numeric_transform_has_matrix(
 bool loom_encoding_numeric_transform_has_seed(
     const loom_encoding_numeric_transform_descriptor_t* descriptor);
 
+// Evaluates the deterministic seed-derived sign bit used by hadamard_sign.
+// Uses unsigned SplitMix64 wraparound on seed + input_index and returns false
+// when the input lane is invalid.
+bool loom_encoding_numeric_transform_seed_sign_bit(int64_t seed,
+                                                   int64_t input_index,
+                                                   bool* out_negate);
+
 // Decodes the numeric transform descriptor produced by |value_id|. This never
 // emits diagnostics or returns iree_status_t: unsupported/non-local/malformed
 // cases are ordinary query results that consumers interpret at their own

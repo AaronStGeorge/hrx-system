@@ -149,6 +149,22 @@ bool loom_encoding_numeric_transform_has_seed(
   return descriptor->seed != LOOM_VALUE_ID_INVALID;
 }
 
+bool loom_encoding_numeric_transform_seed_sign_bit(int64_t seed,
+                                                   int64_t input_index,
+                                                   bool* out_negate) {
+  *out_negate = false;
+  if (input_index < 0) return false;
+  uint64_t mixed = (uint64_t)seed + (uint64_t)input_index;
+  mixed += UINT64_C(0x9E3779B97F4A7C15);
+  mixed ^= mixed >> 30;
+  mixed *= UINT64_C(0xBF58476D1CE4E5B9);
+  mixed ^= mixed >> 27;
+  mixed *= UINT64_C(0x94D049BB133111EB);
+  mixed ^= mixed >> 31;
+  *out_negate = (mixed & 1) != 0;
+  return true;
+}
+
 static loom_encoding_numeric_transform_read_t
 loom_encoding_numeric_transform_make_read(
     loom_encoding_numeric_transform_read_code_t code,
