@@ -52,6 +52,15 @@ class ReaderTest : public ::testing::Test {
     size_t encoding_binding = 0;
   };
 
+  struct BodyOpAttrOffsets {
+    // Byte offset of the operation attribute value kind byte.
+    size_t attr_kind = 0;
+    // Byte offset of the first key inside the nested dict value.
+    size_t nested_dict_first_key = 0;
+    // Byte offset of the second key inside the nested dict value.
+    size_t nested_dict_second_key = 0;
+  };
+
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
@@ -611,6 +620,51 @@ class ReaderTest : public ::testing::Test {
     }
   }
 
+  void SkipAttributeValue(const std::vector<uint8_t>& bytes, size_t* offset,
+                          uint8_t kind) {
+    switch (kind) {
+      case 0:  // I64.
+        ReadUVarint(bytes, offset);
+        break;
+      case 1:  // F64.
+        *offset += sizeof(double);
+        break;
+      case 2:   // STRING.
+      case 4:   // ENUM.
+      case 6:   // SYMBOL.
+      case 7:   // TYPE.
+      case 10:  // ENCODING.
+        ReadUVarint(bytes, offset);
+        break;
+      case 3:  // BOOL.
+        *offset += 1;
+        break;
+      case 5: {  // I64_ARRAY.
+        uint64_t count = ReadUVarint(bytes, offset);
+        for (uint64_t i = 0; i < count; ++i) {
+          ReadUVarint(bytes, offset);
+        }
+        break;
+      }
+      case 8:  // PREDICATE_LIST.
+        SkipPredicateList(bytes, offset);
+        break;
+      case 9: {  // DICT.
+        uint64_t entry_count = ReadUVarint(bytes, offset);
+        for (uint64_t i = 0; i < entry_count; ++i) {
+          ReadUVarint(bytes, offset);
+          uint8_t value_kind = bytes[(*offset)++];
+          SkipAttributeValue(bytes, offset, value_kind);
+        }
+        break;
+      }
+      default:
+        ADD_FAILURE() << "unknown attribute kind in test helper: "
+                      << (unsigned)kind;
+        break;
+    }
+  }
+
   size_t FunctionBodyLengthOffset(const std::vector<uint8_t>& bytes,
                                   uint64_t symbol_index) {
     size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_SYMBOLS);
@@ -783,6 +837,60 @@ class ReaderTest : public ::testing::Test {
     return offset;
   }
 
+  BodyOpAttrOffsets FirstBodyOpAttrOffsets(const std::vector<uint8_t>& bytes) {
+    uint64_t arg_count = 0;
+    size_t offset = RootBlockValueListOffset(bytes, &arg_count);
+    for (uint64_t i = 0; i < arg_count; ++i) {
+      ReadValueDefOffsets(bytes, &offset);
+    }
+    uint64_t op_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(op_count, 1u);
+    ReadUVarint(bytes, &offset);  // op_table_index_plus1
+    ++offset;                     // flags
+    ReadUVarint(bytes, &offset);  // location_id
+    uint64_t operand_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < operand_count; ++i) {
+      ReadUVarint(bytes, &offset);
+    }
+    uint64_t result_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < result_count; ++i) {
+      ReadValueDefOffsets(bytes, &offset);
+    }
+    uint64_t tied_result_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < tied_result_count; ++i) {
+      ReadUVarint(bytes, &offset);
+      ReadUVarint(bytes, &offset);
+    }
+
+    BodyOpAttrOffsets attr_offsets;
+    uint64_t attr_count = ReadUVarint(bytes, &offset);
+    EXPECT_EQ(attr_count, 1u);
+
+    ReadUVarint(bytes, &offset);
+    attr_offsets.attr_kind = offset;
+    uint8_t attr_kind = bytes[offset++];
+    EXPECT_EQ(attr_kind, 9u);
+    uint64_t dict_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(dict_count, 2u);
+
+    ReadUVarint(bytes, &offset);
+    uint8_t dict_first_kind = bytes[offset++];
+    SkipAttributeValue(bytes, &offset, dict_first_kind);
+
+    ReadUVarint(bytes, &offset);
+    uint8_t dict_second_kind = bytes[offset++];
+    EXPECT_EQ(dict_second_kind, 9u);
+    uint64_t nested_dict_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(nested_dict_count, 2u);
+
+    attr_offsets.nested_dict_first_key = offset;
+    ReadUVarint(bytes, &offset);
+    uint8_t nested_dict_first_kind = bytes[offset++];
+    SkipAttributeValue(bytes, &offset, nested_dict_first_kind);
+    attr_offsets.nested_dict_second_key = offset;
+    return attr_offsets;
+  }
+
   size_t LastOpRegionCountOffsetInRegion(const std::vector<uint8_t>& bytes,
                                          size_t* offset) {
     size_t last_region_count_offset = 0;
@@ -863,6 +971,9 @@ class ReaderTest : public ::testing::Test {
     loom_bytecode_read_result_t result = ReadModule(bytes, &module, &error_ids);
     EXPECT_GT(result.error_count, 0u);
     EXPECT_EQ(module, nullptr);
+    if (module) {
+      loom_module_free(module);
+    }
     ASSERT_FALSE(error_ids.empty());
     EXPECT_EQ(error_ids.front(), expected_error_id);
   }
@@ -1201,6 +1312,31 @@ TEST_F(ReaderTest, RejectsOutOfRangeBodyTiedResult) {
   bytes[tied_operand_offset] = 2;
 
   ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsInvalidBodyAttributeKind) {
+  loom_module_t* module = CreateAttributeFunctionModule();
+  auto bytes = WriteModule(module);
+  BodyOpAttrOffsets attr_offsets = FirstBodyOpAttrOffsets(bytes);
+  bytes[attr_offsets.attr_kind] = 0x7F;
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_011");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsNestedDictAttributeKeyOrder) {
+  loom_module_t* module = CreateAttributeFunctionModule();
+  auto bytes = WriteModule(module);
+  BodyOpAttrOffsets attr_offsets = FirstBodyOpAttrOffsets(bytes);
+  ASSERT_LT(bytes[attr_offsets.nested_dict_first_key], 0x80u);
+  ASSERT_LT(bytes[attr_offsets.nested_dict_second_key], 0x80u);
+  bytes[attr_offsets.nested_dict_second_key] =
+      bytes[attr_offsets.nested_dict_first_key];
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_006");
 
   loom_module_free(module);
 }
