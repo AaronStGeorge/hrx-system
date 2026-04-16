@@ -229,6 +229,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_COUNT_MATCHES_RANK",
         "LOOM_PROPERTY_RANK",
     ),
+    "ValueCountMatchesStaticElementCount": (
+        "LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT",
+        "LOOM_PROPERTY_TYPE",
+    ),
     "DimIndexInBounds": ("LOOM_RELATION_ATTR_IN_RANGE_RANK", "LOOM_PROPERTY_RANK"),
     "AllShapesMatch": ("LOOM_RELATION_ALL_SAME", "LOOM_PROPERTY_SHAPE"),
     "LastAxisGroupedBy": ("LOOM_RELATION_LAST_AXIS_GROUPED_BY", "$data"),

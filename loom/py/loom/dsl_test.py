@@ -94,6 +94,7 @@ from loom.dsl import (
     SameShape,
     SameType,
     TypeConstraint,
+    ValueCountMatchesStaticElementCount,
     Writes,
     YieldCountMatchesResults,
     YieldTypesMatchResults,
@@ -517,6 +518,35 @@ class TestConstraints:
         c = OffsetCountMatchesRank("src", "offsets")
         assert c.error is not None
         assert c.error.error_id == "ERR_SUBRANGE_001"
+
+    def test_value_count_matches_static_element_count(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        constraint = ValueCountMatchesStaticElementCount("result", "elements")
+        assert constraint.error is not None
+        assert constraint.error.error_id == "ERR_STRUCTURE_013"
+        assert constraint.check(
+            {
+                "result": FakeValue(
+                    ShapedType(TypeKind.VECTOR, F32, (StaticDim(2), StaticDim(2)))
+                ),
+                "elements": [object(), object(), object(), object()],
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),))),
+                "elements": [object(), object(), object()],
+            }
+        )[0]
+        assert constraint.check(
+            {
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, F32, (DynamicDim(),))),
+                "elements": [object()],
+            }
+        )[0]
 
     def test_dim_index_in_bounds(self) -> None:
         c = DimIndexInBounds("src", "dim")

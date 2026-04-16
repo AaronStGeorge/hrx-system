@@ -86,6 +86,7 @@ from loom.dsl import (
     SameType,
     Trait,
     TypeConstraint,
+    ValueCountMatchesStaticElementCount,
     Writes,
 )
 
@@ -543,8 +544,8 @@ vector_from_elements = Op(
     constraints=[
         HasAllStaticVector("result"),
         SameElementType("elements", "result"),
+        ValueCountMatchesStaticElementCount("result", "elements"),
     ],
-    verify="loom_vector_from_elements_verify",
     facts="loom_vector_from_elements_facts",
     canonicalize="loom_vector_from_elements_canonicalize",
     traits=[PURE],

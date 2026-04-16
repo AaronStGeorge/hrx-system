@@ -154,6 +154,7 @@ __all__ = [
     "HasAllStaticVector",
     "HasAllStaticRankOneVector",
     "OffsetCountMatchesRank",
+    "ValueCountMatchesStaticElementCount",
     "DimIndexInBounds",
     "AllShapesMatch",
     "LastAxisGroupedBy",
@@ -1212,6 +1213,41 @@ def OffsetCountMatchesRank(shaped: str, offsets: str) -> Constraint:
         "OffsetCountMatchesRank",
         (shaped, offsets),
         error=ERR_SUBRANGE_001,
+        validate=_validate,
+    )
+
+
+def ValueCountMatchesStaticElementCount(shaped: str, values: str) -> Constraint:
+    """Value count must equal a shaped field's static element count."""
+
+    def _validate(fields: dict[str, Any]) -> tuple[bool, str]:
+        from loom.ir import DynamicDim, StaticDim
+
+        value_type = _field_value_type(fields.get(shaped))
+        items = fields.get(values, [])
+        if value_type is None or not hasattr(value_type, "dims"):
+            return (True, "")
+        element_count = 1
+        for dim in value_type.dims:
+            if isinstance(dim, DynamicDim):
+                return (True, "")
+            if not isinstance(dim, StaticDim):
+                return (True, "")
+            element_count *= dim.size
+        if len(items) == element_count:
+            return (True, "")
+        return (
+            False,
+            f"'{values}' count {len(items)} != "
+            f"'{shaped}' static element count {element_count}",
+        )
+
+    from loom.error.structure import ERR_STRUCTURE_013
+
+    return Constraint(
+        "ValueCountMatchesStaticElementCount",
+        (shaped, values),
+        error=ERR_STRUCTURE_013,
         validate=_validate,
     )
 

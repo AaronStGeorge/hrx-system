@@ -140,7 +140,7 @@ func.def @broadcast_rank_mismatch(%v: vector<4x4xf32>) {
 
 // Vector construction from scalars must provide every static lane.
 func.def @from_elements_count_mismatch(%x: f32) {
-  // ERROR@+1: STRUCTURE/013 "elements"
+  // ERROR@+1: STRUCTURE/013 "operand 0"
   %r = vector.from_elements %x, %x, %x : vector<4xf32>
   func.return
 }

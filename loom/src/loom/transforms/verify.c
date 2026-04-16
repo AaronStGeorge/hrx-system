@@ -2220,6 +2220,70 @@ static void loom_verify_relation_count_matches_rank(
                               error->param_count < 3 ? error->param_count : 3);
 }
 
+// COUNT_MATCHES_STATIC_ELEMENT_COUNT: a variadic value field's element count
+// equals the static element count of a shaped value field. Args: (shaped value
+// field, variadic value field).
+static void loom_verify_relation_count_matches_static_element_count(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint8_t shaped_ref = constraint->args[0];
+  uint8_t values_ref = constraint->args[1];
+  loom_type_t shaped_type = loom_verify_value_type(
+      state, loom_verify_resolve_value_field(op, shaped_ref));
+  if (!loom_type_is_shaped(shaped_type) ||
+      !loom_type_is_all_static(shaped_type)) {
+    return;
+  }
+
+  uint64_t expected_count = 0;
+  if (!loom_type_static_element_count(shaped_type, &expected_count)) {
+    char shaped_name_buffer[32];
+    iree_string_view_t shaped_name = loom_verify_field_name(
+        op, vtable, shaped_ref, shaped_name_buffer, sizeof(shaped_name_buffer));
+    const loom_error_def_t* error =
+        LOOM_FIELD_REF_CATEGORY(shaped_ref) == LOOM_FIELD_RESULT
+            ? &loom_err_type_004
+            : &loom_err_type_003;
+    loom_diagnostic_param_t params[] = {
+        loom_verify_param_string_for_field(shaped_name, shaped_ref),
+        loom_param_type(shaped_type),
+        loom_param_string(IREE_SV("representable static element count")),
+    };
+    loom_verify_emit_structured(
+        state, op, error, params,
+        error->param_count < 3 ? error->param_count : 3);
+    return;
+  }
+
+  uint16_t value_count = loom_verify_variadic_count(op, vtable, values_ref);
+  if (value_count == expected_count) return;
+
+  char values_name_buffer[32];
+  char shaped_name_buffer[32];
+  char expected_name_buffer[64];
+  iree_string_view_t values_name = loom_verify_field_name(
+      op, vtable, values_ref, values_name_buffer, sizeof(values_name_buffer));
+  iree_string_view_t shaped_name = loom_verify_field_name(
+      op, vtable, shaped_ref, shaped_name_buffer, sizeof(shaped_name_buffer));
+  iree_snprintf(expected_name_buffer, sizeof(expected_name_buffer),
+                "%.*s static element count", (int)shaped_name.size,
+                shaped_name.data);
+  uint32_t expected_count_param =
+      expected_count > UINT32_MAX ? UINT32_MAX : (uint32_t)expected_count;
+  const loom_error_def_t* error =
+      constraint->error ? constraint->error : &loom_err_structure_013;
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(values_name, values_ref),
+      loom_param_u32(value_count),
+      loom_verify_param_string_for_field(
+          iree_make_cstring_view(expected_name_buffer), shaped_ref),
+      loom_param_u32(expected_count_param),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 4 ? error->param_count : 4);
+}
+
 // ATTR_IN_RANGE_RANK: an i64 attribute's value falls within
 // [0, rank) of a shaped value field. Args: (shaped value field,
 // i64 attr field).
@@ -2487,6 +2551,8 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_FIELD_SATISFIES] = loom_verify_relation_field_satisfies,
     [LOOM_RELATION_COUNT_MATCHES_RANK] =
         loom_verify_relation_count_matches_rank,
+    [LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT] =
+        loom_verify_relation_count_matches_static_element_count,
     [LOOM_RELATION_ATTR_IN_RANGE_RANK] =
         loom_verify_relation_attr_in_range_rank,
     [LOOM_RELATION_REGION_ARG_COUNT] = loom_verify_relation_region_arg_count,

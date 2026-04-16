@@ -526,6 +526,10 @@ def test_vector_static_construction_ops_declare_shape_constraints() -> None:
 
     assert ("HasAllStaticVector", ("result",)) in from_elements_constraints
     assert ("SameElementType", ("elements", "result")) in from_elements_constraints
+    assert (
+        "ValueCountMatchesStaticElementCount",
+        ("result", "elements"),
+    ) in from_elements_constraints
     assert ("HasAllStaticRankOneVector", ("source",)) in shuffle_constraints
     assert ("SameType", ("source", "result")) in shuffle_constraints
 

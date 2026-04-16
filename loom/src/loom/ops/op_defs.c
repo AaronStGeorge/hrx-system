@@ -180,6 +180,8 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_ALL_SAME] = "AllSame",
       [LOOM_RELATION_FIELD_SATISFIES] = "FieldSatisfies",
       [LOOM_RELATION_COUNT_MATCHES_RANK] = "CountMatchesRank",
+      [LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT] =
+          "CountMatchesStaticElementCount",
       [LOOM_RELATION_ATTR_IN_RANGE_RANK] = "AttrInRangeRank",
       [LOOM_RELATION_REGION_ARG_COUNT] = "RegionArgCount",
       [LOOM_RELATION_REGION_ARG_MATCH] = "RegionArgMatch",

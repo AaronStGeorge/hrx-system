@@ -462,9 +462,6 @@ iree_status_t loom_vector_from_elements_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
-iree_status_t loom_vector_from_elements_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_EXTRACT: Extract a scalar or tail subvector from a vector at explicit leading indices. Supplying one index consumes the first source axis, two indices consume the first two axes, and consuming all axes produces a scalar element.
 // %x = vector.extract %v[%i] : vector<[%n]xf32> -> f32

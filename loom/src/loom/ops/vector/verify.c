@@ -787,33 +787,6 @@ iree_status_t loom_vector_broadcast_verify(const loom_module_t* module,
   return iree_ok_status();
 }
 
-iree_status_t loom_vector_from_elements_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter) {
-  loom_type_t result_type =
-      loom_module_value_type(module, loom_vector_from_elements_result(op));
-  if (!loom_type_is_vector(result_type)) return iree_ok_status();
-  if (!loom_type_satisfies_constraint(result_type,
-                                      LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR)) {
-    return iree_ok_status();
-  }
-
-  uint64_t expected_count = 0;
-  bool element_count_is_static =
-      loom_type_static_element_count(result_type, &expected_count);
-  if (!element_count_is_static) {
-    return loom_vector_emit_result_constraint(
-        emitter, op, IREE_SV("result"), result_type,
-        IREE_SV("representable static lane count"));
-  }
-
-  loom_value_slice_t elements = loom_vector_from_elements_elements(op);
-  if (elements.count == expected_count) return iree_ok_status();
-  return loom_vector_emit_count_mismatch(
-      emitter, op, IREE_SV("elements"), elements.count,
-      IREE_SV("result element count"), expected_count);
-}
-
 iree_status_t loom_vector_load_verify(const loom_module_t* module,
                                       const loom_op_t* op,
                                       iree_diagnostic_emitter_t emitter) {
