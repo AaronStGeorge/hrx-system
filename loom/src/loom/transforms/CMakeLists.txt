@@ -402,6 +402,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    refine_boundaries_test
+  SRCS
+    "refine_boundaries_test.cc"
+  DEPS
+    ::pass
+    ::refine_boundaries
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     rewriter
