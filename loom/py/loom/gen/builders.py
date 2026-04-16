@@ -678,6 +678,7 @@ def _has_typeof_result(op: Op) -> bool:
 def main() -> None:
     """Generate builder stubs for all registered dialects."""
     from loom.dialect.buffer import ALL_BUFFER_OPS
+    from loom.dialect.cfg import ALL_CFG_OPS
     from loom.dialect.encoding import ALL_ENCODING_OPS
     from loom.dialect.func import ALL_FUNC_OPS
     from loom.dialect.index import ALL_INDEX_OPS
@@ -702,6 +703,7 @@ def main() -> None:
         ),
         ("func", list(ALL_FUNC_OPS), "FuncBuilders", "func/builders.py"),
         ("pool", list(ALL_POOL_OPS), "PoolBuilders", "pool/builders.py"),
+        ("cfg", list(ALL_CFG_OPS), "CfgBuilders", "cfg/builders.py"),
         ("buffer", list(ALL_BUFFER_OPS), "BufferBuilders", "buffer/builders.py"),
         ("view", list(ALL_VIEW_OPS), "ViewBuilders", "view/builders.py"),
         ("vector", list(ALL_VECTOR_OPS), "VectorBuilders", "vector/builders.py"),

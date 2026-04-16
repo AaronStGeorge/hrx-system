@@ -384,6 +384,45 @@ ERR_STRUCTURE_024 = ErrorDef(
     fix_hint="Branch only to blocks in the same region as the branch op",
 )
 
+# ERR_STRUCTURE_025: Successor argument count mismatch.
+ERR_STRUCTURE_025 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=25,
+    severity=Severity.ERROR,
+    summary="Successor argument count mismatch.",
+    message=(
+        "successor {successor_index} of '{op_name}' passes {actual_count} "
+        "arguments, expected {expected_count}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("successor_index", ParamKind.U32),
+        ErrorParam("actual_count", ParamKind.U32),
+        ErrorParam("expected_count", ParamKind.U32),
+    ),
+    fix_hint="Pass one value per destination block argument",
+)
+
+# ERR_STRUCTURE_026: Successor argument type mismatch.
+ERR_STRUCTURE_026 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=26,
+    severity=Severity.ERROR,
+    summary="Successor argument type mismatch.",
+    message=(
+        "successor {successor_index} argument {argument_index} of '{op_name}' "
+        "has type {actual_type}, expected {expected_type}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("successor_index", ParamKind.U32),
+        ErrorParam("argument_index", ParamKind.U32),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("expected_type", ParamKind.TYPE),
+    ),
+    fix_hint="Pass a value whose type matches the destination block argument",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -409,4 +448,6 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_022,
     ERR_STRUCTURE_023,
     ERR_STRUCTURE_024,
+    ERR_STRUCTURE_025,
+    ERR_STRUCTURE_026,
 )

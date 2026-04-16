@@ -106,6 +106,38 @@ func.def @type_substring(%a: f32, %b: f32) -> (f32) {
 
 // ====
 
+// cfg.br must pass one argument per destination block argument.
+func.def @cfg_successor_arg_count(%arg: i32) {
+  // ERROR@+1: STRUCTURE/025 "successor 0" "expected 1"
+  cfg.br ^exit
+^exit(%value : i32):
+  func.return
+}
+
+// ====
+
+// cfg.br successor argument types must match destination block arguments.
+func.def @cfg_successor_arg_type(%arg: f32) {
+  // ERROR@+1: STRUCTURE/026 "successor 0" "expected i32"
+  cfg.br ^exit(%arg : f32)
+^exit(%value : i32):
+  func.return
+}
+
+// ====
+
+// cfg.cond_br currently carries no per-edge payloads.
+func.def @cfg_cond_successor_payload(%condition: i1) {
+  // ERROR@+1: STRUCTURE/025 "successor 1" "expected 1"
+  cfg.cond_br %condition, ^then, ^else : i1
+^then:
+  func.return
+^else(%value : i32):
+  func.return
+}
+
+// ====
+
 // Non-symbol-defining op at module level is rejected by the verifier.
 // ERROR@+1: STRUCTURE/011 "test.constant"
 %c = test.constant 42 : i32

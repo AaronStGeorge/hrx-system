@@ -3947,6 +3947,21 @@ static bool loom_verify_region_terminator_matches(
          terminator->kind == region_descriptor->implicit_terminator;
 }
 
+static bool loom_verify_region_has_cfg_successors(const loom_region_t* region) {
+  if (!region) return false;
+  if (iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
+    return true;
+  }
+  for (uint16_t b = 0; b < region->block_count; ++b) {
+    const loom_block_t* block = loom_region_const_block(region, b);
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (op->successor_count > 0) return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_verify_region_entry_yield(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, uint8_t region_index,
@@ -3987,9 +4002,10 @@ static iree_string_view_t loom_verify_op_kind_name(loom_verify_state_t* state,
 static void loom_verify_region_terminator_kind(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, uint8_t region_index,
+    bool region_uses_cfg_successors,
     const loom_region_descriptor_t* region_descriptor,
     const loom_op_t* terminator_op) {
-  if (!terminator_op ||
+  if (!terminator_op || region_uses_cfg_successors ||
       loom_verify_region_terminator_matches(region_descriptor, terminator_op)) {
     return;
   }
@@ -4031,6 +4047,8 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
           state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 6),
           params, IREE_ARRAYSIZE(params));
     }
+    bool region_uses_cfg_successors =
+        loom_verify_region_has_cfg_successors(region);
     for (uint16_t b = 0; b < region->block_count; ++b) {
       const loom_block_t* block = loom_region_const_block(region, b);
       const loom_op_t* terminator_op = NULL;
@@ -4065,7 +4083,8 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
         }
       }
       if (!terminator_op &&
-          region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN) {
+          (region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN ||
+           region_uses_cfg_successors)) {
         loom_diagnostic_param_t params[] = {
             loom_param_string(op_name),
             loom_param_u32(i),
@@ -4075,6 +4094,7 @@ static void loom_verify_region_structure(loom_verify_state_t* state,
             params, IREE_ARRAYSIZE(params));
       }
       loom_verify_region_terminator_kind(state, op, vtable, i,
+                                         region_uses_cfg_successors,
                                          region_descriptor, terminator_op);
     }
   }

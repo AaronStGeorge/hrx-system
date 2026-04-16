@@ -661,9 +661,15 @@ static iree_status_t loom_parse_format_optional_group(
       //                   has been dropped.
       //   anything else — fall back to peeking for an SSA value (the
       //                   common case for variadic operand groups).
+      uint16_t first_inner_index = element_index + 1;
+      while (first_inner_index < vtable->format_element_count &&
+             vtable->format_elements[first_inner_index].kind ==
+                 LOOM_FORMAT_KIND_GLUE) {
+        ++first_inner_index;
+      }
       const loom_format_element_t* first_inner =
-          (element_index + 1 < vtable->format_element_count)
-              ? &vtable->format_elements[element_index + 1]
+          (first_inner_index < vtable->format_element_count)
+              ? &vtable->format_elements[first_inner_index]
               : NULL;
       if (first_inner && first_inner->kind == LOOM_FORMAT_KIND_KEYWORD) {
         IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(

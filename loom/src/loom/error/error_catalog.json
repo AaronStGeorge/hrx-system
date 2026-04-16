@@ -1709,6 +1709,77 @@
     "fix_hint_template": "Branch only to blocks in the same region as the branch op"
   },
   {
+    "error_id": "ERR_STRUCTURE_025",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 25,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Successor argument count mismatch.",
+    "message_template": "successor {successor_index} of '{op_name}' passes {actual_count} arguments, expected {expected_count}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "successor_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Pass one value per destination block argument"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_026",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 26,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Successor argument type mismatch.",
+    "message_template": "successor {successor_index} argument {argument_index} of '{op_name}' has type {actual_type}, expected {expected_type}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "successor_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "argument_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Pass a value whose type matches the destination block argument"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",

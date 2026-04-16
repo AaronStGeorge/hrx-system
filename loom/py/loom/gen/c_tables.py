@@ -3341,6 +3341,7 @@ def main() -> None:
     """Generate C tables for all registered dialects."""
     from loom.builtin_types import ALL_BUILTIN_TYPES
     from loom.dialect.buffer import ALL_BUFFER_OPS, buffer_ops
+    from loom.dialect.cfg import ALL_CFG_OPS, cfg_ops
     from loom.dialect.encoding import ALL_ENCODING_OPS, encoding_ops
     from loom.dialect.func import ALL_FUNC_OPS, func_ops
     from loom.dialect.globals import ALL_GLOBAL_OPS, global_ops
@@ -3363,6 +3364,7 @@ def main() -> None:
         (pool_ops, list(ALL_POOL_OPS)),
         (global_ops, list(ALL_GLOBAL_OPS)),
         (scf_ops, list(ALL_SCF_OPS)),
+        (cfg_ops, list(ALL_CFG_OPS)),
         (buffer_ops, list(ALL_BUFFER_OPS)),
         (view_ops, list(ALL_VIEW_OPS)),
         (vector_ops, list(ALL_VECTOR_OPS)),

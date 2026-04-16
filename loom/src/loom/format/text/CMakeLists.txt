@@ -46,6 +46,7 @@ loom_cc_test(
     loom::src::loom::error::diagnostic
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::op_defs

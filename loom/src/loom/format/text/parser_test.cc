@@ -18,6 +18,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
@@ -69,6 +70,12 @@ class ParserTest : public ::testing::Test {
       const loom_op_vtable_t* const* vtables =
           loom_func_dialect_vtables(&count);
       IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_FUNC,
+                                                   vtables, (uint16_t)count));
+    }
+    {
+      iree_host_size_t count = 0;
+      const loom_op_vtable_t* const* vtables = loom_cfg_dialect_vtables(&count);
+      IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_CFG,
                                                    vtables, (uint16_t)count));
     }
     {
@@ -1106,6 +1113,17 @@ TEST_F(ParserTest, TestFuncForwardSuccessorReference) {
     EXPECT_NE(text.find("^exit:"), std::string::npos) << text;
     loom_module_free(module);
   }
+}
+
+TEST_F(ParserTest, FuncCfgBranchWithArguments) {
+  std::string text = RoundTrip(
+      "func.def @cfg(%arg : i32) -> (i32) {\n"
+      "  cfg.br ^exit(%arg : i32)\n"
+      "^exit(%value : i32):\n"
+      "  func.return %value : i32\n"
+      "}\n");
+  EXPECT_NE(text.find("cfg.br ^exit(%arg : i32)"), std::string::npos) << text;
+  EXPECT_NE(text.find("^exit(%value : i32):"), std::string::npos) << text;
 }
 
 TEST_F(ParserTest, NestedMapRegion) {

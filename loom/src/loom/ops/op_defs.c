@@ -1426,6 +1426,11 @@ iree_status_t loom_builder_finalize_op(loom_builder_t* builder, loom_op_t* op) {
           loom_module_refresh_value_type_uses(builder->module, results[i]));
     }
   }
+  // Successor-bearing ops make their enclosing region unstructured CFG.
+  if (op->successor_count > 0 && op->parent_block &&
+      op->parent_block->parent_region) {
+    op->parent_block->parent_region->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  }
   // Wire the symbol table entry for symbol-defining ops so that
   // loom_func_like_cast can find the defining op without a scan.
   const loom_op_vtable_t* vtable = loom_op_vtable(builder->module, op);

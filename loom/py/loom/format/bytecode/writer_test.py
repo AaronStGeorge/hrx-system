@@ -19,6 +19,7 @@ import pytest
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.buffer import ALL_BUFFER_OPS
+from loom.dialect.cfg import ALL_CFG_OPS
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.globals import ALL_GLOBAL_OPS
@@ -128,7 +129,7 @@ def _text_parser(
     include_kernel: bool = False,
 ) -> Parser:
     parser = Parser()
-    ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
+    ops = list(ALL_FUNC_OPS) + list(ALL_CFG_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
         _append_unique(ops, ALL_ENCODING_OPS)
     if include_global:
@@ -161,7 +162,7 @@ def _text_printer(
     include_kernel: bool = False,
 ) -> Printer:
     printer = Printer()
-    ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
+    ops = list(ALL_FUNC_OPS) + list(ALL_CFG_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
         _append_unique(ops, ALL_ENCODING_OPS)
     if include_global:
