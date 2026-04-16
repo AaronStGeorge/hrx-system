@@ -469,6 +469,19 @@ def test_vector_memory_ops_are_effectful_and_view_based() -> None:
     store_compress_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.store.compress"].constraints}
     assert ("HasRankOneVector", ("result",)) in load_expand_constraints
     assert ("HasRankOneVector", ("value",)) in store_compress_constraints
+    offset_indexed_ops = (
+        "vector.gather",
+        "vector.gather.mask",
+        "vector.scatter",
+        "vector.scatter.mask",
+        "vector.atomic.reduce",
+        "vector.atomic.reduce.mask",
+        "vector.atomic.rmw",
+        "vector.atomic.rmw.mask",
+    )
+    for name in offset_indexed_ops:
+        constraints = {(constraint.name, constraint.args) for constraint in ops[name].constraints}
+        assert ("HasIndexOrNonI1IntegerElement", ("offsets",)) in constraints
     assert ops["vector.gather"].effects[0].operand == "view"
     assert ops["vector.gather"].effects[0].kind == EffectKind.READ
     assert ops["vector.gather.mask"].effects[0].operand == "view"
@@ -517,11 +530,21 @@ def test_vector_static_construction_ops_declare_shape_constraints() -> None:
     assert ("SameType", ("source", "result")) in shuffle_constraints
 
 
+def test_vector_coordinate_ops_declare_index_or_integer_constraints() -> None:
+    ops = _op_by_name()
+    iota_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.iota"].constraints}
+    mask_range_constraints = {(constraint.name, constraint.args) for constraint in ops["vector.mask.range"].constraints}
+
+    assert ("HasIndexOrNonI1IntegerScalar", ("base",)) in iota_constraints
+    assert ("HasIndexOrNonI1IntegerScalar", ("lower_bound",)) in mask_range_constraints
+
+
 def test_vector_table_lookup_is_pure_register_lookup() -> None:
     op = _op_by_name()["vector.table.lookup"]
     constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
 
     assert ("HasRankOneVector", ("table",)) in constraints
+    assert ("HasIndexOrNonI1IntegerElement", ("indices",)) in constraints
     assert ("SameElementType", ("table", "result")) in constraints
     assert ("SameShape", ("indices", "result")) in constraints
     assert "Pure" in {trait.name for trait in op.traits}

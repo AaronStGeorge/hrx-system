@@ -13,6 +13,7 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/encoding/params.h"
 #include "loom/ops/encoding/roles.h"
+#include "loom/ops/op_defs.h"
 
 iree_status_t loom_encoding_register_physical_storage_family(
     loom_context_t* context);
@@ -691,15 +692,6 @@ static bool loom_encoding_numeric_transform_normalization_supported(
          iree_string_view_equal(value, IREE_SV("orthonormal"));
 }
 
-static bool loom_encoding_type_has_index_or_non_i1_integer_element(
-    loom_type_t type) {
-  if (!loom_type_is_vector(type)) return false;
-  loom_scalar_type_t element_type = loom_type_element_type(type);
-  if (element_type == LOOM_SCALAR_TYPE_INDEX) return true;
-  return element_type != LOOM_SCALAR_TYPE_I1 &&
-         loom_scalar_type_is_integer(element_type);
-}
-
 static bool loom_encoding_numeric_transform_param_is_extent(
     const loom_module_t* module, loom_string_id_t name_id) {
   return loom_encoding_string_id_equal(module, name_id,
@@ -818,7 +810,10 @@ static iree_status_t loom_encoding_numeric_transform_verify_dynamic_params(
 
     if (loom_encoding_string_id_equal(module, entry->name_id,
                                       IREE_SV("permutation"))) {
-      if (loom_encoding_type_has_index_or_non_i1_integer_element(actual_type)) {
+      if (loom_type_is_vector(actual_type) &&
+          loom_type_satisfies_constraint(
+              actual_type,
+              LOOM_TYPE_CONSTRAINT_INDEX_OR_NON_I1_INTEGER_ELEMENT)) {
         continue;
       }
       return loom_encoding_emit_dynamic_type_error(

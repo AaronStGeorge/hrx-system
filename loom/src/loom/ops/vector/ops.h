@@ -407,9 +407,6 @@ iree_status_t loom_vector_iota_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
-iree_status_t loom_vector_iota_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_MASK_RANGE: Construct an i1 tail mask from an explicit scalar coordinate range. For logical lane ordinal i, the lane is true when lower_bound + i * step is strictly less than upper_bound using the coordinate domain's signed ordering. The bracketed syntax mirrors scf.for ranges because the same inclusive-lower, exclusive-upper semantics are being tested; the result vector type supplies the number and shape of lanes to test.
 // %mask = vector.mask.range [%iv to %n step %c1] : index -> vector<16xi1>
@@ -431,9 +428,6 @@ iree_status_t loom_vector_mask_range_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
-iree_status_t loom_vector_mask_range_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BROADCAST: Broadcast a vector value to a larger-rank or same-rank vector result. Source axes align with the trailing result axes, and each static source extent must either be 1 or match the corresponding result extent.
 // %wide = vector.broadcast %v : vector<4xf32> -> vector<16x4xf32>

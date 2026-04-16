@@ -58,7 +58,9 @@ __all__ = [
     "VIEW",
     "BUFFER",
     "INTEGER",
+    "INDEX_OR_NON_I1_INTEGER_SCALAR",
     "INTEGER_ELEMENT",
+    "INDEX_OR_NON_I1_INTEGER_ELEMENT",
     "I8_ELEMENT",
     "I32_ELEMENT",
     "FLOAT",
@@ -141,6 +143,8 @@ __all__ = [
     "RanksMatch",
     "HasIntegerElement",
     "HasFloatElement",
+    "HasIndexOrNonI1IntegerScalar",
+    "HasIndexOrNonI1IntegerElement",
     "HasI1Element",
     "HasI8Element",
     "HasI32Element",
@@ -205,8 +209,10 @@ class TypeConstraint(Enum):
       BUFFER   → BufferType
       INTEGER  → ScalarType with kind in {I1, I8, I16, I32, I64}
       FLOAT    → ScalarType with kind in {F8*, F16, BF16, F32, F64}
+      INDEX_OR_NON_I1_INTEGER_SCALAR → ScalarType index or non-i1 integer
       INTEGER_ELEMENT → ShapedType with integer element type
       FLOAT_ELEMENT   → ShapedType with float element type
+      INDEX_OR_NON_I1_INTEGER_ELEMENT → ShapedType index or non-i1 integer element
       I1_ELEMENT      → ShapedType with element type i1
       I8_ELEMENT      → ShapedType with element type i8
       I32_ELEMENT     → ShapedType with element type i32
@@ -243,8 +249,10 @@ class TypeConstraint(Enum):
     BUFFER = "buffer"
     INTEGER = "integer"
     FLOAT = "float"
+    INDEX_OR_NON_I1_INTEGER_SCALAR = "index_or_non_i1_integer_scalar"
     INTEGER_ELEMENT = "integer_element"
     FLOAT_ELEMENT = "float_element"
+    INDEX_OR_NON_I1_INTEGER_ELEMENT = "index_or_non_i1_integer_element"
     I1_ELEMENT = "i1_element"
     I8_ELEMENT = "i8_element"
     I32_ELEMENT = "i32_element"
@@ -276,8 +284,10 @@ VIEW = TypeConstraint.VIEW
 BUFFER = TypeConstraint.BUFFER
 INTEGER = TypeConstraint.INTEGER
 FLOAT = TypeConstraint.FLOAT
+INDEX_OR_NON_I1_INTEGER_SCALAR = TypeConstraint.INDEX_OR_NON_I1_INTEGER_SCALAR
 INTEGER_ELEMENT = TypeConstraint.INTEGER_ELEMENT
 FLOAT_ELEMENT = TypeConstraint.FLOAT_ELEMENT
+INDEX_OR_NON_I1_INTEGER_ELEMENT = TypeConstraint.INDEX_OR_NON_I1_INTEGER_ELEMENT
 I1_ELEMENT = TypeConstraint.I1_ELEMENT
 I8_ELEMENT = TypeConstraint.I8_ELEMENT
 I32_ELEMENT = TypeConstraint.I32_ELEMENT
@@ -997,7 +1007,7 @@ def RanksMatch(a: str, b: str) -> Constraint:
 def _type_satisfies_field_constraint(
     value_type: Any, constraint: TypeConstraint
 ) -> bool:
-    from loom.ir import ScalarTypeKind, ShapedType, TypeKind
+    from loom.ir import ScalarType, ScalarTypeKind, ShapedType, TypeKind
 
     if constraint == RANK_ONE_VECTOR:
         return (
@@ -1018,9 +1028,28 @@ def _type_satisfies_field_constraint(
             and value_type.rank == 1
             and value_type.is_all_static
         )
+    if constraint == INDEX_OR_NON_I1_INTEGER_SCALAR:
+        if not isinstance(value_type, ScalarType):
+            return False
+        scalar_kind = value_type.kind
+        return scalar_kind in {
+            ScalarTypeKind.INDEX,
+            ScalarTypeKind.I8,
+            ScalarTypeKind.I16,
+            ScalarTypeKind.I32,
+            ScalarTypeKind.I64,
+        }
     if not isinstance(value_type, ShapedType):
         return False
     element_kind = value_type.element_type.kind
+    if constraint == INDEX_OR_NON_I1_INTEGER_ELEMENT:
+        return element_kind in {
+            ScalarTypeKind.INDEX,
+            ScalarTypeKind.I8,
+            ScalarTypeKind.I16,
+            ScalarTypeKind.I32,
+            ScalarTypeKind.I64,
+        }
     if constraint == INTEGER_ELEMENT:
         return element_kind in {
             ScalarTypeKind.I1,
@@ -1095,6 +1124,18 @@ def HasFloatElement(field: str) -> Constraint:
     """A shaped field must have a floating-point element type."""
 
     return _has_element_constraint(field, FLOAT_ELEMENT)
+
+
+def HasIndexOrNonI1IntegerScalar(field: str) -> Constraint:
+    """A field must have an index or non-i1 integer scalar type."""
+
+    return _has_field_constraint(field, INDEX_OR_NON_I1_INTEGER_SCALAR)
+
+
+def HasIndexOrNonI1IntegerElement(field: str) -> Constraint:
+    """A shaped field must have an index or non-i1 integer element type."""
+
+    return _has_element_constraint(field, INDEX_OR_NON_I1_INTEGER_ELEMENT)
 
 
 def HasI1Element(field: str) -> Constraint:

@@ -70,6 +70,8 @@ from loom.dsl import (
     HasI1Element,
     HasI8Element,
     HasI32Element,
+    HasIndexOrNonI1IntegerElement,
+    HasIndexOrNonI1IntegerScalar,
     HasIntegerElement,
     HasRankOneVector,
     Op,
@@ -443,10 +445,10 @@ vector_iota = Op(
     ],
     results=[Result("result", VECTOR)],
     constraints=[
+        HasIndexOrNonI1IntegerScalar("base"),
         SameType("base", "step"),
         SameElementType("base", "step", "result"),
     ],
-    verify="loom_vector_iota_verify",
     facts="loom_vector_iota_facts",
     traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     format=[
@@ -483,9 +485,9 @@ vector_mask_range = Op(
     results=[Result("result", VECTOR)],
     constraints=[
         HasI1Element("result"),
+        HasIndexOrNonI1IntegerScalar("lower_bound"),
         SameType("lower_bound", "upper_bound", "step"),
     ],
-    verify="loom_vector_mask_range_verify",
     facts="loom_vector_mask_range_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
@@ -887,6 +889,7 @@ vector_table_lookup = Op(
     results=[Result("result", VECTOR)],
     constraints=[
         HasRankOneVector("table"),
+        HasIndexOrNonI1IntegerElement("indices"),
         SameElementType("table", "result"),
         SameShape("indices", "result"),
     ],
@@ -1291,6 +1294,7 @@ vector_gather = Op(
     results=[Result("result", VECTOR, doc="Gathered vector value.")],
     attrs=_indexed_memory_attrs(),
     constraints=[
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("view", "result"),
         SameShape("offsets", "result"),
     ],
@@ -1335,6 +1339,7 @@ vector_scatter = Op(
     ],
     attrs=_indexed_memory_attrs(),
     constraints=[
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("value", "view"),
         SameShape("offsets", "value"),
     ],
@@ -1383,6 +1388,7 @@ vector_gather_mask = Op(
     attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("view", "passthrough", "result"),
         SameShape("offsets", "mask", "passthrough", "result"),
         SameType("passthrough", "result"),
@@ -1432,6 +1438,7 @@ vector_scatter_mask = Op(
     attrs=_indexed_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("value", "view"),
         SameShape("offsets", "mask", "value"),
     ],
@@ -1506,6 +1513,7 @@ vector_atomic_reduce = Op(
     ],
     attrs=_atomic_memory_attrs(),
     constraints=[
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("value", "view"),
         SameShape("offsets", "value"),
     ],
@@ -1548,6 +1556,7 @@ vector_atomic_reduce_mask = Op(
     attrs=_atomic_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("value", "view"),
         SameShape("offsets", "mask", "value"),
     ],
@@ -1599,6 +1608,7 @@ vector_atomic_rmw = Op(
     results=[Result("result", VECTOR, doc="Old memory values read by the atomic operations.")],
     attrs=_atomic_memory_attrs(),
     constraints=[
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("value", "view", "result"),
         SameShape("offsets", "value", "result"),
         SameType("value", "result"),
@@ -1644,6 +1654,7 @@ vector_atomic_rmw_mask = Op(
     attrs=_atomic_memory_attrs(),
     constraints=[
         HasI1Element("mask"),
+        HasIndexOrNonI1IntegerElement("offsets"),
         SameElementType("value", "view", "passthrough", "result"),
         SameShape("offsets", "mask", "value"),
         SameType("value", "passthrough", "result"),

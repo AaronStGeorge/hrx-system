@@ -8,6 +8,7 @@
 
 import pytest
 
+import loom.ir as ir
 from loom.assembly import (
     COLON,
     EQUALS,
@@ -73,6 +74,8 @@ from loom.dsl import (
     HasI1Element,
     HasI8Element,
     HasI32Element,
+    HasIndexOrNonI1IntegerElement,
+    HasIndexOrNonI1IntegerScalar,
     HasIntegerElement,
     HasParent,
     HasRankOneVector,
@@ -426,6 +429,10 @@ class TestConstraints:
     def test_element_family_constraints(self) -> None:
         assert HasIntegerElement("x").name == "HasIntegerElement"
         assert HasFloatElement("x").name == "HasFloatElement"
+        assert HasIndexOrNonI1IntegerScalar("x").name == "HasIndexOrNonI1IntegerScalar"
+        assert (
+            HasIndexOrNonI1IntegerElement("x").name == "HasIndexOrNonI1IntegerElement"
+        )
         assert HasI1Element("x").name == "HasI1Element"
         assert HasI8Element("x").name == "HasI8Element"
         assert HasI32Element("x").name == "HasI32Element"
@@ -452,6 +459,37 @@ class TestConstraints:
         assert not HasF16OrBf16Element("x").check({"x": FakeValue(vector_type(F32))})[0]
         assert HasF32Element("x").check({"x": FakeValue(vector_type(F32))})[0]
         assert not HasF32Element("x").check({"x": FakeValue(I32)})[0]
+
+    def test_index_or_non_i1_integer_constraints_validate_types(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        def vector_type(element_type: ScalarType) -> ShapedType:
+            return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(4),))
+
+        assert HasIndexOrNonI1IntegerScalar("x").check({"x": FakeValue(ir.INDEX)})[0]
+        assert HasIndexOrNonI1IntegerScalar("x").check({"x": FakeValue(I32)})[0]
+        assert not HasIndexOrNonI1IntegerScalar("x").check({"x": FakeValue(ir.I1)})[0]
+        assert not HasIndexOrNonI1IntegerScalar("x").check({"x": FakeValue(ir.OFFSET)})[
+            0
+        ]
+        assert not HasIndexOrNonI1IntegerScalar("x").check({"x": FakeValue(F32)})[0]
+        assert HasIndexOrNonI1IntegerElement("x").check(
+            {"x": FakeValue(vector_type(ir.INDEX))}
+        )[0]
+        assert HasIndexOrNonI1IntegerElement("x").check(
+            {"x": FakeValue(vector_type(I8))}
+        )[0]
+        assert not HasIndexOrNonI1IntegerElement("x").check(
+            {"x": FakeValue(vector_type(ir.I1))}
+        )[0]
+        assert not HasIndexOrNonI1IntegerElement("x").check(
+            {"x": FakeValue(vector_type(ir.OFFSET))}
+        )[0]
+        assert not HasIndexOrNonI1IntegerElement("x").check(
+            {"x": FakeValue(vector_type(F32))}
+        )[0]
 
     def test_vector_shape_constraints_validate_vector_shape(self) -> None:
         class FakeValue:

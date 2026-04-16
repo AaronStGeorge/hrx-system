@@ -325,6 +325,10 @@ typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT,
   // Shaped type with a floating-point element type.
   LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT,
+  // Scalar index type or non-i1 integer type.
+  LOOM_TYPE_CONSTRAINT_INDEX_OR_NON_I1_INTEGER_SCALAR,
+  // Shaped type with index or non-i1 integer element type.
+  LOOM_TYPE_CONSTRAINT_INDEX_OR_NON_I1_INTEGER_ELEMENT,
   // Shaped type with element type i1.
   LOOM_TYPE_CONSTRAINT_I1_ELEMENT,
   // Shaped type with element type i8.
@@ -352,101 +356,8 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint);
 // Returns true if |type| satisfies the abstract |constraint|.
 // Used by the verifier for operand/result type checking and by
 // builders for debug-mode assertions.
-static inline bool loom_type_satisfies_constraint(
-    loom_type_t type, loom_type_constraint_t constraint) {
-  switch (constraint) {
-    case LOOM_TYPE_CONSTRAINT_ANY:
-      return true;
-    case LOOM_TYPE_CONSTRAINT_TILE:
-      return loom_type_is_tile(type);
-    case LOOM_TYPE_CONSTRAINT_TENSOR:
-      return loom_type_is_tensor(type);
-    case LOOM_TYPE_CONSTRAINT_VECTOR:
-      return loom_type_is_vector(type);
-    case LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR:
-      return loom_type_is_vector(type) && loom_type_rank(type) == 1;
-    case LOOM_TYPE_CONSTRAINT_ALL_STATIC_VECTOR:
-      if (!loom_type_is_vector(type)) return false;
-      for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
-        if (loom_type_dim_is_dynamic_at(type, i)) return false;
-      }
-      return true;
-    case LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR:
-      if (!loom_type_is_vector(type) || loom_type_rank(type) != 1) {
-        return false;
-      }
-      return !loom_type_dim_is_dynamic_at(type, 0);
-    case LOOM_TYPE_CONSTRAINT_VIEW:
-      return loom_type_is_view(type);
-    case LOOM_TYPE_CONSTRAINT_BUFFER:
-      return loom_type_is_buffer(type);
-    case LOOM_TYPE_CONSTRAINT_SCALAR:
-      return loom_type_is_scalar(type);
-    case LOOM_TYPE_CONSTRAINT_INDEX:
-      return loom_type_is_scalar(type) &&
-             loom_type_element_type(type) == LOOM_SCALAR_TYPE_INDEX;
-    case LOOM_TYPE_CONSTRAINT_OFFSET:
-      return loom_type_is_scalar(type) &&
-             loom_type_element_type(type) == LOOM_SCALAR_TYPE_OFFSET;
-    case LOOM_TYPE_CONSTRAINT_ADDRESS:
-      return loom_type_is_scalar(type) &&
-             (loom_type_element_type(type) == LOOM_SCALAR_TYPE_INDEX ||
-              loom_type_element_type(type) == LOOM_SCALAR_TYPE_OFFSET);
-    case LOOM_TYPE_CONSTRAINT_INTEGER:
-      return loom_type_is_scalar(type) &&
-             loom_scalar_type_is_integer(loom_type_element_type(type));
-    case LOOM_TYPE_CONSTRAINT_FLOAT:
-      return loom_type_is_scalar(type) &&
-             loom_scalar_type_is_float(loom_type_element_type(type));
-    case LOOM_TYPE_CONSTRAINT_GROUP:
-      return loom_type_kind(type) == LOOM_TYPE_GROUP;
-    case LOOM_TYPE_CONSTRAINT_ANY_ENCODING:
-      return loom_type_is_encoding(type);
-    case LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT:
-      return loom_type_is_encoding(type) &&
-             loom_type_encoding_role(type) == LOOM_ENCODING_ROLE_ADDRESS_LAYOUT;
-    case LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA:
-      return loom_type_is_encoding(type) &&
-             loom_type_encoding_role(type) == LOOM_ENCODING_ROLE_STORAGE_SCHEMA;
-    case LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE:
-      return loom_type_is_encoding(type) &&
-             loom_type_encoding_role(type) ==
-                 LOOM_ENCODING_ROLE_PHYSICAL_STORAGE;
-    case LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM:
-      return loom_type_is_encoding(type) &&
-             loom_type_encoding_role(type) ==
-                 LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM;
-    case LOOM_TYPE_CONSTRAINT_POOL:
-      return loom_type_is_pool(type);
-    case LOOM_TYPE_CONSTRAINT_I1:
-      return loom_type_is_scalar(type) &&
-             loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
-    case LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT:
-      return loom_type_is_shaped(type) &&
-             loom_scalar_type_is_integer(loom_type_element_type(type));
-    case LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT:
-      return loom_type_is_shaped(type) &&
-             loom_scalar_type_is_float(loom_type_element_type(type));
-    case LOOM_TYPE_CONSTRAINT_I1_ELEMENT:
-      return loom_type_is_shaped(type) &&
-             loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
-    case LOOM_TYPE_CONSTRAINT_I8_ELEMENT:
-      return loom_type_is_shaped(type) &&
-             loom_type_element_type(type) == LOOM_SCALAR_TYPE_I8;
-    case LOOM_TYPE_CONSTRAINT_I32_ELEMENT:
-      return loom_type_is_shaped(type) &&
-             loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
-    case LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT:
-      return loom_type_is_shaped(type) &&
-             (loom_type_element_type(type) == LOOM_SCALAR_TYPE_F16 ||
-              loom_type_element_type(type) == LOOM_SCALAR_TYPE_BF16);
-    case LOOM_TYPE_CONSTRAINT_F32_ELEMENT:
-      return loom_type_is_shaped(type) &&
-             loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32;
-    default:
-      return false;
-  }
-}
+bool loom_type_satisfies_constraint(loom_type_t type,
+                                    loom_type_constraint_t constraint);
 
 //===----------------------------------------------------------------------===//
 // Semantic constraints
