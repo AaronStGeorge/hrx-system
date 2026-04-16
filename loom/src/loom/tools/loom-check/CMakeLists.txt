@@ -69,6 +69,7 @@ loom_cc_library(
     loom::src::loom::transforms::canonicalize
     loom::src::loom::transforms::cse
     loom::src::loom::transforms::dce
+    loom::src::loom::transforms::kernel_async_legality
     loom::src::loom::transforms::licm
     loom::src::loom::transforms::loop_fusion
     loom::src::loom::transforms::pass

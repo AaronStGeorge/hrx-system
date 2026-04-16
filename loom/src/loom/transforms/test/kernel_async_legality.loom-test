@@ -1,0 +1,17 @@
+// RUN: pass kernel-async-legality
+
+func.def @single_group_wait() {
+  %group = kernel.async.group -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @two_group_pipeline_waits_oldest_first() {
+  %load0 = kernel.async.group -> kernel.async.group
+  %load1 = kernel.async.group -> kernel.async.group
+  kernel.async.wait %load0 {newer_groups = 1} : kernel.async.group
+  kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
+  func.return
+}

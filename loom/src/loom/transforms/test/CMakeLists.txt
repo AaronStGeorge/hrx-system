@@ -34,6 +34,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "kernel_async_legality"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/kernel_async_legality.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "licm"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/licm.loom-test"

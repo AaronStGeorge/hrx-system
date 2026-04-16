@@ -193,6 +193,42 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    kernel_async_legality
+  HDRS
+    "kernel_async_legality.h"
+  SRCS
+    "kernel_async_legality.c"
+  DEPS
+    ::pass
+    iree::base
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    kernel_async_legality_test
+  SRCS
+    "kernel_async_legality_test.cc"
+  DEPS
+    ::kernel_async_legality
+    ::pass
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     licm
   HDRS
     "licm.h"
