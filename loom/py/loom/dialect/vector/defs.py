@@ -128,6 +128,17 @@ IntegerDot4Kind = EnumDef(
     doc="Signedness variants for four-lane i8 dot products accumulated into i32 lanes.",
 )
 
+IntegerDot8I4Kind = EnumDef(
+    "IntegerDot8I4Kind",
+    [
+        EnumCase("s4s4", 0, doc="Signed packed i4 lhs times signed packed i4 rhs."),
+        EnumCase("u4s4", 1, doc="Unsigned packed u4 lhs times signed packed i4 rhs."),
+        EnumCase("s4u4", 2, doc="Signed packed i4 lhs times unsigned packed u4 rhs."),
+        EnumCase("u4u4", 3, doc="Unsigned packed u4 lhs times unsigned packed u4 rhs."),
+    ],
+    doc="Signedness variants for packed eight-lane i4 dot products accumulated into i32 lanes.",
+)
+
 FloatAssumptionFlags = EnumDef(
     "FloatAssumptionFlags",
     [
@@ -2939,6 +2950,46 @@ vector_dot4i = Op(
     ],
 )
 
+vector_dot8i4 = Op(
+    "vector.dot8i4",
+    group=vector_ops,
+    doc=(
+        "Treat each i32 source lane as a little-endian pack of eight 4-bit "
+        "integer fields, multiply corresponding packed fields using the "
+        "signedness template, and add the eight-product sum into the matching "
+        "i32 accumulator lane. This is a packed-storage register dot: use "
+        "vector.bitpack<4> when starting from unpacked byte lanes. The "
+        "semantics match AMDGPU sdot8/udot8/sudot8 with clamp disabled."
+    ),
+    operands=[
+        Operand("lhs", VECTOR, doc="i32 lanes holding packed lhs 4-bit fields."),
+        Operand("rhs", VECTOR, doc="i32 lanes holding packed rhs 4-bit fields."),
+        Operand("acc", VECTOR, doc="i32 accumulator lanes updated by each packed eight-lane dot product."),
+    ],
+    results=[Result("result", VECTOR, doc="Updated i32 accumulator lanes.")],
+    attrs=[AttrDef("kind", ATTR_TYPE_ENUM, enum_def=IntegerDot8I4Kind)],
+    constraints=[
+        HasIntegerElement("lhs"),
+        SameType("lhs", "rhs", "acc", "result"),
+    ],
+    verify="loom_vector_dot8i4_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("kind"),
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COMMA,
+        Ref("acc"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%r = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi32>",
+        "%r = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<[%N]xi32>",
+    ],
+)
+
 
 # ============================================================================
 # Reductions
@@ -3118,5 +3169,6 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_dotf,
     vector_dot2f,
     vector_dot4i,
+    vector_dot8i4,
     vector_reduce,
 )

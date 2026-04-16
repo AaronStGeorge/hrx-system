@@ -591,6 +591,8 @@ iree_status_t loom_vector_to_scalar_build_lane(
       return loom_vector_to_scalar_build_dot2f_lane(state, indices, out_lane);
     case LOOM_VECTOR_TO_SCALAR_LANE_DOT4I:
       return loom_vector_to_scalar_build_dot4i_lane(state, indices, out_lane);
+    case LOOM_VECTOR_TO_SCALAR_LANE_DOT8I4:
+      return loom_vector_to_scalar_build_dot8i4_lane(state, indices, out_lane);
     case LOOM_VECTOR_TO_SCALAR_LANE_BITPACK:
       return loom_vector_to_scalar_build_bitpack_lane(state, indices, out_lane);
     case LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKU:

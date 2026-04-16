@@ -277,6 +277,19 @@ func.def @dot4i(%lhs: vector<16xi8>, %rhs: vector<16xi8>, %acc: vector<4xi32>, %
 
 // ====
 
+// Eight-lane i4 dot products consume packed i32 storage lanes directly instead
+// of inventing an i4 scalar type.
+func.def @dot8i4(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xi32>, %n: index, %dyn_lhs: vector<[%n]xi32>, %dyn_rhs: vector<[%n]xi32>, %dyn_acc: vector<[%n]xi32>) {
+  %ss = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi32>
+  %us = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<4xi32>
+  %su = vector.dot8i4<s4u4> %lhs, %rhs, %acc : vector<4xi32>
+  %uu = vector.dot8i4<u4u4> %dyn_lhs, %dyn_rhs, %dyn_acc : vector<[%n]xi32>
+  test.use %ss, %us, %su, %uu : vector<4xi32>, vector<4xi32>, vector<4xi32>, vector<[%n]xi32>
+  func.return
+}
+
+// ====
+
 // Block-quant register decode snippets make storage reinterpretation and lane
 // ordering explicit without hidden decode pseudo-ops.
 func.def @q4_0_register_decode(%scale_bytes: vector<2xi8>, %qs: vector<16xi8>) {

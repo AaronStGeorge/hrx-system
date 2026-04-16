@@ -150,8 +150,9 @@ enum {
   LOOM_OP_VECTOR_DOTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 129),
   LOOM_OP_VECTOR_DOT2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 130),
   LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 131),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 132),
-  LOOM_OP_VECTOR_COUNT_ = 133,
+  LOOM_OP_VECTOR_DOT8I4 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 132),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 133),
+  LOOM_OP_VECTOR_COUNT_ = 134,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -284,6 +285,15 @@ typedef enum loom_vector_dot4i_kind_e {
   LOOM_VECTOR_DOT4I_KIND_U8U8 = 3,
   LOOM_VECTOR_DOT4I_KIND_COUNT_ = 4,
 } loom_vector_dot4i_kind_t;
+
+// Signedness variants for packed eight-lane i4 dot products accumulated into i32 lanes.
+typedef enum loom_vector_dot8i4_kind_e {
+  LOOM_VECTOR_DOT8I4_KIND_S4S4 = 0,
+  LOOM_VECTOR_DOT8I4_KIND_U4S4 = 1,
+  LOOM_VECTOR_DOT8I4_KIND_S4U4 = 2,
+  LOOM_VECTOR_DOT8I4_KIND_U4U4 = 3,
+  LOOM_VECTOR_DOT8I4_KIND_COUNT_ = 4,
+} loom_vector_dot8i4_kind_t;
 
 // Combining operations for vector reductions.
 typedef enum loom_vector_reduce_kind_e {
@@ -2763,6 +2773,27 @@ iree_status_t loom_vector_dot4i_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_dot4i_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_DOT8I4: Treat each i32 source lane as a little-endian pack of eight 4-bit integer fields, multiply corresponding packed fields using the signedness template, and add the eight-product sum into the matching i32 accumulator lane. This is a packed-storage register dot: use vector.bitpack<4> when starting from unpacked byte lanes. The semantics match AMDGPU sdot8/udot8/sudot8 with clamp disabled.
+// %r = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi32>
+LOOM_DEFINE_ISA(loom_vector_dot8i4_isa, LOOM_OP_VECTOR_DOT8I4)
+LOOM_DEFINE_OPERAND(loom_vector_dot8i4_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_dot8i4_rhs, 1)
+LOOM_DEFINE_OPERAND(loom_vector_dot8i4_acc, 2)
+LOOM_DEFINE_RESULT(loom_vector_dot8i4_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_dot8i4_kind, 0)
+iree_status_t loom_vector_dot8i4_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_value_id_t lhs,
+    loom_value_id_t rhs,
+    loom_value_id_t acc,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_dot8i4_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

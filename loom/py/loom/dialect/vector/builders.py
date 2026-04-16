@@ -1777,6 +1777,21 @@ class VectorBuilders:
         _operands.append(acc)
         return cast(ValueRef, self._b.build("vector.dot4i", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def dot8i4(self, *, kind: str, lhs: ValueRef, rhs: ValueRef, acc: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Treat each i32 source lane as a little-endian pack of eight 4-bit integer fields, multiply corresponding packed fields using the signedness template, and add the eight-product sum into the matching i32 accumulator lane. This is a packed-storage register dot: use vector.bitpack<4> when starting from unpacked byte lanes. The semantics match AMDGPU sdot8/udot8/sudot8 with clamp disabled.
+
+        Example::
+            %r = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _operands.append(lhs)
+        _operands.append(rhs)
+        _operands.append(acc)
+        return cast(ValueRef, self._b.build("vector.dot8i4", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def reduce(self, *, kind: str, input: ValueRef, init: ValueRef, result_types: list[Type]) -> ValueRef:
         """Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type.
 

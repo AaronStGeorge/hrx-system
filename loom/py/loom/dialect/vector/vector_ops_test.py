@@ -17,6 +17,7 @@ from loom.dialect.vector import (
     AtomicScope,
     FloatAssumptionFlags,
     IntegerDot4Kind,
+    IntegerDot8I4Kind,
     QuantizeNaN,
     QuantizeTie,
 )
@@ -639,6 +640,26 @@ def test_vector_dot4i_is_pure_grouped_i8_to_i32_dot() -> None:
     assert ("HasIntegerElement", ("acc",)) in constraints
     assert ("SameShape", ("lhs", "rhs")) in constraints
     assert ("SameType", ("acc", "result")) in constraints
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
+    assert op.effects == ()
+
+
+def test_vector_dot8i4_is_pure_packed_i4_to_i32_dot() -> None:
+    op = _op_by_name()["vector.dot8i4"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    trait_names = {trait.name for trait in op.traits}
+
+    assert [case.keyword for case in IntegerDot8I4Kind.cases] == [
+        "s4s4",
+        "u4s4",
+        "s4u4",
+        "u4u4",
+    ]
+    assert ("HasIntegerElement", ("lhs",)) in constraints
+    assert ("SameType", ("lhs", "rhs", "acc", "result")) in constraints
+    assert "little-endian pack" in op.doc
+    assert "sdot8/udot8/sudot8" in op.doc
     assert "Pure" in trait_names
     assert "Elementwise" not in trait_names
     assert op.effects == ()
