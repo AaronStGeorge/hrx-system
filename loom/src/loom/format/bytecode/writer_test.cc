@@ -642,6 +642,45 @@ TEST_F(WriterTest, ModuleWithFunction) {
   loom_module_free(module);
 }
 
+TEST_F(WriterTest, FunctionSymbolKindUsesDenseWireEnum) {
+  loom_module_t* module = CreateAttrsModule(/*reverse_attr_order=*/false);
+  auto bytes = WriteModule(module);
+
+  size_t dir_offset = 24;
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  SectionEntry symbols_entry = {};
+  ASSERT_TRUE(
+      FindSection(entries, LOOM_BYTECODE_SECTION_SYMBOLS, &symbols_entry));
+
+  const uint8_t* symbols_data =
+      bytes.data() + (size_t)module_offset + (size_t)symbols_entry.offset;
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(
+      symbols_data, (iree_host_size_t)symbols_entry.length, &cursor);
+  uint64_t symbol_count = 0;
+  uint64_t import_count = 0;
+  uint64_t export_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &symbol_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &import_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &export_count));
+  ASSERT_EQ(symbol_count, 1u);
+  ASSERT_EQ(import_count, 0u);
+  ASSERT_EQ(export_count, 1u);
+
+  iree_const_byte_span_t export_table = {};
+  IREE_ASSERT_OK(loom_bytecode_cursor_read_span(&cursor, 8, &export_table));
+  EXPECT_EQ(export_table.data_length, 8u);
+
+  uint64_t name_id = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &name_id));
+  uint8_t kind = 0;
+  IREE_ASSERT_OK(loom_bytecode_cursor_read_u8(&cursor, &kind));
+  EXPECT_EQ(kind, LOOM_BYTECODE_SYMBOL_FUNC_DEF);
+
+  loom_module_free(module);
+}
+
 TEST_F(WriterTest, FunctionBodySummaryAndOpTableRefsUseNewWireShape) {
   loom_module_t* module = CreateModule("test");
 

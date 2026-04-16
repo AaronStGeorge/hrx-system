@@ -707,6 +707,8 @@ static iree_status_t loom_bytecode_number_region(
     uint32_t depth);
 static iree_status_t loom_bytecode_number_operation(
     loom_bytecode_numbering_t* numbering, const loom_op_t* op, uint32_t depth);
+static iree_status_t loom_bytecode_number_encoding(
+    loom_bytecode_numbering_t* numbering, uint16_t encoding_id);
 
 static iree_status_t loom_bytecode_number_attr_value(
     loom_bytecode_numbering_t* numbering, loom_attribute_t attr,
@@ -752,6 +754,11 @@ static iree_status_t loom_bytecode_number_attr_value(
           loom_bytecode_numbering_intern_type(numbering, type, &unused_id));
       break;
     }
+    case LOOM_ATTR_ENCODING: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_number_encoding(
+          numbering, loom_attr_as_encoding_id(attr)));
+      break;
+    }
     case LOOM_ATTR_DICT: {
       for (uint16_t i = 0; i < attr.count; ++i) {
         IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
@@ -763,6 +770,33 @@ static iree_status_t loom_bytecode_number_attr_value(
     }
     default:
       break;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_number_encoding(
+    loom_bytecode_numbering_t* numbering, uint16_t encoding_id) {
+  if (encoding_id == 0 || encoding_id > numbering->module->encodings.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "encoding_id %u out of range (module has %" PRIhsz " encodings)",
+        (unsigned)encoding_id, numbering->module->encodings.count);
+  }
+  uint32_t unused_id = 0;
+  const loom_encoding_t* encoding =
+      &numbering->module->encodings.entries[encoding_id - 1];
+  IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
+      numbering, encoding->name_id, &unused_id));
+  if (encoding->alias_id != LOOM_STRING_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
+        numbering, encoding->alias_id, &unused_id));
+  }
+  for (uint8_t i = 0; i < encoding->attribute_count; ++i) {
+    const loom_named_attr_t* attr = &encoding->attributes[i];
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
+        numbering, attr->name_id, &unused_id));
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_number_attr_value(numbering, attr->value, NULL));
   }
   return iree_ok_status();
 }
@@ -1018,6 +1052,34 @@ static iree_status_t loom_bytecode_encoding_role_byte(loom_encoding_role_t role,
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                           "unknown encoding role %d", (int)role);
+}
+
+static iree_status_t loom_bytecode_symbol_kind_byte(loom_symbol_kind_t kind,
+                                                    uint8_t* out_byte) {
+  switch (kind) {
+    case LOOM_SYMBOL_FUNC_DEF:
+      *out_byte = LOOM_BYTECODE_SYMBOL_FUNC_DEF;
+      return iree_ok_status();
+    case LOOM_SYMBOL_FUNC_DECL:
+      *out_byte = LOOM_BYTECODE_SYMBOL_FUNC_DECL;
+      return iree_ok_status();
+    case LOOM_SYMBOL_FUNC_TEMPLATE:
+      *out_byte = LOOM_BYTECODE_SYMBOL_FUNC_TEMPLATE;
+      return iree_ok_status();
+    case LOOM_SYMBOL_FUNC_UKERNEL:
+      *out_byte = LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL;
+      return iree_ok_status();
+    case LOOM_SYMBOL_GLOBAL:
+      *out_byte = LOOM_BYTECODE_SYMBOL_GLOBAL;
+      return iree_ok_status();
+    case LOOM_SYMBOL_EXECUTABLE:
+      *out_byte = LOOM_BYTECODE_SYMBOL_EXECUTABLE;
+      return iree_ok_status();
+    default:
+      break;
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown symbol kind %u", (unsigned)kind);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1732,7 +1794,10 @@ static iree_status_t loom_bytecode_write_symbols_section(
     IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, name_writer_id));
 
     // Kind.
-    IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, symbol->kind));
+    uint8_t kind_byte = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_symbol_kind_byte(symbol->kind, &kind_byte));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, kind_byte));
 
     // Visibility.
     IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(
@@ -2198,6 +2263,12 @@ iree_status_t loom_bytecode_write_module(
       uint32_t unused_id = 0;
       status = loom_bytecode_numbering_intern_module_string(
           &numbering, module->symbols.entries[i].name_id, &unused_id);
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    for (iree_host_size_t i = 0;
+         i < module->encodings.count && iree_status_is_ok(status); ++i) {
+      status = loom_bytecode_number_encoding(&numbering, (uint16_t)(i + 1));
     }
   }
 

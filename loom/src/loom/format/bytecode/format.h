@@ -395,8 +395,8 @@ typedef enum loom_bytecode_section_kind_e {
 // OPS indexes are dense 0..op_count-1. The zero sentinel exists only on
 // references in the IR section via op_table_index_plus1; the in-memory compiler
 // and the OPS table remain dense. The reader looks up each name in the
-// runtime's op vtable registry. Unknown op names are noted but not fatal (the
-// function containing them is skippable).
+// runtime's op vtable registry. Unknown op names are fatal because bytecode is
+// not allowed to materialize opaque or half-valid operations.
 
 // ==========================================================================
 // LOCATIONS section
@@ -813,6 +813,26 @@ typedef struct loom_bytecode_section_dir_entry_t {
   // Original uncompressed size. 0 if section is not compressed.
   uint64_t uncompressed_length;
 } loom_bytecode_section_dir_entry_t;
+
+// Symbol kind byte in the SYMBOLS section. These are dense wire values and
+// intentionally not equal to loom_symbol_kind_t, whose zero value is an
+// in-memory "unlinked" sentinel that is never serialized.
+typedef enum loom_bytecode_symbol_kind_e {
+  LOOM_BYTECODE_SYMBOL_FUNC_DEF = 0,
+  LOOM_BYTECODE_SYMBOL_FUNC_DECL = 1,
+  LOOM_BYTECODE_SYMBOL_FUNC_TEMPLATE = 2,
+  LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL = 3,
+  LOOM_BYTECODE_SYMBOL_GLOBAL = 4,
+  LOOM_BYTECODE_SYMBOL_EXECUTABLE = 5,
+  LOOM_BYTECODE_SYMBOL_COUNT_,
+} loom_bytecode_symbol_kind_t;
+
+// Symbol visibility byte in the SYMBOLS section.
+typedef enum loom_bytecode_symbol_visibility_e {
+  LOOM_BYTECODE_SYMBOL_VISIBILITY_PUBLIC = 0,
+  LOOM_BYTECODE_SYMBOL_VISIBILITY_PRIVATE = 1,
+  LOOM_BYTECODE_SYMBOL_VISIBILITY_COUNT_,
+} loom_bytecode_symbol_visibility_t;
 
 // Symbol flags (in the u16 flags field of each symbol entry).
 enum loom_bytecode_symbol_flag_bits_e {

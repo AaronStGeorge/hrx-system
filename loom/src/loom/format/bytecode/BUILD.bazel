@@ -64,6 +64,40 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "reader",
+    srcs = ["reader.c"],
+    hdrs = ["reader.h"],
+    deps = [
+        ":diagnostic",
+        ":format",
+        ":varint",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:unicode",
+    ],
+)
+
+loom_cc_test(
+    name = "reader_test",
+    srcs = ["reader_test.cc"],
+    deps = [
+        ":format",
+        ":reader",
+        ":varint",
+        ":writer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "writer",
     srcs = ["writer.c"],
     hdrs = ["writer.h"],

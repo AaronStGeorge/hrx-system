@@ -73,6 +73,44 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    reader
+  HDRS
+    "reader.h"
+  SRCS
+    "reader.c"
+  DEPS
+    ::diagnostic
+    ::format
+    ::varint
+    iree::base
+    iree::base::internal::arena
+    iree::base::internal::unicode
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    reader_test
+  SRCS
+    "reader_test.cc"
+  DEPS
+    ::format
+    ::reader
+    ::varint
+    ::writer
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::ir
+    loom::src::loom::ops::test
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     writer
   HDRS
     "writer.h"
