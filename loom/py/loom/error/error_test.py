@@ -214,6 +214,21 @@ class TestCatalogIntegrity:
                 f"domain {domain.name}: codes {codes} should be sequential {expected}"
             )
 
+    def test_catalog_fits_compact_error_refs(self) -> None:
+        """C LOOM_ERROR_REF packs a domain and code into 16 bits."""
+        from loom.error import ALL_ERRORS
+
+        max_code = (1 << 10) - 1
+        max_domain_value = (1 << 6) - 2
+        for error in ALL_ERRORS:
+            assert error.code <= max_code, (
+                f"{error.error_id}: code {error.code} exceeds LOOM_ERROR_REF max"
+            )
+            assert error.domain.value <= max_domain_value, (
+                f"{error.error_id}: domain {error.domain.name} exceeds "
+                "LOOM_ERROR_REF max"
+            )
+
 
 class TestOldErrorsPorted:
     """Spot-check that key errors from the old system were ported."""

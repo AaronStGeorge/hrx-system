@@ -372,8 +372,8 @@ static void ExpectBadTraitDiagnostic(const loom_op_vtable_t* bad_vtable,
   IREE_ASSERT_OK(loom_verify_module(module, &options, &result));
 
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(capture, &loom_err_structure_016);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 16));
   ASSERT_NE(entry, nullptr)
       << "Expected STRUCTURE/016 incompatible-traits error";
   EXPECT_EQ(GetStringParam(*entry, 0), op_name);
@@ -465,8 +465,8 @@ TEST_F(VerifyTest, RejectsPredicateArityMismatch) {
   DiagnosticCapture capture;
   auto result = VerifyStructured(&capture);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(capture, &loom_err_structure_021);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 21));
   ASSERT_NE(entry, nullptr)
       << "Expected STRUCTURE/021 predicate-arity diagnostic";
   EXPECT_EQ(GetStringParam(*entry, 0), "predicates");
@@ -520,8 +520,8 @@ TEST_F(VerifyTest, WrongOperandCountDetected) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_structure_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1));
   ASSERT_NE(entry, nullptr) << "Expected STRUCTURE/001 operand-count error";
   EXPECT_EQ(GetStringParam(*entry, 0), "test.addi");
   ExpectU32Param(*entry, 1, 1);
@@ -540,8 +540,8 @@ TEST_F(VerifyTest, OpAfterTerminatorDetected) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_structure_012);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 12));
   ASSERT_NE(entry, nullptr)
       << "Expected STRUCTURE/012 op-after-terminator error";
   EXPECT_EQ(GetStringParam(*entry, 0), "test.constant");
@@ -583,8 +583,8 @@ TEST_F(VerifyTest, OpAfterTerminatorReportsTerminatorLocation) {
       module_, kSource, filename, &structured);
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* structure_error =
-      FindDiagnostic(structured, &loom_err_structure_012);
+  const CapturedDiagnostic* structure_error = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 12));
   ASSERT_NE(structure_error, nullptr)
       << "Expected STRUCTURE/012 op-after-terminator diagnostic";
   EXPECT_EQ(GetStringParam(*structure_error, 0), "test.constant");
@@ -621,8 +621,8 @@ TEST_F(VerifyTest, TypeConstraintViolationDetected) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_003);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/003 operand constraint error";
   EXPECT_EQ(GetStringParam(*entry, 0), "lhs");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
@@ -673,8 +673,8 @@ TEST_F(VerifyTest, SameTypeConstraintViolation) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/001 SameType diagnostic";
   EXPECT_EQ(GetStringParam(*entry, 0), "lhs");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
@@ -712,8 +712,8 @@ TEST_F(VerifyTest, UndefinedOperandDetected) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_dominance_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 1));
   ASSERT_NE(entry, nullptr) << "Expected DOMINANCE/001 undefined-value error";
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
 }
@@ -723,8 +723,8 @@ TEST_F(VerifyTest, UndefinedOperandDetected) {
 //===----------------------------------------------------------------------===//
 
 TEST_F(VerifyTest, ConstraintTableSize) {
-  static_assert(sizeof(loom_constraint_t) == 16,
-                "loom_constraint_t must be 16 bytes");
+  static_assert(sizeof(loom_constraint_t) == 10,
+                "loom_constraint_t must be 10 bytes");
 }
 
 TEST_F(VerifyTest, AddiHasConstraints) {
@@ -734,6 +734,8 @@ TEST_F(VerifyTest, AddiHasConstraints) {
   EXPECT_EQ(vtable->constraints[0].relation, LOOM_RELATION_PAIRWISE_EQ);
   EXPECT_EQ(vtable->constraints[0].property, LOOM_PROPERTY_TYPE);
   EXPECT_EQ(vtable->constraints[0].arg_count, 3);
+  EXPECT_EQ(vtable->constraints[0].error_ref,
+            LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TYPE, 1));
 }
 
 TEST_F(VerifyTest, MapHasRegionConstraints) {
@@ -868,8 +870,8 @@ TEST_F(VerifyTest, ParsedSourceResolverHighlightsExactResultAndOperandTokens) {
   IREE_EXPECT_OK(loom_verify_module(parsed_module, &options, &result));
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* type_error =
-      FindDiagnostic(structured, &loom_err_type_001);
+  const CapturedDiagnostic* type_error = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
   ASSERT_NE(type_error, nullptr) << "Expected TYPE/001 SameType diagnostic";
   EXPECT_EQ(type_error->origin.provenance, LOOM_SOURCE_PROVENANCE_EXACT_SOURCE);
   EXPECT_EQ(type_error->source_location.provenance,
@@ -890,8 +892,8 @@ TEST_F(VerifyTest, ParsedSourceResolverHighlightsExactResultAndOperandTokens) {
                                                type_error->highlights[1].start),
             "%lhs");
 
-  const CapturedDiagnostic* result_error =
-      FindDiagnostic(structured, &loom_err_type_004);
+  const CapturedDiagnostic* result_error = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4));
   ASSERT_NE(result_error, nullptr)
       << "Expected TYPE/004 result constraint diagnostic";
   ASSERT_EQ(result_error->highlights.size(), 1u);
@@ -938,8 +940,8 @@ TEST_F(VerifyTest, ParsedUseAfterConsumeReportsRelatedConsumeLocation) {
   IREE_EXPECT_OK(loom_verify_module(parsed_module, &options, &result));
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* dominance_error =
-      FindDiagnostic(structured, &loom_err_dominance_002);
+  const CapturedDiagnostic* dominance_error = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 2));
   ASSERT_NE(dominance_error, nullptr)
       << "Expected DOMINANCE/002 consumed-value diagnostic";
   EXPECT_EQ(GetStringParam(*dominance_error, 0), "arg");
@@ -996,8 +998,8 @@ TEST_F(VerifyTest, ParsedInvokeOperandCountMismatchReportsCalleeLocation) {
       parsed_module, kSource, "parsed_invoke_operand_count.loom", &structured);
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* invoke_error =
-      FindDiagnostic(structured, &loom_err_structure_001);
+  const CapturedDiagnostic* invoke_error = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1));
   ASSERT_NE(invoke_error, nullptr)
       << "Expected STRUCTURE/001 invoke operand-count diagnostic";
   EXPECT_EQ(GetStringParam(*invoke_error, 0), "test.invoke");
@@ -1029,8 +1031,8 @@ TEST_F(VerifyTest, ParsedInvokeOperandTypeMismatchReportsCalleeLocation) {
       parsed_module, kSource, "parsed_invoke_operand_type.loom", &structured);
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* invoke_error =
-      FindDiagnostic(structured, &loom_err_type_001);
+  const CapturedDiagnostic* invoke_error = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
   ASSERT_NE(invoke_error, nullptr)
       << "Expected TYPE/001 invoke operand-type diagnostic";
   EXPECT_EQ(GetStringParam(*invoke_error, 0), "operand 0");
@@ -1077,8 +1079,8 @@ TEST_F(VerifyTest, ParsedInvokeResultCountMismatchReportsCalleeLocation) {
       parsed_module, kSource, "parsed_invoke_result_count.loom", &structured);
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* invoke_error =
-      FindDiagnostic(structured, &loom_err_structure_002);
+  const CapturedDiagnostic* invoke_error = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2));
   ASSERT_NE(invoke_error, nullptr)
       << "Expected STRUCTURE/002 invoke result-count diagnostic";
   EXPECT_EQ(GetStringParam(*invoke_error, 0), "test.invoke");
@@ -1398,8 +1400,8 @@ TEST_F(VerifyTest, StructuredDominanceError) {
   EXPECT_GT(result.error_count, 0u);
 
   // Find a DOMINANCE error.
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_dominance_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 1));
   ASSERT_NE(entry, nullptr) << "Expected a DOMINANCE/001 undefined-value error";
   EXPECT_TRUE(entry->has_source_range)
       << "Dominance error should have print-op fallback source";
@@ -1475,8 +1477,8 @@ TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_dominance_006);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 6));
   ASSERT_NE(entry, nullptr)
       << "Expected DOMINANCE/006 duplicate tied-result error";
   ExpectU32Param(*entry, 0, 0);
@@ -1527,8 +1529,8 @@ TEST_F(VerifyTest, DuplicateTiedOperandIndexDetected) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_dominance_007);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 7));
   ASSERT_NE(entry, nullptr)
       << "Expected DOMINANCE/007 duplicate tied-operand error";
   ExpectU32Param(*entry, 0, 0);
@@ -1555,8 +1557,8 @@ TEST_F(VerifyTest, ParsedDuplicateTiedOperandIndexReportsPreviousTiedLocation) {
       &structured);
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_dominance_007);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 7));
   ASSERT_NE(entry, nullptr)
       << "Expected DOMINANCE/007 duplicate tied-operand error";
   ExpectU32Param(*entry, 0, 0);
@@ -1611,8 +1613,8 @@ TEST_F(VerifyTest, AmbiguousRepeatedOperandValueDetected) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_dominance_008);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 8));
   ASSERT_NE(entry, nullptr)
       << "Expected DOMINANCE/008 ambiguous tied operand-value error";
   ExpectU32Param(*entry, 0, 1);
@@ -1696,8 +1698,8 @@ TEST_F(VerifyTest, RejectsNonLocalSymbolRef) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_symbol_004);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 4));
   ASSERT_NE(entry, nullptr) << "Expected SYMBOL/004 non-local symbol ref error";
   ExpectU32Param(*entry, 0, 1);
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, 0);
@@ -1759,8 +1761,8 @@ TEST_F(VerifyTest, SsaEncodingOutOfRange) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_encoding_003);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 3));
   ASSERT_NE(entry, nullptr) << "Expected ENCODING/003 out-of-range error";
   EXPECT_EQ(GetStringParam(*entry, 0), "result");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
@@ -1797,8 +1799,8 @@ TEST_F(VerifyTest, SsaEncodingNotDefined) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_encoding_004);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 4));
   ASSERT_NE(entry, nullptr) << "Expected ENCODING/004 not-defined error";
   EXPECT_EQ(entry->origin.provenance,
             LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
@@ -1832,8 +1834,8 @@ TEST_F(VerifyTest, SsaEncodingWrongType) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_encoding_005);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 5));
   ASSERT_NE(entry, nullptr) << "Expected ENCODING/005 wrong-type error";
   EXPECT_EQ(entry->origin.provenance,
             LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
@@ -1855,8 +1857,8 @@ TEST_F(VerifyTest, RejectsRankZeroVectorType) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_010);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 10));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/010 malformed vector error";
   EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
   ExpectNoFieldRefParam(*entry, 0);
@@ -1876,8 +1878,8 @@ TEST_F(VerifyTest, RejectsOutOfRangeTypeKind) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_010);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 10));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/010 invalid type kind error";
   EXPECT_EQ(GetStringParam(*entry, 0), "block arg 0");
   ExpectNoFieldRefParam(*entry, 0);
@@ -1901,8 +1903,8 @@ TEST_F(VerifyTest, RejectsVectorEncodingAttachment) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_010);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 10));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/010 vector encoding error";
   EXPECT_EQ(GetStringParam(*entry, 0), "result");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
@@ -1955,8 +1957,8 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchInVariadic) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch within variadic inputs";
   EXPECT_EQ(GetStringParam(*entry, 0), "inputs[0]");
@@ -1990,8 +1992,8 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchHighlightsWideOperandIndex) {
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch for the 65th variadic operand";
   EXPECT_EQ(GetStringParam(*entry, 0), "inputs[0]");
@@ -2032,8 +2034,8 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchAgainstResult) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch between variadic input and result";
   EXPECT_EQ(GetStringParam(*entry, 0), "inputs");
@@ -2249,8 +2251,8 @@ TEST_F(VerifyTest, AllSameViolationDifferentShapes) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_shape_003);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 3));
   ASSERT_NE(entry, nullptr) << "Expected SHAPE/003 AllSame diagnostic";
   ExpectTypeParam(*entry, 0, tile4);
   ExpectU32Param(*entry, 1, 1);
@@ -2321,8 +2323,8 @@ TEST_F(VerifyTest, RegionArgCountViolation) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_structure_007);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 7));
   ASSERT_NE(entry, nullptr)
       << "Expected STRUCTURE/007 region-arg-count diagnostic";
   ExpectU32Param(*entry, 0, 3);
@@ -2368,8 +2370,8 @@ TEST_F(VerifyTest, RegionArgMatchViolation) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_008);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 8));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/008 region-arg-match diagnostic";
   ExpectU32Param(*entry, 0, 0);
   ExpectTypeParam(*entry, 1, i32_type);
@@ -2410,8 +2412,8 @@ TEST_F(VerifyTest, YieldCountViolation) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_structure_008);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 8));
   ASSERT_NE(entry, nullptr) << "Expected STRUCTURE/008 yield-count diagnostic";
   ExpectU32Param(*entry, 0, 2);
   ExpectU32Param(*entry, 1, 1);
@@ -2440,8 +2442,8 @@ TEST_F(VerifyTest, YieldCountViolationWithImplicitTerminator) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_structure_008);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 8));
   ASSERT_NE(entry, nullptr)
       << "Expected STRUCTURE/008 implicit-yield-count diagnostic";
   ExpectU32Param(*entry, 0, 0);
@@ -2479,8 +2481,8 @@ TEST_F(VerifyTest, YieldMatchViolation) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_009);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 9));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/009 yield-match diagnostic";
   ExpectTypeParam(*entry, 0, i32_type);
   ExpectTypeParam(*entry, 1, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
@@ -2516,8 +2518,8 @@ TEST_F(VerifyTest, YieldMatchViolationReportsResultElementTypeParam) {
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
 
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_type_009);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 9));
   ASSERT_NE(entry, nullptr) << "Expected TYPE/009 yield-match diagnostic";
   ExpectTypeParam(*entry, 0, i32_type);
   ExpectTypeParam(*entry, 1, f32_type);
@@ -2550,8 +2552,8 @@ TEST_F(VerifyTest, CountMatchesRankViolation) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_subrange_001);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 1));
   ASSERT_NE(entry, nullptr)
       << "Expected SUBRANGE/001 count-matches-rank diagnostic";
   EXPECT_EQ(GetStringParam(*entry, 0), "source");
@@ -2612,8 +2614,8 @@ TEST_F(VerifyTest, AttrInRangeRankViolation) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_subrange_002);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 2));
   ASSERT_NE(entry, nullptr)
       << "Expected SUBRANGE/002 dim-index-out-of-bounds diagnostic";
   ExpectI64Param(*entry, 0, 5);
@@ -2645,8 +2647,8 @@ TEST_F(VerifyTest, AttrInRangeRankNegativeIndex) {
   DiagnosticCapture structured;
   auto result = VerifyStructured(&structured);
   EXPECT_GT(result.error_count, 0u);
-  const CapturedDiagnostic* entry =
-      FindDiagnostic(structured, &loom_err_subrange_002);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 2));
   ASSERT_NE(entry, nullptr)
       << "Expected SUBRANGE/002 negative dim-index diagnostic";
   ExpectI64Param(*entry, 0, -1);

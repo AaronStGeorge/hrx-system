@@ -50,16 +50,23 @@ TEST(ErrorDefsTest, LookupNonExistentReturnsNull) {
   EXPECT_EQ(loom_error_def_lookup(LOOM_ERROR_DOMAIN_FOLD, 0), nullptr);
 }
 
-TEST(ErrorDefsTest, ExternSymbolsAccessible) {
-  // Verify that extern declarations in error_defs.inc resolve.
-  EXPECT_EQ(&loom_err_type_001,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
-  EXPECT_EQ(&loom_err_bytecode_007,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7));
-  EXPECT_EQ(&loom_err_fold_005,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_FOLD, 5));
-  EXPECT_EQ(&loom_err_parse_003,
-            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
+TEST(ErrorDefsTest, LookupRefsResolve) {
+  EXPECT_EQ(
+      loom_error_def_lookup_ref(LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TYPE, 1)),
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
+  EXPECT_EQ(
+      loom_error_def_lookup_ref(LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_BYTECODE, 7)),
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7));
+  EXPECT_EQ(
+      loom_error_def_lookup_ref(LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_FOLD, 5)),
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_FOLD, 5));
+  EXPECT_EQ(
+      loom_error_def_lookup_ref(LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_PARSE, 3)),
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
+}
+
+TEST(ErrorDefsTest, EmptyRefReturnsNull) {
+  EXPECT_EQ(loom_error_def_lookup_ref(LOOM_ERROR_REF_NONE), nullptr);
 }
 
 TEST(ErrorDefsTest, DomainNames) {

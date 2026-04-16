@@ -70,7 +70,7 @@ static const loom_error_param_def_t loom_err_type_001_params[] = {
     {"field_b", LOOM_PARAM_STRING},
     {"type_b", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_type_001 = {
+static const loom_error_def_t loom_err_type_001 = {
     .error_id = "ERR_TYPE_001",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -90,7 +90,7 @@ static const loom_error_param_def_t loom_err_type_002_params[] = {
     {"field_b", LOOM_PARAM_STRING},
     {"element_type_b", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_type_002 = {
+static const loom_error_def_t loom_err_type_002 = {
     .error_id = "ERR_TYPE_002",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -111,7 +111,7 @@ static const loom_error_param_def_t loom_err_type_003_params[] = {
     {"actual_type", LOOM_PARAM_TYPE},
     {"expected_constraint", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_type_003 = {
+static const loom_error_def_t loom_err_type_003 = {
     .error_id = "ERR_TYPE_003",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -131,7 +131,7 @@ static const loom_error_param_def_t loom_err_type_004_params[] = {
     {"actual_type", LOOM_PARAM_TYPE},
     {"expected_constraint", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_type_004 = {
+static const loom_error_def_t loom_err_type_004 = {
     .error_id = "ERR_TYPE_004",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -151,7 +151,7 @@ static const loom_error_param_def_t loom_err_type_005_params[] = {
     {"actual_kind", LOOM_PARAM_U32},
     {"expected_kind", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_type_005 = {
+static const loom_error_def_t loom_err_type_005 = {
     .error_id = "ERR_TYPE_005",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -169,7 +169,7 @@ static const loom_error_param_def_t loom_err_type_006_params[] = {
     {"value_type", LOOM_PARAM_TYPE},
     {"element_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_type_006 = {
+static const loom_error_def_t loom_err_type_006 = {
     .error_id = "ERR_TYPE_006",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -187,7 +187,7 @@ static const loom_error_param_def_t loom_err_type_007_params[] = {
     {"attr_type", LOOM_PARAM_TYPE},
     {"result_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_type_007 = {
+static const loom_error_def_t loom_err_type_007 = {
     .error_id = "ERR_TYPE_007",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -208,7 +208,7 @@ static const loom_error_param_def_t loom_err_type_008_params[] = {
     {"arg_type", LOOM_PARAM_TYPE},
     {"element_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_type_008 = {
+static const loom_error_def_t loom_err_type_008 = {
     .error_id = "ERR_TYPE_008",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -228,7 +228,7 @@ static const loom_error_param_def_t loom_err_type_009_params[] = {
     {"yield_type", LOOM_PARAM_TYPE},
     {"result_element_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_type_009 = {
+static const loom_error_def_t loom_err_type_009 = {
     .error_id = "ERR_TYPE_009",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -247,7 +247,7 @@ static const loom_error_param_def_t loom_err_type_010_params[] = {
     {"actual_type", LOOM_PARAM_TYPE},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_type_010 = {
+static const loom_error_def_t loom_err_type_010 = {
     .error_id = "ERR_TYPE_010",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -266,7 +266,7 @@ static const loom_error_param_def_t loom_err_type_011_params[] = {
     {"threshold_count", LOOM_PARAM_I64},
     {"max_code", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_type_011 = {
+static const loom_error_def_t loom_err_type_011 = {
     .error_id = "ERR_TYPE_011",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -286,7 +286,7 @@ static const loom_error_param_def_t loom_err_type_012_params[] = {
     {"boundary_kind", LOOM_PARAM_STRING},
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_type_012 = {
+static const loom_error_def_t loom_err_type_012 = {
     .error_id = "ERR_TYPE_012",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -307,7 +307,7 @@ static const loom_error_param_def_t loom_err_type_013_params[] = {
     {"arg_type", LOOM_PARAM_TYPE},
     {"expected_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_type_013 = {
+static const loom_error_def_t loom_err_type_013 = {
     .error_id = "ERR_TYPE_013",
     .domain = LOOM_ERROR_DOMAIN_TYPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -327,7 +327,7 @@ static const loom_error_param_def_t loom_err_shape_001_params[] = {
     {"operand_b", LOOM_PARAM_STRING},
     {"rank_b", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_shape_001 = {
+static const loom_error_def_t loom_err_shape_001 = {
     .error_id = "ERR_SHAPE_001",
     .domain = LOOM_ERROR_DOMAIN_SHAPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -346,7 +346,7 @@ static const loom_error_param_def_t loom_err_shape_002_params[] = {
     {"field_a", LOOM_PARAM_STRING},
     {"field_b", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_shape_002 = {
+static const loom_error_def_t loom_err_shape_002 = {
     .error_id = "ERR_SHAPE_002",
     .domain = LOOM_ERROR_DOMAIN_SHAPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -364,7 +364,7 @@ static const loom_error_param_def_t loom_err_shape_003_params[] = {
     {"other_index", LOOM_PARAM_U32},
     {"other_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_shape_003 = {
+static const loom_error_def_t loom_err_shape_003 = {
     .error_id = "ERR_SHAPE_003",
     .domain = LOOM_ERROR_DOMAIN_SHAPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -386,7 +386,7 @@ static const loom_error_param_def_t loom_err_shape_004_params[] = {
     {"result_axis", LOOM_PARAM_U32},
     {"result_size", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_shape_004 = {
+static const loom_error_def_t loom_err_shape_004 = {
     .error_id = "ERR_SHAPE_004",
     .domain = LOOM_ERROR_DOMAIN_SHAPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -406,7 +406,7 @@ static const loom_error_param_def_t loom_err_shape_005_params[] = {
     {"result_type", LOOM_PARAM_TYPE},
     {"input_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_shape_005 = {
+static const loom_error_def_t loom_err_shape_005 = {
     .error_id = "ERR_SHAPE_005",
     .domain = LOOM_ERROR_DOMAIN_SHAPE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -426,7 +426,7 @@ static const loom_error_param_def_t loom_err_subrange_001_params[] = {
     {"offset_count", LOOM_PARAM_U32},
     {"rank", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_subrange_001 = {
+static const loom_error_def_t loom_err_subrange_001 = {
     .error_id = "ERR_SUBRANGE_001",
     .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -444,7 +444,7 @@ static const loom_error_param_def_t loom_err_subrange_002_params[] = {
     {"dim_index", LOOM_PARAM_I64},
     {"rank", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_subrange_002 = {
+static const loom_error_def_t loom_err_subrange_002 = {
     .error_id = "ERR_SUBRANGE_002",
     .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -463,7 +463,7 @@ static const loom_error_param_def_t loom_err_subrange_003_params[] = {
     {"size_count", LOOM_PARAM_U32},
     {"rank", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_subrange_003 = {
+static const loom_error_def_t loom_err_subrange_003 = {
     .error_id = "ERR_SUBRANGE_003",
     .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -482,7 +482,7 @@ static const loom_error_param_def_t loom_err_subrange_004_params[] = {
     {"size", LOOM_PARAM_I64},      {"total", LOOM_PARAM_I64},
     {"bound", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_subrange_004 = {
+static const loom_error_def_t loom_err_subrange_004 = {
     .error_id = "ERR_SUBRANGE_004",
     .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -502,7 +502,7 @@ static const loom_error_param_def_t loom_err_subrange_005_params[] = {
     {"vector_axis", LOOM_PARAM_I64}, {"origin", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},   {"required", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_subrange_005 = {
+static const loom_error_def_t loom_err_subrange_005 = {
     .error_id = "ERR_SUBRANGE_005",
     .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -524,7 +524,7 @@ static const loom_error_param_def_t loom_err_subrange_006_params[] = {
     {"reason", LOOM_PARAM_STRING},
     {"required", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_subrange_006 = {
+static const loom_error_def_t loom_err_subrange_006 = {
     .error_id = "ERR_SUBRANGE_006",
     .domain = LOOM_ERROR_DOMAIN_SUBRANGE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -544,7 +544,7 @@ static const loom_error_param_def_t loom_err_encoding_001_params[] = {
     {"field_a", LOOM_PARAM_STRING},
     {"field_b", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_001 = {
+static const loom_error_def_t loom_err_encoding_001 = {
     .error_id = "ERR_ENCODING_001",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -563,7 +563,7 @@ const loom_error_def_t loom_err_encoding_001 = {
 static const loom_error_param_def_t loom_err_encoding_002_params[] = {
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_002 = {
+static const loom_error_def_t loom_err_encoding_002 = {
     .error_id = "ERR_ENCODING_002",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -582,7 +582,7 @@ static const loom_error_param_def_t loom_err_encoding_003_params[] = {
     {"value_id", LOOM_PARAM_U32},
     {"value_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_encoding_003 = {
+static const loom_error_def_t loom_err_encoding_003 = {
     .error_id = "ERR_ENCODING_003",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -602,7 +602,7 @@ static const loom_error_param_def_t loom_err_encoding_004_params[] = {
     {"field_name", LOOM_PARAM_STRING},
     {"value_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_004 = {
+static const loom_error_def_t loom_err_encoding_004 = {
     .error_id = "ERR_ENCODING_004",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -623,7 +623,7 @@ static const loom_error_param_def_t loom_err_encoding_005_params[] = {
     {"value_name", LOOM_PARAM_STRING},
     {"actual_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_encoding_005 = {
+static const loom_error_def_t loom_err_encoding_005 = {
     .error_id = "ERR_ENCODING_005",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -642,7 +642,7 @@ const loom_error_def_t loom_err_encoding_005 = {
 static const loom_error_param_def_t loom_err_encoding_006_params[] = {
     {"param_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_006 = {
+static const loom_error_def_t loom_err_encoding_006 = {
     .error_id = "ERR_ENCODING_006",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -662,7 +662,7 @@ static const loom_error_param_def_t loom_err_encoding_007_params[] = {
     {"encoding_name", LOOM_PARAM_STRING},
     {"param_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_007 = {
+static const loom_error_def_t loom_err_encoding_007 = {
     .error_id = "ERR_ENCODING_007",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -680,7 +680,7 @@ static const loom_error_param_def_t loom_err_encoding_008_params[] = {
     {"encoding_name", LOOM_PARAM_STRING},
     {"param_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_008 = {
+static const loom_error_def_t loom_err_encoding_008 = {
     .error_id = "ERR_ENCODING_008",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -701,7 +701,7 @@ static const loom_error_param_def_t loom_err_encoding_009_params[] = {
     {"actual_type", LOOM_PARAM_TYPE},
     {"expected_type", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_009 = {
+static const loom_error_def_t loom_err_encoding_009 = {
     .error_id = "ERR_ENCODING_009",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -722,7 +722,7 @@ static const loom_error_param_def_t loom_err_encoding_010_params[] = {
     {"actual_kind", LOOM_PARAM_U32},
     {"expected_kind", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_010 = {
+static const loom_error_def_t loom_err_encoding_010 = {
     .error_id = "ERR_ENCODING_010",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -742,7 +742,7 @@ static const loom_error_param_def_t loom_err_encoding_011_params[] = {
     {"param_name", LOOM_PARAM_STRING},
     {"expected_role", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_011 = {
+static const loom_error_def_t loom_err_encoding_011 = {
     .error_id = "ERR_ENCODING_011",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -762,7 +762,7 @@ static const loom_error_param_def_t loom_err_encoding_012_params[] = {
     {"actual_type", LOOM_PARAM_TYPE},
     {"expected_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_encoding_012 = {
+static const loom_error_def_t loom_err_encoding_012 = {
     .error_id = "ERR_ENCODING_012",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -784,7 +784,7 @@ static const loom_error_param_def_t loom_err_encoding_013_params[] = {
     {"actual_value", LOOM_PARAM_STRING},
     {"expected_values", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_013 = {
+static const loom_error_def_t loom_err_encoding_013 = {
     .error_id = "ERR_ENCODING_013",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -805,7 +805,7 @@ static const loom_error_param_def_t loom_err_encoding_014_params[] = {
     {"param_a", LOOM_PARAM_STRING},
     {"param_b", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_encoding_014 = {
+static const loom_error_def_t loom_err_encoding_014 = {
     .error_id = "ERR_ENCODING_014",
     .domain = LOOM_ERROR_DOMAIN_ENCODING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -825,7 +825,7 @@ static const loom_error_param_def_t loom_err_structure_001_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_001 = {
+static const loom_error_def_t loom_err_structure_001 = {
     .error_id = "ERR_STRUCTURE_001",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -843,7 +843,7 @@ static const loom_error_param_def_t loom_err_structure_002_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_002 = {
+static const loom_error_def_t loom_err_structure_002 = {
     .error_id = "ERR_STRUCTURE_002",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -861,7 +861,7 @@ static const loom_error_param_def_t loom_err_structure_003_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_003 = {
+static const loom_error_def_t loom_err_structure_003 = {
     .error_id = "ERR_STRUCTURE_003",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -879,7 +879,7 @@ static const loom_error_param_def_t loom_err_structure_004_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_004 = {
+static const loom_error_def_t loom_err_structure_004 = {
     .error_id = "ERR_STRUCTURE_004",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -896,7 +896,7 @@ static const loom_error_param_def_t loom_err_structure_005_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"region_index", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_005 = {
+static const loom_error_def_t loom_err_structure_005 = {
     .error_id = "ERR_STRUCTURE_005",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -914,7 +914,7 @@ static const loom_error_param_def_t loom_err_structure_006_params[] = {
     {"region_index", LOOM_PARAM_U32},
     {"block_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_006 = {
+static const loom_error_def_t loom_err_structure_006 = {
     .error_id = "ERR_STRUCTURE_006",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -932,7 +932,7 @@ static const loom_error_param_def_t loom_err_structure_007_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_007 = {
+static const loom_error_def_t loom_err_structure_007 = {
     .error_id = "ERR_STRUCTURE_007",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -951,7 +951,7 @@ static const loom_error_param_def_t loom_err_structure_008_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_008 = {
+static const loom_error_def_t loom_err_structure_008 = {
     .error_id = "ERR_STRUCTURE_008",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -968,7 +968,7 @@ static const loom_error_param_def_t loom_err_structure_009_params[] = {
     {"op_kind", LOOM_PARAM_U32},
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_structure_009 = {
+static const loom_error_def_t loom_err_structure_009 = {
     .error_id = "ERR_STRUCTURE_009",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -985,7 +985,7 @@ static const loom_error_param_def_t loom_err_structure_010_params[] = {
     {"actual_value", LOOM_PARAM_U32},
     {"enum_case_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_010 = {
+static const loom_error_def_t loom_err_structure_010 = {
     .error_id = "ERR_STRUCTURE_010",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1003,7 +1003,7 @@ const loom_error_def_t loom_err_structure_010 = {
 static const loom_error_param_def_t loom_err_structure_011_params[] = {
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_structure_011 = {
+static const loom_error_def_t loom_err_structure_011 = {
     .error_id = "ERR_STRUCTURE_011",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1020,7 +1020,7 @@ const loom_error_def_t loom_err_structure_011 = {
 static const loom_error_param_def_t loom_err_structure_012_params[] = {
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_structure_012 = {
+static const loom_error_def_t loom_err_structure_012 = {
     .error_id = "ERR_STRUCTURE_012",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1040,7 +1040,7 @@ static const loom_error_param_def_t loom_err_structure_013_params[] = {
     {"field_b", LOOM_PARAM_STRING},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_013 = {
+static const loom_error_def_t loom_err_structure_013 = {
     .error_id = "ERR_STRUCTURE_013",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1060,7 +1060,7 @@ static const loom_error_param_def_t loom_err_structure_014_params[] = {
     {"actual_value", LOOM_PARAM_I64},
     {"expected_constraint", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_structure_014 = {
+static const loom_error_def_t loom_err_structure_014 = {
     .error_id = "ERR_STRUCTURE_014",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1080,7 +1080,7 @@ static const loom_error_param_def_t loom_err_structure_015_params[] = {
     {"left_index", LOOM_PARAM_U32},
     {"right_index", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_015 = {
+static const loom_error_def_t loom_err_structure_015 = {
     .error_id = "ERR_STRUCTURE_015",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1099,7 +1099,7 @@ static const loom_error_param_def_t loom_err_structure_016_params[] = {
     {"trait_a", LOOM_PARAM_STRING},
     {"trait_b", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_structure_016 = {
+static const loom_error_def_t loom_err_structure_016 = {
     .error_id = "ERR_STRUCTURE_016",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1118,7 +1118,7 @@ static const loom_error_param_def_t loom_err_structure_017_params[] = {
     {"read_count", LOOM_PARAM_U32},
     {"write_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_017 = {
+static const loom_error_def_t loom_err_structure_017 = {
     .error_id = "ERR_STRUCTURE_017",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1139,7 +1139,7 @@ static const loom_error_param_def_t loom_err_structure_018_params[] = {
     {"expected_terminator", LOOM_PARAM_STRING},
     {"actual_terminator", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_structure_018 = {
+static const loom_error_def_t loom_err_structure_018 = {
     .error_id = "ERR_STRUCTURE_018",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1157,7 +1157,7 @@ static const loom_error_param_def_t loom_err_structure_019_params[] = {
     {"attr_name", LOOM_PARAM_STRING},
     {"predicate_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_019 = {
+static const loom_error_def_t loom_err_structure_019 = {
     .error_id = "ERR_STRUCTURE_019",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1177,7 +1177,7 @@ static const loom_error_param_def_t loom_err_structure_020_params[] = {
     {"actual_kind", LOOM_PARAM_U32},
     {"kind_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_020 = {
+static const loom_error_def_t loom_err_structure_020 = {
     .error_id = "ERR_STRUCTURE_020",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1196,7 +1196,7 @@ static const loom_error_param_def_t loom_err_structure_021_params[] = {
     {"predicate_name", LOOM_PARAM_STRING}, {"expected_count", LOOM_PARAM_U32},
     {"actual_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_021 = {
+static const loom_error_def_t loom_err_structure_021 = {
     .error_id = "ERR_STRUCTURE_021",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1217,7 +1217,7 @@ static const loom_error_param_def_t loom_err_structure_022_params[] = {
     {"argument_index", LOOM_PARAM_U32}, {"actual_tag", LOOM_PARAM_U32},
     {"tag_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_structure_022 = {
+static const loom_error_def_t loom_err_structure_022 = {
     .error_id = "ERR_STRUCTURE_022",
     .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1236,7 +1236,7 @@ const loom_error_def_t loom_err_structure_022 = {
 static const loom_error_param_def_t loom_err_dominance_001_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_dominance_001 = {
+static const loom_error_def_t loom_err_dominance_001 = {
     .error_id = "ERR_DOMINANCE_001",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1252,7 +1252,7 @@ static const loom_error_param_def_t loom_err_dominance_002_params[] = {
     {"value_name", LOOM_PARAM_STRING},
     {"consuming_op", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_dominance_002 = {
+static const loom_error_def_t loom_err_dominance_002 = {
     .error_id = "ERR_DOMINANCE_002",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1271,7 +1271,7 @@ static const loom_error_param_def_t loom_err_dominance_003_params[] = {
     {"value_id", LOOM_PARAM_U32},
     {"max_id", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_dominance_003 = {
+static const loom_error_def_t loom_err_dominance_003 = {
     .error_id = "ERR_DOMINANCE_003",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1288,7 +1288,7 @@ static const loom_error_param_def_t loom_err_dominance_004_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"result_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_dominance_004 = {
+static const loom_error_def_t loom_err_dominance_004 = {
     .error_id = "ERR_DOMINANCE_004",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1307,7 +1307,7 @@ static const loom_error_param_def_t loom_err_dominance_005_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"operand_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_dominance_005 = {
+static const loom_error_def_t loom_err_dominance_005 = {
     .error_id = "ERR_DOMINANCE_005",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1325,7 +1325,7 @@ static const loom_error_param_def_t loom_err_dominance_006_params[] = {
     {"result_index", LOOM_PARAM_U32},
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_dominance_006 = {
+static const loom_error_def_t loom_err_dominance_006 = {
     .error_id = "ERR_DOMINANCE_006",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1342,7 +1342,7 @@ static const loom_error_param_def_t loom_err_dominance_007_params[] = {
     {"operand_index", LOOM_PARAM_U32},
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_dominance_007 = {
+static const loom_error_def_t loom_err_dominance_007 = {
     .error_id = "ERR_DOMINANCE_007",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1361,7 +1361,7 @@ static const loom_error_param_def_t loom_err_dominance_008_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"value_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_dominance_008 = {
+static const loom_error_def_t loom_err_dominance_008 = {
     .error_id = "ERR_DOMINANCE_008",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1380,7 +1380,7 @@ static const loom_error_param_def_t loom_err_dominance_009_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_constraint", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_dominance_009 = {
+static const loom_error_def_t loom_err_dominance_009 = {
     .error_id = "ERR_DOMINANCE_009",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1400,7 +1400,7 @@ static const loom_error_param_def_t loom_err_dominance_010_params[] = {
     {"user_op", LOOM_PARAM_STRING},
     {"expected_constraint", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_dominance_010 = {
+static const loom_error_def_t loom_err_dominance_010 = {
     .error_id = "ERR_DOMINANCE_010",
     .domain = LOOM_ERROR_DOMAIN_DOMINANCE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1419,7 +1419,7 @@ static const loom_error_param_def_t loom_err_symbol_001_params[] = {
     {"symbol_index", LOOM_PARAM_U32},
     {"max_index", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_symbol_001 = {
+static const loom_error_def_t loom_err_symbol_001 = {
     .error_id = "ERR_SYMBOL_001",
     .domain = LOOM_ERROR_DOMAIN_SYMBOL,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1436,7 +1436,7 @@ const loom_error_def_t loom_err_symbol_001 = {
 static const loom_error_param_def_t loom_err_symbol_002_params[] = {
     {"symbol_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_symbol_002 = {
+static const loom_error_def_t loom_err_symbol_002 = {
     .error_id = "ERR_SYMBOL_002",
     .domain = LOOM_ERROR_DOMAIN_SYMBOL,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1453,7 +1453,7 @@ static const loom_error_param_def_t loom_err_symbol_003_params[] = {
     {"actual_kind", LOOM_PARAM_STRING},
     {"expected_kind", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_symbol_003 = {
+static const loom_error_def_t loom_err_symbol_003 = {
     .error_id = "ERR_SYMBOL_003",
     .domain = LOOM_ERROR_DOMAIN_SYMBOL,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1470,7 +1470,7 @@ const loom_error_def_t loom_err_symbol_003 = {
 static const loom_error_param_def_t loom_err_symbol_004_params[] = {
     {"module_id", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_symbol_004 = {
+static const loom_error_def_t loom_err_symbol_004 = {
     .error_id = "ERR_SYMBOL_004",
     .domain = LOOM_ERROR_DOMAIN_SYMBOL,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1487,7 +1487,7 @@ const loom_error_def_t loom_err_symbol_004 = {
 static const loom_error_param_def_t loom_err_parse_001_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_001 = {
+static const loom_error_def_t loom_err_parse_001 = {
     .error_id = "ERR_PARSE_001",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1502,7 +1502,7 @@ const loom_error_def_t loom_err_parse_001 = {
 static const loom_error_param_def_t loom_err_parse_002_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_002 = {
+static const loom_error_def_t loom_err_parse_002 = {
     .error_id = "ERR_PARSE_002",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1518,7 +1518,7 @@ static const loom_error_param_def_t loom_err_parse_003_params[] = {
     {"actual_token", LOOM_PARAM_STRING},
     {"expected", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_003 = {
+static const loom_error_def_t loom_err_parse_003 = {
     .error_id = "ERR_PARSE_003",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1534,7 +1534,7 @@ const loom_error_def_t loom_err_parse_003 = {
 static const loom_error_param_def_t loom_err_parse_004_params[] = {
     {"text", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_004 = {
+static const loom_error_def_t loom_err_parse_004 = {
     .error_id = "ERR_PARSE_004",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1546,7 +1546,7 @@ const loom_error_def_t loom_err_parse_004 = {
     .param_count = 1,
 };
 
-const loom_error_def_t loom_err_parse_005 = {
+static const loom_error_def_t loom_err_parse_005 = {
     .error_id = "ERR_PARSE_005",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1561,7 +1561,7 @@ const loom_error_def_t loom_err_parse_005 = {
 static const loom_error_param_def_t loom_err_parse_006_params[] = {
     {"op_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_006 = {
+static const loom_error_def_t loom_err_parse_006 = {
     .error_id = "ERR_PARSE_006",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1578,7 +1578,7 @@ const loom_error_def_t loom_err_parse_006 = {
 static const loom_error_param_def_t loom_err_parse_007_params[] = {
     {"type_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_007 = {
+static const loom_error_def_t loom_err_parse_007 = {
     .error_id = "ERR_PARSE_007",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1593,7 +1593,7 @@ const loom_error_def_t loom_err_parse_007 = {
 static const loom_error_param_def_t loom_err_parse_008_params[] = {
     {"encoding_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_008 = {
+static const loom_error_def_t loom_err_parse_008 = {
     .error_id = "ERR_PARSE_008",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1610,7 +1610,7 @@ static const loom_error_param_def_t loom_err_parse_009_params[] = {
     {"expected_count", LOOM_PARAM_U32},
     {"actual_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_parse_009 = {
+static const loom_error_def_t loom_err_parse_009 = {
     .error_id = "ERR_PARSE_009",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1628,7 +1628,7 @@ static const loom_error_param_def_t loom_err_parse_010_params[] = {
     {"expected_count", LOOM_PARAM_U32},
     {"actual_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_parse_010 = {
+static const loom_error_def_t loom_err_parse_010 = {
     .error_id = "ERR_PARSE_010",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1644,7 +1644,7 @@ const loom_error_def_t loom_err_parse_010 = {
 static const loom_error_param_def_t loom_err_parse_011_params[] = {
     {"detail", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_011 = {
+static const loom_error_def_t loom_err_parse_011 = {
     .error_id = "ERR_PARSE_011",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1659,7 +1659,7 @@ const loom_error_def_t loom_err_parse_011 = {
 static const loom_error_param_def_t loom_err_parse_012_params[] = {
     {"error_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_parse_012 = {
+static const loom_error_def_t loom_err_parse_012 = {
     .error_id = "ERR_PARSE_012",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1674,7 +1674,7 @@ const loom_error_def_t loom_err_parse_012 = {
 static const loom_error_param_def_t loom_err_parse_013_params[] = {
     {"predicate_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_013 = {
+static const loom_error_def_t loom_err_parse_013 = {
     .error_id = "ERR_PARSE_013",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1689,7 +1689,7 @@ const loom_error_def_t loom_err_parse_013 = {
 static const loom_error_param_def_t loom_err_parse_014_params[] = {
     {"detail", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_014 = {
+static const loom_error_def_t loom_err_parse_014 = {
     .error_id = "ERR_PARSE_014",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1704,7 +1704,7 @@ const loom_error_def_t loom_err_parse_014 = {
 static const loom_error_param_def_t loom_err_parse_015_params[] = {
     {"text", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_015 = {
+static const loom_error_def_t loom_err_parse_015 = {
     .error_id = "ERR_PARSE_015",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1719,7 +1719,7 @@ const loom_error_def_t loom_err_parse_015 = {
 static const loom_error_param_def_t loom_err_parse_016_params[] = {
     {"text", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_016 = {
+static const loom_error_def_t loom_err_parse_016 = {
     .error_id = "ERR_PARSE_016",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1735,7 +1735,7 @@ static const loom_error_param_def_t loom_err_parse_017_params[] = {
     {"enum_name", LOOM_PARAM_STRING},
     {"value", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_017 = {
+static const loom_error_def_t loom_err_parse_017 = {
     .error_id = "ERR_PARSE_017",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1751,7 +1751,7 @@ static const loom_error_param_def_t loom_err_parse_018_params[] = {
     {"context", LOOM_PARAM_STRING},
     {"value", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_018 = {
+static const loom_error_def_t loom_err_parse_018 = {
     .error_id = "ERR_PARSE_018",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1766,7 +1766,7 @@ const loom_error_def_t loom_err_parse_018 = {
 static const loom_error_param_def_t loom_err_parse_019_params[] = {
     {"byte_offset", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_parse_019 = {
+static const loom_error_def_t loom_err_parse_019 = {
     .error_id = "ERR_PARSE_019",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1781,7 +1781,7 @@ const loom_error_def_t loom_err_parse_019 = {
 static const loom_error_param_def_t loom_err_parse_020_params[] = {
     {"key_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_020 = {
+static const loom_error_def_t loom_err_parse_020 = {
     .error_id = "ERR_PARSE_020",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1797,7 +1797,7 @@ const loom_error_def_t loom_err_parse_020 = {
 static const loom_error_param_def_t loom_err_parse_021_params[] = {
     {"max_depth", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_parse_021 = {
+static const loom_error_def_t loom_err_parse_021 = {
     .error_id = "ERR_PARSE_021",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1813,7 +1813,7 @@ const loom_error_def_t loom_err_parse_021 = {
 static const loom_error_param_def_t loom_err_parse_022_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_022 = {
+static const loom_error_def_t loom_err_parse_022 = {
     .error_id = "ERR_PARSE_022",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1831,7 +1831,7 @@ const loom_error_def_t loom_err_parse_022 = {
 static const loom_error_param_def_t loom_err_parse_023_params[] = {
     {"detail", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_023 = {
+static const loom_error_def_t loom_err_parse_023 = {
     .error_id = "ERR_PARSE_023",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1846,7 +1846,7 @@ const loom_error_def_t loom_err_parse_023 = {
 static const loom_error_param_def_t loom_err_parse_024_params[] = {
     {"sigil", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_024 = {
+static const loom_error_def_t loom_err_parse_024 = {
     .error_id = "ERR_PARSE_024",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1858,7 +1858,7 @@ const loom_error_def_t loom_err_parse_024 = {
     .param_count = 1,
 };
 
-const loom_error_def_t loom_err_parse_025 = {
+static const loom_error_def_t loom_err_parse_025 = {
     .error_id = "ERR_PARSE_025",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1870,7 +1870,7 @@ const loom_error_def_t loom_err_parse_025 = {
     .param_count = 0,
 };
 
-const loom_error_def_t loom_err_parse_026 = {
+static const loom_error_def_t loom_err_parse_026 = {
     .error_id = "ERR_PARSE_026",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1885,7 +1885,7 @@ const loom_error_def_t loom_err_parse_026 = {
 static const loom_error_param_def_t loom_err_parse_027_params[] = {
     {"key_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_027 = {
+static const loom_error_def_t loom_err_parse_027 = {
     .error_id = "ERR_PARSE_027",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1901,7 +1901,7 @@ const loom_error_def_t loom_err_parse_027 = {
 static const loom_error_param_def_t loom_err_parse_028_params[] = {
     {"param_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_028 = {
+static const loom_error_def_t loom_err_parse_028 = {
     .error_id = "ERR_PARSE_028",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1920,7 +1920,7 @@ const loom_error_def_t loom_err_parse_028 = {
 static const loom_error_param_def_t loom_err_parse_029_params[] = {
     {"param_name", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_parse_029 = {
+static const loom_error_def_t loom_err_parse_029 = {
     .error_id = "ERR_PARSE_029",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1936,7 +1936,7 @@ static const loom_error_param_def_t loom_err_parse_030_params[] = {
     {"actual_count", LOOM_PARAM_U32},
     {"expected_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_parse_030 = {
+static const loom_error_def_t loom_err_parse_030 = {
     .error_id = "ERR_PARSE_030",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1956,7 +1956,7 @@ static const loom_error_param_def_t loom_err_parse_031_params[] = {
     {"expected_count", LOOM_PARAM_U32},
     {"actual_count", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_parse_031 = {
+static const loom_error_def_t loom_err_parse_031 = {
     .error_id = "ERR_PARSE_031",
     .domain = LOOM_ERROR_DOMAIN_PARSE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1975,7 +1975,7 @@ static const loom_error_param_def_t loom_err_bytecode_001_params[] = {
     {"expected_magic", LOOM_PARAM_STRING},
     {"actual_magic", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_001 = {
+static const loom_error_def_t loom_err_bytecode_001 = {
     .error_id = "ERR_BYTECODE_001",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -1992,7 +1992,7 @@ static const loom_error_param_def_t loom_err_bytecode_002_params[] = {
     {"actual_version", LOOM_PARAM_U32},
     {"expected_version", LOOM_PARAM_U32},
 };
-const loom_error_def_t loom_err_bytecode_002 = {
+static const loom_error_def_t loom_err_bytecode_002 = {
     .error_id = "ERR_BYTECODE_002",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2011,7 +2011,7 @@ static const loom_error_param_def_t loom_err_bytecode_003_params[] = {
     {"needed_bytes", LOOM_PARAM_U64},
     {"available_bytes", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_003 = {
+static const loom_error_def_t loom_err_bytecode_003 = {
     .error_id = "ERR_BYTECODE_003",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2029,7 +2029,7 @@ static const loom_error_param_def_t loom_err_bytecode_004_params[] = {
     {"type_kind", LOOM_PARAM_U32},
     {"offset", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_004 = {
+static const loom_error_def_t loom_err_bytecode_004 = {
     .error_id = "ERR_BYTECODE_004",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2045,7 +2045,7 @@ static const loom_error_param_def_t loom_err_bytecode_005_params[] = {
     {"attr_kind", LOOM_PARAM_U32},
     {"offset", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_005 = {
+static const loom_error_def_t loom_err_bytecode_005 = {
     .error_id = "ERR_BYTECODE_005",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2062,7 +2062,7 @@ static const loom_error_param_def_t loom_err_bytecode_006_params[] = {
     {"record_index", LOOM_PARAM_U64},    {"field_name", LOOM_PARAM_STRING},
     {"offset", LOOM_PARAM_U64},          {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_006 = {
+static const loom_error_def_t loom_err_bytecode_006 = {
     .error_id = "ERR_BYTECODE_006",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2083,7 +2083,7 @@ static const loom_error_param_def_t loom_err_bytecode_007_params[] = {
     {"length", LOOM_PARAM_U64},
     {"container_length", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_007 = {
+static const loom_error_def_t loom_err_bytecode_007 = {
     .error_id = "ERR_BYTECODE_007",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2101,7 +2101,7 @@ static const loom_error_param_def_t loom_err_bytecode_008_params[] = {
     {"offset", LOOM_PARAM_U64},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_008 = {
+static const loom_error_def_t loom_err_bytecode_008 = {
     .error_id = "ERR_BYTECODE_008",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2118,7 +2118,7 @@ static const loom_error_param_def_t loom_err_bytecode_009_params[] = {
     {"count", LOOM_PARAM_U64},
     {"limit", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_009 = {
+static const loom_error_def_t loom_err_bytecode_009 = {
     .error_id = "ERR_BYTECODE_009",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2135,7 +2135,7 @@ static const loom_error_param_def_t loom_err_bytecode_010_params[] = {
     {"string_id", LOOM_PARAM_U64},
     {"string_count", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_010 = {
+static const loom_error_def_t loom_err_bytecode_010 = {
     .error_id = "ERR_BYTECODE_010",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2154,7 +2154,7 @@ static const loom_error_param_def_t loom_err_bytecode_011_params[] = {
     {"actual_value", LOOM_PARAM_U64},
     {"case_count", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_011 = {
+static const loom_error_def_t loom_err_bytecode_011 = {
     .error_id = "ERR_BYTECODE_011",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2173,7 +2173,7 @@ static const loom_error_param_def_t loom_err_bytecode_012_params[] = {
     {"ref_id", LOOM_PARAM_U64},
     {"table_count", LOOM_PARAM_U64},
 };
-const loom_error_def_t loom_err_bytecode_012 = {
+static const loom_error_def_t loom_err_bytecode_012 = {
     .error_id = "ERR_BYTECODE_012",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2192,7 +2192,7 @@ static const loom_error_param_def_t loom_err_bytecode_013_params[] = {
     {"offset", LOOM_PARAM_U64},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_013 = {
+static const loom_error_def_t loom_err_bytecode_013 = {
     .error_id = "ERR_BYTECODE_013",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2210,7 +2210,7 @@ static const loom_error_param_def_t loom_err_bytecode_014_params[] = {
     {"offset", LOOM_PARAM_U64},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_014 = {
+static const loom_error_def_t loom_err_bytecode_014 = {
     .error_id = "ERR_BYTECODE_014",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2227,7 +2227,7 @@ static const loom_error_param_def_t loom_err_bytecode_015_params[] = {
     {"offset", LOOM_PARAM_U64},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_015 = {
+static const loom_error_def_t loom_err_bytecode_015 = {
     .error_id = "ERR_BYTECODE_015",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2245,7 +2245,7 @@ static const loom_error_param_def_t loom_err_bytecode_016_params[] = {
     {"offset", LOOM_PARAM_U64},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_016 = {
+static const loom_error_def_t loom_err_bytecode_016 = {
     .error_id = "ERR_BYTECODE_016",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2264,7 +2264,7 @@ static const loom_error_param_def_t loom_err_bytecode_017_params[] = {
     {"offset", LOOM_PARAM_U64},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_bytecode_017 = {
+static const loom_error_def_t loom_err_bytecode_017 = {
     .error_id = "ERR_BYTECODE_017",
     .domain = LOOM_ERROR_DOMAIN_BYTECODE,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2282,7 +2282,7 @@ static const loom_error_param_def_t loom_err_fold_001_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_fold_001 = {
+static const loom_error_def_t loom_err_fold_001 = {
     .error_id = "ERR_FOLD_001",
     .domain = LOOM_ERROR_DOMAIN_FOLD,
     .severity = LOOM_DIAGNOSTIC_REMARK,
@@ -2298,7 +2298,7 @@ static const loom_error_param_def_t loom_err_fold_002_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"source_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_fold_002 = {
+static const loom_error_def_t loom_err_fold_002 = {
     .error_id = "ERR_FOLD_002",
     .domain = LOOM_ERROR_DOMAIN_FOLD,
     .severity = LOOM_DIAGNOSTIC_REMARK,
@@ -2315,7 +2315,7 @@ static const loom_error_param_def_t loom_err_fold_003_params[] = {
     {"op_name", LOOM_PARAM_STRING},
     {"target_type", LOOM_PARAM_TYPE},
 };
-const loom_error_def_t loom_err_fold_003 = {
+static const loom_error_def_t loom_err_fold_003 = {
     .error_id = "ERR_FOLD_003",
     .domain = LOOM_ERROR_DOMAIN_FOLD,
     .severity = LOOM_DIAGNOSTIC_REMARK,
@@ -2333,7 +2333,7 @@ static const loom_error_param_def_t loom_err_fold_004_params[] = {
     {"offset", LOOM_PARAM_I64},     {"size", LOOM_PARAM_I64},
     {"total", LOOM_PARAM_I64},      {"bound", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_fold_004 = {
+static const loom_error_def_t loom_err_fold_004 = {
     .error_id = "ERR_FOLD_004",
     .domain = LOOM_ERROR_DOMAIN_FOLD,
     .severity = LOOM_DIAGNOSTIC_REMARK,
@@ -2352,7 +2352,7 @@ static const loom_error_param_def_t loom_err_fold_005_params[] = {
     {"dim_index", LOOM_PARAM_I64},
     {"offset", LOOM_PARAM_I64},
 };
-const loom_error_def_t loom_err_fold_005 = {
+static const loom_error_def_t loom_err_fold_005 = {
     .error_id = "ERR_FOLD_005",
     .domain = LOOM_ERROR_DOMAIN_FOLD,
     .severity = LOOM_DIAGNOSTIC_REMARK,
@@ -2371,7 +2371,7 @@ static const loom_error_param_def_t loom_err_lowering_001_params[] = {
     {"pass_name", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_lowering_001 = {
+static const loom_error_def_t loom_err_lowering_001 = {
     .error_id = "ERR_LOWERING_001",
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2390,7 +2390,7 @@ static const loom_error_param_def_t loom_err_lowering_002_params[] = {
     {"scope", LOOM_PARAM_STRING},
     {"reason", LOOM_PARAM_STRING},
 };
-const loom_error_def_t loom_err_lowering_002 = {
+static const loom_error_def_t loom_err_lowering_002 = {
     .error_id = "ERR_LOWERING_002",
     .domain = LOOM_ERROR_DOMAIN_LOWERING,
     .severity = LOOM_DIAGNOSTIC_ERROR,
@@ -2459,4 +2459,10 @@ const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,
     }
   }
   return NULL;
+}
+
+const loom_error_def_t* loom_error_def_lookup_ref(loom_error_ref_t ref) {
+  if (!loom_error_ref_is_set(ref)) return NULL;
+  return loom_error_def_lookup(loom_error_ref_domain(ref),
+                               loom_error_ref_code(ref));
 }

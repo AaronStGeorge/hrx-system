@@ -154,7 +154,7 @@ static iree_status_t loom_kernel_async_legality_fail(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = &loom_err_lowering_001,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

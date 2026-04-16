@@ -93,9 +93,9 @@ typedef struct loom_token_t {
 
 // Structured lexical error payload for the current LOOM_TOKEN_ERROR lookahead.
 //
-// |error| points at a stable loom_err_parse_* definition in .rodata. Any string
-// parameters must point at either static storage or the tokenizer's source
-// buffer; they remain valid until the next successful scan clears this payload.
+// |error| points at a stable generated error definition. Any string parameters
+// must point at either static storage or the tokenizer's source buffer; they
+// remain valid until the next successful scan clears this payload.
 typedef struct loom_tokenizer_error_t {
   const loom_error_def_t* error;
   loom_diagnostic_param_t params[LOOM_TOKENIZER_MAX_ERROR_PARAMS];

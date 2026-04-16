@@ -55,7 +55,6 @@ loom_cc_library(
     error_defs
   HDRS
     "error_defs.h"
-    "error_defs.inc"
   SRCS
     "error_tables.c"
   DEPS

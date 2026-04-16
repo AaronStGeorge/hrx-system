@@ -149,6 +149,19 @@ TYPE_CONSTRAINT_MAP: dict[TypeConstraint, str] = {
     TypeConstraint.I1: "LOOM_TYPE_CONSTRAINT_I1",
 }
 
+_ERROR_REF_CODE_BITS = 10
+_ERROR_REF_MAX_CODE = (1 << _ERROR_REF_CODE_BITS) - 1
+_ERROR_REF_MAX_DOMAIN_VALUE = (1 << (16 - _ERROR_REF_CODE_BITS)) - 2
+
+
+def _error_ref_literal(error: Any) -> str:
+    if error.code > _ERROR_REF_MAX_CODE:
+        raise ValueError(f"{error.error_id}: code {error.code} exceeds LOOM_ERROR_REF 10-bit max")
+    if error.domain.value > _ERROR_REF_MAX_DOMAIN_VALUE:
+        raise ValueError(f"{error.error_id}: domain {error.domain.name} exceeds LOOM_ERROR_REF 6-bit max")
+    return f"LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_{error.domain.name}, {error.code})"
+
+
 # Maps Python trait names to C trait bit names.
 TRAIT_MAP: dict[str, str] = {
     "Pure": "LOOM_TRAIT_PURE",
@@ -2636,10 +2649,10 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 arg_refs.append("0")
             args_str = ", ".join(arg_refs)
             if constraint.error is not None:
-                error_symbol = f"&loom_err_{constraint.error.domain.name.lower()}_{constraint.error.code:03d}"
+                error_ref = _error_ref_literal(constraint.error)
             else:
-                error_symbol = "NULL"
-            lines.append(f"    {{{relation_name}, {property_name}, {len(constraint.args)}, 0, {{{args_str}}}, {error_symbol}}},")
+                error_ref = "LOOM_ERROR_REF_NONE"
+            lines.append(f"    {{{relation_name}, {property_name}, {len(constraint.args)}, 0, {{{args_str}}}, {error_ref}}},")
         lines.append("};")
     lines.append("")
 

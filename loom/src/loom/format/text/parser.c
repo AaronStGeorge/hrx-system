@@ -73,8 +73,9 @@ static iree_status_t loom_parse_f64_token(loom_parser_t* parser,
     loom_diagnostic_param_t params[] = {
         loom_param_string(token.text),
     };
-    return loom_parser_emit(parser, &loom_err_parse_016, params,
-                            IREE_ARRAYSIZE(params), token);
+    return loom_parser_emit(parser,
+                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 16),
+                            params, IREE_ARRAYSIZE(params), token);
   }
   return iree_ok_status();
 }
@@ -278,9 +279,9 @@ iree_status_t loom_parser_definition_scope_pop_if_needed(
     loom_diagnostic_param_t params[] = {
         loom_param_string(placeholder.name_token.text),
     };
-    iree_status_t status =
-        loom_parser_emit(parser, &loom_err_parse_022, params,
-                         IREE_ARRAYSIZE(params), placeholder.name_token);
+    iree_status_t status = loom_parser_emit(
+        parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 22), params,
+        IREE_ARRAYSIZE(params), placeholder.name_token);
     loom_parser_definition_scope_discard(parser);
     return status;
   }
@@ -401,8 +402,9 @@ iree_status_t loom_parser_emit_duplicate_value_name(loom_parser_t* parser,
   loom_diagnostic_param_t params[] = {
       loom_param_string(name_token.text),
   };
-  return loom_parser_emit(parser, &loom_err_parse_002, params,
-                          IREE_ARRAYSIZE(params), name_token);
+  return loom_parser_emit(parser,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2),
+                          params, IREE_ARRAYSIZE(params), name_token);
 }
 
 iree_status_t loom_parser_define_value_name(loom_parser_t* parser,
@@ -471,8 +473,9 @@ iree_status_t loom_parser_resolve_value(loom_parser_t* parser,
   loom_diagnostic_param_t params[] = {
       loom_param_string(name_token.text),
   };
-  return loom_parser_emit(parser, &loom_err_parse_001, params,
-                          IREE_ARRAYSIZE(params), name_token);
+  return loom_parser_emit(parser,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1),
+                          params, IREE_ARRAYSIZE(params), name_token);
 }
 
 iree_status_t loom_parser_emit_result_count_mismatch(
@@ -484,8 +487,9 @@ iree_status_t loom_parser_emit_result_count_mismatch(
       loom_param_u32(expected_count),
       loom_param_u32(actual_count),
   };
-  return loom_parser_emit(parser, &loom_err_parse_009, params,
-                          IREE_ARRAYSIZE(params), op_name_token);
+  return loom_parser_emit(parser,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 9),
+                          params, IREE_ARRAYSIZE(params), op_name_token);
 }
 
 //===----------------------------------------------------------------------===//
@@ -666,7 +670,7 @@ static iree_status_t loom_parser_emit_diagnostic(
     };
     loom_diagnostic_t limit_diagnostic = {
         .severity = LOOM_DIAGNOSTIC_ERROR,
-        .error = &loom_err_parse_012,
+        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 12),
         .params = limit_params,
         .param_count = IREE_ARRAYSIZE(limit_params),
         .emitter = LOOM_EMITTER_PARSER,
@@ -726,8 +730,9 @@ iree_status_t loom_parser_emit_unexpected_token(loom_parser_t* parser,
       loom_param_string(actual_text),
       loom_param_string(expected),
   };
-  return loom_parser_emit(parser, &loom_err_parse_003, params,
-                          IREE_ARRAYSIZE(params), token);
+  return loom_parser_emit(parser,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3),
+                          params, IREE_ARRAYSIZE(params), token);
 }
 
 iree_status_t loom_parser_emit_token_text_error(loom_parser_t* parser,
@@ -789,8 +794,9 @@ static iree_status_t loom_parser_emit_location_error(loom_parser_t* parser,
   loom_diagnostic_param_t params[] = {
       loom_param_string(detail),
   };
-  return loom_parser_emit(parser, &loom_err_parse_011, params,
-                          IREE_ARRAYSIZE(params), token);
+  return loom_parser_emit(parser,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 11),
+                          params, IREE_ARRAYSIZE(params), token);
 }
 
 static iree_status_t loom_parser_resolve_location_source(
@@ -1308,16 +1314,17 @@ static iree_status_t loom_parse_i64_array_attr(loom_parser_t* parser,
     loom_token_t token = loom_token_none();
     LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_INTEGER, &token);
     if (count >= IREE_ARRAYSIZE(stack_values)) {
-      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
-                                               token);
+      return loom_parser_emit_token_text_error(
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 4), token);
     }
     int64_t value = 0;
     if (!iree_string_view_atoi_int64(token.text, &value)) {
       loom_diagnostic_param_t params[] = {
           loom_param_string(token.text),
       };
-      return loom_parser_emit(parser, &loom_err_parse_015, params,
-                              IREE_ARRAYSIZE(params), token);
+      return loom_parser_emit(
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 15), params,
+          IREE_ARRAYSIZE(params), token);
     }
     stack_values[count++] = value;
   }
@@ -1348,8 +1355,9 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
         loom_diagnostic_param_t params[] = {
             loom_param_string(token.text),
         };
-        return loom_parser_emit(parser, &loom_err_parse_015, params,
-                                IREE_ARRAYSIZE(params), token);
+        return loom_parser_emit(
+            parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 15), params,
+            IREE_ARRAYSIZE(params), token);
       }
       *out_attr = loom_attr_i64(value);
       return iree_ok_status();
@@ -1427,8 +1435,9 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
             loom_param_string(enum_name),
             loom_param_string(token.text),
         };
-        return loom_parser_emit(parser, &loom_err_parse_017, params,
-                                IREE_ARRAYSIZE(params), token);
+        return loom_parser_emit(
+            parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 17), params,
+            IREE_ARRAYSIZE(params), token);
       }
     }
     case LOOM_ATTR_I64_ARRAY: {
@@ -1515,8 +1524,8 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
     }
     if (count >= 16) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
-                                               peek);
+      return loom_parser_emit_token_text_error(
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 4), peek);
     }
 
     // Parse predicate kind name.
@@ -1535,8 +1544,9 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
       loom_diagnostic_param_t params[] = {
           loom_param_string(name_token.text),
       };
-      return loom_parser_emit(parser, &loom_err_parse_013, params,
-                              IREE_ARRAYSIZE(params), name_token);
+      return loom_parser_emit(
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 13), params,
+          IREE_ARRAYSIZE(params), name_token);
     }
 
     // Expect '('.
@@ -1559,8 +1569,8 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
       }
       if (predicate.arg_count >= 3) {
         loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-        return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
-                                                 peek);
+        return loom_parser_emit_token_text_error(
+            parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 4), peek);
       }
 
       loom_token_t arg_token = loom_tokenizer_peek(&parser->tokenizer);
@@ -1579,8 +1589,9 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
           loom_diagnostic_param_t params[] = {
               loom_param_string(arg_token.text),
           };
-          return loom_parser_emit(parser, &loom_err_parse_015, params,
-                                  IREE_ARRAYSIZE(params), arg_token);
+          return loom_parser_emit(
+              parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 15),
+              params, IREE_ARRAYSIZE(params), arg_token);
         }
         predicate.arg_tags[predicate.arg_count] = LOOM_PRED_ARG_CONST;
         predicate.args[predicate.arg_count] = value;
@@ -1603,8 +1614,9 @@ iree_status_t loom_parse_predicate_list(loom_parser_t* parser,
           loom_param_u32(expected_argument_count),
           loom_param_u32(predicate.arg_count),
       };
-      return loom_parser_emit(parser, &loom_err_parse_031, params,
-                              IREE_ARRAYSIZE(params), name_token);
+      return loom_parser_emit(
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 31), params,
+          IREE_ARRAYSIZE(params), name_token);
     }
 
     stack_predicates[count++] = predicate;
@@ -1643,8 +1655,9 @@ static iree_status_t loom_parser_emit_duplicate_attr_dict_key(
       loom_param_string(key_token.text),
   };
   return loom_parser_emit_related(
-      parser, &loom_err_parse_020, params, IREE_ARRAYSIZE(params), key_token,
-      IREE_SV("previously defined here"), previous_key_token);
+      parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 20), params,
+      IREE_ARRAYSIZE(params), key_token, IREE_SV("previously defined here"),
+      previous_key_token);
 }
 
 static iree_string_view_t loom_parsed_attr_dict_entry_name(
@@ -1668,8 +1681,9 @@ iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
         loom_diagnostic_param_t params[] = {
             loom_param_string(value_token.text),
         };
-        return loom_parser_emit(parser, &loom_err_parse_015, params,
-                                IREE_ARRAYSIZE(params), value_token);
+        return loom_parser_emit(
+            parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 15), params,
+            IREE_ARRAYSIZE(params), value_token);
       }
       *out_attr = loom_attr_i64(int_value);
       return iree_ok_status();
@@ -1763,8 +1777,9 @@ static iree_status_t loom_parse_present_attr_dict(loom_parser_t* parser,
     loom_diagnostic_param_t params[] = {
         loom_param_u32(LOOM_ATTR_DICT_MAX_NESTING_DEPTH),
     };
-    return loom_parser_emit(parser, &loom_err_parse_021, params,
-                            IREE_ARRAYSIZE(params), open_brace_token);
+    return loom_parser_emit(parser,
+                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 21),
+                            params, IREE_ARRAYSIZE(params), open_brace_token);
   }
 
   uint32_t errors_before = parser->error_count;
@@ -1780,8 +1795,8 @@ static iree_status_t loom_parse_present_attr_dict(loom_parser_t* parser,
     }
     if (count >= IREE_ARRAYSIZE(stack_entries)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-      return loom_parser_emit_token_text_error(parser, &loom_err_parse_004,
-                                               peek);
+      return loom_parser_emit_token_text_error(
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 4), peek);
     }
 
     loom_token_t key_token = loom_token_none();
@@ -2095,8 +2110,9 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
     loom_diagnostic_param_t params[] = {
         loom_param_string(op_name_token.text),
     };
-    return loom_parser_emit(parser, &loom_err_parse_006, params,
-                            IREE_ARRAYSIZE(params), op_name_token);
+    return loom_parser_emit(parser,
+                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6),
+                            params, IREE_ARRAYSIZE(params), op_name_token);
   }
 
   bool is_symbol_definition =
@@ -2416,9 +2432,9 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
               loom_param_string(
                   IREE_SV("alias name shadows a registered encoding family")),
           };
-          IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_014,
-                                                params, IREE_ARRAYSIZE(params),
-                                                alias_token));
+          IREE_RETURN_IF_ERROR(loom_parser_emit(
+              parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14),
+              params, IREE_ARRAYSIZE(params), alias_token));
           loom_parser_sync_to_newline(parser);
           continue;
         }
@@ -2426,9 +2442,9 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
           loom_diagnostic_param_t params[] = {
               loom_param_string(IREE_SV("duplicate encoding alias name")),
           };
-          IREE_RETURN_IF_ERROR(loom_parser_emit(parser, &loom_err_parse_014,
-                                                params, IREE_ARRAYSIZE(params),
-                                                alias_token));
+          IREE_RETURN_IF_ERROR(loom_parser_emit(
+              parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14),
+              params, IREE_ARRAYSIZE(params), alias_token));
           loom_parser_sync_to_newline(parser);
           continue;
         }
@@ -2454,7 +2470,8 @@ static iree_status_t loom_parse_module_body(loom_parser_t* parser) {
       }
       // Not an alias — this is an error.
       IREE_RETURN_IF_ERROR(loom_parser_emit_token_text_error(
-          parser, &loom_err_parse_014, alias_token));
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14),
+          alias_token));
       loom_parser_sync_to_newline(parser);
       continue;
     }

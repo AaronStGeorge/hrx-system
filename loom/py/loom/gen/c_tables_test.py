@@ -124,6 +124,8 @@ def test_generate_tables_emits_attr_matches_element_type_constraint() -> None:
     assert "LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE" in tables_c
     assert "LOOM_PROPERTY_ELEMENT_TYPE" in tables_c
     assert "LOOM_FIELD_REF(2, 0), LOOM_FIELD_REF(1, 0)" in tables_c
+    assert "LOOM_ERROR_REF(LOOM_ERROR_DOMAIN_TYPE, 5)" in tables_c
+    assert "loom_err_" not in tables_c
 
 
 def test_generate_tables_emits_bit_count_constraints() -> None:

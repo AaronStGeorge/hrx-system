@@ -71,9 +71,9 @@ TEST(Diagnostic, ErrorWithCaret) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(IREE_SV("y")),
   };
-  std::string output =
-      FormatStructured(&loom_err_parse_001, params, IREE_ARRAYSIZE(params),
-                       LOOM_DIAGNOSTIC_ERROR, src, 19, 21, 1, 20);
+  std::string output = FormatStructured(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1), params,
+      IREE_ARRAYSIZE(params), LOOM_DIAGNOSTIC_ERROR, src, 19, 21, 1, 20);
 
   // Clang-style: file:line:col: severity [DOMAIN/CODE]: message
   EXPECT_NE(output.find("test.loom:1:20: error [PARSE/001]"), std::string::npos)
@@ -105,9 +105,10 @@ TEST(Diagnostic, MultiTokenUnderline) {
       loom_param_string(IREE_SV("an operand")),
       loom_param_string(IREE_SV("test.addi")),
   };
-  std::string output = FormatStructured(
-      &loom_err_parse_003, params, IREE_ARRAYSIZE(params),
-      LOOM_DIAGNOSTIC_ERROR, "%r = test.addi %x, %y : i32", 5, 15, 1, 6);
+  std::string output =
+      FormatStructured(loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3),
+                       params, IREE_ARRAYSIZE(params), LOOM_DIAGNOSTIC_ERROR,
+                       "%r = test.addi %x, %y : i32", 5, 15, 1, 6);
   EXPECT_NE(output.find("^^^^^^^^^^"), std::string::npos);
 }
 
@@ -118,9 +119,10 @@ TEST(Diagnostic, WarningFormat) {
       loom_param_string(IREE_SV("a result")),
       loom_param_string(IREE_SV("test.yield")),
   };
-  std::string output = FormatStructured(
-      &loom_err_parse_003, params, IREE_ARRAYSIZE(params),
-      LOOM_DIAGNOSTIC_WARNING, "test.yield %x : f32", 0, 10, 5, 1);
+  std::string output =
+      FormatStructured(loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3),
+                       params, IREE_ARRAYSIZE(params), LOOM_DIAGNOSTIC_WARNING,
+                       "test.yield %x : f32", 0, 10, 5, 1);
   EXPECT_NE(output.find("test.loom:5:1: warning"), std::string::npos);
 }
 
@@ -128,9 +130,10 @@ TEST(Diagnostic, RemarkFormat) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(IREE_SV("input")),
   };
-  std::string output = FormatStructured(
-      &loom_err_parse_001, params, IREE_ARRAYSIZE(params),
-      LOOM_DIAGNOSTIC_REMARK, "%x = test.neg %input : f32", 0, 2, 10, 1);
+  std::string output =
+      FormatStructured(loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1),
+                       params, IREE_ARRAYSIZE(params), LOOM_DIAGNOSTIC_REMARK,
+                       "%x = test.neg %input : f32", 0, 2, 10, 1);
   EXPECT_NE(output.find("remark"), std::string::npos);
 }
 
@@ -139,9 +142,9 @@ TEST(Diagnostic, SingleCharCaret) {
       loom_param_string(IREE_SV("')'")),
       loom_param_string(IREE_SV("]")),
   };
-  std::string output =
-      FormatStructured(&loom_err_parse_003, params, IREE_ARRAYSIZE(params),
-                       LOOM_DIAGNOSTIC_ERROR, "( ] )", 2, 3, 1, 3);
+  std::string output = FormatStructured(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3), params,
+      IREE_ARRAYSIZE(params), LOOM_DIAGNOSTIC_ERROR, "( ] )", 2, 3, 1, 3);
   EXPECT_NE(output.find("^"), std::string::npos);
 }
 
@@ -153,9 +156,9 @@ TEST(Diagnostic, MultiLineSource) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(IREE_SV("z")),
   };
-  std::string output =
-      FormatStructured(&loom_err_parse_001, params, IREE_ARRAYSIZE(params),
-                       LOOM_DIAGNOSTIC_ERROR, source, 43, 45, 2, 21);
+  std::string output = FormatStructured(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1), params,
+      IREE_ARRAYSIZE(params), LOOM_DIAGNOSTIC_ERROR, source, 43, 45, 2, 21);
   EXPECT_NE(output.find("test.loom:2:21: error"), std::string::npos);
   EXPECT_NE(output.find("test.addi"), std::string::npos);
   EXPECT_NE(output.find("^^"), std::string::npos);
@@ -169,7 +172,7 @@ TEST(Diagnostic, NoSource) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.origin.filename = IREE_SV("test.loom");
@@ -227,7 +230,7 @@ TEST(Diagnostic, RelatedLocationsFormatAsNotes) {
   };
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_dominance_002;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 2);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.origin = {
@@ -285,7 +288,7 @@ TEST(Diagnostic, StructuredErrorCodeInOutput) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_type_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
   diagnostic.params = params;
   diagnostic.param_count = 4;
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
@@ -319,7 +322,7 @@ TEST(Diagnostic, StructuredWithSourceRange) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_structure_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1);
   diagnostic.params = params;
   diagnostic.param_count = 3;
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
@@ -361,7 +364,7 @@ TEST(Diagnostic, NoFixHintForNullTemplate) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_structure_002;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2);
   diagnostic.params = params;
   diagnostic.param_count = 3;
 
@@ -421,7 +424,7 @@ TEST(Diagnostic, SinkCollects) {
   };
   loom_diagnostic_t d1 = {};
   d1.severity = LOOM_DIAGNOSTIC_ERROR;
-  d1.error = &loom_err_parse_001;
+  d1.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   d1.params = params1;
   d1.param_count = IREE_ARRAYSIZE(params1);
   IREE_ASSERT_OK(loom_diagnostic_emit(&sink, &d1));
@@ -431,16 +434,18 @@ TEST(Diagnostic, SinkCollects) {
   };
   loom_diagnostic_t d2 = {};
   d2.severity = LOOM_DIAGNOSTIC_WARNING;
-  d2.error = &loom_err_parse_001;
+  d2.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   d2.params = params2;
   d2.param_count = IREE_ARRAYSIZE(params2);
   IREE_ASSERT_OK(loom_diagnostic_emit(&sink, &d2));
 
   EXPECT_EQ(collected.size(), 2u);
   EXPECT_EQ(collected[0].severity, LOOM_DIAGNOSTIC_ERROR);
-  EXPECT_EQ(collected[0].error, &loom_err_parse_001);
+  EXPECT_EQ(collected[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(collected[1].severity, LOOM_DIAGNOSTIC_WARNING);
-  EXPECT_EQ(collected[1].error, &loom_err_parse_001);
+  EXPECT_EQ(collected[1].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
 }
 
 TEST(Diagnostic, NullSinkDoesNotCrash) {
@@ -450,7 +455,7 @@ TEST(Diagnostic, NullSinkDoesNotCrash) {
   };
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   IREE_ASSERT_OK(loom_diagnostic_emit(&null_sink, &diagnostic));

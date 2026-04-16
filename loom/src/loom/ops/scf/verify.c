@@ -39,7 +39,8 @@ static iree_status_t loom_scf_emit_attribute_kind_mismatch(
       loom_param_u32(actual_kind),
       loom_param_u32(expected_kind),
   };
-  return loom_scf_emit(emitter, op, &loom_err_type_005, params,
+  return loom_scf_emit(emitter, op,
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5), params,
                        IREE_ARRAYSIZE(params));
 }
 
@@ -52,8 +53,9 @@ static iree_status_t loom_scf_emit_attribute_value_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_scf_emit(emitter, op, &loom_err_structure_014, params,
-                       IREE_ARRAYSIZE(params));
+  return loom_scf_emit(emitter, op,
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
+                       params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_scf_emit_count_mismatch(
@@ -66,8 +68,9 @@ static iree_status_t loom_scf_emit_count_mismatch(
       loom_param_string(expected_field_name),
       loom_param_u32(loom_scf_saturating_u32(expected_count)),
   };
-  return loom_scf_emit(emitter, op, &loom_err_structure_013, params,
-                       IREE_ARRAYSIZE(params));
+  return loom_scf_emit(emitter, op,
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13),
+                       params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_scf_emit_value_type_mismatch(
@@ -81,7 +84,8 @@ static iree_status_t loom_scf_emit_value_type_mismatch(
       loom_param_string(expected_field_name),
       loom_param_type(loom_module_value_type(module, expected_value_id)),
   };
-  return loom_scf_emit(emitter, op, &loom_err_type_001, params,
+  return loom_scf_emit(emitter, op,
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params,
                        IREE_ARRAYSIZE(params));
 }
 
@@ -131,7 +135,8 @@ static iree_status_t loom_scf_emit_lookup_type_mismatch(
       loom_param_type(
           loom_module_value_type(module, results.values[result_index])),
   };
-  return loom_scf_emit(emitter, op, &loom_err_type_001, params,
+  return loom_scf_emit(emitter, op,
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params,
                        IREE_ARRAYSIZE(params));
 }
 
@@ -258,7 +263,8 @@ static iree_status_t loom_scf_emit_switch_type_mismatch(
       loom_param_type(
           loom_module_value_type(module, results.values[result_index])),
   };
-  return loom_scf_emit(emitter, op, &loom_err_type_001, params,
+  return loom_scf_emit(emitter, op,
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params,
                        IREE_ARRAYSIZE(params));
 }
 

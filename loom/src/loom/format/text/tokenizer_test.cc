@@ -364,12 +364,16 @@ TEST(Tokenizer, HashAttr) {
 
 TEST(Tokenizer, HashAttrRejectsNumericName) {
   ScopedTokenizer t("#0 #1");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("#"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("#"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("#"));
   loom_token_t value = t.next();
   EXPECT_EQ(value.kind, LOOM_TOKEN_INTEGER);
   EXPECT_TRUE(iree_string_view_equal(value.text, IREE_SV("0")));
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("#"), 1, 4, 5);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("#"), 1, 4, 5);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("#"));
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_INTEGER);
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
@@ -546,28 +550,40 @@ TEST(Tokenizer, PeekDoesNotMatchWrongKind) {
 
 TEST(Tokenizer, UnterminatedStringError) {
   ScopedTokenizer t("\"unterminated");
-  ExpectPeekedErrorToken(t.get(), &loom_err_parse_005, IREE_SV("\""), 1, 1, 2);
+  ExpectPeekedErrorToken(t.get(),
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5),
+                         IREE_SV("\""), 1, 1, 2);
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, ErrorSurvivesMultiplePeeks) {
   ScopedTokenizer t("\"unterminated");
-  ExpectPeekedErrorToken(t.get(), &loom_err_parse_005, IREE_SV("\""), 1, 1, 2);
-  ExpectPeekedErrorToken(t.get(), &loom_err_parse_005, IREE_SV("\""), 1, 1, 2);
-  ExpectNextErrorToken(t.get(), &loom_err_parse_005, IREE_SV("\""), 1, 1, 2);
+  ExpectPeekedErrorToken(t.get(),
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5),
+                         IREE_SV("\""), 1, 1, 2);
+  ExpectPeekedErrorToken(t.get(),
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5),
+                         IREE_SV("\""), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5),
+                       IREE_SV("\""), 1, 1, 2);
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, ScanErrorSurfacedOnNext) {
   ScopedTokenizer t("\"unterminated");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_005, IREE_SV("\""), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5),
+                       IREE_SV("\""), 1, 1, 2);
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, ErrorAfterValidTokens) {
   ScopedTokenizer t("42 \"\\x\" %ok");
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_INTEGER);
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\\x"), 1, 5, 7);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\\x"), 1, 5, 7);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("unknown escape sequence"));
   loom_token_t value = t.next();
   EXPECT_EQ(value.kind, LOOM_TOKEN_SSA_VALUE);
@@ -578,7 +594,9 @@ TEST(Tokenizer, ErrorAfterValidTokens) {
 
 TEST(Tokenizer, UnexpectedCharacterError) {
   ScopedTokenizer t("~");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_025, IREE_SV("~"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 25),
+                       IREE_SV("~"), 1, 1, 2);
   EXPECT_EQ(t.get()->error.param_count, 0u);
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
   ExpectNoInfrastructureStatus(t.get());
@@ -586,7 +604,9 @@ TEST(Tokenizer, UnexpectedCharacterError) {
 
 TEST(Tokenizer, InvalidStringEscapeError) {
   ScopedTokenizer t("\"\\x\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\\x"), 1, 2, 4);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\\x"), 1, 2, 4);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("unknown escape sequence"));
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
   ExpectNoInfrastructureStatus(t.get());
@@ -594,7 +614,9 @@ TEST(Tokenizer, InvalidStringEscapeError) {
 
 TEST(Tokenizer, InvalidStringEscapeMessage) {
   ScopedTokenizer t("\"\\x\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\\x"), 1, 2, 4);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\\x"), 1, 2, 4);
   ASSERT_EQ(t.get()->error.param_count, 1u);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("unknown escape sequence"));
   ExpectNoInfrastructureStatus(t.get());
@@ -602,7 +624,9 @@ TEST(Tokenizer, InvalidStringEscapeMessage) {
 
 TEST(Tokenizer, TruncatedUnicodeEscapeError) {
   ScopedTokenizer t("\"\\u12\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\""), 1, 6, 7);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\""), 1, 6, 7);
   ExpectErrorStringParam(t.get()->error, 0,
                          IREE_SV("truncated unicode escape"));
   ExpectNoInfrastructureStatus(t.get());
@@ -610,7 +634,9 @@ TEST(Tokenizer, TruncatedUnicodeEscapeError) {
 
 TEST(Tokenizer, InvalidUnicodeEscapeHexDigitError) {
   ScopedTokenizer t("\"\\u12G4\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("G"), 1, 6, 7);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("G"), 1, 6, 7);
   ExpectErrorStringParam(t.get()->error, 0,
                          IREE_SV("invalid hex digit in unicode escape"));
   ExpectNoInfrastructureStatus(t.get());
@@ -618,8 +644,9 @@ TEST(Tokenizer, InvalidUnicodeEscapeHexDigitError) {
 
 TEST(Tokenizer, LoneHighSurrogateEscapeError) {
   ScopedTokenizer t("\"\\uD83D\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\\uD83D"), 1, 2,
-                       8);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\\uD83D"), 1, 2, 8);
   ExpectErrorStringParam(
       t.get()->error, 0,
       IREE_SV("high surrogate not followed by low surrogate"));
@@ -628,15 +655,18 @@ TEST(Tokenizer, LoneHighSurrogateEscapeError) {
 
 TEST(Tokenizer, InvalidLowSurrogateEscapeError) {
   ScopedTokenizer t("\"\\uD83D\\u0041\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("0041"), 1, 10,
-                       14);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("0041"), 1, 10, 14);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("invalid low surrogate"));
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, UnexpectedLowSurrogateEscapeError) {
   ScopedTokenizer t("\"\\uDD25\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("DD25"), 1, 4, 8);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("DD25"), 1, 4, 8);
   ExpectErrorStringParam(t.get()->error, 0,
                          IREE_SV("unexpected low surrogate"));
   ExpectNoInfrastructureStatus(t.get());
@@ -644,7 +674,9 @@ TEST(Tokenizer, UnexpectedLowSurrogateEscapeError) {
 
 TEST(Tokenizer, RawControlCharacterInStringError) {
   ScopedTokenizer t("\"\x01\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\x01"), 1, 2, 3);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\x01"), 1, 2, 3);
   ExpectErrorStringParam(
       t.get()->error, 0,
       IREE_SV("unescaped control character in string literal"));
@@ -654,20 +686,26 @@ TEST(Tokenizer, RawControlCharacterInStringError) {
 
 TEST(Tokenizer, RawNewlineInStringError) {
   ScopedTokenizer t("\"line1\nline2\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\n"), 1, 7, 8);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\n"), 1, 7, 8);
   ExpectErrorStringParam(
       t.get()->error, 0,
       IREE_SV("unescaped control character in string literal"));
   loom_token_t value = t.next();
   EXPECT_EQ(value.kind, LOOM_TOKEN_BARE_IDENT);
   EXPECT_TRUE(iree_string_view_equal(value.text, IREE_SV("line2")));
-  ExpectNextErrorToken(t.get(), &loom_err_parse_005, IREE_SV("\""), 2, 6, 7);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5),
+                       IREE_SV("\""), 2, 6, 7);
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, BarePercentError) {
   ScopedTokenizer t("% ");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("%"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("%"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("%"));
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
   ExpectNoInfrastructureStatus(t.get());
@@ -675,35 +713,45 @@ TEST(Tokenizer, BarePercentError) {
 
 TEST(Tokenizer, BareAtSignError) {
   ScopedTokenizer t("@ ");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("@"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("@"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("@"));
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, BareHashError) {
   ScopedTokenizer t("# ");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("#"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("#"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("#"));
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, BareCaretError) {
   ScopedTokenizer t("^ ");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("^"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("^"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("^"));
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, BarePercentAtEOFError) {
   ScopedTokenizer t("%");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("%"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("%"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("%"));
   ExpectNoInfrastructureStatus(t.get());
 }
 
 TEST(Tokenizer, BareAtSignAtEOFError) {
   ScopedTokenizer t("@");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("@"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("@"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("@"));
   ExpectNoInfrastructureStatus(t.get());
 }
@@ -744,7 +792,9 @@ TEST(Tokenizer, PrefixStrippedFromHashAttr) {
 
 TEST(Tokenizer, HashAttrNumericNameAtEOFIsInvalid) {
   ScopedTokenizer t("#42");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_024, IREE_SV("#"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24),
+                       IREE_SV("#"), 1, 1, 2);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("#"));
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_INTEGER);
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
@@ -797,7 +847,9 @@ TEST(Tokenizer, AngleInteriorInvalidStringEscapeError) {
   iree_string_view_t interior;
   IREE_ASSERT_OK(loom_tokenizer_scan_angle_interior(t.get(), &interior));
   EXPECT_TRUE(iree_string_view_is_empty(interior));
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\\x"), 1, 9, 11);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\\x"), 1, 9, 11);
   ExpectErrorStringParam(t.get()->error, 0, IREE_SV("unknown escape sequence"));
   ExpectNoInfrastructureStatus(t.get());
 }
@@ -809,7 +861,9 @@ TEST(Tokenizer, AngleInteriorEscapeAtEOF) {
   iree_string_view_t interior;
   IREE_ASSERT_OK(loom_tokenizer_scan_angle_interior(t.get(), &interior));
   EXPECT_TRUE(iree_string_view_is_empty(interior));
-  ExpectNextErrorToken(t.get(), &loom_err_parse_005, IREE_SV("\\"), 1, 6, 7);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5),
+                       IREE_SV("\\"), 1, 6, 7);
   ExpectNoInfrastructureStatus(t.get());
 }
 
@@ -832,7 +886,9 @@ TEST(Tokenizer, AngleInteriorStringWithRawNewlineIsInvalid) {
   iree_string_view_t interior;
   IREE_ASSERT_OK(loom_tokenizer_scan_angle_interior(t.get(), &interior));
   EXPECT_TRUE(iree_string_view_is_empty(interior));
-  ExpectNextErrorToken(t.get(), &loom_err_parse_023, IREE_SV("\n"), 1, 8, 9);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23),
+                       IREE_SV("\n"), 1, 8, 9);
   ExpectErrorStringParam(
       t.get()->error, 0,
       IREE_SV("unescaped control character in string literal"));
@@ -953,7 +1009,9 @@ TEST(Tokenizer, CommentColumnTrackingAfterContent) {
 TEST(Tokenizer, InvalidUtf8InString) {
   // 0xFF is never valid as a UTF-8 lead byte.
   ScopedTokenizer t("\"\xff\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_019, IREE_SV("\xff"), 1, 2, 3);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19),
+                       IREE_SV("\xff"), 1, 2, 3);
   ExpectErrorU32Param(t.get()->error, 0, 1u);
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
   ExpectNoInfrastructureStatus(t.get());
@@ -964,7 +1022,9 @@ TEST(Tokenizer, InvalidUtf8TruncatedSequence) {
   // then the closing quote. The closing quote is not a valid continuation byte,
   // so the sequence is invalid.
   ScopedTokenizer t("\"\xe4\xbd\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_019, IREE_SV("\xe4"), 1, 2, 3);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19),
+                       IREE_SV("\xe4"), 1, 2, 3);
   ExpectErrorU32Param(t.get()->error, 0, 1u);
   ExpectNoInfrastructureStatus(t.get());
 }
@@ -972,7 +1032,9 @@ TEST(Tokenizer, InvalidUtf8TruncatedSequence) {
 TEST(Tokenizer, InvalidUtf8OverlongSequence) {
   // Overlong encoding of '/' (U+002F): 0xC0 0xAF.
   ScopedTokenizer t("\"\xc0\xaf\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_019, IREE_SV("\xc0"), 1, 2, 3);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19),
+                       IREE_SV("\xc0"), 1, 2, 3);
   ExpectErrorU32Param(t.get()->error, 0, 1u);
   ExpectNoInfrastructureStatus(t.get());
 }
@@ -980,7 +1042,9 @@ TEST(Tokenizer, InvalidUtf8OverlongSequence) {
 TEST(Tokenizer, InvalidUtf8SurrogateRejected) {
   // UTF-8 encoding of surrogate U+D800: 0xED 0xA0 0x80.
   ScopedTokenizer t("\"\xed\xa0\x80\"");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_019, IREE_SV("\xed"), 1, 2, 3);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19),
+                       IREE_SV("\xed"), 1, 2, 3);
   ExpectErrorU32Param(t.get()->error, 0, 1u);
   ExpectNoInfrastructureStatus(t.get());
 }
@@ -988,7 +1052,9 @@ TEST(Tokenizer, InvalidUtf8SurrogateRejected) {
 TEST(Tokenizer, InvalidUtf8BareBytes) {
   // Bare continuation byte outside a string — not valid UTF-8.
   ScopedTokenizer t("\x80");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_019, IREE_SV("\x80"), 1, 1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19),
+                       IREE_SV("\x80"), 1, 1, 2);
   ExpectErrorU32Param(t.get()->error, 0, 0u);
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
   ExpectNoInfrastructureStatus(t.get());
@@ -998,8 +1064,9 @@ TEST(Tokenizer, ValidUnicodeOutsideStringError) {
   // Chinese character outside a string — valid UTF-8 but not a valid token.
   // Should produce an error mentioning the codepoint.
   ScopedTokenizer t("\xe4\xbd\xa0");
-  ExpectNextErrorToken(t.get(), &loom_err_parse_025, IREE_SV("\xe4\xbd\xa0"), 1,
-                       1, 2);
+  ExpectNextErrorToken(t.get(),
+                       loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 25),
+                       IREE_SV("\xe4\xbd\xa0"), 1, 1, 2);
   EXPECT_EQ(t.get()->error.param_count, 0u);
   EXPECT_EQ(t.next().kind, LOOM_TOKEN_EOF);
   ExpectNoInfrastructureStatus(t.get());

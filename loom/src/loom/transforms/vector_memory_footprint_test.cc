@@ -60,13 +60,15 @@ static iree_status_t CollectDiagnosticEmission(
   auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
   ++collector->count;
   collector->error = emission->error;
-  if (emission->error == &loom_err_subrange_005 && emission->param_count >= 6) {
+  if (emission->error == loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 5) &&
+      emission->param_count >= 6) {
     collector->view_axis = emission->params[1].i64;
     collector->vector_axis = emission->params[2].i64;
     collector->origin = CopyString(emission->params[3].string);
     collector->reason = CopyString(emission->params[4].string);
     collector->required = CopyString(emission->params[5].string);
-  } else if (emission->error == &loom_err_subrange_006 &&
+  } else if (emission->error ==
+                 loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 6) &&
              emission->param_count >= 4) {
     collector->origin = CopyString(emission->params[1].string);
     collector->reason = CopyString(emission->params[2].string);
@@ -248,7 +250,8 @@ func.def @test(%buffer: buffer, %base: offset) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_subrange_005);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 5));
   EXPECT_EQ(collector.view_axis, 0);
   EXPECT_EQ(collector.vector_axis, 0);
   EXPECT_EQ(collector.origin, "5");
@@ -398,7 +401,8 @@ func.def @test(%buffer: buffer, %base: offset) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_subrange_006);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 6));
   EXPECT_EQ(collector.origin, "<linearized origin>");
   EXPECT_EQ(collector.reason, "upper bound proof failed");
   EXPECT_EQ(collector.required,

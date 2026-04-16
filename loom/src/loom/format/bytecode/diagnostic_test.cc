@@ -78,7 +78,8 @@ TEST(BytecodeDiagnostic, InvalidRecordFieldRendersPathAndOffset) {
       offset, IREE_SV("overlaps previous section")));
 
   EXPECT_EQ(captured.emitter, LOOM_EMITTER_BYTECODE_READER);
-  EXPECT_EQ(captured.error, &loom_err_bytecode_006);
+  EXPECT_EQ(captured.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 6));
   EXPECT_EQ(captured.origin.provenance,
             LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE);
   EXPECT_EQ(captured.origin.start, (iree_host_size_t)offset);
@@ -118,7 +119,8 @@ TEST(BytecodeDiagnostic, InvalidRangeRendersStructuredBounds) {
   IREE_ASSERT_OK(loom_bytecode_reader_emit_invalid_range(
       &context, IREE_SV("module[0].sections"), 120, 48, 128));
 
-  EXPECT_EQ(captured.error, &loom_err_bytecode_007);
+  EXPECT_EQ(captured.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7));
   EXPECT_EQ(captured.origin.start, 120u);
   EXPECT_EQ(captured.origin.end, 168u);
   EXPECT_NE(captured.text.find("invalid range 'module[0].sections' at offset "
@@ -145,10 +147,11 @@ TEST(BytecodeDiagnostic, InvalidArgumentsReturnStatus) {
                         loom_bytecode_reader_emit_diagnostic(
                             &context, nullptr, nullptr, 0,
                             loom_bytecode_reader_byte_range(0, 0)));
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        loom_bytecode_reader_emit_diagnostic(
-                            &context, &loom_err_bytecode_007, nullptr, 1,
-                            loom_bytecode_reader_byte_range(0, 0)));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_bytecode_reader_emit_diagnostic(
+          &context, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7),
+          nullptr, 1, loom_bytecode_reader_byte_range(0, 0)));
 }
 
 }  // namespace

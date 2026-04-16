@@ -63,6 +63,32 @@ typedef enum loom_error_domain_e {
   LOOM_ERROR_DOMAIN_COUNT_,
 } loom_error_domain_t;
 
+// A compact stable reference to a generated error definition. It packs a
+// non-zero domain ordinal and code into 16 bits so generated static tables can
+// name diagnostics without requiring public storage symbols.
+typedef uint16_t loom_error_ref_t;
+
+#define LOOM_ERROR_REF_NONE ((loom_error_ref_t)0u)
+#define LOOM_ERROR_REF_CODE_BITS 10u
+#define LOOM_ERROR_REF_CODE_MASK \
+  ((uint16_t)((1u << LOOM_ERROR_REF_CODE_BITS) - 1u))
+#define LOOM_ERROR_REF(domain, code)                  \
+  ((loom_error_ref_t)(((((uint16_t)(domain)) + 1u)    \
+                       << LOOM_ERROR_REF_CODE_BITS) | \
+                      ((uint16_t)(code))))
+
+static inline bool loom_error_ref_is_set(loom_error_ref_t ref) {
+  return ref != LOOM_ERROR_REF_NONE;
+}
+
+static inline loom_error_domain_t loom_error_ref_domain(loom_error_ref_t ref) {
+  return (loom_error_domain_t)((ref >> LOOM_ERROR_REF_CODE_BITS) - 1u);
+}
+
+static inline uint16_t loom_error_ref_code(loom_error_ref_t ref) {
+  return ref & LOOM_ERROR_REF_CODE_MASK;
+}
+
 // Which subsystem emitted the diagnostic. Context for debugging and
 // filtering, not part of the error identity.
 typedef enum loom_emitter_e {
@@ -212,11 +238,9 @@ static inline loom_diagnostic_param_t loom_param_with_field_ref(
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,
                                               uint16_t code);
 
-//===----------------------------------------------------------------------===//
-// Generated extern declarations
-//===----------------------------------------------------------------------===//
-
-#include "loom/error/error_defs.inc"
+// Returns the error def for a compact reference, or NULL if |ref| is
+// LOOM_ERROR_REF_NONE or names no generated definition.
+const loom_error_def_t* loom_error_def_lookup_ref(loom_error_ref_t ref);
 
 #ifdef __cplusplus
 }

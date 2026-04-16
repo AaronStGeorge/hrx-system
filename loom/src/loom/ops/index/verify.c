@@ -47,8 +47,9 @@ static iree_status_t loom_index_emit_operand_constraint(
       loom_param_type(actual_type),
       loom_param_string(expected_constraint),
   };
-  return loom_index_emit(emitter, op, &loom_err_type_003, params,
-                         IREE_ARRAYSIZE(params));
+  return loom_index_emit(emitter, op,
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3),
+                         params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_index_emit_result_constraint(
@@ -60,8 +61,9 @@ static iree_status_t loom_index_emit_result_constraint(
       loom_param_type(actual_type),
       loom_param_string(expected_constraint),
   };
-  return loom_index_emit(emitter, op, &loom_err_type_004, params,
-                         IREE_ARRAYSIZE(params));
+  return loom_index_emit(emitter, op,
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
+                         params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_index_emit_assume_count_mismatch(
@@ -72,8 +74,9 @@ static iree_status_t loom_index_emit_assume_count_mismatch(
       loom_param_string(IREE_SV("results")),
       loom_param_u32(op->result_count),
   };
-  return loom_index_emit(emitter, op, &loom_err_structure_013, params,
-                         IREE_ARRAYSIZE(params));
+  return loom_index_emit(emitter, op,
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 13),
+                         params, IREE_ARRAYSIZE(params));
 }
 
 static void loom_index_format_assume_field_name(
@@ -102,8 +105,9 @@ static iree_status_t loom_index_emit_assume_type_mismatch(
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, field_index)),
       loom_param_type(result_type),
   };
-  return loom_index_emit(emitter, op, &loom_err_type_001, params,
-                         IREE_ARRAYSIZE(params));
+  return loom_index_emit(emitter, op,
+                         loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1),
+                         params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_index_cast_verify(const loom_module_t* module,

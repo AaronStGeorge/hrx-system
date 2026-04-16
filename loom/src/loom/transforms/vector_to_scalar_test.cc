@@ -47,7 +47,8 @@ static iree_status_t CollectDiagnosticEmission(
   auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
   ++collector->count;
   collector->error = emission->error;
-  if (emission->error == &loom_err_lowering_001 && emission->param_count >= 3) {
+  if (emission->error == loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1) &&
+      emission->param_count >= 3) {
     collector->reason = CopyString(emission->params[2].string);
   }
   return iree_ok_status();
@@ -147,7 +148,8 @@ func.def @test(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_001);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1));
   EXPECT_NE(collector.reason.find("in-bounds source lanes"), std::string::npos);
 }
 
@@ -165,7 +167,8 @@ func.def @test(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_001);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1));
   EXPECT_NE(collector.reason.find("name each source lane once"),
             std::string::npos);
 }

@@ -59,7 +59,7 @@ static iree_status_t loom_vector_to_scalar_emit_transform_unimplemented(
   };
   loom_diagnostic_emission_t emission = {
       .op = state->op,
-      .error = &loom_err_lowering_001,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

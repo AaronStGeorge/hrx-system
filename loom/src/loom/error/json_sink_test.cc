@@ -75,7 +75,7 @@ TEST(JsonSink, SimpleStructuredError) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.emitter = LOOM_EMITTER_PARSER;
@@ -106,7 +106,7 @@ TEST(JsonSink, ObjectWriterOmitsTrailingNewline) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.emitter = LOOM_EMITTER_PARSER;
@@ -124,7 +124,7 @@ TEST(JsonSink, WarningFormat) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_WARNING;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
 
@@ -149,7 +149,7 @@ TEST(JsonSink, StructuredSameType) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_type_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1);
   diagnostic.params = params;
   diagnostic.param_count = 4;
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
@@ -190,7 +190,7 @@ TEST(JsonSink, StructuredStructureError) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_structure_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1);
   diagnostic.params = params;
   diagnostic.param_count = 3;
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
@@ -216,7 +216,7 @@ TEST(JsonSink, StructuredBytecodeRangeUsesU64Params) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_bytecode_007;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.emitter = LOOM_EMITTER_BYTECODE_READER;
@@ -242,7 +242,7 @@ TEST(JsonSink, EscapesSpecialCharacters) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
 
@@ -275,7 +275,7 @@ TEST(JsonSink, SerializesSourceRangesAndHighlights) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
@@ -340,7 +340,7 @@ TEST(JsonSink, SerializesClippedSourceExcerpt) {
   }};
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.emitter = LOOM_EMITTER_PARSER;
@@ -374,7 +374,7 @@ TEST(JsonSink, SerializesUnavailableSourceProvenance) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
@@ -428,7 +428,7 @@ TEST(JsonSink, SerializesRelatedLocations) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_dominance_002;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 2);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.emitter = LOOM_EMITTER_VERIFIER;
@@ -458,7 +458,7 @@ TEST(JsonSink, RejectsInvalidParamFieldRefKind) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
 
@@ -480,7 +480,7 @@ TEST(JsonSink, RejectsHighlightWithInvalidParamIndex) {
 
   loom_diagnostic_t diagnostic = {};
   diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
-  diagnostic.error = &loom_err_parse_001;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   diagnostic.params = params;
   diagnostic.param_count = IREE_ARRAYSIZE(params);
   diagnostic.highlights = highlights;
@@ -510,7 +510,7 @@ TEST(JsonSink, MultipleDiagnostics) {
   };
   loom_diagnostic_t d1 = {};
   d1.severity = LOOM_DIAGNOSTIC_ERROR;
-  d1.error = &loom_err_parse_001;
+  d1.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   d1.params = params1;
   d1.param_count = IREE_ARRAYSIZE(params1);
   IREE_ASSERT_OK(loom_diagnostic_json_sink(&options, &d1));
@@ -520,7 +520,7 @@ TEST(JsonSink, MultipleDiagnostics) {
   };
   loom_diagnostic_t d2 = {};
   d2.severity = LOOM_DIAGNOSTIC_WARNING;
-  d2.error = &loom_err_parse_001;
+  d2.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1);
   d2.params = params2;
   d2.param_count = IREE_ARRAYSIZE(params2);
   IREE_ASSERT_OK(loom_diagnostic_json_sink(&options, &d2));

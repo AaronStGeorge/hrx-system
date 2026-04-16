@@ -551,25 +551,28 @@ typedef uint8_t loom_constraint_property_t;
 const char* loom_constraint_relation_name(loom_constraint_relation_t relation);
 const char* loom_constraint_property_name(loom_constraint_property_t property);
 
-// Forward-declared error definition. Defined in error/error_defs.h.
-typedef struct loom_error_def_t loom_error_def_t;
-
-// A table-driven semantic constraint entry. 16 bytes.
+// A table-driven semantic constraint entry. 10 bytes.
 //
 // Each op's vtable points to an array of these. The verifier walks
 // the array, interpreting each constraint by (relation, property).
-// Per-op cost: 16 bytes .rodata per constraint, zero .text code.
+// Per-op cost: 10 bytes .rodata per constraint, zero .text code.
 typedef struct loom_constraint_t {
+  // Relation interpreter opcode.
   loom_constraint_relation_t relation;
+  // Property or small data payload interpreted by the relation.
   loom_constraint_property_t property;
+  // Number of valid field references in args.
   uint8_t arg_count;
+  // Reserved for stable table layout and must be zero.
   uint8_t reserved;
+  // Field references consumed by the relation, padded with zero.
   loom_field_ref_t args[4];
-  const loom_error_def_t* error;
+  // LOOM_ERROR_REF-packed override, or LOOM_ERROR_REF_NONE for the default.
+  uint16_t error_ref;
 } loom_constraint_t;
 
-static_assert(sizeof(loom_constraint_t) == 16,
-              "loom_constraint_t must be 16 bytes");
+static_assert(sizeof(loom_constraint_t) == 10,
+              "loom_constraint_t must be 10 bytes");
 
 //===----------------------------------------------------------------------===//
 // Field descriptors

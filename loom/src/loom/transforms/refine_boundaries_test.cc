@@ -50,7 +50,8 @@ static iree_status_t CollectDiagnosticEmission(
   auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
   ++collector->count;
   collector->error = emission->error;
-  if (emission->error == &loom_err_lowering_002 && emission->param_count >= 3) {
+  if (emission->error == loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 2) &&
+      emission->param_count >= 3) {
     collector->pass_name = CopyString(emission->params[0].string);
     collector->scope = CopyString(emission->params[1].string);
     collector->reason = CopyString(emission->params[2].string);
@@ -187,7 +188,8 @@ func.def public @caller() -> (index) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
 
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_002);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 2));
   EXPECT_EQ(collector.pass_name, "refine-boundaries");
   EXPECT_EQ(collector.scope, "module");
   EXPECT_NE(collector.reason.find("did not converge"), std::string::npos);

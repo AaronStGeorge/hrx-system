@@ -793,7 +793,8 @@ TEST_F(ParserTest, PredicateArityMismatchEmitsStructuredDiagnostic) {
       "%x = test.constant 0 : index\n"
       "%y = test.assume %x [pow2(%x, 16)] : index\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_031);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 31));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "pow2");
   ExpectU32Param(diagnostics[0], 1, 1u);
   ExpectU32Param(diagnostics[0], 2, 2u);
@@ -984,7 +985,8 @@ TEST_F(ParserTest, FuncDeclUnresolvedPlaceholderReportsOriginalNameToken) {
   const auto& diagnostics =
       ParseExpectErrors("test.decl @shape(%x: tile<[%M]xf32>)\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_022);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 22));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "M");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 28u);
@@ -998,7 +1000,8 @@ TEST_F(ParserTest, FuncDeclSignatureScopeDoesNotLeakPlaceholderNames) {
       "%u = test.constant 0 : index\n"
       "%bad = test.cast %u : index to tile<[%M]xf32>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "M");
   EXPECT_EQ(diagnostics[0].origin_line, 3u);
   EXPECT_EQ(diagnostics[0].origin_column, 38u);
@@ -1300,14 +1303,16 @@ TEST_F(ParserTest, UnknownOp) {
   const auto& diagnostics =
       ParseExpectErrors("%r = bogus.nonexistent %x : i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_006);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "bogus.nonexistent");
 }
 
 TEST_F(ParserTest, UnexpectedTokenRetainsSigilAndSpan) {
   const auto& diagnostics = ParseExpectErrors("%r = @callee\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "@callee");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 6u);
@@ -1317,7 +1322,8 @@ TEST_F(ParserTest, UnexpectedTokenRetainsSigilAndSpan) {
 TEST_F(ParserTest, UnexpectedStringTokenRendersQuotesAndSpan) {
   const auto& diagnostics = ParseExpectErrors("\"hello\"\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "\"hello\"");
   EXPECT_EQ(GetStringParam(diagnostics[0], 1), "op name");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
@@ -1328,7 +1334,8 @@ TEST_F(ParserTest, UnexpectedStringTokenRendersQuotesAndSpan) {
 TEST_F(ParserTest, UnexpectedStringTokenEscapesDecodedPayload) {
   const auto& diagnostics = ParseExpectErrors("\"row\\n\\t\\\"slash\\\\\"\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "\"row\\n\\t\\\"slash\\\\\"");
   EXPECT_EQ(GetStringParam(diagnostics[0], 1), "op name");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
@@ -1339,7 +1346,8 @@ TEST_F(ParserTest, UnexpectedStringTokenEscapesDecodedPayload) {
 TEST_F(ParserTest, UnterminatedStringReportsTokenizerDiagnostic) {
   const auto& diagnostics = ParseExpectErrors("\"unterminated");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_005);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 5));
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 1u);
   EXPECT_EQ(diagnostics[0].origin_end_column, 2u);
@@ -1350,14 +1358,15 @@ TEST_F(ParserTest, InvalidStringEscapeRecoversToNextSiblingOp) {
       "\"\\x\"\n"
       "%r = bogus.nonexistent %x : i32\n");
   ASSERT_GE(diagnostics.size(), 2u);
-  ExpectError(diagnostics[0], &loom_err_parse_023);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 23));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "unknown escape sequence");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 2u);
   EXPECT_EQ(diagnostics[0].origin_end_column, 4u);
 
-  const CapturedDiagnostic* unknown_op =
-      FindDiagnostic(capture_, &loom_err_parse_006);
+  const CapturedDiagnostic* unknown_op = FindDiagnostic(
+      capture_, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6));
   ASSERT_NE(unknown_op, nullptr);
   EXPECT_EQ(GetStringParam(*unknown_op, 0), "bogus.nonexistent");
   EXPECT_EQ(unknown_op->origin_line, 2u);
@@ -1367,7 +1376,8 @@ TEST_F(ParserTest, InvalidStringEscapeRecoversToNextSiblingOp) {
 TEST_F(ParserTest, BareHashReportsTokenizerDiagnostic) {
   const auto& diagnostics = ParseExpectErrors("#\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_024);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "#");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 1u);
@@ -1377,7 +1387,8 @@ TEST_F(ParserTest, BareHashReportsTokenizerDiagnostic) {
 TEST_F(ParserTest, UnexpectedCharacterReportsTokenizerDiagnostic) {
   const auto& diagnostics = ParseExpectErrors("~\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_025);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 25));
   EXPECT_EQ(diagnostics[0].params.size(), 0u);
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 1u);
@@ -1387,7 +1398,8 @@ TEST_F(ParserTest, UnexpectedCharacterReportsTokenizerDiagnostic) {
 TEST_F(ParserTest, InvalidUtf8ReportsTokenizerDiagnostic) {
   const auto& diagnostics = ParseExpectErrors("\x80\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_019);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 19));
   ExpectU32Param(diagnostics[0], 0, 0u);
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 1u);
@@ -1397,7 +1409,8 @@ TEST_F(ParserTest, InvalidUtf8ReportsTokenizerDiagnostic) {
 TEST_F(ParserTest, UnexpectedBlockLabelTokenRendersSigilAndSpan) {
   const auto& diagnostics = ParseExpectErrors("^bb\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "^bb");
   EXPECT_EQ(GetStringParam(diagnostics[0], 1), "op name");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
@@ -1410,7 +1423,8 @@ TEST_F(ParserTest, UndefinedSSAValue) {
       "%c = test.constant 1 : i32\n"
       "%r = test.addi %c, %undefined : i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "undefined");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 20u);
@@ -1425,7 +1439,8 @@ TEST_F(ParserTest, BindingListNameIsRegionLocal) {
       "} -> (f32)\n"
       "%leak = test.neg %element : f32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "element");
   EXPECT_EQ(diagnostics[0].origin_line, 5u);
   EXPECT_EQ(diagnostics[0].origin_column, 18u);
@@ -1439,7 +1454,8 @@ TEST_F(ParserTest, FuncResultNameIsSignatureLocal) {
       "  func.return %x : index\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "n");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 18u);
@@ -1494,7 +1510,8 @@ TEST_F(ParserTest, LoopIvNameIsRegionLocal) {
       "  }\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "iv");
   EXPECT_EQ(diagnostics[0].origin_line, 4u);
   EXPECT_EQ(diagnostics[0].origin_column, 22u);
@@ -1512,7 +1529,8 @@ TEST_F(ParserTest, LoopIterArgNameIsNotATiedResultTarget) {
       "  func.return %r : f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "acc");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 80u);
@@ -1529,7 +1547,8 @@ TEST_F(ParserTest, LoopIvNameIsNotATiedResultTarget) {
       "  func.return %r : f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "iv");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 80u);
@@ -1541,7 +1560,8 @@ TEST_F(ParserTest, DuplicateFunctionArgName) {
       "  func.return\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_002);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 23u);
@@ -1554,7 +1574,8 @@ TEST_F(ParserTest, DuplicateBlockArgName) {
       "  func.return\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_002);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 15u);
@@ -1571,7 +1592,8 @@ TEST_F(ParserTest, DuplicateOpResultName) {
       "  test.yield %rhs, %lhs : f32, f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_002);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "r");
   EXPECT_EQ(diagnostics[0].origin_line, 4u);
   EXPECT_EQ(diagnostics[0].origin_column, 5u);
@@ -1580,7 +1602,8 @@ TEST_F(ParserTest, DuplicateOpResultName) {
 TEST_F(ParserTest, ResultBodyOpRequiresLhsNames) {
   const auto& diagnostics = ParseExpectErrors("test.constant 42 : i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_009);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 9));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "test.constant");
   ExpectU32Param(diagnostics[0], 1, 1u);
   ExpectU32Param(diagnostics[0], 2, 0u);
@@ -1592,7 +1615,8 @@ TEST_F(ParserTest, SymbolDefinitionRejectsLhsNames) {
       "  func.return\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_009);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 9));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "func.def");
   ExpectU32Param(diagnostics[0], 1, 0u);
   ExpectU32Param(diagnostics[0], 2, 1u);
@@ -1605,7 +1629,8 @@ TEST_F(ParserTest, DuplicateBindingListName) {
       "  test.yield %element : f32\n"
       "} -> (f32)\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_002);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 2));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "element");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
 }
@@ -1615,7 +1640,8 @@ TEST_F(ParserTest, DuplicateAttrDictKey) {
       "%c = test.constant 0 : f32\n"
       "%s = test.attrs %c {alpha = 1, alpha = 2} : f32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_020);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 20));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "alpha");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 32u);
@@ -1638,7 +1664,8 @@ TEST_F(ParserTest, DuplicateOperandDictKey) {
       "%result = test.operand_dict %input "
       "{alpha = %alpha : f32, alpha = %input : f32} : f32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_027);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 27));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "alpha");
   EXPECT_EQ(diagnostics[0].origin_line, 3u);
   ASSERT_EQ(diagnostics[0].related_locations.size(), 1u);
@@ -1652,7 +1679,7 @@ TEST_F(ParserTest, OperandDictTypeAnnotationMismatch) {
       "%alpha = test.constant 1 : i32\n"
       "%result = test.operand_dict %input {alpha = %alpha : f32} : f32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_type_001);
+  ExpectError(diagnostics[0], loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "alpha");
   EXPECT_EQ(GetStringParam(diagnostics[0], 2), "type annotation");
 }
@@ -1662,7 +1689,8 @@ TEST_F(ParserTest, DuplicateNestedAttrDictKey) {
       "%c = test.constant 0 : f32\n"
       "%s = test.attrs %c {config = {zeta = 1, zeta = 2}} : f32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_020);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 20));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "zeta");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 41u);
@@ -1693,7 +1721,8 @@ TEST_F(ParserTest, AttrDictTooDeep) {
 
   const auto& diagnostics = ParseExpectErrors(source.c_str());
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_021);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 21));
   ExpectU32Param(diagnostics[0], 0, LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
 }
 
@@ -1704,7 +1733,8 @@ TEST_F(ParserTest, UnexpectedTokenInFuncSignature) {
       "  func.return %x : f32\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(diagnostics[0].params.size(), 2u);
 }
 
@@ -1713,7 +1743,8 @@ TEST_F(ParserTest, UnknownTypeName) {
       ParseExpectErrors("%c = test.constant 0 : foobar\n");
   ASSERT_GE(diagnostics.size(), 1u);
   // Unknown type name triggers ERR_PARSE_007.
-  ExpectError(diagnostics[0], &loom_err_parse_007);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 7));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "foobar");
 }
 
@@ -1721,7 +1752,8 @@ TEST_F(ParserTest, UnknownEncodingRole) {
   const auto& diagnostics =
       ParseExpectErrors("%c = test.constant 0 : encoding<address>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_018);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 18));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "encoding role");
   EXPECT_EQ(GetStringParam(diagnostics[0], 1), "address");
 }
@@ -1732,7 +1764,8 @@ TEST_F(ParserTest, UnknownEncodingInType) {
   const auto& diagnostics =
       ParseExpectErrors("%c = test.constant 0 : tile<4xf32, bogus>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_008);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 8));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "bogus");
 }
 
@@ -1740,7 +1773,8 @@ TEST_F(ParserTest, UnknownStaticEncodingFamilyInType) {
   const auto& diagnostics =
       ParseExpectErrors("%c = test.constant 0 : tile<4xf32, #bogus>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_008);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 8));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "bogus");
 }
 
@@ -1748,7 +1782,8 @@ TEST_F(ParserTest, VectorRequiresRank) {
   const auto& diagnostics =
       ParseExpectErrors("%c = test.constant 0 : vector<f32>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 1),
             "vector types must have rank >= 1");
 }
@@ -1766,7 +1801,8 @@ TEST_F(ParserTest, VectorRejectsEncodingAttachment) {
   const auto& diagnostics =
       ParseExpectErrors("%c = test.constant 0 : vector<4xf32, #dense>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_004);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 4));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0),
             "vector types must not carry encoding or layout attachments");
 }
@@ -1788,7 +1824,8 @@ TEST_F(ParserTest, EncodingAlias) {
 TEST_F(ParserTest, InvalidEncodingAliasReportsAliasToken) {
   const auto& diagnostics = ParseExpectErrors("#enc test.constant 0 : i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_014);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "#enc");
   EXPECT_EQ(diagnostics[0].origin_line, 1u);
   EXPECT_EQ(diagnostics[0].origin_column, 1u);
@@ -1893,7 +1930,8 @@ TEST_F(ParserTest, StaticEncodingRejectsSSAParameter) {
       "  func.return\n"
       "}\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_028);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 28));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "group_size");
 }
 
@@ -1901,7 +1939,8 @@ TEST_F(ParserTest, StaticEncodingRejectsDuplicateParameter) {
   const auto& diagnostics = ParseExpectErrors(
       "%enc = encoding.define #q8_0<block=32, block=64> : encoding<schema>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_029);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 29));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "block");
 }
 
@@ -1975,7 +2014,8 @@ TEST_F(ParserTest, EncodingDefineNestedInlineSpec) {
 TEST_F(ParserTest, EncodingAliasCannotShadowRegisteredFamily) {
   const auto& diagnostics = ParseExpectErrors("#q8_0 = #dense\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_014);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0),
             "alias name shadows a registered encoding family");
 }
@@ -1985,7 +2025,8 @@ TEST_F(ParserTest, DuplicateEncodingAliasDefinitionFails) {
       "#enc = #dense\n"
       "#enc = #q8_0<block=32>\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_014);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 14));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "duplicate encoding alias name");
 }
 
@@ -2122,7 +2163,8 @@ TEST_F(ParserTest, TrailingLocationRejectsUnknownBodyKeyword) {
   const auto& diagnostics =
       ParseExpectErrors("%c = test.constant 42 : i32 loc(mystery<\"x\">)\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_011);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 11));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0),
             "expected a file location string, 'fused', or 'opaque'");
 }
@@ -2131,7 +2173,8 @@ TEST_F(ParserTest, TrailingLocationRejectsOutOfRangeCoordinates) {
   const auto& diagnostics = ParseExpectErrors(
       "%c = test.constant 42 : i32 loc(\"model.loom\":65536:1)\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_011);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 11));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0),
             "line/column must be an integer in [0, 65535]");
 }
@@ -2140,7 +2183,8 @@ TEST_F(ParserTest, TrailingLocationRejectsMissingRangeEndColumn) {
   const auto& diagnostics = ParseExpectErrors(
       "%c = test.constant 42 : i32 loc(\"model.loom\":1:2 to 3)\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), ")");
   EXPECT_EQ(GetStringParam(diagnostics[0], 1), "':'");
 }
@@ -2149,7 +2193,8 @@ TEST_F(ParserTest, TrailingLocationRejectsRangeEndLineName) {
   const auto& diagnostics = ParseExpectErrors(
       "%c = test.constant 42 : i32 loc(\"model.loom\":1:2 to end:4)\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "end");
   EXPECT_EQ(GetStringParam(diagnostics[0], 1), "integer");
 }
@@ -2159,7 +2204,8 @@ TEST_F(ParserTest, TrailingFusedLocationRejectsMissingRangeEndColumn) {
       "%c = test.constant 42 : i32 "
       "loc(fused<\"model.loom\":1:2 to 3>)\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_003);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 3));
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), ">");
   EXPECT_EQ(GetStringParam(diagnostics[0], 1), "':'");
 }
@@ -2174,7 +2220,8 @@ TEST_F(ParserTest, ErrorPointsAtCorrectLine) {
       "%b = test.constant 2 : i32\n"    // line 2
       "%r = bogus.op %a, %b : i32\n");  // line 3 — error here
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_006);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6));
   EXPECT_EQ(diagnostics[0].origin_line, 3u);
 }
 
@@ -2182,7 +2229,8 @@ TEST_F(ParserTest, ErrorPointsAtCorrectColumn) {
   // "%r = bogus.op" — the op name starts at column 6.
   const auto& diagnostics = ParseExpectErrors("%r = bogus.op %x : i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_006);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6));
   // Column depends on whether the tokenizer's column is 0-based or 1-based.
   // The op name "bogus.op" starts after "%r = " (5 chars), so column 6
   // if 1-based.
@@ -2202,7 +2250,8 @@ TEST_F(ParserTest, UndefinedDimReportsRealPosition) {
       "%x = test.constant 0 : i32\n"
       "%r = test.cast %x : tile<[%UNDEF]xf32> to i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 27u);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "UNDEF");
@@ -2217,7 +2266,8 @@ TEST_F(ParserTest, UndefinedDimSecondPositionIsDistinct) {
       "%x = test.constant 0 : i32\n"
       "%r = test.cast %x : tile<4x[%BAD]xf32> to i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_001);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 1));
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 29u);
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "BAD");
@@ -2243,7 +2293,8 @@ TEST_F(ParserTest, GroupScopeReportsRealPosition) {
       "%x = test.constant 0 : i32\n"
       "%r = test.cast %x : group<bad> to i32\n");
   ASSERT_GE(diagnostics.size(), 1u);
-  ExpectError(diagnostics[0], &loom_err_parse_018);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 18));
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 27u);
 }
@@ -2260,7 +2311,9 @@ TEST_F(ParserTest, RecoverySkipsToNextOp) {
       "%c = test.constant 42 : i32\n");
   // At minimum, we get the ERR_PARSE_006 for the unknown op.
   ASSERT_GE(diagnostics.size(), 1u);
-  EXPECT_NE(FindDiagnostic(capture_, &loom_err_parse_006), nullptr);
+  EXPECT_NE(FindDiagnostic(capture_,
+                           loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6)),
+            nullptr);
 }
 
 TEST_F(ParserTest, MaxErrorsLimit) {
@@ -2287,7 +2340,9 @@ TEST_F(ParserTest, MaxErrorsLimit) {
   ASSERT_GE(capture_.diagnostics.size(), 2u);
 
   // Find ERR_PARSE_012 (too many errors) somewhere in the diagnostics.
-  EXPECT_NE(FindDiagnostic(capture_, &loom_err_parse_012), nullptr)
+  EXPECT_NE(FindDiagnostic(capture_,
+                           loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 12)),
+            nullptr)
       << "Expected ERR_PARSE_012 (too many errors)";
 
   // Total error count should not exceed max_errors + 1 (the "too many" itself).
@@ -2313,8 +2368,11 @@ TEST_F(ParserTest, TokenizerDiagnosticsRespectMaxErrorsLimit) {
   EXPECT_EQ(module, nullptr);
 
   ASSERT_GE(capture_.diagnostics.size(), 2u);
-  ExpectError(capture_.diagnostics[0], &loom_err_parse_024);
-  EXPECT_NE(FindDiagnostic(capture_, &loom_err_parse_012), nullptr);
+  ExpectError(capture_.diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 24));
+  EXPECT_NE(FindDiagnostic(capture_,
+                           loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 12)),
+            nullptr);
   EXPECT_LE(capture_.diagnostics.size(), 6u + 1u);
 }
 

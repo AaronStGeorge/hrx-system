@@ -172,8 +172,9 @@ static iree_status_t loom_global_verify_result_type(
       loom_param_string(
           iree_make_cstring_view(loom_type_constraint_name(constraint))),
   };
-  return loom_global_emit(emitter, op, &loom_err_type_004, params,
-                          IREE_ARRAYSIZE(params));
+  return loom_global_emit(emitter, op,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
+                          params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_global_verify_load_results(
@@ -187,8 +188,9 @@ static iree_status_t loom_global_verify_load_results(
         loom_param_u32(0),
         loom_param_u32(1),
     };
-    return loom_global_emit(emitter, op, &loom_err_structure_002, params,
-                            IREE_ARRAYSIZE(params));
+    return loom_global_emit(
+        emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2),
+        params, IREE_ARRAYSIZE(params));
   }
 
   loom_type_t value_type = loom_module_value_type(module, results.values[0]);
@@ -224,8 +226,9 @@ static iree_status_t loom_global_verify_load_results(
         loom_param_u32(results.count),
         loom_param_u32(expected_result_count),
     };
-    return loom_global_emit(emitter, op, &loom_err_structure_002, params,
-                            IREE_ARRAYSIZE(params));
+    return loom_global_emit(
+        emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2),
+        params, IREE_ARRAYSIZE(params));
   }
   return iree_ok_status();
 }
@@ -245,7 +248,7 @@ static iree_status_t loom_global_emit_kind_mismatch(
   }};
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = &loom_err_symbol_003,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
       .related_ops = related_ops,
@@ -270,7 +273,7 @@ static iree_status_t loom_global_emit_type_mismatch(
   }};
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = &loom_err_type_001,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
       .related_ops = related_ops,
@@ -287,8 +290,9 @@ static iree_status_t loom_global_emit_initializer_kind_mismatch(
       loom_param_u32(actual_kind),
       loom_param_u32(expected_kind),
   };
-  return loom_global_emit(emitter, op, &loom_err_type_005, params,
-                          IREE_ARRAYSIZE(params));
+  return loom_global_emit(emitter, op,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5),
+                          params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_global_emit_initializer_type_mismatch(
@@ -299,8 +303,9 @@ static iree_status_t loom_global_emit_initializer_type_mismatch(
       loom_param_type(global_type),
       loom_param_string(IREE_SV("scalar")),
   };
-  return loom_global_emit(emitter, op, &loom_err_type_004, params,
-                          IREE_ARRAYSIZE(params));
+  return loom_global_emit(emitter, op,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
+                          params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_global_verify_initializer(

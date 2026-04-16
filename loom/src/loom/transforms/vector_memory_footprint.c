@@ -156,7 +156,7 @@ static iree_status_t loom_vector_memory_footprint_emit_failure(
   };
   loom_diagnostic_emission_t emission = {
       .op = access->op,
-      .error = &loom_err_subrange_005,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 5),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -212,7 +212,7 @@ static iree_status_t loom_vector_memory_footprint_fail_linear_span(
   };
   loom_diagnostic_emission_t emission = {
       .op = access->op,
-      .error = &loom_err_subrange_006,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 6),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };

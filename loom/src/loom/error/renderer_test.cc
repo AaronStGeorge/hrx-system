@@ -78,8 +78,9 @@ TEST(Renderer, SameTypeError) {
       loom_param_type(f32_type),
   };
 
-  std::string message = RenderMessage(&loom_err_type_001, params, 4,
-                                      {loom_type_format_minimal, nullptr});
+  std::string message =
+      RenderMessage(loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params, 4,
+                    {loom_type_format_minimal, nullptr});
   EXPECT_EQ(message, "'lhs' type i32 does not match 'rhs' type f32");
 }
 
@@ -91,8 +92,9 @@ TEST(Renderer, SameTypeFixHint) {
       loom_param_type(loom_type_scalar(LOOM_SCALAR_TYPE_F32)),
   };
 
-  std::string hint = RenderFixHint(&loom_err_type_001, params, 4,
-                                   {loom_type_format_minimal, nullptr});
+  std::string hint =
+      RenderFixHint(loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params, 4,
+                    {loom_type_format_minimal, nullptr});
   EXPECT_EQ(hint, "Ensure 'lhs' and 'rhs' have the same type");
 }
 
@@ -109,7 +111,8 @@ TEST(Renderer, StructureOperandCount) {
       loom_param_u32(2),
   };
 
-  std::string message = RenderMessage(&loom_err_structure_001, params, 3);
+  std::string message = RenderMessage(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1), params, 3);
   EXPECT_EQ(message, "'test.addi' has 3 operands, expected 2");
 }
 
@@ -125,7 +128,8 @@ TEST(Renderer, BytecodeRangeUsesU64Params) {
       loom_param_u64(UINT64_C(4294967297)),
   };
 
-  std::string message = RenderMessage(&loom_err_bytecode_007, params, 4);
+  std::string message = RenderMessage(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 7), params, 4);
   EXPECT_EQ(message,
             "invalid range 'module[0]' at offset 4294967296 with length 64; "
             "container length is 4294967297");
@@ -141,7 +145,8 @@ TEST(Renderer, UndefinedValue) {
       loom_param_string(IREE_SV("%y")),
   };
 
-  std::string message = RenderMessage(&loom_err_dominance_001, params, 1);
+  std::string message = RenderMessage(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_DOMINANCE, 1), params, 1);
   EXPECT_EQ(message, "use of undefined value '%y'");
 }
 
@@ -159,7 +164,8 @@ TEST(Renderer, ShapeRankMismatch) {
       loom_param_i64(3),
   };
 
-  std::string message = RenderMessage(&loom_err_shape_001, params, 4);
+  std::string message = RenderMessage(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 1), params, 4);
   EXPECT_EQ(message, "'input' rank (2) does not match 'output' rank (3)");
 }
 
@@ -176,7 +182,8 @@ TEST(Renderer, TypeWithoutFormatter) {
   };
 
   // NULL type formatter → TYPE renders as "<type>".
-  std::string message = RenderMessage(&loom_err_type_001, params, 4);
+  std::string message = RenderMessage(
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params, 4);
   EXPECT_EQ(message, "'lhs' type <type> does not match 'rhs' type <type>");
 }
 
@@ -241,7 +248,8 @@ TEST(Renderer, NoFixHint) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&builder, &stream);
   IREE_ASSERT_OK(loom_diagnostic_render_fix_hint(
-      &loom_err_structure_001, params, 3, {nullptr, nullptr}, &stream));
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1), params, 3,
+      {nullptr, nullptr}, &stream));
   EXPECT_EQ(iree_string_builder_size(&builder), 0u);
   iree_string_builder_deinitialize(&builder);
 }
@@ -252,14 +260,14 @@ TEST(Renderer, NullParamsWithNonZeroCountReturnsError) {
   iree_string_builder_initialize(iree_allocator_system(), &builder);
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&builder, &stream);
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_diagnostic_render_message(&loom_err_type_001, nullptr, 4,
-                                     {nullptr, nullptr}, &stream));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      loom_diagnostic_render_fix_hint(&loom_err_type_001, nullptr, 4,
-                                      {nullptr, nullptr}, &stream));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_diagnostic_render_message(
+                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1),
+                            nullptr, 4, {nullptr, nullptr}, &stream));
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_diagnostic_render_fix_hint(
+                            loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1),
+                            nullptr, 4, {nullptr, nullptr}, &stream));
   iree_string_builder_deinitialize(&builder);
 }
 
@@ -276,8 +284,9 @@ TEST(Renderer, ParamKindMismatchReturnsError) {
   loom_output_stream_for_builder(&builder, &stream);
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INTERNAL,
-      loom_diagnostic_render_message(&loom_err_structure_001, params, 3,
-                                     {nullptr, nullptr}, &stream));
+      loom_diagnostic_render_message(
+          loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1), params, 3,
+          {nullptr, nullptr}, &stream));
   iree_string_builder_deinitialize(&builder);
 }
 

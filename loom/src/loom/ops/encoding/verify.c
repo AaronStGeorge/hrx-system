@@ -33,8 +33,9 @@ static iree_status_t loom_encoding_define_emit_duplicate_static_dynamic_param(
   loom_diagnostic_param_t params[] = {
       loom_param_string(param_name),
   };
-  return loom_encoding_emit(emitter, op, &loom_err_encoding_006, params,
-                            IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(
+      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 6), params,
+      IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_define_emit_result_role_error(
@@ -46,8 +47,9 @@ static iree_status_t loom_encoding_define_emit_result_role_error(
       loom_param_type(actual_type),
       loom_param_type(expected_type),
   };
-  return loom_encoding_emit(emitter, op, &loom_err_encoding_012, params,
-                            IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(
+      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 12),
+      params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_encoding_emit_attribute_value_constraint(
@@ -59,8 +61,9 @@ static iree_status_t loom_encoding_emit_attribute_value_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_encoding_emit(emitter, op, &loom_err_structure_014, params,
-                            IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(
+      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
+      params, IREE_ARRAYSIZE(params));
 }
 
 static uint16_t loom_encoding_dynamic_sentinel_count(loom_attribute_t values) {
@@ -86,8 +89,9 @@ static iree_status_t loom_encoding_verify_dynamic_index_count(
       loom_param_u32(dynamic_count),
       loom_param_u32(expected_dynamic_count),
   };
-  return loom_encoding_emit(emitter, op, &loom_err_structure_001, params,
-                            IREE_ARRAYSIZE(params));
+  return loom_encoding_emit(
+      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1),
+      params, IREE_ARRAYSIZE(params));
 }
 
 iree_status_t loom_encoding_layout_strided_verify(

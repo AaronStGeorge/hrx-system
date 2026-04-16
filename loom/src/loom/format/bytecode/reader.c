@@ -189,8 +189,9 @@ static iree_status_t loom_bytecode_reader_emit_unexpected_end(
       loom_param_u64(needed),
       loom_param_u64(available),
   };
-  return loom_bytecode_reader_emit(reader, &loom_err_bytecode_003, params,
-                                   IREE_ARRAYSIZE(params), offset, 0);
+  return loom_bytecode_reader_emit(
+      reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 3), params,
+      IREE_ARRAYSIZE(params), offset, 0);
 }
 
 static iree_status_t loom_bytecode_reader_emit_invalid_field(
@@ -220,8 +221,9 @@ static iree_status_t loom_bytecode_reader_emit_count_exceeds(
       loom_param_u64(count),
       loom_param_u64(limit),
   };
-  return loom_bytecode_reader_emit(reader, &loom_err_bytecode_009, params,
-                                   IREE_ARRAYSIZE(params), offset, 0);
+  return loom_bytecode_reader_emit(
+      reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 9), params,
+      IREE_ARRAYSIZE(params), offset, 0);
 }
 
 static iree_status_t loom_bytecode_reader_emit_invalid_ir_body(
@@ -232,8 +234,10 @@ static iree_status_t loom_bytecode_reader_emit_invalid_ir_body(
       loom_param_u64(offset),
       loom_param_string(reason),
   };
-  return loom_bytecode_reader_emit(body_reader->reader, &loom_err_bytecode_016,
-                                   params, IREE_ARRAYSIZE(params), offset, 0);
+  return loom_bytecode_reader_emit(
+      body_reader->reader,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 16), params,
+      IREE_ARRAYSIZE(params), offset, 0);
 }
 
 static iree_status_t loom_bytecode_body_reader_lookup_value(
@@ -256,8 +260,9 @@ static iree_status_t loom_bytecode_reader_emit_table_ref(
       loom_param_u64(ref_id),
       loom_param_u64(table_count),
   };
-  return loom_bytecode_reader_emit(reader, &loom_err_bytecode_012, params,
-                                   IREE_ARRAYSIZE(params), offset, 0);
+  return loom_bytecode_reader_emit(
+      reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 12), params,
+      IREE_ARRAYSIZE(params), offset, 0);
 }
 
 static iree_status_t loom_bytecode_reader_emit_enum_value(
@@ -268,8 +273,9 @@ static iree_status_t loom_bytecode_reader_emit_enum_value(
       loom_param_u64(actual_value),
       loom_param_u64(case_count),
   };
-  return loom_bytecode_reader_emit(reader, &loom_err_bytecode_011, params,
-                                   IREE_ARRAYSIZE(params), offset, 1);
+  return loom_bytecode_reader_emit(
+      reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 11), params,
+      IREE_ARRAYSIZE(params), offset, 1);
 }
 
 static iree_status_t loom_bytecode_reader_read_u8(
@@ -333,8 +339,9 @@ static iree_status_t loom_bytecode_reader_read_uvarint(
       loom_param_u64(offset),
       loom_param_string(reason),
   };
-  return loom_bytecode_reader_emit(reader, &loom_err_bytecode_008, params,
-                                   IREE_ARRAYSIZE(params), offset, 0);
+  return loom_bytecode_reader_emit(
+      reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 8), params,
+      IREE_ARRAYSIZE(params), offset, 0);
 }
 
 static iree_status_t loom_bytecode_reader_read_svarint(
@@ -441,8 +448,9 @@ static iree_status_t loom_bytecode_reader_validate_string_ref(
         loom_param_u64(string_id),
         loom_param_u64(reader->string_count),
     };
-    return loom_bytecode_reader_emit(reader, &loom_err_bytecode_010, params,
-                                     IREE_ARRAYSIZE(params), offset, 0);
+    return loom_bytecode_reader_emit(
+        reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 10), params,
+        IREE_ARRAYSIZE(params), offset, 0);
   }
   *out_string = reader->strings[string_id];
   return iree_ok_status();
@@ -1229,8 +1237,9 @@ static iree_status_t loom_bytecode_reader_read_encodings(
           loom_param_u64(alias_plus_one - 1),
           loom_param_u64(reader->string_count),
       };
-      return loom_bytecode_reader_emit(reader, &loom_err_bytecode_010, params,
-                                       IREE_ARRAYSIZE(params), alias_offset, 0);
+      return loom_bytecode_reader_emit(
+          reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 10), params,
+          IREE_ARRAYSIZE(params), alias_offset, 0);
     }
     uint64_t param_count = 0;
     IREE_RETURN_IF_ERROR(
@@ -1441,8 +1450,9 @@ static iree_status_t loom_bytecode_reader_decode_type_kind(
           loom_param_u32(kind_byte),
           loom_param_u64(offset),
       };
-      return loom_bytecode_reader_emit(reader, &loom_err_bytecode_004, params,
-                                       IREE_ARRAYSIZE(params), offset, 1);
+      return loom_bytecode_reader_emit(
+          reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 4), params,
+          IREE_ARRAYSIZE(params), offset, 1);
     }
   }
 }
@@ -3999,9 +4009,9 @@ static iree_status_t loom_bytecode_reader_validate_file_header(
         loom_param_string(IREE_SV(LOOM_BYTECODE_MAGIC)),
         loom_param_string(iree_make_cstring_view(actual_magic)),
     };
-    return loom_bytecode_reader_emit(reader, &loom_err_bytecode_001, params,
-                                     IREE_ARRAYSIZE(params), 0,
-                                     LOOM_BYTECODE_MAGIC_LENGTH);
+    return loom_bytecode_reader_emit(
+        reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 1), params,
+        IREE_ARRAYSIZE(params), 0, LOOM_BYTECODE_MAGIC_LENGTH);
   }
 
   uint8_t version = 0;
@@ -4011,8 +4021,9 @@ static iree_status_t loom_bytecode_reader_validate_file_header(
         loom_param_u32(version),
         loom_param_u32(LOOM_BYTECODE_FORMAT_VERSION),
     };
-    return loom_bytecode_reader_emit(reader, &loom_err_bytecode_002, params,
-                                     IREE_ARRAYSIZE(params), 4, 1);
+    return loom_bytecode_reader_emit(
+        reader, loom_error_def_lookup(LOOM_ERROR_DOMAIN_BYTECODE, 2), params,
+        IREE_ARRAYSIZE(params), 4, 1);
   }
   uint8_t location_mode = 0;
   IREE_RETURN_IF_ERROR(

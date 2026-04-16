@@ -84,7 +84,8 @@ static iree_status_t loom_test_emit_callee_kind_mismatch(
       loom_param_string(IREE_SV("function")),
   };
   return loom_test_emit_callee_diagnostic(
-      emitter, invoke_op, symbol->defining_op, &loom_err_symbol_003, params,
+      emitter, invoke_op, symbol->defining_op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3), params,
       IREE_ARRAYSIZE(params));
 }
 
@@ -275,7 +276,7 @@ static iree_status_t loom_test_emit_constant_kind_mismatch(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = &loom_err_type_005,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -292,7 +293,7 @@ static iree_status_t loom_test_emit_constant_result_type_mismatch(
   };
   loom_diagnostic_emission_t emission = {
       .op = op,
-      .error = &loom_err_type_004,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 4),
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
@@ -308,8 +309,8 @@ static iree_status_t loom_test_verify_invoke_argument_count(
   }
   return loom_test_emit_invoke_count_mismatch(
       module, invoke_op, signature->definition_op, emitter,
-      &loom_err_structure_001, invoke_op->operand_count,
-      signature->argument_count);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1),
+      invoke_op->operand_count, signature->argument_count);
 }
 
 static iree_status_t loom_test_verify_invoke_result_count(
@@ -321,8 +322,8 @@ static iree_status_t loom_test_verify_invoke_result_count(
   }
   return loom_test_emit_invoke_count_mismatch(
       module, invoke_op, signature->definition_op, emitter,
-      &loom_err_structure_002, invoke_op->result_count,
-      signature->result_count);
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 2),
+      invoke_op->result_count, signature->result_count);
 }
 
 static void loom_test_format_field_name(char* buffer,
@@ -352,9 +353,10 @@ static iree_status_t loom_test_emit_invoke_type_mismatch(
       loom_param_string(iree_make_cstring_view(callee_field_name)),
       loom_param_type(callee_type),
   };
-  return loom_test_emit_callee_diagnostic(emitter, invoke_op, definition_op,
-                                          &loom_err_type_001, params,
-                                          IREE_ARRAYSIZE(params));
+  return loom_test_emit_callee_diagnostic(
+      emitter, invoke_op, definition_op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1), params,
+      IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_test_verify_invoke_argument_types(

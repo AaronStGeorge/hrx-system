@@ -49,10 +49,7 @@ loom_cc_test(
 loom_cc_library(
     name = "error_defs",
     srcs = ["error_tables.c"],
-    hdrs = [
-        "error_defs.h",
-        "error_defs.inc",
-    ],
+    hdrs = ["error_defs.h"],
     deps = [
         ":emitter",
         "//loom/src/loom/ir",

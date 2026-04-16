@@ -51,7 +51,8 @@ static iree_status_t CollectDiagnosticEmission(
   auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
   ++collector->count;
   collector->error = emission->error;
-  if (emission->error == &loom_err_lowering_001 && emission->param_count >= 3) {
+  if (emission->error == loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1) &&
+      emission->param_count >= 3) {
     collector->op_name = CopyString(emission->params[0].string);
     collector->pass_name = CopyString(emission->params[1].string);
     collector->reason = CopyString(emission->params[2].string);
@@ -179,7 +180,8 @@ func.def @test() {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_001);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1));
   EXPECT_EQ(collector.op_name, "kernel.async.wait");
   EXPECT_EQ(collector.pass_name, "kernel-async-legality");
   EXPECT_EQ(collector.reason,
@@ -199,7 +201,8 @@ func.def @test(%group: kernel.async.group) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_001);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1));
   EXPECT_EQ(collector.op_name, "kernel.async.wait");
   EXPECT_EQ(collector.pass_name, "kernel-async-legality");
   EXPECT_EQ(collector.reason,
@@ -222,7 +225,8 @@ func.def @test() {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_001);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1));
   EXPECT_EQ(collector.op_name, "kernel.async.wait");
   EXPECT_EQ(collector.pass_name, "kernel-async-legality");
   EXPECT_EQ(collector.reason,
@@ -243,7 +247,8 @@ func.def @test() {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_001);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1));
   EXPECT_EQ(collector.op_name, "kernel.async.group");
   EXPECT_EQ(collector.pass_name, "kernel-async-legality");
   EXPECT_EQ(collector.reason,
@@ -263,7 +268,8 @@ func.def @test() {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         RunSingleFunction(source, &collector));
   EXPECT_EQ(collector.count, 1);
-  EXPECT_EQ(collector.error, &loom_err_lowering_001);
+  EXPECT_EQ(collector.error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1));
   EXPECT_EQ(collector.op_name, "kernel.async.group");
   EXPECT_EQ(collector.pass_name, "kernel-async-legality");
   EXPECT_EQ(collector.reason,

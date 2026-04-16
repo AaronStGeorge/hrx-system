@@ -107,8 +107,9 @@ static iree_status_t loom_view_emit_attribute_value_constraint(
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
-  return loom_view_emit(emitter, op, &loom_err_structure_014, params,
-                        IREE_ARRAYSIZE(params));
+  return loom_view_emit(emitter, op,
+                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 14),
+                        params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_view_emit_operand_constraint(
@@ -120,8 +121,9 @@ static iree_status_t loom_view_emit_operand_constraint(
       loom_param_type(actual_type),
       loom_param_string(expected_constraint),
   };
-  return loom_view_emit(emitter, op, &loom_err_type_003, params,
-                        IREE_ARRAYSIZE(params));
+  return loom_view_emit(emitter, op,
+                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 3),
+                        params, IREE_ARRAYSIZE(params));
 }
 
 static uint16_t loom_view_dynamic_sentinel_count(loom_attribute_t values) {
@@ -146,8 +148,9 @@ static iree_status_t loom_view_verify_dynamic_index_count(
       loom_param_u32(dynamic_count),
       loom_param_u32(expected_dynamic_count),
   };
-  return loom_view_emit(emitter, op, &loom_err_structure_001, params,
-                        IREE_ARRAYSIZE(params));
+  return loom_view_emit(emitter, op,
+                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1),
+                        params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_view_verify_static_index_count_matches_rank(
@@ -162,8 +165,9 @@ static iree_status_t loom_view_verify_static_index_count_matches_rank(
       loom_param_u32(static_values.count),
       loom_param_i64(rank),
   };
-  return loom_view_emit(emitter, op, &loom_err_subrange_001, params,
-                        IREE_ARRAYSIZE(params));
+  return loom_view_emit(emitter, op,
+                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 1),
+                        params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_view_verify_type_has_encoding(
@@ -177,8 +181,9 @@ static iree_status_t loom_view_verify_type_has_encoding(
       loom_param_string(field_name),
       loom_param_string(IREE_SV("view type")),
   };
-  return loom_view_emit(emitter, op, &loom_err_encoding_001, params,
-                        IREE_ARRAYSIZE(params));
+  return loom_view_emit(emitter, op,
+                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 1),
+                        params, IREE_ARRAYSIZE(params));
 }
 
 static bool loom_view_static_index_in_bounds(loom_type_t view_type,
@@ -217,8 +222,9 @@ static iree_status_t loom_view_emit_static_index_out_of_bounds(
       loom_param_i64(axis),  loom_param_i64(static_index), loom_param_i64(1),
       loom_param_i64(total), loom_param_i64(bound),
   };
-  return loom_view_emit(emitter, op, &loom_err_subrange_004, params,
-                        IREE_ARRAYSIZE(params));
+  return loom_view_emit(emitter, op,
+                        loom_error_def_lookup(LOOM_ERROR_DOMAIN_SUBRANGE, 4),
+                        params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_view_verify_element_access(
@@ -334,8 +340,9 @@ static iree_status_t loom_view_refine_verify_static_dimensions(
         loom_param_string(IREE_SV("result static dimension")),
         loom_param_i64(result_size),
     };
-    return loom_view_emit(emitter, op, &loom_err_shape_001, params,
-                          IREE_ARRAYSIZE(params));
+    return loom_view_emit(emitter, op,
+                          loom_error_def_lookup(LOOM_ERROR_DOMAIN_SHAPE, 1),
+                          params, IREE_ARRAYSIZE(params));
   }
   return iree_ok_status();
 }
