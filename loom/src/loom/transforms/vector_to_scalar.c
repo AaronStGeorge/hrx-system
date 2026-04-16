@@ -492,6 +492,9 @@ static iree_status_t loom_vector_to_scalar_lower_op(loom_pass_t* pass,
   loom_vector_to_scalar_state_t state = {0};
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_prepare_state(
       pass, rewriter, op, descriptor, 0, &state));
+  if (descriptor->lane_kind == LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM) {
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_validate_transform(&state));
+  }
   IREE_RETURN_IF_ERROR(
       loom_vector_to_scalar_lower_aggregate(&state, &replacement));
   return loom_vector_to_scalar_replace_one_result(&state, replacement);

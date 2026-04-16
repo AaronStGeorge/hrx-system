@@ -379,6 +379,10 @@ iree_status_t loom_vector_to_scalar_build_transform_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
 
+// Validates transform descriptors before aggregate lowering emits lane IR.
+iree_status_t loom_vector_to_scalar_validate_transform(
+    loom_vector_to_scalar_state_t* state);
+
 iree_status_t loom_vector_to_scalar_build_load_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);

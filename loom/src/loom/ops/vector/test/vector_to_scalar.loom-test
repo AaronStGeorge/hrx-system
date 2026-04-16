@@ -2088,6 +2088,81 @@ func.def @transform_sign_permute_hadamard(%v: vector<2xf32>, %signs: vector<2xi1
 // ====
 // RUN: pass vector-to-scalar
 
+func.def @transform_sign_permute_hadamard_iota_permutation(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %permutation = vector.iota %c0 step %c1 : vector<2xindex>
+  %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xindex>, signs = %signs : vector<2xi1>} : encoding<transform>
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @transform_sign_permute_hadamard_iota_permutation(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
+  %11 = vector.extract %v[0] : vector<2xf32> -> f32
+  %12 = vector.extract %signs[0] : vector<2xi1> -> i1
+  %13 = scalar.negf %11 : f32
+  %14 = scf.select %12, %13, %11 : f32
+  %18 = vector.extract %v[1] : vector<2xf32> -> f32
+  %19 = vector.extract %signs[1] : vector<2xi1> -> i1
+  %20 = scalar.negf %18 : f32
+  %21 = scf.select %19, %20, %18 : f32
+  %22 = scalar.addf %14, %21 : f32
+  %26 = vector.extract %v[0] : vector<2xf32> -> f32
+  %27 = vector.extract %signs[0] : vector<2xi1> -> i1
+  %28 = scalar.negf %26 : f32
+  %29 = scf.select %27, %28, %26 : f32
+  %33 = vector.extract %v[1] : vector<2xf32> -> f32
+  %34 = vector.extract %signs[1] : vector<2xi1> -> i1
+  %35 = scalar.negf %33 : f32
+  %36 = scf.select %34, %35, %33 : f32
+  %37 = scalar.negf %36 : f32
+  %38 = scalar.addf %29, %37 : f32
+  %r = vector.from_elements %22, %38 : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+
+func.def @transform_sign_permute_hadamard_refined_permutation(%v: vector<2xf32>, %signs: vector<2xi1>, %p: index) -> (vector<2xf32>) {
+  %p1 = index.assume %p [range(%p, 1, 1)] : index
+  %c1 = index.constant 1 : index
+  %p0 = index.sub %p1, %c1 : index
+  %permutation = vector.from_elements %p1, %p0 : vector<2xindex>
+  %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xindex>, signs = %signs : vector<2xi1>} : encoding<transform>
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @transform_sign_permute_hadamard_refined_permutation(%v: vector<2xf32>, %signs: vector<2xi1>, %p: index) -> (vector<2xf32>) {
+  %10 = vector.extract %v[1] : vector<2xf32> -> f32
+  %11 = vector.extract %signs[1] : vector<2xi1> -> i1
+  %12 = scalar.negf %10 : f32
+  %13 = scf.select %11, %12, %10 : f32
+  %14 = vector.extract %v[0] : vector<2xf32> -> f32
+  %15 = vector.extract %signs[0] : vector<2xi1> -> i1
+  %16 = scalar.negf %14 : f32
+  %17 = scf.select %15, %16, %14 : f32
+  %18 = scalar.addf %13, %17 : f32
+  %19 = vector.extract %v[1] : vector<2xf32> -> f32
+  %20 = vector.extract %signs[1] : vector<2xi1> -> i1
+  %21 = scalar.negf %19 : f32
+  %22 = scf.select %20, %21, %19 : f32
+  %23 = vector.extract %v[0] : vector<2xf32> -> f32
+  %24 = vector.extract %signs[0] : vector<2xi1> -> i1
+  %25 = scalar.negf %23 : f32
+  %26 = scf.select %24, %25, %23 : f32
+  %27 = scalar.negf %26 : f32
+  %28 = scalar.addf %22, %27 : f32
+  %r = vector.from_elements %18, %28 : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+
 func.def @transform_hadamard_orthonormal(%v: vector<4xf32>) -> (vector<4xf32>) {
   %xf = encoding.define #numeric_transform<family="hadamard", input_elems=4, normalization="orthonormal", output_elems=4> : encoding<transform>
   %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>

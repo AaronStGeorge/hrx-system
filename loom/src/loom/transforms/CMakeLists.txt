@@ -473,6 +473,29 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    vector_to_scalar_test
+  SRCS
+    "vector_to_scalar_test.cc"
+  DEPS
+    ::pass
+    ::vector_to_scalar
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::encoding
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::vector
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     verify
