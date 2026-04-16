@@ -385,7 +385,9 @@ loom_cc_library(
     "refine_boundaries.c"
   DEPS
     ::canonicalize
+    ::materialize
     ::pass
+    ::remap
     iree::base
     loom::src::loom::analysis::scc
     loom::src::loom::analysis::type_refinement

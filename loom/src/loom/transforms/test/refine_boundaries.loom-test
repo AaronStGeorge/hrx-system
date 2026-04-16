@@ -516,9 +516,9 @@ func.def public @call_private_strided_view(%buffer: buffer) {
 
 // ====
 
-// Conflicting extension payloads drop back to the scalar fact join. The callee
-// must remain dynamic instead of accidentally specializing to one caller's
-// layout.
+// Conflicting extension payloads fork private callees into static-layout
+// specializations instead of forcing one dynamic signature to serve incompatible
+// exact layouts.
 func.def @private_conflicting_layout_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
   %offset = index.constant 0 : offset
   %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
@@ -537,19 +537,25 @@ func.def public @call_private_conflicting_layout_view(%buffer: buffer) {
 }
 
 // ----
-func.def @private_conflicting_layout_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
+func.def @private_conflicting_layout_view() {
+  func.return
+}
+
+func.def @private_conflicting_layout_view_spec0(%buffer: buffer) -> (view<4xf32, #dense>) {
   %offset = index.constant 0 : offset
-  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
-  func.return %view : view<4xf32, %layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #dense>
+  func.return %view : view<4xf32, #dense>
+}
+
+func.def @private_conflicting_layout_view_spec1(%buffer: buffer) -> (view<4xf32, #strided<stride=8>>) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #strided<stride=8>>
+  func.return %view : view<4xf32, #strided<stride=8>>
 }
 
 func.def public @call_private_conflicting_layout_view(%buffer: buffer) {
-  %dense_base = encoding.layout.dense : encoding<layout>
-  %dense = encoding.assume.spec %dense_base, #dense : encoding<layout>
-  %strided_base = encoding.layout.strided [8] : encoding<layout>
-  %strided = encoding.assume.spec %strided_base, #strided<stride=8> : encoding<layout>
-  %view0 = func.call pure @private_conflicting_layout_view(%buffer, %dense) : (buffer, encoding<layout>) -> (view<4xf32, #dense>)
-  %view1 = func.call pure @private_conflicting_layout_view(%buffer, %strided) : (buffer, encoding<layout>) -> (view<4xf32, #strided<stride=8>>)
+  %view0 = func.call pure @private_conflicting_layout_view_spec0(%buffer) : (buffer) -> (view<4xf32, #dense>)
+  %view1 = func.call pure @private_conflicting_layout_view_spec1(%buffer) : (buffer) -> (view<4xf32, #strided<stride=8>>)
   test.use %view0, %view1 : view<4xf32, #dense>, view<4xf32, #strided<stride=8>>
   func.return
 }

@@ -339,7 +339,9 @@ loom_cc_library(
     hdrs = ["refine_boundaries.h"],
     deps = [
         ":canonicalize",
+        ":materialize",
         ":pass",
+        ":remap",
         "//loom/src/loom/analysis:scc",
         "//loom/src/loom/analysis:type_refinement",
         "//loom/src/loom/ir",
