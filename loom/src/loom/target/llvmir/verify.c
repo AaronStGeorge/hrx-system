@@ -176,6 +176,31 @@ static iree_status_t loom_llvmir_verify_memory_flags(uint32_t flags) {
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_verify_metadata_attachments(
+    const loom_llvmir_module_t* module,
+    const loom_llvmir_metadata_attachment_storage_t* attachments,
+    iree_host_size_t attachment_count) {
+  if (attachment_count == 0) return iree_ok_status();
+  if (attachments == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty LLVM metadata attachment list has null storage");
+  }
+  for (iree_host_size_t i = 0; i < attachment_count; ++i) {
+    if (iree_string_view_is_empty(attachments[i].name)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "LLVM metadata attachment name must not be empty");
+    }
+    if (attachments[i].metadata_id >= module->metadata_node_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "LLVM metadata attachment references unknown node");
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_verify_mask_result_type(
     const loom_llvmir_module_t* module, loom_llvmir_type_id_t operand_type_id,
     loom_llvmir_type_id_t result_type_id) {
@@ -868,7 +893,11 @@ static iree_status_t loom_llvmir_verify_instruction(
       }
       IREE_RETURN_IF_ERROR(
           loom_llvmir_verify_memory_alignment(instruction->load.alignment));
-      return loom_llvmir_verify_memory_flags(instruction->load.flags);
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_verify_memory_flags(instruction->load.flags));
+      return loom_llvmir_verify_metadata_attachments(
+          module, instruction->load.metadata_attachments,
+          instruction->load.metadata_attachment_count);
     case LOOM_LLVMIR_INST_STORE:
       if (!loom_llvmir_verify_value(module, instruction->store.value) ||
           !loom_llvmir_verify_value(module, instruction->store.pointer)) {
@@ -884,7 +913,11 @@ static iree_status_t loom_llvmir_verify_instruction(
       }
       IREE_RETURN_IF_ERROR(
           loom_llvmir_verify_memory_alignment(instruction->store.alignment));
-      return loom_llvmir_verify_memory_flags(instruction->store.flags);
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_verify_memory_flags(instruction->store.flags));
+      return loom_llvmir_verify_metadata_attachments(
+          module, instruction->store.metadata_attachments,
+          instruction->store.metadata_attachment_count);
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT:
       return loom_llvmir_verify_extract_element(module, instruction);
     case LOOM_LLVMIR_INST_INSERT_ELEMENT:

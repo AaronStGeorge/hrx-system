@@ -1846,6 +1846,12 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
           instruction->alloca.alignment, &packed_flags);
     }
     case LOOM_LLVMIR_INST_LOAD: {
+      if (instruction->load.metadata_attachment_count != 0) {
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "LLVM bitcode instruction metadata attachment emission is not "
+            "implemented");
+      }
       uint64_t encoded_alignment = 0;
       uint64_t is_volatile = 0;
       IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_encode_alignment(
@@ -1854,6 +1860,12 @@ static iree_status_t loom_llvmir_bitcode_check_instruction(
                                                  &is_volatile);
     }
     case LOOM_LLVMIR_INST_STORE: {
+      if (instruction->store.metadata_attachment_count != 0) {
+        return iree_make_status(
+            IREE_STATUS_UNIMPLEMENTED,
+            "LLVM bitcode instruction metadata attachment emission is not "
+            "implemented");
+      }
       uint64_t encoded_alignment = 0;
       uint64_t is_volatile = 0;
       IREE_RETURN_IF_ERROR(loom_llvmir_bitcode_encode_alignment(

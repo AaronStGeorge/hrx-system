@@ -247,6 +247,10 @@ typedef struct loom_llvmir_load_desc_t {
   uint32_t alignment;
   // Memory operation flags.
   loom_llvmir_memory_flags_t flags;
+  // Metadata attachments such as !nontemporal.
+  const loom_llvmir_metadata_attachment_t* metadata_attachments;
+  // Number of entries in |metadata_attachments|.
+  iree_host_size_t metadata_attachment_count;
 } loom_llvmir_load_desc_t;
 
 typedef struct loom_llvmir_store_desc_t {
@@ -258,6 +262,10 @@ typedef struct loom_llvmir_store_desc_t {
   uint32_t alignment;
   // Memory operation flags.
   loom_llvmir_memory_flags_t flags;
+  // Metadata attachments such as !nontemporal.
+  const loom_llvmir_metadata_attachment_t* metadata_attachments;
+  // Number of entries in |metadata_attachments|.
+  iree_host_size_t metadata_attachment_count;
 } loom_llvmir_store_desc_t;
 
 typedef struct loom_llvmir_call_desc_t {

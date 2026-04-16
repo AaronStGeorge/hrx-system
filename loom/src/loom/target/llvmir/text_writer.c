@@ -275,6 +275,27 @@ static iree_status_t loom_llvmir_write_attr_list(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_write_metadata_attachments(
+    const loom_llvmir_metadata_attachment_storage_t* attachments,
+    iree_host_size_t attachment_count, const char* separator,
+    loom_output_stream_t* stream) {
+  if (attachment_count != 0 && attachments == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "LLVM text writer saw null metadata attachment storage");
+  }
+  for (iree_host_size_t i = 0; i < attachment_count; ++i) {
+    const loom_llvmir_metadata_attachment_storage_t* attachment =
+        &attachments[i];
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, separator));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '!'));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, attachment->name));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, " !%u", attachment->metadata_id));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_write_parameter(
     const loom_llvmir_module_t* module,
     const loom_llvmir_parameter_t* parameter, loom_output_stream_t* stream) {
@@ -826,10 +847,12 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
           module, instruction->load.pointer, stream));
       if (instruction->load.alignment != 0) {
-        return loom_output_stream_write_format(stream, ", align %u",
-                                               instruction->load.alignment);
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            stream, ", align %u", instruction->load.alignment));
       }
-      return iree_ok_status();
+      return loom_llvmir_write_metadata_attachments(
+          instruction->load.metadata_attachments,
+          instruction->load.metadata_attachment_count, ", ", stream);
     }
     case LOOM_LLVMIR_INST_STORE: {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "store "));
@@ -843,10 +866,12 @@ static iree_status_t loom_llvmir_write_instruction(
       IREE_RETURN_IF_ERROR(loom_llvmir_write_typed_value_ref(
           module, instruction->store.pointer, stream));
       if (instruction->store.alignment != 0) {
-        return loom_output_stream_write_format(stream, ", align %u",
-                                               instruction->store.alignment);
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            stream, ", align %u", instruction->store.alignment));
       }
-      return iree_ok_status();
+      return loom_llvmir_write_metadata_attachments(
+          instruction->store.metadata_attachments,
+          instruction->store.metadata_attachment_count, ", ", stream);
     }
     case LOOM_LLVMIR_INST_EXTRACT_ELEMENT: {
       IREE_RETURN_IF_ERROR(
@@ -1019,15 +1044,9 @@ static iree_status_t loom_llvmir_write_function_signature(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         stream, " #%u", function->attr_group_id));
   }
-  for (iree_host_size_t i = 0; i < function->metadata_attachment_count; ++i) {
-    const loom_llvmir_metadata_attachment_storage_t* attachment =
-        &function->metadata_attachments[i];
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " !"));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, attachment->name));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, " !%u", attachment->metadata_id));
-  }
-  return iree_ok_status();
+  return loom_llvmir_write_metadata_attachments(
+      function->metadata_attachments, function->metadata_attachment_count, " ",
+      stream);
 }
 
 static iree_status_t loom_llvmir_write_global(

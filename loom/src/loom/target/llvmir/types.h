@@ -111,6 +111,13 @@ typedef enum loom_llvmir_inst_kind_e {
   LOOM_LLVMIR_INST_UNOP = 19,
 } loom_llvmir_inst_kind_t;
 
+typedef struct loom_llvmir_metadata_attachment_storage_t {
+  // Attachment name without the leading exclamation mark.
+  iree_string_view_t name;
+  // Referenced metadata node id.
+  loom_llvmir_metadata_id_t metadata_id;
+} loom_llvmir_metadata_attachment_storage_t;
+
 typedef struct loom_llvmir_instruction_t {
   // Instruction kind selecting the active payload.
   loom_llvmir_inst_kind_t kind;
@@ -213,6 +220,10 @@ typedef struct loom_llvmir_instruction_t {
       uint32_t alignment;
       // Memory operation flags.
       uint32_t flags;
+      // Metadata attachments owned by the module arena.
+      loom_llvmir_metadata_attachment_storage_t* metadata_attachments;
+      // Number of entries in |metadata_attachments|.
+      iree_host_size_t metadata_attachment_count;
     } load;
     // Store operands and memory attributes.
     struct {
@@ -224,6 +235,10 @@ typedef struct loom_llvmir_instruction_t {
       uint32_t alignment;
       // Memory operation flags.
       uint32_t flags;
+      // Metadata attachments owned by the module arena.
+      loom_llvmir_metadata_attachment_storage_t* metadata_attachments;
+      // Number of entries in |metadata_attachments|.
+      iree_host_size_t metadata_attachment_count;
     } store;
     // Vector lane extraction operands.
     struct {
@@ -323,13 +338,6 @@ typedef struct loom_llvmir_metadata_node_t {
   // Number of entries in |i32_values|.
   iree_host_size_t i32_value_count;
 } loom_llvmir_metadata_node_t;
-
-typedef struct loom_llvmir_metadata_attachment_storage_t {
-  // Attachment name without the leading exclamation mark.
-  iree_string_view_t name;
-  // Referenced metadata node id.
-  loom_llvmir_metadata_id_t metadata_id;
-} loom_llvmir_metadata_attachment_storage_t;
 
 struct loom_llvmir_global_t {
   // Owning module.

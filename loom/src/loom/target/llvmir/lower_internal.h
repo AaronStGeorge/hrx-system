@@ -56,6 +56,8 @@ typedef struct loom_llvmir_lowering_state_t {
   const loom_value_fact_table_t* fact_table;
   // Cached profile kernel attribute group, or INVALID until materialized.
   loom_llvmir_attr_group_id_t kernel_attr_group_id;
+  // Cached !{i32 1} node used by LLVM's !nontemporal metadata.
+  loom_llvmir_metadata_id_t nontemporal_metadata_id;
   // Address spaces for cached llvm.prefetch declarations.
   uint32_t prefetch_function_address_spaces[8];
   // Cached llvm.prefetch declarations keyed by address space.

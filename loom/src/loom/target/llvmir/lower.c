@@ -773,6 +773,7 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
   state->value_map_count = source_module->values.count;
   state->symbol_function_count = source_module->symbols.count;
   state->kernel_attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
+  state->nontemporal_metadata_id = LOOM_LLVMIR_METADATA_ID_INVALID;
 
   iree_string_view_t source_name = options->source_name;
   if (iree_string_view_is_empty(source_name)) {

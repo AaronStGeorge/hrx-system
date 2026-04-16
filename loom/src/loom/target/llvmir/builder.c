@@ -87,6 +87,41 @@ static iree_status_t loom_llvmir_builder_copy_attrs(
   return iree_ok_status();
 }
 
+static iree_status_t loom_llvmir_builder_copy_metadata_attachments(
+    loom_llvmir_module_t* module,
+    const loom_llvmir_metadata_attachment_t* attachments,
+    iree_host_size_t attachment_count,
+    loom_llvmir_metadata_attachment_storage_t** out_attachments) {
+  *out_attachments = NULL;
+  if (attachment_count == 0) return iree_ok_status();
+  if (attachments == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty LLVM metadata attachment list has null storage");
+  }
+  loom_llvmir_metadata_attachment_storage_t* copied_attachments = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      &module->arena, attachment_count, sizeof(*copied_attachments),
+      (void**)&copied_attachments));
+  for (iree_host_size_t i = 0; i < attachment_count; ++i) {
+    if (iree_string_view_is_empty(attachments[i].name)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "LLVM metadata attachment name must not be empty");
+    }
+    if (attachments[i].metadata_id >= module->metadata_node_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "LLVM instruction references unknown metadata node");
+    }
+    copied_attachments[i].metadata_id = attachments[i].metadata_id;
+    IREE_RETURN_IF_ERROR(loom_llvmir_builder_copy_string(
+        module, attachments[i].name, &copied_attachments[i].name));
+  }
+  *out_attachments = copied_attachments;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_builder_copy_values(
     loom_llvmir_module_t* module, const loom_llvmir_value_id_t* values,
     iree_host_size_t value_count, loom_llvmir_value_id_t** out_values) {
@@ -406,8 +441,8 @@ iree_status_t loom_llvmir_build_load(loom_llvmir_block_t* block,
   IREE_ASSERT_ARGUMENT(block);
   IREE_ASSERT_ARGUMENT(desc);
   IREE_ASSERT_ARGUMENT(out_value_id);
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_check_value(block->function->module, desc->pointer));
+  loom_llvmir_module_t* module = block->function->module;
+  IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, desc->pointer));
   loom_llvmir_instruction_t instruction = {
       .kind = LOOM_LLVMIR_INST_LOAD,
       .result_value_id = LOOM_LLVMIR_VALUE_ID_INVALID,
@@ -417,8 +452,12 @@ iree_status_t loom_llvmir_build_load(loom_llvmir_block_t* block,
               .pointer = desc->pointer,
               .alignment = desc->alignment,
               .flags = desc->flags,
+              .metadata_attachment_count = desc->metadata_attachment_count,
           },
   };
+  IREE_RETURN_IF_ERROR(loom_llvmir_builder_copy_metadata_attachments(
+      module, desc->metadata_attachments, desc->metadata_attachment_count,
+      &instruction.load.metadata_attachments));
   IREE_RETURN_IF_ERROR(loom_llvmir_define_instruction_value(
       block, desc->result_type, desc->result_name, out_value_id));
   instruction.result_value_id = *out_value_id;
@@ -441,8 +480,12 @@ iree_status_t loom_llvmir_build_store(loom_llvmir_block_t* block,
               .pointer = desc->pointer,
               .alignment = desc->alignment,
               .flags = desc->flags,
+              .metadata_attachment_count = desc->metadata_attachment_count,
           },
   };
+  IREE_RETURN_IF_ERROR(loom_llvmir_builder_copy_metadata_attachments(
+      module, desc->metadata_attachments, desc->metadata_attachment_count,
+      &instruction.store.metadata_attachments));
   return loom_llvmir_builder_append_instruction(block, &instruction);
 }
 

@@ -6,6 +6,7 @@
 
 #include "loom/ir/facts.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/cache.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/vector/memory.h"
@@ -139,6 +140,84 @@ static uint32_t loom_llvmir_lowering_load_store_alignment(
                            ? pointer_alignment
                            : (uint64_t)element_byte_count;
   return alignment <= 1 ? 0 : (uint32_t)alignment;
+}
+
+static iree_status_t loom_llvmir_lowering_nontemporal_metadata(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_metadata_attachment_t* out_attachment) {
+  if (state->nontemporal_metadata_id == LOOM_LLVMIR_METADATA_ID_INVALID) {
+    int32_t values[] = {1};
+    loom_llvmir_metadata_i32_tuple_t metadata = {
+        .values = values,
+        .value_count = IREE_ARRAYSIZE(values),
+    };
+    IREE_RETURN_IF_ERROR(loom_llvmir_module_add_metadata_i32_tuple(
+        state->target_module, &metadata, &state->nontemporal_metadata_id));
+  }
+  *out_attachment = (loom_llvmir_metadata_attachment_t){
+      .name = IREE_SV("nontemporal"),
+      .metadata_id = state->nontemporal_metadata_id,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_cache_policy_metadata(
+    loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    uint16_t cache_scope_attr_index, uint16_t cache_temporal_attr_index,
+    loom_cache_policy_access_t access,
+    loom_llvmir_metadata_attachment_t* out_attachment,
+    iree_host_size_t* out_attachment_count) {
+  *out_attachment_count = 0;
+  if (op->attribute_count <= cache_scope_attr_index ||
+      op->attribute_count <= cache_temporal_attr_index) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "cache policy attributes are malformed");
+  }
+  loom_attribute_t cache_scope_attr = loom_op_attrs(op)[cache_scope_attr_index];
+  loom_attribute_t cache_temporal_attr =
+      loom_op_attrs(op)[cache_temporal_attr_index];
+  bool has_cache_scope = !loom_attr_is_absent(cache_scope_attr);
+  bool has_cache_temporal = !loom_attr_is_absent(cache_temporal_attr);
+  if (!has_cache_scope && !has_cache_temporal) return iree_ok_status();
+  if (!has_cache_scope || !has_cache_temporal ||
+      cache_scope_attr.kind != LOOM_ATTR_ENUM ||
+      cache_temporal_attr.kind != LOOM_ATTR_ENUM) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "cache policy attributes are malformed");
+  }
+
+  uint8_t cache_scope = loom_attr_as_enum(cache_scope_attr);
+  uint8_t cache_temporal = loom_attr_as_enum(cache_temporal_attr);
+  if (loom_cache_policy_validate(cache_scope, cache_temporal, access) !=
+      LOOM_CACHE_POLICY_ERROR_NONE) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "cache policy is invalid for this memory operation");
+  }
+  switch ((loom_cache_temporal_t)cache_temporal) {
+    case LOOM_CACHE_TEMPORAL_REGULAR:
+      return iree_ok_status();
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL: {
+      // Generic LLVM represents non-temporal intent as instruction metadata;
+      // cache-scope-specific encodings require target extension support.
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_nontemporal_metadata(state, out_attachment));
+      *out_attachment_count = 1;
+      return iree_ok_status();
+    }
+    case LOOM_CACHE_TEMPORAL_HIGH_TEMPORAL:
+    case LOOM_CACHE_TEMPORAL_LAST_USE:
+    case LOOM_CACHE_TEMPORAL_WRITEBACK:
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_REGULAR:
+    case LOOM_CACHE_TEMPORAL_REGULAR_NON_TEMPORAL:
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_HIGH_TEMPORAL:
+    case LOOM_CACHE_TEMPORAL_NON_TEMPORAL_WRITEBACK:
+    case LOOM_CACHE_TEMPORAL_BYPASS:
+    case LOOM_CACHE_TEMPORAL_COUNT_:
+      break;
+  }
+  return loom_llvmir_lowering_unsupported_op(
+      state, op,
+      "LLVMIR lowering only supports regular and non_temporal cache policies");
 }
 
 static iree_status_t loom_llvmir_lowering_vector_memory_access(
@@ -676,6 +755,12 @@ iree_status_t loom_llvmir_lowering_lower_view_load(
       loom_scalar_type_bitwidth(loom_type_element_type(view_type));
   int64_t element_byte_count =
       bit_width > 0 && (bit_width % 8) == 0 ? bit_width / 8 : -1;
+  loom_llvmir_metadata_attachment_t metadata_attachment = {0};
+  iree_host_size_t metadata_attachment_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cache_policy_metadata(
+      state, op, loom_view_load_cache_scope_ATTR_INDEX,
+      loom_view_load_cache_temporal_ATTR_INDEX, LOOM_CACHE_POLICY_ACCESS_LOAD,
+      &metadata_attachment, &metadata_attachment_count));
   loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_build_load(
       target_block,
@@ -686,6 +771,8 @@ iree_status_t loom_llvmir_lowering_lower_view_load(
           .pointer = pointer,
           .alignment = loom_llvmir_lowering_load_store_alignment(
               pointer_alignment, element_byte_count),
+          .metadata_attachments = &metadata_attachment,
+          .metadata_attachment_count = metadata_attachment_count,
       },
       &result));
   return loom_llvmir_lowering_map_single_result(state, op, result);
@@ -713,12 +800,20 @@ iree_status_t loom_llvmir_lowering_lower_view_store(
       loom_scalar_type_bitwidth(loom_type_element_type(view_type));
   int64_t element_byte_count =
       bit_width > 0 && (bit_width % 8) == 0 ? bit_width / 8 : -1;
+  loom_llvmir_metadata_attachment_t metadata_attachment = {0};
+  iree_host_size_t metadata_attachment_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cache_policy_metadata(
+      state, op, loom_view_store_cache_scope_ATTR_INDEX,
+      loom_view_store_cache_temporal_ATTR_INDEX, LOOM_CACHE_POLICY_ACCESS_STORE,
+      &metadata_attachment, &metadata_attachment_count));
   return loom_llvmir_build_store(
       target_block, &(loom_llvmir_store_desc_t){
                         .value = value,
                         .pointer = pointer,
                         .alignment = loom_llvmir_lowering_load_store_alignment(
                             pointer_alignment, element_byte_count),
+                        .metadata_attachments = &metadata_attachment,
+                        .metadata_attachment_count = metadata_attachment_count,
                     });
 }
 
@@ -756,6 +851,12 @@ iree_status_t loom_llvmir_lowering_lower_vector_load(
   loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_llvmir_lowering_lower_type(state, result_source_type, &result_type));
+  loom_llvmir_metadata_attachment_t metadata_attachment = {0};
+  iree_host_size_t metadata_attachment_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cache_policy_metadata(
+      state, op, loom_vector_load_cache_scope_ATTR_INDEX,
+      loom_vector_load_cache_temporal_ATTR_INDEX, LOOM_CACHE_POLICY_ACCESS_LOAD,
+      &metadata_attachment, &metadata_attachment_count));
   loom_llvmir_value_id_t result = LOOM_LLVMIR_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_llvmir_build_load(
       target_block,
@@ -766,6 +867,8 @@ iree_status_t loom_llvmir_lowering_lower_vector_load(
           .pointer = pointer,
           .alignment = loom_llvmir_lowering_load_store_alignment(
               pointer_alignment, vector_byte_count),
+          .metadata_attachments = &metadata_attachment,
+          .metadata_attachment_count = metadata_attachment_count,
       },
       &result));
   return loom_llvmir_lowering_map_single_result(state, op, result);
@@ -806,12 +909,21 @@ iree_status_t loom_llvmir_lowering_lower_vector_store(
       &access, loom_vector_store_static_indices(op), view_alignment,
       pointer_alignment);
 
+  loom_llvmir_metadata_attachment_t metadata_attachment = {0};
+  iree_host_size_t metadata_attachment_count = 0;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cache_policy_metadata(
+      state, op, loom_vector_store_cache_scope_ATTR_INDEX,
+      loom_vector_store_cache_temporal_ATTR_INDEX,
+      LOOM_CACHE_POLICY_ACCESS_STORE, &metadata_attachment,
+      &metadata_attachment_count));
   return loom_llvmir_build_store(
       target_block, &(loom_llvmir_store_desc_t){
                         .value = value,
                         .pointer = pointer,
                         .alignment = loom_llvmir_lowering_load_store_alignment(
                             pointer_alignment, vector_byte_count),
+                        .metadata_attachments = &metadata_attachment,
+                        .metadata_attachment_count = metadata_attachment_count,
                     });
 }
 

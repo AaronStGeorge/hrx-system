@@ -87,6 +87,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::buffer
+    loom::src::loom::ops::cache
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::index
