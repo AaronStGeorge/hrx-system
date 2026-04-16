@@ -18,14 +18,15 @@
 //   Entry block:     block 0 of a multi-block region dominates all
 //                    sibling blocks.
 //
-// For CFG regions (future), the dominance info struct will cache a
-// computed dominator tree from predecessor edges. The query API is
-// identical — callers don't need to know which strategy is in use.
+// For CFG regions, the dominance info struct caches a computed block graph and
+// dominator tree from predecessor edges. The query API is identical — callers
+// don't need to know which strategy is in use.
 //
 // Usage:
 //
 //   loom_dominance_info_t dom_info;
-//   loom_dominance_info_initialize(module, &arena, &dom_info);
+//   IREE_RETURN_IF_ERROR(
+//       loom_dominance_info_initialize(module, &arena, &dom_info));
 //
 //   if (loom_dominates_op(&dom_info, producer, consumer)) {
 //     // producer's results are visible at consumer.
@@ -50,20 +51,26 @@ extern "C" {
 // Dominance info
 //===----------------------------------------------------------------------===//
 
-// Dominance analysis state. For structured IR this is lightweight
-// (just a module reference). For CFG regions it will cache dominator
-// trees allocated from the arena.
+typedef struct loom_cfg_dominance_region_t loom_cfg_dominance_region_t;
+
+// Dominance analysis state. For structured IR this is lightweight: queries walk
+// parent_op chains and block order directly. For CFG regions, initialization
+// caches block graphs and dominator trees allocated from the caller arena.
 typedef struct loom_dominance_info_t {
   // Module containing the IR being queried.
   const loom_module_t* module;
-  // Scratch arena reserved for future CFG dominance caches.
+  // Scratch arena that owns CFG dominance caches.
   iree_arena_allocator_t* arena;
+  // Linked list of cached CFG-region dominance records.
+  loom_cfg_dominance_region_t* cfg_regions;
 } loom_dominance_info_t;
 
-// Initializes dominance info for the given module.
-void loom_dominance_info_initialize(const loom_module_t* module,
-                                    iree_arena_allocator_t* arena,
-                                    loom_dominance_info_t* out_info);
+// Initializes dominance info for the given module. The caller must keep |arena|
+// and |module| live and must rebuild the analysis after mutating region block
+// structure or successor edges.
+iree_status_t loom_dominance_info_initialize(const loom_module_t* module,
+                                             iree_arena_allocator_t* arena,
+                                             loom_dominance_info_t* out_info);
 
 //===----------------------------------------------------------------------===//
 // Dominance queries

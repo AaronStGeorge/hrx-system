@@ -6,19 +6,50 @@
 
 #include "loom/util/dominance.h"
 
+#include <stdint.h>
+#include <string.h>
+
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/util/cfg_graph.h"
+
+#define LOOM_CFG_DOMINATOR_INVALID UINT16_MAX
+
+struct loom_cfg_dominance_region_t {
+  // Region described by graph and dominator arrays.
+  const loom_region_t* region;
+  // Dense control-flow graph for region.
+  loom_cfg_graph_t graph;
+  // Immediate dominator per dense block index.
+  uint16_t* immediate_dominators;
+  // Dominator-tree depth per dense block index.
+  uint16_t* dominator_depths;
+  // True when graph is well-formed enough for CFG dominance queries.
+  bool available;
+  // Next cached CFG region in loom_dominance_info_t::cfg_regions.
+  struct loom_cfg_dominance_region_t* next;
+};
 
 //===----------------------------------------------------------------------===//
 // Dominance info
 //===----------------------------------------------------------------------===//
 
-void loom_dominance_info_initialize(const loom_module_t* module,
-                                    iree_arena_allocator_t* arena,
-                                    loom_dominance_info_t* out_info) {
+static iree_status_t loom_dominance_info_build_region(
+    loom_dominance_info_t* info, const loom_region_t* region);
+
+iree_status_t loom_dominance_info_initialize(const loom_module_t* module,
+                                             iree_arena_allocator_t* arena,
+                                             loom_dominance_info_t* out_info) {
+  if (!module || !arena || !out_info) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "dominance analysis requires a module, arena, and output info");
+  }
+  memset(out_info, 0, sizeof(*out_info));
   out_info->module = module;
   out_info->arena = arena;
+  return loom_dominance_info_build_region(out_info, module->body);
 }
 
 //===----------------------------------------------------------------------===//
@@ -46,25 +77,279 @@ const loom_op_t* loom_op_ancestor_at_depth(const loom_op_t* op,
   return op;
 }
 
-// Returns true if blocks |a_block| and |b_block| are siblings in the
-// same region, AND |a_block| is the entry block (block 0). This means
-// a_block dominates b_block in structured control flow.
-static bool loom_entry_block_dominates(const loom_op_t* parent_op,
-                                       const loom_block_t* a_block,
-                                       const loom_block_t* b_block) {
-  if (!parent_op) return false;
-  loom_region_t** regions = loom_op_regions(parent_op);
-  for (uint8_t r = 0; r < parent_op->region_count; ++r) {
-    loom_region_t* region = regions[r];
-    if (!region || region->block_count < 2) continue;
-    if (loom_region_entry_block(region) == a_block) {
-      // a is the entry block. Check if b is a sibling.
-      for (uint16_t b = 1; b < region->block_count; ++b) {
-        if (loom_region_block(region, b) == b_block) return true;
+//===----------------------------------------------------------------------===//
+// CFG dominance construction
+//===----------------------------------------------------------------------===//
+
+typedef struct loom_cfg_rpo_frame_t {
+  // Block currently on the iterative DFS stack.
+  uint16_t block_index;
+  // Next successor offset to visit from block_index.
+  iree_host_size_t next_successor;
+} loom_cfg_rpo_frame_t;
+
+static iree_status_t loom_cfg_dominance_compute_rpo(
+    const loom_cfg_graph_t* graph, iree_arena_allocator_t* arena,
+    uint16_t** out_rpo_order, iree_host_size_t* out_rpo_count,
+    iree_host_size_t** out_rpo_numbers) {
+  *out_rpo_order = NULL;
+  *out_rpo_count = 0;
+  *out_rpo_numbers = NULL;
+  if (graph->block_count == 0) return iree_ok_status();
+
+  bool* visited = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, graph->block_count, sizeof(*visited), (void**)&visited));
+  memset(visited, 0, graph->block_count * sizeof(*visited));
+
+  loom_cfg_rpo_frame_t* stack = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, graph->block_count, sizeof(*stack), (void**)&stack));
+
+  uint16_t* postorder = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, graph->block_count, sizeof(*postorder), (void**)&postorder));
+
+  uint16_t* rpo_order = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, graph->block_count, sizeof(*rpo_order), (void**)&rpo_order));
+
+  iree_host_size_t* rpo_numbers = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, graph->block_count, sizeof(*rpo_numbers), (void**)&rpo_numbers));
+  for (iree_host_size_t i = 0; i < graph->block_count; ++i) {
+    rpo_numbers[i] = IREE_HOST_SIZE_MAX;
+  }
+
+  iree_host_size_t stack_count = 0;
+  iree_host_size_t postorder_count = 0;
+  visited[0] = true;
+  stack[stack_count++] = (loom_cfg_rpo_frame_t){
+      .block_index = 0,
+      .next_successor = 0,
+  };
+  while (stack_count > 0) {
+    loom_cfg_rpo_frame_t* frame = &stack[stack_count - 1];
+    loom_cfg_block_index_span_t successors =
+        loom_cfg_graph_successors(graph, frame->block_index);
+    if (frame->next_successor < successors.count) {
+      uint16_t successor_index = successors.values[frame->next_successor++];
+      if (!visited[successor_index]) {
+        visited[successor_index] = true;
+        stack[stack_count++] = (loom_cfg_rpo_frame_t){
+            .block_index = successor_index,
+            .next_successor = 0,
+        };
+      }
+      continue;
+    }
+    postorder[postorder_count++] = frame->block_index;
+    --stack_count;
+  }
+
+  for (iree_host_size_t i = 0; i < postorder_count; ++i) {
+    uint16_t block_index = postorder[postorder_count - i - 1];
+    rpo_order[i] = block_index;
+    rpo_numbers[block_index] = i;
+  }
+  *out_rpo_order = rpo_order;
+  *out_rpo_count = postorder_count;
+  *out_rpo_numbers = rpo_numbers;
+  return iree_ok_status();
+}
+
+static uint16_t loom_cfg_dominance_intersect(
+    const uint16_t* immediate_dominators, const iree_host_size_t* rpo_numbers,
+    uint16_t lhs, uint16_t rhs) {
+  while (lhs != rhs) {
+    while (rpo_numbers[lhs] > rpo_numbers[rhs]) {
+      lhs = immediate_dominators[lhs];
+    }
+    while (rpo_numbers[rhs] > rpo_numbers[lhs]) {
+      rhs = immediate_dominators[rhs];
+    }
+  }
+  return lhs;
+}
+
+static iree_status_t loom_cfg_dominance_compute(
+    loom_cfg_dominance_region_t* cache, iree_arena_allocator_t* arena) {
+  iree_host_size_t block_count = cache->graph.block_count;
+  if (block_count == 0) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, block_count, sizeof(*cache->immediate_dominators),
+      (void**)&cache->immediate_dominators));
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, block_count, sizeof(*cache->dominator_depths),
+      (void**)&cache->dominator_depths));
+  for (iree_host_size_t i = 0; i < block_count; ++i) {
+    cache->immediate_dominators[i] = LOOM_CFG_DOMINATOR_INVALID;
+    cache->dominator_depths[i] = LOOM_CFG_DOMINATOR_INVALID;
+  }
+
+  if (cache->graph.malformed) return iree_ok_status();
+
+  uint16_t* rpo_order = NULL;
+  iree_host_size_t rpo_count = 0;
+  iree_host_size_t* rpo_numbers = NULL;
+  IREE_RETURN_IF_ERROR(loom_cfg_dominance_compute_rpo(
+      &cache->graph, arena, &rpo_order, &rpo_count, &rpo_numbers));
+  if (rpo_count == 0) return iree_ok_status();
+
+  cache->immediate_dominators[0] = 0;
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (iree_host_size_t rpo_index = 1; rpo_index < rpo_count; ++rpo_index) {
+      uint16_t block_index = rpo_order[rpo_index];
+      uint16_t new_idom = LOOM_CFG_DOMINATOR_INVALID;
+      loom_cfg_block_index_span_t predecessors =
+          loom_cfg_graph_predecessors(&cache->graph, block_index);
+      for (iree_host_size_t i = 0; i < predecessors.count; ++i) {
+        uint16_t predecessor_index = predecessors.values[i];
+        if (cache->immediate_dominators[predecessor_index] ==
+            LOOM_CFG_DOMINATOR_INVALID) {
+          continue;
+        }
+        new_idom = new_idom == LOOM_CFG_DOMINATOR_INVALID
+                       ? predecessor_index
+                       : loom_cfg_dominance_intersect(
+                             cache->immediate_dominators, rpo_numbers,
+                             predecessor_index, new_idom);
+      }
+      if (cache->immediate_dominators[block_index] != new_idom) {
+        cache->immediate_dominators[block_index] = new_idom;
+        changed = true;
       }
     }
   }
-  return false;
+
+  cache->dominator_depths[0] = 0;
+  for (iree_host_size_t rpo_index = 1; rpo_index < rpo_count; ++rpo_index) {
+    uint16_t block_index = rpo_order[rpo_index];
+    uint16_t idom = cache->immediate_dominators[block_index];
+    if (idom == LOOM_CFG_DOMINATOR_INVALID) continue;
+    cache->dominator_depths[block_index] = cache->dominator_depths[idom] + 1;
+  }
+  cache->available = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_dominance_info_add_cfg_region(
+    loom_dominance_info_t* info, const loom_region_t* region) {
+  loom_cfg_dominance_region_t* cache = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(info->arena, sizeof(*cache), (void**)&cache));
+  memset(cache, 0, sizeof(*cache));
+  cache->region = region;
+  IREE_RETURN_IF_ERROR(
+      loom_cfg_graph_build(region, info->arena, &cache->graph));
+  IREE_RETURN_IF_ERROR(loom_cfg_dominance_compute(cache, info->arena));
+  cache->next = info->cfg_regions;
+  info->cfg_regions = cache;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_dominance_info_build_region(
+    loom_dominance_info_t* info, const loom_region_t* region) {
+  if (!region) return iree_ok_status();
+  if (iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
+    IREE_RETURN_IF_ERROR(loom_dominance_info_add_cfg_region(info, region));
+  }
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = block->first_op;
+    while (op) {
+      loom_region_t** regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        IREE_RETURN_IF_ERROR(
+            loom_dominance_info_build_region(info, regions[i]));
+      }
+      op = op->next_op;
+    }
+  }
+  return iree_ok_status();
+}
+
+static const loom_cfg_dominance_region_t* loom_dominance_lookup_cfg_region(
+    const loom_dominance_info_t* info, const loom_region_t* region) {
+  for (const loom_cfg_dominance_region_t* cache = info->cfg_regions; cache;
+       cache = cache->next) {
+    if (cache->region == region) return cache;
+  }
+  return NULL;
+}
+
+static bool loom_cfg_region_block_dominates(
+    const loom_cfg_dominance_region_t* cache, uint16_t dominator_index,
+    uint16_t dominated_index) {
+  if (!cache || !cache->available) return false;
+  if (dominator_index == dominated_index) return true;
+  if (!loom_cfg_graph_block_is_reachable(&cache->graph, dominator_index) ||
+      !loom_cfg_graph_block_is_reachable(&cache->graph, dominated_index)) {
+    return false;
+  }
+  uint16_t dominator_depth = cache->dominator_depths[dominator_index];
+  uint16_t dominated_depth = cache->dominator_depths[dominated_index];
+  if (dominator_depth == LOOM_CFG_DOMINATOR_INVALID ||
+      dominated_depth == LOOM_CFG_DOMINATOR_INVALID ||
+      dominator_depth > dominated_depth) {
+    return false;
+  }
+
+  uint16_t current_index = dominated_index;
+  while (cache->dominator_depths[current_index] > dominator_depth) {
+    current_index = cache->immediate_dominators[current_index];
+    if (current_index == LOOM_CFG_DOMINATOR_INVALID) return false;
+  }
+  return current_index == dominator_index;
+}
+
+static bool loom_structured_block_dominates(
+    const loom_block_t* dominator_block, const loom_block_t* dominated_block) {
+  if (!dominator_block || !dominated_block ||
+      dominator_block->parent_region != dominated_block->parent_region) {
+    return false;
+  }
+  const loom_region_t* region = dominator_block->parent_region;
+  if (!region || region->block_count < 2) return false;
+  return loom_region_const_entry_block(region) == dominator_block;
+}
+
+static bool loom_block_dominates(const loom_dominance_info_t* info,
+                                 const loom_block_t* dominator_block,
+                                 const loom_block_t* dominated_block) {
+  if (!dominator_block || !dominated_block) return false;
+  if (dominator_block == dominated_block) return true;
+  const loom_region_t* region = dominator_block->parent_region;
+  if (!region || region != dominated_block->parent_region) return false;
+  if (!iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
+    return loom_structured_block_dominates(dominator_block, dominated_block);
+  }
+
+  const loom_cfg_dominance_region_t* cache =
+      loom_dominance_lookup_cfg_region(info, region);
+  if (!cache) return false;
+  iree_host_size_t dominator_index =
+      loom_cfg_graph_block_index(&cache->graph, dominator_block);
+  iree_host_size_t dominated_index =
+      loom_cfg_graph_block_index(&cache->graph, dominated_block);
+  if (dominator_index == IREE_HOST_SIZE_MAX ||
+      dominated_index == IREE_HOST_SIZE_MAX) {
+    return false;
+  }
+  return loom_cfg_region_block_dominates(cache, (uint16_t)dominator_index,
+                                         (uint16_t)dominated_index);
+}
+
+static bool loom_op_crosses_isolation_boundary(
+    const loom_dominance_info_t* info, const loom_op_t* op) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(info->module, op);
+  if (!vtable) return false;
+  loom_trait_flags_t traits =
+      vtable->effective_traits ? vtable->effective_traits(op) : vtable->traits;
+  return loom_traits_is_isolated(traits);
 }
 
 //===----------------------------------------------------------------------===//
@@ -73,6 +358,8 @@ static bool loom_entry_block_dominates(const loom_op_t* parent_op,
 
 bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
                        const loom_op_t* b) {
+  if (!info || !info->module || !a || !b) return false;
+
   // Self-dominance.
   if (a == b) return true;
 
@@ -81,10 +368,9 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
     return a->block_ordinal < b->block_ordinal;
   }
 
-  // Same parent op, different blocks: entry block dominance.
+  // Same parent op, different blocks: region block dominance.
   if (a->parent_op == b->parent_op && a->parent_op != NULL) {
-    return loom_entry_block_dominates(a->parent_op, a->parent_block,
-                                      b->parent_block);
+    return loom_block_dominates(info, a->parent_block, b->parent_block);
   }
 
   // Different nesting depths or different parent ops.
@@ -107,16 +393,9 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
   uint16_t current_depth = depth_b;
   while (current_depth > depth_a) {
     // Check for isolation boundary on b's path.
-    if (b_at_a_depth->parent_op) {
-      const loom_op_vtable_t* vtable =
-          loom_op_vtable(info->module, b_at_a_depth->parent_op);
-      if (vtable) {
-        loom_trait_flags_t traits =
-            vtable->effective_traits
-                ? vtable->effective_traits(b_at_a_depth->parent_op)
-                : vtable->traits;
-        if (loom_traits_is_isolated(traits)) return false;
-      }
+    if (b_at_a_depth->parent_op &&
+        loom_op_crosses_isolation_boundary(info, b_at_a_depth->parent_op)) {
+      return false;
     }
     b_at_a_depth = b_at_a_depth->parent_op;
     --current_depth;
@@ -137,10 +416,10 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
   }
 
   // Same parent op at the same depth, different blocks: entry block
-  // dominance.
+  // or CFG block dominance.
   if (a->parent_op == b_at_a_depth->parent_op && a->parent_op != NULL) {
-    return loom_entry_block_dominates(a->parent_op, a->parent_block,
-                                      b_at_a_depth->parent_block);
+    return loom_block_dominates(info, a->parent_block,
+                                b_at_a_depth->parent_block);
   }
 
   // Different parent ops at the same depth: neither dominates.
@@ -156,29 +435,20 @@ bool loom_dominates_value(const loom_dominance_info_t* info,
   const loom_value_t* value = &info->module->values.entries[value_id];
 
   if (value->flags & LOOM_VALUE_FLAG_BLOCK_ARG) {
-    // Block argument: dominates all ops in the block and all ops
-    // in nested regions (subject to isolation boundaries).
+    // Block argument: dominates all ops in dominated blocks and all ops in
+    // nested regions reached without crossing an isolation boundary.
     const loom_block_t* def_block = loom_value_def_block(value);
     if (!def_block) return false;
 
-    // Same block: block args dominate all ops in the block.
-    if (use_op->parent_block == def_block) return true;
-
-    // Check if use_op is nested inside the def block's region.
-    // Walk use_op's ancestry looking for the def block.
     const loom_op_t* current = use_op;
-    while (current->parent_op) {
-      // Check isolation on the parent.
-      const loom_op_vtable_t* vtable =
-          loom_op_vtable(info->module, current->parent_op);
-      if (vtable) {
-        loom_trait_flags_t traits =
-            vtable->effective_traits
-                ? vtable->effective_traits(current->parent_op)
-                : vtable->traits;
-        if (loom_traits_is_isolated(traits)) return false;
+    while (current) {
+      if (loom_block_dominates(info, def_block, current->parent_block)) {
+        return true;
       }
-      if (current->parent_op->parent_block == def_block) return true;
+      if (!current->parent_op) return false;
+      if (loom_op_crosses_isolation_boundary(info, current->parent_op)) {
+        return false;
+      }
       current = current->parent_op;
     }
     return false;

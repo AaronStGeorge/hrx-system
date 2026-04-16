@@ -62,8 +62,8 @@ class AvailabilityTest : public ::testing::Test {
 
   void PrepareAvailabilityAnalysis() {
     IREE_ASSERT_OK(loom_module_compute_uses(module_));
-    loom_availability_analysis_initialize(module_, &analysis_arena_,
-                                          &availability_);
+    IREE_ASSERT_OK(loom_availability_analysis_initialize(
+        module_, &analysis_arena_, &availability_));
   }
 
   void InternTypeAndFindId(loom_type_t type, loom_type_id_t* out_type_id) {

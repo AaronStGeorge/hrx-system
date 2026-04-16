@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
 
@@ -29,6 +30,11 @@ class DominanceTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    iree_host_size_t cfg_vtable_count = 0;
+    const loom_op_vtable_t* const* cfg_vtables =
+        loom_cfg_dialect_vtables(&cfg_vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_CFG, cfg_vtables, (uint16_t)cfg_vtable_count));
     iree_host_size_t vtable_count = 0;
     const loom_op_vtable_t* const* vtables =
         loom_test_dialect_vtables(&vtable_count);
@@ -60,7 +66,6 @@ class DominanceTest : public ::testing::Test {
     builder_.ip.parent_op = func_op;
 
     iree_arena_initialize(&block_pool_, &dom_arena_);
-    loom_dominance_info_initialize(module_, &dom_arena_, &dom_info_);
   }
 
   void TearDown() override {
@@ -81,7 +86,50 @@ class DominanceTest : public ::testing::Test {
     saved_ips_.pop_back();
   }
 
-  void finalize() { IREE_ASSERT_OK(loom_module_compute_uses(module_)); }
+  void set_block(loom_block_t* block) {
+    loom_builder_set_block(&builder_, block);
+    builder_.ip.parent_op = func_op_;
+  }
+
+  loom_block_t* append_block() {
+    loom_block_t* block = nullptr;
+    IREE_CHECK_OK(loom_region_append_block(module_, body_, &block));
+    return block;
+  }
+
+  loom_op_t* build_constant(loom_type_t type, int64_t value) {
+    loom_op_t* op = NULL;
+    IREE_CHECK_OK(loom_test_constant_build(&builder_, loom_attr_i64(value),
+                                           type, LOOM_LOCATION_UNKNOWN, &op));
+    return op;
+  }
+
+  loom_value_id_t build_condition() {
+    loom_op_t* condition = build_constant(loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+                                          /*value=*/1);
+    return loom_test_constant_result(condition);
+  }
+
+  void build_branch(loom_block_t* dest) {
+    loom_op_t* branch_op = NULL;
+    IREE_ASSERT_OK(loom_cfg_br_build(&builder_, dest, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &branch_op));
+  }
+
+  void build_conditional_branch(loom_block_t* true_dest,
+                                loom_block_t* false_dest) {
+    loom_value_id_t condition = build_condition();
+    loom_op_t* branch_op = NULL;
+    IREE_ASSERT_OK(loom_cfg_cond_br_build(&builder_, condition, true_dest,
+                                          false_dest, LOOM_LOCATION_UNKNOWN,
+                                          &branch_op));
+  }
+
+  void finalize() {
+    IREE_ASSERT_OK(loom_module_compute_uses(module_));
+    IREE_ASSERT_OK(
+        loom_dominance_info_initialize(module_, &dom_arena_, &dom_info_));
+  }
 
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
@@ -432,6 +480,169 @@ TEST_F(DominanceTest, SiblingAfterRegionDoesNotDominateNested) {
   EXPECT_TRUE(loom_dominates_op(&dom_info_, c0, inner));
   // And map_op itself dominates inner (ancestor).
   EXPECT_TRUE(loom_dominates_op(&dom_info_, map_op, inner));
+}
+
+TEST_F(DominanceTest, CfgDiamondDominanceUsesPredecessorGraph) {
+  body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_block_t* entry = loom_region_entry_block(body_);
+  loom_block_t* then_block = append_block();
+  loom_block_t* else_block = append_block();
+  loom_block_t* merge_block = append_block();
+
+  set_block(entry);
+  loom_op_t* entry_value = build_constant(i32, 0);
+  build_conditional_branch(then_block, else_block);
+
+  set_block(then_block);
+  loom_op_t* then_value = build_constant(i32, 1);
+  build_branch(merge_block);
+
+  set_block(else_block);
+  loom_op_t* else_value = build_constant(i32, 2);
+  build_branch(merge_block);
+
+  set_block(merge_block);
+  loom_op_t* merge_value = build_constant(i32, 3);
+  finalize();
+
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, entry_value, then_value));
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, entry_value, else_value));
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, entry_value, merge_value));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, then_value, merge_value));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, else_value, merge_value));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, then_value, else_value));
+}
+
+TEST_F(DominanceTest, CfgLoopDominanceUsesFixedPointDominators) {
+  body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_block_t* header_block = loom_region_entry_block(body_);
+  loom_block_t* body_block = append_block();
+  loom_block_t* exit_block = append_block();
+
+  set_block(header_block);
+  loom_op_t* header_value = build_constant(i32, 0);
+  build_conditional_branch(body_block, exit_block);
+
+  set_block(body_block);
+  loom_op_t* body_value = build_constant(i32, 1);
+  build_branch(header_block);
+
+  set_block(exit_block);
+  loom_op_t* exit_value = build_constant(i32, 2);
+  finalize();
+
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, header_value, body_value));
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, header_value, exit_value));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, body_value, header_value));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, body_value, exit_value));
+}
+
+TEST_F(DominanceTest, CfgBlockArgumentsDominateOnlyDominatedBlocks) {
+  body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_block_t* entry = loom_region_entry_block(body_);
+  loom_block_t* then_block = append_block();
+  loom_block_t* else_block = append_block();
+  loom_block_t* merge_block = append_block();
+
+  loom_value_id_t entry_arg = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &entry_arg));
+  IREE_ASSERT_OK(loom_block_add_arg(module_, entry, entry_arg));
+
+  loom_value_id_t then_arg = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &then_arg));
+  IREE_ASSERT_OK(loom_block_add_arg(module_, then_block, then_arg));
+
+  set_block(entry);
+  build_conditional_branch(then_block, else_block);
+  set_block(then_block);
+  loom_op_t* then_value = build_constant(i32, 1);
+  build_branch(merge_block);
+  set_block(else_block);
+  loom_op_t* else_value = build_constant(i32, 2);
+  build_branch(merge_block);
+  set_block(merge_block);
+  loom_op_t* merge_value = build_constant(i32, 3);
+  finalize();
+
+  EXPECT_TRUE(loom_dominates_value(&dom_info_, entry_arg, then_value));
+  EXPECT_TRUE(loom_dominates_value(&dom_info_, entry_arg, else_value));
+  EXPECT_TRUE(loom_dominates_value(&dom_info_, entry_arg, merge_value));
+  EXPECT_TRUE(loom_dominates_value(&dom_info_, then_arg, then_value));
+  EXPECT_FALSE(loom_dominates_value(&dom_info_, then_arg, else_value));
+  EXPECT_FALSE(loom_dominates_value(&dom_info_, then_arg, merge_value));
+}
+
+TEST_F(DominanceTest, CfgUnreachableBlocksAreConservative) {
+  body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_block_t* entry = loom_region_entry_block(body_);
+  loom_block_t* reachable_block = append_block();
+  loom_block_t* unreachable_block = append_block();
+
+  set_block(entry);
+  loom_op_t* entry_value = build_constant(i32, 0);
+  build_branch(reachable_block);
+
+  set_block(reachable_block);
+  loom_op_t* reachable_value = build_constant(i32, 1);
+
+  set_block(unreachable_block);
+  loom_op_t* unreachable_value = build_constant(i32, 2);
+  finalize();
+
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, entry_value, reachable_value));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, entry_value, unreachable_value));
+  EXPECT_FALSE(
+      loom_dominates_op(&dom_info_, unreachable_value, reachable_value));
+}
+
+TEST_F(DominanceTest, CfgDominanceReachesNestedStructuredRegions) {
+  body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t tile_type = loom_type_shaped_1d(
+      LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
+  loom_block_t* entry = loom_region_entry_block(body_);
+  loom_block_t* nested_block = append_block();
+
+  set_block(entry);
+  loom_op_t* tile = build_constant(tile_type, 0);
+  loom_value_id_t tile_value = loom_test_constant_result(tile);
+  build_branch(nested_block);
+
+  set_block(nested_block);
+  loom_op_t* map_op = NULL;
+  IREE_ASSERT_OK(loom_test_map_build(&builder_, &tile_value, 1, tile_type, NULL,
+                                     0, LOOM_LOCATION_UNKNOWN, &map_op));
+  enter_region(map_op, loom_test_map_body(map_op));
+  loom_op_t* inner = build_constant(i32, 1);
+  leave_region();
+  finalize();
+
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, tile, map_op));
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, tile, inner));
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, map_op, inner));
+}
+
+TEST_F(DominanceTest, MalformedCfgGraphDoesNotProvideCrossBlockDominance) {
+  body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_block_t* entry = loom_region_entry_block(body_);
+  loom_block_t* target = append_block();
+
+  set_block(entry);
+  loom_op_t* entry_value = build_constant(i32, 0);
+  build_branch(target);
+  loom_op_t* after_branch = build_constant(i32, 1);
+
+  set_block(target);
+  loom_op_t* target_value = build_constant(i32, 2);
+  finalize();
+
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, entry_value, after_branch));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, entry_value, target_value));
 }
 
 }  // namespace

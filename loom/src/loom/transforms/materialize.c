@@ -880,8 +880,8 @@ iree_status_t loom_ir_move_block_ops_before(
 
   bool omit_terminators = options ? options->omit_terminators : false;
   loom_availability_analysis_t availability = {0};
-  loom_availability_analysis_initialize(rewriter->module, rewriter->arena,
-                                        &availability);
+  IREE_RETURN_IF_ERROR(loom_availability_analysis_initialize(
+      rewriter->module, rewriter->arena, &availability));
   loom_ir_move_availability_t query = {
       .analysis = &availability,
       .remap = remap,

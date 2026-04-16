@@ -10,12 +10,14 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 
-void loom_availability_analysis_initialize(
+iree_status_t loom_availability_analysis_initialize(
     const loom_module_t* module, iree_arena_allocator_t* arena,
     loom_availability_analysis_t* out_analysis) {
   out_analysis->module = module;
   out_analysis->arena = arena;
-  loom_dominance_info_initialize(module, arena, &out_analysis->dominance);
+  IREE_RETURN_IF_ERROR(
+      loom_dominance_info_initialize(module, arena, &out_analysis->dominance));
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//

@@ -44,7 +44,7 @@ typedef struct loom_availability_analysis_t {
 
 // Initializes availability analysis for |module|. The caller owns |arena| and
 // must keep it live for the analysis object's lifetime.
-void loom_availability_analysis_initialize(
+iree_status_t loom_availability_analysis_initialize(
     const loom_module_t* module, iree_arena_allocator_t* arena,
     loom_availability_analysis_t* out_analysis);
 

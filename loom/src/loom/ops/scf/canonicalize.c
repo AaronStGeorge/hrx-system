@@ -664,8 +664,8 @@ static iree_status_t loom_scf_region_branch_factor_common_tail(
   }
 
   loom_availability_analysis_t availability;
-  loom_availability_analysis_initialize(rewriter->module, rewriter->arena,
-                                        &availability);
+  IREE_RETURN_IF_ERROR(loom_availability_analysis_initialize(
+      rewriter->module, rewriter->arena, &availability));
   loom_op_t* reference_tail = tail_ops[0];
   for (uint8_t i = 0; i < op->region_count; ++i) {
     bool tail_ops_match = false;

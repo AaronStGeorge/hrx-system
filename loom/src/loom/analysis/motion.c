@@ -49,8 +49,8 @@ iree_status_t loom_motion_analysis_initialize(
     loom_motion_analysis_t* out_analysis) {
   out_analysis->module = module;
   out_analysis->arena = arena;
-  loom_availability_analysis_initialize(module, arena,
-                                        &out_analysis->availability);
+  IREE_RETURN_IF_ERROR(loom_availability_analysis_initialize(
+      module, arena, &out_analysis->availability));
   return loom_motion_region_stack_initialize(arena,
                                              &out_analysis->region_stack);
 }

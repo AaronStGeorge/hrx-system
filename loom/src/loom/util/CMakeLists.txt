@@ -155,12 +155,43 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    cfg_graph
+  HDRS
+    "cfg_graph.h"
+  SRCS
+    "cfg_graph.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    cfg_graph_test
+  SRCS
+    "cfg_graph_test.cc"
+  DEPS
+    ::cfg_graph
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     dominance
   HDRS
     "dominance.h"
   SRCS
     "dominance.c"
   DEPS
+    ::cfg_graph
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
@@ -177,6 +208,7 @@ loom_cc_test(
     ::dominance
     iree::base::internal::arena
     loom::src::loom::ir
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::test
     iree::testing::gtest

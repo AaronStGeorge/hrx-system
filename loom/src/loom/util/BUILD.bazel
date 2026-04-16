@@ -135,10 +135,37 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "cfg_graph",
+    srcs = ["cfg_graph.c"],
+    hdrs = ["cfg_graph.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "cfg_graph_test",
+    srcs = ["cfg_graph_test.cc"],
+    deps = [
+        ":cfg_graph",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "dominance",
     srcs = ["dominance.c"],
     hdrs = ["dominance.h"],
     deps = [
+        ":cfg_graph",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//runtime/src/iree/base",
@@ -153,6 +180,7 @@ loom_cc_test(
         ":dominance",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/test",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
