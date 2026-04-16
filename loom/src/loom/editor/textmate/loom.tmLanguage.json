@@ -137,7 +137,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(kernel)\\.(async\\.gather\\.mask|async\\.copy\\.mask|async\\.gather|async\\.group|async\\.copy|async\\.wait|barrier)\\b",
+          "match": "\\b(kernel)\\.(async\\.tensor\\.store\\.from\\.lds|async\\.tensor\\.load\\.to\\.lds|tensor\\.lds\\.descriptor|async\\.gather\\.mask|async\\.copy\\.mask|async\\.gather|async\\.group|async\\.copy|async\\.wait|barrier)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"
@@ -297,7 +297,7 @@
       "patterns": [
         {
           "name": "support.type.loom",
-          "match": "\\b(?:kernel\\.async\\.group|kernel\\.async\\.token|hal\\.buffer|buffer|f8E4M3|f8E5M2|offset|tensor|vector|group|index|bf16|pool|tile|view|f16|f32|f64|i16|i32|i64|i1|i8)\\b"
+          "match": "\\b(?:kernel\\.tensor\\.lds\\.descriptor|kernel\\.async\\.group|kernel\\.async\\.token|hal\\.buffer|buffer|f8E4M3|f8E5M2|offset|tensor|vector|group|index|bf16|pool|tile|view|f16|f32|f64|i16|i32|i64|i1|i8)\\b"
         }
       ]
     },
@@ -305,7 +305,7 @@
       "patterns": [
         {
           "name": "keyword.other.loom",
-          "match": "\\b(?:iter_args|priority|default|device|import|layout|public|where|case|else|host|into|step|as|do|to|x)\\b"
+          "match": "\\b(?:iter_args|priority|default|dgroups|device|import|layout|public|using|where|case|else|host|into|step|as|do|to|x)\\b"
         },
         {
           "name": "constant.language.boolean.loom",

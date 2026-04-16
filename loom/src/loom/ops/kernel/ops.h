@@ -25,7 +25,10 @@ enum {
   LOOM_OP_KERNEL_ASYNC_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 4),
   LOOM_OP_KERNEL_ASYNC_GROUP = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 5),
   LOOM_OP_KERNEL_ASYNC_WAIT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 6),
-  LOOM_OP_KERNEL_COUNT_ = 7,
+  LOOM_OP_KERNEL_TENSOR_LDS_DESCRIPTOR = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 7),
+  LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 8),
+  LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 9),
+  LOOM_OP_KERNEL_COUNT_ = 10,
 };
 
 // Target-independent cache scope for memory operations.
@@ -200,7 +203,7 @@ iree_status_t loom_kernel_async_gather_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_KERNEL_ASYNC_GROUP: Commit zero or more async copy/gather tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
+// LOOM_OP_KERNEL_ASYNC_GROUP: Commit zero or more async copy/gather/tensor tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
 // %empty = kernel.async.group -> kernel.async.group
 LOOM_DEFINE_ISA(loom_kernel_async_group_isa, LOOM_OP_KERNEL_ASYNC_GROUP)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_kernel_async_group_tokens, 0)
@@ -228,6 +231,68 @@ iree_status_t loom_kernel_async_wait_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_kernel_async_wait_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_TENSOR_LDS_DESCRIPTOR: Bundle AMDGPU tensor-memory descriptor groups into one typed SSA value. The dgroups are the exact operands lowered to llvm.amdgcn.tensor.load.to.lds or llvm.amdgcn.tensor.store.from.lds: D0 is vector<4xi32>, D1 is vector<8xi32>, and optional D2/D3 are vector<4xi32>. Gfx1250 uses two-group and four-group descriptor forms; the LLVM intrinsic's fifth D4 operand is lowered as zero because gfx1250 ignores it. The op is pure and contains no memory endpoints; endpoint views are operands of the async tensor ops so fact propagation and alias analysis do not need to decode hardware bitfields.
+// %desc = kernel.tensor.lds.descriptor dgroups(%d0, %d1) : vector<4xi32>, vector<8xi32> -> kernel.tensor.lds.descriptor
+LOOM_DEFINE_ISA(loom_kernel_tensor_lds_descriptor_isa, LOOM_OP_KERNEL_TENSOR_LDS_DESCRIPTOR)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_kernel_tensor_lds_descriptor_dgroups, 0)
+LOOM_DEFINE_RESULT(loom_kernel_tensor_lds_descriptor_descriptor, 0)
+iree_status_t loom_kernel_tensor_lds_descriptor_build(
+    loom_builder_t* builder,
+    loom_may_consume const loom_value_id_t* dgroups,
+    iree_host_size_t dgroups_count,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_tensor_lds_descriptor_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS: Initiate an AMDGPU gfx1250+ tensor-memory load from a global-like source view into a workgroup/LDS destination view using an explicit kernel.tensor.lds.descriptor. The descriptor supplies the exact hardware dgroups, while the source and destination views keep the logical rank, element type, layout, and memory-space facts visible. The endpoints must have the same rank in [1, 5], the same 1/2/4/8 byte element type, and memory spaces global/constant/descriptor to workgroup. The returned token must be committed to exactly one kernel.async.group.
+// %copy = kernel.async.tensor.load.to.lds %global_tile to %lds_tile using %desc {cache_scope = cu, cache_temporal = regular} : view<64x64xf32> to view<64x64xf32>, kernel.tensor.lds.descriptor -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_tensor_load_to_lds_isa, LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS)
+LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_load_to_lds_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_load_to_lds_dest, 1)
+LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_load_to_lds_descriptor, 2)
+LOOM_DEFINE_RESULT(loom_kernel_async_tensor_load_to_lds_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_load_to_lds_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_load_to_lds_cache_temporal, 1)
+iree_status_t loom_kernel_async_tensor_load_to_lds_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    loom_may_consume loom_value_id_t descriptor,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_tensor_load_to_lds_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS: Initiate an AMDGPU gfx1250+ tensor-memory store from a workgroup/LDS source view into a global-like destination view using an explicit kernel.tensor.lds.descriptor. The descriptor supplies the exact hardware dgroups, while the source and destination views keep the logical rank, element type, layout, and memory-space facts visible. The endpoints must have the same rank in [1, 5], the same 1/2/4/8 byte element type, and memory spaces workgroup to global/descriptor. The returned token must be committed to exactly one kernel.async.group.
+// %copy = kernel.async.tensor.store.from.lds %lds_tile to %global_tile using %desc {cache_scope = device, cache_temporal = non_temporal_writeback} : view<64x64xf32> to view<64x64xf32>, kernel.tensor.lds.descriptor -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_tensor_store_from_lds_isa, LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS)
+LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_store_from_lds_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_store_from_lds_dest, 1)
+LOOM_DEFINE_OPERAND(loom_kernel_async_tensor_store_from_lds_descriptor, 2)
+LOOM_DEFINE_RESULT(loom_kernel_async_tensor_store_from_lds_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_store_from_lds_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_tensor_store_from_lds_cache_temporal, 1)
+iree_status_t loom_kernel_async_tensor_store_from_lds_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    loom_may_consume loom_value_id_t descriptor,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_tensor_store_from_lds_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

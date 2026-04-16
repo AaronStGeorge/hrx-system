@@ -13,10 +13,15 @@ is the oracle for the C reader — these tests must be exhaustive.
 """
 
 import struct
+from typing import TypeVar
 
 from loom.builtin_types import ALL_BUILTIN_TYPES
+from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
+from loom.dialect.index import ALL_INDEX_OPS
+from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
+from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.format.bytecode.reader import read_module
@@ -71,52 +76,111 @@ from loom.ir import (
 # Helpers
 # ============================================================================
 
+_T = TypeVar("_T")
+
+
+def _append_unique(items: list[_T], additions: tuple[_T, ...]) -> None:
+    seen_ids = {id(item) for item in items}
+    for item in additions:
+        item_id = id(item)
+        if item_id in seen_ids:
+            continue
+        seen_ids.add(item_id)
+        items.append(item)
+
 
 def _text_parser(
-    *, include_encoding: bool = False, include_vector: bool = False
+    *,
+    include_encoding: bool = False,
+    include_vector: bool = False,
+    include_kernel: bool = False,
 ) -> Parser:
     parser = Parser()
     ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
-        ops += list(ALL_ENCODING_OPS)
+        _append_unique(ops, ALL_ENCODING_OPS)
     if include_vector:
-        ops += list(ALL_VECTOR_OPS)
+        _append_unique(ops, ALL_VECTOR_OPS)
+    if include_kernel:
+        _append_unique(
+            ops,
+            ALL_SCALAR_OPS
+            + ALL_INDEX_OPS
+            + ALL_ENCODING_OPS
+            + ALL_BUFFER_OPS
+            + ALL_VECTOR_OPS
+            + ALL_KERNEL_OPS,
+        )
     parser.register_ops(ops)
-    parser.register_types(ALL_BUILTIN_TYPES)
+    types = list(ALL_BUILTIN_TYPES)
+    if include_kernel:
+        _append_unique(types, ALL_KERNEL_TYPES)
+    parser.register_types(types)
     return parser
 
 
 def _text_printer(
-    *, include_encoding: bool = False, include_vector: bool = False
+    *,
+    include_encoding: bool = False,
+    include_vector: bool = False,
+    include_kernel: bool = False,
 ) -> Printer:
     printer = Printer()
     ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
-        ops += list(ALL_ENCODING_OPS)
+        _append_unique(ops, ALL_ENCODING_OPS)
     if include_vector:
-        ops += list(ALL_VECTOR_OPS)
+        _append_unique(ops, ALL_VECTOR_OPS)
+    if include_kernel:
+        _append_unique(
+            ops,
+            ALL_SCALAR_OPS
+            + ALL_INDEX_OPS
+            + ALL_ENCODING_OPS
+            + ALL_BUFFER_OPS
+            + ALL_VECTOR_OPS
+            + ALL_KERNEL_OPS,
+        )
     printer.register_ops(ops)
-    printer.register_types(ALL_BUILTIN_TYPES)
+    types = list(ALL_BUILTIN_TYPES)
+    if include_kernel:
+        _append_unique(types, ALL_KERNEL_TYPES)
+    printer.register_types(types)
     return printer
 
 
 def _parse_write_read(
-    text: str, *, include_encoding: bool = False, include_vector: bool = False
+    text: str,
+    *,
+    include_encoding: bool = False,
+    include_vector: bool = False,
+    include_kernel: bool = False,
 ) -> Module:
     module = _text_parser(
-        include_encoding=include_encoding, include_vector=include_vector
+        include_encoding=include_encoding,
+        include_vector=include_vector,
+        include_kernel=include_kernel,
     ).parse(text)
     return read_module(write_module(module))
 
 
 def _roundtrip_text_through_bytecode(
-    text: str, *, include_encoding: bool = False, include_vector: bool = False
+    text: str,
+    *,
+    include_encoding: bool = False,
+    include_vector: bool = False,
+    include_kernel: bool = False,
 ) -> str:
     loaded = _parse_write_read(
-        text, include_encoding=include_encoding, include_vector=include_vector
+        text,
+        include_encoding=include_encoding,
+        include_vector=include_vector,
+        include_kernel=include_kernel,
     )
     return _text_printer(
-        include_encoding=include_encoding, include_vector=include_vector
+        include_encoding=include_encoding,
+        include_vector=include_vector,
+        include_kernel=include_kernel,
     ).print_module(loaded)
 
 
@@ -1107,6 +1171,55 @@ class TestCrossFormatRoundTrip:
         )
 
         assert _roundtrip_text_through_bytecode(text, include_vector=True) == text
+
+    def test_kernel_tensor_lds_ops_survive_bytecode(self) -> None:
+        text = (
+            "func.def @async_tensor_lds_bytecode(%source_buffer: buffer, "
+            "%dest_buffer: buffer, %source_offset: offset, %dest_offset: offset) {\n"
+            "  %zero = index.constant 0 : offset\n"
+            "  %bytes = index.constant 16384 : offset\n"
+            "  %layout = encoding.layout.dense : encoding<layout>\n"
+            "  %i32_zero = scalar.constant 0 : i32\n"
+            "  %d0 = vector.splat %i32_zero : vector<4xi32>\n"
+            "  %d1 = vector.splat %i32_zero : vector<8xi32>\n"
+            "  %d2 = vector.splat %i32_zero : vector<4xi32>\n"
+            "  %d3 = vector.splat %i32_zero : vector<4xi32>\n"
+            "  %desc = kernel.tensor.lds.descriptor dgroups(%d0, %d1, %d2, %d3) "
+            ": vector<4xi32>, vector<8xi32>, vector<4xi32>, vector<4xi32> -> "
+            "kernel.tensor.lds.descriptor\n"
+            "  %source_global = buffer.assume.memory_space %source_buffer "
+            "{memory_space = global} : buffer\n"
+            "  %source = buffer.view %source_global[%source_offset] : buffer -> "
+            "view<64x64xf32, %layout>\n"
+            "  %scratch = buffer.alloca %bytes {base_alignment = 256, "
+            "memory_space = workgroup} : buffer\n"
+            "  %lds = buffer.view %scratch[%zero] : buffer -> "
+            "view<64x64xf32, %layout>\n"
+            "  %load = kernel.async.tensor.load.to.lds %source to %lds using "
+            "%desc {cache_scope = cu, cache_temporal = regular} : "
+            "view<64x64xf32, %layout> to view<64x64xf32, %layout>, "
+            "kernel.tensor.lds.descriptor -> kernel.async.token\n"
+            "  %load_group = kernel.async.group %load : kernel.async.token -> "
+            "kernel.async.group\n"
+            "  kernel.async.wait %load_group {newer_groups = 0} : "
+            "kernel.async.group\n"
+            "  %dest_global = buffer.assume.memory_space %dest_buffer "
+            "{memory_space = global} : buffer\n"
+            "  %dest = buffer.view %dest_global[%dest_offset] : buffer -> "
+            "view<64x64xf32, %layout>\n"
+            "  %store = kernel.async.tensor.store.from.lds %lds to %dest using "
+            "%desc {cache_scope = device, cache_temporal = non_temporal_writeback} "
+            ": view<64x64xf32, %layout> to view<64x64xf32, %layout>, "
+            "kernel.tensor.lds.descriptor -> kernel.async.token\n"
+            "  %store_group = kernel.async.group %store : kernel.async.token -> "
+            "kernel.async.group\n"
+            "  kernel.async.wait %store_group {newer_groups = 0} : "
+            "kernel.async.group\n"
+            "  func.return\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_kernel=True) == text
 
     def test_attr_dict_parser_programmatic_and_readback_converge(self) -> None:
         from loom.builtin_types import ALL_BUILTIN_TYPES

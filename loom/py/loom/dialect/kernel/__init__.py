@@ -19,10 +19,14 @@ from loom.dialect.kernel.defs import (
     kernel_async_gather_mask,
     kernel_async_group,
     kernel_async_group_type,
+    kernel_async_tensor_load_to_lds,
+    kernel_async_tensor_store_from_lds,
     kernel_async_token_type,
     kernel_async_wait,
     kernel_barrier,
     kernel_ops,
+    kernel_tensor_lds_descriptor,
+    kernel_tensor_lds_descriptor_type,
 )
 
 __all__ = [
@@ -38,8 +42,12 @@ __all__ = [
     "kernel_async_gather",
     "kernel_async_gather_mask",
     "kernel_async_group",
+    "kernel_async_tensor_load_to_lds",
+    "kernel_async_tensor_store_from_lds",
     "kernel_async_group_type",
     "kernel_async_token_type",
     "kernel_async_wait",
     "kernel_barrier",
+    "kernel_tensor_lds_descriptor",
+    "kernel_tensor_lds_descriptor_type",
 ]

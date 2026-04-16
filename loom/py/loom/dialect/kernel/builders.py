@@ -98,7 +98,7 @@ class KernelBuilders:
         return cast(ValueRef, self._b.build("kernel.async.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def group(self, *, tokens: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Commit zero or more async copy/gather tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
+        """Commit zero or more async copy/gather/tensor tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
 
         Example::
             %empty = kernel.async.group -> kernel.async.group
@@ -121,3 +121,47 @@ class KernelBuilders:
         _attributes["newer_groups"] = newer_groups
         _operands.append(group)
         self._b.build("kernel.async.wait", _operands, attributes=_attributes, regions=_regions)
+
+    def descriptor(self, *, dgroups: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Bundle AMDGPU tensor-memory descriptor groups into one typed SSA value. The dgroups are the exact operands lowered to llvm.amdgcn.tensor.load.to.lds or llvm.amdgcn.tensor.store.from.lds: D0 is vector<4xi32>, D1 is vector<8xi32>, and optional D2/D3 are vector<4xi32>. Gfx1250 uses two-group and four-group descriptor forms; the LLVM intrinsic's fifth D4 operand is lowered as zero because gfx1250 ignores it. The op is pure and contains no memory endpoints; endpoint views are operands of the async tensor ops so fact propagation and alias analysis do not need to decode hardware bitfields.
+
+        Example::
+            %desc = kernel.tensor.lds.descriptor dgroups(%d0, %d1) : vector<4xi32>, vector<8xi32> -> kernel.tensor.lds.descriptor
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.extend(dgroups)
+        return cast(ValueRef, self._b.build("kernel.tensor.lds.descriptor", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def async_tensor_load_to_lds(self, *, source: ValueRef, dest: ValueRef, descriptor: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Initiate an AMDGPU gfx1250+ tensor-memory load from a global-like source view into a workgroup/LDS destination view using an explicit kernel.tensor.lds.descriptor. The descriptor supplies the exact hardware dgroups, while the source and destination views keep the logical rank, element type, layout, and memory-space facts visible. The endpoints must have the same rank in [1, 5], the same 1/2/4/8 byte element type, and memory spaces global/constant/descriptor to workgroup. The returned token must be committed to exactly one kernel.async.group.
+
+        Example::
+            %copy = kernel.async.tensor.load.to.lds %global_tile to %lds_tile using %desc {cache_scope = cu, cache_temporal = regular} : view<64x64xf32> to view<64x64xf32>, kernel.tensor.lds.descriptor -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _operands.append(source)
+        _operands.append(dest)
+        _operands.append(descriptor)
+        return cast(ValueRef, self._b.build("kernel.async.tensor.load.to.lds", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def async_tensor_store_from_lds(self, *, source: ValueRef, dest: ValueRef, descriptor: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Initiate an AMDGPU gfx1250+ tensor-memory store from a workgroup/LDS source view into a global-like destination view using an explicit kernel.tensor.lds.descriptor. The descriptor supplies the exact hardware dgroups, while the source and destination views keep the logical rank, element type, layout, and memory-space facts visible. The endpoints must have the same rank in [1, 5], the same 1/2/4/8 byte element type, and memory spaces workgroup to global/descriptor. The returned token must be committed to exactly one kernel.async.group.
+
+        Example::
+            %copy = kernel.async.tensor.store.from.lds %lds_tile to %global_tile using %desc {cache_scope = device, cache_temporal = non_temporal_writeback} : view<64x64xf32> to view<64x64xf32>, kernel.tensor.lds.descriptor -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _operands.append(source)
+        _operands.append(dest)
+        _operands.append(descriptor)
+        return cast(ValueRef, self._b.build("kernel.async.tensor.store.from.lds", _operands, results=results, attributes=_attributes, regions=_regions))

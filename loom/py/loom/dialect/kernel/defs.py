@@ -6,7 +6,22 @@
 
 """Kernel dialect type and op definitions."""
 
-from loom.assembly import ARROW, COLON, COMMA, AttrDict, OptionalGroup, Ref, Refs, ResultType, TypeOf, TypesOf, kw
+from loom.assembly import (
+    ARROW,
+    COLON,
+    COMMA,
+    GLUE,
+    LPAREN,
+    RPAREN,
+    AttrDict,
+    OptionalGroup,
+    Ref,
+    Refs,
+    ResultType,
+    TypeOf,
+    TypesOf,
+    kw,
+)
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dsl import (
     ANY,
@@ -14,6 +29,7 @@ from loom.dsl import (
     ATTR_TYPE_I64,
     I1,
     UNKNOWN_EFFECTS,
+    VECTOR,
     VIEW,
     AttrDef,
     Dialect,
@@ -49,6 +65,17 @@ kernel_async_token_type = TypeDef(
 kernel_async_group_type = TypeDef(
     name="kernel.async.group",
     doc=("Opaque handle for one ordered asynchronous copy group. A group must be waited before leaving the kernel async-copy stream."),
+)
+
+kernel_tensor_lds_descriptor_type = TypeDef(
+    name="kernel.tensor.lds.descriptor",
+    doc=(
+        "Opaque descriptor grouping AMDGPU tensor-memory dgroups for one "
+        "global/LDS tensor transfer. The descriptor contains the low-level "
+        "dgroup values; the consuming async op still carries the source and "
+        "destination views so layout, extent, and memory-space facts remain "
+        "visible to Loom analyses."
+    ),
 )
 
 # ============================================================================
@@ -127,6 +154,49 @@ def _async_cache_attrs() -> list[AttrDef]:
         ),
     ]
 
+
+# ============================================================================
+# kernel.tensor.lds.descriptor — AMDGPU tensor-memory dgroup bundle
+# ============================================================================
+
+kernel_tensor_lds_descriptor = Op(
+    name="kernel.tensor.lds.descriptor",
+    group=kernel_ops,
+    doc=(
+        "Bundle AMDGPU tensor-memory descriptor groups into one typed SSA "
+        "value. The dgroups are the exact operands lowered to "
+        "llvm.amdgcn.tensor.load.to.lds or "
+        "llvm.amdgcn.tensor.store.from.lds: D0 is vector<4xi32>, D1 is "
+        "vector<8xi32>, and optional D2/D3 are vector<4xi32>. Gfx1250 uses "
+        "two-group and four-group descriptor forms; the LLVM intrinsic's fifth "
+        "D4 operand is lowered as zero because gfx1250 ignores it. The op is "
+        "pure and contains no memory endpoints; endpoint views are operands of "
+        "the async tensor ops so fact propagation and alias analysis do not "
+        "need to decode hardware bitfields."
+    ),
+    operands=[
+        Operand("dgroups", VECTOR, variadic=True, doc="AMDGPU tensor-memory descriptor groups D0..D3."),
+    ],
+    results=[
+        Result("descriptor", ANY, doc="Typed tensor LDS descriptor value."),
+    ],
+    verify="loom_kernel_tensor_lds_descriptor_verify",
+    format=[
+        kw("dgroups"),
+        GLUE,
+        LPAREN,
+        Refs("dgroups"),
+        RPAREN,
+        COLON,
+        TypesOf("dgroups"),
+        ARROW,
+        ResultType("descriptor"),
+    ],
+    examples=[
+        "%desc = kernel.tensor.lds.descriptor dgroups(%d0, %d1) : vector<4xi32>, vector<8xi32> -> kernel.tensor.lds.descriptor",
+        "%desc = kernel.tensor.lds.descriptor dgroups(%d0, %d1, %d2, %d3) : vector<4xi32>, vector<8xi32>, vector<4xi32>, vector<4xi32> -> kernel.tensor.lds.descriptor",
+    ],
+)
 
 # ============================================================================
 # kernel.barrier — workgroup execution barrier with an explicit memory fence
@@ -367,6 +437,106 @@ kernel_async_gather_mask = Op(
 )
 
 # ============================================================================
+# kernel.async.tensor.load.to.lds — AMDGPU tensor-memory global-to-LDS transfer
+# ============================================================================
+
+kernel_async_tensor_load_to_lds = Op(
+    name="kernel.async.tensor.load.to.lds",
+    group=kernel_ops,
+    doc=(
+        "Initiate an AMDGPU gfx1250+ tensor-memory load from a global-like "
+        "source view into a workgroup/LDS destination view using an explicit "
+        "kernel.tensor.lds.descriptor. The descriptor supplies the exact "
+        "hardware dgroups, while the source and destination views keep the "
+        "logical rank, element type, layout, and memory-space facts visible. "
+        "The endpoints must have the same rank in [1, 5], the same 1/2/4/8 "
+        "byte element type, and memory spaces global/constant/descriptor to "
+        "workgroup. "
+        "The returned token must be committed to exactly one kernel.async.group."
+    ),
+    operands=[
+        Operand("source", VIEW, doc="Global-like tensor-memory source view."),
+        Operand("dest", VIEW, doc="Workgroup/LDS tensor-memory destination view."),
+        Operand("descriptor", ANY, doc="Tensor LDS descriptor supplying AMDGPU dgroups."),
+    ],
+    results=[
+        Result("token", ANY, doc="Opaque async-copy token for the tensor load."),
+    ],
+    attrs=_async_cache_attrs(),
+    effects=[Reads("source"), Writes("dest")],
+    verify="loom_kernel_async_tensor_load_to_lds_verify",
+    format=[
+        Ref("source"),
+        kw("to"),
+        Ref("dest"),
+        kw("using"),
+        Ref("descriptor"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        kw("to"),
+        TypeOf("dest"),
+        COMMA,
+        TypeOf("descriptor"),
+        ARROW,
+        ResultType("token"),
+    ],
+    examples=[
+        "%copy = kernel.async.tensor.load.to.lds %global_tile to %lds_tile using %desc {cache_scope = cu, cache_temporal = regular} : view<64x64xf32> to view<64x64xf32>, kernel.tensor.lds.descriptor -> kernel.async.token",
+    ],
+)
+
+# ============================================================================
+# kernel.async.tensor.store.from.lds — AMDGPU tensor-memory LDS-to-global transfer
+# ============================================================================
+
+kernel_async_tensor_store_from_lds = Op(
+    name="kernel.async.tensor.store.from.lds",
+    group=kernel_ops,
+    doc=(
+        "Initiate an AMDGPU gfx1250+ tensor-memory store from a workgroup/LDS "
+        "source view into a global-like destination view using an explicit "
+        "kernel.tensor.lds.descriptor. The descriptor supplies the exact "
+        "hardware dgroups, while the source and destination views keep the "
+        "logical rank, element type, layout, and memory-space facts visible. "
+        "The endpoints must have the same rank in [1, 5], the same 1/2/4/8 "
+        "byte element type, and memory spaces workgroup to global/descriptor. "
+        "The "
+        "returned token must be committed to exactly one kernel.async.group."
+    ),
+    operands=[
+        Operand("source", VIEW, doc="Workgroup/LDS tensor-memory source view."),
+        Operand("dest", VIEW, doc="Global-like tensor-memory destination view."),
+        Operand("descriptor", ANY, doc="Tensor LDS descriptor supplying AMDGPU dgroups."),
+    ],
+    results=[
+        Result("token", ANY, doc="Opaque async-copy token for the tensor store."),
+    ],
+    attrs=_async_cache_attrs(),
+    effects=[Reads("source"), Writes("dest")],
+    verify="loom_kernel_async_tensor_store_from_lds_verify",
+    format=[
+        Ref("source"),
+        kw("to"),
+        Ref("dest"),
+        kw("using"),
+        Ref("descriptor"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        kw("to"),
+        TypeOf("dest"),
+        COMMA,
+        TypeOf("descriptor"),
+        ARROW,
+        ResultType("token"),
+    ],
+    examples=[
+        "%copy = kernel.async.tensor.store.from.lds %lds_tile to %global_tile using %desc {cache_scope = device, cache_temporal = non_temporal_writeback} : view<64x64xf32> to view<64x64xf32>, kernel.tensor.lds.descriptor -> kernel.async.token",
+    ],
+)
+
+# ============================================================================
 # kernel.async.group — commit async-copy tokens into one ordered group
 # ============================================================================
 
@@ -374,7 +544,7 @@ kernel_async_group = Op(
     name="kernel.async.group",
     group=kernel_ops,
     doc=(
-        "Commit zero or more async copy/gather tokens into the ordered async "
+        "Commit zero or more async copy/gather/tensor tokens into the ordered async "
         "stream. Empty groups are valid pipeline markers. The resulting group "
         "completes after all committed transfers complete. Groups are ordered "
         "by program order; waiting a group also completes older groups in the "
@@ -385,7 +555,7 @@ kernel_async_group = Op(
             "tokens",
             ANY,
             variadic=True,
-            doc="Async copy or gather tokens to commit into this group.",
+            doc="Async copy, gather, or tensor-memory tokens to commit into this group.",
         ),
     ],
     results=[
@@ -454,6 +624,7 @@ kernel_async_wait = Op(
 ALL_KERNEL_TYPES: tuple[TypeDef, ...] = (
     kernel_async_group_type,
     kernel_async_token_type,
+    kernel_tensor_lds_descriptor_type,
 )
 
 ALL_KERNEL_OPS: tuple[Op, ...] = (
@@ -464,4 +635,7 @@ ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_async_gather_mask,
     kernel_async_group,
     kernel_async_wait,
+    kernel_tensor_lds_descriptor,
+    kernel_async_tensor_load_to_lds,
+    kernel_async_tensor_store_from_lds,
 )

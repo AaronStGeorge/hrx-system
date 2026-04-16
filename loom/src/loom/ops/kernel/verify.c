@@ -76,17 +76,25 @@ static iree_status_t loom_kernel_emit(iree_diagnostic_emitter_t emitter,
   return iree_diagnostic_emit(emitter, &emission);
 }
 
-static iree_status_t loom_kernel_emit_attribute_value_constraint(
+static iree_status_t loom_kernel_emit_integer_field_constraint(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
-    iree_string_view_t attr_name, int64_t actual_value,
+    iree_string_view_t field_name, int64_t actual_value,
     iree_string_view_t expected_constraint) {
   loom_diagnostic_param_t params[] = {
-      loom_param_string(attr_name),
+      loom_param_string(field_name),
       loom_param_i64(actual_value),
       loom_param_string(expected_constraint),
   };
   return loom_kernel_emit(emitter, op, &loom_err_structure_014, params,
                           IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_kernel_emit_attribute_value_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t attr_name, int64_t actual_value,
+    iree_string_view_t expected_constraint) {
+  return loom_kernel_emit_integer_field_constraint(
+      emitter, op, attr_name, actual_value, expected_constraint);
 }
 
 static iree_status_t loom_kernel_emit_operand_constraint(
@@ -184,6 +192,12 @@ static bool loom_kernel_type_is_async_group(const loom_module_t* module,
                                             IREE_SV("kernel.async.group"));
 }
 
+static bool loom_kernel_type_is_tensor_lds_descriptor(
+    const loom_module_t* module, loom_type_t type) {
+  return loom_kernel_type_is_opaque_dialect(
+      module, type, IREE_SV("kernel.tensor.lds.descriptor"));
+}
+
 static iree_status_t loom_kernel_verify_result_async_token(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, iree_string_view_t result_name,
@@ -208,6 +222,19 @@ static iree_status_t loom_kernel_verify_result_async_group(
       emitter, op, result_name, result_type, IREE_SV("kernel.async.group"));
 }
 
+static iree_status_t loom_kernel_verify_result_tensor_lds_descriptor(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t result_name,
+    loom_value_id_t result_id) {
+  loom_type_t result_type = loom_module_value_type(module, result_id);
+  if (loom_kernel_type_is_tensor_lds_descriptor(module, result_type)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_result_constraint(
+      emitter, op, result_name, result_type,
+      IREE_SV("kernel.tensor.lds.descriptor"));
+}
+
 static iree_status_t loom_kernel_verify_operand_async_group(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, iree_string_view_t operand_name,
@@ -218,6 +245,19 @@ static iree_status_t loom_kernel_verify_operand_async_group(
   }
   return loom_kernel_emit_operand_constraint(
       emitter, op, operand_name, operand_type, IREE_SV("kernel.async.group"));
+}
+
+static iree_status_t loom_kernel_verify_operand_tensor_lds_descriptor(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t operand_name,
+    loom_value_id_t operand_id) {
+  loom_type_t operand_type = loom_module_value_type(module, operand_id);
+  if (loom_kernel_type_is_tensor_lds_descriptor(module, operand_type)) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_operand_constraint(
+      emitter, op, operand_name, operand_type,
+      IREE_SV("kernel.tensor.lds.descriptor"));
 }
 
 static bool loom_kernel_try_get_local_buffer_memory_space(
@@ -451,15 +491,18 @@ static iree_status_t loom_kernel_verify_token_defined_by_copy(
   const loom_value_t* token = loom_module_value(module, token_id);
   const loom_op_t* defining_op =
       loom_value_is_block_arg(token) ? NULL : loom_value_def_op(token);
-  if (defining_op && (loom_kernel_async_copy_isa(defining_op) ||
-                      loom_kernel_async_copy_mask_isa(defining_op) ||
-                      loom_kernel_async_gather_isa(defining_op) ||
-                      loom_kernel_async_gather_mask_isa(defining_op))) {
+  if (defining_op &&
+      (loom_kernel_async_copy_isa(defining_op) ||
+       loom_kernel_async_copy_mask_isa(defining_op) ||
+       loom_kernel_async_gather_isa(defining_op) ||
+       loom_kernel_async_gather_mask_isa(defining_op) ||
+       loom_kernel_async_tensor_load_to_lds_isa(defining_op) ||
+       loom_kernel_async_tensor_store_from_lds_isa(defining_op))) {
     return iree_ok_status();
   }
   return loom_kernel_emit_value_user_constraint(
       module, emitter, op, token_id, defining_op,
-      IREE_SV("kernel.async.copy or kernel.async.gather result"));
+      IREE_SV("kernel async transfer result"));
 }
 
 static iree_status_t loom_kernel_verify_group_has_uses(
@@ -574,6 +617,76 @@ static iree_status_t loom_kernel_verify_async_gather_like(
   return loom_kernel_verify_copy_token_group_use(module, emitter, op, token_id);
 }
 
+static bool loom_kernel_type_is_static_i32_vector(loom_type_t type,
+                                                  int64_t lane_count) {
+  return loom_type_is_vector(type) && loom_type_rank(type) == 1 &&
+         !loom_type_dim_is_dynamic_at(type, 0) &&
+         loom_type_dim_static_size_at(type, 0) == lane_count &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
+}
+
+static iree_status_t loom_kernel_verify_tensor_endpoint_types(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id) {
+  loom_type_t source_type = loom_module_value_type(module, source_id);
+  loom_type_t dest_type = loom_module_value_type(module, dest_id);
+  if (!loom_type_is_view(source_type)) {
+    return loom_kernel_emit_operand_constraint(emitter, op, IREE_SV("source"),
+                                               source_type, IREE_SV("view"));
+  }
+  if (!loom_type_is_view(dest_type)) {
+    return loom_kernel_emit_operand_constraint(emitter, op, IREE_SV("dest"),
+                                               dest_type, IREE_SV("view"));
+  }
+
+  uint8_t source_rank = loom_type_rank(source_type);
+  if (source_rank == 0 || source_rank > 5) {
+    return loom_kernel_emit_operand_constraint(emitter, op, IREE_SV("source"),
+                                               source_type,
+                                               IREE_SV("view rank in [1, 5]"));
+  }
+  if (source_rank != loom_type_rank(dest_type)) {
+    return loom_kernel_emit_operand_constraint(emitter, op, IREE_SV("dest"),
+                                               dest_type,
+                                               IREE_SV("same rank as source"));
+  }
+
+  loom_scalar_type_t source_element_type = loom_type_element_type(source_type);
+  if (source_element_type != loom_type_element_type(dest_type)) {
+    return loom_kernel_emit_operand_constraint(
+        emitter, op, IREE_SV("dest"), dest_type,
+        IREE_SV("same element type as source"));
+  }
+
+  int32_t element_bit_count = loom_scalar_type_bitwidth(source_element_type);
+  if (element_bit_count != 8 && element_bit_count != 16 &&
+      element_bit_count != 32 && element_bit_count != 64) {
+    return loom_kernel_emit_operand_constraint(
+        emitter, op, IREE_SV("source"), source_type,
+        IREE_SV("view with 1, 2, 4, or 8 byte element type"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_kernel_verify_async_tensor_like(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id,
+    loom_value_id_t descriptor_id, uint8_t direction, uint8_t cache_scope,
+    uint8_t cache_temporal, loom_value_id_t token_id) {
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_result_async_token(
+      module, emitter, op, IREE_SV("token"), token_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_operand_tensor_lds_descriptor(
+      module, emitter, op, IREE_SV("descriptor"), descriptor_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_tensor_endpoint_types(
+      module, emitter, op, source_id, dest_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_async_copy_memory_spaces(
+      module, emitter, op, source_id, dest_id, direction));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_async_cache_policy(
+      emitter, op, cache_scope, cache_temporal,
+      direction == LOOM_KERNEL_DIRECTION_WORKGROUP_TO_GLOBAL));
+  return loom_kernel_verify_copy_token_group_use(module, emitter, op, token_id);
+}
+
 iree_status_t loom_kernel_barrier_verify(const loom_module_t* module,
                                          const loom_op_t* op,
                                          iree_diagnostic_emitter_t emitter) {
@@ -599,6 +712,35 @@ iree_status_t loom_kernel_barrier_verify(const loom_module_t* module,
         emitter, op, IREE_SV("scope"), scope, IREE_SV("workgroup scope"));
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_kernel_tensor_lds_descriptor_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_value_slice_t dgroups = loom_kernel_tensor_lds_descriptor_dgroups(op);
+  if (dgroups.count != 2 && dgroups.count != 4) {
+    return loom_kernel_emit_integer_field_constraint(
+        emitter, op, IREE_SV("dgroups"), dgroups.count,
+        IREE_SV("two or four AMDGPU tensor dgroups"));
+  }
+
+  static const int64_t expected_lanes[] = {4, 8, 4, 4};
+  for (uint16_t i = 0; i < dgroups.count; ++i) {
+    loom_value_id_t dgroup_id = loom_value_slice_get(dgroups, i);
+    loom_type_t dgroup_type = loom_module_value_type(module, dgroup_id);
+    if (!loom_kernel_type_is_static_i32_vector(dgroup_type,
+                                               expected_lanes[i])) {
+      return loom_kernel_emit_operand_constraint(
+          emitter, op, IREE_SV("dgroups"), dgroup_type,
+          i == 1 ? IREE_SV("D1 vector<8xi32>")
+                 : IREE_SV("D0/D2/D3 vector<4xi32>"));
+    }
+  }
+
+  loom_value_id_t descriptor_id =
+      loom_kernel_tensor_lds_descriptor_descriptor(op);
+  return loom_kernel_verify_result_tensor_lds_descriptor(
+      module, emitter, op, IREE_SV("descriptor"), descriptor_id);
 }
 
 iree_status_t loom_kernel_async_copy_verify(const loom_module_t* module,
@@ -644,6 +786,32 @@ iree_status_t loom_kernel_async_gather_mask_verify(
       loom_kernel_async_gather_mask_cache_scope(op),
       loom_kernel_async_gather_mask_cache_temporal(op),
       loom_kernel_async_gather_mask_token(op));
+}
+
+iree_status_t loom_kernel_async_tensor_load_to_lds_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_tensor_like(
+      module, emitter, op, loom_kernel_async_tensor_load_to_lds_source(op),
+      loom_kernel_async_tensor_load_to_lds_dest(op),
+      loom_kernel_async_tensor_load_to_lds_descriptor(op),
+      LOOM_KERNEL_DIRECTION_GLOBAL_TO_WORKGROUP,
+      loom_kernel_async_tensor_load_to_lds_cache_scope(op),
+      loom_kernel_async_tensor_load_to_lds_cache_temporal(op),
+      loom_kernel_async_tensor_load_to_lds_token(op));
+}
+
+iree_status_t loom_kernel_async_tensor_store_from_lds_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_tensor_like(
+      module, emitter, op, loom_kernel_async_tensor_store_from_lds_source(op),
+      loom_kernel_async_tensor_store_from_lds_dest(op),
+      loom_kernel_async_tensor_store_from_lds_descriptor(op),
+      LOOM_KERNEL_DIRECTION_WORKGROUP_TO_GLOBAL,
+      loom_kernel_async_tensor_store_from_lds_cache_scope(op),
+      loom_kernel_async_tensor_store_from_lds_cache_temporal(op),
+      loom_kernel_async_tensor_store_from_lds_token(op));
 }
 
 iree_status_t loom_kernel_async_group_verify(
