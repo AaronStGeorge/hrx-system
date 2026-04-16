@@ -278,6 +278,78 @@ TEST_F(ModuleTest, ReplaceValueTypeUsesUpdatesDynamicDims) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, ReplaceTypeValueReferencesDoesNotMutateCarriers) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_value_id_t old_dim_id = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t new_dim_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &old_dim_id));
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &new_dim_id));
+  loom_type_t vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(old_dim_id), 0);
+  loom_value_id_t vector_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, vector_type, &vector_id));
+
+  loom_type_t replaced_type = vector_type;
+  bool changed = false;
+  IREE_ASSERT_OK(loom_module_replace_type_value_references(
+      module, vector_type, old_dim_id, new_dim_id, &replaced_type, &changed));
+
+  EXPECT_TRUE(changed);
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(replaced_type, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(replaced_type, 0), new_dim_id);
+  EXPECT_EQ(
+      loom_type_dim_value_id_at(loom_module_value_type(module, vector_id), 0),
+      old_dim_id);
+  EXPECT_TRUE(loom_module_value_has_type_uses(module, old_dim_id));
+  EXPECT_FALSE(loom_module_value_has_type_uses(module, new_dim_id));
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, ReplaceTypeValueReferencesDoesNotMutateSsaEncodingCarrier) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_type_t layout_type =
+      loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+  loom_value_id_t old_layout_id = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t new_layout_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, layout_type, &old_layout_id));
+  IREE_ASSERT_OK(loom_module_define_value(module, layout_type, &new_layout_id));
+  loom_type_t view_type = loom_type_shaped_1d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  view_type.encoding_id = (uint16_t)old_layout_id;
+  view_type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+  loom_value_id_t view_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, view_type, &view_id));
+
+  loom_type_t replaced_type = view_type;
+  bool changed = false;
+  IREE_ASSERT_OK(loom_module_replace_type_value_references(
+      module, view_type, old_layout_id, new_layout_id, &replaced_type,
+      &changed));
+
+  EXPECT_TRUE(changed);
+  ASSERT_TRUE(loom_type_has_ssa_encoding(replaced_type));
+  EXPECT_EQ(loom_type_encoding_value_id(replaced_type), new_layout_id);
+  ASSERT_TRUE(
+      loom_type_has_ssa_encoding(loom_module_value_type(module, view_id)));
+  EXPECT_EQ(
+      loom_type_encoding_value_id(loom_module_value_type(module, view_id)),
+      old_layout_id);
+  EXPECT_TRUE(loom_module_value_has_type_uses(module, old_layout_id));
+  EXPECT_FALSE(loom_module_value_has_type_uses(module, new_layout_id));
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, ReplaceValueTypeUsesUpdatesSsaEncoding) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

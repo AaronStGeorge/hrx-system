@@ -62,12 +62,14 @@ loom_cc_library(
     loom::src::loom::analysis::symbolic_expr
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
     loom::src::loom::ops::special_values
     loom::src::loom::ops::vector
+    loom::src::loom::ops::view
     loom::src::loom::util::fact_table
     loom::src::loom::util::walk
   PUBLIC

@@ -123,6 +123,14 @@ iree_status_t loom_module_recompute_type_uses(loom_module_t* module);
 bool loom_module_value_has_type_uses(const loom_module_t* module,
                                      loom_value_id_t value_id);
 
+// Replaces SSA references to |old_id| embedded in |type| with |new_id| and
+// interns the resulting type in |module|. The module value table and type-use
+// side table are not mutated; callers decide which carrier value, if any, owns
+// the returned type.
+iree_status_t loom_module_replace_type_value_references(
+    loom_module_t* module, loom_type_t type, loom_value_id_t old_id,
+    loom_value_id_t new_id, loom_type_t* out_type, bool* out_changed);
+
 // Replaces all SSA references to |old_id| embedded in value types with
 // |new_id| and updates the module's type-use side table.
 iree_status_t loom_module_replace_value_type_uses(loom_module_t* module,

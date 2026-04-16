@@ -2009,7 +2009,7 @@ static bool loom_module_type_has_replaceable_dims(loom_type_t type) {
   return loom_type_is_shaped(type) || loom_type_is_pool(type);
 }
 
-static iree_status_t loom_module_replace_type_value_refs(
+static iree_status_t loom_module_replace_type_value_refs_impl(
     loom_module_t* module, loom_type_t type, loom_value_id_t old_id,
     loom_value_id_t new_id, loom_type_t* out_type, bool* out_changed);
 
@@ -2032,7 +2032,7 @@ static iree_status_t loom_module_replace_type_ref_sequence(
                                                  (void**)&replaced_types));
   for (uint16_t i = 0; i < type_count; ++i) {
     bool element_changed = false;
-    IREE_RETURN_IF_ERROR(loom_module_replace_type_value_refs(
+    IREE_RETURN_IF_ERROR(loom_module_replace_type_value_refs_impl(
         module, types[i], old_id, new_id, &replaced_types[i],
         &element_changed));
     *out_changed = *out_changed || element_changed;
@@ -2041,7 +2041,7 @@ static iree_status_t loom_module_replace_type_ref_sequence(
   return iree_ok_status();
 }
 
-static iree_status_t loom_module_replace_type_value_refs(
+static iree_status_t loom_module_replace_type_value_refs_impl(
     loom_module_t* module, loom_type_t type, loom_value_id_t old_id,
     loom_value_id_t new_id, loom_type_t* out_type, bool* out_changed) {
   *out_type = type;
@@ -2139,6 +2139,28 @@ static iree_status_t loom_module_replace_type_value_refs(
   return loom_module_intern_type(module, replaced_type, out_type);
 }
 
+iree_status_t loom_module_replace_type_value_references(
+    loom_module_t* module, loom_type_t type, loom_value_id_t old_id,
+    loom_value_id_t new_id, loom_type_t* out_type, bool* out_changed) {
+  if (!module || !out_type || !out_changed) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "module, output type, and output changed flag are required");
+  }
+  *out_type = type;
+  *out_changed = false;
+  if (old_id == new_id) return iree_ok_status();
+  if (old_id >= module->values.count || new_id >= module->values.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "cannot replace type references from %%%u to %%%u in a module with "
+        "%" PRIhsz " values",
+        (unsigned)old_id, (unsigned)new_id, module->values.count);
+  }
+  return loom_module_replace_type_value_refs_impl(module, type, old_id, new_id,
+                                                  out_type, out_changed);
+}
+
 iree_status_t loom_module_replace_value_type_uses(loom_module_t* module,
                                                   loom_value_id_t old_id,
                                                   loom_value_id_t new_id) {
@@ -2163,7 +2185,7 @@ iree_status_t loom_module_replace_value_type_uses(loom_module_t* module,
     loom_type_t old_type = module->values.entries[user_value_id].type;
     loom_type_t new_type = old_type;
     bool changed = false;
-    IREE_RETURN_IF_ERROR(loom_module_replace_type_value_refs(
+    IREE_RETURN_IF_ERROR(loom_module_replace_type_value_refs_impl(
         module, old_type, old_id, new_id, &new_type, &changed));
     if (!changed) {
       return iree_make_status(
