@@ -19,6 +19,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/format/bytecode/format.h"
 #include "loom/ir/context.h"
+#include "loom/ir/module.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,14 @@ extern "C" {
 typedef struct loom_bytecode_read_options_t {
   // Sink for structured malformed-bytecode diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;
+
+  // Runs the module verifier after successful materialization. Verification
+  // diagnostics are emitted to diagnostic_sink and counted in the read result.
+  bool verify_module;
+
+  // Maximum verifier errors to emit when verify_module is set. Zero means
+  // unlimited, matching loom_verify_options_t.
+  uint32_t verify_max_errors;
 } loom_bytecode_read_options_t;
 
 // Summary of one decoded module's lightweight metadata.
@@ -72,6 +81,22 @@ iree_status_t loom_bytecode_read_metadata(
     loom_context_t* context, iree_arena_block_pool_t* block_pool,
     const loom_bytecode_read_options_t* options,
     loom_bytecode_read_result_t* out_result);
+
+// Reads a single-module .loombc file and materializes its IR into |out_module|.
+//
+// Malformed bytecode follows the same diagnostic contract as
+// loom_bytecode_read_metadata: diagnostics are emitted and counted in
+// |out_result| while the function returns OK unless infrastructure fails. When
+// malformed-bytecode diagnostics are emitted, |out_module| is NULL.
+//
+// |host_allocator| owns the returned module object. All IR storage inside that
+// module is arena-owned by the module and released by loom_module_free.
+iree_status_t loom_bytecode_read_module(
+    iree_const_byte_span_t bytecode, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    const loom_bytecode_read_options_t* options,
+    loom_bytecode_read_result_t* out_result, loom_module_t** out_module,
+    iree_allocator_t host_allocator);
 
 #ifdef __cplusplus
 }

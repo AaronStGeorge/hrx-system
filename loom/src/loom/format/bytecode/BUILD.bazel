@@ -73,6 +73,8 @@ loom_cc_library(
         ":varint",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/transforms:verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/internal:unicode",
