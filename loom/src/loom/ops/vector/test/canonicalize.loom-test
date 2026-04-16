@@ -221,7 +221,7 @@ func.def @select_uniform_true(%a: vector<4xi32>, %b: vector<4xi32>) -> (vector<4
 
 // Repeated scalar operands are more regular as a splat.
 func.def @from_elements_same_operand_to_splat(%x: f32) -> (vector<4xf32>) {
-  %v = vector.from_elements %x, %x, %x, %x : f32, f32, f32, f32 -> vector<4xf32>
+  %v = vector.from_elements %x, %x, %x, %x : vector<4xf32>
   func.return %v : vector<4xf32>
 }
 // ----
@@ -250,7 +250,7 @@ func.def @extract_from_elements_to_operand() -> (i32) {
   %c0 = scalar.constant 1 : i32
   %c1 = scalar.constant 2 : i32
   %c2 = scalar.constant 3 : i32
-  %v = vector.from_elements %c0, %c1, %c2 : i32, i32, i32 -> vector<3xi32>
+  %v = vector.from_elements %c0, %c1, %c2 : vector<3xi32>
   %r = vector.extract %v[1] : vector<3xi32> -> i32
   func.return %r : i32
 }

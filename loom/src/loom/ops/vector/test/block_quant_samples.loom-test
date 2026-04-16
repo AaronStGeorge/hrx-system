@@ -18,7 +18,7 @@ func.def @q4_0_reference_chunk() -> (i1) {
   %b1 = scalar.constant 0x32 : i8
   %b2 = scalar.constant 0x54 : i8
   %b3 = scalar.constant 0x76 : i8
-  %qs = vector.from_elements %b0, %b1, %b2, %b3 : i8, i8, i8, i8 -> vector<4xi8>
+  %qs = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xi8>
 
   %lo = vector.bitfield.extractu %qs {offset = 0, width = 4} : vector<4xi8> -> vector<4xi8>
   %hi = vector.bitfield.extractu %qs {offset = 4, width = 4} : vector<4xi8> -> vector<4xi8>
@@ -34,7 +34,7 @@ func.def @q4_0_reference_chunk() -> (i1) {
   %e5 = scalar.constant -5 : i8
   %e6 = scalar.constant -3 : i8
   %e7 = scalar.constant -1 : i8
-  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : i8, i8, i8, i8, i8, i8, i8, i8 -> vector<8xi8>
+  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : vector<8xi8>
   %matches = vector.cmpi eq, %signed, %expected : vector<8xi8> -> vector<8xi1>
   %true = scalar.constant 1 : i1
   %ok = vector.reduce<andi> %matches, %true : vector<8xi1> -> i1
@@ -57,7 +57,7 @@ func.def @q8_0_reference_chunk() -> (i1) {
   %q1 = scalar.constant -1 : i8
   %q2 = scalar.constant 2 : i8
   %q3 = scalar.constant 7 : i8
-  %q = vector.from_elements %q0, %q1, %q2, %q3 : i8, i8, i8, i8 -> vector<4xi8>
+  %q = vector.from_elements %q0, %q1, %q2, %q3 : vector<4xi8>
 
   %scale = scalar.constant 0.5 : f16
   %scalev = vector.splat %scale : vector<4xf16>
@@ -68,7 +68,7 @@ func.def @q8_0_reference_chunk() -> (i1) {
   %e1 = scalar.constant -0.5 : f16
   %e2 = scalar.constant 1.0 : f16
   %e3 = scalar.constant 3.5 : f16
-  %expected = vector.from_elements %e0, %e1, %e2, %e3 : f16, f16, f16, f16 -> vector<4xf16>
+  %expected = vector.from_elements %e0, %e1, %e2, %e3 : vector<4xf16>
   %matches = vector.cmpf oeq, %decoded, %expected : vector<4xf16> -> vector<4xi1>
   %true = scalar.constant 1 : i1
   %ok = vector.reduce<andi> %matches, %true : vector<4xi1> -> i1
@@ -92,13 +92,13 @@ func.def @q8_0_dot4_reference_chunk() -> (vector<1xi32>) {
   %a1 = scalar.constant -1 : i8
   %a2 = scalar.constant 2 : i8
   %a3 = scalar.constant 7 : i8
-  %lhs = vector.from_elements %a0, %a1, %a2, %a3 : i8, i8, i8, i8 -> vector<4xi8>
+  %lhs = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xi8>
 
   %b0 = scalar.constant 4 : i8
   %b1 = scalar.constant 5 : i8
   %b2 = scalar.constant -2 : i8
   %b3 = scalar.constant 1 : i8
-  %rhs = vector.from_elements %b0, %b1, %b2, %b3 : i8, i8, i8, i8 -> vector<4xi8>
+  %rhs = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xi8>
 
   %acc = vector.constant 10 : vector<1xi32>
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
@@ -127,11 +127,11 @@ func.def @q6_k_reference_chunk() -> (i1) {
   %l1 = scalar.constant 0x32 : i8
   %l2 = scalar.constant 0x54 : i8
   %l3 = scalar.constant 0x76 : i8
-  %low_packed = vector.from_elements %l0, %l1, %l2, %l3 : i8, i8, i8, i8 -> vector<4xi8>
+  %low_packed = vector.from_elements %l0, %l1, %l2, %l3 : vector<4xi8>
 
   %h0 = scalar.constant 0x24 : i8
   %h1 = scalar.constant 0x1B : i8
-  %high_packed = vector.from_elements %h0, %h1 : i8, i8 -> vector<2xi8>
+  %high_packed = vector.from_elements %h0, %h1 : vector<2xi8>
 
   %lo4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<4xi8> -> vector<4xi8>
   %hi4 = vector.bitfield.extractu %low_packed {offset = 4, width = 4} : vector<4xi8> -> vector<4xi8>
@@ -152,7 +152,7 @@ func.def @q6_k_reference_chunk() -> (i1) {
   %e5 = scalar.constant -11 : i8
   %e6 = scalar.constant -26 : i8
   %e7 = scalar.constant -25 : i8
-  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : i8, i8, i8, i8, i8, i8, i8, i8 -> vector<8xi8>
+  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : vector<8xi8>
   %matches = vector.cmpi eq, %signed, %expected : vector<8xi8> -> vector<8xi1>
   %true = scalar.constant 1 : i1
   %ok = vector.reduce<andi> %matches, %true : vector<8xi1> -> i1
@@ -172,7 +172,7 @@ func.def @iq_grid_reference_chunk() -> (i1) {
 
   %p0 = scalar.constant 0x10 : i8
   %p1 = scalar.constant 0x32 : i8
-  %packed = vector.from_elements %p0, %p1 : i8, i8 -> vector<2xi8>
+  %packed = vector.from_elements %p0, %p1 : vector<2xi8>
   %codes = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
 
   %g0 = scalar.constant -1.0 : f16
@@ -191,9 +191,9 @@ func.def @iq_grid_reference_chunk() -> (i1) {
   %g13 = scalar.constant -0.125 : f16
   %g14 = scalar.constant 0.125 : f16
   %g15 = scalar.constant 3.0 : f16
-  %grid = vector.from_elements %g0, %g1, %g2, %g3, %g4, %g5, %g6, %g7, %g8, %g9, %g10, %g11, %g12, %g13, %g14, %g15 : f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16 -> vector<16xf16>
+  %grid = vector.from_elements %g0, %g1, %g2, %g3, %g4, %g5, %g6, %g7, %g8, %g9, %g10, %g11, %g12, %g13, %g14, %g15 : vector<16xf16>
   %decoded = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<4xi8> -> vector<4xf16>
-  %expected = vector.from_elements %g0, %g1, %g2, %g3 : f16, f16, f16, f16 -> vector<4xf16>
+  %expected = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf16>
   %matches = vector.cmpf oeq, %decoded, %expected : vector<4xf16> -> vector<4xi1>
   %true = scalar.constant 1 : i1
   %ok = vector.reduce<andi> %matches, %true : vector<4xi1> -> i1
@@ -247,7 +247,7 @@ func.def @turboquant_threshold_encode_reference(%values: vector<4xf16>, %params:
   %t0 = scalar.constant -1.0 : f16
   %t1 = scalar.constant 0.0 : f16
   %t2 = scalar.constant 1.0 : f16
-  %thresholds = vector.from_elements %t0, %t1, %t2 : f16, f16, f16 -> vector<3xf16>
+  %thresholds = vector.from_elements %t0, %t1, %t2 : vector<3xf16>
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xf16>, vector<3xf16> -> vector<4xi8>
   func.return %codes : vector<4xi8>
 }
@@ -272,7 +272,7 @@ func.def @turboquant_decode_reference(%packed_codes: vector<1xi8>, %params: buff
   %c1 = scalar.constant -0.5 : f16
   %c2 = scalar.constant 0.5 : f16
   %c3 = scalar.constant 1.5 : f16
-  %centroids = vector.from_elements %c0, %c1, %c2, %c3 : f16, f16, f16, f16 -> vector<4xf16>
+  %centroids = vector.from_elements %c0, %c1, %c2, %c3 : vector<4xf16>
   %decoded = vector.table.lookup %centroids[%codes] : vector<4xf16>, vector<4xi8> -> vector<4xf16>
   func.return %decoded : vector<4xf16>
 }
@@ -298,7 +298,7 @@ func.def @turboquant_logit_reference(%query: vector<4xf16>, %packed_codes: vecto
   %c1 = scalar.constant -0.5 : f16
   %c2 = scalar.constant 0.5 : f16
   %c3 = scalar.constant 1.5 : f16
-  %centroids = vector.from_elements %c0, %c1, %c2, %c3 : f16, f16, f16, f16 -> vector<4xf16>
+  %centroids = vector.from_elements %c0, %c1, %c2, %c3 : vector<4xf16>
   %decoded = vector.table.lookup %centroids[%codes] : vector<4xf16>, vector<4xi8> -> vector<4xf16>
   %q32 = vector.extf %query : vector<4xf16> to vector<4xf32>
   %d32 = vector.extf %decoded : vector<4xf16> to vector<4xf32>
@@ -320,7 +320,7 @@ func.def @fp4_table_reference_chunk() -> (i1) {
 
   %p0 = scalar.constant 0x20 : i8
   %p1 = scalar.constant 0x31 : i8
-  %packed = vector.from_elements %p0, %p1 : i8, i8 -> vector<2xi8>
+  %packed = vector.from_elements %p0, %p1 : vector<2xi8>
   %codes = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
 
   %v0 = scalar.constant 0.0 : f16
@@ -339,9 +339,9 @@ func.def @fp4_table_reference_chunk() -> (i1) {
   %v13 = scalar.constant 6.0 : f16
   %v14 = scalar.constant -6.0 : f16
   %v15 = scalar.constant 8.0 : f16
-  %table = vector.from_elements %v0, %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8, %v9, %v10, %v11, %v12, %v13, %v14, %v15 : f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16, f16 -> vector<16xf16>
+  %table = vector.from_elements %v0, %v1, %v2, %v3, %v4, %v5, %v6, %v7, %v8, %v9, %v10, %v11, %v12, %v13, %v14, %v15 : vector<16xf16>
   %decoded = vector.table.lookup %table[%codes] : vector<16xf16>, vector<4xi8> -> vector<4xf16>
-  %expected = vector.from_elements %v0, %v2, %v1, %v3 : f16, f16, f16, f16 -> vector<4xf16>
+  %expected = vector.from_elements %v0, %v2, %v1, %v3 : vector<4xf16>
   %matches = vector.cmpf oeq, %decoded, %expected : vector<4xf16> -> vector<4xi1>
   %true = scalar.constant 1 : i1
   %ok = vector.reduce<andi> %matches, %true : vector<4xi1> -> i1

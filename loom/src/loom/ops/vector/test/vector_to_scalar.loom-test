@@ -39,7 +39,7 @@ func.def @static_add_select_cast(%a: vector<4xi32>, %b: vector<4xi32>, %mask: ve
   %32 = vector.extract %a[3] : vector<4xi32> -> i32
   %33 = scf.select %28, %31, %32 : i32
   %34 = scalar.sitofp %33 : i32 to f32
-  %r = vector.from_elements %13, %20, %27, %34 : f32, f32, f32, f32 -> vector<4xf32>
+  %r = vector.from_elements %13, %20, %27, %34 : vector<4xf32>
   func.return %r : vector<4xf32>
 }
 
@@ -145,7 +145,7 @@ func.def @static_float_math(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf
   %15 = scalar.expf %14 : f32
   %16 = vector.extract %a[1] : vector<2xf32> -> f32
   %17 = scalar.maxnumf %15, %16 : f32
-  %r = vector.from_elements %11, %17 : f32, f32 -> vector<2xf32>
+  %r = vector.from_elements %11, %17 : vector<2xf32>
   func.return %r : vector<2xf32>
 }
 
@@ -190,7 +190,7 @@ func.def @static_integer_sub_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vec
   %7 = vector.extract %a[1] : vector<2xi32> -> i32
   %8 = vector.extract %b[1] : vector<2xi32> -> i32
   %9 = scalar.subi<nuw> %7, %8 : i32
-  %r = vector.from_elements %6, %9 : i32, i32 -> vector<2xi32>
+  %r = vector.from_elements %6, %9 : vector<2xi32>
   func.return %r : vector<2xi32>
 }
 
@@ -214,35 +214,35 @@ func.def @static_integer_division_wave2(%a: vector<2xi32>, %c: vector<2xi32>) ->
   %43 = vector.extract %a[1] : vector<2xi32> -> i32
   %44 = vector.extract %c[1] : vector<2xi32> -> i32
   %45 = scalar.divsi %43, %44 : i32
-  %divs = vector.from_elements %42, %45 : i32, i32 -> vector<2xi32>
+  %divs = vector.from_elements %42, %45 : vector<2xi32>
   %33 = vector.extract %a[0] : vector<2xi32> -> i32
   %34 = vector.extract %c[0] : vector<2xi32> -> i32
   %35 = scalar.divui %33, %34 : i32
   %36 = vector.extract %a[1] : vector<2xi32> -> i32
   %37 = vector.extract %c[1] : vector<2xi32> -> i32
   %38 = scalar.divui %36, %37 : i32
-  %divu = vector.from_elements %35, %38 : i32, i32 -> vector<2xi32>
+  %divu = vector.from_elements %35, %38 : vector<2xi32>
   %26 = vector.extract %a[0] : vector<2xi32> -> i32
   %27 = vector.extract %c[0] : vector<2xi32> -> i32
   %28 = scalar.ceildivsi %26, %27 : i32
   %29 = vector.extract %a[1] : vector<2xi32> -> i32
   %30 = vector.extract %c[1] : vector<2xi32> -> i32
   %31 = scalar.ceildivsi %29, %30 : i32
-  %ceilsi = vector.from_elements %28, %31 : i32, i32 -> vector<2xi32>
+  %ceilsi = vector.from_elements %28, %31 : vector<2xi32>
   %19 = vector.extract %a[0] : vector<2xi32> -> i32
   %20 = vector.extract %c[0] : vector<2xi32> -> i32
   %21 = scalar.ceildivui %19, %20 : i32
   %22 = vector.extract %a[1] : vector<2xi32> -> i32
   %23 = vector.extract %c[1] : vector<2xi32> -> i32
   %24 = scalar.ceildivui %22, %23 : i32
-  %ceilui = vector.from_elements %21, %24 : i32, i32 -> vector<2xi32>
+  %ceilui = vector.from_elements %21, %24 : vector<2xi32>
   %12 = vector.extract %a[0] : vector<2xi32> -> i32
   %13 = vector.extract %c[0] : vector<2xi32> -> i32
   %14 = scalar.floordivsi %12, %13 : i32
   %15 = vector.extract %a[1] : vector<2xi32> -> i32
   %16 = vector.extract %c[1] : vector<2xi32> -> i32
   %17 = scalar.floordivsi %15, %16 : i32
-  %floorsi = vector.from_elements %14, %17 : i32, i32 -> vector<2xi32>
+  %floorsi = vector.from_elements %14, %17 : vector<2xi32>
   func.return %divs, %divu, %ceilsi, %ceilui, %floorsi : vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>
 }
 
@@ -263,14 +263,14 @@ func.def @static_integer_remainder_wave2(%a: vector<2xi32>, %c: vector<2xi32>) -
   %16 = vector.extract %a[1] : vector<2xi32> -> i32
   %17 = vector.extract %c[1] : vector<2xi32> -> i32
   %18 = scalar.remsi %16, %17 : i32
-  %rems = vector.from_elements %15, %18 : i32, i32 -> vector<2xi32>
+  %rems = vector.from_elements %15, %18 : vector<2xi32>
   %6 = vector.extract %a[0] : vector<2xi32> -> i32
   %7 = vector.extract %c[0] : vector<2xi32> -> i32
   %8 = scalar.remui %6, %7 : i32
   %9 = vector.extract %a[1] : vector<2xi32> -> i32
   %10 = vector.extract %c[1] : vector<2xi32> -> i32
   %11 = scalar.remui %9, %10 : i32
-  %remu = vector.from_elements %8, %11 : i32, i32 -> vector<2xi32>
+  %remu = vector.from_elements %8, %11 : vector<2xi32>
   func.return %rems, %remu : vector<2xi32>, vector<2xi32>
 }
 
@@ -289,14 +289,14 @@ func.def @static_integer_unary_wave2(%a: vector<2xi32>) -> (vector<2xi32>, vecto
   %13 = scalar.negi %12 : i32
   %14 = vector.extract %a[1] : vector<2xi32> -> i32
   %15 = scalar.negi %14 : i32
-  %neg = vector.from_elements %13, %15 : i32, i32 -> vector<2xi32>
+  %neg = vector.from_elements %13, %15 : vector<2xi32>
   %5 = vector.extract %a[0] : vector<2xi32> -> i32
   %6 = scalar.negi %5 : i32
   %7 = scalar.absi %6 : i32
   %8 = vector.extract %a[1] : vector<2xi32> -> i32
   %9 = scalar.negi %8 : i32
   %10 = scalar.absi %9 : i32
-  %abs = vector.from_elements %7, %10 : i32, i32 -> vector<2xi32>
+  %abs = vector.from_elements %7, %10 : vector<2xi32>
   func.return %neg, %abs : vector<2xi32>, vector<2xi32>
 }
 
@@ -319,28 +319,28 @@ func.def @static_integer_minmax_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (
   %34 = vector.extract %a[1] : vector<2xi32> -> i32
   %35 = vector.extract %b[1] : vector<2xi32> -> i32
   %36 = scalar.minsi %34, %35 : i32
-  %minsi = vector.from_elements %33, %36 : i32, i32 -> vector<2xi32>
+  %minsi = vector.from_elements %33, %36 : vector<2xi32>
   %24 = vector.extract %a[0] : vector<2xi32> -> i32
   %25 = vector.extract %b[0] : vector<2xi32> -> i32
   %26 = scalar.maxsi %24, %25 : i32
   %27 = vector.extract %a[1] : vector<2xi32> -> i32
   %28 = vector.extract %b[1] : vector<2xi32> -> i32
   %29 = scalar.maxsi %27, %28 : i32
-  %maxsi = vector.from_elements %26, %29 : i32, i32 -> vector<2xi32>
+  %maxsi = vector.from_elements %26, %29 : vector<2xi32>
   %17 = vector.extract %a[0] : vector<2xi32> -> i32
   %18 = vector.extract %b[0] : vector<2xi32> -> i32
   %19 = scalar.minui %17, %18 : i32
   %20 = vector.extract %a[1] : vector<2xi32> -> i32
   %21 = vector.extract %b[1] : vector<2xi32> -> i32
   %22 = scalar.minui %20, %21 : i32
-  %minui = vector.from_elements %19, %22 : i32, i32 -> vector<2xi32>
+  %minui = vector.from_elements %19, %22 : vector<2xi32>
   %10 = vector.extract %a[0] : vector<2xi32> -> i32
   %11 = vector.extract %b[0] : vector<2xi32> -> i32
   %12 = scalar.maxui %10, %11 : i32
   %13 = vector.extract %a[1] : vector<2xi32> -> i32
   %14 = vector.extract %b[1] : vector<2xi32> -> i32
   %15 = scalar.maxui %13, %14 : i32
-  %maxui = vector.from_elements %12, %15 : i32, i32 -> vector<2xi32>
+  %maxui = vector.from_elements %12, %15 : vector<2xi32>
   func.return %minsi, %maxsi, %minui, %maxui : vector<2xi32>, vector<2xi32>, vector<2xi32>, vector<2xi32>
 }
 
@@ -362,7 +362,7 @@ func.def @static_integer_fma_wave2(%a: vector<2xi32>, %b: vector<2xi32>, %c: vec
   %10 = vector.extract %b[1] : vector<2xi32> -> i32
   %11 = vector.extract %c[1] : vector<2xi32> -> i32
   %12 = scalar.fmai<nsw> %9, %10, %11 : i32
-  %fma = vector.from_elements %8, %12 : i32, i32 -> vector<2xi32>
+  %fma = vector.from_elements %8, %12 : vector<2xi32>
   func.return %fma : vector<2xi32>
 }
 
@@ -383,14 +383,14 @@ func.def @static_integer_shift_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (v
   %16 = vector.extract %a[1] : vector<2xi32> -> i32
   %17 = vector.extract %b[1] : vector<2xi32> -> i32
   %18 = scalar.shli<nuw> %16, %17 : i32
-  %shl = vector.from_elements %15, %18 : i32, i32 -> vector<2xi32>
+  %shl = vector.from_elements %15, %18 : vector<2xi32>
   %6 = vector.extract %a[0] : vector<2xi32> -> i32
   %7 = vector.extract %b[0] : vector<2xi32> -> i32
   %8 = scalar.shrui %6, %7 : i32
   %9 = vector.extract %a[1] : vector<2xi32> -> i32
   %10 = vector.extract %b[1] : vector<2xi32> -> i32
   %11 = scalar.shrui %9, %10 : i32
-  %shru = vector.from_elements %8, %11 : i32, i32 -> vector<2xi32>
+  %shru = vector.from_elements %8, %11 : vector<2xi32>
   func.return %shl, %shru : vector<2xi32>, vector<2xi32>
 }
 
@@ -420,7 +420,7 @@ func.def @static_integer_rotate_count_sign_wave2(%a: vector<2xi32>, %b: vector<2
   %16 = scalar.cttzi %15 : i32
   %17 = scalar.ctpopi %16 : i32
   %18 = scalar.signi %17 : i32
-  %r = vector.from_elements %12, %18 : i32, i32 -> vector<2xi32>
+  %r = vector.from_elements %12, %18 : vector<2xi32>
   func.return %r : vector<2xi32>
 }
 
@@ -442,19 +442,19 @@ func.def @static_bit_count_wave2(%a: vector<2xi32>, %b: vector<2xi32>) -> (vecto
   %23 = vector.extract %a[1] : vector<2xi32> -> i32
   %24 = vector.extract %b[1] : vector<2xi32> -> i32
   %25 = scalar.shrsi %23, %24 : i32
-  %shrs = vector.from_elements %22, %25 : i32, i32 -> vector<2xi32>
+  %shrs = vector.from_elements %22, %25 : vector<2xi32>
   %13 = vector.extract %a[0] : vector<2xi32> -> i32
   %14 = vector.extract %b[0] : vector<2xi32> -> i32
   %15 = scalar.rotli %13, %14 : i32
   %16 = vector.extract %a[1] : vector<2xi32> -> i32
   %17 = vector.extract %b[1] : vector<2xi32> -> i32
   %18 = scalar.rotli %16, %17 : i32
-  %rotl = vector.from_elements %15, %18 : i32, i32 -> vector<2xi32>
+  %rotl = vector.from_elements %15, %18 : vector<2xi32>
   %8 = vector.extract %a[0] : vector<2xi32> -> i32
   %9 = scalar.ctlzi %8 : i32
   %10 = vector.extract %a[1] : vector<2xi32> -> i32
   %11 = scalar.ctlzi %10 : i32
-  %clz = vector.from_elements %9, %11 : i32, i32 -> vector<2xi32>
+  %clz = vector.from_elements %9, %11 : vector<2xi32>
   func.return %shrs, %rotl, %clz : vector<2xi32>, vector<2xi32>, vector<2xi32>
 }
 
@@ -476,27 +476,27 @@ func.def @static_predicate_wave2(%a: vector<2xf32>, %i: vector<2xi32>) -> (vecto
   %33 = scalar.isnanf %32 : f32
   %34 = vector.extract %a[1] : vector<2xf32> -> f32
   %35 = scalar.isnanf %34 : f32
-  %is_nan = vector.from_elements %33, %35 : i1, i1 -> vector<2xi1>
+  %is_nan = vector.from_elements %33, %35 : vector<2xi1>
   %27 = vector.extract %a[0] : vector<2xf32> -> f32
   %28 = scalar.isinff %27 : f32
   %29 = vector.extract %a[1] : vector<2xf32> -> f32
   %30 = scalar.isinff %29 : f32
-  %is_inf = vector.from_elements %28, %30 : i1, i1 -> vector<2xi1>
+  %is_inf = vector.from_elements %28, %30 : vector<2xi1>
   %22 = vector.extract %a[0] : vector<2xf32> -> f32
   %23 = scalar.isfinitef %22 : f32
   %24 = vector.extract %a[1] : vector<2xf32> -> f32
   %25 = scalar.isfinitef %24 : f32
-  %is_finite = vector.from_elements %23, %25 : i1, i1 -> vector<2xi1>
+  %is_finite = vector.from_elements %23, %25 : vector<2xi1>
   %17 = vector.extract %a[0] : vector<2xf32> -> f32
   %18 = scalar.signf %17 : f32
   %19 = vector.extract %a[1] : vector<2xf32> -> f32
   %20 = scalar.signf %19 : f32
-  %fsign = vector.from_elements %18, %20 : f32, f32 -> vector<2xf32>
+  %fsign = vector.from_elements %18, %20 : vector<2xf32>
   %12 = vector.extract %i[0] : vector<2xi32> -> i32
   %13 = scalar.signi %12 : i32
   %14 = vector.extract %i[1] : vector<2xi32> -> i32
   %15 = scalar.signi %14 : i32
-  %isign = vector.from_elements %13, %15 : i32, i32 -> vector<2xi32>
+  %isign = vector.from_elements %13, %15 : vector<2xi32>
   func.return %is_nan, %is_inf, %is_finite, %fsign, %isign : vector<2xi1>, vector<2xi1>, vector<2xi1>, vector<2xf32>, vector<2xi32>
 }
 
@@ -660,7 +660,7 @@ func.def @coordinates(%n: index) -> (vector<4xindex>, vector<[%n]xi1>) {
   %26 = index.constant 3 : index
   %27 = index.mul %26, %c1 : index
   %28 = index.add %c0, %27 : index
-  %lanes = vector.from_elements %19, %22, %25, %28 : index, index, index, index -> vector<4xindex>
+  %lanes = vector.from_elements %19, %22, %25, %28 : vector<4xindex>
   %7 = vector.constant false : vector<[%n]xi1>
   %8 = index.constant 0 : index
   %9 = index.constant 1 : index
@@ -700,7 +700,7 @@ func.def @integer_coordinates(%limit: i32) -> (vector<4xi32>, vector<4xi1>) {
   %33 = scalar.constant 3 : i32
   %34 = scalar.muli %33, %c2 : i32
   %35 = scalar.addi %c0, %34 : i32
-  %lanes = vector.from_elements %26, %29, %32, %35 : i32, i32, i32, i32 -> vector<4xi32>
+  %lanes = vector.from_elements %26, %29, %32, %35 : vector<4xi32>
   %7 = scalar.constant 0 : i32
   %8 = scalar.muli %7, %c2 : i32
   %9 = scalar.addi %c0, %8 : i32
@@ -717,7 +717,7 @@ func.def @integer_coordinates(%limit: i32) -> (vector<4xi32>, vector<4xi1>) {
   %20 = scalar.muli %19, %c2 : i32
   %21 = scalar.addi %c0, %20 : i32
   %22 = scalar.cmpi slt, %21, %limit : i32
-  %mask = vector.from_elements %10, %14, %18, %22 : i1, i1, i1, i1 -> vector<4xi1>
+  %mask = vector.from_elements %10, %14, %18, %22 : vector<4xi1>
   func.return %lanes, %mask : vector<4xi32>, vector<4xi1>
 }
 
@@ -735,10 +735,10 @@ func.def @static_constant_poison() -> (vector<2xi32>, vector<2xf32>) {
 func.def @static_constant_poison() -> (vector<2xi32>, vector<2xf32>) {
   %7 = scalar.constant 7 : i32
   %8 = scalar.constant 7 : i32
-  %c = vector.from_elements %7, %8 : i32, i32 -> vector<2xi32>
+  %c = vector.from_elements %7, %8 : vector<2xi32>
   %4 = scalar.poison : f32
   %5 = scalar.poison : f32
-  %p = vector.from_elements %4, %5 : f32, f32 -> vector<2xf32>
+  %p = vector.from_elements %4, %5 : vector<2xf32>
   func.return %c, %p : vector<2xi32>, vector<2xf32>
 }
 
@@ -766,7 +766,7 @@ func.def @static_rearrange(%a: vector<4xi32>, %b: vector<4xi32>, %x: i32) -> (ve
   %8 = vector.extract %b[1] : vector<4xi32> -> i32
   %9 = vector.extract %a[3] : vector<4xi32> -> i32
   %10 = vector.extract %a[2] : vector<4xi32> -> i32
-  %r = vector.from_elements %8, %x, %9, %10 : i32, i32, i32, i32 -> vector<4xi32>
+  %r = vector.from_elements %8, %x, %9, %10 : vector<4xi32>
   func.return %r : vector<4xi32>
 }
 
@@ -791,7 +791,7 @@ func.def @static_broadcast_transpose_bitcast(%v: vector<2xi32>) -> (vector<2x2xf
   %10 = scalar.bitcast %9 : i32 to f32
   %11 = vector.extract %v[1] : vector<2xi32> -> i32
   %12 = scalar.bitcast %11 : i32 to f32
-  %r = vector.from_elements %6, %8, %10, %12 : f32, f32, f32, f32 -> vector<2x2xf32>
+  %r = vector.from_elements %6, %8, %10, %12 : vector<2x2xf32>
   func.return %r : vector<2x2xf32>
 }
 
@@ -815,7 +815,7 @@ func.def @static_shape_changing_bitcast(%bytes: vector<2xi8>, %half: vector<1xf1
   %24 = scalar.shli %22, %23 : i16
   %25 = scalar.ori %20, %24 : i16
   %26 = scalar.bitcast %25 : i16 to f16
-  %to_half = vector.from_elements %26 : f16 -> vector<1xf16>
+  %to_half = vector.from_elements %26 : vector<1xf16>
   %6 = vector.extract %half[0] : vector<1xf16> -> f16
   %7 = scalar.bitcast %6 : f16 to i16
   %8 = scalar.constant 255 : i16
@@ -828,7 +828,7 @@ func.def @static_shape_changing_bitcast(%bytes: vector<2xi8>, %half: vector<1xf1
   %15 = scalar.constant 255 : i16
   %16 = scalar.andi %14, %15 : i16
   %17 = scalar.trunci %16 : i16 to i8
-  %to_bytes = vector.from_elements %10, %17 : i8, i8 -> vector<2xi8>
+  %to_bytes = vector.from_elements %10, %17 : vector<2xi8>
   func.return %to_half, %to_bytes : vector<1xf16>, vector<2xi8>
 }
 
@@ -848,13 +848,13 @@ func.def @static_interleave_deinterleave(%a: vector<2xi8>, %b: vector<2xi8>) -> 
   %15 = vector.extract %b[0] : vector<2xi8> -> i8
   %16 = vector.extract %a[1] : vector<2xi8> -> i8
   %17 = vector.extract %b[1] : vector<2xi8> -> i8
-  %paired = vector.from_elements %14, %15, %16, %17 : i8, i8, i8, i8 -> vector<4xi8>
+  %paired = vector.from_elements %14, %15, %16, %17 : vector<4xi8>
   %8 = vector.extract %a[0] : vector<2xi8> -> i8
   %9 = vector.extract %a[1] : vector<2xi8> -> i8
-  %even = vector.from_elements %8, %9 : i8, i8 -> vector<2xi8>
+  %even = vector.from_elements %8, %9 : vector<2xi8>
   %11 = vector.extract %b[0] : vector<2xi8> -> i8
   %12 = vector.extract %b[1] : vector<2xi8> -> i8
-  %odd = vector.from_elements %11, %12 : i8, i8 -> vector<2xi8>
+  %odd = vector.from_elements %11, %12 : vector<2xi8>
   func.return %paired, %even, %odd : vector<4xi8>, vector<2xi8>, vector<2xi8>
 }
 
@@ -878,7 +878,7 @@ func.def @dynamic_slice(%n: index, %offset: index, %v: vector<[%n]xi32>) -> (vec
   %12 = index.constant 3 : index
   %13 = index.add %offset, %12 : index
   %14 = vector.extract %v[%13] : vector<[%n]xi32> -> i32
-  %r = vector.from_elements %5, %8, %11, %14 : i32, i32, i32, i32 -> vector<4xi32>
+  %r = vector.from_elements %5, %8, %11, %14 : vector<4xi32>
   func.return %r : vector<4xi32>
 }
 
@@ -1061,7 +1061,7 @@ func.def @static_bitfields(%bytes: vector<2xi8>, %zero: vector<2xi8>) -> (vector
   %34 = scalar.constant 4 : i8
   %35 = scalar.shrsi %33, %34 : i8
   %36 = scalar.extsi %35 : i8 to i32
-  %hi = vector.from_elements %32, %36 : i32, i32 -> vector<2xi32>
+  %hi = vector.from_elements %32, %36 : vector<2xi32>
   test.use %hi : vector<2xi32>
   %6 = vector.extract %bytes[0] : vector<2xi8> -> i8
   %7 = scalar.constant 15 : i8
@@ -1085,7 +1085,7 @@ func.def @static_bitfields(%bytes: vector<2xi8>, %zero: vector<2xi8>) -> (vector
   %25 = scalar.xori %23, %24 : i8
   %26 = scalar.andi %20, %25 : i8
   %27 = scalar.ori %26, %22 : i8
-  %r = vector.from_elements %16, %27 : i8, i8 -> vector<2xi8>
+  %r = vector.from_elements %16, %27 : vector<2xi8>
   func.return %r : vector<2xi8>
 }
 
@@ -1125,7 +1125,7 @@ func.def @static_dot4i(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi3
   %27 = scalar.extui %25 : i8 to i32
   %28 = scalar.muli %26, %27 : i32
   %29 = scalar.addi %23, %28 : i32
-  %r = vector.from_elements %29 : i32 -> vector<1xi32>
+  %r = vector.from_elements %29 : vector<1xi32>
   func.return %r : vector<1xi32>
 }
 
@@ -1204,7 +1204,7 @@ func.def @static_bitpack_q4_pair(%codes: vector<2xi8>) -> (vector<1xi8>) {
   %11 = scalar.constant 4 : i8
   %12 = scalar.shli %10, %11 : i8
   %13 = scalar.ori %7, %12 : i8
-  %r = vector.from_elements %13 : i8 -> vector<1xi8>
+  %r = vector.from_elements %13 : vector<1xi8>
   func.return %r : vector<1xi8>
 }
 
@@ -1230,7 +1230,7 @@ func.def @static_bitunpacku_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
   %12 = scalar.constant 15 : i8
   %13 = scalar.andi %11, %12 : i8
   %14 = scalar.ori %8, %13 : i8
-  %r = vector.from_elements %7, %14 : i8, i8 -> vector<2xi8>
+  %r = vector.from_elements %7, %14 : vector<2xi8>
   func.return %r : vector<2xi8>
 }
 
@@ -1264,7 +1264,7 @@ func.def @static_bitunpacks_q4_pair(%packed: vector<1xi8>) -> (vector<2xi8>) {
   %20 = scalar.shli %18, %19 : i8
   %21 = scalar.constant 4 : i8
   %22 = scalar.shrsi %20, %21 : i8
-  %r = vector.from_elements %11, %22 : i8, i8 -> vector<2xi8>
+  %r = vector.from_elements %11, %22 : vector<2xi8>
   func.return %r : vector<2xi8>
 }
 
@@ -1340,7 +1340,7 @@ func.def @static_bitpack_q3(%codes: vector<8xi8>) -> (vector<3xi8>) {
   %61 = scalar.constant 5 : i8
   %62 = scalar.shli %60, %61 : i8
   %63 = scalar.ori %57, %62 : i8
-  %r = vector.from_elements %19, %44, %63 : i8, i8, i8 -> vector<3xi8>
+  %r = vector.from_elements %19, %44, %63 : vector<3xi8>
   func.return %r : vector<3xi8>
 }
 
@@ -1453,7 +1453,7 @@ func.def @static_bitunpacks_q3(%packed: vector<3xi8>) -> (vector<8xi8>) {
   %98 = scalar.shli %96, %97 : i8
   %99 = scalar.constant 5 : i8
   %100 = scalar.shrsi %98, %99 : i8
-  %r = vector.from_elements %11, %22, %39, %50, %61, %78, %89, %100 : i8, i8, i8, i8, i8, i8, i8, i8 -> vector<8xi8>
+  %r = vector.from_elements %11, %22, %39, %50, %61, %78, %89, %100 : vector<8xi8>
   func.return %r : vector<8xi8>
 }
 
@@ -1519,7 +1519,7 @@ func.def @dynamic_bitpack_q4(%n: index, %m: index, %codes: vector<[%n]xi8>, %pac
 func.def @static_table_lookup(%table: vector<4xf32>) -> (vector<2xf32>) {
   %i0 = scalar.constant 3 : i8
   %i1 = scalar.constant 0 : i8
-  %codes = vector.from_elements %i0, %i1 : i8, i8 -> vector<2xi8>
+  %codes = vector.from_elements %i0, %i1 : vector<2xi8>
   %r = vector.table.lookup %table[%codes] : vector<4xf32>, vector<2xi8> -> vector<2xf32>
   func.return %r : vector<2xf32>
 }
@@ -1532,7 +1532,7 @@ func.def @static_table_lookup(%table: vector<4xf32>) -> (vector<2xf32>) {
   %7 = vector.extract %table[%6] : vector<4xf32> -> f32
   %8 = index.cast %i1 : i8 to index
   %9 = vector.extract %table[%8] : vector<4xf32> -> f32
-  %r = vector.from_elements %7, %9 : f32, f32 -> vector<2xf32>
+  %r = vector.from_elements %7, %9 : vector<2xf32>
   func.return %r : vector<2xf32>
 }
 
@@ -1568,7 +1568,7 @@ func.def @static_table_quantize(%values: vector<2xf32>) -> (vector<2xi8>) {
   %t0 = scalar.constant -1.0 : f32
   %t1 = scalar.constant 0.0 : f32
   %t2 = scalar.constant 1.0 : f32
-  %thresholds = vector.from_elements %t0, %t1, %t2 : f32, f32, f32 -> vector<3xf32>
+  %thresholds = vector.from_elements %t0, %t1, %t2 : vector<3xf32>
   %r = vector.table.quantize %values, %thresholds {nan = max, tie = upper} : vector<2xf32>, vector<3xf32> -> vector<2xi8>
   func.return %r : vector<2xi8>
 }
@@ -1612,7 +1612,7 @@ func.def @static_table_quantize(%values: vector<2xf32>) -> (vector<2xi8>) {
   %38 = scalar.constant 3 : i8
   %39 = scalar.isnanf %24 : f32
   %40 = scf.select %39, %38, %37 : i8
-  %r = vector.from_elements %23, %40 : i8, i8 -> vector<2xi8>
+  %r = vector.from_elements %23, %40 : vector<2xi8>
   func.return %r : vector<2xi8>
 }
 
@@ -1698,7 +1698,7 @@ func.def @transform_hadamard(%v: vector<4xf32>) -> (vector<4xf32>) {
   %35 = scalar.addf %32, %34 : f32
   %36 = vector.extract %v[3] : vector<4xf32> -> f32
   %37 = scalar.addf %35, %36 : f32
-  %r = vector.from_elements %10, %19, %28, %37 : f32, f32, f32, f32 -> vector<4xf32>
+  %r = vector.from_elements %10, %19, %28, %37 : vector<4xf32>
   func.return %r : vector<4xf32>
 }
 
@@ -1732,7 +1732,7 @@ func.def @transform_hadamard_sign(%v: vector<2xf32>, %signs: vector<2xi1>) -> (v
   %21 = scf.select %19, %20, %18 : f32
   %22 = scalar.negf %21 : f32
   %23 = scalar.addf %17, %22 : f32
-  %r = vector.from_elements %13, %23 : f32, f32 -> vector<2xf32>
+  %r = vector.from_elements %13, %23 : vector<2xf32>
   func.return %r : vector<2xf32>
 }
 
@@ -1770,7 +1770,7 @@ func.def @transform_hadamard_sign_seed(%v: vector<1xf32>, %seed: index) -> (vect
   %25 = scalar.cmpi ne, %23, %24 : i64
   %26 = scalar.negf %5 : f32
   %27 = scf.select %25, %26, %5 : f32
-  %r = vector.from_elements %27 : f32 -> vector<1xf32>
+  %r = vector.from_elements %27 : vector<1xf32>
   func.return %r : vector<1xf32>
 }
 
@@ -1780,7 +1780,7 @@ func.def @transform_hadamard_sign_seed(%v: vector<1xf32>, %seed: index) -> (vect
 func.def @transform_sign_permute_hadamard(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
   %p1 = index.constant 1 : index
   %p0 = index.constant 0 : index
-  %permutation = vector.from_elements %p1, %p0 : index, index -> vector<2xindex>
+  %permutation = vector.from_elements %p1, %p0 : vector<2xindex>
   %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xindex>, signs = %signs : vector<2xi1>} : encoding<transform>
   %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
   func.return %r : vector<2xf32>
@@ -1807,7 +1807,7 @@ func.def @transform_sign_permute_hadamard(%v: vector<2xf32>, %signs: vector<2xi1
   %24 = scf.select %22, %23, %21 : f32
   %25 = scalar.negf %24 : f32
   %26 = scalar.addf %20, %25 : f32
-  %r = vector.from_elements %16, %26 : f32, f32 -> vector<2xf32>
+  %r = vector.from_elements %16, %26 : vector<2xf32>
   func.return %r : vector<2xf32>
 }
 
@@ -1864,7 +1864,7 @@ func.def @transform_hadamard_orthonormal(%v: vector<4xf32>) -> (vector<4xf32>) {
   %43 = scalar.addf %41, %42 : f32
   %44 = scalar.constant 0.5 : f32
   %45 = scalar.mulf %43, %44 : f32
-  %r = vector.from_elements %12, %23, %34, %45 : f32, f32, f32, f32 -> vector<4xf32>
+  %r = vector.from_elements %12, %23, %34, %45 : vector<4xf32>
   func.return %r : vector<4xf32>
 }
 
@@ -1900,6 +1900,6 @@ func.def @transform_jl_dense(%v: vector<2xf32>, %matrix: vector<3x2xf32>) -> (ve
   %23 = vector.extract %matrix[2, 1] : vector<3x2xf32> -> f32
   %24 = scalar.mulf %23, %22 : f32
   %25 = scalar.addf %21, %24 : f32
-  %r = vector.from_elements %11, %18, %25 : f32, f32, f32 -> vector<3xf32>
+  %r = vector.from_elements %11, %18, %25 : vector<3xf32>
   func.return %r : vector<3xf32>
 }

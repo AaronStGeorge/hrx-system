@@ -13,7 +13,7 @@ func.def @load_static(%buffer: buffer, %byte_offset: offset) -> (vector<2xf32>) 
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
   %6 = view.load %view[3] : view<8xf32, %layout> -> f32
   %7 = view.load %view[4] : view<8xf32, %layout> -> f32
-  %loaded = vector.from_elements %6, %7 : f32, f32 -> vector<2xf32>
+  %loaded = vector.from_elements %6, %7 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -71,7 +71,7 @@ func.def @load_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector<
     %15 = vector.extract %old[1] : vector<2xf32> -> f32
     scf.yield %15 : f32
   }
-  %loaded = vector.from_elements %9, %13 : f32, f32 -> vector<2xf32>
+  %loaded = vector.from_elements %9, %13 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -160,7 +160,7 @@ func.def @load_expand_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
     %36 = vector.extract %old[2] : vector<3xf32> -> f32
     scf.yield %36 : f32
   }
-  %loaded = vector.from_elements %9, %17, %32 : f32, f32, f32 -> vector<3xf32>
+  %loaded = vector.from_elements %9, %17, %32 : vector<3xf32>
   func.return %loaded : vector<3xf32>
 }
 
@@ -226,7 +226,7 @@ func.def @gather_static(%buffer: buffer, %byte_offset: offset, %offsets: vector<
   %12 = index.constant 3 : index
   %13 = index.add %12, %11 : index
   %14 = view.load %view[%13] : view<8xf32, %layout> -> f32
-  %loaded = vector.from_elements %10, %14 : f32, f32 -> vector<2xf32>
+  %loaded = vector.from_elements %10, %14 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -293,7 +293,7 @@ func.def @gather_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
     %24 = vector.extract %old[1] : vector<2xf32> -> f32
     scf.yield %24 : f32
   }
-  %loaded = vector.from_elements %10, %18 : f32, f32 -> vector<2xf32>
+  %loaded = vector.from_elements %10, %18 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 

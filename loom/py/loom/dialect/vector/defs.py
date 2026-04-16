@@ -498,7 +498,12 @@ vector_broadcast = Op(
 vector_from_elements = Op(
     "vector.from_elements",
     group=vector_ops,
-    doc=("Build an all-static vector from scalar element operands in logical lane order. The number of operands must equal the static element count of the result type."),
+    doc=(
+        "Build an all-static vector from scalar element operands in logical "
+        "lane order. The result vector type defines both the lane count and "
+        "element type: the number of operands must equal the static element "
+        "count, and every operand must have the vector element type."
+    ),
     operands=[Operand("elements", SCALAR, variadic=True)],
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("elements", "result")],
@@ -509,11 +514,9 @@ vector_from_elements = Op(
     format=[
         Refs("elements"),
         COLON,
-        TypesOf("elements"),
-        ARROW,
         ResultType("result"),
     ],
-    examples=["%v = vector.from_elements %a, %b, %c, %d : f32, f32, f32, f32 -> vector<4xf32>"],
+    examples=["%v = vector.from_elements %a, %b, %c, %d : vector<4xf32>"],
 )
 
 

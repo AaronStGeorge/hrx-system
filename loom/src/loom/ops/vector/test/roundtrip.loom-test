@@ -24,7 +24,7 @@ func.def @construction(%x: f32, %i: i32, %n: index) {
   %wide = vector.broadcast %c : vector<4xf32> -> vector<4x4xf32>
   %lane0 = vector.extract %c[0] : vector<4xf32> -> f32
   %updated = vector.insert %lane0 into %c[%n] : f32, vector<4xf32>
-  %from = vector.from_elements %x, %x, %x, %x : f32, f32, f32, f32 -> vector<4xf32>
+  %from = vector.from_elements %x, %x, %x, %x : vector<4xf32>
   test.use %ps, %pv, %empty, %vf, %empty_splat, %vi, %lanes, %int_lanes, %dyn_lanes, %tail, %int_tail, %wide, %updated, %from : f32, vector<4xf32>, vector<0xf32>, vector<16xf32>, vector<0xf32>, vector<[%n]xi32>, vector<16xindex>, vector<4xi32>, vector<[%n]xindex>, vector<16xi1>, vector<4xi1>, vector<4x4xf32>, vector<4xf32>, vector<4xf32>
   func.return
 }

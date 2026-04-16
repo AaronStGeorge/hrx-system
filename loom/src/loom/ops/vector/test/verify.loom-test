@@ -131,7 +131,25 @@ func.def @broadcast_rank_mismatch(%v: vector<4x4xf32>) {
 // Vector construction from scalars must provide every static lane.
 func.def @from_elements_count_mismatch(%x: f32) {
   // ERROR@+1: STRUCTURE/013 "elements"
-  %r = vector.from_elements %x, %x, %x : f32, f32, f32 -> vector<4xf32>
+  %r = vector.from_elements %x, %x, %x : vector<4xf32>
+  func.return
+}
+
+// ====
+
+// The result vector type is the only type annotation for vector.from_elements.
+func.def @from_elements_reject_old_operand_type_list(%x: f32) {
+  // ERROR@+1: PARSE/003
+  %r = vector.from_elements %x, %x : f32, f32 -> vector<2xf32>
+  func.return
+}
+
+// ====
+
+// Scalar element operands must match the result vector element type.
+func.def @from_elements_element_mismatch(%x: f32, %y: i32) {
+  // ERROR@+1: TYPE/002
+  %r = vector.from_elements %x, %y : vector<2xf32>
   func.return
 }
 
@@ -140,7 +158,7 @@ func.def @from_elements_count_mismatch(%x: f32) {
 // Vector construction from scalars needs an all-static lane count.
 func.def @from_elements_dynamic_result(%x: f32, %n: index) {
   // ERROR@+1: TYPE/004 "all-static vector shape"
-  %r = vector.from_elements %x, %x, %x, %x : f32, f32, f32, f32 -> vector<[%n]xf32>
+  %r = vector.from_elements %x, %x, %x, %x : vector<[%n]xf32>
   func.return
 }
 
@@ -743,7 +761,7 @@ func.def @table_quantize_result_capacity(%values: vector<4xf32>, %thresholds: ve
 func.def @table_quantize_unsorted_thresholds(%values: vector<4xf32>) {
   %t0 = scalar.constant 0.0 : f32
   %t1 = scalar.constant -1.0 : f32
-  %thresholds = vector.from_elements %t0, %t1 : f32, f32 -> vector<2xf32>
+  %thresholds = vector.from_elements %t0, %t1 : vector<2xf32>
   // ERROR@+1: STRUCTURE/015 "thresholds" "0" "1"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xf32>, vector<2xf32> -> vector<4xi8>
   func.return
@@ -881,7 +899,7 @@ func.def @transform_signs_shape_mismatch(%v: vector<128xf32>, %signs: vector<64x
 func.def @transform_permutation_out_of_bounds(%v: vector<2xf32>, %signs: vector<2xi1>) {
   %p0 = scalar.constant 0 : i64
   %p2 = scalar.constant 2 : i64
-  %permutation = vector.from_elements %p0, %p2 : i64, i64 -> vector<2xi64>
+  %permutation = vector.from_elements %p0, %p2 : vector<2xi64>
   %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xi64>, signs = %signs : vector<2xi1>} : encoding<transform>
   // ERROR@+1: SUBRANGE/004
   %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
@@ -893,7 +911,7 @@ func.def @transform_permutation_out_of_bounds(%v: vector<2xf32>, %signs: vector<
 // Static permutation maps must name each source lane once.
 func.def @transform_permutation_duplicate(%v: vector<2xf32>, %signs: vector<2xi1>) {
   %p0 = scalar.constant 0 : i64
-  %permutation = vector.from_elements %p0, %p0 : i64, i64 -> vector<2xi64>
+  %permutation = vector.from_elements %p0, %p0 : vector<2xi64>
   %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xi64>, signs = %signs : vector<2xi1>} : encoding<transform>
   // ERROR@+1: STRUCTURE/014 "permutation" "0" "unique lane indices"
   %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>

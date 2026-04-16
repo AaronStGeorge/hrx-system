@@ -405,8 +405,8 @@ iree_status_t loom_vector_broadcast_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_FROM_ELEMENTS: Build an all-static vector from scalar element operands in logical lane order. The number of operands must equal the static element count of the result type.
-// %v = vector.from_elements %a, %b, %c, %d : f32, f32, f32, f32 -> vector<4xf32>
+// LOOM_OP_VECTOR_FROM_ELEMENTS: Build an all-static vector from scalar element operands in logical lane order. The result vector type defines both the lane count and element type: the number of operands must equal the static element count, and every operand must have the vector element type.
+// %v = vector.from_elements %a, %b, %c, %d : vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_from_elements_isa, LOOM_OP_VECTOR_FROM_ELEMENTS)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_vector_from_elements_elements, 0)
 LOOM_DEFINE_RESULT(loom_vector_from_elements_result, 0)

@@ -105,10 +105,10 @@ class VectorBuilders:
         return cast(ValueRef, self._b.build("vector.broadcast", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def from_elements(self, *, elements: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Build an all-static vector from scalar element operands in logical lane order. The number of operands must equal the static element count of the result type.
+        """Build an all-static vector from scalar element operands in logical lane order. The result vector type defines both the lane count and element type: the number of operands must equal the static element count, and every operand must have the vector element type.
 
         Example::
-            %v = vector.from_elements %a, %b, %c, %d : f32, f32, f32, f32 -> vector<4xf32>
+            %v = vector.from_elements %a, %b, %c, %d : vector<4xf32>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}

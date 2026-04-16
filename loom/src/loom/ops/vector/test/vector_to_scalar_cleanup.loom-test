@@ -17,7 +17,7 @@ func.def @gather_zero_offsets(%buffer: buffer, %byte_offset: offset) -> (vector<
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
   %8 = view.load %view[3] : view<8xf32, %layout> -> f32
   %10 = view.load %view[3] : view<8xf32, %layout> -> f32
-  %loaded = vector.from_elements %8, %10 : f32, f32 -> vector<2xf32>
+  %loaded = vector.from_elements %8, %10 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -74,6 +74,6 @@ func.def @load_full_range_mask(%buffer: buffer, %byte_offset: offset) -> (vector
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
   %16 = view.load %view[3] : view<8xf32, %layout> -> f32
   %23 = view.load %view[4] : view<8xf32, %layout> -> f32
-  %loaded = vector.from_elements %16, %23 : f32, f32 -> vector<2xf32>
+  %loaded = vector.from_elements %16, %23 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }

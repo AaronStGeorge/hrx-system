@@ -87,7 +87,7 @@ func.def @atomic_rmw_static(%buffer: buffer, %byte_offset: offset, %value: vecto
   %15 = index.constant 3 : index
   %16 = index.add %15, %14 : index
   %17 = view.atomic.rmw<xchgi> %13, %view[%16] {ordering = acq_rel, scope = workgroup} : i32, view<8xi32, %layout> -> i32
-  %old = vector.from_elements %12, %17 : i32, i32 -> vector<2xi32>
+  %old = vector.from_elements %12, %17 : vector<2xi32>
   func.return %old : vector<2xi32>
 }
 
@@ -130,7 +130,7 @@ func.def @atomic_rmw_mask_static(%buffer: buffer, %byte_offset: offset, %value: 
     %27 = vector.extract %passthrough[1] : vector<2xf32> -> f32
     scf.yield %27 : f32
   }
-  %old = vector.from_elements %11, %20 : f32, f32 -> vector<2xf32>
+  %old = vector.from_elements %11, %20 : vector<2xf32>
   func.return %old : vector<2xf32>
 }
 
