@@ -26,7 +26,8 @@ func.def public @entry() -> (index) {
 
 // ----
 func.def @private_extent_identity(%n: index) -> (index) {
-  func.return %n : index
+  %13 = index.constant 32 : index
+  func.return %13 : index
 }
 
 func.def public @entry() -> (index) {
@@ -150,6 +151,56 @@ func.def @same_actual_arguments(%lhs: index, %rhs: index) -> (index) {
 func.def public @call_same_actual(%n: index) -> (index) {
   %biased = index.constant 1 : index
   func.return %biased : index
+}
+
+// ====
+
+// Exact facts can materialize directly at private callee argument boundaries,
+// even when there is no local consumer op to force ordinary constant folding.
+func.def @private_exact_arg_return(%n: index) -> (index) {
+  func.return %n : index
+}
+
+func.def public @call_private_exact_arg_return() -> (index) {
+  %n = index.constant 7 : index
+  %result = func.call @private_exact_arg_return(%n) : (index) -> (index)
+  func.return %result : index
+}
+
+// ----
+func.def @private_exact_arg_return(%n: index) -> (index) {
+  %5 = index.constant 7 : index
+  func.return %5 : index
+}
+
+func.def public @call_private_exact_arg_return() -> (index) {
+  %n = index.constant 7 : index
+  func.return %n : index
+}
+
+// ====
+
+// Exact return facts materialize at direct call results so naked forwarded
+// values become ordinary constants without requiring a downstream arithmetic op.
+func.def @same_actual_direct_return(%lhs: index, %rhs: index) -> (index) {
+  %delta = index.sub %lhs, %rhs : index
+  func.return %delta : index
+}
+
+func.def public @call_same_actual_direct_return(%n: index) -> (index) {
+  %result = func.call @same_actual_direct_return(%n, %n) : (index, index) -> (index)
+  func.return %result : index
+}
+
+// ----
+func.def @same_actual_direct_return(%lhs: index, %rhs: index) -> (index) {
+  %delta = index.constant 0 : index
+  func.return %delta : index
+}
+
+func.def public @call_same_actual_direct_return(%n: index) -> (index) {
+  %8 = index.constant 0 : index
+  func.return %8 : index
 }
 
 // ====

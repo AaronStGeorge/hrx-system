@@ -90,6 +90,8 @@ loom_cc_library(
     ::op_defs
     iree::base
     loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
   PUBLIC

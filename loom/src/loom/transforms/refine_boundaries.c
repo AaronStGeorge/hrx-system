@@ -14,6 +14,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/special_values.h"
 #include "loom/transforms/canonicalize.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/walk.h"
@@ -28,6 +29,7 @@ enum {
   LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_FACTS_CHANGED = 2,
   LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_REPLACEMENTS_CHANGED = 3,
   LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_REPLACEMENTS_APPLIED = 4,
+  LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_CONSTANTS_MATERIALIZED = 5,
 };
 
 static const loom_pass_statistic_def_t kRefineBoundariesStatistics[] = {
@@ -42,6 +44,8 @@ static const loom_pass_statistic_def_t kRefineBoundariesStatistics[] = {
          "Number of fixed-point rounds that changed boundary replacements.")},
     {IREE_SVL("boundary-replacements-applied"),
      IREE_SVL("Number of direct boundary value replacements applied.")},
+    {IREE_SVL("boundary-constants-materialized"),
+     IREE_SVL("Number of exact boundary constants materialized.")},
 };
 
 static const loom_pass_info_t loom_refine_boundaries_pass_info_storage = {
@@ -577,49 +581,108 @@ typedef struct loom_refine_boundaries_apply_t {
   // Replacement summary for the current fixed-point round.
   const loom_refine_boundaries_replacement_table_t* replacements;
 
+  // Boundary facts from the current fixed-point round.
+  const loom_value_fact_table_t* boundary_facts;
+
   // Number of replacements applied while walking this function.
   int64_t* applied_count;
+
+  // Number of constants materialized while walking this function.
+  int64_t* materialized_count;
 } loom_refine_boundaries_apply_t;
 
-static iree_status_t loom_refine_boundaries_apply_op_replacements(
+static iree_status_t loom_refine_boundaries_materialize_exact_value(
+    loom_module_t* module, const loom_value_fact_table_t* boundary_facts,
+    loom_builder_t* builder, loom_value_id_t old_value,
+    loom_location_id_t location, int64_t* materialized_count) {
+  if (!loom_refine_boundaries_value_has_uses(module, old_value)) {
+    return iree_ok_status();
+  }
+  if (!loom_refine_boundaries_table_has_entry(boundary_facts, old_value)) {
+    return iree_ok_status();
+  }
+  loom_value_facts_t facts =
+      loom_value_fact_table_lookup(boundary_facts, old_value);
+  loom_type_t type = loom_module_value_type(module, old_value);
+  if (!loom_value_facts_can_materialize_constant(facts, type)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_constant_build(builder, facts, type, location, &replacement));
+  IREE_RETURN_IF_ERROR(
+      loom_value_replace_all_uses_with(module, old_value, replacement));
+  *materialized_count += 1;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_refine_boundaries_apply_op_boundary_values(
     void* user_data, loom_op_t* op, const loom_walk_context_t* context,
     loom_walk_result_t* out_result) {
   (void)context;
   *out_result = LOOM_WALK_CONTINUE;
+  if (op->result_count == 0) return iree_ok_status();
+
   loom_refine_boundaries_apply_t* apply =
       (loom_refine_boundaries_apply_t*)user_data;
+  loom_builder_t builder;
+  loom_builder_initialize(apply->module, &apply->module->arena,
+                          op->parent_block, &builder);
+  loom_builder_set_before(&builder, op);
+
   loom_value_id_t* results = loom_op_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_apply_value_replacement(
         apply->module, apply->replacements, results[i], apply->applied_count));
+    IREE_RETURN_IF_ERROR(loom_refine_boundaries_materialize_exact_value(
+        apply->module, apply->boundary_facts, &builder, results[i],
+        op->location, apply->materialized_count));
   }
   return iree_ok_status();
 }
 
-static iree_status_t loom_refine_boundaries_apply_function_replacements(
+static iree_status_t loom_refine_boundaries_apply_function_boundary_values(
     loom_module_t* module,
     const loom_refine_boundaries_replacement_table_t* replacements,
+    const loom_value_fact_table_t* boundary_facts,
     loom_refine_boundaries_function_t* function_info,
-    iree_arena_allocator_t* walk_arena, int64_t* out_applied_count) {
+    iree_arena_allocator_t* walk_arena, int64_t* out_applied_count,
+    int64_t* out_materialized_count) {
   *out_applied_count = 0;
-  for (uint16_t i = 0; i < function_info->argument_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_refine_boundaries_apply_value_replacement(
-        module, replacements, function_info->argument_ids[i],
-        out_applied_count));
-  }
-
+  *out_materialized_count = 0;
   loom_region_t* body = loom_func_like_body(function_info->function);
   if (!body) return iree_ok_status();
+
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  loom_builder_t entry_builder;
+  loom_builder_initialize(module, &module->arena, entry_block, &entry_builder);
+  if (entry_block->first_op) {
+    loom_builder_set_before(&entry_builder, entry_block->first_op);
+  } else {
+    entry_builder.ip.parent_op = function_info->function.op;
+  }
+  for (uint16_t i = 0; i < function_info->argument_count; ++i) {
+    loom_value_id_t argument = function_info->argument_ids[i];
+    IREE_RETURN_IF_ERROR(loom_refine_boundaries_apply_value_replacement(
+        module, replacements, argument, out_applied_count));
+    IREE_RETURN_IF_ERROR(loom_refine_boundaries_materialize_exact_value(
+        module, boundary_facts, &entry_builder, argument,
+        function_info->function.op->location, out_materialized_count));
+  }
+
   loom_refine_boundaries_apply_t apply = {
       .module = module,
       .replacements = replacements,
+      .boundary_facts = boundary_facts,
       .applied_count = out_applied_count,
+      .materialized_count = out_materialized_count,
   };
   loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
   iree_arena_reset(walk_arena);
   return loom_walk_function(
       module, function_info->function, LOOM_WALK_PRE_ORDER,
-      (loom_walk_callback_t){loom_refine_boundaries_apply_op_replacements,
+      (loom_walk_callback_t){loom_refine_boundaries_apply_op_boundary_values,
                              &apply},
       walk_arena, &walk_result);
 }
@@ -838,9 +901,10 @@ static iree_status_t loom_refine_boundaries_run_function(
     loom_refine_boundaries_replacement_table_t* next_boundary_replacements,
     loom_refine_boundaries_function_t* function_info) {
   int64_t replacements_applied = 0;
-  IREE_RETURN_IF_ERROR(loom_refine_boundaries_apply_function_replacements(
-      graph->module, seed_replacements, function_info, graph->walk_arena,
-      &replacements_applied));
+  int64_t constants_materialized = 0;
+  IREE_RETURN_IF_ERROR(loom_refine_boundaries_apply_function_boundary_values(
+      graph->module, seed_replacements, seed_facts, function_info,
+      graph->walk_arena, &replacements_applied, &constants_materialized));
 
   loom_canonicalizer_options_t options = {
       .seed_facts = seed_facts,
@@ -851,7 +915,8 @@ static iree_status_t loom_refine_boundaries_run_function(
   if (pass->statistics) {
     loom_pass_statistic_add(pass, LOOM_REFINE_BOUNDARIES_STAT_FUNCTIONS_VISITED,
                             1);
-    if (replacements_applied > 0 || canonicalize_result.changed) {
+    if (replacements_applied > 0 || constants_materialized > 0 ||
+        canonicalize_result.changed) {
       loom_pass_statistic_add(pass,
                               LOOM_REFINE_BOUNDARIES_STAT_FUNCTIONS_CHANGED, 1);
     }
@@ -859,6 +924,11 @@ static iree_status_t loom_refine_boundaries_run_function(
       loom_pass_statistic_add(
           pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_REPLACEMENTS_APPLIED,
           replacements_applied);
+    }
+    if (constants_materialized > 0) {
+      loom_pass_statistic_add(
+          pass, LOOM_REFINE_BOUNDARIES_STAT_BOUNDARY_CONSTANTS_MATERIALIZED,
+          constants_materialized);
     }
   }
 

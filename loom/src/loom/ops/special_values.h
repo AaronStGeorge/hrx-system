@@ -14,6 +14,7 @@
 #ifndef LOOM_OPS_SPECIAL_VALUES_H_
 #define LOOM_OPS_SPECIAL_VALUES_H_
 
+#include "loom/ir/facts.h"
 #include "loom/ops/op_defs.h"
 
 #ifdef __cplusplus
@@ -32,6 +33,20 @@ iree_status_t loom_poison_build(loom_builder_t* builder,
                                 loom_type_t result_type,
                                 loom_location_id_t location,
                                 loom_value_id_t* out_value_id);
+
+// Returns true when |type| currently has a supported constant materializer.
+bool loom_type_has_constant_materializer(loom_type_t type);
+
+// Returns true when |facts| can be materialized as a constant of |type|.
+bool loom_value_facts_can_materialize_constant(loom_value_facts_t facts,
+                                               loom_type_t type);
+
+// Builds a typed constant value from exact facts for supported result types.
+iree_status_t loom_constant_build(loom_builder_t* builder,
+                                  loom_value_facts_t facts,
+                                  loom_type_t result_type,
+                                  loom_location_id_t location,
+                                  loom_value_id_t* out_value_id);
 
 // Returns true when |op| materializes a typed empty aggregate value.
 bool loom_op_is_empty(const loom_op_t* op);

@@ -23,39 +23,6 @@
 #include "loom/transforms/type_propagation.h"
 #include "loom/util/walk.h"
 
-//===----------------------------------------------------------------------===//
-// Constant materialization
-//===----------------------------------------------------------------------===//
-
-// Materializes a typed constant from exact facts.
-static iree_status_t loom_canonicalize_materialize_constant(
-    loom_builder_t* builder, loom_value_facts_t facts, loom_type_t result_type,
-    loom_location_id_t location, loom_value_id_t* out_value_id) {
-  loom_attribute_t attr;
-  if (loom_value_facts_is_float(facts)) {
-    attr = loom_attr_f64(loom_value_facts_as_f64(facts));
-  } else if (loom_type_is_scalar(result_type) &&
-             loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_I1) {
-    attr = loom_attr_bool(facts.range_lo != 0);
-  } else {
-    attr = loom_attr_i64(facts.range_lo);
-  }
-  if (loom_type_is_scalar(result_type) &&
-      (loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_INDEX ||
-       loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_OFFSET)) {
-    loom_op_t* constant_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_index_constant_build(builder, attr, result_type,
-                                                   location, &constant_op));
-    *out_value_id = loom_index_constant_result(constant_op);
-    return iree_ok_status();
-  }
-  loom_op_t* constant_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_constant_build(builder, attr, result_type,
-                                                  location, &constant_op));
-  *out_value_id = loom_scalar_constant_result(constant_op);
-  return iree_ok_status();
-}
-
 static iree_status_t loom_canonicalize_replace_single_result_with_value(
     loom_rewriter_t* rewriter, loom_op_t* op, loom_value_id_t replacement) {
   return loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement,
@@ -1242,7 +1209,7 @@ iree_status_t loom_canonicalizer_run_function(
   IREE_RETURN_IF_ERROR(loom_rewriter_initialize(rewriter, canonicalizer->module,
                                                 &canonicalizer->scratch_arena));
   canonicalizer->state->rewriter_initialized = true;
-  rewriter->materialize_constant = loom_canonicalize_materialize_constant;
+  rewriter->materialize_constant = loom_constant_build;
 
   iree_status_t status = loom_rewriter_enable_analysis_with_seed_facts(
       rewriter, function, options ? options->seed_facts : NULL);
