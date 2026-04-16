@@ -15,6 +15,7 @@ loom_cc_library(
     encoding
   HDRS
     "families.h"
+    "numeric_transform.h"
     "ops.h"
     "params.h"
     "roles.h"
@@ -23,11 +24,13 @@ loom_cc_library(
     "builders.c"
     "facts.c"
     "families.c"
+    "numeric_transform.c"
     "roles.c"
     "storage.c"
     "tables.c"
     "verify.c"
   DEPS
+    iree::base
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

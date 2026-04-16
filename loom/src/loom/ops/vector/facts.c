@@ -19,6 +19,7 @@
 
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/numeric_transform.h"
 #include "loom/ops/scalar/compare.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
@@ -477,6 +478,384 @@ static bool loom_vector_grouped_dot_source_lane(
   }
   *out_source_lane = source_lane;
   return true;
+}
+
+static bool loom_vector_static_shapes_match(loom_type_t lhs_type,
+                                            loom_type_t rhs_type) {
+  uint8_t rank = loom_type_rank(lhs_type);
+  if (loom_type_rank(rhs_type) != rank) return false;
+  for (uint8_t axis = 0; axis < rank; ++axis) {
+    if (loom_type_dim_is_dynamic_at(lhs_type, axis) ||
+        loom_type_dim_is_dynamic_at(rhs_type, axis) ||
+        loom_type_dim_static_size_at(lhs_type, axis) !=
+            loom_type_dim_static_size_at(rhs_type, axis)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_vector_static_leading_shapes_match(loom_type_t lhs_type,
+                                                    loom_type_t rhs_type) {
+  uint8_t rank = loom_type_rank(lhs_type);
+  if (loom_type_rank(rhs_type) != rank || rank == 0) return false;
+  for (uint8_t axis = 0; axis + 1 < rank; ++axis) {
+    if (loom_type_dim_is_dynamic_at(lhs_type, axis) ||
+        loom_type_dim_is_dynamic_at(rhs_type, axis) ||
+        loom_type_dim_static_size_at(lhs_type, axis) !=
+            loom_type_dim_static_size_at(rhs_type, axis)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_vector_static_last_axis_extent(loom_type_t type,
+                                                iree_host_size_t* out_extent) {
+  uint8_t rank = loom_type_rank(type);
+  if (rank == 0 || loom_type_dim_is_dynamic_at(type, (uint8_t)(rank - 1))) {
+    return false;
+  }
+  int64_t extent = loom_type_dim_static_size_at(type, (uint8_t)(rank - 1));
+  if (extent <= 0 || (uint64_t)extent > (uint64_t)IREE_HOST_SIZE_MAX) {
+    return false;
+  }
+  *out_extent = (iree_host_size_t)extent;
+  return true;
+}
+
+static bool loom_vector_facts_query_iota_lane(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    iree_host_size_t lane, loom_value_facts_t* out_element) {
+  loom_value_fact_vector_iota_t iota = {0};
+  if (!loom_value_facts_query_vector_iota(context, facts, &iota)) {
+    return false;
+  }
+  int64_t base = 0;
+  int64_t step = 0;
+  if (!loom_vector_facts_query_exact_i64(iota.base, &base) ||
+      !loom_vector_facts_query_exact_i64(iota.step, &step) ||
+      lane > (iree_host_size_t)INT64_MAX) {
+    return false;
+  }
+  int64_t delta = 0;
+  int64_t value = 0;
+  if (!loom_checked_mul_i64((int64_t)lane, step, &delta) ||
+      !loom_checked_add_i64(base, delta, &value)) {
+    return false;
+  }
+  *out_element = loom_value_facts_exact_i64(value);
+  return true;
+}
+
+static bool loom_vector_facts_query_lane_or_iota(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    iree_host_size_t lane, loom_value_facts_t* out_element) {
+  return loom_vector_facts_query_lane(context, facts, lane, out_element) ||
+         loom_vector_facts_query_iota_lane(context, facts, lane, out_element);
+}
+
+static bool loom_vector_transform_query_f64_lane(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    iree_host_size_t lane, double* out_value) {
+  loom_value_facts_t lane_facts = {0};
+  return loom_vector_facts_query_lane_or_iota(context, facts, lane,
+                                              &lane_facts) &&
+         loom_vector_facts_query_exact_f64(lane_facts, out_value);
+}
+
+static bool loom_vector_transform_query_i64_lane(
+    const loom_fact_context_t* context, loom_value_facts_t facts,
+    iree_host_size_t lane, int64_t* out_value) {
+  loom_value_facts_t lane_facts = {0};
+  return loom_vector_facts_query_lane_or_iota(context, facts, lane,
+                                              &lane_facts) &&
+         loom_vector_facts_query_exact_i64(lane_facts, out_value);
+}
+
+static bool loom_vector_transform_dynamic_value_facts(
+    const loom_fact_context_t* context, loom_value_id_t value_id,
+    loom_value_facts_t* out_facts) {
+  if (!context || !context->table || value_id == LOOM_VALUE_ID_INVALID) {
+    return false;
+  }
+  *out_facts = loom_value_fact_table_lookup(context->table, value_id);
+  return true;
+}
+
+static bool loom_vector_transform_validate_hadamard_descriptor(
+    const loom_encoding_numeric_transform_descriptor_t* descriptor) {
+  if (descriptor->family == LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD) {
+    return !loom_encoding_numeric_transform_has_signs(descriptor) &&
+           !loom_encoding_numeric_transform_has_permutation(descriptor) &&
+           !loom_encoding_numeric_transform_has_matrix(descriptor) &&
+           !loom_encoding_numeric_transform_has_seed(descriptor);
+  }
+  if (descriptor->family ==
+      LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD_SIGN) {
+    bool has_signs = loom_encoding_numeric_transform_has_signs(descriptor);
+    bool has_seed = loom_encoding_numeric_transform_has_seed(descriptor);
+    return has_signs != has_seed &&
+           !loom_encoding_numeric_transform_has_permutation(descriptor) &&
+           !loom_encoding_numeric_transform_has_matrix(descriptor);
+  }
+  if (descriptor->family ==
+      LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD) {
+    return loom_encoding_numeric_transform_has_signs(descriptor) &&
+           loom_encoding_numeric_transform_has_permutation(descriptor) &&
+           !loom_encoding_numeric_transform_has_matrix(descriptor) &&
+           !loom_encoding_numeric_transform_has_seed(descriptor);
+  }
+  return false;
+}
+
+static bool loom_vector_transform_query_sign(
+    const loom_fact_context_t* context,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
+    iree_host_size_t lane, bool* out_negate) {
+  *out_negate = false;
+  if (!loom_encoding_numeric_transform_has_signs(descriptor)) {
+    return !loom_encoding_numeric_transform_has_seed(descriptor);
+  }
+  loom_value_facts_t signs_facts = {0};
+  int64_t sign_bit = 0;
+  if (!loom_vector_transform_dynamic_value_facts(context, descriptor->signs,
+                                                 &signs_facts) ||
+      !loom_vector_transform_query_i64_lane(context, signs_facts, lane,
+                                            &sign_bit)) {
+    return false;
+  }
+  *out_negate = sign_bit != 0;
+  return true;
+}
+
+static bool loom_vector_transform_query_permutation_lane(
+    const loom_fact_context_t* context,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
+    iree_host_size_t transform_lane, int64_t default_source_last_index,
+    iree_host_size_t input_extent, int64_t* out_source_last_index) {
+  *out_source_last_index = 0;
+  if (!loom_encoding_numeric_transform_has_permutation(descriptor)) {
+    *out_source_last_index = default_source_last_index;
+    return true;
+  }
+  loom_value_facts_t permutation_facts = {0};
+  if (!loom_vector_transform_dynamic_value_facts(
+          context, descriptor->permutation, &permutation_facts) ||
+      !loom_vector_transform_query_i64_lane(
+          context, permutation_facts, transform_lane, out_source_last_index)) {
+    return false;
+  }
+  return *out_source_last_index >= 0 &&
+         (uint64_t)*out_source_last_index < (uint64_t)input_extent;
+}
+
+static bool loom_vector_transform_hadamard_lane_value(
+    const loom_fact_context_t* context,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
+    loom_type_t source_type, loom_value_facts_t source_facts,
+    const int64_t* result_indices, iree_host_size_t input_extent,
+    double* out_value) {
+  uint8_t rank = loom_type_rank(source_type);
+  uint8_t last_axis = (uint8_t)(rank - 1);
+  int64_t source_indices[LOOM_TYPE_MAX_RANK] = {0};
+  memcpy(source_indices, result_indices, rank * sizeof(source_indices[0]));
+
+  double accumulator = 0.0;
+  for (iree_host_size_t input_index = 0; input_index < input_extent;
+       ++input_index) {
+    source_indices[last_axis] = (int64_t)input_index;
+    iree_host_size_t transform_lane = 0;
+    if (!loom_vector_static_ordinal_from_indices(source_type, source_indices,
+                                                 &transform_lane)) {
+      return false;
+    }
+
+    int64_t source_last_index = 0;
+    if (!loom_vector_transform_query_permutation_lane(
+            context, descriptor, transform_lane, (int64_t)input_index,
+            input_extent, &source_last_index)) {
+      return false;
+    }
+    source_indices[last_axis] = source_last_index;
+    iree_host_size_t source_lane = 0;
+    if (!loom_vector_static_ordinal_from_indices(source_type, source_indices,
+                                                 &source_lane)) {
+      return false;
+    }
+
+    double term = 0.0;
+    if (!loom_vector_transform_query_f64_lane(context, source_facts,
+                                              source_lane, &term)) {
+      return false;
+    }
+
+    bool sign_negates = false;
+    if (!loom_vector_transform_query_sign(context, descriptor, source_lane,
+                                          &sign_negates)) {
+      return false;
+    }
+    if (sign_negates) term = -term;
+
+    int64_t output_index = result_indices[last_axis];
+    if (loom_count_ones_u64_width(
+            (uint64_t)(output_index & (int64_t)input_index), 64) &
+        1) {
+      term = -term;
+    }
+    accumulator += term;
+    source_indices[last_axis] = (int64_t)input_index;
+  }
+
+  if (descriptor->normalization ==
+      LOOM_ENCODING_NUMERIC_TRANSFORM_NORMALIZATION_ORTHONORMAL) {
+    accumulator *= 1.0 / sqrt((double)input_extent);
+  }
+  *out_value = accumulator;
+  return true;
+}
+
+static iree_status_t loom_vector_transform_hadamard_facts(
+    loom_fact_context_t* context,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
+    loom_type_t source_type, loom_type_t result_type,
+    loom_value_facts_t source_facts, loom_value_facts_t* result_facts) {
+  iree_host_size_t result_lane_count = 0;
+  iree_host_size_t input_extent = 0;
+  if (!loom_vector_transform_validate_hadamard_descriptor(descriptor) ||
+      !loom_vector_static_shapes_match(source_type, result_type) ||
+      !loom_vector_type_static_lane_count(result_type, &result_lane_count) ||
+      !loom_vector_static_last_axis_extent(source_type, &input_extent) ||
+      result_lane_count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT ||
+      input_extent > LOOM_VECTOR_FACT_STATIC_LOOP_LIMIT ||
+      !loom_is_power_of_two_i64((int64_t)input_extent)) {
+    return loom_vector_make_unknown_facts(result_facts);
+  }
+
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  int64_t result_indices[LOOM_TYPE_MAX_RANK] = {0};
+  for (iree_host_size_t result_lane = 0; result_lane < result_lane_count;
+       ++result_lane) {
+    loom_vector_static_indices_from_ordinal(result_type, result_lane,
+                                            result_indices);
+    double value = 0.0;
+    lanes[result_lane] = loom_value_facts_unknown();
+    if (loom_vector_transform_hadamard_lane_value(
+            context, descriptor, source_type, source_facts, result_indices,
+            input_extent, &value)) {
+      lanes[result_lane] = loom_value_facts_exact_f64(value);
+    }
+  }
+  return loom_vector_make_small_static_lane_facts(
+      context, lanes, result_lane_count, result_facts);
+}
+
+static bool loom_vector_transform_jl_descriptor_is_valid(
+    const loom_encoding_numeric_transform_descriptor_t* descriptor) {
+  return descriptor->family ==
+             LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_JL_DENSE &&
+         descriptor->normalization ==
+             LOOM_ENCODING_NUMERIC_TRANSFORM_NORMALIZATION_NONE &&
+         loom_encoding_numeric_transform_has_matrix(descriptor) &&
+         !loom_encoding_numeric_transform_has_signs(descriptor) &&
+         !loom_encoding_numeric_transform_has_permutation(descriptor) &&
+         !loom_encoding_numeric_transform_has_seed(descriptor);
+}
+
+static bool loom_vector_transform_jl_lane_value(
+    const loom_fact_context_t* context, loom_type_t source_type,
+    loom_type_t matrix_type, loom_value_facts_t source_facts,
+    loom_value_facts_t matrix_facts, const int64_t* result_indices,
+    iree_host_size_t input_extent, double* out_value) {
+  uint8_t rank = loom_type_rank(source_type);
+  uint8_t last_axis = (uint8_t)(rank - 1);
+  int64_t source_indices[LOOM_TYPE_MAX_RANK] = {0};
+  int64_t matrix_indices[2] = {
+      result_indices[last_axis],
+      0,
+  };
+  memcpy(source_indices, result_indices, rank * sizeof(source_indices[0]));
+
+  double accumulator = 0.0;
+  for (iree_host_size_t input_index = 0; input_index < input_extent;
+       ++input_index) {
+    source_indices[last_axis] = (int64_t)input_index;
+    matrix_indices[1] = (int64_t)input_index;
+
+    iree_host_size_t source_lane = 0;
+    iree_host_size_t matrix_lane = 0;
+    if (!loom_vector_static_ordinal_from_indices(source_type, source_indices,
+                                                 &source_lane) ||
+        !loom_vector_static_ordinal_from_indices(matrix_type, matrix_indices,
+                                                 &matrix_lane)) {
+      return false;
+    }
+
+    double source_value = 0.0;
+    double matrix_value = 0.0;
+    if (!loom_vector_transform_query_f64_lane(context, source_facts,
+                                              source_lane, &source_value) ||
+        !loom_vector_transform_query_f64_lane(context, matrix_facts,
+                                              matrix_lane, &matrix_value)) {
+      return false;
+    }
+    accumulator += matrix_value * source_value;
+  }
+  *out_value = accumulator;
+  return true;
+}
+
+static iree_status_t loom_vector_transform_jl_dense_facts(
+    loom_fact_context_t* context,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
+    const loom_module_t* module, loom_type_t source_type,
+    loom_type_t result_type, loom_value_facts_t source_facts,
+    loom_value_facts_t* result_facts) {
+  iree_host_size_t result_lane_count = 0;
+  iree_host_size_t input_extent = 0;
+  if (!loom_vector_transform_jl_descriptor_is_valid(descriptor) ||
+      !loom_vector_static_leading_shapes_match(source_type, result_type) ||
+      !loom_vector_type_static_lane_count(result_type, &result_lane_count) ||
+      !loom_vector_static_last_axis_extent(source_type, &input_extent) ||
+      result_lane_count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT ||
+      input_extent > LOOM_VECTOR_FACT_STATIC_LOOP_LIMIT) {
+    return loom_vector_make_unknown_facts(result_facts);
+  }
+
+  loom_type_t matrix_type = loom_module_value_type(module, descriptor->matrix);
+  uint8_t result_last_axis = (uint8_t)(loom_type_rank(result_type) - 1);
+  if (!loom_type_is_vector(matrix_type) || loom_type_rank(matrix_type) != 2 ||
+      loom_type_dim_is_dynamic_at(matrix_type, 0) ||
+      loom_type_dim_is_dynamic_at(matrix_type, 1) ||
+      loom_type_dim_is_dynamic_at(result_type, result_last_axis) ||
+      loom_type_dim_static_size_at(matrix_type, 0) !=
+          loom_type_dim_static_size_at(result_type, result_last_axis) ||
+      loom_type_dim_static_size_at(matrix_type, 1) != (int64_t)input_extent) {
+    return loom_vector_make_unknown_facts(result_facts);
+  }
+
+  loom_value_facts_t matrix_facts = {0};
+  if (!loom_vector_transform_dynamic_value_facts(context, descriptor->matrix,
+                                                 &matrix_facts)) {
+    return loom_vector_make_unknown_facts(result_facts);
+  }
+
+  loom_value_facts_t lanes[LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT] = {{0}};
+  int64_t result_indices[LOOM_TYPE_MAX_RANK] = {0};
+  for (iree_host_size_t result_lane = 0; result_lane < result_lane_count;
+       ++result_lane) {
+    loom_vector_static_indices_from_ordinal(result_type, result_lane,
+                                            result_indices);
+    double value = 0.0;
+    lanes[result_lane] = loom_value_facts_unknown();
+    if (loom_vector_transform_jl_lane_value(
+            context, source_type, matrix_type, source_facts, matrix_facts,
+            result_indices, input_extent, &value)) {
+      lanes[result_lane] = loom_value_facts_exact_f64(value);
+    }
+  }
+  return loom_vector_make_small_static_lane_facts(
+      context, lanes, result_lane_count, result_facts);
 }
 
 static bool loom_vector_dot4i_lhs_is_signed(uint8_t kind) {
@@ -1053,6 +1432,38 @@ iree_status_t loom_vector_deinterleave_facts(
         context, lanes, result_lane_count, &result_facts[result_index]));
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_vector_transform_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_encoding_numeric_transform_read_t read =
+      loom_encoding_numeric_transform_read_descriptor(
+          module, loom_vector_transform_transform(op));
+  if (read.code != LOOM_ENCODING_NUMERIC_TRANSFORM_READ_OK) {
+    return loom_vector_make_unknown_facts(result_facts);
+  }
+
+  loom_type_t source_type =
+      loom_module_value_type(module, loom_vector_transform_source(op));
+  loom_type_t result_type =
+      loom_module_value_type(module, loom_vector_transform_result(op));
+  switch (read.descriptor.family) {
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD_SIGN:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD:
+      return loom_vector_transform_hadamard_facts(
+          context, &read.descriptor, source_type, result_type, operand_facts[0],
+          &result_facts[0]);
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_JL_DENSE:
+      return loom_vector_transform_jl_dense_facts(
+          context, &read.descriptor, module, source_type, result_type,
+          operand_facts[0], &result_facts[0]);
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_UNKNOWN:
+      return loom_vector_make_unknown_facts(result_facts);
+  }
+  return loom_vector_make_unknown_facts(result_facts);
 }
 
 //===----------------------------------------------------------------------===//

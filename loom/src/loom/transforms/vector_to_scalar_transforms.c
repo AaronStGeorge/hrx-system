@@ -10,8 +10,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/encoding/ops.h"
-#include "loom/ops/encoding/params.h"
+#include "loom/ops/encoding/numeric_transform.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -21,34 +20,6 @@
 //===----------------------------------------------------------------------===//
 // Numeric transform descriptor decoding
 //===----------------------------------------------------------------------===//
-
-typedef enum loom_vector_to_scalar_transform_family_e {
-  LOOM_VECTOR_TO_SCALAR_TRANSFORM_UNKNOWN = 0,
-  LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD = 1,
-  LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD_SIGN = 2,
-  LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD = 3,
-  LOOM_VECTOR_TO_SCALAR_TRANSFORM_JL_DENSE = 4,
-} loom_vector_to_scalar_transform_family_t;
-
-typedef enum loom_vector_to_scalar_transform_normalization_e {
-  LOOM_VECTOR_TO_SCALAR_TRANSFORM_NORMALIZATION_NONE = 0,
-  LOOM_VECTOR_TO_SCALAR_TRANSFORM_NORMALIZATION_ORTHONORMAL = 1,
-} loom_vector_to_scalar_transform_normalization_t;
-
-typedef struct loom_vector_to_scalar_transform_descriptor_t {
-  // Static numeric_transform family selected by the encoding descriptor.
-  loom_vector_to_scalar_transform_family_t family;
-  // Static normalization convention requested by the transform descriptor.
-  loom_vector_to_scalar_transform_normalization_t normalization;
-  // Optional dynamic i1 vector carrying per-lane negative-sign bits.
-  loom_value_id_t signs;
-  // Optional dynamic integer/index vector carrying per-lane permutation slots.
-  loom_value_id_t permutation;
-  // Optional dynamic floating-point matrix used by jl_dense transforms.
-  loom_value_id_t matrix;
-  // Optional dynamic seed for deterministic sign/permutation generation.
-  loom_value_id_t seed;
-} loom_vector_to_scalar_transform_descriptor_t;
 
 static iree_status_t loom_vector_to_scalar_emit_transform_unimplemented(
     loom_vector_to_scalar_state_t* state, iree_string_view_t reason) {
@@ -71,188 +42,52 @@ static iree_status_t loom_vector_to_scalar_emit_transform_unimplemented(
                           (int)reason.size, reason.data);
 }
 
-static bool loom_vector_to_scalar_string_id_equal(const loom_module_t* module,
-                                                  loom_string_id_t string_id,
-                                                  iree_string_view_t expected) {
-  if (string_id == LOOM_STRING_ID_INVALID ||
-      string_id >= module->strings.count) {
-    return false;
-  }
-  return iree_string_view_equal(module->strings.entries[string_id], expected);
-}
-
-static const loom_named_attr_t* loom_vector_to_scalar_find_named_attr(
-    const loom_module_t* module, loom_named_attr_slice_t attrs,
-    iree_string_view_t name) {
-  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
-    const loom_named_attr_t* entry = &attrs.entries[i];
-    if (loom_vector_to_scalar_string_id_equal(module, entry->name_id, name)) {
-      return entry;
-    }
-  }
-  return NULL;
-}
-
-static bool loom_vector_to_scalar_string_attr_value(
-    const loom_module_t* module, loom_attribute_t attr,
-    iree_string_view_t* out_value) {
-  *out_value = iree_string_view_empty();
-  if (attr.kind != LOOM_ATTR_STRING ||
-      attr.string_id == LOOM_STRING_ID_INVALID ||
-      attr.string_id >= module->strings.count) {
-    return false;
-  }
-  *out_value = module->strings.entries[attr.string_id];
-  return true;
-}
-
-static bool loom_vector_to_scalar_dynamic_param_value(
-    const loom_encoding_define_param_view_t* params,
-    const loom_named_attr_t* name_entry, loom_value_id_t* out_value) {
-  *out_value = LOOM_VALUE_ID_INVALID;
-  if (!name_entry || name_entry->value.kind != LOOM_ATTR_I64) return false;
-  int64_t ordinal = name_entry->value.i64;
-  if (ordinal < 0 || ordinal >= params->dynamic_values.count) return false;
-  *out_value = params->dynamic_values.values[ordinal];
-  return true;
-}
-
-static loom_vector_to_scalar_transform_family_t
-loom_vector_to_scalar_transform_family_from_name(iree_string_view_t name) {
-  if (iree_string_view_equal(name, IREE_SV("hadamard"))) {
-    return LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD;
-  }
-  if (iree_string_view_equal(name, IREE_SV("hadamard_sign"))) {
-    return LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD_SIGN;
-  }
-  if (iree_string_view_equal(name, IREE_SV("sign_permute_hadamard"))) {
-    return LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD;
-  }
-  if (iree_string_view_equal(name, IREE_SV("jl_dense"))) {
-    return LOOM_VECTOR_TO_SCALAR_TRANSFORM_JL_DENSE;
-  }
-  return LOOM_VECTOR_TO_SCALAR_TRANSFORM_UNKNOWN;
-}
-
 static iree_status_t loom_vector_to_scalar_read_transform_descriptor(
     loom_vector_to_scalar_state_t* state,
-    loom_vector_to_scalar_transform_descriptor_t* out_descriptor) {
-  *out_descriptor = (loom_vector_to_scalar_transform_descriptor_t){
-      .signs = LOOM_VALUE_ID_INVALID,
-      .permutation = LOOM_VALUE_ID_INVALID,
-      .matrix = LOOM_VALUE_ID_INVALID,
-      .seed = LOOM_VALUE_ID_INVALID,
-  };
-
+    loom_encoding_numeric_transform_descriptor_t* out_descriptor) {
   loom_value_id_t transform_value = loom_vector_transform_transform(state->op);
-  if (transform_value == LOOM_VALUE_ID_INVALID ||
-      transform_value >= state->rewriter->module->values.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "vector.transform operand id is out of range");
-  }
-  const loom_value_t* transform =
-      loom_module_value(state->rewriter->module, transform_value);
-  if (loom_value_is_block_arg(transform)) {
-    return loom_vector_to_scalar_emit_transform_unimplemented(
-        state, IREE_SV("transform descriptor is not locally defined"));
-  }
-
-  const loom_op_t* define_op = loom_value_def_op(transform);
-  if (!define_op || !loom_encoding_define_isa(define_op)) {
-    return loom_vector_to_scalar_emit_transform_unimplemented(
-        state, IREE_SV("transform descriptor is not an encoding.define"));
-  }
-
-  loom_encoding_define_param_view_t params =
-      loom_encoding_define_param_view(state->rewriter->module, define_op);
-  if (!params.spec || !loom_vector_to_scalar_string_id_equal(
-                          state->rewriter->module, params.spec->name_id,
-                          IREE_SV("numeric_transform"))) {
-    return loom_vector_to_scalar_emit_transform_unimplemented(
-        state, IREE_SV("transform descriptor is not #numeric_transform"));
-  }
-
-  const loom_named_attr_t* family_param = loom_vector_to_scalar_find_named_attr(
-      state->rewriter->module, params.static_attrs, IREE_SV("family"));
-  iree_string_view_t family_name = iree_string_view_empty();
-  if (!family_param ||
-      !loom_vector_to_scalar_string_attr_value(
-          state->rewriter->module, family_param->value, &family_name)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "vector.transform numeric_transform family must be a static string");
-  }
-  out_descriptor->family =
-      loom_vector_to_scalar_transform_family_from_name(family_name);
-  if (out_descriptor->family == LOOM_VECTOR_TO_SCALAR_TRANSFORM_UNKNOWN) {
-    return loom_vector_to_scalar_emit_transform_unimplemented(
-        state, IREE_SV("unknown numeric_transform family"));
-  }
-
-  out_descriptor->normalization =
-      LOOM_VECTOR_TO_SCALAR_TRANSFORM_NORMALIZATION_NONE;
-  const loom_named_attr_t* normalization_param =
-      loom_vector_to_scalar_find_named_attr(state->rewriter->module,
-                                            params.static_attrs,
-                                            IREE_SV("normalization"));
-  if (normalization_param) {
-    iree_string_view_t normalization = iree_string_view_empty();
-    if (!loom_vector_to_scalar_string_attr_value(state->rewriter->module,
-                                                 normalization_param->value,
-                                                 &normalization)) {
+  loom_encoding_numeric_transform_read_t read =
+      loom_encoding_numeric_transform_read_descriptor(state->rewriter->module,
+                                                      transform_value);
+  switch (read.code) {
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_OK:
+      *out_descriptor = read.descriptor;
+      return iree_ok_status();
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_VALUE_OUT_OF_RANGE:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "vector.transform operand id is out of range");
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NOT_LOCALLY_DEFINED:
+      return loom_vector_to_scalar_emit_transform_unimplemented(
+          state, IREE_SV("transform descriptor is not locally defined"));
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NOT_ENCODING_DEFINE:
+      return loom_vector_to_scalar_emit_transform_unimplemented(
+          state, IREE_SV("transform descriptor is not an encoding.define"));
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NOT_NUMERIC_TRANSFORM:
+      return loom_vector_to_scalar_emit_transform_unimplemented(
+          state, IREE_SV("transform descriptor is not #numeric_transform"));
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_MISSING_FAMILY:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NON_STRING_FAMILY:
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "vector.transform numeric_transform family must be a static string");
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_UNKNOWN_FAMILY:
+      return loom_vector_to_scalar_emit_transform_unimplemented(
+          state, IREE_SV("unknown numeric_transform family"));
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_NON_STRING_NORMALIZATION:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "numeric_transform normalization must be a "
                               "static string");
-    }
-    if (iree_string_view_equal(normalization, IREE_SV("orthonormal"))) {
-      out_descriptor->normalization =
-          LOOM_VECTOR_TO_SCALAR_TRANSFORM_NORMALIZATION_ORTHONORMAL;
-    } else if (!iree_string_view_equal(normalization, IREE_SV("none"))) {
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_UNKNOWN_NORMALIZATION:
       return loom_vector_to_scalar_emit_transform_unimplemented(
           state, IREE_SV("unknown numeric_transform normalization"));
-    }
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_READ_MALFORMED_DYNAMIC_PARAM:
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "malformed encoding.define operand dictionary for parameter '%.*s'",
+          (int)read.parameter_name.size, read.parameter_name.data);
   }
-
-  const loom_named_attr_t* signs_param = loom_vector_to_scalar_find_named_attr(
-      state->rewriter->module, params.dynamic_names, IREE_SV("signs"));
-  if (signs_param && !loom_vector_to_scalar_dynamic_param_value(
-                         &params, signs_param, &out_descriptor->signs)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter 'signs'");
-  }
-
-  const loom_named_attr_t* permutation_param =
-      loom_vector_to_scalar_find_named_attr(state->rewriter->module,
-                                            params.dynamic_names,
-                                            IREE_SV("permutation"));
-  if (permutation_param &&
-      !loom_vector_to_scalar_dynamic_param_value(
-          &params, permutation_param, &out_descriptor->permutation)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "malformed encoding.define operand dictionary for "
-                            "parameter 'permutation'");
-  }
-
-  const loom_named_attr_t* matrix_param = loom_vector_to_scalar_find_named_attr(
-      state->rewriter->module, params.dynamic_names, IREE_SV("matrix"));
-  if (matrix_param && !loom_vector_to_scalar_dynamic_param_value(
-                          &params, matrix_param, &out_descriptor->matrix)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter 'matrix'");
-  }
-
-  const loom_named_attr_t* seed_param = loom_vector_to_scalar_find_named_attr(
-      state->rewriter->module, params.dynamic_names, IREE_SV("seed"));
-  if (seed_param && !loom_vector_to_scalar_dynamic_param_value(
-                        &params, seed_param, &out_descriptor->seed)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "malformed encoding.define operand dictionary for parameter 'seed'");
-  }
-
-  return iree_ok_status();
+  return loom_vector_to_scalar_emit_transform_unimplemented(
+      state, IREE_SV("unrecognized numeric_transform descriptor"));
 }
 
 //===----------------------------------------------------------------------===//
@@ -260,29 +95,9 @@ static iree_status_t loom_vector_to_scalar_read_transform_descriptor(
 //===----------------------------------------------------------------------===//
 
 static bool loom_vector_to_scalar_transform_uses_signs(
-    loom_vector_to_scalar_transform_family_t family) {
-  return family == LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD_SIGN ||
-         family == LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD;
-}
-
-static bool loom_vector_to_scalar_transform_has_signs(
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor) {
-  return descriptor->signs != LOOM_VALUE_ID_INVALID;
-}
-
-static bool loom_vector_to_scalar_transform_has_permutation(
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor) {
-  return descriptor->permutation != LOOM_VALUE_ID_INVALID;
-}
-
-static bool loom_vector_to_scalar_transform_has_matrix(
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor) {
-  return descriptor->matrix != LOOM_VALUE_ID_INVALID;
-}
-
-static bool loom_vector_to_scalar_transform_has_seed(
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor) {
-  return descriptor->seed != LOOM_VALUE_ID_INVALID;
+    loom_encoding_numeric_transform_family_t family) {
+  return family == LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD_SIGN ||
+         family == LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD;
 }
 
 static int64_t loom_vector_to_scalar_static_last_axis_extent(loom_type_t type) {
@@ -522,14 +337,14 @@ static iree_status_t loom_vector_to_scalar_validate_transform_permutation(
 
 iree_status_t loom_vector_to_scalar_validate_transform(
     loom_vector_to_scalar_state_t* state) {
-  loom_vector_to_scalar_transform_descriptor_t descriptor = {0};
+  loom_encoding_numeric_transform_descriptor_t descriptor = {0};
   IREE_RETURN_IF_ERROR(
       loom_vector_to_scalar_read_transform_descriptor(state, &descriptor));
   if (descriptor.family !=
-      LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD) {
+      LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD) {
     return iree_ok_status();
   }
-  if (!loom_vector_to_scalar_transform_has_permutation(&descriptor)) {
+  if (!loom_encoding_numeric_transform_has_permutation(&descriptor)) {
     return iree_ok_status();
   }
 
@@ -582,10 +397,10 @@ static iree_status_t loom_vector_to_scalar_build_mulf_lane(
 
 static iree_status_t loom_vector_to_scalar_apply_orthonormal_scale(
     loom_vector_to_scalar_state_t* state,
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
     int64_t input_extent, loom_value_id_t input, loom_value_id_t* out_result) {
   if (descriptor->normalization !=
-      LOOM_VECTOR_TO_SCALAR_TRANSFORM_NORMALIZATION_ORTHONORMAL) {
+      LOOM_ENCODING_NUMERIC_TRANSFORM_NORMALIZATION_ORTHONORMAL) {
     *out_result = input;
     return iree_ok_status();
   }
@@ -641,7 +456,7 @@ static iree_status_t loom_vector_to_scalar_cast_value_to_index(
 
 static iree_status_t loom_vector_to_scalar_permutation_lane_term(
     loom_vector_to_scalar_state_t* state,
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
     loom_vector_to_scalar_index_list_t indices,
     loom_vector_to_scalar_index_term_t* out_term) {
   loom_value_id_t permutation_lane = LOOM_VALUE_ID_INVALID;
@@ -772,7 +587,7 @@ static iree_status_t loom_vector_to_scalar_apply_hadamard_phase(
 // expressible entirely in scalar integer IR.
 static iree_status_t loom_vector_to_scalar_build_seed_sign_bit(
     loom_vector_to_scalar_state_t* state,
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
     int64_t input_index, loom_value_id_t* out_sign) {
   loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
   loom_type_t i64_type = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
@@ -816,7 +631,7 @@ static iree_status_t loom_vector_to_scalar_build_seed_sign_bit(
 
 static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
     loom_vector_to_scalar_state_t* state,
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   loom_type_t source_type = loom_module_value_type(
       state->rewriter->module, loom_vector_transform_source(state->op));
@@ -827,37 +642,38 @@ static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
         state, IREE_SV("dynamic transform extents require specialization"));
   }
 
-  if (descriptor->family == LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD &&
-      (loom_vector_to_scalar_transform_has_signs(descriptor) ||
-       loom_vector_to_scalar_transform_has_permutation(descriptor) ||
-       loom_vector_to_scalar_transform_has_matrix(descriptor) ||
-       loom_vector_to_scalar_transform_has_seed(descriptor))) {
+  if (descriptor->family == LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD &&
+      (loom_encoding_numeric_transform_has_signs(descriptor) ||
+       loom_encoding_numeric_transform_has_permutation(descriptor) ||
+       loom_encoding_numeric_transform_has_matrix(descriptor) ||
+       loom_encoding_numeric_transform_has_seed(descriptor))) {
     return loom_vector_to_scalar_emit_transform_unimplemented(
         state, IREE_SV("hadamard does not consume dynamic transform "
                        "parameters"));
   }
 
   if (descriptor->family ==
-      LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD) {
-    if (!loom_vector_to_scalar_transform_has_signs(descriptor) ||
-        !loom_vector_to_scalar_transform_has_permutation(descriptor) ||
-        loom_vector_to_scalar_transform_has_matrix(descriptor) ||
-        loom_vector_to_scalar_transform_has_seed(descriptor)) {
+      LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD) {
+    if (!loom_encoding_numeric_transform_has_signs(descriptor) ||
+        !loom_encoding_numeric_transform_has_permutation(descriptor) ||
+        loom_encoding_numeric_transform_has_matrix(descriptor) ||
+        loom_encoding_numeric_transform_has_seed(descriptor)) {
       return loom_vector_to_scalar_emit_transform_unimplemented(
           state, IREE_SV("sign_permute_hadamard requires explicit signs and "
                          "permutation only"));
     }
   }
 
-  if (descriptor->family == LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD_SIGN) {
-    bool has_signs = loom_vector_to_scalar_transform_has_signs(descriptor);
-    bool has_seed = loom_vector_to_scalar_transform_has_seed(descriptor);
+  if (descriptor->family ==
+      LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD_SIGN) {
+    bool has_signs = loom_encoding_numeric_transform_has_signs(descriptor);
+    bool has_seed = loom_encoding_numeric_transform_has_seed(descriptor);
     if (has_signs == has_seed) {
       return loom_vector_to_scalar_emit_transform_unimplemented(
           state, IREE_SV("hadamard_sign requires exactly one sign source"));
     }
-    if (loom_vector_to_scalar_transform_has_permutation(descriptor) ||
-        loom_vector_to_scalar_transform_has_matrix(descriptor)) {
+    if (loom_encoding_numeric_transform_has_permutation(descriptor) ||
+        loom_encoding_numeric_transform_has_matrix(descriptor)) {
       return loom_vector_to_scalar_emit_transform_unimplemented(
           state, IREE_SV("hadamard_sign does not consume permutation or matrix "
                          "parameters"));
@@ -877,7 +693,7 @@ static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
 
     loom_vector_to_scalar_index_list_t source_indices = transform_indices;
     if (descriptor->family ==
-        LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD) {
+        LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD) {
       loom_vector_to_scalar_index_term_t source_last_index = {0};
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_permutation_lane_term(
           state, descriptor, transform_indices, &source_last_index));
@@ -893,7 +709,7 @@ static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
 
     if (loom_vector_to_scalar_transform_uses_signs(descriptor->family)) {
       loom_value_id_t sign_lane = LOOM_VALUE_ID_INVALID;
-      if (loom_vector_to_scalar_transform_has_signs(descriptor)) {
+      if (loom_encoding_numeric_transform_has_signs(descriptor)) {
         IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
             state, descriptor->signs, source_indices, &sign_lane));
       } else {
@@ -929,21 +745,21 @@ static iree_status_t loom_vector_to_scalar_transform_matrix_indices_from_terms(
 
 static iree_status_t loom_vector_to_scalar_transform_jl_dense_lane(
     loom_vector_to_scalar_state_t* state,
-    const loom_vector_to_scalar_transform_descriptor_t* descriptor,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   if (descriptor->matrix == LOOM_VALUE_ID_INVALID) {
     return loom_vector_to_scalar_emit_transform_unimplemented(
         state, IREE_SV("jl_dense requires an explicit matrix parameter"));
   }
   if (descriptor->normalization !=
-      LOOM_VECTOR_TO_SCALAR_TRANSFORM_NORMALIZATION_NONE) {
+      LOOM_ENCODING_NUMERIC_TRANSFORM_NORMALIZATION_NONE) {
     return loom_vector_to_scalar_emit_transform_unimplemented(
         state, IREE_SV("jl_dense normalization is carried by the explicit "
                        "matrix"));
   }
-  if (loom_vector_to_scalar_transform_has_signs(descriptor) ||
-      loom_vector_to_scalar_transform_has_permutation(descriptor) ||
-      loom_vector_to_scalar_transform_has_seed(descriptor)) {
+  if (loom_encoding_numeric_transform_has_signs(descriptor) ||
+      loom_encoding_numeric_transform_has_permutation(descriptor) ||
+      loom_encoding_numeric_transform_has_seed(descriptor)) {
     return loom_vector_to_scalar_emit_transform_unimplemented(
         state, IREE_SV("jl_dense does not consume signs, permutation, or seed "
                        "parameters"));
@@ -996,16 +812,16 @@ static iree_status_t loom_vector_to_scalar_transform_jl_dense_lane(
 iree_status_t loom_vector_to_scalar_build_transform_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  loom_vector_to_scalar_transform_descriptor_t descriptor = {0};
+  loom_encoding_numeric_transform_descriptor_t descriptor = {0};
   IREE_RETURN_IF_ERROR(
       loom_vector_to_scalar_read_transform_descriptor(state, &descriptor));
   switch (descriptor.family) {
-    case LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD:
-    case LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD_SIGN:
-    case LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD_SIGN:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD:
       return loom_vector_to_scalar_transform_hadamard_lane(state, &descriptor,
                                                            indices, out_lane);
-    case LOOM_VECTOR_TO_SCALAR_TRANSFORM_JL_DENSE:
+    case LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_JL_DENSE:
       return loom_vector_to_scalar_transform_jl_dense_lane(state, &descriptor,
                                                            indices, out_lane);
     default:

@@ -1013,6 +1013,7 @@ vector_transform = Op(
         SameElementType("source", "result"),
     ],
     verify="loom_vector_transform_verify",
+    facts="loom_vector_transform_facts",
     traits=[PURE],
     format=[
         Ref("source"),

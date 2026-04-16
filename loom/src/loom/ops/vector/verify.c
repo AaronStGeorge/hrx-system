@@ -13,6 +13,7 @@
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/atomic.h"
 #include "loom/ops/cache.h"
+#include "loom/ops/encoding/numeric_transform.h"
 #include "loom/ops/encoding/params.h"
 #include "loom/ops/encoding/roles.h"
 #include "loom/ops/scalar/ops.h"
@@ -1596,18 +1597,6 @@ iree_status_t loom_vector_table_quantize_verify(
                                                    thresholds_value);
 }
 
-typedef enum loom_vector_transform_family_e {
-  LOOM_VECTOR_TRANSFORM_FAMILY_UNKNOWN = 0,
-  LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD = 1,
-  LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD_SIGN = 2,
-  LOOM_VECTOR_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD = 3,
-  LOOM_VECTOR_TRANSFORM_FAMILY_JL_DENSE = 4,
-} loom_vector_transform_family_t;
-
-static iree_string_view_t loom_vector_transform_family_param_name(void) {
-  return IREE_SV("family");
-}
-
 static iree_string_view_t loom_vector_transform_input_elems_param_name(void) {
   return IREE_SV("input_elems");
 }
@@ -1676,42 +1665,6 @@ static iree_status_t loom_vector_emit_encoding_dynamic_type_error(
   return loom_vector_emit(emitter, op,
                           loom_error_def_lookup(LOOM_ERROR_DOMAIN_ENCODING, 9),
                           params, IREE_ARRAYSIZE(params));
-}
-
-static bool loom_vector_string_attr_value(const loom_module_t* module,
-                                          loom_attribute_t attr,
-                                          iree_string_view_t* out_value) {
-  if (attr.kind != LOOM_ATTR_STRING ||
-      attr.string_id == LOOM_STRING_ID_INVALID ||
-      attr.string_id >= module->strings.count) {
-    return false;
-  }
-  *out_value = module->strings.entries[attr.string_id];
-  return true;
-}
-
-static loom_vector_transform_family_t loom_vector_transform_family_from_name(
-    iree_string_view_t name) {
-  if (iree_string_view_equal(name, IREE_SV("hadamard"))) {
-    return LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD;
-  }
-  if (iree_string_view_equal(name, IREE_SV("hadamard_sign"))) {
-    return LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD_SIGN;
-  }
-  if (iree_string_view_equal(name, IREE_SV("sign_permute_hadamard"))) {
-    return LOOM_VECTOR_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD;
-  }
-  if (iree_string_view_equal(name, IREE_SV("jl_dense"))) {
-    return LOOM_VECTOR_TRANSFORM_FAMILY_JL_DENSE;
-  }
-  return LOOM_VECTOR_TRANSFORM_FAMILY_UNKNOWN;
-}
-
-static bool loom_vector_transform_family_is_hadamard_like(
-    loom_vector_transform_family_t family) {
-  return family == LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD ||
-         family == LOOM_VECTOR_TRANSFORM_FAMILY_HADAMARD_SIGN ||
-         family == LOOM_VECTOR_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD;
 }
 
 static bool loom_vector_i64_is_power_of_two(int64_t value) {
@@ -1905,16 +1858,14 @@ static iree_status_t loom_vector_transform_verify_dynamic_param_shapes(
     return iree_ok_status();
   }
 
-  const loom_named_attr_t* family_param = loom_vector_find_named_attr(
-      module, params->static_attrs, loom_vector_transform_family_param_name());
-  if (!family_param) return iree_ok_status();
-  iree_string_view_t family_name = iree_string_view_empty();
-  if (!loom_vector_string_attr_value(module, family_param->value,
-                                     &family_name)) {
+  loom_encoding_numeric_transform_read_t read =
+      loom_encoding_numeric_transform_read_descriptor(
+          module, loom_encoding_define_result(define_op));
+  if (read.code != LOOM_ENCODING_NUMERIC_TRANSFORM_READ_OK) {
     return iree_ok_status();
   }
-  if (loom_vector_transform_family_from_name(family_name) !=
-      LOOM_VECTOR_TRANSFORM_FAMILY_JL_DENSE) {
+  if (read.descriptor.family !=
+      LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_JL_DENSE) {
     return iree_ok_status();
   }
 
@@ -1934,28 +1885,17 @@ static iree_status_t loom_vector_transform_verify_dynamic_param_shapes(
 
 static iree_status_t loom_vector_transform_verify_family(
     const loom_module_t* module, const loom_op_t* op,
-    const loom_encoding_define_param_view_t* params,
     iree_diagnostic_emitter_t emitter, loom_type_t source_type,
     loom_type_t result_type) {
-  const loom_named_attr_t* family_param = loom_vector_find_named_attr(
-      module, params->static_attrs, loom_vector_transform_family_param_name());
-  if (!family_param) {
+  loom_encoding_numeric_transform_read_t read =
+      loom_encoding_numeric_transform_read_descriptor(
+          module, loom_vector_transform_transform(op));
+  if (read.code != LOOM_ENCODING_NUMERIC_TRANSFORM_READ_OK) {
     return iree_ok_status();
   }
 
-  iree_string_view_t family_name = iree_string_view_empty();
-  if (!loom_vector_string_attr_value(module, family_param->value,
-                                     &family_name)) {
-    return iree_ok_status();
-  }
-
-  loom_vector_transform_family_t family =
-      loom_vector_transform_family_from_name(family_name);
-  if (family == LOOM_VECTOR_TRANSFORM_FAMILY_UNKNOWN) {
-    return iree_ok_status();
-  }
-
-  if (!loom_vector_transform_family_is_hadamard_like(family)) {
+  if (!loom_encoding_numeric_transform_family_is_hadamard_like(
+          read.descriptor.family)) {
     return iree_ok_status();
   }
   if (!loom_vector_shapes_match(source_type, result_type)) {
@@ -2037,8 +1977,8 @@ iree_status_t loom_vector_transform_verify(const loom_module_t* module,
       module, emitter, op, define_op, &params, encoding_name, source_type,
       result_type));
 
-  return loom_vector_transform_verify_family(module, op, &params, emitter,
-                                             source_type, result_type);
+  return loom_vector_transform_verify_family(module, op, emitter, source_type,
+                                             result_type);
 }
 
 iree_status_t loom_vector_reduce_verify(const loom_module_t* module,

@@ -11,6 +11,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/ops/encoding/numeric_transform.h"
 #include "loom/ops/encoding/params.h"
 #include "loom/ops/encoding/roles.h"
 #include "loom/ops/op_defs.h"
@@ -25,18 +26,6 @@ static iree_string_view_t loom_encoding_turboquant_kv_name(void) {
 static iree_string_view_t loom_encoding_amdgpu_matrix_operand_name(void) {
   return IREE_SV("amdgpu_matrix_operand");
 }
-
-static iree_string_view_t loom_encoding_numeric_transform_name(void) {
-  return IREE_SV("numeric_transform");
-}
-
-typedef enum loom_encoding_numeric_transform_family_e {
-  LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_UNKNOWN = 0,
-  LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD = 1,
-  LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD_SIGN = 2,
-  LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_JL_DENSE = 3,
-  LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD = 4,
-} loom_encoding_numeric_transform_family_t;
 
 static bool loom_encoding_string_id_equal(const loom_module_t* module,
                                           loom_string_id_t string_id,
@@ -652,27 +641,8 @@ static bool loom_encoding_numeric_transform_dynamic_param_name_is_supported(
 
 static bool loom_encoding_numeric_transform_family_supported(
     iree_string_view_t value) {
-  return iree_string_view_equal(value, IREE_SV("hadamard")) ||
-         iree_string_view_equal(value, IREE_SV("hadamard_sign")) ||
-         iree_string_view_equal(value, IREE_SV("jl_dense")) ||
-         iree_string_view_equal(value, IREE_SV("sign_permute_hadamard"));
-}
-
-static loom_encoding_numeric_transform_family_t
-loom_encoding_numeric_transform_family_from_name(iree_string_view_t value) {
-  if (iree_string_view_equal(value, IREE_SV("hadamard"))) {
-    return LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD;
-  }
-  if (iree_string_view_equal(value, IREE_SV("hadamard_sign"))) {
-    return LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_HADAMARD_SIGN;
-  }
-  if (iree_string_view_equal(value, IREE_SV("jl_dense"))) {
-    return LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_JL_DENSE;
-  }
-  if (iree_string_view_equal(value, IREE_SV("sign_permute_hadamard"))) {
-    return LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_SIGN_PERMUTE_HADAMARD;
-  }
-  return LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_UNKNOWN;
+  return loom_encoding_numeric_transform_family_from_name(value) !=
+         LOOM_ENCODING_NUMERIC_TRANSFORM_FAMILY_UNKNOWN;
 }
 
 static iree_string_view_t loom_encoding_numeric_transform_family_quoted(
@@ -694,8 +664,10 @@ static iree_string_view_t loom_encoding_numeric_transform_family_quoted(
 
 static bool loom_encoding_numeric_transform_normalization_supported(
     iree_string_view_t value) {
-  return iree_string_view_equal(value, IREE_SV("none")) ||
-         iree_string_view_equal(value, IREE_SV("orthonormal"));
+  loom_encoding_numeric_transform_normalization_t normalization =
+      LOOM_ENCODING_NUMERIC_TRANSFORM_NORMALIZATION_NONE;
+  return loom_encoding_numeric_transform_normalization_from_name(
+      value, &normalization);
 }
 
 static bool loom_encoding_numeric_transform_param_is_extent(
