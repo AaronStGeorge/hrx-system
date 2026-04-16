@@ -66,6 +66,22 @@ TEST(MatrixContractTest, Gfx942Fp8MfmaDescriptor) {
   EXPECT_EQ(descriptor->scale_kind, LOOM_AMDGPU_MATRIX_SCALE_NONE);
 }
 
+TEST(MatrixContractTest, Gfx90aBf16OneKMfmaDescriptor) {
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      FindDescriptor("mfma.f32.16x16x16.bf16.1k");
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
+  EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
+            "llvm.amdgcn.mfma.f32.16x16x16.bf16.1k");
+  EXPECT_EQ(descriptor->tile_shape.result_row_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.result_column_count, 16);
+  EXPECT_EQ(descriptor->tile_shape.reduction_count, 16);
+  EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF16);
+  EXPECT_EQ(descriptor->lhs_payload.register_count, 2);
+  EXPECT_EQ(descriptor->accumulator_payload.register_count, 4);
+}
+
 TEST(MatrixContractTest, Gfx950ScaledMfmaDescriptor) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       FindDescriptor("mfma.scale.f32.32x32x64.f8f6f4");
@@ -114,6 +130,40 @@ TEST(MatrixContractTest, SparseDescriptorsCarrySparseFlag) {
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
   EXPECT_EQ(swmmac->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT,
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT);
+}
+
+TEST(MatrixContractTest, SparseFp8CrossProductDescriptors) {
+  const loom_amdgpu_matrix_contract_descriptor_t* smfmac =
+      FindDescriptor("smfmac.f32.16x16x64.bf8.fp8");
+  ASSERT_NE(smfmac, nullptr);
+  EXPECT_EQ(smfmac->family, LOOM_AMDGPU_MATRIX_FAMILY_SMFMAC);
+  EXPECT_EQ(smfmac->tile_shape.reduction_count, 64);
+  EXPECT_EQ(smfmac->lhs_payload.numeric_type, LOOM_AMDGPU_MATRIX_NUMERIC_BF8);
+  EXPECT_EQ(smfmac->rhs_payload.numeric_type, LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
+  EXPECT_EQ(smfmac->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* swmmac =
+      FindDescriptor("swmmac.f32.16x16x32.fp8.bf8");
+  ASSERT_NE(swmmac, nullptr);
+  EXPECT_EQ(swmmac->family, LOOM_AMDGPU_MATRIX_FAMILY_SWMMAC);
+  EXPECT_EQ(swmmac->tile_shape.reduction_count, 32);
+  EXPECT_EQ(swmmac->lhs_payload.numeric_type, LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
+  EXPECT_EQ(swmmac->rhs_payload.numeric_type, LOOM_AMDGPU_MATRIX_NUMERIC_BF8);
+  EXPECT_EQ(swmmac->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
+}
+
+TEST(MatrixContractTest, WmmaFp8CrossProductDescriptors) {
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      FindDescriptor("wmma.f32.16x16x16.bf8.fp8");
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_WMMA);
+  EXPECT_EQ(descriptor->tile_shape.reduction_count, 16);
+  EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF8);
+  EXPECT_EQ(descriptor->rhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
 }
 
 TEST(MatrixContractTest, ProcessorFeatureBitsGateAvailability) {
