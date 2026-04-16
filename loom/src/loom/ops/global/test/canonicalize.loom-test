@@ -1,0 +1,46 @@
+// RUN: pass canonicalize
+
+// A scalar global.constant with an inline initializer is an exact fact source.
+// Loading it folds through ordinary scalar/index arithmetic and erases the
+// load because every load result is exact.
+global.constant @answer : index = 40
+
+func.def @load_scalar_constant_global() -> (index) {
+  %value = global.load @answer : index
+  %two = index.constant 2 : index
+  %result = index.add %value, %two : index
+  func.return %result : index
+}
+
+// ----
+global.constant @answer : index = 40
+
+func.def @load_scalar_constant_global() -> (index) {
+  %result = index.constant 42 : index
+  func.return %result : index
+}
+
+// ====
+
+// Declaration predicates on a shaped global remap to the corresponding load
+// co-results. The shaped value itself remains unknown, but facts on %m are
+// strong enough for local canonicalization.
+global.constant @weights : tile<[%n]xf32> where [mul(%n, 16)]
+
+func.def @load_global_predicate() -> (index) {
+  %tile, %m = global.load @weights : tile<[%m]xf32>
+  test.use %tile : tile<[%m]xf32>
+  %sixteen = index.constant 16 : index
+  %remainder = index.rem %m, %sixteen : index
+  func.return %remainder : index
+}
+
+// ----
+global.constant @weights : tile<[%n]xf32> where [mul(%n, 16)]
+
+func.def @load_global_predicate() -> (index) {
+  %tile, %m = global.load @weights : tile<[%m]xf32>
+  test.use %tile : tile<[%m]xf32>
+  %remainder = index.constant 0 : index
+  func.return %remainder : index
+}

@@ -174,12 +174,13 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
       &rewriter->fact_table, rewriter->module, op, &facts_changed));
   if (facts_changed) {
     rewriter->flags |= LOOM_REWRITER_FLAG_FACTS_CHANGED;
+    // Ensure downstream ops are revisited with updated facts. Type-use edges
+    // can point back to another result of the same op, so only reschedule when
+    // facts actually changed; otherwise dynamic shaped multi-result ops can
+    // keep themselves on the worklist forever.
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_add_result_users_to_worklist(rewriter, op));
   }
-
-  // Ensure downstream ops are revisited with potentially-updated facts.
-  // The worklist dedup flag makes this cheap for ops already queued.
-  IREE_RETURN_IF_ERROR(
-      loom_rewriter_add_result_users_to_worklist(rewriter, op));
 
   // Cannot materialize without a callback, and don't replace
   // constant-like ops with themselves.

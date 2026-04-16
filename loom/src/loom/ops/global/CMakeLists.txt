@@ -17,12 +17,14 @@ loom_cc_library(
     "ops.h"
   SRCS
     "builders.c"
+    "facts.c"
     "tables.c"
     "verify.c"
   DEPS
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
   PUBLIC
 )

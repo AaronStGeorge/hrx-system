@@ -166,6 +166,7 @@ global_load = Op(
     # The result count is determined by the LHS result names.
     results=[Result("result", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    facts="loom_global_load_facts",
     verify="loom_global_load_verify",
     format=[
         SymbolRef("global"),
