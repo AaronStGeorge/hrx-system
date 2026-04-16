@@ -58,6 +58,34 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "golden_corpus_test",
+    srcs = ["golden_corpus_test.cc"],
+    deps = [
+        ":parser",
+        ":printer",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/llvmir",
+        "//loom/src/loom/ops/pool",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/ops/view",
+        "//loom/src/loom/test/corpus/text:golden_text_corpus",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_benchmark(
     name = "parser_scope_benchmark",
     srcs = ["parser_scope_benchmark.cc"],

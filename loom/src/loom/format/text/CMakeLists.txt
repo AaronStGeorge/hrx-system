@@ -56,6 +56,35 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    golden_corpus_test
+  SRCS
+    "golden_corpus_test.cc"
+  DEPS
+    ::parser
+    ::printer
+    iree::base::internal::arena
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::encoding
+    loom::src::loom::ops::func
+    loom::src::loom::ops::global
+    loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::llvmir
+    loom::src::loom::ops::pool
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::test
+    loom::src::loom::ops::vector
+    loom::src::loom::ops::view
+    loom::src::loom::test::corpus::text::golden_text_corpus
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_benchmark(
   NAME
     parser_scope_benchmark

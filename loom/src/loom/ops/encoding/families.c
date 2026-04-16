@@ -1135,6 +1135,11 @@ static const loom_encoding_vtable_t loom_encoding_ggml_q8_0_vtable = {
     .role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA,
 };
 
+static const loom_encoding_vtable_t loom_encoding_q6_k_vtable = {
+    .name = IREE_SVL("q6_k"),
+    .role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA,
+};
+
 static const loom_encoding_vtable_t loom_encoding_ggml_q6_k_vtable = {
     .name = IREE_SVL("ggml_q6_k"),
     .role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA,
@@ -1179,6 +1184,7 @@ static const loom_encoding_vtable_t* const loom_encoding_builtin_vtables[] = {
     &loom_encoding_q8_0_vtable,
     &loom_encoding_ggml_q4_0_vtable,
     &loom_encoding_ggml_q8_0_vtable,
+    &loom_encoding_q6_k_vtable,
     &loom_encoding_ggml_q6_k_vtable,
     &loom_encoding_ggml_iq_grid_vtable,
     &loom_encoding_loom_fp4_table_vtable,
