@@ -1705,6 +1705,236 @@ bool loom_amdgpu_matrix_contract_is_available(
   return (descriptor->wave_size_bits & wave_size_bits) != 0;
 }
 
+static bool loom_amdgpu_matrix_contract_family_matches(
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
+    const loom_amdgpu_matrix_contract_match_request_t* request) {
+  return request->family == LOOM_AMDGPU_MATRIX_FAMILY_UNKNOWN ||
+         descriptor->family == request->family;
+}
+
+static bool loom_amdgpu_matrix_contract_tile_shape_matches(
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
+    const loom_amdgpu_matrix_contract_match_request_t* request) {
+  return descriptor->tile_shape.result_row_count ==
+             request->tile_shape.result_row_count &&
+         descriptor->tile_shape.result_column_count ==
+             request->tile_shape.result_column_count &&
+         descriptor->tile_shape.reduction_count ==
+             request->tile_shape.reduction_count;
+}
+
+static bool loom_amdgpu_matrix_contract_payload_matches(
+    loom_amdgpu_matrix_payload_shape_t descriptor_payload,
+    loom_amdgpu_matrix_payload_shape_t request_payload) {
+  if (request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_UNKNOWN) {
+    return false;
+  }
+  if (descriptor_payload.numeric_type != request_payload.numeric_type) {
+    return false;
+  }
+  if (request_payload.register_count != 0 &&
+      descriptor_payload.register_count != 0 &&
+      descriptor_payload.register_count != request_payload.register_count) {
+    return false;
+  }
+  if (request_payload.element_count != 0 &&
+      descriptor_payload.element_count != 0 &&
+      descriptor_payload.element_count != request_payload.element_count) {
+    return false;
+  }
+  return true;
+}
+
+static loom_amdgpu_matrix_contract_rejection_bits_t
+loom_amdgpu_matrix_contract_payload_rejection_bits(
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
+    const loom_amdgpu_matrix_contract_match_request_t* request) {
+  loom_amdgpu_matrix_contract_rejection_bits_t rejection_bits =
+      LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE;
+  if (!loom_amdgpu_matrix_contract_payload_matches(descriptor->lhs_payload,
+                                                   request->lhs_payload)) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_LHS_PAYLOAD;
+  }
+  if (!loom_amdgpu_matrix_contract_payload_matches(descriptor->rhs_payload,
+                                                   request->rhs_payload)) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RHS_PAYLOAD;
+  }
+  if (!loom_amdgpu_matrix_contract_payload_matches(
+          descriptor->accumulator_payload, request->accumulator_payload)) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_ACCUMULATOR_PAYLOAD;
+  }
+  if (!loom_amdgpu_matrix_contract_payload_matches(descriptor->result_payload,
+                                                   request->result_payload)) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RESULT_PAYLOAD;
+  }
+  return rejection_bits;
+}
+
+static loom_amdgpu_matrix_contract_rejection_bits_t
+loom_amdgpu_matrix_contract_missing_flag_rejection_bits(
+    loom_amdgpu_matrix_contract_flags_t missing_flags) {
+  loom_amdgpu_matrix_contract_rejection_bits_t rejection_bits =
+      LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE;
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE) != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SPARSE;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED) != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS) != 0) {
+    rejection_bits |=
+        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_MATRIX_FORMATS;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE) != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_REUSE;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP) != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_CLAMP;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT) != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SIGN_SELECT;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_AB_MODIFIERS) != 0) {
+    rejection_bits |=
+        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_AB_MODIFIERS;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_C_MODIFIER) != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_C_MODIFIER;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_OPSEL) != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_OPSEL;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS) != 0) {
+    rejection_bits |=
+        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE_FORMATS;
+  }
+  if ((missing_flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_ZERO_SCALE_FALLBACK) !=
+      0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_REQUIRED_FLAGS;
+  }
+  return rejection_bits;
+}
+
+static loom_amdgpu_matrix_contract_rejection_bits_t
+loom_amdgpu_matrix_contract_flag_rejection_bits(
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
+    const loom_amdgpu_matrix_contract_match_request_t* request) {
+  const loom_amdgpu_matrix_contract_flags_t required_abi_flags =
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_AB_MODIFIERS |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_C_MODIFIER |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_OPSEL |
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS;
+  const loom_amdgpu_matrix_contract_flags_t missing_available_flags =
+      descriptor->flags & required_abi_flags & ~request->available_flags;
+  loom_amdgpu_matrix_contract_rejection_bits_t rejection_bits =
+      loom_amdgpu_matrix_contract_missing_flag_rejection_bits(
+          missing_available_flags);
+  const loom_amdgpu_matrix_contract_flags_t missing_required_flags =
+      request->required_flags & ~descriptor->flags;
+  if (missing_required_flags != 0) {
+    rejection_bits |= LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_REQUIRED_FLAGS;
+    rejection_bits |= loom_amdgpu_matrix_contract_missing_flag_rejection_bits(
+        missing_required_flags);
+  }
+  return rejection_bits;
+}
+
+const loom_amdgpu_matrix_contract_descriptor_t*
+loom_amdgpu_matrix_contract_select(
+    const loom_amdgpu_matrix_contract_match_request_t* request,
+    loom_amdgpu_matrix_contract_match_diagnostic_t* out_diagnostic) {
+  loom_amdgpu_matrix_contract_match_diagnostic_t diagnostic = {
+      .descriptor_count = IREE_ARRAYSIZE(kMatrixContractDescriptors),
+  };
+  if (request == NULL) {
+    diagnostic.rejection_bits =
+        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_INVALID_REQUEST;
+    if (out_diagnostic != NULL) *out_diagnostic = diagnostic;
+    return NULL;
+  }
+
+  loom_amdgpu_matrix_contract_rejection_bits_t payload_rejection_bits =
+      LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE;
+  loom_amdgpu_matrix_contract_rejection_bits_t flag_rejection_bits =
+      LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kMatrixContractDescriptors);
+       ++i) {
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+        &kMatrixContractDescriptors[i];
+    if (!loom_amdgpu_matrix_contract_family_matches(descriptor, request)) {
+      continue;
+    }
+    ++diagnostic.family_candidate_count;
+
+    if (!loom_amdgpu_matrix_contract_tile_shape_matches(descriptor, request)) {
+      continue;
+    }
+    ++diagnostic.shape_candidate_count;
+
+    const loom_amdgpu_matrix_contract_rejection_bits_t payload_rejection =
+        loom_amdgpu_matrix_contract_payload_rejection_bits(descriptor, request);
+    if (payload_rejection != LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE) {
+      payload_rejection_bits |= payload_rejection;
+      continue;
+    }
+    ++diagnostic.payload_candidate_count;
+
+    if (descriptor->scale_kind != request->scale_kind) {
+      continue;
+    }
+    ++diagnostic.scale_candidate_count;
+
+    const loom_amdgpu_matrix_contract_rejection_bits_t flag_rejection =
+        loom_amdgpu_matrix_contract_flag_rejection_bits(descriptor, request);
+    if (flag_rejection != LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE) {
+      flag_rejection_bits |= flag_rejection;
+      continue;
+    }
+    ++diagnostic.flag_candidate_count;
+
+    if ((request->feature_bits & descriptor->required_feature_bits) !=
+        descriptor->required_feature_bits) {
+      continue;
+    }
+    ++diagnostic.feature_candidate_count;
+
+    if (!loom_amdgpu_matrix_contract_is_available(
+            descriptor, request->feature_bits, request->wave_size)) {
+      continue;
+    }
+    ++diagnostic.wave_candidate_count;
+
+    if (out_diagnostic != NULL) *out_diagnostic = diagnostic;
+    return descriptor;
+  }
+
+  if (diagnostic.family_candidate_count == 0) {
+    diagnostic.rejection_bits = LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FAMILY;
+  } else if (diagnostic.shape_candidate_count == 0) {
+    diagnostic.rejection_bits =
+        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_TILE_SHAPE;
+  } else if (diagnostic.payload_candidate_count == 0) {
+    diagnostic.rejection_bits = payload_rejection_bits;
+  } else if (diagnostic.scale_candidate_count == 0) {
+    diagnostic.rejection_bits =
+        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_SCALE_KIND;
+  } else if (diagnostic.flag_candidate_count == 0) {
+    diagnostic.rejection_bits = flag_rejection_bits;
+  } else if (diagnostic.feature_candidate_count == 0) {
+    diagnostic.rejection_bits = LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FEATURES;
+  } else if (diagnostic.wave_candidate_count == 0) {
+    diagnostic.rejection_bits = LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_WAVE_SIZE;
+  }
+  if (out_diagnostic != NULL) *out_diagnostic = diagnostic;
+  return NULL;
+}
+
 #undef MATRIX_DESCRIPTOR
 #undef MATRIX_PAYLOAD
 #undef MATRIX_TILE_SHAPE

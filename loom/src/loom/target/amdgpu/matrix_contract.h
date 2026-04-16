@@ -211,6 +211,110 @@ typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   loom_amdgpu_matrix_scale_kind_t scale_kind;
 } loom_amdgpu_matrix_contract_descriptor_t;
 
+// Bitset of structural reasons that prevented a matrix contract match.
+typedef uint32_t loom_amdgpu_matrix_contract_rejection_bits_t;
+
+// No rejection reason was recorded.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE ((uint32_t)0u)
+// The requested family rejected every descriptor.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FAMILY ((uint32_t)1u << 0)
+// The requested tile shape rejected every family-compatible descriptor.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_TILE_SHAPE ((uint32_t)1u << 1)
+// The requested matrix A payload rejected every shape-compatible descriptor.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_LHS_PAYLOAD ((uint32_t)1u << 2)
+// The requested matrix B payload rejected every shape-compatible descriptor.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RHS_PAYLOAD ((uint32_t)1u << 3)
+// The requested accumulator payload rejected every shape-compatible descriptor.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_ACCUMULATOR_PAYLOAD \
+  ((uint32_t)1u << 4)
+// The requested result payload rejected every shape-compatible descriptor.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RESULT_PAYLOAD ((uint32_t)1u << 5)
+// The requested scale kind rejected every payload-compatible descriptor.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_SCALE_KIND ((uint32_t)1u << 6)
+// The selected processor feature bits rejected every semantic candidate.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FEATURES ((uint32_t)1u << 7)
+// The selected wave size rejected every feature-compatible candidate.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_WAVE_SIZE ((uint32_t)1u << 8)
+// A candidate required a sparse index fact or operand that was unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SPARSE ((uint32_t)1u << 9)
+// A candidate required scale operands that were unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE ((uint32_t)1u << 10)
+// A candidate required matrix-format selectors that were unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_MATRIX_FORMATS \
+  ((uint32_t)1u << 11)
+// A candidate required reuse operands that were unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_REUSE ((uint32_t)1u << 12)
+// A candidate required a clamp operand that was unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_CLAMP ((uint32_t)1u << 13)
+// A candidate required sign-selection operands that were unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SIGN_SELECT \
+  ((uint32_t)1u << 14)
+// A candidate required A/B operand modifiers that were unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_AB_MODIFIERS \
+  ((uint32_t)1u << 15)
+// A candidate required a C accumulator modifier that was unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_C_MODIFIER \
+  ((uint32_t)1u << 16)
+// A candidate required op_sel operands that were unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_OPSEL ((uint32_t)1u << 17)
+// A candidate required scale-format selectors that were unavailable.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_MISSING_SCALE_FORMATS \
+  ((uint32_t)1u << 18)
+// The request required target flags that the remaining candidates do not carry.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_REQUIRED_FLAGS \
+  ((uint32_t)1u << 19)
+// The request itself was invalid or absent.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_INVALID_REQUEST \
+  ((uint32_t)1u << 20)
+
+typedef struct loom_amdgpu_matrix_contract_match_request_t {
+  // Optional instruction family. UNKNOWN allows any family.
+  loom_amdgpu_matrix_family_t family;
+  // Required logical tile shape.
+  loom_amdgpu_matrix_tile_shape_t tile_shape;
+  // Required matrix A payload facts. Zero register/element counts are ignored.
+  loom_amdgpu_matrix_payload_shape_t lhs_payload;
+  // Required matrix B payload facts. Zero register/element counts are ignored.
+  loom_amdgpu_matrix_payload_shape_t rhs_payload;
+  // Required accumulator payload facts. Zero register/element counts are
+  // ignored.
+  loom_amdgpu_matrix_payload_shape_t accumulator_payload;
+  // Required result payload facts. Zero register/element counts are ignored.
+  loom_amdgpu_matrix_payload_shape_t result_payload;
+  // Required scale operand kind.
+  loom_amdgpu_matrix_scale_kind_t scale_kind;
+  // Processor feature bits available to the target.
+  loom_amdgpu_matrix_feature_bits_t feature_bits;
+  // Concrete wave size selected for the target. Use 0 when not yet selected.
+  uint32_t wave_size;
+  // Contract flag classes for which the request has facts or operands
+  // available. Descriptor ABI flags must be present here before selection.
+  loom_amdgpu_matrix_contract_flags_t available_flags;
+  // Contract flag classes that the selected descriptor must carry.
+  loom_amdgpu_matrix_contract_flags_t required_flags;
+} loom_amdgpu_matrix_contract_match_request_t;
+
+typedef struct loom_amdgpu_matrix_contract_match_diagnostic_t {
+  // Structural rejection reason selected for user-facing diagnostics.
+  loom_amdgpu_matrix_contract_rejection_bits_t rejection_bits;
+  // Number of descriptors scanned.
+  iree_host_size_t descriptor_count;
+  // Number of descriptors that matched the requested family.
+  iree_host_size_t family_candidate_count;
+  // Number of family-compatible descriptors that matched the tile shape.
+  iree_host_size_t shape_candidate_count;
+  // Number of shape-compatible descriptors that matched all payload facts.
+  iree_host_size_t payload_candidate_count;
+  // Number of payload-compatible descriptors that matched the scale kind.
+  iree_host_size_t scale_candidate_count;
+  // Number of scale-compatible descriptors that matched flag requirements.
+  iree_host_size_t flag_candidate_count;
+  // Number of flag-compatible descriptors available for the target features.
+  iree_host_size_t feature_candidate_count;
+  // Number of feature-compatible descriptors legal for the selected wave size.
+  iree_host_size_t wave_candidate_count;
+} loom_amdgpu_matrix_contract_match_diagnostic_t;
+
 // Returns the stable display name for a matrix family.
 iree_string_view_t loom_amdgpu_matrix_family_name(
     loom_amdgpu_matrix_family_t family);
@@ -245,6 +349,14 @@ loom_amdgpu_matrix_contract_find_by_name(iree_string_view_t name);
 bool loom_amdgpu_matrix_contract_is_available(
     const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
     loom_amdgpu_matrix_feature_bits_t feature_bits, uint32_t wave_size);
+
+// Selects the first descriptor that satisfies a fully structural match request.
+// Returns NULL when no descriptor matches and optionally populates
+// |out_diagnostic| with the first filter that rejected all candidates.
+const loom_amdgpu_matrix_contract_descriptor_t*
+loom_amdgpu_matrix_contract_select(
+    const loom_amdgpu_matrix_contract_match_request_t* request,
+    loom_amdgpu_matrix_contract_match_diagnostic_t* out_diagnostic);
 
 #ifdef __cplusplus
 }
