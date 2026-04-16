@@ -1,8 +1,8 @@
-global.constant @weights : tile<16x32xi8, #q8_0<block=32>>
+global.constant @weights : tile<[%m]x[%k]xi8, #q8_0<block=32>> where [mul(%m, 16)]
 
 global.variable @state : f32 = 0.0
 
-global.variable @kv_cache : tile<128x64xf32>
+global.variable @kv_cache : tile<[%s]x[%d]xf32>
 
 func.def initializer @init_state(%value: f32) {
   global.store %value, @state : f32
@@ -10,8 +10,8 @@ func.def initializer @init_state(%value: f32) {
 }
 
 func.def @load_weights() {
-  %tile = global.load @weights : tile<16x32xi8, #q8_0<block=32>>
-  test.use %tile : tile<16x32xi8, #q8_0<block=32>>
+  %tile, %m, %k = global.load @weights : tile<[%m]x[%k]xi8, #q8_0<block=32>>
+  test.use %tile, %m, %k : tile<[%m]x[%k]xi8, #q8_0<block=32>>, index, index
   func.return
 }
 

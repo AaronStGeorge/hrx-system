@@ -25,9 +25,9 @@ from loom.dialect.scf import ALL_SCF_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.view import ALL_VIEW_OPS
-from loom.format.text.parser import Parser
+from loom.format.text.parser import ParseError, Parser
 from loom.format.text.printer import Printer
-from loom.ir import I1, Module, Operation
+from loom.ir import ENCODING_TYPE, I1, INDEX, Module, Operation
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 _GOLDEN_ROOT = _REPO_ROOT / "loom/src/loom/test/corpus/text"
@@ -125,3 +125,29 @@ def test_inferred_singleton_result_type_is_concrete() -> None:
     module = _parser().parse(source)
     op = _first_body_op(module, "cmp", "index.cmp")
     assert module.values[op.results[0]].type == I1
+
+
+def test_dynamic_global_load_co_results_have_metadata_types() -> None:
+    source = (
+        "global.constant @weights : tile<[%m]xf32, %enc>\n\n"
+        "func.def @load() {\n"
+        "  %tile, %m, %enc = global.load @weights : tile<[%m]xf32, %enc>\n"
+        "  func.return\n"
+        "}\n"
+    )
+    module = _parser().parse(source)
+    op = _first_body_op(module, "load", "global.load")
+    assert module.values[op.results[1]].type == INDEX
+    assert module.values[op.results[2]].type == ENCODING_TYPE
+
+
+def test_dynamic_global_symbols_are_declaration_local() -> None:
+    source = (
+        "global.constant @weights : tile<[%m]xf32>\n\n"
+        "func.def @bad() {\n"
+        "  test.use %m : index\n"
+        "  func.return\n"
+        "}\n"
+    )
+    with pytest.raises(ParseError, match="undefined SSA value '%m'"):
+        _parser().parse(source)

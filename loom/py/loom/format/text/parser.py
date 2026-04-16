@@ -1234,6 +1234,25 @@ class Parser:
                 operand_ids.append(field_values[0])
         return operand_ids
 
+    def _scope_allows_symbolic_type_values(
+        self, op_decl: Op, inner_elements: tuple[FormatElement, ...]
+    ) -> bool:
+        """Returns true for declaration scopes that own symbolic type names."""
+        return op_decl.has_trait("SymbolDefine") and not any(
+            isinstance(element, FuncArgs) for element in inner_elements
+        )
+
+    def _assign_reserved_binding_types(self, bindings: Mapping[int, int]) -> None:
+        reserved_result_ids = set(self._reserved_result_ids)
+        for binding_position, value_id in bindings.items():
+            if value_id not in reserved_result_ids:
+                continue
+            value = self._module.values[value_id]
+            if binding_position == -1:
+                value.type = ENCODING_TYPE
+            elif binding_position >= 0:
+                value.type = INDEX
+
     # --- Op parsing ---
 
     def parse_operation_from_text(
@@ -1348,6 +1367,8 @@ class Parser:
                     )
                     if inferred_type is not None:
                         value.type = inferred_type
+                    elif isinstance(value.type, PlaceholderType):
+                        value.type = NONE_TYPE
                 if i < len(parsed.result_ids):
                     parsed.result_ids[i] = value_id
                 else:
@@ -1646,18 +1667,25 @@ class Parser:
                     parsed.attributes[name] = sym_tok.text
 
                 case TypeOf(field=name):
+                    field_desc = self._layout(op_decl).fields.get(name)
+                    is_result = field_desc and field_desc.kind == FieldKind.RESULT
+                    parse_mode = (
+                        TypeParseMode.SIGNATURE
+                        if self._definition_scope_active and is_result
+                        else TypeParseMode.BODY
+                    )
                     parsed_type, bindings = parse_type_from_tokens(
                         tok,
                         self._scope,
                         self._module,
                         self._type_registry,
-                        TypeParseMode.BODY,
+                        parse_mode,
                     )
                     # Check if this field is a result — store the type.
-                    field_desc = self._layout(op_decl).fields.get(name)
-                    if field_desc and field_desc.kind == FieldKind.RESULT:
+                    if is_result:
                         parsed.result_types.append(parsed_type)
                         parsed.result_bindings.append(bindings)
+                        self._assign_reserved_binding_types(bindings)
 
                 case TypesOf(field=name):
                     field_desc = self._layout(op_decl).fields.get(name)
@@ -1673,6 +1701,7 @@ class Parser:
                         if is_result:
                             parsed.result_types.append(t)
                             parsed.result_bindings.append(bindings)
+                            self._assign_reserved_binding_types(bindings)
                         while tok.try_consume(TokenKind.COMMA):
                             if not _is_type_start(tok.peek(), self._type_registry):
                                 break
@@ -1686,6 +1715,7 @@ class Parser:
                             if is_result:
                                 parsed.result_types.append(t)
                                 parsed.result_bindings.append(bindings)
+                                self._assign_reserved_binding_types(bindings)
 
                 case ResultType(field=name):
                     self._parse_result_type(parsed)
@@ -1775,15 +1805,23 @@ class Parser:
                         raise RuntimeError(
                             "nested Scope(...) format elements are not supported"
                         )
+                    allow_symbolic_type_values = (
+                        self._scope_allows_symbolic_type_values(op_decl, inner)
+                    )
                     parent_scope = self._scope
                     self._scope = self._scope.push()
                     self._definition_scope_active = True
                     try:
                         self._walk_format(inner, op_decl, parsed)
-                        # Verify all placeholders defined in this scope are resolved.
+                        # Function-like signatures resolve placeholders through
+                        # arguments. Global-like declaration scopes keep them
+                        # as local symbolic type values referenced by metadata.
                         for name, value_id in self._scope._names.items():
                             value = self._module.values[value_id]
-                            if isinstance(value.type, PlaceholderType):
+                            if (
+                                isinstance(value.type, PlaceholderType)
+                                and not allow_symbolic_type_values
+                            ):
                                 origin = (
                                     self._scope.placeholder_location(name)
                                     or tok.current_location()
@@ -1982,16 +2020,22 @@ class Parser:
             for name, value_id in zip(
                 self._reserved_result_names, self._reserved_result_ids, strict=False
             ):
+                value = self._module.values[value_id]
+                if value.type == NONE_TYPE:
+                    value.type = PlaceholderType()
                 scope.define(name, value_id)
         result_type, bindings = parse_type_from_tokens(
             self._tokenizer,
             scope,
             self._module,
             self._type_registry,
-            TypeParseMode.BODY,
+            TypeParseMode.SIGNATURE
+            if self._definition_scope_active
+            else TypeParseMode.BODY,
         )
         parsed.result_types.append(result_type)
         parsed.result_bindings.append(bindings)
+        self._assign_reserved_binding_types(bindings)
 
     def _parse_result_type_list(
         self, parsed: ParsedFields, op_decl: Op, field_name: str, *, parens: bool = True
@@ -2003,6 +2047,9 @@ class Parser:
             for name, value_id in zip(
                 self._reserved_result_names, self._reserved_result_ids, strict=False
             ):
+                value = self._module.values[value_id]
+                if value.type == NONE_TYPE:
+                    value.type = PlaceholderType()
                 self._scope.define(name, value_id)
         tok = self._tokenizer
         if parens:
@@ -2071,6 +2118,7 @@ class Parser:
                     self._scope.define(name_tok.text, value_id)
                 parsed.result_types.append(result_type)
                 parsed.result_bindings.append(all_bindings)
+                self._assign_reserved_binding_types(all_bindings)
                 parsed.result_ids.append(value_id)
             elif tok.try_consume(TokenKind.BARE_IDENT, "as"):
                 # Tied result: %operand as type.
@@ -2084,6 +2132,7 @@ class Parser:
                 )
                 parsed.result_types.append(result_type)
                 parsed.result_bindings.append(bindings)
+                self._assign_reserved_binding_types(bindings)
                 parsed.result_ids.append(None)
                 # Find the operand index.
                 try:
@@ -2125,6 +2174,7 @@ class Parser:
             )
             parsed.result_types.append(result_type)
             parsed.result_bindings.append(bindings)
+            self._assign_reserved_binding_types(bindings)
             parsed.result_ids.append(None)
 
     # --- Index list ---
