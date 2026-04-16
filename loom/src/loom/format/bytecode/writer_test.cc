@@ -209,6 +209,23 @@ class WriterTest : public ::testing::Test {
     return bytes;
   }
 
+  // Expects a write attempt to fail with the given status code.
+  void ExpectWriteModuleStatus(
+      iree_status_code_t expected_status, const loom_module_t* module,
+      const loom_bytecode_write_options_t* options = nullptr) {
+    iree_io_stream_t* stream = nullptr;
+    IREE_ASSERT_OK(iree_io_vec_stream_create(
+        IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+            IREE_IO_STREAM_MODE_RESIZABLE,
+        4096, iree_allocator_system(), &stream));
+
+    IREE_EXPECT_STATUS_IS(
+        expected_status,
+        loom_bytecode_write_module(module, stream, options, &block_pool_));
+
+    iree_io_stream_release(stream);
+  }
+
   // Reads a little-endian u16 from raw bytes at the given offset.
   uint16_t ReadU16LE(const std::vector<uint8_t>& bytes, size_t offset) {
     return (uint16_t)bytes[offset] | ((uint16_t)bytes[offset + 1] << 8);
@@ -341,6 +358,16 @@ TEST_F(WriterTest, NoLocationsModeOmitsLocationsSection) {
   SectionEntry locations_entry = {};
   EXPECT_FALSE(
       FindSection(entries, LOOM_BYTECODE_SECTION_LOCATIONS, &locations_entry));
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FullLocationsModeFailsUntilFieldSpansExist) {
+  loom_module_t* module = CreateModule("test");
+  loom_bytecode_write_options_t options = {{0}};
+  options.location_mode = LOOM_BYTECODE_LOCATION_MODE_FULL_LOCATIONS;
+
+  ExpectWriteModuleStatus(IREE_STATUS_UNIMPLEMENTED, module, &options);
 
   loom_module_free(module);
 }
@@ -947,6 +974,34 @@ TEST_F(WriterTest, InvalidEncodingRoleFails) {
       loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
 
   iree_io_stream_release(stream);
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, GlobalSymbolFailsLoudly) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("g"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  module->symbols.entries[symbol_id].kind = LOOM_SYMBOL_GLOBAL;
+
+  ExpectWriteModuleStatus(IREE_STATUS_UNIMPLEMENTED, module);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, ExecutableSymbolFailsLoudly) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("exe"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  module->symbols.entries[symbol_id].kind = LOOM_SYMBOL_EXECUTABLE;
+
+  ExpectWriteModuleStatus(IREE_STATUS_UNIMPLEMENTED, module);
+
   loom_module_free(module);
 }
 
