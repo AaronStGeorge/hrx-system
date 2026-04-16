@@ -21,6 +21,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BindingList,
+    BlockArgs,
     FuncArgs,
     IndexList,
     Keyword,
@@ -171,6 +172,12 @@ class TestBindingList:
     def test_construct(self) -> None:
         bl = BindingList("inputs")
         assert bl.field == "inputs"
+
+
+class TestBlockArgs:
+    def test_construct(self) -> None:
+        args = BlockArgs("body")
+        assert args.region == "body"
 
 
 class TestFuncArgs:

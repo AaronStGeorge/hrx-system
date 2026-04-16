@@ -31,6 +31,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BindingList,
+    BlockArgs,
     Flags,
     FormatElement,
     FuncArgs,
@@ -107,6 +108,7 @@ KEYWORD_MAP: dict[str, str] = {
     "into": "LOOM_KW_INTO",
     "default": "LOOM_KW_DEFAULT",
     "case": "LOOM_KW_CASE",
+    "do": "LOOM_KW_DO",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.
@@ -182,6 +184,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
     "DimIndexInBounds": ("LOOM_RELATION_ATTR_IN_RANGE_RANK", "LOOM_PROPERTY_RANK"),
     "AllShapesMatch": ("LOOM_RELATION_ALL_SAME", "LOOM_PROPERTY_SHAPE"),
     "BlockArgCount": ("LOOM_RELATION_REGION_ARG_COUNT", "LOOM_PROPERTY_TYPE"),
+    "BlockArgsMatchTypes": (
+        "LOOM_RELATION_REGION_ARG_MATCH",
+        "LOOM_PROPERTY_TYPE",
+    ),
     "BlockArgsMatchElementTypes": (
         "LOOM_RELATION_REGION_ARG_MATCH",
         "LOOM_PROPERTY_ELEMENT_TYPE",
@@ -838,6 +844,12 @@ def _translate_format_elements(
                     bk = "LOOM_BINDING_ELEMENT" if binding_kind == "element" else "LOOM_BINDING_CAPTURE"
                     elements.append(("LOOM_FORMAT_KIND_BINDING_LIST", index, bk))
 
+                case BlockArgs(region=name):
+                    kind, index = _resolve_field(name)
+                    if kind != FieldKind.REGION:
+                        raise ValueError(f"Op '{op.name}': BlockArgs region field '{name}' is not a region field")
+                    elements.append(("LOOM_FORMAT_KIND_BLOCK_ARGS", index, "0"))
+
                 case FuncArgs(field=name):
                     elements.append(("LOOM_FORMAT_KIND_FUNC_ARGS", 0, "0"))
 
@@ -1340,6 +1352,9 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                         "binding_kind": binding_kind,
                     }
 
+                case BlockArgs():
+                    pass
+
                 case ResultType(field=name):
                     # When ResultType references a variadic result, the
                     # builder needs result_types/result_count (same as
@@ -1388,6 +1403,7 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                             "kind": "auto_region",
                             "region_index": layout.fields[name].index,
                             "binding": binding,
+                            "arg_source": (region_def.arg_source if region_def else None),
                             "implicit_args": (region_def.implicit_args if region_def else ()),
                             "func_args": func_args,
                         }
@@ -1791,7 +1807,7 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
             continue
         idx = param["region_index"]
         name = param["name"]
-        has_block_args = bool(param.get("implicit_args")) or bool(param.get("binding")) or bool(param.get("func_args"))
+        has_block_args = bool(param.get("implicit_args")) or bool(param.get("binding")) or bool(param.get("arg_source")) or bool(param.get("func_args"))
         lines.append(f"  // Auto-create {name} region with entry block.")
         lines.append("  {")
         lines.append("    loom_region_t* _region = NULL;")
@@ -1835,6 +1851,20 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
                 lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
                 lines.append("          builder, _block, _arg_type, &_arg_id));")
                 lines.append("    }")
+
+        # Region args sourced from an existing value field. This is used for
+        # regions whose entry args are semantically linked to a terminator or
+        # loop edge, while the builder can still seed them from the op's input
+        # values before the body is populated.
+        arg_source = param.get("arg_source")
+        if arg_source and not binding:
+            lines.append(f"    for (iree_host_size_t _i = 0; _i < {arg_source}_count; ++_i) {{")
+            lines.append("      loom_type_t _arg_type =")
+            lines.append(f"          loom_module_value_type(builder->module, {arg_source}[_i]);")
+            lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+            lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+            lines.append("          builder, _block, _arg_type, &_arg_id));")
+            lines.append("    }")
 
         # FuncArgs: entry block args typed from the arg_types parameter.
         if param.get("func_args") and not binding:

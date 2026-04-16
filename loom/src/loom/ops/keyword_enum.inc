@@ -32,3 +32,4 @@
   LOOM_KW_INTO = 23,  // "into"
   LOOM_KW_DEFAULT = 24,  // "default"
   LOOM_KW_CASE = 25,  // "case"
+  LOOM_KW_DO = 26,  // "do"

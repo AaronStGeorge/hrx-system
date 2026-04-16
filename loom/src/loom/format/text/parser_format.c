@@ -514,6 +514,46 @@ static iree_status_t loom_parse_format_binding_list(
   return iree_ok_status();
 }
 
+// Parses region block arguments: (%block_arg : type, ...). Creates block arg
+// values and stores them as pending for the next REGION element. Names become
+// visible in that region's child scope, not in the current parent scope.
+static iree_status_t loom_parse_format_block_args(loom_parser_t* parser) {
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LPAREN)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'('"));
+  }
+
+  iree_host_size_t parsed_arg_count = 0;
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
+         !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    if (parsed_arg_count > 0) {
+      if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+        break;
+      }
+    }
+
+    loom_token_t arg_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &arg_token);
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COLON, NULL);
+
+    loom_type_t type = {0};
+    IREE_RETURN_IF_ERROR(loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
+
+    loom_value_id_t arg_value_id = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_module_define_value(parser->module, type, &arg_value_id));
+    IREE_RETURN_IF_ERROR(
+        loom_parser_add_pending_block_arg(parser, arg_value_id, arg_token));
+    ++parsed_arg_count;
+  }
+
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("')'"));
+  }
+  return iree_ok_status();
+}
+
 // Parses function arguments: (%name: type, type, ...).
 // Creates SSA values in the surrounding signature scope and stores them as
 // pending block args for the next REGION element. For bodyless func-like ops,
@@ -525,9 +565,10 @@ static iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'('"));
   }
 
+  iree_host_size_t parsed_arg_count = 0;
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-    if (parser->pending_block_args.count > 0) {
+    if (parsed_arg_count > 0) {
       if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
         break;
       }
@@ -556,6 +597,7 @@ static iree_status_t loom_parse_format_func_args(loom_parser_t* parser,
     // Store as pending block arg for REGION to consume.
     IREE_RETURN_IF_ERROR(
         loom_parser_add_pending_block_arg(parser, value_id, name_token));
+    ++parsed_arg_count;
   }
 
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {
@@ -624,7 +666,8 @@ static iree_status_t loom_parse_format_optional_group(
         IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
             parser, first_inner, &present));
       } else if (first_inner &&
-                 first_inner->kind == LOOM_FORMAT_KIND_BINDING_LIST) {
+                 (first_inner->kind == LOOM_FORMAT_KIND_BINDING_LIST ||
+                  first_inner->kind == LOOM_FORMAT_KIND_BLOCK_ARGS)) {
         present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LPAREN);
       } else {
         present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_SSA_VALUE);
@@ -1576,6 +1619,11 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       case LOOM_FORMAT_KIND_BINDING_LIST: {
         IREE_RETURN_IF_ERROR(
             loom_parse_format_binding_list(parser, element, parsed));
+        break;
+      }
+
+      case LOOM_FORMAT_KIND_BLOCK_ARGS: {
+        IREE_RETURN_IF_ERROR(loom_parse_format_block_args(parser));
         break;
       }
 

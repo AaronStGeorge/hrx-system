@@ -43,6 +43,33 @@ func.def @loop_body_op(%lo: index, %hi: index, %step: index, %init: f32) -> (f32
 
 // ====
 
+// scf.while without loop-carried values.
+func.def @void_while(%cond: i1) {
+  scf.while {
+    scf.condition %cond : i1
+  } do {
+    scf.yield
+  }
+  func.return
+}
+
+// ====
+
+// scf.while with one loop-carried value. The before region uses a binding list
+// for the current value, while the after region spells its block args directly.
+func.def @count_while(%init: index, %limit: index, %one: index) -> (index) {
+  %result = scf.while(%before = %init : index) -> (index) {
+    %keep_going = index.cmp slt, %before, %limit : index
+    scf.condition %keep_going, %before : i1, index
+  } do(%body: index) {
+    %next = index.add %body, %one : index
+    scf.yield %next : index
+  }
+  func.return %result : index
+}
+
+// ====
+
 // scf.if without results (both branches required even when void).
 func.def @void_if(%cond: i1) {
   scf.if %cond {

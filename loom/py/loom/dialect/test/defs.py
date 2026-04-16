@@ -31,6 +31,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BindingList,
+    BlockArgs,
     FuncArgs,
     IndexList,
     OperandDict,
@@ -71,6 +72,7 @@ from loom.dsl import (
     AttrDef,
     BlockArgCount,
     BlockArgsMatchElementTypes,
+    BlockArgsMatchTypes,
     Dialect,
     DimIndexInBounds,
     EnumCase,
@@ -737,6 +739,42 @@ test_loop = Op(
 )
 
 # ============================================================================
+# test.block_args — explicit region entry args
+# ============================================================================
+
+test_block_args = Op(
+    "test.block_args",
+    group=test_ops,
+    doc="Test op with explicit BlockArgs syntax for a region entry block.",
+    operands=[Operand("inputs", ANY, variadic=True)],
+    regions=[
+        RegionDef(
+            "body",
+            doc="Body with explicitly named entry block args.",
+            single_block=True,
+            terminator="test.yield",
+            arg_source="inputs",
+        )
+    ],
+    constraints=[
+        BlockArgCount("body", "inputs"),
+        BlockArgsMatchTypes("body", "inputs"),
+    ],
+    traits=[ImplicitTerminator("test.implicit_yield")],
+    format=[
+        Refs("inputs"),
+        COLON,
+        TypesOf("inputs"),
+        kw("do"),
+        BlockArgs("body"),
+        Region("body"),
+    ],
+    examples=[
+        "test.block_args %value : i32 do(%arg: i32) {\n  test.yield\n}",
+    ],
+)
+
+# ============================================================================
 # test.branch — if/else with optional else region
 # ============================================================================
 
@@ -1309,6 +1347,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_invoke,
     test_slice,
     test_loop,
+    test_block_args,
     test_branch,
     test_implicit_yield,
     test_yield,

@@ -1274,6 +1274,17 @@ static const loom_value_id_t* loom_print_func_arg_ids(
   return NULL;
 }
 
+static const loom_value_id_t* loom_print_region_entry_arg_ids(
+    const loom_op_t* op, uint8_t region_index, uint16_t* out_arg_count) {
+  *out_arg_count = 0;
+  if (region_index >= op->region_count) return NULL;
+  loom_region_t* region = loom_op_regions(op)[region_index];
+  if (!region || region->block_count == 0) return NULL;
+  const loom_block_t* block = loom_region_const_entry_block(region);
+  *out_arg_count = block->arg_count;
+  return block->arg_ids;
+}
+
 // Returns the operand domain used for tied-result printing. Regular body ops
 // tie to op operands; symbol-defining func-like ops tie to signature args.
 static const loom_value_id_t* loom_print_tied_operand_ids(
@@ -1749,6 +1760,24 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
           // Operand type.
           IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
           IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, operands[start + j]));
+          loom_print_did_write(ctx);
+        }
+        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ")", false));
+        break;
+      }
+      case LOOM_FORMAT_KIND_BLOCK_ARGS: {
+        uint16_t arg_count = 0;
+        const loom_value_id_t* arg_ids = loom_print_region_entry_arg_ids(
+            op, element->field_index, &arg_count);
+        IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "(", true));
+        for (uint16_t j = 0; j < arg_count; ++j) {
+          if (j > 0) {
+            IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
+          }
+          IREE_RETURN_IF_ERROR(loom_print_value_name(ctx, arg_ids[j]));
+          IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", true));
+          IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+          IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, arg_ids[j]));
           loom_print_did_write(ctx);
         }
         IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ")", false));

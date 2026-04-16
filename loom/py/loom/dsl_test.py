@@ -59,6 +59,7 @@ from loom.dsl import (
     AttrDef,
     BlockArgCount,
     BlockArgsMatchElementTypes,
+    BlockArgsMatchTypes,
     Dialect,
     DimIndexInBounds,
     EnumCase,
@@ -283,6 +284,10 @@ class TestRegionDef:
         r = RegionDef("body", single_block=True)
         assert r.single_block
 
+    def test_arg_source(self) -> None:
+        r = RegionDef("body", arg_source="inputs")
+        assert r.arg_source == "inputs"
+
 
 # ============================================================================
 # Traits
@@ -424,6 +429,10 @@ class TestConstraints:
         block_args_match = BlockArgsMatchElementTypes("body", "inputs")
         assert block_args_match.error is not None
         assert block_args_match.error.error_id == "ERR_TYPE_008"
+
+        block_args_type_match = BlockArgsMatchTypes("body", "inputs")
+        assert block_args_type_match.error is not None
+        assert block_args_type_match.error.error_id == "ERR_TYPE_013"
 
         yield_count = YieldCountMatchesResults("body", "results")
         assert yield_count.error is not None
@@ -764,6 +773,34 @@ class TestOp:
                     Ref("source"),
                     IndexList("offsets", "static_offsets"),  # Neither declared!
                 ],
+            )
+
+    def test_region_arg_source_must_be_value_field(self) -> None:
+        """Region arg_source must name an operand or result field."""
+        with pytest.raises(ValueError, match="arg_source references non-value"):
+            Op(
+                "test.bad",
+                attrs=[AttrDef("types", "string")],
+                regions=[RegionDef("body", arg_source="types")],
+                format=[Region("body")],
+            )
+
+    def test_region_arg_source_validates_without_format(self) -> None:
+        """Region arg_source is an op contract, not an assembly-format detail."""
+        with pytest.raises(ValueError, match="arg_source references non-value"):
+            Op(
+                "test.bad",
+                regions=[RegionDef("body", arg_source="missing")],
+            )
+
+    def test_region_arg_source_must_be_variadic(self) -> None:
+        """Region arg_source maps one region arg per source value."""
+        with pytest.raises(ValueError, match="must reference a variadic"):
+            Op(
+                "test.bad",
+                operands=[Operand("input", INTEGER)],
+                regions=[RegionDef("body", arg_source="input")],
+                format=[Ref("input"), Region("body")],
             )
 
     def test_nested_scope_rejected(self) -> None:

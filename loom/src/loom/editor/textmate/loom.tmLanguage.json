@@ -185,7 +185,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(scf)\\.(lookup|select|switch|yield|for|if)\\b",
+          "match": "\\b(scf)\\.(condition|lookup|select|switch|while|yield|for|if)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"
@@ -197,7 +197,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(test)\\.(fact_encoding_layout_stride_hi|fact_view_root_min_alignment|fact_is_vector_prefix_mask|fact_buffer_min_alignment|fact_encoding_layout_kind|fact_buffer_memory_space|fact_is_buffer_reference|fact_view_byte_length_hi|fact_view_byte_length_lo|fact_view_byte_offset_hi|fact_view_byte_offset_lo|fact_view_element_bytes|fact_view_min_alignment|fact_is_view_reference|fact_view_memory_space|fact_view_root_matches|fact_is_vector_iota|fact_non_negative|fact_power_of_two|isolated_region|mutate_resource|implicit_yield|write_resource|fact_non_zero|fact_positive|fact_range_hi|fact_range_lo|read_resource|fact_divisor|operand_dict|region_table|attr_table|constant|convert|counter|deflate|assume|branch|invoke|reduce|update|alloc|attrs|slice|yield|addi|cast|decl|func|loop|cmp|dim|map|neg|use)\\b",
+          "match": "\\b(test)\\.(fact_encoding_layout_stride_hi|fact_view_root_min_alignment|fact_is_vector_prefix_mask|fact_buffer_min_alignment|fact_encoding_layout_kind|fact_buffer_memory_space|fact_is_buffer_reference|fact_view_byte_length_hi|fact_view_byte_length_lo|fact_view_byte_offset_hi|fact_view_byte_offset_lo|fact_view_element_bytes|fact_view_min_alignment|fact_is_view_reference|fact_view_memory_space|fact_view_root_matches|fact_is_vector_iota|fact_non_negative|fact_power_of_two|isolated_region|mutate_resource|implicit_yield|write_resource|fact_non_zero|fact_positive|fact_range_hi|fact_range_lo|read_resource|fact_divisor|operand_dict|region_table|attr_table|block_args|constant|convert|counter|deflate|assume|branch|invoke|reduce|update|alloc|attrs|slice|yield|addi|cast|decl|func|loop|cmp|dim|map|neg|use)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"
@@ -305,7 +305,7 @@
       "patterns": [
         {
           "name": "keyword.other.loom",
-          "match": "\\b(?:iter_args|priority|default|device|import|layout|public|where|case|else|host|into|step|as|to|x)\\b"
+          "match": "\\b(?:iter_args|priority|default|device|import|layout|public|where|case|else|host|into|step|as|do|to|x)\\b"
         },
         {
           "name": "constant.language.boolean.loom",

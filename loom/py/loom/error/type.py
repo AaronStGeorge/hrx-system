@@ -135,6 +135,22 @@ ERR_TYPE_008 = ErrorDef(
     "tile element type",
 )
 
+# ERR_TYPE_013: Block arg type does not match input type.
+ERR_TYPE_013 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=13,
+    severity=Severity.ERROR,
+    summary="Block argument type does not match input type.",
+    message="block argument {arg_index} has type {arg_type}, expected "
+    "type {expected_type}",
+    params=(
+        ErrorParam("arg_index", ParamKind.U32),
+        ErrorParam("arg_type", ParamKind.TYPE),
+        ErrorParam("expected_type", ParamKind.TYPE),
+    ),
+    fix_hint="Block argument should have type {expected_type}",
+)
+
 # ERR_TYPE_009: Yield type does not match result type.
 ERR_TYPE_009 = ErrorDef(
     domain=ErrorDomain.TYPE,
@@ -211,4 +227,5 @@ ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_010,
     ERR_TYPE_011,
     ERR_TYPE_012,
+    ERR_TYPE_013,
 )

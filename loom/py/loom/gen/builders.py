@@ -27,6 +27,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BindingList,
+    BlockArgs,
     Flags,
     FormatElement,
     FuncArgs,
@@ -316,7 +317,7 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                                 continue
                             append_attr_param(attr_def.name)
 
-                case Keyword() | TypeOf() | TypesOf() | Glue():
+                case Keyword() | TypeOf() | TypesOf() | BlockArgs() | Glue():
                     pass  # Not parameters.
 
     walk(op.format)

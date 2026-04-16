@@ -2109,7 +2109,9 @@ static void loom_verify_relation_region_arg_match(
     const loom_error_def_t* error =
         constraint->error ? constraint->error : &loom_err_type_008;
     loom_type_t expected_type =
-        loom_type_scalar(loom_type_element_type(input_type));
+        constraint->property == LOOM_PROPERTY_ELEMENT_TYPE
+            ? loom_type_scalar(loom_type_element_type(input_type))
+            : input_type;
     loom_diagnostic_param_t params[] = {
         loom_param_u32(i),
         loom_param_type(block_arg_type),

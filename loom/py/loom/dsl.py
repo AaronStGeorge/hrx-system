@@ -138,6 +138,7 @@ __all__ = [
     "DimIndexInBounds",
     "AllShapesMatch",
     "BlockArgCount",
+    "BlockArgsMatchTypes",
     "BlockArgsMatchElementTypes",
     "YieldCountMatchesResults",
     "YieldTypesMatchResults",
@@ -421,6 +422,9 @@ class RegionDef:
         where type_keyword is a scalar type name (e.g., "index").
         These are prepended before any BindingList-derived args.
         Example: loop IV is ("iv", "index").
+    arg_source: Optional value field whose per-position types seed entry block
+        arguments in generated builders. Text parsing still gets the concrete
+        names and types from BindingList or BlockArgs format elements.
     """
 
     name: str
@@ -429,6 +433,7 @@ class RegionDef:
     variadic: bool = False
     terminator: str | None = None
     implicit_args: tuple[tuple[str, str], ...] = ()
+    arg_source: str | None = None
 
 
 # ============================================================================
@@ -1117,6 +1122,17 @@ def BlockArgCount(region: str, inputs: str) -> Constraint:
     )
 
 
+def BlockArgsMatchTypes(region: str, inputs: str) -> Constraint:
+    """Each block argument type must match its input type."""
+    from loom.error.type import ERR_TYPE_013
+
+    return Constraint(
+        "BlockArgsMatchTypes",
+        (region, inputs),
+        error=ERR_TYPE_013,
+    )
+
+
 def BlockArgsMatchElementTypes(region: str, inputs: str) -> Constraint:
     """Each block argument type must match its input's element type."""
     from loom.error.type import ERR_TYPE_008
@@ -1385,6 +1401,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         AttrDict,
         AttrTable,
         BindingList,
+        BlockArgs,
         EncodingOf,
         Flags,
         FuncArgs,
@@ -1428,7 +1445,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
                 fields.add(f)
             case Region(field=f):
                 fields.add(f)
-            case BindingList(field=f) | FuncArgs(field=f):
+            case BindingList(field=f) | BlockArgs(region=f) | FuncArgs(field=f):
                 fields.add(f)
             case PredicateList(field=f):
                 fields.add(f)
@@ -1496,6 +1513,32 @@ def _validate_format_fields(
             f"Op '{op_name}': format references undeclared fields: "
             f"{sorted(unknown)}. Declared: {sorted(declared)}"
         )
+
+
+def _validate_region_arg_sources(
+    op_name: str,
+    operands: tuple[Operand, ...],
+    results: tuple[Result | TiedResult, ...],
+    regions: tuple[RegionDef, ...],
+) -> None:
+    """Validate RegionDef.arg_source contracts."""
+    value_fields: dict[str, bool] = {o.name: o.variadic for o in operands} | {
+        r.name: r.variadic for r in results
+    }
+    for region in regions:
+        if region.arg_source is None:
+            continue
+        variadic = value_fields.get(region.arg_source)
+        if variadic is None:
+            raise ValueError(
+                f"Op '{op_name}': region '{region.name}' arg_source "
+                f"references non-value field '{region.arg_source}'."
+            )
+        if not variadic:
+            raise ValueError(
+                f"Op '{op_name}': region '{region.name}' arg_source "
+                f"'{region.arg_source}' must reference a variadic value field."
+            )
 
 
 # ============================================================================
@@ -1837,6 +1880,12 @@ class Op:
                 frozen_attrs,
                 frozen_regions,
             )
+        _validate_region_arg_sources(
+            name,
+            frozen_operands,
+            frozen_results,
+            frozen_regions,
+        )
 
     def __repr__(self) -> str:
         return f"Op({self.name!r})"

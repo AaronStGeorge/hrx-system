@@ -24,7 +24,9 @@ enum {
   LOOM_OP_SCF_YIELD = LOOM_OP_KIND(LOOM_DIALECT_SCF, 3),
   LOOM_OP_SCF_SELECT = LOOM_OP_KIND(LOOM_DIALECT_SCF, 4),
   LOOM_OP_SCF_LOOKUP = LOOM_OP_KIND(LOOM_DIALECT_SCF, 5),
-  LOOM_OP_SCF_COUNT_ = 6,
+  LOOM_OP_SCF_CONDITION = LOOM_OP_KIND(LOOM_DIALECT_SCF, 6),
+  LOOM_OP_SCF_WHILE = LOOM_OP_KIND(LOOM_DIALECT_SCF, 7),
+  LOOM_OP_SCF_COUNT_ = 8,
 };
 
 // LOOM_OP_SCF_FOR: Bounded counted loop with optional loop-carried state.
@@ -169,6 +171,44 @@ iree_status_t loom_scf_lookup_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 iree_status_t loom_scf_lookup_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_SCF_CONDITION: Terminates the before region of scf.while with a scalar i1 continuation condition and the values forwarded to the after region.
+// scf.condition %keep_going : i1
+LOOM_DEFINE_ISA(loom_scf_condition_isa, LOOM_OP_SCF_CONDITION)
+LOOM_DEFINE_OPERAND(loom_scf_condition_condition, 0)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_scf_condition_forwarded, 1)
+iree_status_t loom_scf_condition_build(
+    loom_builder_t* builder,
+    loom_value_id_t condition,
+    const loom_value_id_t* forwarded,
+    iree_host_size_t forwarded_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_SCF_WHILE: Unbounded loop with explicit before and after regions. The before region terminates with scf.condition, and the after region terminates with scf.yield.
+// scf.while {
+//   scf.condition %cond : i1
+// } do {
+//   scf.yield
+// }
+LOOM_DEFINE_ISA(loom_scf_while_isa, LOOM_OP_SCF_WHILE)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_scf_while_iter_args, 0)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_scf_while_results, 0)
+LOOM_DEFINE_REGION(loom_scf_while_before, 0)
+LOOM_DEFINE_REGION(loom_scf_while_after, 1)
+iree_status_t loom_scf_while_build(
+    loom_builder_t* builder,
+    loom_may_consume const loom_value_id_t* iter_args,
+    iree_host_size_t iter_args_count,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_scf_while_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

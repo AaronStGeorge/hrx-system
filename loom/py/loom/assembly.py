@@ -67,6 +67,7 @@ __all__ = [
     "IndexList",
     "OperandDict",
     "BindingList",
+    "BlockArgs",
     "FuncArgs",
     "PredicateList",
     "OptionalGroup",
@@ -417,6 +418,22 @@ class BindingList:
 
 
 @dataclass(frozen=True, slots=True)
+class BlockArgs:
+    """Region entry block argument definitions.
+
+    Prints/parses: (%a: type, %b: type)
+
+    Unlike BindingList, BlockArgs does not bind each argument to an existing
+    operand in the surface syntax. It only names and types the entry block
+    arguments of the referenced region. The op verifier owns the semantic
+    relationship between those block arguments and any operands, terminator
+    operands, or result fields.
+    """
+
+    region: str
+
+
+@dataclass(frozen=True, slots=True)
 class FuncArgs:
     """Function argument definitions with types.
 
@@ -530,6 +547,7 @@ class Glue:
       - IndexList: glues when following another format element (always %ref[...]),
         but not when it is the first element after the op name
       - BindingList: always glues (always keyword(...) or opname(...))
+      - BlockArgs: always glues (always keyword(...))
       - FuncArgs: always glues (always @name(...))
 
     Elements that never glue (space before them is always present):
@@ -691,6 +709,7 @@ type FormatElement = (
     | IndexList
     | OperandDict
     | BindingList
+    | BlockArgs
     | FuncArgs
     | PredicateList
     | OptionalGroup

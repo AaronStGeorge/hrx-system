@@ -56,6 +56,59 @@ func.def @for_iter_args_second_type_mismatch(%lo: index, %hi: index, %step: inde
 
 // ====
 
+// scf.while after-region block args must match the loop-carried input types.
+func.def @while_after_arg_type_mismatch(%cond: i1, %init: index) -> (index) {
+  // ERROR@+1: TYPE/013
+  %r = scf.while(%before = %init : index) -> (index) {
+    scf.condition %cond, %before : i1, index
+  } do(%body: f32) {
+    scf.yield %init : index
+  }
+  func.return %r : index
+}
+
+// ====
+
+// scf.condition forwards one value for each after-region entry block arg.
+func.def @while_condition_forward_count_mismatch(%cond: i1, %init: index) -> (index) {
+  %r = scf.while(%before = %init : index) -> (index) {
+    // ERROR@+1: STRUCTURE/013 "forwarded" "0" "after block args" "1"
+    scf.condition %cond : i1
+  } do(%body: index) {
+    scf.yield %body : index
+  }
+  func.return %r : index
+}
+
+// ====
+
+// scf.condition forwarded values must match the after-region block arg types.
+func.def @while_condition_forward_type_mismatch(%cond: i1, %init: index, %wrong: f32) -> (index) {
+  %r = scf.while(%before = %init : index) -> (index) {
+    // ERROR@+1: TYPE/001 "forwarded[0]" "after[0]"
+    scf.condition %cond, %wrong : i1, f32
+  } do(%body: index) {
+    scf.yield %body : index
+  }
+  func.return %r : index
+}
+
+// ====
+
+// The before region must terminate with scf.condition, not the generic
+// scf.yield used by ordinary result-producing scf regions.
+func.def @while_wrong_before_terminator(%cond: i1, %init: index) -> (index) {
+  // ERROR@+1: STRUCTURE/018 "scf.while" "0" "scf.condition" "scf.yield"
+  %r = scf.while(%before = %init : index) -> (index) {
+    scf.yield %before : index
+  } do(%body: index) {
+    scf.yield %body : index
+  }
+  func.return %r : index
+}
+
+// ====
+
 // scf.lookup case keys are sorted and unique. The parser preserves source key
 // order so the verifier owns the structured key-order diagnostic.
 func.def @lookup_unsorted_case_keys(%variant: index, %a: index, %b: index, %fallback: index) -> (index) {

@@ -32,3 +32,4 @@
     [LOOM_KW_INTO] = (const uint8_t*)"\x04" "into",
     [LOOM_KW_DEFAULT] = (const uint8_t*)"\x07" "default",
     [LOOM_KW_CASE] = (const uint8_t*)"\x04" "case",
+    [LOOM_KW_DO] = (const uint8_t*)"\x02" "do",

@@ -134,7 +134,7 @@ typedef enum loom_format_kind_e {
   LOOM_FORMAT_KIND_OPERAND_TYPES = 6,
   // Result type list with tied handling: -> (type, %op as type).
   LOOM_FORMAT_KIND_RESULT_TYPE_LIST = 7,
-  // Literal keyword token: , : -> to step else.
+  // Literal keyword token: , : -> to step else do.
   LOOM_FORMAT_KIND_KEYWORD = 8,
   // Optional attribute dictionary: {key = value, ...}.
   // If data has LOOM_ATTR_DICT_FORMAT_INLINE_ATTRS, dictionary entries map to
@@ -207,6 +207,10 @@ typedef enum loom_format_kind_e {
   // field index storing row keys and the fixed default region index using
   // LOOM_FORMAT_REGION_TABLE_DATA.
   LOOM_FORMAT_KIND_REGION_TABLE = 24,
+
+  // Region entry block arguments: (%a: type, %b: type).
+  // field_index = region index whose entry block args are printed or parsed.
+  LOOM_FORMAT_KIND_BLOCK_ARGS = 25,
 };
 typedef uint8_t loom_format_kind_t;
 

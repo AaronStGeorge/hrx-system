@@ -336,6 +336,34 @@
     "fix_hint_template": "Canonicalize away dead poison or prevent the invalid observation before it reaches this boundary"
   },
   {
+    "error_id": "ERR_TYPE_013",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 13,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Block argument type does not match input type.",
+    "message_template": "block argument {arg_index} has type {arg_type}, expected type {expected_type}",
+    "params": [
+      {
+        "name": "arg_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "arg_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Block argument should have type {expected_type}"
+  },
+  {
     "error_id": "ERR_SHAPE_001",
     "domain": 1,
     "domain_name": "SHAPE",

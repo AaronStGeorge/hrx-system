@@ -48,6 +48,7 @@
 //   - IndexList glues to a preceding format element: %src[0, %off].
 //     Leading IndexList forms keep a space after the op name: op [0, %off].
 //   - BindingList glues to preceding token: iter_args(%acc = %init : f32)
+//   - BlockArgs glues to preceding token: do(%arg: f32)
 //   - FuncArgs glues to preceding symbol: @name(%a: type)
 //   - Explicit Glue suppresses space: @callee(%x) not @callee (%x)
 // - Result types: ops with variadic or tied results use parenthesized
@@ -410,6 +411,9 @@
 //   BindingList(field)    Parenthesized named bindings:
 //                           (%elem = %tile : type, ...).
 //                           Always glues to preceding token.
+//   BlockArgs(region)     Region entry block args:
+//                           (%arg: type, ...).
+//                           Always glues to preceding token.
 //   FuncArgs(field)       Function argument defs: (%a: type, %b: type).
 //                           Always glues to preceding symbol.
 //   PredicateList(field)  Where-clause predicates:
@@ -430,7 +434,7 @@
 // Default: single space between tokens.
 // Backward-glue (no space before): , ) ] }
 // Forward-glue (no space after): ( [ {
-// Built-in glue: non-leading IndexList, BindingList, FuncArgs.
+// Built-in glue: non-leading IndexList, BindingList, BlockArgs, FuncArgs.
 // Explicit Glue: suppresses space before the next token.
 // ResultTypeList, PredicateList, OperandDict, and AttrTable never glue.
 //

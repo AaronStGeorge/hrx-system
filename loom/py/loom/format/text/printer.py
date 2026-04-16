@@ -38,6 +38,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BindingList,
+    BlockArgs,
     Flags,
     FormatElement,
     FuncArgs,
@@ -351,8 +352,9 @@ class TokenStream:
       - Default: space before each token.
       - Backward-glue punctuation (, ) ] }): always suppress space before.
       - Explicit Glue element: marks the next token to suppress space.
-      - Composite elements with built-in glue (BindingList, FuncArgs, and
-        non-leading IndexList): their output is emitted with glue=True.
+      - Composite elements with built-in glue (BindingList, BlockArgs,
+        FuncArgs, and non-leading IndexList): their output is emitted with
+        glue=True.
 
     The token joiner is trivial: check the glue flag, emit space or not.
     No character-level heuristics.
@@ -1049,6 +1051,12 @@ class Printer:
                         self._format_binding_list(fields, name, module), glue=True
                     )
 
+                case BlockArgs(region=name):
+                    assert isinstance(fields, ResolvedFields)
+                    stream.emit(
+                        self._format_block_args(fields, name, module), glue=True
+                    )
+
                 case FuncArgs():
                     assert isinstance(fields, ResolvedFields)
                     arg_names, _arg_types, arg_value_ids = fields.func_args()
@@ -1224,6 +1232,19 @@ class Printer:
             else:
                 parts.append(f"{operand_name} : {operand_type}")
 
+        return "(" + ", ".join(parts) + ")"
+
+    def _format_block_args(
+        self, fields: ResolvedFields, name: str, module: Module
+    ) -> str:
+        """Format (%block_arg: type, ...)."""
+        region = fields.region(name)
+        entry_block = region.blocks[0] if region and region.blocks else None
+        arg_value_ids = list(entry_block.arg_ids) if entry_block else []
+        parts: list[str] = []
+        for arg_value_id in arg_value_ids:
+            arg_type = self._print_value_type(arg_value_id, module)
+            parts.append(f"{self._value_name(arg_value_id)}: {arg_type}")
         return "(" + ", ".join(parts) + ")"
 
     def _format_operand_dict(

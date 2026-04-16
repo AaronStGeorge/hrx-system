@@ -188,6 +188,22 @@ class TestBuilders:
         _operands.extend(iter_args)
         return cast(list[ValueRef], self._b.build("test.loop", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def block_args(self, *, inputs: list[ValueRef], body: Region | None = None) -> None:
+        """Test op with explicit BlockArgs syntax for a region entry block.
+
+        Example::
+            test.block_args %value : i32 do(%arg: i32) {
+              test.yield
+            }
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        if body is not None:
+            _regions.append(body)
+        _operands.extend(inputs)
+        self._b.build("test.block_args", _operands, attributes=_attributes, regions=_regions)
+
     def branch(self, *, condition: ValueRef, results: list[Type | TiedResultSpec], then_region: Region | None = None, else_region: Region | None = None) -> list[ValueRef]:
         """Test if/else with both regions always present.
 

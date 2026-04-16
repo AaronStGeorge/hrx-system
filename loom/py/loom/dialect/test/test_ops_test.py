@@ -16,6 +16,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BindingList,
+    BlockArgs,
     FormatElement,
     FuncArgs,
     IndexList,
@@ -118,7 +119,7 @@ class TestFormatFieldsMatchDeclarations:
                     fields.add(f)
                 case Region(field=f):
                     fields.add(f)
-                case BindingList(field=f) | FuncArgs(field=f):
+                case BindingList(field=f) | BlockArgs(region=f) | FuncArgs(field=f):
                     fields.add(f)
                 case OperandDict(operands=operands, names=names):
                     fields.add(operands)
@@ -235,6 +236,7 @@ class TestFormatElementCoverage:
             Region,
             IndexList,
             BindingList,
+            BlockArgs,
             FuncArgs,
             PredicateList,
             OptionalGroup,

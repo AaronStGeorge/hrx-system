@@ -28,6 +28,7 @@ from loom.assembly import (
     AttrDict,
     AttrTable,
     BindingList,
+    BlockArgs,
     Flags,
     FormatElement,
     FuncArgs,
@@ -1657,6 +1658,9 @@ class Parser:
                 case BindingList(field=name, kind=binding_kind):
                     self._parse_binding_list(parsed, name, binding_kind)
 
+                case BlockArgs(region=name):
+                    self._parse_block_args(parsed, name)
+
                 case FuncArgs(field=name):
                     tok.expect(TokenKind.LPAREN)
                     if not tok.at(TokenKind.RPAREN):
@@ -1775,9 +1779,9 @@ class Parser:
                 return True
             case Ref() | Refs():
                 return tok.at(TokenKind.SSA_VALUE)
-            case BindingList():
-                # BindingList prints/parses as `(%name = %value : type, ...)`,
-                # so the trigger token is the opening paren.
+            case BindingList() | BlockArgs():
+                # BindingList and BlockArgs print/parse as parenthesized
+                # clauses, so the trigger token is the opening paren.
                 return tok.at(TokenKind.LPAREN)
             case _:
                 return False
@@ -2098,6 +2102,33 @@ class Parser:
 
         tok.expect(TokenKind.RPAREN)
         # Store block arg info for region parsing.
+        parsed.attributes["_binding_arg_names"] = block_arg_names
+        parsed.attributes["_binding_arg_types"] = block_arg_types
+
+    def _parse_block_args(self, parsed: ParsedFields, _region_name: str) -> None:
+        """Parse BlockArgs into pending entry block argument metadata."""
+        tok = self._tokenizer
+        tok.expect(TokenKind.LPAREN)
+        block_arg_names: list[str] = []
+        block_arg_types: list[Type] = []
+
+        if not tok.at(TokenKind.RPAREN):
+            while True:
+                name_token = tok.expect(TokenKind.SSA_VALUE)
+                tok.expect(TokenKind.COLON)
+                arg_type, _bindings = parse_type_from_tokens(
+                    tok,
+                    self._scope,
+                    self._module,
+                    self._type_registry,
+                    TypeParseMode.BODY,
+                )
+                block_arg_names.append(name_token.text)
+                block_arg_types.append(arg_type)
+                if not tok.try_consume(TokenKind.COMMA):
+                    break
+
+        tok.expect(TokenKind.RPAREN)
         parsed.attributes["_binding_arg_names"] = block_arg_names
         parsed.attributes["_binding_arg_types"] = block_arg_types
 
