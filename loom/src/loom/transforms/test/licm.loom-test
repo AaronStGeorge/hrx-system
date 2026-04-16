@@ -174,3 +174,31 @@ func.def @hoists_from_while_after(%cond: i1, %init: i32) -> (i32) {
   }
   func.return %result : i32
 }
+
+// ====
+
+// Values defined by the while body entry block are loop-local. Pure users of
+// those values stay inside the after region and can still feed scf.yield.
+func.def @keeps_while_body_arg_dependency(%cond: i1, %init: i32) -> (i32) {
+  %result = scf.while(%before = %init : i32) -> (i32) {
+    scf.condition %cond, %before : i1, i32
+  } do(%body: i32) {
+    %next = test.addi %body, %body : i32
+    scf.yield %next : i32
+  }
+  func.return %result : i32
+}
+
+// ====
+
+// Effectful work in a while after region is not hoisted even when all operands
+// are available before the loop.
+func.def @keeps_while_effects_inside_after(%cond: i1, %init: i32) -> (i32) {
+  %result = scf.while(%before = %init : i32) -> (i32) {
+    scf.condition %cond, %before : i1, i32
+  } do(%body: i32) {
+    test.use %init : i32
+    scf.yield %body : i32
+  }
+  func.return %result : i32
+}

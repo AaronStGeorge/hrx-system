@@ -211,6 +211,9 @@ static bool loom_loop_fusion_block_effects_are_allowed(
   return true;
 }
 
+// Reads the counted-loop subset accepted by this pass. scf.while remains a
+// LoopLike op for generic analyses such as LICM, but it has no counted domain
+// until a separate analysis proves one.
 static bool loom_loop_fusion_read_for_info(loom_op_t* op,
                                            loom_loop_fusion_for_info_t* info) {
   if (!loom_scf_for_isa(op)) return false;
