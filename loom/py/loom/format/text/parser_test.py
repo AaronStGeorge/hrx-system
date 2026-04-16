@@ -2349,7 +2349,12 @@ class TestLocationRoundTrip:
             "func.def @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc("model.loom":42:3 to 42:58)\n'
             '  test.yield %neg0 : f32 loc("model.loom":43:3 to 43:28)\n'
-            "}\n"
+            '} loc("model.loom":41:1 to 44:2)\n'
+        )
+
+    def test_top_level_declaration_location_roundtrip(self) -> None:
+        self._roundtrip_with_locations(
+            'func.decl @located() loc("model.loom":1:1 to 1:20)\n'
         )
 
     def test_comments_survive_explicit_location_roundtrip(self) -> None:
@@ -2358,7 +2363,7 @@ class TestLocationRoundTrip:
             "  // located constant\n"
             '  %c = test.constant 42 : i32 loc("model.loom":42:3 to 42:58)\n'
             '  test.yield %c : i32 loc("model.loom":43:3 to 43:28)\n'
-            "}\n"
+            '} loc("model.loom":41:1 to 44:2)\n'
         )
 
     def test_fused_location_roundtrip(self) -> None:
@@ -2367,7 +2372,7 @@ class TestLocationRoundTrip:
             "func.def @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(fused<"a.loom":1:1, "b.loom":2:2>)\n'
             '  test.yield %neg0 : f32 loc("a.loom":3:1 to 3:28)\n'
-            "}\n"
+            '} loc(fused<"a.loom":1:1, "b.loom":3:2>)\n'
         )
 
     def test_opaque_location_roundtrip(self) -> None:
@@ -2376,7 +2381,7 @@ class TestLocationRoundTrip:
             "func.def @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(opaque<"torch", "node_id=42">)\n'
             '  test.yield %neg0 : f32 loc("model.loom":2:3 to 2:28)\n'
-            "}\n"
+            '} loc(opaque<"torch", "node_id=func">)\n'
         )
 
     def test_escaped_location_roundtrip_is_canonical(self) -> None:
@@ -2385,7 +2390,7 @@ class TestLocationRoundTrip:
             "func.def @negate(%input: f32) -> (f32) {\n"
             '  %neg0 = test.neg %input : f32 loc(opaque<"torch \\"aten\\"", "node\\\\id\\n\\u0001">)\n'
             '  test.yield %neg0 : f32 loc("model \\"main\\"\\\\v2\\n.loom":2:3 to 2:28)\n'
-            "}\n"
+            '} loc(opaque<"torch \\"aten\\"", "fn\\\\id\\n\\u0001">)\n'
         )
 
     def test_stable_after_two_rounds(self) -> None:

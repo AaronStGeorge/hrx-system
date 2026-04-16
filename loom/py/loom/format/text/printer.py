@@ -683,6 +683,11 @@ class Printer:
             self._print_regions,
         )
 
+        if self._print_locations:
+            loc_str = self._format_location(op.location_id, module)
+            if loc_str:
+                stream.emit(loc_str)
+
         self._emit(stream.join())
 
     # --- Region body printing ---

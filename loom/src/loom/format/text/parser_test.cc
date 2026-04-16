@@ -2041,6 +2041,13 @@ TEST_F(ParserTest, CommentSurvivesTrailingLocation) {
             "loc(\"model.loom\":42:3 to 42:58)\n");
 }
 
+TEST_F(ParserTest, TopLevelDeclarationLocationRoundTrip) {
+  std::string text =
+      RoundTrip("func.decl @located() loc(\"model.loom\":1:1 to 1:20)\n",
+                LOOM_TEXT_PRINT_DEFAULT | LOOM_TEXT_PRINT_LOCATIONS);
+  EXPECT_EQ(text, "func.decl @located() loc(\"model.loom\":1:1 to 1:20)\n");
+}
+
 TEST_F(ParserTest, TrailingLocationsReuseSourceIds) {
   loom_module_t* module = ParseOk(
       "%c0 = test.constant 1 : i32 loc(\"model.loom\":7:8)\n"
