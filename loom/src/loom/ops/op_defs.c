@@ -689,6 +689,120 @@ iree_status_t loom_builder_allocate_op(
   return iree_ok_status();
 }
 
+iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,
+                                     const bool* remove_results,
+                                     iree_arena_allocator_t* scratch_arena,
+                                     uint16_t* out_removed_count) {
+  if (!module || !op || !remove_results || !scratch_arena ||
+      !out_removed_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "module, op, remove_results, scratch arena, and removed count output "
+        "are required");
+  }
+  *out_removed_count = 0;
+  uint16_t old_result_count = op->result_count;
+  if (old_result_count == 0) return iree_ok_status();
+
+  uint16_t* result_map = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(scratch_arena, old_result_count,
+                                sizeof(*result_map), (void**)&result_map));
+
+  loom_value_id_t* results = loom_op_results(op);
+  uint16_t kept_count = 0;
+  for (uint16_t i = 0; i < old_result_count; ++i) {
+    if (!remove_results[i]) {
+      result_map[i] = kept_count++;
+      continue;
+    }
+
+    result_map[i] = UINT16_MAX;
+    loom_value_id_t result = results[i];
+    if (result == LOOM_VALUE_ID_INVALID || result >= module->values.count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "removed result %u value %%%u is invalid",
+                              (unsigned)i, (unsigned)result);
+    }
+    const loom_value_t* value = loom_module_value(module, result);
+    if (value->use_count != 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "cannot remove result %%%u with %u operand use(s)", (unsigned)result,
+          (unsigned)value->use_count);
+    }
+    if (loom_module_value_has_type_uses(module, result)) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "cannot remove result %%%u with incoming type use(s)",
+          (unsigned)result);
+    }
+  }
+  *out_removed_count = (uint16_t)(old_result_count - kept_count);
+  if (*out_removed_count == 0) return iree_ok_status();
+
+  const loom_tied_result_t* old_tied_results = loom_op_tied_results(op);
+  loom_tied_result_t* kept_tied_results = NULL;
+  if (op->tied_result_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        scratch_arena, op->tied_result_count, sizeof(*kept_tied_results),
+        (void**)&kept_tied_results));
+  }
+
+  uint16_t kept_tied_count = 0;
+  for (uint16_t i = 0; i < op->tied_result_count; ++i) {
+    loom_tied_result_t tied_result = old_tied_results[i];
+    if (tied_result.result_index >= old_result_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "tied result index %u is out of range for %u result(s)",
+          (unsigned)tied_result.result_index, (unsigned)old_result_count);
+    }
+    uint16_t new_result_index = result_map[tied_result.result_index];
+    if (new_result_index == UINT16_MAX) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "cannot remove result %u because it is tied to operand %u",
+          (unsigned)tied_result.result_index,
+          (unsigned)tied_result.operand_index);
+    }
+    tied_result.result_index = new_result_index;
+    kept_tied_results[kept_tied_count++] = tied_result;
+  }
+
+  loom_use_index_t* old_operand_use_indices = loom_op_operand_use_indices(op);
+  loom_attribute_t* old_attrs = loom_op_attrs(op);
+  for (uint16_t i = 0; i < old_result_count; ++i) {
+    loom_value_id_t result = results[i];
+    if (remove_results[i]) {
+      loom_module_drop_value_type_uses(module, result);
+      module->values.entries[result].def = loom_value_def_make_none();
+      continue;
+    }
+    uint16_t new_index = result_map[i];
+    results[new_index] = result;
+    module->values.entries[result].def = loom_value_def_make_op(op, new_index);
+  }
+
+  op->result_count = kept_count;
+  op->tied_result_count = kept_tied_count;
+
+  if (kept_tied_count > 0) {
+    memmove(loom_op_tied_results(op), kept_tied_results,
+            (iree_host_size_t)kept_tied_count * sizeof(*kept_tied_results));
+  }
+  if (op->operand_count > 0) {
+    memmove(
+        loom_op_operand_use_indices(op), old_operand_use_indices,
+        (iree_host_size_t)op->operand_count * sizeof(*old_operand_use_indices));
+  }
+  if (op->attribute_count > 0) {
+    memmove(loom_op_attrs(op), old_attrs,
+            (iree_host_size_t)op->attribute_count * sizeof(*old_attrs));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_op_verify_erase_preconditions(loom_module_t* module,
                                                         loom_op_t* op) {
   loom_value_id_t* results = loom_op_results(op);

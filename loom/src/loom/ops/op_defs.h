@@ -1333,6 +1333,20 @@ iree_status_t loom_builder_allocate_op(
     uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
     uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op);
 
+// Removes selected results from a variadic-result op and compacts trailing
+// storage in-place.
+//
+// |remove_results| has one entry per current result. Removed result values must
+// have no operand uses and no incoming type uses. Dropped values remain in the
+// module value table but no longer carry defining-op identity or outgoing
+// type-use records. Kept result values keep their IDs and receive updated
+// definition indices. Tied results targeting removed result slots are rejected;
+// kept tied result indices are remapped.
+iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,
+                                     const bool* remove_results,
+                                     iree_arena_allocator_t* scratch_arena,
+                                     uint16_t* out_removed_count);
+
 // Erases an op: removes all use records for the op's operands, verifies
 // that every result has no operand uses or external type uses (caller must
 // RAUW results first), drops type-use records carried by result and nested

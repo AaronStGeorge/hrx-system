@@ -935,6 +935,52 @@ TEST_F(BuilderTest, UseCountAfterBuild) {
   EXPECT_EQ(loom_module_value(module_, b)->use_count, 0);
 }
 
+TEST_F(BuilderTest, OpRemoveResultsCompactsDefinitionsAndTiedResults) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t operand = build_constant(&builder_, module_, f32);
+  loom_value_id_t operands[] = {operand};
+  loom_type_t result_types[] = {f32, f32, f32};
+  loom_tied_result_t tied[] = {
+      {.result_index = 2, .operand_index = 0, .has_type_change = false}};
+  loom_symbol_ref_t callee = {0, 1};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_invoke_build(
+      &builder_, callee, operands, IREE_ARRAYSIZE(operands), result_types,
+      IREE_ARRAYSIZE(result_types), tied, IREE_ARRAYSIZE(tied),
+      LOOM_LOCATION_UNKNOWN, &op));
+  const loom_value_id_t old_result0 = loom_op_results(op)[0];
+  const loom_value_id_t old_result1 = loom_op_results(op)[1];
+  const loom_value_id_t old_result2 = loom_op_results(op)[2];
+
+  bool remove_results[] = {false, true, false};
+  uint16_t removed_count = 0;
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(&block_pool_, &scratch_arena);
+  iree_status_t status = loom_op_remove_results(module_, op, remove_results,
+                                                &scratch_arena, &removed_count);
+  iree_arena_deinitialize(&scratch_arena);
+  IREE_ASSERT_OK(status);
+
+  EXPECT_EQ(removed_count, 1u);
+  EXPECT_EQ(op->result_count, 2u);
+  EXPECT_EQ(loom_op_results(op)[0], old_result0);
+  EXPECT_EQ(loom_op_results(op)[1], old_result2);
+  EXPECT_EQ(loom_value_def_op(loom_module_value(module_, old_result0)), op);
+  EXPECT_EQ(loom_value_def_index(loom_module_value(module_, old_result0)), 0u);
+  EXPECT_EQ(loom_value_def_op(loom_module_value(module_, old_result2)), op);
+  EXPECT_EQ(loom_value_def_index(loom_module_value(module_, old_result2)), 1u);
+  EXPECT_EQ(loom_value_def_op(loom_module_value(module_, old_result1)),
+            nullptr);
+  ASSERT_EQ(op->tied_result_count, 1u);
+  EXPECT_EQ(loom_op_tied_results(op)[0].result_index, 1u);
+  EXPECT_EQ(loom_op_tied_results(op)[0].operand_index, 0u);
+  EXPECT_EQ(loom_test_invoke_callee(op).symbol_id, 1u);
+
+  EXPECT_EQ(loom_module_value(module_, operand)->use_count, 1u);
+  IREE_ASSERT_OK(loom_op_erase(module_, op));
+  EXPECT_EQ(loom_module_value(module_, operand)->use_count, 0u);
+}
+
 TEST_F(BuilderTest, InlineUsesPopulated) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_value_id_t a = build_constant(&builder_, module_, i32);

@@ -25,9 +25,8 @@ func.def public @entry() -> (index) {
 }
 
 // ----
-func.def @private_extent_identity() -> (index) {
-  %13 = index.constant 32 : index
-  func.return %13 : index
+func.def @private_extent_identity() {
+  func.return
 }
 
 func.def public @entry() -> (index) {
@@ -116,8 +115,8 @@ func.def public @joined_call_result_divisibility() -> (index) {
 }
 
 // ----
-func.def @private_joined_extent(%n: index) -> (index) {
-  func.return %n : index
+func.def @private_joined_extent() {
+  func.return
 }
 
 func.def public @joined_call_result_divisibility() -> (index) {
@@ -143,9 +142,8 @@ func.def public @call_same_actual(%n: index) -> (index) {
 }
 
 // ----
-func.def @same_actual_arguments() -> (index) {
-  %delta = index.constant 0 : index
-  func.return %delta : index
+func.def @same_actual_arguments() {
+  func.return
 }
 
 func.def public @call_same_actual(%n: index) -> (index) {
@@ -168,9 +166,8 @@ func.def public @call_private_exact_arg_return() -> (index) {
 }
 
 // ----
-func.def @private_exact_arg_return() -> (index) {
-  %5 = index.constant 7 : index
-  func.return %5 : index
+func.def @private_exact_arg_return() {
+  func.return
 }
 
 func.def public @call_private_exact_arg_return() -> (index) {
@@ -193,9 +190,8 @@ func.def public @call_same_actual_direct_return(%n: index) -> (index) {
 }
 
 // ----
-func.def @same_actual_direct_return() -> (index) {
-  %delta = index.constant 0 : index
-  func.return %delta : index
+func.def @same_actual_direct_return() {
+  func.return
 }
 
 func.def public @call_same_actual_direct_return(%n: index) -> (index) {
@@ -332,5 +328,56 @@ func.def @effectful_return_buffer(%buffer: buffer) -> (buffer) {
 
 func.def public @call_effectful_return_buffer(%dead: index, %buffer: buffer) -> (buffer) {
   %result = func.call @effectful_return_buffer(%buffer) : (buffer) -> (%buffer as buffer)
+  func.return %result : buffer
+}
+
+// ====
+
+// Unused private callee results are removed from both the callee signature and
+// every direct call site. This can expose newly-unused arguments for pruning in
+// the same boundary cleanup round.
+func.def @effectful_return_first(%x: index, %dead: index) -> (index, index) {
+  test.use %x : index
+  func.return %x, %dead : index, index
+}
+
+func.def public @call_effectful_return_first(%x: index, %y: index) -> (index) {
+  %kept, %dead = func.call @effectful_return_first(%x, %y) : (index, index) -> (index, index)
+  func.return %kept : index
+}
+
+// ----
+func.def @effectful_return_first(%x: index) {
+  test.use %x : index
+  func.return
+}
+
+func.def public @call_effectful_return_first(%x: index, %y: index) -> (index) {
+  func.call @effectful_return_first(%x) : (index)
+  func.return %x : index
+}
+
+// ====
+
+// Tied result slots are preserved, and their result ordinals are remapped when
+// earlier unused result slots disappear.
+func.def @effectful_return_tied_after_dead(%dead: index, %buffer: buffer) -> (index, buffer) {
+  test.use %buffer : buffer
+  func.return %dead, %buffer : index, buffer
+}
+
+func.def public @call_effectful_return_tied_after_dead(%dead: index, %buffer: buffer) -> (buffer) {
+  %dead_result, %result = func.call @effectful_return_tied_after_dead(%dead, %buffer) : (index, buffer) -> (index, %buffer as buffer)
+  func.return %result : buffer
+}
+
+// ----
+func.def @effectful_return_tied_after_dead(%buffer: buffer) -> (buffer) {
+  test.use %buffer : buffer
+  func.return %buffer : buffer
+}
+
+func.def public @call_effectful_return_tied_after_dead(%dead: index, %buffer: buffer) -> (buffer) {
+  %result = func.call @effectful_return_tied_after_dead(%buffer) : (buffer) -> (%buffer as buffer)
   func.return %result : buffer
 }
