@@ -145,6 +145,12 @@ static inline double loom_value_facts_as_f64(loom_value_facts_t facts) {
 loom_value_facts_t loom_value_facts_make(int64_t lo, int64_t hi,
                                          int64_t known_divisor);
 
+// Tightens facts to the dynamic extent domain. Extents are non-negative
+// integer sizes; incompatible float or negative-only facts degrade to the
+// conservative non-negative extent range.
+loom_value_facts_t loom_value_facts_non_negative_extent(
+    loom_value_facts_t facts);
+
 //===----------------------------------------------------------------------===//
 // Predicates
 //===----------------------------------------------------------------------===//

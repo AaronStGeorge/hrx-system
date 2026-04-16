@@ -52,6 +52,38 @@ func.def @assume_refines_address_facts(%n: index, %base: offset) -> (i64, i64) {
 
 // ====
 
+// SSA values referenced as dynamic shape extents are non-negative by type
+// semantics. This applies to ordinary block arguments with shaped types.
+func.def @block_arg_shape_extent_non_negative(%n: index, %tile: tile<[%n]xf32>) -> (i1) {
+  %nn = test.fact_non_negative %n : index -> i1
+  func.return %nn : i1
+}
+// ----
+func.def @block_arg_shape_extent_non_negative(%n: index, %tile: tile<[%n]xf32>) -> (i1) {
+  %nn = scalar.constant true : i1
+  func.return %nn : i1
+}
+
+// ====
+
+// Dynamic extents introduced by op result types also seed non-negative facts,
+// even when the producing op has no dimension-specific fact callback.
+func.def @result_shape_extent_non_negative(%buffer: buffer, %offset: offset, %n: index, %layout: encoding<layout>) -> (i1) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<[%n]xf32, %layout>
+  test.use %view : view<[%n]xf32, %layout>
+  %nn = test.fact_non_negative %n : index -> i1
+  func.return %nn : i1
+}
+// ----
+func.def @result_shape_extent_non_negative(%buffer: buffer, %offset: offset, %n: index, %layout: encoding<layout>) -> (i1) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<[%n]xf32, %layout>
+  test.use %view : view<[%n]xf32, %layout>
+  %nn = scalar.constant true : i1
+  func.return %nn : i1
+}
+
+// ====
+
 // index.mul by a constant propagates divisibility.
 func.def @mul_divisibility(%x: index) -> (i64) {
   %c64 = index.constant 64 : index

@@ -724,7 +724,7 @@ static bool loom_value_facts_type_dim(loom_type_t type, uint8_t index,
   return true;
 }
 
-static loom_value_facts_t loom_value_facts_non_negative_extent(
+loom_value_facts_t loom_value_facts_non_negative_extent(
     loom_value_facts_t facts) {
   if (loom_value_facts_is_float(facts) || facts.range_hi < 0) {
     return loom_value_facts_make(0, INT64_MAX, 1);

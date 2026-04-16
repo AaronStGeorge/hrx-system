@@ -129,33 +129,6 @@ static bool loom_global_load_result_index(loom_value_slice_t results,
   return false;
 }
 
-static void loom_global_load_seed_dimension_facts(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_value_facts_t* result_facts) {
-  loom_value_slice_t results = loom_global_load_result(op);
-  if (results.count == 0 || results.values[0] >= module->values.count) return;
-
-  loom_type_t load_type = loom_module_value_type(module, results.values[0]);
-  if (!loom_type_is_shaped(load_type)) return;
-
-  uint8_t rank = loom_type_rank(load_type);
-  for (uint8_t i = 0; i < rank; ++i) {
-    if (!loom_type_dim_is_dynamic_at(load_type, i)) continue;
-    loom_value_id_t dimension_value = loom_type_dim_value_id_at(load_type, i);
-
-    iree_host_size_t result_index = 0;
-    if (!loom_global_load_result_index(results, dimension_value,
-                                       &result_index)) {
-      continue;
-    }
-    if (results.values[result_index] >= module->values.count) continue;
-    loom_type_t result_type =
-        loom_module_value_type(module, results.values[result_index]);
-    if (!loom_global_predicate_facts_support_type(result_type)) continue;
-    result_facts[result_index] = loom_value_facts_make(0, INT64_MAX, 1);
-  }
-}
-
 static void loom_global_load_apply_definition_predicates(
     const loom_module_t* module, const loom_op_t* op,
     const loom_op_t* definition_op, loom_value_facts_t* result_facts) {
@@ -222,7 +195,6 @@ iree_status_t loom_global_load_facts(loom_fact_context_t* context,
   const loom_op_t* definition_op = loom_global_load_definition(module, op);
   if (!definition_op) return iree_ok_status();
 
-  loom_global_load_seed_dimension_facts(module, op, result_facts);
   loom_global_load_apply_definition_predicates(module, op, definition_op,
                                                result_facts);
   if (!loom_global_constant_isa(definition_op) || results.count == 0 ||
