@@ -40,6 +40,26 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "matrix_contract_fixture_test",
+    srcs = ["matrix_contract_fixture_test.cc"],
+    deps = [
+        ":matrix_contract",
+        ":matrix_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/testing:context",
+        "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "matrix_facts_test",
     srcs = ["matrix_facts_test.cc"],
     deps = [
