@@ -23,6 +23,7 @@ from loom.dsl import (
     BUFFER,
     OFFSET,
     PURE,
+    REFINABLE_RESULT_TYPE_REFS,
     VIEW,
     AttrDef,
     Dialect,
@@ -158,7 +159,7 @@ buffer_view = Op(
         Operand("byte_offset", OFFSET, doc="Base byte offset from the buffer root."),
     ],
     results=[Result("result", VIEW, doc="Typed logical view over the buffer.")],
-    traits=[PURE],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     verify="loom_buffer_view_verify",
     facts="loom_buffer_view_facts",
     format=[

@@ -647,6 +647,10 @@ enum loom_trait_bits_e {
   // being control-dependent. Common-tail motion does not need this trait when
   // every original control path already executed an equivalent op exactly once.
   LOOM_TRAIT_SAFE_TO_SPECULATE = 1u << 16,
+  // Op owns the SSA references embedded in its result types. Local
+  // canonicalization may rewrite those references when the rewritten result
+  // value has no users that require the original type/shape/encoding identity.
+  LOOM_TRAIT_REFINABLE_RESULT_TYPE_REFS = 1u << 17,
 };
 typedef uint32_t loom_trait_flags_t;
 
@@ -693,6 +697,14 @@ static inline bool loom_traits_has_unique_identity(loom_trait_flags_t traits) {
 static inline bool loom_traits_are_safe_to_speculate(
     loom_trait_flags_t traits) {
   return (traits & LOOM_TRAIT_SAFE_TO_SPECULATE) != 0;
+}
+
+// Returns true when result types carry op-owned SSA references that local
+// rewrites may retarget after separately checking downstream type-sensitive
+// uses.
+static inline bool loom_traits_have_refinable_result_type_refs(
+    loom_trait_flags_t traits) {
+  return (traits & LOOM_TRAIT_REFINABLE_RESULT_TYPE_REFS) != 0;
 }
 
 // Structural flags on the op vtable (shared by all instances of an op kind).

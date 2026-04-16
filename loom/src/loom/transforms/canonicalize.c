@@ -13,14 +13,12 @@
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
-#include "loom/ops/buffer/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/special_values.h"
 #include "loom/ops/vector/ops.h"
-#include "loom/ops/view/ops.h"
 #include "loom/transforms/rewriter.h"
 #include "loom/transforms/type_propagation.h"
 #include "loom/util/walk.h"
@@ -753,8 +751,7 @@ static bool loom_canonicalize_type_constraint_mentions_operand(
 }
 
 static bool loom_canonicalize_op_type_constraints_mention_operand(
-    const loom_module_t* module, const loom_op_t* op, uint16_t operand_index) {
-  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+    const loom_op_vtable_t* vtable, uint16_t operand_index) {
   if (!vtable) return true;
   if (vtable->constraint_count > 0 && !vtable->constraints) return true;
   for (uint8_t i = 0; i < vtable->constraint_count; ++i) {
@@ -776,25 +773,17 @@ static bool loom_canonicalize_value_has_type_sensitive_use(
   for (uint32_t i = 0; i < value->use_count; ++i) {
     loom_op_t* user = loom_use_user_op(uses[i]);
     if (!user || iree_any_bit_set(user->flags, LOOM_OP_FLAG_DEAD)) continue;
-    if (iree_any_bit_set(loom_op_effective_traits(module, user),
-                         LOOM_TRAIT_TERMINATOR)) {
+    const loom_op_vtable_t* vtable = loom_op_vtable(module, user);
+    if (!vtable) return true;
+    if (iree_any_bit_set(vtable->traits, LOOM_TRAIT_TERMINATOR)) {
       return true;
     }
     if (loom_canonicalize_op_type_constraints_mention_operand(
-            module, user, loom_use_operand_index(uses[i]))) {
+            vtable, loom_use_operand_index(uses[i]))) {
       return true;
     }
   }
   return false;
-}
-
-static bool loom_canonicalize_op_result_owns_edge_refinable_type(
-    const loom_op_t* op) {
-  return loom_buffer_view_isa(op) || loom_view_subview_isa(op) ||
-         loom_view_refine_isa(op) || loom_vector_constant_isa(op) ||
-         loom_vector_poison_isa(op) || loom_vector_empty_isa(op) ||
-         loom_vector_splat_isa(op) || loom_vector_iota_isa(op) ||
-         loom_vector_mask_range_isa(op) || loom_vector_load_isa(op);
 }
 
 static bool loom_canonicalize_can_rewrite_edge_type_refs_for_result(
@@ -803,7 +792,8 @@ static bool loom_canonicalize_can_rewrite_edge_type_refs_for_result(
   if (result_id == LOOM_VALUE_ID_INVALID || result_id >= module->values.count) {
     return false;
   }
-  if (!loom_canonicalize_op_result_owns_edge_refinable_type(op)) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !loom_traits_have_refinable_result_type_refs(vtable->traits)) {
     return false;
   }
   return !loom_canonicalize_value_has_type_sensitive_use(module, result_id);

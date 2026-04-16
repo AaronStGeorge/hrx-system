@@ -48,6 +48,7 @@ from loom.dsl import (
     OFFSET,
     POOL,
     PURE,
+    REFINABLE_RESULT_TYPE_REFS,
     SAFE_TO_SPECULATE,
     TENSOR,
     TERMINATOR,
@@ -328,6 +329,7 @@ class TestTraits:
             ELEMENTWISE,
             DECOMPOSABLE,
             SAFE_TO_SPECULATE,
+            REFINABLE_RESULT_TYPE_REFS,
         ]
         names = [t.name for t in standard]
         assert len(set(names)) == len(names), "Duplicate trait names"

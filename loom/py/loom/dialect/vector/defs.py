@@ -52,6 +52,7 @@ from loom.dsl import (
     INTEGER_ELEMENT,
     INVOLUTION,
     PURE,
+    REFINABLE_RESULT_TYPE_REFS,
     SCALAR,
     VECTOR,
     VIEW,
@@ -334,7 +335,7 @@ vector_constant = Op(
     attrs=[AttrDef("value", ATTR_TYPE_ANY, doc="The constant payload.")],
     verify="loom_vector_constant_verify",
     facts="loom_vector_constant_facts",
-    traits=[PURE, CONSTANT_LIKE],
+    traits=[PURE, CONSTANT_LIKE, REFINABLE_RESULT_TYPE_REFS],
     format=[Attr("value"), COLON, ResultType("result")],
     examples=["%v = vector.constant 0.0 : vector<4xf32>"],
 )
@@ -354,7 +355,7 @@ vector_poison = Op(
     ),
     results=[Result("result", VECTOR)],
     verify="loom_vector_poison_verify",
-    traits=[PURE],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     format=[COLON, ResultType("result")],
     examples=[
         "%p = vector.poison : vector<4xf32>",
@@ -367,7 +368,7 @@ vector_empty = Op(
     doc=("Materialize the unique empty aggregate value for a static zero-lane vector type. Empty vectors are ordinary values, not poison, and pure zero-lane computation canonicalizes to this op."),
     results=[Result("result", VECTOR)],
     verify="loom_vector_empty_verify",
-    traits=[PURE, CONSTANT_LIKE],
+    traits=[PURE, CONSTANT_LIKE, REFINABLE_RESULT_TYPE_REFS],
     format=[COLON, ResultType("result")],
     examples=["%v = vector.empty : vector<0xf32>"],
 )
@@ -386,7 +387,7 @@ vector_splat = Op(
     constraints=[SameElementType("scalar", "result")],
     facts="loom_vector_splat_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",
-    traits=[PURE],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     format=[Ref("scalar"), COLON, ResultType("result")],
     examples=[
         "%vec = vector.splat %scalar : vector<16xf32>",
@@ -417,7 +418,7 @@ vector_iota = Op(
     ],
     verify="loom_vector_iota_verify",
     facts="loom_vector_iota_facts",
-    traits=[PURE],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     format=[
         Ref("base"),
         kw("step"),
@@ -457,7 +458,7 @@ vector_mask_range = Op(
     verify="loom_vector_mask_range_verify",
     facts="loom_vector_mask_range_facts",
     canonicalize="loom_vector_uniform_result_canonicalize",
-    traits=[PURE],
+    traits=[PURE, REFINABLE_RESULT_TYPE_REFS],
     format=[
         LBRACKET,
         Ref("lower_bound"),
@@ -989,6 +990,7 @@ vector_load = Op(
         ),
     ],
     constraints=[SameElementType("view", "result")],
+    traits=[REFINABLE_RESULT_TYPE_REFS],
     effects=[Reads("view")],
     verify="loom_vector_load_verify",
     format=[

@@ -113,6 +113,7 @@ __all__ = [
     "UNKNOWN_EFFECTS",
     "HINT",
     "SAFE_TO_SPECULATE",
+    "REFINABLE_RESULT_TYPE_REFS",
     # Trait constructors.
     "AllTypesMatch",
     "HasParent",
@@ -565,6 +566,9 @@ HINT = Trait("Hint")
 # rewrites, not for ordinary common-tail motion where every path already
 # executes an equivalent op exactly once.
 SAFE_TO_SPECULATE = Trait("SafeToSpeculate")
+# Result types carry op-owned SSA references. Local canonicalization may retarget
+# those references after proving the result has no type-sensitive users.
+REFINABLE_RESULT_TYPE_REFS = Trait("RefinableResultTypeRefs")
 
 
 # ============================================================================
