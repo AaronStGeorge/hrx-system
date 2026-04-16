@@ -180,6 +180,25 @@ loom_cc_fuzz(
 
 loom_cc_benchmark(
   NAME
+    reader_benchmark
+  SRCS
+    "reader_benchmark.cc"
+  DEPS
+    ::reader
+    ::writer
+    benchmark
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    loom::src::loom::testing::gen
+    iree::testing::benchmark_main
+  TESTONLY
+)
+
+loom_cc_benchmark(
+  NAME
     varint_benchmark
   SRCS
     "varint_benchmark.cc"
