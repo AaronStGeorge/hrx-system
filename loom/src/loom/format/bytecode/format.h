@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 3
+#define LOOM_BYTECODE_FORMAT_VERSION 4
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -490,6 +490,11 @@ typedef enum loom_bytecode_section_kind_e {
 //                                  from name_id for import aliasing)
 //
 //   For FUNC_DEF / FUNC_DECL / FUNC_TEMPLATE / FUNC_UKERNEL:
+//     [def_op_table_index_plus1: varint]
+//                         0 is invalid. N > 0 means the defining func-like op
+//                         name is OPS[N - 1]. The symbol kind is semantic
+//                         linkage metadata; this op reference preserves the
+//                         exact dialect op used to define the symbol.
 //     [calling_convention: byte]
 //     [arg_count: varint]
 //     [result_count: varint]

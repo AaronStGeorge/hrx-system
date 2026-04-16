@@ -77,15 +77,6 @@ __all__ = [
     "read_module",
 ]
 
-# Maps the kind byte in the SYMBOLS section to an op name.
-# 0=FUNC_DEF, 1=FUNC_DECL, 2=FUNC_TEMPLATE, 3=FUNC_UKERNEL.
-_FUNC_KIND_OP_NAMES: list[str] = [
-    "func.def",
-    "func.decl",
-    "func.template",
-    "func.ukernel",
-]
-
 # Maps the cc byte to a cc attribute string.
 # 0=HOST (absent/default), 1=DEVICE, 2=INITIALIZER.
 _FUNC_CC_BYTES: list[str | None] = [None, "device", "initializer"]
@@ -636,6 +627,19 @@ class BytecodeReader:
                 source_symbol = self._strings[source_symbol_id]
 
             if kind <= 3:  # FUNC_DEF, FUNC_DECL, FUNC_TEMPLATE, FUNC_UKERNEL
+                op_table_index_plus1, offset = decode_varint(sym_data, offset)
+                if op_table_index_plus1 == 0:
+                    raise BytecodeError(
+                        "function symbol op_table_index_plus1 must be nonzero"
+                    )
+                op_table_index = op_table_index_plus1 - 1
+                if op_table_index >= len(self._ops):
+                    raise BytecodeError(
+                        "function symbol op_table_index_plus1 references OPS "
+                        f"entry {op_table_index} but only {len(self._ops)} exist"
+                    )
+                op_name = self._ops[op_table_index]
+
                 cc_byte = sym_data[offset]
                 offset += 1
                 arg_count, offset = decode_varint(sym_data, offset)
@@ -706,7 +710,7 @@ class BytecodeReader:
                         operand_ids.append(vid)
 
                 op = Operation(
-                    name=_FUNC_KIND_OP_NAMES[kind],
+                    name=op_name,
                     operands=operand_ids,
                     results=result_ids,
                     tied_results=tied_results,

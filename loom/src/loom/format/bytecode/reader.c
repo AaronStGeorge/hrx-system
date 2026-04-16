@@ -381,6 +381,17 @@ static iree_status_t loom_bytecode_reader_validate_location_ref(
   return iree_ok_status();
 }
 
+static iree_status_t loom_bytecode_reader_validate_op_ref(
+    loom_bytecode_reader_state_t* reader, uint64_t op_table_index_plus1,
+    uint64_t offset, const loom_op_vtable_t** out_vtable) {
+  if (op_table_index_plus1 == 0 || op_table_index_plus1 > reader->op_count) {
+    return loom_bytecode_reader_emit_table_ref(
+        reader, IREE_SV("OPS"), op_table_index_plus1, reader->op_count, offset);
+  }
+  *out_vtable = reader->ops[op_table_index_plus1 - 1];
+  return iree_ok_status();
+}
+
 static iree_status_t loom_bytecode_reader_validate_range(
     loom_bytecode_reader_state_t* reader, iree_string_view_t range_name,
     uint64_t offset, uint64_t length, uint64_t container_length) {
@@ -1442,6 +1453,16 @@ static iree_status_t loom_bytecode_reader_read_symbols(
     }
 
     if (kind <= LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL) {
+      uint64_t op_ref_offset =
+          loom_bytecode_reader_cursor_absolute_position(&cursor);
+      uint64_t op_table_index_plus1 = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
+          reader, &cursor, &op_table_index_plus1));
+      const loom_op_vtable_t* unused_vtable = NULL;
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_op_ref(
+          reader, op_table_index_plus1, op_ref_offset, &unused_vtable));
+      if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+
       uint8_t calling_convention = 0;
       uint64_t cc_offset =
           loom_bytecode_reader_cursor_absolute_position(&cursor);

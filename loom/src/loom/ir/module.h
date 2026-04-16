@@ -84,6 +84,14 @@ iree_status_t loom_module_set_value_type(loom_module_t* module,
                                          loom_value_id_t value_id,
                                          loom_type_t type);
 
+// Sets the optional SSA display name for |value_id|. The name must be invalid
+// or reference an existing module string. This does not update parser scopes or
+// any other name lookup side table; callers own the lookup structure they use
+// while constructing IR.
+iree_status_t loom_module_set_value_name(loom_module_t* module,
+                                         loom_value_id_t value_id,
+                                         loom_string_id_t name_id);
+
 // Removes type-use records carried by |value_id|'s current type while leaving
 // the stored type unchanged. Used when the carrier value is no longer live
 // enough for its type to keep referenced values alive, such as op erasure.

@@ -1163,6 +1163,25 @@ iree_status_t loom_module_set_value_type(loom_module_t* module,
   return loom_module_refresh_value_type_uses(module, value_id);
 }
 
+iree_status_t loom_module_set_value_name(loom_module_t* module,
+                                         loom_value_id_t value_id,
+                                         loom_string_id_t name_id) {
+  if (value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value %%%u out of range (module has %" PRIhsz
+                            " values)",
+                            (unsigned)value_id, module->values.count);
+  }
+  if (name_id != LOOM_STRING_ID_INVALID && name_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value name string id %u out of range (module has "
+                            "%" PRIhsz " strings)",
+                            (unsigned)name_id, module->strings.count);
+  }
+  module->values.entries[value_id].name_id = name_id;
+  return iree_ok_status();
+}
+
 iree_status_t loom_module_refresh_value_type_uses(loom_module_t* module,
                                                   loom_value_id_t value_id) {
   if (value_id >= module->values.count) {

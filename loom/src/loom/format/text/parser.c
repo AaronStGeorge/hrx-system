@@ -413,7 +413,8 @@ iree_status_t loom_parser_define_value_name(loom_parser_t* parser,
   loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(parser->module, name_token.text, &name_id));
-  parser->module->values.entries[value_id].name_id = name_id;
+  IREE_RETURN_IF_ERROR(
+      loom_module_set_value_name(parser->module, value_id, name_id));
   bool duplicate = false;
   IREE_RETURN_IF_ERROR(loom_parser_scope_define(
       parser->scope, &parser->parser_arena, name_id, value_id, &duplicate));
@@ -2069,7 +2070,8 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
         loom_string_id_t name_id = 0;
         IREE_RETURN_IF_ERROR(loom_module_intern_string(
             parser->module, name_token.text, &name_id));
-        parser->module->values.entries[value_id].name_id = name_id;
+        IREE_RETURN_IF_ERROR(
+            loom_module_set_value_name(parser->module, value_id, name_id));
       }
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_result(
           parsed, &parser->parser_arena, value_id, name_token));

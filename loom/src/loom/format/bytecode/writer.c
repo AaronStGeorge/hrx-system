@@ -824,6 +824,10 @@ static iree_status_t loom_bytecode_number_function(
     loom_bytecode_numbering_t* numbering, loom_func_like_t func_like) {
   uint32_t unused_id = 0;
 
+  // Defining func-like op name.
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_numbering_intern_op(numbering, func_like.op, &unused_id));
+
   // Arg names and types.
   uint16_t arg_count = 0;
   const loom_value_id_t* arg_ids =
@@ -1640,6 +1644,12 @@ static iree_status_t loom_bytecode_write_func_metadata(
     iree_string_builder_t* builder, loom_bytecode_numbering_t* numbering,
     const loom_module_t* module, loom_func_like_t func_like,
     loom_bytecode_ir_offset_t ir_offset) {
+  uint32_t writer_op_id = 0;
+  IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_op(
+      numbering, func_like.op, &writer_op_id));
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_emit_uvarint(builder, (uint64_t)writer_op_id + 1));
+
   IREE_RETURN_IF_ERROR(
       loom_bytecode_emit_u8(builder, loom_func_like_cc(func_like)));
 

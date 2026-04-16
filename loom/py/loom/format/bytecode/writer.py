@@ -119,7 +119,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 PRODUCER = "loom-py"
 
 
@@ -256,6 +256,10 @@ class BytecodeWriter:
     def _number_func_op(self, op: Operation) -> None:
         """Number all entities in a func-like op (func.def, func.decl, etc.)."""
         module = self._module
+
+        # Defining func-like op name.
+        self._ctx.intern_op(op.name)
+        self._ctx.intern_string(op.name)
 
         # Arg names/types: entry block args for defs, operands for decls.
         if op.regions and op.regions[0].blocks:
@@ -904,6 +908,8 @@ class BytecodeWriter:
             ):
                 op = symbol.op
                 module = self._module
+
+                buf.write_varint(self._ctx.ops[op.name] + 1)
 
                 # CC: map attribute string to binary byte.
                 # 0=HOST (default/absent), 1=DEVICE, 2=INITIALIZER.
