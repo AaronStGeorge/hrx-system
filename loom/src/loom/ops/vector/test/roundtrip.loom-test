@@ -358,8 +358,8 @@ func.def @table_quantize(%values: vector<32xf32>, %thresholds: vector<15xf32>) -
 // Numeric transforms are explicit register transforms described by SSA
 // encodings. The descriptor carries its input and output last-axis extents so
 // target matching does not infer transform domains from loose metadata.
-func.def @numeric_transform_hadamard(%v: vector<128xf32>, %seed: index, %signs: vector<128xi1>) -> (vector<128xf32>) {
-  %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, normalization="orthonormal", output_elems=128> {seed = %seed : index, signs = %signs : vector<128xi1>} : encoding<transform>
+func.def @numeric_transform_hadamard(%v: vector<128xf32>, %signs: vector<128xi1>) -> (vector<128xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, normalization="orthonormal", output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
   %r = vector.transform %v, %xf : vector<128xf32>, encoding<transform> -> vector<128xf32>
   func.return %r : vector<128xf32>
 }

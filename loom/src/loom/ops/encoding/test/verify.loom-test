@@ -74,12 +74,66 @@ func.def @numeric_transform_unknown_family_define_only() {
 
 // ====
 
+func.def @numeric_transform_hadamard_rejects_signs() {
+  %signs = vector.constant false : vector<128xi1>
+  // ERROR@+1: ENCODING/008 "numeric_transform" "signs"
+  %xf = encoding.define #numeric_transform<family="hadamard", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  func.return
+}
+
+// ====
+
+func.def @numeric_transform_hadamard_sign_requires_signs() {
+  // ERROR@+1: ENCODING/007 "numeric_transform" "signs"
+  %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
+  func.return
+}
+
+// ====
+
+func.def @numeric_transform_hadamard_sign_rejects_seed(%seed: index) {
+  %signs = vector.constant false : vector<128xi1>
+  // ERROR@+1: ENCODING/008 "numeric_transform" "seed"
+  %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {seed = %seed : index, signs = %signs : vector<128xi1>} : encoding<transform>
+  func.return
+}
+
+// ====
+
+func.def @numeric_transform_sign_permute_requires_permutation() {
+  %signs = vector.constant false : vector<128xi1>
+  // ERROR@+1: ENCODING/007 "numeric_transform" "permutation"
+  %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  func.return
+}
+
+// ====
+
+func.def @numeric_transform_jl_dense_requires_matrix() {
+  // ERROR@+1: ENCODING/007 "numeric_transform" "matrix"
+  %xf = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  func.return
+}
+
+// ====
+
+func.def @numeric_transform_jl_dense_rejects_orthonormal() {
+  %matrix = vector.constant 0.0 : vector<64x128xf32>
+  // ERROR@+1: ENCODING/013 "numeric_transform" "normalization" "orthonormal"
+  %xf = encoding.define #numeric_transform<family="jl_dense", input_elems=128, normalization="orthonormal", output_elems=64> {matrix = %matrix : vector<64x128xf32>} : encoding<transform>
+  func.return
+}
+
+// ====
+
 func.def @turboquant_missing_static_param(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
-  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %signs = vector.constant false : vector<128xi1>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: ENCODING/007 "turboquant_kv" "logical_element"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
   func.return
@@ -91,8 +145,10 @@ func.def @turboquant_wrong_static_kind(%params: buffer, %thresholds_offset: offs
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
-  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %signs = vector.constant false : vector<128xi1>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: ENCODING/010 "turboquant_kv" "first_stage_bits"
   %schema = encoding.define #turboquant_kv<first_stage_bits="2", logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
   func.return
@@ -104,8 +160,10 @@ func.def @turboquant_unsupported_pack_order(%params: buffer, %thresholds_offset:
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
-  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %signs = vector.constant false : vector<128xi1>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: ENCODING/013 "turboquant_kv" "pack_order" "msb0"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="msb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
   func.return
@@ -117,8 +175,10 @@ func.def @turboquant_record_too_small(%params: buffer, %thresholds_offset: offse
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
-  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %signs = vector.constant false : vector<128xi1>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: STRUCTURE/014 "record_bytes" "39"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=39, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
   func.return
@@ -130,8 +190,10 @@ func.def @turboquant_threshold_count_mismatch(%params: buffer, %thresholds_offse
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<4xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
-  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %signs = vector.constant false : vector<128xi1>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: STRUCTURE/014 "thresholds" "4"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<4xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
   func.return
@@ -143,8 +205,10 @@ func.def @turboquant_centroids_wrong_type(%params: buffer, %thresholds_offset: o
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xi32, %dense>
-  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %signs = vector.constant false : vector<128xi1>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: ENCODING/009 "turboquant_kv" "centroids"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xi32, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
   func.return
@@ -157,7 +221,8 @@ func.def @turboquant_transform_role_mismatch(%params: buffer, %thresholds_offset
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
   %schema_param = encoding.define #q8_0<block=32> : encoding<schema>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: ENCODING/011 "turboquant_kv" "transform" "a numeric transform encoding"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %schema_param : encoding<schema>} : encoding<schema>
   func.return
@@ -170,7 +235,8 @@ func.def @turboquant_transform_family_mismatch(%params: buffer, %thresholds_offs
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
   %transform = encoding.define #numeric_transform<family="hadamard", input_elems=128, output_elems=128> : encoding<transform>
-  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> : encoding<transform>
+  %qjl_matrix = vector.constant 0.0 : vector<64x128xf32>
+  %qjl_transform = encoding.define #numeric_transform<family="jl_dense", input_elems=128, output_elems=64> {matrix = %qjl_matrix : vector<64x128xf32>} : encoding<transform>
   // ERROR@+1: ENCODING/013 "turboquant_kv" "transform" "hadamard"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
   func.return
@@ -182,7 +248,8 @@ func.def @turboquant_qjl_transform_family_mismatch(%params: buffer, %thresholds_
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>
   %centroids = buffer.view %params[%centroids_offset] : buffer -> view<4xf16, %dense>
-  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
+  %signs = vector.constant false : vector<128xi1>
+  %transform = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {signs = %signs : vector<128xi1>} : encoding<transform>
   %qjl_transform = encoding.define #numeric_transform<family="hadamard", input_elems=128, output_elems=64> : encoding<transform>
   // ERROR@+1: ENCODING/013 "turboquant_kv" "qjl_transform" "hadamard"
   %schema = encoding.define #turboquant_kv<first_stage_bits=2, logical_element="f16", logical_elems=128, pack_order="lsb0", qjl_rows=64, record_bytes=40, residual_bits=1, scalar_quantizer="lloyd_max", transform_family="hadamard_sign"> {centroids = %centroids : view<4xf16, %dense>, qjl_transform = %qjl_transform : encoding<transform>, thresholds = %thresholds : view<3xf32, %dense>, transform = %transform : encoding<transform>} : encoding<schema>
