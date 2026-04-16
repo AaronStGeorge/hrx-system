@@ -103,6 +103,31 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    scc
+  HDRS
+    "scc.h"
+  SRCS
+    "scc.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    scc_test
+  SRCS
+    "scc_test.cc"
+  DEPS
+    ::scc
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     symbolic_expr
   HDRS
     "symbolic_expr.h"
@@ -119,6 +144,37 @@ loom_cc_library(
     loom::src::loom::util::fact_table
     loom::src::loom::util::math
   PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    type_refinement
+  HDRS
+    "type_refinement.h"
+  SRCS
+    "type_refinement.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ir::type_refinement
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    type_refinement_test
+  SRCS
+    "type_refinement_test.cc"
+  DEPS
+    ::type_refinement
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ir::type_refinement
+    loom::src::loom::util::fact_table
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_library(

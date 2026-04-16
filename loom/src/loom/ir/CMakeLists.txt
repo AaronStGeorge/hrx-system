@@ -63,6 +63,33 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    type_refinement
+  HDRS
+    "type_refinement.h"
+  SRCS
+    "type_refinement.c"
+  DEPS
+    ::ir
+    iree::base
+    iree::base::internal::arena
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    type_refinement_test
+  SRCS
+    "type_refinement_test.cc"
+  DEPS
+    ::ir
+    ::type_refinement
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_test(
   NAME
     context_test

@@ -92,6 +92,27 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "scc",
+    srcs = ["scc.c"],
+    hdrs = ["scc.h"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "scc_test",
+    srcs = ["scc_test.cc"],
+    deps = [
+        ":scc",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "symbolic_expr",
     srcs = ["symbolic_expr.c"],
     hdrs = ["symbolic_expr.h"],
@@ -105,6 +126,33 @@ loom_cc_library(
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "type_refinement",
+    srcs = ["type_refinement.c"],
+    hdrs = ["type_refinement.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:type_refinement",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "type_refinement_test",
+    srcs = ["type_refinement_test.cc"],
+    deps = [
+        ":type_refinement",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:type_refinement",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
