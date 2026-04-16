@@ -56,6 +56,25 @@ func.def @for_iter_args_second_type_mismatch(%lo: index, %hi: index, %step: inde
 
 // ====
 
+// Yield/result type matching remaps parent result references to the values
+// yielded by each region. This keeps co-result-shaped types valid without
+// forcing branch-local layouts to escape their region.
+func.def @if_yield_type_refs_forwarded_results(%cond: i1, %buffer: buffer, %offset: offset) {
+  %layout, %view = scf.if %cond -> (encoding<layout>, view<4xf32, %layout>) {
+    %dense = encoding.layout.dense : encoding<layout>
+    %then_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %dense>
+    scf.yield %dense, %then_view : encoding<layout>, view<4xf32, %dense>
+  } else {
+    %else_layout = encoding.layout.dense : encoding<layout>
+    %else_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %else_layout>
+    scf.yield %else_layout, %else_view : encoding<layout>, view<4xf32, %else_layout>
+  }
+  test.use %view : view<4xf32, %layout>
+  func.return
+}
+
+// ====
+
 // scf.while after-region block args must match the loop-carried input types.
 func.def @while_after_arg_type_mismatch(%cond: i1, %init: index) -> (index) {
   // ERROR@+1: TYPE/013
@@ -229,6 +248,27 @@ func.def @switch_yield_type_mismatch(%variant: index, %a: f32, %fallback: index)
     }
   }
   func.return %r : index
+}
+
+// ====
+
+// The custom switch verifier uses the same result-to-yield type forwarding
+// rule as generic scf.yield constraints.
+func.def @switch_yield_type_refs_forwarded_results(%variant: index, %buffer: buffer, %offset: offset) {
+  %layout, %view = scf.switch %variant -> (encoding<layout>, view<4xf32, %layout>) {
+    case 0 {
+      %dense = encoding.layout.dense : encoding<layout>
+      %case_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %dense>
+      scf.yield %dense, %case_view : encoding<layout>, view<4xf32, %dense>
+    }
+    default {
+      %default_layout = encoding.layout.dense : encoding<layout>
+      %default_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %default_layout>
+      scf.yield %default_layout, %default_view : encoding<layout>, view<4xf32, %default_layout>
+    }
+  }
+  test.use %view : view<4xf32, %layout>
+  func.return
 }
 
 // ====

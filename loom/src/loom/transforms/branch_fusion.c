@@ -230,24 +230,23 @@ static iree_status_t loom_branch_fusion_set_fused_result_types(
       first, second, fused_if, &remap));
 
   loom_value_slice_t fused_results = loom_scf_if_results(fused_if);
+  loom_type_t* first_result_types = NULL;
+  IREE_RETURN_IF_ERROR(loom_ir_remap_value_types(&remap, first->results.values,
+                                                 first->results.count,
+                                                 &first_result_types));
   for (uint16_t i = 0; i < first->results.count; ++i) {
-    loom_type_t result_type = {0};
-    IREE_RETURN_IF_ERROR(loom_ir_remap_type(
-        &remap,
-        loom_module_value_type(context->module, first->results.values[i]),
-        &result_type));
     IREE_RETURN_IF_ERROR(loom_rewriter_set_value_type(
-        context->rewriter, fused_results.values[i], result_type));
+        context->rewriter, fused_results.values[i], first_result_types[i]));
   }
+
+  loom_type_t* second_result_types = NULL;
+  IREE_RETURN_IF_ERROR(loom_ir_remap_value_types(&remap, second->results.values,
+                                                 second->results.count,
+                                                 &second_result_types));
   for (uint16_t i = 0; i < second->results.count; ++i) {
-    loom_type_t result_type = {0};
-    IREE_RETURN_IF_ERROR(loom_ir_remap_type(
-        &remap,
-        loom_module_value_type(context->module, second->results.values[i]),
-        &result_type));
     IREE_RETURN_IF_ERROR(loom_rewriter_set_value_type(
         context->rewriter, fused_results.values[first->results.count + i],
-        result_type));
+        second_result_types[i]));
   }
   return iree_ok_status();
 }

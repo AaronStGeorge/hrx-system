@@ -86,6 +86,17 @@ iree_status_t loom_ir_remap_map_value(loom_ir_remap_t* remap,
                                       loom_value_id_t source_value,
                                       loom_value_id_t target_value);
 
+// Adds or replaces a one-to-one SSA mapping for each source/target value pair.
+//
+// Use this before remapping result types for transforms that rebuild or fuse
+// result lists. Dynamic type payloads can reference sibling/co-result values,
+// so callers must install every old-result -> new-result mapping before asking
+// loom_ir_remap_type to rewrite those result types.
+iree_status_t loom_ir_remap_map_values(loom_ir_remap_t* remap,
+                                       const loom_value_id_t* source_values,
+                                       const loom_value_id_t* target_values,
+                                       iree_host_size_t value_count);
+
 // Looks up a mapped SSA value. Returns false when |source_value| is outside the
 // source table or when no explicit mapping exists.
 bool loom_ir_remap_try_lookup_value(const loom_ir_remap_t* remap,
@@ -115,6 +126,18 @@ iree_status_t loom_ir_remap_location_id(
 iree_status_t loom_ir_remap_type(loom_ir_remap_t* remap,
                                  loom_type_t source_type,
                                  loom_type_t* out_target_type);
+
+// Remaps the type of each source value into a remap-arena-owned
+// result type array.
+//
+// Callers that rebuild operation result lists should first map all old result
+// values to their new values with loom_ir_remap_map_values. That makes
+// co-result type references deterministic instead of relying on later RAUW to
+// repair embedded dynamic dimensions or SSA encodings.
+iree_status_t loom_ir_remap_value_types(loom_ir_remap_t* remap,
+                                        const loom_value_id_t* source_values,
+                                        iree_host_size_t value_count,
+                                        loom_type_t** out_target_types);
 
 // Remaps one static module encoding table ID into the target module.
 iree_status_t loom_ir_remap_encoding_id(loom_ir_remap_t* remap,

@@ -281,11 +281,19 @@ static iree_status_t loom_scf_switch_verify_region_yield(
   }
 
   loom_value_slice_t results = loom_scf_switch_results(op);
+  loom_type_value_remap_t yield_remap = {
+      .source_values = results.values,
+      .target_values = yielded_values.values,
+      .count = yielded_values.count,
+  };
   for (uint16_t i = 0; i < yielded_values.count; ++i) {
     loom_type_t yield_type =
         loom_module_value_type(module, yielded_values.values[i]);
     loom_type_t result_type = loom_module_value_type(module, results.values[i]);
-    if (loom_type_equal(yield_type, result_type)) continue;
+    if (loom_type_equal_after_value_remap(result_type, yield_type,
+                                          &yield_remap)) {
+      continue;
+    }
     char yield_name[48];
     loom_scf_format_switch_region_field_name(yield_name, sizeof(yield_name),
                                              field_name, region_ordinal, i);

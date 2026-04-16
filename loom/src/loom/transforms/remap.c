@@ -83,6 +83,22 @@ iree_status_t loom_ir_remap_map_value(loom_ir_remap_t* remap,
   return iree_ok_status();
 }
 
+iree_status_t loom_ir_remap_map_values(loom_ir_remap_t* remap,
+                                       const loom_value_id_t* source_values,
+                                       const loom_value_id_t* target_values,
+                                       iree_host_size_t value_count) {
+  if (value_count > 0 && (!source_values || !target_values)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty source and target value arrays require payloads");
+  }
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_ir_remap_map_value(remap, source_values[i], target_values[i]));
+  }
+  return iree_ok_status();
+}
+
 bool loom_ir_remap_try_lookup_value(const loom_ir_remap_t* remap,
                                     loom_value_id_t source_value,
                                     loom_value_id_t* out_target_value) {
@@ -474,6 +490,42 @@ iree_status_t loom_ir_remap_type(loom_ir_remap_t* remap,
                                                  target_type, &target_type));
   }
   *out_target_type = target_type;
+  return iree_ok_status();
+}
+
+iree_status_t loom_ir_remap_value_types(loom_ir_remap_t* remap,
+                                        const loom_value_id_t* source_values,
+                                        iree_host_size_t value_count,
+                                        loom_type_t** out_target_types) {
+  if (!loom_ir_remap_is_initialized(remap) || !out_target_types) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "initialized remap and target type array output are required");
+  }
+  *out_target_types = NULL;
+  if (value_count == 0) return iree_ok_status();
+  if (!source_values) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "non-empty source value array requires a payload");
+  }
+
+  loom_type_t* target_types = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      remap->arena, value_count, sizeof(loom_type_t), (void**)&target_types));
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    loom_value_id_t source_value = source_values[i];
+    if (source_value >= remap->source_module->values.count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "source value %%%u out of range (source module has %" PRIhsz
+          " values)",
+          (unsigned)source_value, remap->source_module->values.count);
+    }
+    IREE_RETURN_IF_ERROR(loom_ir_remap_type(
+        remap, loom_module_value_type(remap->source_module, source_value),
+        &target_types[i]));
+  }
+  *out_target_types = target_types;
   return iree_ok_status();
 }
 

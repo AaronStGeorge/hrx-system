@@ -96,6 +96,130 @@ bool loom_type_equal(loom_type_t a, loom_type_t b) {
   return true;
 }
 
+static loom_value_id_t loom_type_remap_value(
+    const loom_type_value_remap_t* remap, loom_value_id_t value_id) {
+  if (!remap) return value_id;
+  for (iree_host_size_t i = 0; i < remap->count; ++i) {
+    if (remap->source_values[i] == value_id) return remap->target_values[i];
+  }
+  return value_id;
+}
+
+static bool loom_type_dim_equal_after_value_remap(
+    uint64_t source_dim, uint64_t target_dim,
+    const loom_type_value_remap_t* remap) {
+  if (!loom_dim_is_dynamic(source_dim)) return source_dim == target_dim;
+  loom_value_id_t remapped_value =
+      loom_type_remap_value(remap, loom_dim_value_id(source_dim));
+  return loom_dim_pack_dynamic(remapped_value) == target_dim;
+}
+
+static bool loom_type_encoding_equal_after_value_remap(
+    loom_type_t source_type, loom_type_t target_type,
+    const loom_type_value_remap_t* remap) {
+  if (source_type.encoding_flags != target_type.encoding_flags) return false;
+  if (!loom_type_has_ssa_encoding(source_type)) {
+    return source_type.encoding_id == target_type.encoding_id;
+  }
+  loom_value_id_t remapped_value = loom_type_remap_value(
+      remap, (loom_value_id_t)loom_type_encoding_value_id(source_type));
+  if (remapped_value > UINT16_MAX) return false;
+  return (uint16_t)remapped_value == target_type.encoding_id;
+}
+
+static bool loom_type_sequence_equal_after_value_remap(
+    const loom_type_t* source_types, const loom_type_t* target_types,
+    uint16_t type_count, const loom_type_value_remap_t* remap) {
+  if (type_count == 0) return true;
+  if (!source_types || !target_types) return source_types == target_types;
+  for (uint16_t i = 0; i < type_count; ++i) {
+    if (!loom_type_equal_after_value_remap(source_types[i], target_types[i],
+                                           remap)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool loom_type_equal_after_value_remap(loom_type_t source_type,
+                                       loom_type_t target_type,
+                                       const loom_type_value_remap_t* remap) {
+  if (remap && remap->count > 0 &&
+      (!remap->source_values || !remap->target_values)) {
+    return false;
+  }
+
+  loom_type_kind_t source_kind = loom_type_kind(source_type);
+  if (source_kind != loom_type_kind(target_type)) return false;
+  if (!loom_type_kind_is_valid(source_kind)) {
+    return source_type.dims[0] == target_type.dims[0] &&
+           source_type.dims[1] == target_type.dims[1];
+  }
+
+  switch (source_kind) {
+    case LOOM_TYPE_FUNCTION: {
+      if (source_type.header != target_type.header ||
+          source_type.encoding_id != target_type.encoding_id ||
+          source_type.encoding_flags != target_type.encoding_flags) {
+        return false;
+      }
+      const loom_func_type_data_t* source_data =
+          loom_type_func_data(source_type);
+      const loom_func_type_data_t* target_data =
+          loom_type_func_data(target_type);
+      if (!source_data || !target_data) return source_data == target_data;
+      uint16_t type_count =
+          (uint16_t)(source_data->arg_count + source_data->result_count);
+      return source_data->arg_count == target_data->arg_count &&
+             source_data->result_count == target_data->result_count &&
+             loom_type_sequence_equal_after_value_remap(
+                 source_data->types, target_data->types, type_count, remap);
+    }
+
+    case LOOM_TYPE_DIALECT: {
+      if (source_type.header != target_type.header ||
+          source_type.encoding_id != target_type.encoding_id ||
+          loom_type_dialect_name_id(source_type) !=
+              loom_type_dialect_name_id(target_type)) {
+        return false;
+      }
+      uint16_t param_count = loom_type_dialect_param_count(source_type);
+      return param_count == loom_type_dialect_param_count(target_type) &&
+             loom_type_sequence_equal_after_value_remap(
+                 loom_type_dialect_params(source_type),
+                 loom_type_dialect_params(target_type), param_count, remap);
+    }
+
+    default:
+      break;
+  }
+
+  if (loom_type_is_shaped(source_type) || loom_type_is_pool(source_type)) {
+    if (loom_type_element_type(source_type) !=
+            loom_type_element_type(target_type) ||
+        loom_type_rank(source_type) != loom_type_rank(target_type) ||
+        loom_type_flags(source_type) != loom_type_flags(target_type)) {
+      return false;
+    }
+    uint8_t rank = loom_type_rank(source_type);
+    for (uint8_t i = 0; i < rank; ++i) {
+      if (!loom_type_dim_equal_after_value_remap(loom_type_dim(source_type, i),
+                                                 loom_type_dim(target_type, i),
+                                                 remap)) {
+        return false;
+      }
+    }
+    return loom_type_encoding_equal_after_value_remap(source_type, target_type,
+                                                      remap);
+  }
+
+  return source_type.header == target_type.header &&
+         source_type.encoding_id == target_type.encoding_id &&
+         source_type.encoding_flags == target_type.encoding_flags &&
+         source_type.dims[0] == target_type.dims[0] &&
+         source_type.dims[1] == target_type.dims[1];
+}
+
 //===----------------------------------------------------------------------===//
 // Shaped type queries
 //===----------------------------------------------------------------------===//

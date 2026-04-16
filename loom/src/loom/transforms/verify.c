@@ -2180,11 +2180,20 @@ static void loom_verify_relation_yield_match(
   if (!result_values) return;
   uint16_t check_count =
       yield_count < result_count ? yield_count : result_count;
+  loom_type_value_remap_t yield_remap = {
+      .source_values = result_values,
+      .target_values = yield_operands,
+      .count = check_count,
+  };
   for (uint16_t i = 0; i < check_count; ++i) {
     loom_type_t yield_type = loom_verify_value_type(state, yield_operands[i]);
     loom_type_t result_type = loom_verify_value_type(state, result_values[i]);
-    if (loom_constraint_property_equals(yield_type, result_type,
-                                        constraint->property)) {
+    bool matched = constraint->property == LOOM_PROPERTY_TYPE
+                       ? loom_type_equal_after_value_remap(
+                             result_type, yield_type, &yield_remap)
+                       : loom_constraint_property_equals(
+                             yield_type, result_type, constraint->property);
+    if (matched) {
       continue;
     }
     const loom_error_def_t* error =

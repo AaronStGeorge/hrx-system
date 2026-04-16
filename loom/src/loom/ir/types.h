@@ -574,6 +574,17 @@ static inline bool loom_type_can_have_encoding(loom_type_t type) {
 
 // --- Type comparison ---
 
+// One-way SSA value map used when comparing types across forwarding
+// boundaries.
+typedef struct loom_type_value_remap_t {
+  // Values appearing in the source-side type.
+  const loom_value_id_t* source_values;
+  // Values that the corresponding source values forward to.
+  const loom_value_id_t* target_values;
+  // Number of source/target value pairs.
+  iree_host_size_t count;
+} loom_type_value_remap_t;
+
 // Returns true if two types have the same element type.
 // Meaningful for scalar and shaped types. For non-element-bearing types
 // (group, function, encoding, pool), compares the raw header byte.
@@ -614,6 +625,17 @@ bool loom_type_static_element_count(loom_type_t type,
 // recursively. Dialect types compare the dialect type name and parameter
 // list recursively.
 bool loom_type_equal(loom_type_t a, loom_type_t b);
+
+// Returns true if |source_type| equals |target_type| after applying |remap| to
+// SSA value references embedded in |source_type|.
+//
+// This is used for region forwarding checks where a parent result type may
+// reference a sibling result (`view<4xf32, %layout>`) while each region yields
+// an equivalent branch-local value (`view<4xf32, %branch_layout>`). The helper
+// is allocation-free and does not intern remapped types.
+bool loom_type_equal_after_value_remap(loom_type_t source_type,
+                                       loom_type_t target_type,
+                                       const loom_type_value_remap_t* remap);
 
 // Returns a content-based hash for |type|.
 //

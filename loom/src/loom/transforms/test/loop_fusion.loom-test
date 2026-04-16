@@ -64,6 +64,46 @@ func.def @fuses_equal_constant_domains(%a: i32, %b: i32) -> (i32, i32) {
 
 // ====
 
+func.def @fuses_dynamic_result_type_references(%n: index, %buffer: buffer, %offset: offset) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %base_layout = encoding.layout.dense : encoding<layout>
+  %base_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %base_layout>
+  %left_layout, %left_view = scf.for %i = [%zero to %n step %one](%layout_acc = %base_layout : encoding<layout>, %view_acc = %base_view : view<4xf32, %base_layout>) -> (encoding<layout>, view<4xf32, %left_layout>) {
+    %dense = encoding.layout.dense : encoding<layout>
+    %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %dense>
+    scf.yield %dense, %view : encoding<layout>, view<4xf32, %dense>
+  }
+  %right_layout, %right_view = scf.for %j = [%zero to %n step %one](%layout_acc = %base_layout : encoding<layout>, %view_acc = %base_view : view<4xf32, %base_layout>) -> (encoding<layout>, view<4xf32, %right_layout>) {
+    %dense = encoding.layout.dense : encoding<layout>
+    %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %dense>
+    scf.yield %dense, %view : encoding<layout>, view<4xf32, %dense>
+  }
+  test.use %left_view : view<4xf32, %left_layout>
+  test.use %right_view : view<4xf32, %right_layout>
+  func.return
+}
+
+// ----
+func.def @fuses_dynamic_result_type_references(%n: index, %buffer: buffer, %offset: offset) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %base_layout = encoding.layout.dense : encoding<layout>
+  %base_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %base_layout>
+  %left_layout, %left_view, %right_layout, %right_view = scf.for %21 = [%zero to %n step %one](%22 = %base_layout : encoding<layout>, %23 = %base_view : view<4xf32, %base_layout>, %24 = %base_layout : encoding<layout>, %25 = %base_view : view<4xf32, %base_layout>) -> (encoding<layout>, view<4xf32, %left_layout>, encoding<layout>, view<4xf32, %right_layout>) {
+    %dense = encoding.layout.dense : encoding<layout>
+    %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %dense>
+    %19 = encoding.layout.dense : encoding<layout>
+    %20 = buffer.view %buffer[%offset] : buffer -> view<4xf32, %19>
+    scf.yield %dense, %view, %19, %20 : encoding<layout>, view<4xf32, %dense>, encoding<layout>, view<4xf32, %19>
+  }
+  test.use %left_view : view<4xf32, %left_layout>
+  test.use %right_view : view<4xf32, %right_layout>
+  func.return
+}
+
+// ====
+
 func.def @fuses_load_then_lane_local_compute(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index, %seed: vector<[%n]xf32>, %old: vector<[%n]xf32>) -> (vector<[%n]xf32>, vector<[%n]xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xf32, %layout>
