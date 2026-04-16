@@ -81,6 +81,7 @@ loom_cc_test(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::test::corpus::text::golden_text_corpus
+    loom::src::loom::testing::context
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -163,6 +164,21 @@ loom_cc_test(
     loom::src::loom::error::error_defs
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+loom_cc_fuzz(
+  NAME
+    parser_fuzz
+  SRCS
+    "parser_fuzz.cc"
+  DEPS
+    ::parser
+    ::printer
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    loom::src::loom::testing::gen
 )
 
 loom_cc_fuzz(
