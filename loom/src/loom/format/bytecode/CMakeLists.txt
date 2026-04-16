@@ -111,6 +111,25 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    reader_corpus_test
+  SRCS
+    "reader_corpus_test.cc"
+  DEPS
+    ::reader
+    ::writer
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::error::diagnostic
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::test::corpus::text::golden_text_corpus
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     writer

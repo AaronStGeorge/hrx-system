@@ -507,8 +507,7 @@ typedef enum loom_bytecode_section_kind_e {
 //     [tied_result_count: varint]
 //     [predicate_count: varint]
 //     For each predicate:
-//       [kind: byte]       (0=eq, 1=lt, 2=le, 3=gt, 4=ge,
-//                           5=mul, 6=min, 7=max, 8=pow2, 9=range)
+//       [kind: byte]       loom_predicate_kind_t byte value
 //       [arg_count: byte]
 //       For each arg:
 //         [tag: byte]      (1=value, 2=const)

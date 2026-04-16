@@ -317,7 +317,7 @@ typedef struct loom_bytecode_numbering_t {
 
   // Type mapping: module type index → writer type_id.
   uint32_t* type_map;
-  // Reverse lookup from structural type value to module type index.
+  // Reverse lookup from wire type value to a representative module type index.
   loom_bytecode_type_index_entry_t* type_index_entries;
   // Capacity of type_index_entries. Always a power of two when non-zero.
   iree_host_size_t type_index_capacity;
@@ -335,6 +335,198 @@ typedef struct loom_bytecode_numbering_t {
   // Allocated capacity of op_entries.
   iree_host_size_t op_capacity;
 } loom_bytecode_numbering_t;
+
+static uint32_t loom_bytecode_type_hash_mix_bytes(uint32_t hash,
+                                                  const void* data,
+                                                  iree_host_size_t length) {
+  const uint8_t* bytes = (const uint8_t*)data;
+  for (iree_host_size_t i = 0; i < length; ++i) {
+    hash ^= bytes[i];
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+static uint32_t loom_bytecode_type_hash_mix_u8(uint32_t hash, uint8_t value) {
+  return loom_bytecode_type_hash_mix_bytes(hash, &value, sizeof(value));
+}
+
+static uint32_t loom_bytecode_type_hash_mix_u16(uint32_t hash, uint16_t value) {
+  return loom_bytecode_type_hash_mix_bytes(hash, &value, sizeof(value));
+}
+
+static uint32_t loom_bytecode_type_hash_mix_u32(uint32_t hash, uint32_t value) {
+  return loom_bytecode_type_hash_mix_bytes(hash, &value, sizeof(value));
+}
+
+static uint32_t loom_bytecode_type_hash_mix_u64(uint32_t hash, uint64_t value) {
+  return loom_bytecode_type_hash_mix_bytes(hash, &value, sizeof(value));
+}
+
+static uint32_t loom_bytecode_type_wire_hash(loom_type_t type) {
+  uint32_t hash = 2166136261u;
+  loom_type_kind_t kind = loom_type_kind(type);
+  hash = loom_bytecode_type_hash_mix_u8(hash, (uint8_t)kind);
+  hash = loom_bytecode_type_hash_mix_u8(hash,
+                                        (uint8_t)loom_type_element_type(type));
+  hash = loom_bytecode_type_hash_mix_u8(hash, loom_type_rank(type));
+
+  switch (kind) {
+    case LOOM_TYPE_TILE:
+    case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW: {
+      if (loom_type_has_ssa_encoding(type)) {
+        hash = loom_bytecode_type_hash_mix_u8(
+            hash, LOOM_BYTECODE_ENCODING_ATTACHMENT_SSA);
+      } else if (loom_type_has_static_encoding(type)) {
+        hash = loom_bytecode_type_hash_mix_u8(
+            hash, LOOM_BYTECODE_ENCODING_ATTACHMENT_STATIC);
+        hash = loom_bytecode_type_hash_mix_u16(hash, type.encoding_id);
+      } else {
+        hash = loom_bytecode_type_hash_mix_u8(
+            hash, LOOM_BYTECODE_ENCODING_ATTACHMENT_NONE);
+      }
+      for (uint8_t i = 0; i < loom_type_rank(type); ++i) {
+        uint64_t dim = loom_type_dim(type, i);
+        if (loom_dim_is_dynamic(dim)) {
+          hash = loom_bytecode_type_hash_mix_u8(hash, 1);
+        } else {
+          hash = loom_bytecode_type_hash_mix_u8(hash, 0);
+          hash = loom_bytecode_type_hash_mix_u64(hash, dim);
+        }
+      }
+      return hash;
+    }
+    case LOOM_TYPE_POOL: {
+      uint64_t dim = loom_type_dim(type, 0);
+      if (loom_dim_is_dynamic(dim)) {
+        hash = loom_bytecode_type_hash_mix_u8(hash, 1);
+      } else {
+        hash = loom_bytecode_type_hash_mix_u8(hash, 0);
+        hash = loom_bytecode_type_hash_mix_u64(hash, dim);
+      }
+      return hash;
+    }
+    case LOOM_TYPE_GROUP:
+      return loom_bytecode_type_hash_mix_u8(
+          hash, (uint8_t)loom_type_group_scope(type));
+    case LOOM_TYPE_FUNCTION: {
+      const loom_func_type_data_t* data = loom_type_func_data(type);
+      if (!data) return hash;
+      hash = loom_bytecode_type_hash_mix_u16(hash, data->arg_count);
+      hash = loom_bytecode_type_hash_mix_u16(hash, data->result_count);
+      uint16_t type_count = (uint16_t)(data->arg_count + data->result_count);
+      for (uint16_t i = 0; i < type_count; ++i) {
+        hash = loom_bytecode_type_hash_mix_u32(
+            hash, loom_bytecode_type_wire_hash(data->types[i]));
+      }
+      return hash;
+    }
+    case LOOM_TYPE_DIALECT: {
+      hash = loom_bytecode_type_hash_mix_u32(hash,
+                                             loom_type_dialect_name_id(type));
+      uint16_t param_count = loom_type_dialect_param_count(type);
+      hash = loom_bytecode_type_hash_mix_u16(hash, param_count);
+      const loom_type_t* params = loom_type_dialect_params(type);
+      for (uint16_t i = 0; params && i < param_count; ++i) {
+        hash = loom_bytecode_type_hash_mix_u32(
+            hash, loom_bytecode_type_wire_hash(params[i]));
+      }
+      return hash;
+    }
+    case LOOM_TYPE_ENCODING:
+      return loom_bytecode_type_hash_mix_u8(
+          hash, (uint8_t)loom_type_encoding_role(type));
+    default:
+      return hash;
+  }
+}
+
+static bool loom_bytecode_type_dim_wire_equal(uint64_t a, uint64_t b) {
+  bool a_dynamic = loom_dim_is_dynamic(a);
+  bool b_dynamic = loom_dim_is_dynamic(b);
+  if (a_dynamic || b_dynamic) return a_dynamic == b_dynamic;
+  return a == b;
+}
+
+static bool loom_bytecode_type_encoding_wire_equal(loom_type_t a,
+                                                   loom_type_t b) {
+  if (loom_type_has_ssa_encoding(a) || loom_type_has_ssa_encoding(b)) {
+    return loom_type_has_ssa_encoding(a) == loom_type_has_ssa_encoding(b);
+  }
+  if (loom_type_has_static_encoding(a) || loom_type_has_static_encoding(b)) {
+    return loom_type_has_static_encoding(a) ==
+               loom_type_has_static_encoding(b) &&
+           a.encoding_id == b.encoding_id;
+  }
+  return !loom_type_has_encoding(a) && !loom_type_has_encoding(b);
+}
+
+static bool loom_bytecode_type_wire_equal(loom_type_t a, loom_type_t b) {
+  loom_type_kind_t kind = loom_type_kind(a);
+  if (kind != loom_type_kind(b)) return false;
+  if (loom_type_element_type(a) != loom_type_element_type(b)) return false;
+  if (loom_type_rank(a) != loom_type_rank(b)) return false;
+
+  switch (kind) {
+    case LOOM_TYPE_TILE:
+    case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW:
+      if (!loom_bytecode_type_encoding_wire_equal(a, b)) return false;
+      for (uint8_t i = 0; i < loom_type_rank(a); ++i) {
+        if (!loom_bytecode_type_dim_wire_equal(loom_type_dim(a, i),
+                                               loom_type_dim(b, i))) {
+          return false;
+        }
+      }
+      return true;
+    case LOOM_TYPE_POOL:
+      return loom_bytecode_type_dim_wire_equal(loom_type_dim(a, 0),
+                                               loom_type_dim(b, 0));
+    case LOOM_TYPE_GROUP:
+      return loom_type_group_scope(a) == loom_type_group_scope(b);
+    case LOOM_TYPE_FUNCTION: {
+      const loom_func_type_data_t* a_data = loom_type_func_data(a);
+      const loom_func_type_data_t* b_data = loom_type_func_data(b);
+      if (!a_data || !b_data) return a_data == b_data;
+      if (a_data->arg_count != b_data->arg_count ||
+          a_data->result_count != b_data->result_count) {
+        return false;
+      }
+      uint16_t type_count =
+          (uint16_t)(a_data->arg_count + a_data->result_count);
+      for (uint16_t i = 0; i < type_count; ++i) {
+        if (!loom_bytecode_type_wire_equal(a_data->types[i],
+                                           b_data->types[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case LOOM_TYPE_DIALECT: {
+      if (loom_type_dialect_name_id(a) != loom_type_dialect_name_id(b)) {
+        return false;
+      }
+      uint16_t param_count = loom_type_dialect_param_count(a);
+      if (param_count != loom_type_dialect_param_count(b)) return false;
+      const loom_type_t* a_params = loom_type_dialect_params(a);
+      const loom_type_t* b_params = loom_type_dialect_params(b);
+      if (!a_params || !b_params) return a_params == b_params;
+      for (uint16_t i = 0; i < param_count; ++i) {
+        if (!loom_bytecode_type_wire_equal(a_params[i], b_params[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    case LOOM_TYPE_ENCODING:
+      return loom_type_encoding_role(a) == loom_type_encoding_role(b);
+    default:
+      return true;
+  }
+}
 
 // Initializes the numbering context. All allocations come from |arena|,
 // which the caller owns. No individual frees needed — the arena handles
@@ -375,7 +567,7 @@ static iree_status_t loom_bytecode_numbering_initialize(
     numbering->type_index_capacity = type_index_capacity;
     iree_host_size_t mask = type_index_capacity - 1;
     for (iree_host_size_t i = 0; i < module->types.count; ++i) {
-      uint32_t hash = loom_type_hash(module->types.entries[i]);
+      uint32_t hash = loom_bytecode_type_wire_hash(module->types.entries[i]);
       iree_host_size_t slot = hash & mask;
       while (numbering->type_index_entries[slot].module_index !=
              LOOM_WRITER_ID_NONE) {
@@ -448,12 +640,13 @@ static iree_status_t loom_bytecode_numbering_intern_string_view(
       return iree_ok_status();
     }
   }
-  // Also check if it happens to match a module string.
+  // Also check if it happens to match a module string. Module strings are
+  // assigned in first-use order, not source intern-table order, so the bytecode
+  // stays canonical across text forms that intern strings differently.
   for (iree_host_size_t i = 0; i < numbering->module->strings.count; ++i) {
-    if (iree_string_view_equal(numbering->module->strings.entries[i], view) &&
-        numbering->module_string_map[i] != LOOM_WRITER_ID_NONE) {
-      *out_writer_id = numbering->module_string_map[i];
-      return iree_ok_status();
+    if (iree_string_view_equal(numbering->module->strings.entries[i], view)) {
+      return loom_bytecode_numbering_intern_module_string(
+          numbering, (loom_string_id_t)i, out_writer_id);
     }
   }
   // New external string.
@@ -473,11 +666,11 @@ static iree_status_t loom_bytecode_numbering_intern_string_view(
   return iree_ok_status();
 }
 
-// Finds the module type table index for a given structural type.
+// Finds the representative module type table index for a given wire type.
 static uint32_t loom_bytecode_find_type_index(
     const loom_bytecode_numbering_t* numbering, loom_type_t type) {
   if (numbering->type_index_capacity == 0) return LOOM_WRITER_ID_NONE;
-  uint32_t hash = loom_type_hash(type);
+  uint32_t hash = loom_bytecode_type_wire_hash(type);
   iree_host_size_t mask = numbering->type_index_capacity - 1;
   iree_host_size_t slot = hash & mask;
   while (numbering->type_index_entries[slot].module_index !=
@@ -485,19 +678,14 @@ static uint32_t loom_bytecode_find_type_index(
     const loom_bytecode_type_index_entry_t* entry =
         &numbering->type_index_entries[slot];
     if (entry->hash == hash &&
-        loom_type_equal(numbering->module->types.entries[entry->module_index],
-                        type)) {
+        loom_bytecode_type_wire_equal(
+            numbering->module->types.entries[entry->module_index], type)) {
       return entry->module_index;
     }
     slot = (slot + 1) & mask;
   }
   return LOOM_WRITER_ID_NONE;
 }
-
-// Forward declaration for recursive type interning.
-static iree_status_t loom_bytecode_numbering_intern_type(
-    loom_bytecode_numbering_t* numbering, loom_type_t type,
-    uint32_t* out_writer_id);
 
 // Interns a type, recursing into sub-types first (topological order).
 static iree_status_t loom_bytecode_numbering_intern_type(
@@ -2260,8 +2448,8 @@ iree_status_t loom_bytecode_write_module(
       loom_bytecode_numbering_initialize(&numbering, module, &arena);
   numbering.location_mode = location_mode;
 
-  // Pass 1: Number module metadata (names, sources, symbol names).
-  // Function signatures and bodies are numbered during IR section writing.
+  // Pass 1: Number module metadata. Function signatures and bodies are numbered
+  // during IR section writing.
   if (iree_status_is_ok(status)) {
     uint32_t unused_id = 0;
     status = loom_bytecode_numbering_intern_module_string(

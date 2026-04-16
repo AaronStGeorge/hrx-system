@@ -99,6 +99,24 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "reader_corpus_test",
+    srcs = ["reader_corpus_test.cc"],
+    deps = [
+        ":reader",
+        ":writer",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/test/corpus/text:golden_text_corpus",
+        "//loom/src/loom/testing:context",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "writer",
     srcs = ["writer.c"],

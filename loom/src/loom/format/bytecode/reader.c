@@ -565,9 +565,10 @@ static iree_status_t loom_bytecode_reader_skip_predicate_list(
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_u8(reader, cursor, &predicate_kind));
     if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
-    if (predicate_kind > 9) {
+    if (predicate_kind >= LOOM_PREDICATE_COUNT_) {
       return loom_bytecode_reader_emit_enum_value(
-          reader, IREE_SV("predicate_kind"), predicate_kind, 10, kind_offset);
+          reader, IREE_SV("predicate_kind"), predicate_kind,
+          LOOM_PREDICATE_COUNT_, kind_offset);
     }
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_u8(reader, cursor, &arg_count));
