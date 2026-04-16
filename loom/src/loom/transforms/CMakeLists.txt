@@ -364,12 +364,14 @@ loom_cc_library(
     "vector_to_scalar_structural.c"
     "vector_to_scalar_tables.c"
     "vector_to_scalar_terms.c"
+    "vector_to_scalar_transforms.c"
   DEPS
     ::pass
     ::rewriter
     iree::base
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::encoding
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar

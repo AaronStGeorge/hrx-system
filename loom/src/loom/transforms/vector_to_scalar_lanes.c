@@ -52,7 +52,7 @@ iree_status_t loom_vector_to_scalar_build_scalar_constant(
   return iree_ok_status();
 }
 
-static iree_status_t loom_vector_to_scalar_build_attr_constant(
+iree_status_t loom_vector_to_scalar_build_scalar_attr_constant(
     loom_builder_t* builder, loom_type_t result_type,
     loom_location_id_t location, loom_attribute_t value,
     loom_value_id_t* out_value_id) {
@@ -427,7 +427,7 @@ static iree_status_t loom_vector_to_scalar_build_mask_range_lane(
 
 iree_status_t loom_vector_to_scalar_build_constant_lane(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_lane) {
-  return loom_vector_to_scalar_build_attr_constant(
+  return loom_vector_to_scalar_build_scalar_attr_constant(
       &state->rewriter->builder, state->result_scalar_type, state->location,
       loom_vector_constant_value(state->op), out_lane);
 }

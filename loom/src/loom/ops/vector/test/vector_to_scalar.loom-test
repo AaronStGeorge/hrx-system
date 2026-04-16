@@ -1655,10 +1655,176 @@ func.def @dynamic_table_quantize(%n: index, %k: index, %values: vector<[%n]xf32>
 
 // ====
 // RUN: pass vector-to-scalar
-// XFAIL: vector.transform has no implemented reference semantics yet.
 
-func.def @transform_unsupported(%v: vector<4xf32>) -> (vector<4xf32>) {
+func.def @transform_hadamard(%v: vector<4xf32>) -> (vector<4xf32>) {
   %xf = encoding.define #numeric_transform<family="hadamard", input_elems=4, output_elems=4> : encoding<transform>
   %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>
   func.return %r : vector<4xf32>
+}
+
+// ----
+func.def @transform_hadamard(%v: vector<4xf32>) -> (vector<4xf32>) {
+  %4 = vector.extract %v[0] : vector<4xf32> -> f32
+  %5 = vector.extract %v[1] : vector<4xf32> -> f32
+  %6 = scalar.addf %4, %5 : f32
+  %7 = vector.extract %v[2] : vector<4xf32> -> f32
+  %8 = scalar.addf %6, %7 : f32
+  %9 = vector.extract %v[3] : vector<4xf32> -> f32
+  %10 = scalar.addf %8, %9 : f32
+  %11 = vector.extract %v[0] : vector<4xf32> -> f32
+  %12 = vector.extract %v[1] : vector<4xf32> -> f32
+  %13 = scalar.negf %12 : f32
+  %14 = scalar.addf %11, %13 : f32
+  %15 = vector.extract %v[2] : vector<4xf32> -> f32
+  %16 = scalar.addf %14, %15 : f32
+  %17 = vector.extract %v[3] : vector<4xf32> -> f32
+  %18 = scalar.negf %17 : f32
+  %19 = scalar.addf %16, %18 : f32
+  %20 = vector.extract %v[0] : vector<4xf32> -> f32
+  %21 = vector.extract %v[1] : vector<4xf32> -> f32
+  %22 = scalar.addf %20, %21 : f32
+  %23 = vector.extract %v[2] : vector<4xf32> -> f32
+  %24 = scalar.negf %23 : f32
+  %25 = scalar.addf %22, %24 : f32
+  %26 = vector.extract %v[3] : vector<4xf32> -> f32
+  %27 = scalar.negf %26 : f32
+  %28 = scalar.addf %25, %27 : f32
+  %29 = vector.extract %v[0] : vector<4xf32> -> f32
+  %30 = vector.extract %v[1] : vector<4xf32> -> f32
+  %31 = scalar.negf %30 : f32
+  %32 = scalar.addf %29, %31 : f32
+  %33 = vector.extract %v[2] : vector<4xf32> -> f32
+  %34 = scalar.negf %33 : f32
+  %35 = scalar.addf %32, %34 : f32
+  %36 = vector.extract %v[3] : vector<4xf32> -> f32
+  %37 = scalar.addf %35, %36 : f32
+  %r = vector.from_elements %10, %19, %28, %37 : f32, f32, f32, f32 -> vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+
+func.def @transform_hadamard_sign(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=2, output_elems=2> {signs = %signs : vector<2xi1>} : encoding<transform>
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @transform_hadamard_sign(%v: vector<2xf32>, %signs: vector<2xi1>) -> (vector<2xf32>) {
+  %5 = vector.extract %v[0] : vector<2xf32> -> f32
+  %6 = vector.extract %signs[0] : vector<2xi1> -> i1
+  %7 = scalar.negf %5 : f32
+  %8 = scf.select %6, %7, %5 : f32
+  %9 = vector.extract %v[1] : vector<2xf32> -> f32
+  %10 = vector.extract %signs[1] : vector<2xi1> -> i1
+  %11 = scalar.negf %9 : f32
+  %12 = scf.select %10, %11, %9 : f32
+  %13 = scalar.addf %8, %12 : f32
+  %14 = vector.extract %v[0] : vector<2xf32> -> f32
+  %15 = vector.extract %signs[0] : vector<2xi1> -> i1
+  %16 = scalar.negf %14 : f32
+  %17 = scf.select %15, %16, %14 : f32
+  %18 = vector.extract %v[1] : vector<2xf32> -> f32
+  %19 = vector.extract %signs[1] : vector<2xi1> -> i1
+  %20 = scalar.negf %18 : f32
+  %21 = scf.select %19, %20, %18 : f32
+  %22 = scalar.negf %21 : f32
+  %23 = scalar.addf %17, %22 : f32
+  %r = vector.from_elements %13, %23 : f32, f32 -> vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+
+func.def @transform_hadamard_orthonormal(%v: vector<4xf32>) -> (vector<4xf32>) {
+  %xf = encoding.define #numeric_transform<family="hadamard", input_elems=4, normalization="orthonormal", output_elems=4> : encoding<transform>
+  %r = vector.transform %v, %xf : vector<4xf32>, encoding<transform> -> vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+
+// ----
+func.def @transform_hadamard_orthonormal(%v: vector<4xf32>) -> (vector<4xf32>) {
+  %4 = vector.extract %v[0] : vector<4xf32> -> f32
+  %5 = vector.extract %v[1] : vector<4xf32> -> f32
+  %6 = scalar.addf %4, %5 : f32
+  %7 = vector.extract %v[2] : vector<4xf32> -> f32
+  %8 = scalar.addf %6, %7 : f32
+  %9 = vector.extract %v[3] : vector<4xf32> -> f32
+  %10 = scalar.addf %8, %9 : f32
+  %11 = scalar.constant 0.5 : f32
+  %12 = scalar.mulf %10, %11 : f32
+  %13 = vector.extract %v[0] : vector<4xf32> -> f32
+  %14 = vector.extract %v[1] : vector<4xf32> -> f32
+  %15 = scalar.negf %14 : f32
+  %16 = scalar.addf %13, %15 : f32
+  %17 = vector.extract %v[2] : vector<4xf32> -> f32
+  %18 = scalar.addf %16, %17 : f32
+  %19 = vector.extract %v[3] : vector<4xf32> -> f32
+  %20 = scalar.negf %19 : f32
+  %21 = scalar.addf %18, %20 : f32
+  %22 = scalar.constant 0.5 : f32
+  %23 = scalar.mulf %21, %22 : f32
+  %24 = vector.extract %v[0] : vector<4xf32> -> f32
+  %25 = vector.extract %v[1] : vector<4xf32> -> f32
+  %26 = scalar.addf %24, %25 : f32
+  %27 = vector.extract %v[2] : vector<4xf32> -> f32
+  %28 = scalar.negf %27 : f32
+  %29 = scalar.addf %26, %28 : f32
+  %30 = vector.extract %v[3] : vector<4xf32> -> f32
+  %31 = scalar.negf %30 : f32
+  %32 = scalar.addf %29, %31 : f32
+  %33 = scalar.constant 0.5 : f32
+  %34 = scalar.mulf %32, %33 : f32
+  %35 = vector.extract %v[0] : vector<4xf32> -> f32
+  %36 = vector.extract %v[1] : vector<4xf32> -> f32
+  %37 = scalar.negf %36 : f32
+  %38 = scalar.addf %35, %37 : f32
+  %39 = vector.extract %v[2] : vector<4xf32> -> f32
+  %40 = scalar.negf %39 : f32
+  %41 = scalar.addf %38, %40 : f32
+  %42 = vector.extract %v[3] : vector<4xf32> -> f32
+  %43 = scalar.addf %41, %42 : f32
+  %44 = scalar.constant 0.5 : f32
+  %45 = scalar.mulf %43, %44 : f32
+  %r = vector.from_elements %12, %23, %34, %45 : f32, f32, f32, f32 -> vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+
+// ====
+// RUN: pass vector-to-scalar
+
+func.def @transform_jl_dense(%v: vector<2xf32>, %matrix: vector<3x2xf32>) -> (vector<3xf32>) {
+  %xf = encoding.define #numeric_transform<family="jl_dense", input_elems=2, output_elems=3> {matrix = %matrix : vector<3x2xf32>} : encoding<transform>
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<3xf32>
+  func.return %r : vector<3xf32>
+}
+
+// ----
+func.def @transform_jl_dense(%v: vector<2xf32>, %matrix: vector<3x2xf32>) -> (vector<3xf32>) {
+  %5 = vector.extract %v[0] : vector<2xf32> -> f32
+  %6 = vector.extract %matrix[0, 0] : vector<3x2xf32> -> f32
+  %7 = scalar.mulf %6, %5 : f32
+  %8 = vector.extract %v[1] : vector<2xf32> -> f32
+  %9 = vector.extract %matrix[0, 1] : vector<3x2xf32> -> f32
+  %10 = scalar.mulf %9, %8 : f32
+  %11 = scalar.addf %7, %10 : f32
+  %12 = vector.extract %v[0] : vector<2xf32> -> f32
+  %13 = vector.extract %matrix[1, 0] : vector<3x2xf32> -> f32
+  %14 = scalar.mulf %13, %12 : f32
+  %15 = vector.extract %v[1] : vector<2xf32> -> f32
+  %16 = vector.extract %matrix[1, 1] : vector<3x2xf32> -> f32
+  %17 = scalar.mulf %16, %15 : f32
+  %18 = scalar.addf %14, %17 : f32
+  %19 = vector.extract %v[0] : vector<2xf32> -> f32
+  %20 = vector.extract %matrix[2, 0] : vector<3x2xf32> -> f32
+  %21 = scalar.mulf %20, %19 : f32
+  %22 = vector.extract %v[1] : vector<2xf32> -> f32
+  %23 = vector.extract %matrix[2, 1] : vector<3x2xf32> -> f32
+  %24 = scalar.mulf %23, %22 : f32
+  %25 = scalar.addf %21, %24 : f32
+  %r = vector.from_elements %11, %18, %25 : f32, f32, f32 -> vector<3xf32>
+  func.return %r : vector<3xf32>
 }

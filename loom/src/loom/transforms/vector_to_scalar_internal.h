@@ -141,6 +141,14 @@ iree_status_t loom_vector_to_scalar_build_scalar_constant(
     loom_location_id_t location, int64_t integer_value,
     loom_value_id_t* out_value_id);
 
+// Builds a scalar or index constant using |value| exactly as the constant
+// attribute, preserving non-integer floating-point constants such as transform
+// normalization scales.
+iree_status_t loom_vector_to_scalar_build_scalar_attr_constant(
+    loom_builder_t* builder, loom_type_t result_type,
+    loom_location_id_t location, loom_attribute_t value,
+    loom_value_id_t* out_value_id);
+
 iree_status_t loom_vector_to_scalar_build_vector_zero(
     loom_vector_to_scalar_state_t* state, loom_type_t result_type,
     loom_value_id_t* out_value_id);

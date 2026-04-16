@@ -318,6 +318,7 @@ loom_cc_library(
         "vector_to_scalar_structural.c",
         "vector_to_scalar_tables.c",
         "vector_to_scalar_terms.c",
+        "vector_to_scalar_transforms.c",
     ],
     hdrs = [
         "vector_to_scalar.h",
@@ -329,6 +330,7 @@ loom_cc_library(
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/index",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/scf",

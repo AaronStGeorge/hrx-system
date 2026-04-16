@@ -4,8 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/error/error_defs.h"
-#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
@@ -262,29 +260,4 @@ iree_status_t loom_vector_to_scalar_build_table_quantize_lane(
   return loom_vector_to_scalar_build_table_quantize_static_lane(
       state, input_lane, input_scalar_type, thresholds, threshold_count,
       out_lane);
-}
-
-iree_status_t loom_vector_to_scalar_build_transform_lane(
-    loom_vector_to_scalar_state_t* state,
-    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
-  (void)indices;
-  (void)out_lane;
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_op_name(state->rewriter->module, state->op)),
-      loom_param_string(IREE_SV("vector-to-scalar")),
-      loom_param_string(IREE_SV(
-          "encoding transform reference semantics are not implemented")),
-  };
-  loom_diagnostic_emission_t emission = {
-      .op = state->op,
-      .error = &loom_err_lowering_001,
-      .params = params,
-      .param_count = IREE_ARRAYSIZE(params),
-  };
-  IREE_RETURN_IF_ERROR(
-      iree_diagnostic_emit(state->pass->diagnostic_emitter, &emission));
-  return iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
-      "vector-to-scalar cannot lower vector.transform until encoding "
-      "transform reference semantics are implemented");
 }
