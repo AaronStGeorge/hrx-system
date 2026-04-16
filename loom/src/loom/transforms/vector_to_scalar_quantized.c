@@ -275,6 +275,26 @@ static iree_status_t loom_vector_to_scalar_build_scalar_shift_term(
       state, kind, input, amount_value, type, out_result);
 }
 
+static iree_status_t loom_vector_to_scalar_build_bitstream_base_term(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_term_t lane_ordinal, int64_t lane_bit_width,
+    loom_vector_to_scalar_index_term_t* out_position) {
+  return loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_MUL, lane_ordinal,
+      loom_vector_to_scalar_static_term(lane_bit_width), out_position);
+}
+
+static iree_status_t loom_vector_to_scalar_build_single_bit_extract(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t lane,
+    loom_type_t lane_type, loom_vector_to_scalar_index_term_t bit_shift,
+    loom_value_id_t one_mask, loom_value_id_t* out_bit) {
+  loom_value_id_t shifted_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_shift_term(
+      state, LOOM_OP_SCALAR_SHRUI, lane, lane_type, bit_shift, &shifted_lane));
+  return loom_vector_to_scalar_build_scalar_binary(
+      state, LOOM_OP_SCALAR_ANDI, shifted_lane, one_mask, lane_type, out_bit);
+}
+
 static iree_status_t loom_vector_to_scalar_indices_from_ordinal_term(
     loom_vector_to_scalar_state_t* state, loom_type_t vector_type,
     loom_vector_to_scalar_index_term_t ordinal,
@@ -479,6 +499,115 @@ static iree_status_t loom_vector_to_scalar_build_bitpack_divisible_lane(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_to_scalar_build_bitpack_dynamic_bit(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t source,
+    loom_type_t source_type, loom_type_t source_scalar_type,
+    loom_type_t storage_scalar_type,
+    loom_vector_to_scalar_index_term_t storage_base_bit,
+    loom_vector_to_scalar_index_term_t storage_bit, int64_t width,
+    loom_value_id_t source_one, loom_value_id_t accumulator,
+    loom_value_id_t* out_accumulator) {
+  loom_vector_to_scalar_index_term_t global_bit = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_ADD, storage_base_bit, storage_bit, &global_bit));
+  loom_vector_to_scalar_index_term_t source_ordinal = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_DIV, global_bit,
+      loom_vector_to_scalar_static_term(width), &source_ordinal));
+  loom_vector_to_scalar_index_term_t source_shift = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_REM, global_bit,
+      loom_vector_to_scalar_static_term(width), &source_shift));
+
+  loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_linear_lane(
+      state, source, source_type, source_ordinal, &source_lane));
+  loom_value_id_t source_bit = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_single_bit_extract(
+      state, source_lane, source_scalar_type, source_shift, source_one,
+      &source_bit));
+  loom_value_id_t storage_bit_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_cast_integer_lane(
+      state, source_bit, source_scalar_type, storage_scalar_type,
+      /*signed_extend=*/false, &storage_bit_value));
+  loom_value_id_t shifted_storage_bit = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_shift_term(
+      state, LOOM_OP_SCALAR_SHLI, storage_bit_value, storage_scalar_type,
+      storage_bit, &shifted_storage_bit));
+  return loom_vector_to_scalar_build_scalar_binary(
+      state, LOOM_OP_SCALAR_ORI, accumulator, shifted_storage_bit,
+      storage_scalar_type, out_accumulator);
+}
+
+static iree_status_t loom_vector_to_scalar_build_bitpack_bitstream_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t source,
+    loom_type_t source_type, int64_t width,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  loom_type_t source_scalar_type = loom_vector_to_scalar_lane_type(source_type);
+  loom_type_t storage_scalar_type = state->result_scalar_type;
+  int32_t storage_width =
+      loom_scalar_type_bitwidth(loom_type_element_type(storage_scalar_type));
+
+  loom_vector_to_scalar_index_term_t storage_ordinal = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_linear_ordinal_term(
+      state, state->vector_type, indices, &storage_ordinal));
+  loom_vector_to_scalar_index_term_t storage_base_bit = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_bitstream_base_term(
+      state, storage_ordinal, storage_width, &storage_base_bit));
+
+  loom_value_id_t lower_bound = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 0, &lower_bound));
+  loom_value_id_t upper_bound = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, storage_width, &upper_bound));
+  loom_value_id_t step = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 1, &step));
+  loom_value_id_t source_one = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, source_scalar_type, state->location, 1,
+      &source_one));
+  loom_value_id_t initial_accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_zero_lane(
+      state, storage_scalar_type, &initial_accumulator));
+
+  loom_op_t* loop = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_scf_for_build(&state->rewriter->builder, lower_bound, upper_bound,
+                         step, &initial_accumulator, 1, &storage_scalar_type, 1,
+                         NULL, 0, state->location, &loop));
+  if (state->pass->statistics) {
+    loom_pass_statistic_add(state->pass,
+                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
+  }
+
+  loom_builder_ip_t saved = loom_builder_enter_region(
+      &state->rewriter->builder, loop, loom_scf_for_body(loop));
+  loom_value_id_t storage_bit_value =
+      loom_region_entry_arg_id(loom_scf_for_body(loop), 0);
+  loom_value_id_t accumulator_arg =
+      loom_region_entry_arg_id(loom_scf_for_body(loop), 1);
+  loom_vector_to_scalar_index_term_t storage_bit =
+      loom_vector_to_scalar_value_term(state, storage_bit_value);
+  loom_value_id_t yielded_accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_bitpack_dynamic_bit(
+      state, source, source_type, source_scalar_type, storage_scalar_type,
+      storage_base_bit, storage_bit, width, source_one, accumulator_arg,
+      &yielded_accumulator));
+  loom_op_t* yield_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder,
+                                            &yielded_accumulator, 1,
+                                            state->location, &yield_op));
+  loom_builder_restore(&state->rewriter->builder, saved);
+
+  *out_lane = loom_scf_for_results(loop).values[0];
+  return iree_ok_status();
+}
+
 iree_status_t loom_vector_to_scalar_build_bitpack_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
@@ -498,13 +627,11 @@ iree_status_t loom_vector_to_scalar_build_bitpack_lane(
     return loom_vector_to_scalar_build_bitpack_static_lane(
         state, source, source_type, width, indices, out_lane);
   }
-  if ((storage_width % width) != 0) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar can only lower dynamic vector.bitpack when field "
-        "width divides storage element width");
+  if ((storage_width % width) == 0) {
+    return loom_vector_to_scalar_build_bitpack_divisible_lane(
+        state, source, source_type, width, indices, out_lane);
   }
-  return loom_vector_to_scalar_build_bitpack_divisible_lane(
+  return loom_vector_to_scalar_build_bitpack_bitstream_lane(
       state, source, source_type, width, indices, out_lane);
 }
 
@@ -672,6 +799,117 @@ static iree_status_t loom_vector_to_scalar_build_bitunpack_divisible_lane(
                                                      signed_unpack, out_lane);
 }
 
+static iree_status_t loom_vector_to_scalar_build_bitunpack_dynamic_bit(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t source,
+    loom_type_t source_type, loom_type_t storage_scalar_type,
+    loom_type_t result_scalar_type,
+    loom_vector_to_scalar_index_term_t result_base_bit,
+    loom_vector_to_scalar_index_term_t result_bit, int32_t storage_width,
+    loom_value_id_t storage_one, loom_value_id_t accumulator,
+    loom_value_id_t* out_accumulator) {
+  loom_vector_to_scalar_index_term_t global_bit = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_ADD, result_base_bit, result_bit, &global_bit));
+  loom_vector_to_scalar_index_term_t storage_ordinal = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_DIV, global_bit,
+      loom_vector_to_scalar_static_term(storage_width), &storage_ordinal));
+  loom_vector_to_scalar_index_term_t storage_shift = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_REM, global_bit,
+      loom_vector_to_scalar_static_term(storage_width), &storage_shift));
+
+  loom_value_id_t storage_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_linear_lane(
+      state, source, source_type, storage_ordinal, &storage_lane));
+  loom_value_id_t storage_bit = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_single_bit_extract(
+      state, storage_lane, storage_scalar_type, storage_shift, storage_one,
+      &storage_bit));
+  loom_value_id_t result_bit_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_cast_integer_lane(
+      state, storage_bit, storage_scalar_type, result_scalar_type,
+      /*signed_extend=*/false, &result_bit_value));
+  loom_value_id_t shifted_result_bit = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_shift_term(
+      state, LOOM_OP_SCALAR_SHLI, result_bit_value, result_scalar_type,
+      result_bit, &shifted_result_bit));
+  return loom_vector_to_scalar_build_scalar_binary(
+      state, LOOM_OP_SCALAR_ORI, accumulator, shifted_result_bit,
+      result_scalar_type, out_accumulator);
+}
+
+static iree_status_t loom_vector_to_scalar_build_bitunpack_bitstream_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t source,
+    loom_type_t source_type, int64_t width, bool signed_unpack,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  loom_type_t storage_scalar_type =
+      loom_vector_to_scalar_lane_type(source_type);
+  loom_type_t result_scalar_type = state->result_scalar_type;
+  int32_t storage_width =
+      loom_scalar_type_bitwidth(loom_type_element_type(storage_scalar_type));
+
+  loom_vector_to_scalar_index_term_t result_ordinal = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_linear_ordinal_term(
+      state, state->vector_type, indices, &result_ordinal));
+  loom_vector_to_scalar_index_term_t result_base_bit = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_bitstream_base_term(
+      state, result_ordinal, width, &result_base_bit));
+
+  loom_value_id_t lower_bound = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 0, &lower_bound));
+  loom_value_id_t upper_bound = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, width, &upper_bound));
+  loom_value_id_t step = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 1, &step));
+  loom_value_id_t storage_one = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, storage_scalar_type, state->location, 1,
+      &storage_one));
+  loom_value_id_t initial_accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_zero_lane(
+      state, result_scalar_type, &initial_accumulator));
+
+  loom_op_t* loop = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_scf_for_build(&state->rewriter->builder, lower_bound, upper_bound,
+                         step, &initial_accumulator, 1, &result_scalar_type, 1,
+                         NULL, 0, state->location, &loop));
+  if (state->pass->statistics) {
+    loom_pass_statistic_add(state->pass,
+                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
+  }
+
+  loom_builder_ip_t saved = loom_builder_enter_region(
+      &state->rewriter->builder, loop, loom_scf_for_body(loop));
+  loom_value_id_t result_bit_value =
+      loom_region_entry_arg_id(loom_scf_for_body(loop), 0);
+  loom_value_id_t accumulator_arg =
+      loom_region_entry_arg_id(loom_scf_for_body(loop), 1);
+  loom_vector_to_scalar_index_term_t result_bit =
+      loom_vector_to_scalar_value_term(state, result_bit_value);
+  loom_value_id_t yielded_accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_bitunpack_dynamic_bit(
+      state, source, source_type, storage_scalar_type, result_scalar_type,
+      result_base_bit, result_bit, storage_width, storage_one, accumulator_arg,
+      &yielded_accumulator));
+  loom_op_t* yield_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder,
+                                            &yielded_accumulator, 1,
+                                            state->location, &yield_op));
+  loom_builder_restore(&state->rewriter->builder, saved);
+
+  return loom_vector_to_scalar_finish_bitunpack_lane(
+      state, loom_scf_for_results(loop).values[0], width, signed_unpack,
+      out_lane);
+}
+
 iree_status_t loom_vector_to_scalar_build_bitunpack_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, bool signed_unpack,
@@ -697,12 +935,10 @@ iree_status_t loom_vector_to_scalar_build_bitunpack_lane(
     return loom_vector_to_scalar_build_bitunpack_static_lane(
         state, source, source_type, width, signed_unpack, indices, out_lane);
   }
-  if ((storage_width % width) != 0) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar can only lower dynamic vector.bitunpack when field "
-        "width divides storage element width");
+  if ((storage_width % width) == 0) {
+    return loom_vector_to_scalar_build_bitunpack_divisible_lane(
+        state, source, source_type, width, signed_unpack, indices, out_lane);
   }
-  return loom_vector_to_scalar_build_bitunpack_divisible_lane(
+  return loom_vector_to_scalar_build_bitunpack_bitstream_lane(
       state, source, source_type, width, signed_unpack, indices, out_lane);
 }
