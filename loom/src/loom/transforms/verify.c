@@ -2154,6 +2154,88 @@ static void loom_verify_relation_field_satisfies(
   }
 }
 
+static bool loom_verify_query_element_bit_width(loom_type_t type,
+                                                int32_t* out_bit_width) {
+  if (!loom_type_is_scalar(type) && !loom_type_is_shaped(type)) return false;
+  int32_t bit_width = loom_scalar_type_bitwidth(loom_type_element_type(type));
+  if (bit_width <= 0) return false;
+  *out_bit_width = bit_width;
+  return true;
+}
+
+// ELEMENT_WIDTH_ORDER: the scalar or shaped element bit width of the first
+// value field is strictly greater or less than the second value field. Args:
+// (checked value field, reference value field).
+static void loom_verify_relation_element_width_order(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint8_t field_ref = constraint->args[0];
+  uint8_t reference_ref = constraint->args[1];
+  if (loom_verify_is_variadic_field(vtable, field_ref) ||
+      loom_verify_is_variadic_field(vtable, reference_ref)) {
+    return;
+  }
+
+  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  loom_value_id_t reference_id =
+      loom_verify_resolve_value_field(op, reference_ref);
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      reference_id == LOOM_VALUE_ID_INVALID) {
+    return;
+  }
+
+  loom_type_t value_type = loom_verify_value_type(state, value_id);
+  loom_type_t reference_type = loom_verify_value_type(state, reference_id);
+  int32_t value_bit_width = 0;
+  int32_t reference_bit_width = 0;
+  if (!loom_verify_query_element_bit_width(value_type, &value_bit_width) ||
+      !loom_verify_query_element_bit_width(reference_type,
+                                           &reference_bit_width)) {
+    return;
+  }
+
+  const char* relation_text = NULL;
+  bool relation_matches = false;
+  switch ((enum loom_constraint_property_e)constraint->property) {
+    case LOOM_PROPERTY_ELEMENT_WIDTH_GREATER_THAN:
+      relation_text = "greater than";
+      relation_matches = value_bit_width > reference_bit_width;
+      break;
+    case LOOM_PROPERTY_ELEMENT_WIDTH_LESS_THAN:
+      relation_text = "less than";
+      relation_matches = value_bit_width < reference_bit_width;
+      break;
+    default:
+      return;
+  }
+  if (relation_matches) return;
+
+  char field_name_buffer[32];
+  char reference_name_buffer[32];
+  iree_string_view_t field_name = loom_verify_field_name(
+      vtable, field_ref, field_name_buffer, sizeof(field_name_buffer));
+  iree_string_view_t reference_name =
+      loom_verify_field_name(vtable, reference_ref, reference_name_buffer,
+                             sizeof(reference_name_buffer));
+
+  char expected_buffer[96];
+  iree_snprintf(expected_buffer, sizeof(expected_buffer),
+                "element bit width %s %.*s", relation_text,
+                (int)reference_name.size, reference_name.data);
+  const loom_error_def_t* error =
+      LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
+          ? &loom_err_type_004
+          : &loom_err_type_003;
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(field_name, field_ref),
+      loom_param_type(value_type),
+      loom_param_string(iree_make_cstring_view(expected_buffer)),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 3 ? error->param_count : 3);
+}
+
 static iree_string_view_t loom_verify_grouped_last_axis_divisibility_constraint(
     int64_t group_size) {
   switch (group_size) {
@@ -2634,6 +2716,8 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_PAIRWISE_EQ] = loom_verify_relation_pairwise_eq,
     [LOOM_RELATION_ALL_SAME] = loom_verify_relation_all_same,
     [LOOM_RELATION_FIELD_SATISFIES] = loom_verify_relation_field_satisfies,
+    [LOOM_RELATION_ELEMENT_WIDTH_ORDER] =
+        loom_verify_relation_element_width_order,
     [LOOM_RELATION_COUNT_MATCHES_RANK] =
         loom_verify_relation_count_matches_rank,
     [LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT] =

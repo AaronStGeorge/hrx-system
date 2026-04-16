@@ -409,6 +409,12 @@ enum loom_constraint_relation_e {
   // fields. Used by Has*Element and Has*Vector constraints.
   LOOM_RELATION_FIELD_SATISFIES,
 
+  // The scalar or shaped element bit width of the first value field is
+  // strictly ordered against the second value field. The property slot stores
+  // the order predicate. Args: (checked value field, reference value field).
+  // Used by ElementWidthGreaterThan and ElementWidthLessThan.
+  LOOM_RELATION_ELEMENT_WIDTH_ORDER,
+
   // The element count of a variadic value field equals the rank of a
   // shaped value field. Args: (shaped value field, variadic value
   // field). Used by OffsetCountMatchesRank.
@@ -483,6 +489,12 @@ enum loom_constraint_property_e {
   // Rank only — ignores dimension sizes, element type, and encoding.
   // Two shaped types with the same number of dimensions match.
   LOOM_PROPERTY_RANK = 5,
+  // Element bit width of the first relation field is strictly greater than the
+  // second relation field. Used by ElementWidthGreaterThan.
+  LOOM_PROPERTY_ELEMENT_WIDTH_GREATER_THAN = 6,
+  // Element bit width of the first relation field is strictly less than the
+  // second relation field. Used by ElementWidthLessThan.
+  LOOM_PROPERTY_ELEMENT_WIDTH_LESS_THAN = 7,
   LOOM_PROPERTY_COUNT_,
 };
 typedef uint8_t loom_constraint_property_t;

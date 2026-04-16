@@ -679,28 +679,6 @@ static iree_status_t loom_vector_verify_optional_cache_policy(
       loom_cache_policy_error_expected_constraint(error));
 }
 
-static iree_status_t loom_vector_verify_element_width_relation(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter, loom_value_id_t input_id,
-    loom_value_id_t result_id, bool result_must_be_wider,
-    iree_string_view_t expected_constraint) {
-  loom_type_t input_type = loom_module_value_type(module, input_id);
-  loom_type_t result_type = loom_module_value_type(module, result_id);
-  int32_t input_width =
-      loom_scalar_type_bitwidth(loom_type_element_type(input_type));
-  int32_t result_width =
-      loom_scalar_type_bitwidth(loom_type_element_type(result_type));
-  if (input_width == 0 || result_width == 0) return iree_ok_status();
-  if (result_must_be_wider && result_width > input_width) {
-    return iree_ok_status();
-  }
-  if (!result_must_be_wider && result_width < input_width) {
-    return iree_ok_status();
-  }
-  return loom_vector_emit_result_constraint(emitter, op, IREE_SV("result"),
-                                            result_type, expected_constraint);
-}
-
 iree_status_t loom_vector_constant_verify(const loom_module_t* module,
                                           const loom_op_t* op,
                                           iree_diagnostic_emitter_t emitter) {
@@ -2064,51 +2042,6 @@ iree_status_t loom_vector_transform_verify(const loom_module_t* module,
 
   return loom_vector_transform_verify_family(module, op, &params, emitter,
                                              source_type, result_type);
-}
-
-iree_status_t loom_vector_extf_verify(const loom_module_t* module,
-                                      const loom_op_t* op,
-                                      iree_diagnostic_emitter_t emitter) {
-  return loom_vector_verify_element_width_relation(
-      module, op, emitter, loom_vector_extf_input(op),
-      loom_vector_extf_result(op), /*result_must_be_wider=*/true,
-      IREE_SV("wider floating-point element type"));
-}
-
-iree_status_t loom_vector_fptrunc_verify(const loom_module_t* module,
-                                         const loom_op_t* op,
-                                         iree_diagnostic_emitter_t emitter) {
-  return loom_vector_verify_element_width_relation(
-      module, op, emitter, loom_vector_fptrunc_input(op),
-      loom_vector_fptrunc_result(op), /*result_must_be_wider=*/false,
-      IREE_SV("narrower floating-point element type"));
-}
-
-iree_status_t loom_vector_extsi_verify(const loom_module_t* module,
-                                       const loom_op_t* op,
-                                       iree_diagnostic_emitter_t emitter) {
-  return loom_vector_verify_element_width_relation(
-      module, op, emitter, loom_vector_extsi_input(op),
-      loom_vector_extsi_result(op), /*result_must_be_wider=*/true,
-      IREE_SV("wider integer element type"));
-}
-
-iree_status_t loom_vector_extui_verify(const loom_module_t* module,
-                                       const loom_op_t* op,
-                                       iree_diagnostic_emitter_t emitter) {
-  return loom_vector_verify_element_width_relation(
-      module, op, emitter, loom_vector_extui_input(op),
-      loom_vector_extui_result(op), /*result_must_be_wider=*/true,
-      IREE_SV("wider integer element type"));
-}
-
-iree_status_t loom_vector_trunci_verify(const loom_module_t* module,
-                                        const loom_op_t* op,
-                                        iree_diagnostic_emitter_t emitter) {
-  return loom_vector_verify_element_width_relation(
-      module, op, emitter, loom_vector_trunci_input(op),
-      loom_vector_trunci_result(op), /*result_must_be_wider=*/false,
-      IREE_SV("narrower integer element type"));
 }
 
 typedef struct loom_vector_total_bit_count_expr_t {

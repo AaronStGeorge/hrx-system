@@ -225,6 +225,14 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_FIELD_SATISFIES",
         "LOOM_TYPE_CONSTRAINT_ALL_STATIC_RANK_ONE_VECTOR",
     ),
+    "ElementWidthGreaterThan": (
+        "LOOM_RELATION_ELEMENT_WIDTH_ORDER",
+        "LOOM_PROPERTY_ELEMENT_WIDTH_GREATER_THAN",
+    ),
+    "ElementWidthLessThan": (
+        "LOOM_RELATION_ELEMENT_WIDTH_ORDER",
+        "LOOM_PROPERTY_ELEMENT_WIDTH_LESS_THAN",
+    ),
     "OffsetCountMatchesRank": (
         "LOOM_RELATION_COUNT_MATCHES_RANK",
         "LOOM_PROPERTY_RANK",

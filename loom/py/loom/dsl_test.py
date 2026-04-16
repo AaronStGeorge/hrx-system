@@ -64,6 +64,8 @@ from loom.dsl import (
     BlockArgsMatchTypes,
     Dialect,
     DimIndexInBounds,
+    ElementWidthGreaterThan,
+    ElementWidthLessThan,
     EnumCase,
     EnumDef,
     HasAllStaticRankOneVector,
@@ -512,6 +514,49 @@ class TestConstraints:
         assert not HasAllStaticRankOneVector("x").check({"x": FakeValue(vector_2d)})[0]
         assert not HasAllStaticRankOneVector("x").check(
             {"x": FakeValue(vector_dynamic)}
+        )[0]
+
+    def test_element_width_order_constraints(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        def vector_type(element_type: ScalarType) -> ShapedType:
+            return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(4),))
+
+        greater = ElementWidthGreaterThan("result", "input")
+        assert greater.name == "ElementWidthGreaterThan"
+        assert greater.args == ("result", "input")
+        assert greater.check(
+            {
+                "input": FakeValue(vector_type(F16)),
+                "result": FakeValue(vector_type(F32)),
+            }
+        )[0]
+        ok, message = greater.check(
+            {
+                "input": FakeValue(vector_type(F32)),
+                "result": FakeValue(vector_type(F16)),
+            }
+        )
+        assert not ok
+        assert "result" in message
+        assert "input" in message
+
+        less = ElementWidthLessThan("result", "input")
+        assert less.name == "ElementWidthLessThan"
+        assert less.args == ("result", "input")
+        assert less.check(
+            {
+                "input": FakeValue(vector_type(I32)),
+                "result": FakeValue(vector_type(I8)),
+            }
+        )[0]
+        assert not less.check(
+            {
+                "input": FakeValue(vector_type(I8)),
+                "result": FakeValue(vector_type(I8)),
+            }
         )[0]
 
     def test_offset_count_matches_rank(self) -> None:

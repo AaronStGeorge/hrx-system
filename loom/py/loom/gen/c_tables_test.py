@@ -25,6 +25,7 @@ from loom.dsl import (
     INTEGER,
     AttrDef,
     Dialect,
+    ElementWidthGreaterThan,
     EnumCase,
     EnumDef,
     Op,
@@ -61,6 +62,22 @@ def test_generate_tables_rejects_constraint_field_index_above_6_bit_max() -> Non
         ),
     ):
         generate_tables_c("test", 0, [op])
+
+
+def test_generate_tables_emits_element_width_constraint() -> None:
+    op = Op(
+        "test.ext",
+        group=Dialect("test"),
+        operands=[Operand("input", INTEGER)],
+        results=[Result("result", INTEGER)],
+        constraints=[ElementWidthGreaterThan("result", "input")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_RELATION_ELEMENT_WIDTH_ORDER" in tables_c
+    assert "LOOM_PROPERTY_ELEMENT_WIDTH_GREATER_THAN" in tables_c
+    assert "LOOM_FIELD_REF(1, 0), LOOM_FIELD_REF(0, 0)" in tables_c
 
 
 def test_generate_builders_use_explicit_flags_for_optional_scalar_attrs() -> None:

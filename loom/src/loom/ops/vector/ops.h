@@ -2497,9 +2497,6 @@ iree_status_t loom_vector_extf_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-iree_status_t loom_vector_extf_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_FPTRUNC: Lanewise floating-point precision truncation. Source and result shapes match exactly; only the floating-point element type narrows.
 // vector.fptrunc
@@ -2510,9 +2507,6 @@ iree_status_t loom_vector_fptrunc_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-iree_status_t loom_vector_fptrunc_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_EXTSI: Lanewise signed integer extension. Source and result shapes match exactly, and each source lane is sign-extended to the result element width.
 // vector.extsi
@@ -2523,9 +2517,6 @@ iree_status_t loom_vector_extsi_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-iree_status_t loom_vector_extsi_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_EXTUI: Lanewise unsigned integer extension. Source and result shapes match exactly, and each source lane is zero-extended to the result element width.
 // vector.extui
@@ -2536,9 +2527,6 @@ iree_status_t loom_vector_extui_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-iree_status_t loom_vector_extui_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_TRUNCI: Lanewise integer truncation. Source and result shapes match exactly, and each lane keeps the low bits required by the result element width.
 // vector.trunci
@@ -2549,9 +2537,6 @@ iree_status_t loom_vector_trunci_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-iree_status_t loom_vector_trunci_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_SITOFP: Lanewise signed integer to floating-point conversion with unchanged shape.
 // vector.sitofp

@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from loom.assembly import (
     ARROW,
@@ -61,6 +61,8 @@ from loom.dsl import (
     Constraint,
     Dialect,
     DimIndexInBounds,
+    ElementWidthGreaterThan,
+    ElementWidthLessThan,
     EnumCase,
     EnumDef,
     HasAllStaticRankOneVector,
@@ -315,7 +317,7 @@ def _vector_cast(
     result_constraint: TypeConstraint,
     source_constraint: Callable[[str], Constraint],
     doc: str,
-    verify: str = "",
+    constraints: Sequence[Constraint] = (),
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     return Op(
@@ -329,9 +331,9 @@ def _vector_cast(
             result_element_constraint("result"),
             SameKind("input", "result"),
             SameShape("input", "result"),
+            *constraints,
         ],
         traits=[PURE, ELEMENTWISE],
-        verify=verify,
         format=[
             Ref("input"),
             COLON,
@@ -2557,7 +2559,7 @@ vector_extf = _vector_cast(
     source_constraint=HasFloatElement,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point precision extension. Source and result shapes match exactly; only the floating-point element type widens."),
-    verify="loom_vector_extf_verify",
+    constraints=[ElementWidthGreaterThan("result", "input")],
 )
 
 vector_fptrunc = _vector_cast(
@@ -2565,7 +2567,7 @@ vector_fptrunc = _vector_cast(
     source_constraint=HasFloatElement,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point precision truncation. Source and result shapes match exactly; only the floating-point element type narrows."),
-    verify="loom_vector_fptrunc_verify",
+    constraints=[ElementWidthLessThan("result", "input")],
 )
 
 vector_extsi = _vector_cast(
@@ -2573,7 +2575,7 @@ vector_extsi = _vector_cast(
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise signed integer extension. Source and result shapes match exactly, and each source lane is sign-extended to the result element width."),
-    verify="loom_vector_extsi_verify",
+    constraints=[ElementWidthGreaterThan("result", "input")],
 )
 
 vector_extui = _vector_cast(
@@ -2581,7 +2583,7 @@ vector_extui = _vector_cast(
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise unsigned integer extension. Source and result shapes match exactly, and each source lane is zero-extended to the result element width."),
-    verify="loom_vector_extui_verify",
+    constraints=[ElementWidthGreaterThan("result", "input")],
 )
 
 vector_trunci = _vector_cast(
@@ -2589,7 +2591,7 @@ vector_trunci = _vector_cast(
     source_constraint=HasIntegerElement,
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise integer truncation. Source and result shapes match exactly, and each lane keeps the low bits required by the result element width."),
-    verify="loom_vector_trunci_verify",
+    constraints=[ElementWidthLessThan("result", "input")],
 )
 
 vector_sitofp = _vector_cast(

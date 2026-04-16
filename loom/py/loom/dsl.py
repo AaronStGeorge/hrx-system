@@ -153,6 +153,8 @@ __all__ = [
     "HasRankOneVector",
     "HasAllStaticVector",
     "HasAllStaticRankOneVector",
+    "ElementWidthGreaterThan",
+    "ElementWidthLessThan",
     "OffsetCountMatchesRank",
     "ValueCountMatchesStaticElementCount",
     "DimIndexInBounds",
@@ -1190,6 +1192,73 @@ def HasAllStaticRankOneVector(field: str) -> Constraint:
     """A field must have a vector type with an all-static rank-1 shape."""
 
     return _has_field_constraint(field, ALL_STATIC_RANK_ONE_VECTOR)
+
+
+def _field_element_bitwidth(item: Any) -> int | None:
+    """Returns a scalar or shaped element bit width when statically known."""
+    element_type = _field_element_type(item)
+    if element_type is None:
+        return None
+    bitwidth = getattr(element_type, "bitwidth", None)
+    return bitwidth if isinstance(bitwidth, int) and bitwidth > 0 else None
+
+
+def _element_width_order(
+    name: str,
+    field: str,
+    reference: str,
+    *,
+    greater_than: bool,
+) -> Constraint:
+    """A field's scalar/shaped element width must be ordered against another."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        field_value = values.get(field)
+        reference_value = values.get(reference)
+        if field_value is None or reference_value is None:
+            return (True, "")
+        field_width = _field_element_bitwidth(field_value)
+        reference_width = _field_element_bitwidth(reference_value)
+        if field_width is None or reference_width is None:
+            return (True, "")
+        if greater_than and field_width > reference_width:
+            return (True, "")
+        if not greater_than and field_width < reference_width:
+            return (True, "")
+        relation = ">" if greater_than else "<"
+        return (
+            False,
+            f"'{field}' element bit width {field_width} is not {relation} "
+            f"'{reference}' element bit width {reference_width}",
+        )
+
+    return Constraint(
+        name,
+        (field, reference),
+        validate=_validate,
+    )
+
+
+def ElementWidthGreaterThan(field: str, reference: str) -> Constraint:
+    """A field's scalar/shaped element bit width must be greater than another."""
+
+    return _element_width_order(
+        "ElementWidthGreaterThan",
+        field,
+        reference,
+        greater_than=True,
+    )
+
+
+def ElementWidthLessThan(field: str, reference: str) -> Constraint:
+    """A field's scalar/shaped element bit width must be less than another."""
+
+    return _element_width_order(
+        "ElementWidthLessThan",
+        field,
+        reference,
+        greater_than=False,
+    )
 
 
 def OffsetCountMatchesRank(shaped: str, offsets: str) -> Constraint:

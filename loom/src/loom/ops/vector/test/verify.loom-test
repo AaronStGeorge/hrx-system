@@ -988,8 +988,26 @@ func.def @transform_unknown_family(%v: vector<128xf32>) {
 
 // Extension and truncation ops encode their width direction in the op name.
 func.def @extf_wrong_width(%v: vector<4xf32>) {
-  // ERROR@+1: TYPE/004 "wider floating-point element type"
+  // ERROR@+1: TYPE/004 "result" "element bit width greater than input"
   %r = vector.extf %v : vector<4xf32> to vector<4xf16>
+  func.return
+}
+
+// ====
+
+// Floating-point truncation must narrow, not widen.
+func.def @fptrunc_wrong_width(%v: vector<4xf16>) {
+  // ERROR@+1: TYPE/004 "result" "element bit width less than input"
+  %r = vector.fptrunc %v : vector<4xf16> to vector<4xf32>
+  func.return
+}
+
+// ====
+
+// Integer extension must widen, not narrow.
+func.def @extsi_wrong_width(%v: vector<4xi32>) {
+  // ERROR@+1: TYPE/004 "result" "element bit width greater than input"
+  %r = vector.extsi %v : vector<4xi32> to vector<4xi8>
   func.return
 }
 
@@ -997,7 +1015,7 @@ func.def @extf_wrong_width(%v: vector<4xf32>) {
 
 // Integer truncation must narrow, not widen.
 func.def @trunci_wrong_width(%v: vector<4xi8>) {
-  // ERROR@+1: TYPE/004 "narrower integer element type"
+  // ERROR@+1: TYPE/004 "result" "element bit width less than input"
   %r = vector.trunci %v : vector<4xi8> to vector<4xi32>
   func.return
 }
