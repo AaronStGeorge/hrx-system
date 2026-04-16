@@ -380,3 +380,87 @@ func.def @binary_sketch_dot_reference(%lhs_bits: vector<16xi8>, %rhs_bits: vecto
   %dot = scalar.subi %total, %twice_hamming : i32
   func.return %dot : i32
 }
+
+// ====
+
+// Recursive polar transforms can stay in ordinary register IR: each level
+// converts adjacent x/y pairs into a radius stream plus an angle stream, then
+// recurses on the radius stream. The 16-lane encoded layout below is:
+//
+//   [root radius, root angle, level-2 angles, level-4 angles, level-8 angles]
+//
+// That keeps every code stream explicit while preserving the reversible tree
+// shape a target matcher needs before fallback scalarization.
+func.def @polar_recursive_encode_16_reference(%v: vector<16xf32>) -> (vector<16xf32>) {
+  %x8, %y8 = vector.deinterleave<0> %v : vector<16xf32> -> vector<8xf32>, vector<8xf32>
+  %xx8 = vector.mulf %x8, %x8 : vector<8xf32>
+  %yy8 = vector.mulf %y8, %y8 : vector<8xf32>
+  %sum8 = vector.addf %xx8, %yy8 : vector<8xf32>
+  %radius8 = vector.sqrtf %sum8 : vector<8xf32>
+  %angle8 = vector.atan2f %y8, %x8 : vector<8xf32>
+
+  %x4, %y4 = vector.deinterleave<0> %radius8 : vector<8xf32> -> vector<4xf32>, vector<4xf32>
+  %xx4 = vector.mulf %x4, %x4 : vector<4xf32>
+  %yy4 = vector.mulf %y4, %y4 : vector<4xf32>
+  %sum4 = vector.addf %xx4, %yy4 : vector<4xf32>
+  %radius4 = vector.sqrtf %sum4 : vector<4xf32>
+  %angle4 = vector.atan2f %y4, %x4 : vector<4xf32>
+
+  %x2, %y2 = vector.deinterleave<0> %radius4 : vector<4xf32> -> vector<2xf32>, vector<2xf32>
+  %xx2 = vector.mulf %x2, %x2 : vector<2xf32>
+  %yy2 = vector.mulf %y2, %y2 : vector<2xf32>
+  %sum2 = vector.addf %xx2, %yy2 : vector<2xf32>
+  %radius2 = vector.sqrtf %sum2 : vector<2xf32>
+  %angle2 = vector.atan2f %y2, %x2 : vector<2xf32>
+
+  %x1, %y1 = vector.deinterleave<0> %radius2 : vector<2xf32> -> vector<1xf32>, vector<1xf32>
+  %xx1 = vector.mulf %x1, %x1 : vector<1xf32>
+  %yy1 = vector.mulf %y1, %y1 : vector<1xf32>
+  %sum1 = vector.addf %xx1, %yy1 : vector<1xf32>
+  %radius1 = vector.sqrtf %sum1 : vector<1xf32>
+  %angle1 = vector.atan2f %y1, %x1 : vector<1xf32>
+
+  %root = vector.concat<0> %radius1, %angle1 : vector<1xf32>, vector<1xf32> -> vector<2xf32>
+  %tree2 = vector.concat<0> %root, %angle2 : vector<2xf32>, vector<2xf32> -> vector<4xf32>
+  %tree4 = vector.concat<0> %tree2, %angle4 : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+  %encoded = vector.concat<0> %tree4, %angle8 : vector<8xf32>, vector<8xf32> -> vector<16xf32>
+  func.return %encoded : vector<16xf32>
+}
+
+// ====
+
+// Decode walks the same layout in reverse. Each angle stream reconstructs the
+// next radius stream with cos/sin and interleave until the original 16 logical
+// lanes are recovered.
+func.def @polar_recursive_decode_16_reference(%encoded: vector<16xf32>) -> (vector<16xf32>) {
+  %radius1 = vector.slice %encoded[0] : vector<16xf32> -> vector<1xf32>
+  %angle1 = vector.slice %encoded[1] : vector<16xf32> -> vector<1xf32>
+  %angle2 = vector.slice %encoded[2] : vector<16xf32> -> vector<2xf32>
+  %angle4 = vector.slice %encoded[4] : vector<16xf32> -> vector<4xf32>
+  %angle8 = vector.slice %encoded[8] : vector<16xf32> -> vector<8xf32>
+
+  %cos1 = vector.cosf %angle1 : vector<1xf32>
+  %sin1 = vector.sinf %angle1 : vector<1xf32>
+  %x1 = vector.mulf %radius1, %cos1 : vector<1xf32>
+  %y1 = vector.mulf %radius1, %sin1 : vector<1xf32>
+  %radius2 = vector.interleave<0> %x1, %y1 : vector<1xf32>, vector<1xf32> -> vector<2xf32>
+
+  %cos2 = vector.cosf %angle2 : vector<2xf32>
+  %sin2 = vector.sinf %angle2 : vector<2xf32>
+  %x2 = vector.mulf %radius2, %cos2 : vector<2xf32>
+  %y2 = vector.mulf %radius2, %sin2 : vector<2xf32>
+  %radius4 = vector.interleave<0> %x2, %y2 : vector<2xf32>, vector<2xf32> -> vector<4xf32>
+
+  %cos4 = vector.cosf %angle4 : vector<4xf32>
+  %sin4 = vector.sinf %angle4 : vector<4xf32>
+  %x4 = vector.mulf %radius4, %cos4 : vector<4xf32>
+  %y4 = vector.mulf %radius4, %sin4 : vector<4xf32>
+  %radius8 = vector.interleave<0> %x4, %y4 : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+
+  %cos8 = vector.cosf %angle8 : vector<8xf32>
+  %sin8 = vector.sinf %angle8 : vector<8xf32>
+  %x8 = vector.mulf %radius8, %cos8 : vector<8xf32>
+  %y8 = vector.mulf %radius8, %sin8 : vector<8xf32>
+  %decoded = vector.interleave<0> %x8, %y8 : vector<8xf32>, vector<8xf32> -> vector<16xf32>
+  func.return %decoded : vector<16xf32>
+}
