@@ -1463,6 +1463,9 @@ static const struct {
                      "eq",
      LOOM_PREDICATE_EQ},
     {(const uint8_t*)"\x02"
+                     "ne",
+     LOOM_PREDICATE_NE},
+    {(const uint8_t*)"\x02"
                      "lt",
      LOOM_PREDICATE_LT},
     {(const uint8_t*)"\x02"

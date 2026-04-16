@@ -735,11 +735,12 @@ static iree_string_view_t loom_resolve_value_name(
 
 // Predicate kind names indexed by loom_predicate_kind_t.
 static const char* const loom_predicate_kind_names[LOOM_PREDICATE_COUNT_] = {
-    [LOOM_PREDICATE_EQ] = "eq",     [LOOM_PREDICATE_LT] = "lt",
-    [LOOM_PREDICATE_LE] = "le",     [LOOM_PREDICATE_GT] = "gt",
-    [LOOM_PREDICATE_GE] = "ge",     [LOOM_PREDICATE_MUL] = "mul",
-    [LOOM_PREDICATE_MIN] = "min",   [LOOM_PREDICATE_MAX] = "max",
-    [LOOM_PREDICATE_POW2] = "pow2", [LOOM_PREDICATE_RANGE] = "range",
+    [LOOM_PREDICATE_EQ] = "eq",       [LOOM_PREDICATE_NE] = "ne",
+    [LOOM_PREDICATE_LT] = "lt",       [LOOM_PREDICATE_LE] = "le",
+    [LOOM_PREDICATE_GT] = "gt",       [LOOM_PREDICATE_GE] = "ge",
+    [LOOM_PREDICATE_MUL] = "mul",     [LOOM_PREDICATE_MIN] = "min",
+    [LOOM_PREDICATE_MAX] = "max",     [LOOM_PREDICATE_POW2] = "pow2",
+    [LOOM_PREDICATE_RANGE] = "range",
 };
 
 // Prints a predicate argument based on its tag.

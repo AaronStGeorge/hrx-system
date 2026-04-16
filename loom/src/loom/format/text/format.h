@@ -770,7 +770,7 @@
 // ==========================================================================
 //
 // predicate ::= pred-name '(' pred-arg (',' pred-arg)* ')'
-// pred-name ::= 'eq' | 'lt' | 'le' | 'gt' | 'ge'
+// pred-name ::= 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge'
 //             | 'min' | 'max' | 'mul' | 'pow2' | 'range'
 // pred-arg  ::= SSA-VALUE | INTEGER
 //
@@ -782,6 +782,7 @@
 //   range(%K, 32, 512)   32 <= %K <= 512.
 //   pow2(%N)             %N is a power of 2.
 //   eq(%M, %K)           %M == %K.
+//   ne(%M, 0)            %M != 0.
 //
 // ==========================================================================
 // Complete example

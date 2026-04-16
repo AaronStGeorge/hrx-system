@@ -59,16 +59,17 @@ static inline loom_symbol_ref_t loom_symbol_ref_null(void) {
 // Predicate kind. Evaluated at runtime for dynamic dimensions. Stored in the
 // kind field of loom_predicate_t.
 typedef enum loom_predicate_kind_e {
-  LOOM_PREDICATE_EQ = 0,     // eq(a, b)
-  LOOM_PREDICATE_LT = 1,     // lt(a, b)
-  LOOM_PREDICATE_LE = 2,     // le(a, b)
-  LOOM_PREDICATE_GT = 3,     // gt(a, b)
-  LOOM_PREDICATE_GE = 4,     // ge(a, b)
-  LOOM_PREDICATE_MUL = 5,    // mul(a, n): a is multiple of n.
-  LOOM_PREDICATE_MIN = 6,    // min(a, n): a >= n.
-  LOOM_PREDICATE_MAX = 7,    // max(a, n): a <= n.
-  LOOM_PREDICATE_POW2 = 8,   // pow2(a): a is power of 2.
-  LOOM_PREDICATE_RANGE = 9,  // range(a, lo, hi): lo <= a <= hi.
+  LOOM_PREDICATE_EQ = 0,      // eq(a, b)
+  LOOM_PREDICATE_NE = 1,      // ne(a, b)
+  LOOM_PREDICATE_LT = 2,      // lt(a, b)
+  LOOM_PREDICATE_LE = 3,      // le(a, b)
+  LOOM_PREDICATE_GT = 4,      // gt(a, b)
+  LOOM_PREDICATE_GE = 5,      // ge(a, b)
+  LOOM_PREDICATE_MUL = 6,     // mul(a, n): a is multiple of n.
+  LOOM_PREDICATE_MIN = 7,     // min(a, n): a >= n.
+  LOOM_PREDICATE_MAX = 8,     // max(a, n): a <= n.
+  LOOM_PREDICATE_POW2 = 9,    // pow2(a): a is power of 2.
+  LOOM_PREDICATE_RANGE = 10,  // range(a, lo, hi): lo <= a <= hi.
   LOOM_PREDICATE_COUNT_,
 } loom_predicate_kind_t;
 

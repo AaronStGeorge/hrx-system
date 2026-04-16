@@ -16,10 +16,12 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/special_values.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/transforms/rewriter.h"
 #include "loom/transforms/type_propagation.h"
+#include "loom/util/walk.h"
 
 //===----------------------------------------------------------------------===//
 // Constant materialization
@@ -518,6 +520,451 @@ static iree_status_t loom_canonicalize_try_symbolic_integer_cleanup(
       rewriter, expression_context, op, out_changed);
 }
 
+//===----------------------------------------------------------------------===//
+// Branch-edge fact materialization
+//===----------------------------------------------------------------------===//
+
+// Opportunistic branch-edge materialization has a local rewrite budget, not an
+// IR legality limit. Over-budget facts remain true but unmaterialized; later
+// canonicalization/fact passes still see the original program semantics.
+#define LOOM_CANONICALIZE_EDGE_RELATION_CAPACITY 32
+#define LOOM_CANONICALIZE_EDGE_CANDIDATE_CAPACITY 16
+#define LOOM_CANONICALIZE_EDGE_PREDICATE_CAPACITY 64
+
+typedef struct loom_canonicalize_edge_assume_candidate_t {
+  // Value used before the branch whose edge-local replacement dominates the
+  // region body.
+  loom_value_id_t source;
+  // Source type, reused for the assume result.
+  loom_type_t type;
+  // True when the source should be refined with index.assume instead of
+  // scalar.assume.
+  bool uses_index_assume;
+  // First predicate in the flat predicate storage.
+  uint16_t predicate_offset;
+  // Number of predicates attached to the assume.
+  uint16_t predicate_count;
+  // True when the source has an operand use inside the target region.
+  bool has_region_use;
+  // Region-entry assume op built for this source.
+  loom_op_t* assume_op;
+  // Result of assume_op that replaces region-local source uses.
+  loom_value_id_t replacement;
+} loom_canonicalize_edge_assume_candidate_t;
+
+typedef struct loom_canonicalize_edge_assume_set_t {
+  // Candidate sources requiring region-entry assumes.
+  loom_canonicalize_edge_assume_candidate_t
+      candidates[LOOM_CANONICALIZE_EDGE_CANDIDATE_CAPACITY];
+  // Number of populated candidates.
+  uint16_t candidate_count;
+  // Flat predicate storage referenced by each candidate.
+  loom_predicate_t predicates[LOOM_CANONICALIZE_EDGE_PREDICATE_CAPACITY];
+  // Number of populated predicates.
+  uint16_t predicate_count;
+} loom_canonicalize_edge_assume_set_t;
+
+static bool loom_canonicalize_type_uses_index_assume(loom_type_t type,
+                                                     bool* out_uses_index) {
+  if (!loom_type_is_scalar(type)) return false;
+  loom_scalar_type_t scalar_type = loom_type_element_type(type);
+  if (scalar_type == LOOM_SCALAR_TYPE_INDEX ||
+      scalar_type == LOOM_SCALAR_TYPE_OFFSET) {
+    *out_uses_index = true;
+    return true;
+  }
+  if (loom_scalar_type_is_integer(scalar_type)) {
+    *out_uses_index = false;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_canonicalize_predicate_equal(const loom_predicate_t* lhs,
+                                              const loom_predicate_t* rhs) {
+  if (lhs->kind != rhs->kind || lhs->arg_count != rhs->arg_count) {
+    return false;
+  }
+  for (uint8_t i = 0; i < lhs->arg_count; ++i) {
+    if (lhs->arg_tags[i] != rhs->arg_tags[i] || lhs->args[i] != rhs->args[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_canonicalize_value_exact_integer(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t value_id) {
+  loom_value_facts_t facts = loom_value_fact_table_lookup(fact_table, value_id);
+  return loom_value_facts_is_exact(facts) && !loom_value_facts_is_float(facts);
+}
+
+static iree_status_t loom_canonicalize_edge_assume_set_append_predicate(
+    loom_rewriter_t* rewriter, loom_canonicalize_edge_assume_set_t* assume_set,
+    loom_value_id_t source, loom_predicate_t predicate) {
+  if (source == LOOM_VALUE_ID_INVALID ||
+      source >= rewriter->module->values.count) {
+    return iree_ok_status();
+  }
+  if (loom_canonicalize_value_exact_integer(&rewriter->fact_table, source)) {
+    return iree_ok_status();
+  }
+
+  loom_type_t source_type = loom_module_value_type(rewriter->module, source);
+  bool uses_index_assume = false;
+  if (!loom_canonicalize_type_uses_index_assume(source_type,
+                                                &uses_index_assume)) {
+    return iree_ok_status();
+  }
+
+  uint16_t candidate_index = 0;
+  bool found_candidate = false;
+  for (uint16_t i = 0; i < assume_set->candidate_count; ++i) {
+    if (assume_set->candidates[i].source == source) {
+      candidate_index = i;
+      found_candidate = true;
+      break;
+    }
+  }
+  if (!found_candidate) {
+    if (assume_set->candidate_count >=
+        LOOM_CANONICALIZE_EDGE_CANDIDATE_CAPACITY) {
+      return iree_ok_status();
+    }
+    candidate_index = assume_set->candidate_count++;
+    assume_set->candidates[candidate_index] =
+        (loom_canonicalize_edge_assume_candidate_t){
+            .source = source,
+            .type = source_type,
+            .uses_index_assume = uses_index_assume,
+            .predicate_offset = assume_set->predicate_count,
+            .predicate_count = 0,
+            .has_region_use = false,
+            .assume_op = NULL,
+            .replacement = LOOM_VALUE_ID_INVALID,
+        };
+  }
+
+  loom_canonicalize_edge_assume_candidate_t* candidate =
+      &assume_set->candidates[candidate_index];
+  for (uint16_t i = 0; i < candidate->predicate_count; ++i) {
+    const loom_predicate_t* existing =
+        &assume_set->predicates[candidate->predicate_offset + i];
+    if (loom_canonicalize_predicate_equal(existing, &predicate)) {
+      return iree_ok_status();
+    }
+  }
+  if (assume_set->predicate_count >=
+      LOOM_CANONICALIZE_EDGE_PREDICATE_CAPACITY) {
+    return iree_ok_status();
+  }
+
+  uint16_t insert_index =
+      (uint16_t)(candidate->predicate_offset + candidate->predicate_count);
+  if (insert_index < assume_set->predicate_count) {
+    memmove(&assume_set->predicates[insert_index + 1],
+            &assume_set->predicates[insert_index],
+            ((iree_host_size_t)assume_set->predicate_count - insert_index) *
+                sizeof(*assume_set->predicates));
+    for (uint16_t i = 0; i < assume_set->candidate_count; ++i) {
+      if (i != candidate_index &&
+          assume_set->candidates[i].predicate_offset >= insert_index) {
+        ++assume_set->candidates[i].predicate_offset;
+      }
+    }
+  }
+  assume_set->predicates[insert_index] = predicate;
+  ++assume_set->predicate_count;
+  ++candidate->predicate_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_canonicalize_edge_assume_set_append_relation(
+    loom_rewriter_t* rewriter, loom_canonicalize_edge_assume_set_t* assume_set,
+    const loom_condition_integer_relation_t* relation) {
+  if (relation->left.kind == LOOM_CONDITION_INTEGER_OPERAND_VALUE) {
+    loom_predicate_t predicate = {0};
+    if (loom_condition_integer_relation_make_predicate_for_value(
+            relation, &rewriter->fact_table, relation->left.value_id,
+            &predicate)) {
+      IREE_RETURN_IF_ERROR(loom_canonicalize_edge_assume_set_append_predicate(
+          rewriter, assume_set, relation->left.value_id, predicate));
+    }
+  }
+  if (relation->right.kind == LOOM_CONDITION_INTEGER_OPERAND_VALUE) {
+    loom_predicate_t predicate = {0};
+    if (loom_condition_integer_relation_make_predicate_for_value(
+            relation, &rewriter->fact_table, relation->right.value_id,
+            &predicate)) {
+      IREE_RETURN_IF_ERROR(loom_canonicalize_edge_assume_set_append_predicate(
+          rewriter, assume_set, relation->right.value_id, predicate));
+    }
+  }
+  return iree_ok_status();
+}
+
+typedef struct loom_canonicalize_region_use_scan_t {
+  // Candidate set whose has_region_use flags are being populated.
+  loom_canonicalize_edge_assume_set_t* assume_set;
+} loom_canonicalize_region_use_scan_t;
+
+static iree_status_t loom_canonicalize_scan_region_uses(
+    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
+    loom_walk_result_t* out_result) {
+  (void)context;
+  *out_result = LOOM_WALK_CONTINUE;
+  loom_canonicalize_region_use_scan_t* scan =
+      (loom_canonicalize_region_use_scan_t*)user_data;
+  if (loom_index_assume_isa(op) || loom_scalar_assume_isa(op)) {
+    return iree_ok_status();
+  }
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t operand_index = 0; operand_index < op->operand_count;
+       ++operand_index) {
+    for (uint16_t candidate_index = 0;
+         candidate_index < scan->assume_set->candidate_count;
+         ++candidate_index) {
+      loom_canonicalize_edge_assume_candidate_t* candidate =
+          &scan->assume_set->candidates[candidate_index];
+      if (operands[operand_index] == candidate->source) {
+        candidate->has_region_use = true;
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+static bool loom_canonicalize_is_edge_assume_op(
+    const loom_canonicalize_edge_assume_set_t* assume_set,
+    const loom_op_t* op) {
+  for (uint16_t i = 0; i < assume_set->candidate_count; ++i) {
+    if (assume_set->candidates[i].assume_op == op) return true;
+  }
+  return false;
+}
+
+typedef struct loom_canonicalize_region_replacement_t {
+  // Rewriter used for operand updates.
+  loom_rewriter_t* rewriter;
+  // Candidate replacements to apply.
+  loom_canonicalize_edge_assume_set_t* assume_set;
+} loom_canonicalize_region_replacement_t;
+
+static iree_status_t loom_canonicalize_replace_region_uses(
+    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
+    loom_walk_result_t* out_result) {
+  (void)context;
+  *out_result = LOOM_WALK_CONTINUE;
+  loom_canonicalize_region_replacement_t* replacement =
+      (loom_canonicalize_region_replacement_t*)user_data;
+  if (loom_canonicalize_is_edge_assume_op(replacement->assume_set, op) ||
+      loom_index_assume_isa(op) || loom_scalar_assume_isa(op)) {
+    return iree_ok_status();
+  }
+
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t operand_index = 0; operand_index < op->operand_count;
+       ++operand_index) {
+    loom_value_id_t operand = operands[operand_index];
+    for (uint16_t candidate_index = 0;
+         candidate_index < replacement->assume_set->candidate_count;
+         ++candidate_index) {
+      const loom_canonicalize_edge_assume_candidate_t* candidate =
+          &replacement->assume_set->candidates[candidate_index];
+      if (operand == candidate->source &&
+          candidate->replacement != LOOM_VALUE_ID_INVALID) {
+        IREE_RETURN_IF_ERROR(loom_rewriter_set_operand(
+            replacement->rewriter, op, operand_index, candidate->replacement));
+        break;
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_canonicalize_materialize_edge_assumes(
+    loom_rewriter_t* rewriter, loom_op_t* parent_op, loom_region_t* region,
+    loom_canonicalize_edge_assume_set_t* assume_set, bool* out_changed) {
+  *out_changed = false;
+  if (!region || region->block_count == 0 || assume_set->candidate_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_canonicalize_region_use_scan_t scan = {.assume_set = assume_set};
+  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+  IREE_RETURN_IF_ERROR(loom_walk_region(
+      rewriter->module, region, LOOM_WALK_PRE_ORDER,
+      (loom_walk_callback_t){loom_canonicalize_scan_region_uses, &scan},
+      rewriter->arena, &walk_result));
+
+  loom_block_t* entry_block = loom_region_entry_block(region);
+  if (!entry_block || !entry_block->first_op) return iree_ok_status();
+
+  iree_status_t status = iree_ok_status();
+  loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
+  loom_builder_set_before(&rewriter->builder, entry_block->first_op);
+  for (uint16_t candidate_index = 0;
+       iree_status_is_ok(status) &&
+       candidate_index < assume_set->candidate_count;
+       ++candidate_index) {
+    loom_canonicalize_edge_assume_candidate_t* candidate =
+        &assume_set->candidates[candidate_index];
+    if (!candidate->has_region_use || candidate->predicate_count == 0) {
+      continue;
+    }
+    loom_value_id_t value = candidate->source;
+    loom_type_t result_type = candidate->type;
+    const loom_predicate_t* source_predicates =
+        &assume_set->predicates[candidate->predicate_offset];
+    loom_predicate_t* predicates = NULL;
+    status = iree_arena_allocate_array(
+        &rewriter->module->arena, candidate->predicate_count,
+        sizeof(loom_predicate_t), (void**)&predicates);
+    if (!iree_status_is_ok(status)) break;
+    memcpy(predicates, source_predicates,
+           candidate->predicate_count * sizeof(loom_predicate_t));
+    if (candidate->uses_index_assume) {
+      status = loom_index_assume_build(
+          &rewriter->builder, &value, 1, predicates, candidate->predicate_count,
+          &result_type, 1, parent_op->location, &candidate->assume_op);
+      if (!iree_status_is_ok(status)) break;
+      candidate->replacement =
+          loom_index_assume_results(candidate->assume_op).values[0];
+    } else {
+      status = loom_scalar_assume_build(
+          &rewriter->builder, &value, 1, predicates, candidate->predicate_count,
+          &result_type, 1, parent_op->location, &candidate->assume_op);
+      if (!iree_status_is_ok(status)) break;
+      candidate->replacement =
+          loom_scalar_assume_results(candidate->assume_op).values[0];
+    }
+    *out_changed = true;
+  }
+  loom_builder_restore(&rewriter->builder, saved_ip);
+  if (!iree_status_is_ok(status)) return status;
+
+  if (!*out_changed) return iree_ok_status();
+  loom_canonicalize_region_replacement_t replacement = {
+      .rewriter = rewriter,
+      .assume_set = assume_set,
+  };
+  return loom_walk_region(
+      rewriter->module, region, LOOM_WALK_PRE_ORDER,
+      (loom_walk_callback_t){loom_canonicalize_replace_region_uses,
+                             &replacement},
+      rewriter->arena, &walk_result);
+}
+
+static iree_status_t loom_canonicalize_materialize_condition_facts_in_region(
+    loom_rewriter_t* rewriter, loom_op_t* parent_op, loom_region_t* region,
+    loom_value_id_t condition, bool assumed_truth, bool* out_changed) {
+  *out_changed = false;
+  loom_condition_integer_relation_t
+      relation_storage[LOOM_CANONICALIZE_EDGE_RELATION_CAPACITY];
+  loom_condition_fact_set_t condition_facts;
+  loom_condition_fact_set_initialize(
+      relation_storage, IREE_ARRAYSIZE(relation_storage), &condition_facts);
+  IREE_RETURN_IF_ERROR(
+      loom_condition_facts_query(rewriter->module, &rewriter->fact_table,
+                                 condition, assumed_truth, &condition_facts));
+  if (condition_facts.integer_relation_count == 0) return iree_ok_status();
+
+  loom_canonicalize_edge_assume_set_t assume_set = {0};
+  for (iree_host_size_t relation_index = 0;
+       relation_index < condition_facts.integer_relation_count;
+       ++relation_index) {
+    IREE_RETURN_IF_ERROR(loom_canonicalize_edge_assume_set_append_relation(
+        rewriter, &assume_set,
+        &condition_facts.integer_relations[relation_index]));
+  }
+  return loom_canonicalize_materialize_edge_assumes(rewriter, parent_op, region,
+                                                    &assume_set, out_changed);
+}
+
+static iree_status_t loom_canonicalize_materialize_selector_case_fact_in_region(
+    loom_rewriter_t* rewriter, loom_op_t* parent_op, loom_region_t* region,
+    loom_value_id_t selector, int64_t case_key, bool* out_changed) {
+  *out_changed = false;
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_EQ,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                   LOOM_PRED_ARG_NONE},
+      .args = {selector, case_key, 0},
+  };
+  loom_canonicalize_edge_assume_set_t assume_set = {0};
+  IREE_RETURN_IF_ERROR(loom_canonicalize_edge_assume_set_append_predicate(
+      rewriter, &assume_set, selector, predicate));
+  return loom_canonicalize_materialize_edge_assumes(rewriter, parent_op, region,
+                                                    &assume_set, out_changed);
+}
+
+static iree_status_t
+loom_canonicalize_materialize_selector_default_facts_in_region(
+    loom_rewriter_t* rewriter, loom_op_t* parent_op, loom_region_t* region,
+    loom_value_id_t selector, loom_attribute_t case_keys, bool* out_changed) {
+  *out_changed = false;
+  loom_canonicalize_edge_assume_set_t assume_set = {0};
+  for (uint16_t i = 0; i < case_keys.count; ++i) {
+    loom_predicate_t predicate = {
+        .kind = LOOM_PREDICATE_NE,
+        .arg_count = 2,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                     LOOM_PRED_ARG_NONE},
+        .args = {selector, case_keys.i64_array[i], 0},
+    };
+    IREE_RETURN_IF_ERROR(loom_canonicalize_edge_assume_set_append_predicate(
+        rewriter, &assume_set, selector, predicate));
+  }
+  return loom_canonicalize_materialize_edge_assumes(rewriter, parent_op, region,
+                                                    &assume_set, out_changed);
+}
+
+static iree_status_t loom_canonicalize_try_materialize_branch_edge_facts(
+    loom_rewriter_t* rewriter, loom_op_t* op, bool* out_changed) {
+  *out_changed = false;
+  if (loom_scf_if_isa(op)) {
+    bool then_changed = false;
+    IREE_RETURN_IF_ERROR(
+        loom_canonicalize_materialize_condition_facts_in_region(
+            rewriter, op, loom_scf_if_then_region(op),
+            loom_scf_if_condition(op), true, &then_changed));
+    bool else_changed = false;
+    IREE_RETURN_IF_ERROR(
+        loom_canonicalize_materialize_condition_facts_in_region(
+            rewriter, op, loom_scf_if_else_region(op),
+            loom_scf_if_condition(op), false, &else_changed));
+    *out_changed = then_changed || else_changed;
+    return iree_ok_status();
+  }
+  if (!loom_scf_switch_isa(op)) return iree_ok_status();
+
+  loom_attribute_t case_keys = loom_scf_switch_case_keys(op);
+  if (case_keys.kind != LOOM_ATTR_I64_ARRAY ||
+      (case_keys.count > 0 && !case_keys.i64_array)) {
+    return iree_ok_status();
+  }
+  loom_region_slice_t case_regions = loom_scf_switch_case_regions(op);
+  if (case_regions.count != case_keys.count) return iree_ok_status();
+
+  loom_value_id_t selector = loom_scf_switch_selector(op);
+  for (uint16_t i = 0; i < case_keys.count; ++i) {
+    bool case_changed = false;
+    IREE_RETURN_IF_ERROR(
+        loom_canonicalize_materialize_selector_case_fact_in_region(
+            rewriter, op, case_regions.regions[i], selector,
+            case_keys.i64_array[i], &case_changed));
+    *out_changed |= case_changed;
+  }
+  bool default_changed = false;
+  IREE_RETURN_IF_ERROR(
+      loom_canonicalize_materialize_selector_default_facts_in_region(
+          rewriter, op, loom_scf_switch_default_region(op), selector, case_keys,
+          &default_changed));
+  *out_changed |= default_changed;
+  return iree_ok_status();
+}
+
 struct loom_canonicalizer_state_t {
   // Rewriter state for the most recent run. Its fact table remains queryable
   // until the next run or deinitialize.
@@ -736,6 +1183,23 @@ iree_status_t loom_canonicalizer_run_function(
           rewriter, &expression_context, op, &symbolic_changed);
       if (!iree_status_is_ok(status)) break;
       if (symbolic_changed) {
+        any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/true);
+        loom_symbolic_expr_context_reset(&expression_context);
+        continue;
+      }
+
+      // Branch-edge fact materialization makes predicate implications visible
+      // as SSA assume values inside each region. Keeping this in the driver
+      // lets the transform use index/scalar assume ops without making scf
+      // depend on those dialects.
+      bool edge_facts_materialized = false;
+      rewriter->flags = 0;
+      status = loom_canonicalize_try_materialize_branch_edge_facts(
+          rewriter, op, &edge_facts_materialized);
+      if (!iree_status_is_ok(status)) break;
+      if (edge_facts_materialized) {
         any_changed = true;
         loom_canonicalizer_record_rewrite(out_result, rewriter,
                                           /*count_modified_op=*/true);

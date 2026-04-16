@@ -1754,17 +1754,18 @@ class TestParsePredicates:
 
         module = self._parse_module(
             "func.decl @f(%M: index, %K: index, %a: tensor<[%M]x[%K]xf32>) -> (tensor<[%M]xf32>)"
-            " where [mul(%M, 16), lt(%K, 1024), range(%M, 32, 512)]\n"
+            " where [mul(%M, 16), lt(%K, 1024), ne(%K, 0), range(%M, 32, 512)]\n"
         )
         op = module.symbols[0].op
         assert op is not None
         predicates = op.attributes.get("predicates", [])
-        assert len(predicates) == 3
+        assert len(predicates) == 4
         assert predicates[0].kind == "mul"
         assert predicates[1].kind == "lt"
-        assert predicates[2].kind == "range"
+        assert predicates[2].kind == "ne"
+        assert predicates[3].kind == "range"
         # range has 3 args.
-        range_pred = predicates[2]
+        range_pred = predicates[3]
         assert len(range_pred.args) == 3
         assert range_pred.args[0].value == "M"
         assert range_pred.args[1].value == 32

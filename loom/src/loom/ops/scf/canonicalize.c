@@ -918,6 +918,65 @@ static bool loom_scf_if_regions_are_discardable(const loom_module_t* module,
   return !loom_op_regions_have_hints(module, op);
 }
 
+static iree_status_t loom_scf_if_fold_exact_boolean_yields(
+    loom_op_t* op, loom_rewriter_t* rewriter, bool* out_folded) {
+  *out_folded = false;
+  if (op->result_count != 1 || op->tied_result_count != 0) {
+    return iree_ok_status();
+  }
+  if (!loom_scf_if_regions_are_discardable(rewriter->module, op)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t result = loom_op_const_results(op)[0];
+  loom_type_t result_type = loom_module_value_type(rewriter->module, result);
+  if (!loom_type_is_scalar(result_type) ||
+      loom_type_element_type(result_type) != LOOM_SCALAR_TYPE_I1) {
+    return iree_ok_status();
+  }
+
+  loom_op_t* then_yield =
+      loom_scf_region_terminator(loom_scf_if_then_region(op));
+  loom_op_t* else_yield =
+      loom_scf_region_terminator(loom_scf_if_else_region(op));
+  if (!then_yield || !else_yield) return iree_ok_status();
+
+  loom_value_slice_t then_values = loom_scf_yield_values(then_yield);
+  loom_value_slice_t else_values = loom_scf_yield_values(else_yield);
+  if (then_values.count != 1 || else_values.count != 1) {
+    return iree_ok_status();
+  }
+
+  bool then_value = false;
+  bool else_value = false;
+  if (!loom_scf_value_facts_are_exact_bool(rewriter, then_values.values[0],
+                                           &then_value) ||
+      !loom_scf_value_facts_are_exact_bool(rewriter, else_values.values[0],
+                                           &else_value)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  if (then_value && !else_value) {
+    replacement = loom_scf_if_condition(op);
+  } else if (then_value == else_value) {
+    loom_builder_set_before(&rewriter->builder, op);
+    loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+    IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
+        rewriter, loom_value_facts_exact_i64(then_value ? 1 : 0), result_type,
+        op->location, &replacement));
+    IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+        rewriter, op, &replacement, 1, value_checkpoint));
+  } else {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement, 1));
+  *out_folded = true;
+  return iree_ok_status();
+}
+
 static bool loom_scf_value_has_no_uses(const loom_module_t* module,
                                        loom_value_id_t value_id) {
   if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
@@ -1160,6 +1219,10 @@ iree_status_t loom_scf_if_canonicalize(loom_op_t* op,
     if (iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
       return iree_ok_status();
     }
+    bool exact_boolean_folded = false;
+    IREE_RETURN_IF_ERROR(loom_scf_if_fold_exact_boolean_yields(
+        op, rewriter, &exact_boolean_folded));
+    if (exact_boolean_folded) return iree_ok_status();
     return loom_scf_if_selectify_yield_only(op, rewriter);
   }
 

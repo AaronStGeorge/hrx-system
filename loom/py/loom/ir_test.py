@@ -1072,6 +1072,16 @@ class TestPredicateEvaluation:
             self._vals(M=17),
         )
 
+    def test_ne(self) -> None:
+        assert evaluate_predicate(
+            self._pred("ne", ("value", "M"), ("const", 16)),
+            self._vals(M=17),
+        )
+        assert not evaluate_predicate(
+            self._pred("ne", ("value", "M"), ("const", 16)),
+            self._vals(M=16),
+        )
+
     def test_lt_true(self) -> None:
         assert evaluate_predicate(
             self._pred("lt", ("value", "K"), ("const", 1024)),

@@ -116,6 +116,76 @@ func.def @if_preserves_inconclusive_unsigned_cmp(%x: index, %y: index) -> (index
 
 // ====
 
+// Branch-edge facts materialize as region-local assumes, allowing both sides of
+// a dynamic condition to fold predicates that are only known on that edge.
+func.def @if_condition_relation_folds_inside_regions(%i: index, %n: index) -> (i1) {
+  %cond = index.cmp slt, %i, %n : index
+  %result = scf.if %cond -> (i1) {
+    %then_known = index.cmp slt, %i, %n : index
+    scf.yield %then_known : i1
+  } else {
+    %else_known = index.cmp sge, %i, %n : index
+    scf.yield %else_known : i1
+  }
+  func.return %result : i1
+}
+
+// ----
+func.def @if_condition_relation_folds_inside_regions(%i: index, %n: index) -> (i1) {
+  %result = scalar.constant true : i1
+  func.return %result : i1
+}
+
+// ====
+
+// The true edge of a boolean and is a conjunction: both source comparisons are
+// true in the branch, so repeated checks fold away.
+func.def @if_and_true_edge_conjoins_relations(%i: index, %n: index, %j: index, %z: index) -> (i1) {
+  %i_in_range = index.cmp slt, %i, %n : index
+  %j_nonzero = index.cmp ne, %j, %z : index
+  %cond = scalar.andi %i_in_range, %j_nonzero : i1
+  %result = scf.if %cond -> (i1) {
+    %i_still_in_range = index.cmp slt, %i, %n : index
+    %j_still_nonzero = index.cmp ne, %j, %z : index
+    %both = scalar.andi %i_still_in_range, %j_still_nonzero : i1
+    scf.yield %both : i1
+  } else {
+    %false = scalar.constant false : i1
+    scf.yield %false : i1
+  }
+  func.return %result : i1
+}
+
+// ----
+func.def @if_and_true_edge_conjoins_relations(%i: index, %n: index, %j: index, %z: index) -> (i1) {
+  %i_in_range = index.cmp slt, %i, %n : index
+  %j_nonzero = index.cmp ne, %j, %z : index
+  %cond = scalar.andi %i_in_range, %j_nonzero : i1
+  func.return %cond : i1
+}
+
+// ====
+
+// Exact boolean yields can fold to the branch condition even when the yielded
+// constants are still materialized inside discardable regions.
+func.def @if_exact_boolean_region_constants_fold_to_condition(%cond: i1) -> (i1) {
+  %result = scf.if %cond -> (i1) {
+    %true = scalar.constant true : i1
+    scf.yield %true : i1
+  } else {
+    %false = scalar.constant false : i1
+    scf.yield %false : i1
+  }
+  func.return %result : i1
+}
+
+// ----
+func.def @if_exact_boolean_region_constants_fold_to_condition(%cond: i1) -> (i1) {
+  func.return %cond : i1
+}
+
+// ====
+
 // A resultless dynamic conditional with no branch effects is dead.
 func.def @if_resultless_empty_erases(%cond: i1) {
   scf.if %cond {
@@ -967,6 +1037,74 @@ func.def @switch_with_body_preserved(%variant: index, %a: index, %b: index, %fal
     }
   }
   func.return %result : index
+}
+
+// ====
+
+// Each explicit switch case refines the selector to the case key inside that
+// region, exposing repeated selector checks to ordinary compare folding.
+func.def @switch_case_edge_relation_folds_inside_region(%variant: index) -> (i1) {
+  %result = scf.switch %variant -> (i1) {
+    case 0 {
+      %zero = index.constant 0 : index
+      %known = index.cmp eq, %variant, %zero : index
+      scf.yield %known : i1
+    }
+    default {
+      %false = scalar.constant false : i1
+      scf.yield %false : i1
+    }
+  }
+  func.return %result : i1
+}
+
+// ----
+func.def @switch_case_edge_relation_folds_inside_region(%variant: index) -> (i1) {
+  %result = scf.switch %variant -> (i1) {
+    case 0 {
+      %known = scalar.constant true : i1
+      scf.yield %known : i1
+    }
+    default {
+      %false = scalar.constant false : i1
+      scf.yield %false : i1
+    }
+  }
+  func.return %result : i1
+}
+
+// ====
+
+// The default switch edge refines the selector to not equal any explicit case
+// key. That is a conjunction, so every repeated miss check can fold.
+func.def @switch_default_edge_relations_fold_inside_region(%variant: index) -> (i1) {
+  %result = scf.switch %variant -> (i1) {
+    case 0 {
+      %false = scalar.constant false : i1
+      scf.yield %false : i1
+    }
+    default {
+      %zero = index.constant 0 : index
+      %known = index.cmp ne, %variant, %zero : index
+      scf.yield %known : i1
+    }
+  }
+  func.return %result : i1
+}
+
+// ----
+func.def @switch_default_edge_relations_fold_inside_region(%variant: index) -> (i1) {
+  %result = scf.switch %variant -> (i1) {
+    case 0 {
+      %false = scalar.constant false : i1
+      scf.yield %false : i1
+    }
+    default {
+      %known = scalar.constant true : i1
+      scf.yield %known : i1
+    }
+  }
+  func.return %result : i1
 }
 
 // ====

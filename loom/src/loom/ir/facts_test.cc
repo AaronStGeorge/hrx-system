@@ -298,6 +298,22 @@ TEST(FactsApplyPredicate, Eq) {
   EXPECT_EQ(f.range_hi, 42);
 }
 
+TEST(FactsApplyPredicate, ValueBoundDoesNotCorruptRange) {
+  loom_value_facts_t f = loom_value_facts_unknown();
+  loom_predicate_t pred = make_predicate_1(LOOM_PREDICATE_LT, 42);
+  pred.arg_tags[1] = LOOM_PRED_ARG_VALUE;
+  pred.args[1] = 7;
+  loom_value_facts_apply_predicate(&f, &pred);
+  EXPECT_TRUE(loom_value_facts_is_unknown(f));
+}
+
+TEST(FactsApplyPredicate, NeIsRepresentedButDoesNotTightenInterval) {
+  loom_value_facts_t f = loom_value_facts_unknown();
+  loom_predicate_t pred = make_predicate_1(LOOM_PREDICATE_NE, 42);
+  loom_value_facts_apply_predicate(&f, &pred);
+  EXPECT_TRUE(loom_value_facts_is_unknown(f));
+}
+
 TEST(FactsApplyPredicate, Ge) {
   loom_value_facts_t f = loom_value_facts_unknown();
   loom_predicate_t pred = make_predicate_1(LOOM_PREDICATE_GE, 10);

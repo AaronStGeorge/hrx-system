@@ -92,6 +92,15 @@ bool loom_condition_integer_relation_apply_to_value_facts(
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
     loom_value_facts_t* inout_facts);
 
+// Converts a relation into an assume predicate for |value_id| when that value
+// is one side of the relation. The produced predicate is normalized so
+// args[0] is |value_id|; the opposite side is either a literal constant when
+// known exact or an SSA value reference.
+bool loom_condition_integer_relation_make_predicate_for_value(
+    const loom_condition_integer_relation_t* relation,
+    const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
+    loom_predicate_t* out_predicate);
+
 // Applies all applicable relations in |facts| to scalar range facts for
 // |value_id|. Returns true if at least one relation was applicable.
 bool loom_condition_fact_set_apply_to_value_facts(

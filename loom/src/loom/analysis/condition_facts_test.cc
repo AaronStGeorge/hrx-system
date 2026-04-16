@@ -99,6 +99,22 @@ class ConditionFactsTest : public ::testing::Test {
     return op;
   }
 
+  loom_op_t* BuildBoolAnd(loom_value_id_t left, loom_value_id_t right) {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_scalar_andi_build(&builder_, left, right,
+                                         loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+                                         LOOM_LOCATION_UNKNOWN, &op));
+    return op;
+  }
+
+  loom_op_t* BuildBoolOr(loom_value_id_t left, loom_value_id_t right) {
+    loom_op_t* op = nullptr;
+    IREE_CHECK_OK(loom_scalar_ori_build(&builder_, left, right,
+                                        loom_type_scalar(LOOM_SCALAR_TYPE_I1),
+                                        LOOM_LOCATION_UNKNOWN, &op));
+    return op;
+  }
+
   void Query(loom_value_id_t condition_value, bool assumed_truth = true) {
     IREE_ASSERT_OK(loom_condition_facts_query(module_, &fact_table_,
                                               condition_value, assumed_truth,
@@ -234,6 +250,69 @@ TEST_F(ConditionFactsTest, ScalarCmpiProducesIntegerRelation) {
   EXPECT_EQ(relation.relation, LOOM_SYMBOLIC_INTEGER_RELATION_NE);
   EXPECT_EQ(relation.left.value_id, left);
   EXPECT_EQ(relation.right.value_id, right);
+}
+
+TEST_F(ConditionFactsTest, BooleanAndTrueEdgeConjoinsRelations) {
+  loom_value_id_t induction = DefineIndexValue();
+  loom_value_id_t upper_bound = DefineIndexValue();
+  loom_value_id_t lane = DefineIndexValue();
+  loom_value_id_t lane_limit = DefineIndexValue();
+  loom_op_t* first =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_SLT, induction, upper_bound);
+  loom_op_t* second =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_NE, lane, lane_limit);
+  loom_op_t* conjunction =
+      BuildBoolAnd(loom_index_cmp_result(first), loom_index_cmp_result(second));
+
+  Query(loom_scalar_andi_result(conjunction));
+
+  ASSERT_EQ(condition_facts_.integer_relation_count, 2u);
+  EXPECT_EQ(condition_facts_.integer_relations[0].relation,
+            LOOM_SYMBOLIC_INTEGER_RELATION_LT);
+  EXPECT_EQ(condition_facts_.integer_relations[0].left.value_id, induction);
+  EXPECT_EQ(condition_facts_.integer_relations[0].right.value_id, upper_bound);
+  EXPECT_EQ(condition_facts_.integer_relations[1].relation,
+            LOOM_SYMBOLIC_INTEGER_RELATION_NE);
+  EXPECT_EQ(condition_facts_.integer_relations[1].left.value_id, lane);
+  EXPECT_EQ(condition_facts_.integer_relations[1].right.value_id, lane_limit);
+}
+
+TEST_F(ConditionFactsTest, BooleanOrFalseEdgeConjoinsInvertedRelations) {
+  loom_value_id_t induction = DefineIndexValue();
+  loom_value_id_t upper_bound = DefineIndexValue();
+  loom_value_id_t lane = DefineIndexValue();
+  loom_value_id_t lane_limit = DefineIndexValue();
+  loom_op_t* first =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_SLT, induction, upper_bound);
+  loom_op_t* second =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_NE, lane, lane_limit);
+  loom_op_t* disjunction =
+      BuildBoolOr(loom_index_cmp_result(first), loom_index_cmp_result(second));
+
+  Query(loom_scalar_ori_result(disjunction), false);
+
+  ASSERT_EQ(condition_facts_.integer_relation_count, 2u);
+  EXPECT_EQ(condition_facts_.integer_relations[0].relation,
+            LOOM_SYMBOLIC_INTEGER_RELATION_GE);
+  EXPECT_EQ(condition_facts_.integer_relations[1].relation,
+            LOOM_SYMBOLIC_INTEGER_RELATION_EQ);
+}
+
+TEST_F(ConditionFactsTest, BooleanAndFalseEdgeIsDisjunctiveWithoutKnownSide) {
+  loom_value_id_t induction = DefineIndexValue();
+  loom_value_id_t upper_bound = DefineIndexValue();
+  loom_value_id_t lane = DefineIndexValue();
+  loom_value_id_t lane_limit = DefineIndexValue();
+  loom_op_t* first =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_SLT, induction, upper_bound);
+  loom_op_t* second =
+      BuildIndexCompare(LOOM_INDEX_CMP_PREDICATE_NE, lane, lane_limit);
+  loom_op_t* conjunction =
+      BuildBoolAnd(loom_index_cmp_result(first), loom_index_cmp_result(second));
+
+  Query(loom_scalar_andi_result(conjunction), false);
+
+  EXPECT_EQ(condition_facts_.integer_relation_count, 0u);
 }
 
 TEST_F(ConditionFactsTest, UnknownConditionProducesNoFacts) {

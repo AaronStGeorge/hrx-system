@@ -716,15 +716,16 @@ class BytecodeWriter:
     # Predicate kind name → byte mapping.
     _PRED_KIND_BYTES: ClassVar[dict[str, int]] = {
         "eq": 0,
-        "lt": 1,
-        "le": 2,
-        "gt": 3,
-        "ge": 4,
-        "mul": 5,
-        "min": 6,
-        "max": 7,
-        "pow2": 8,
-        "range": 9,
+        "ne": 1,
+        "lt": 2,
+        "le": 3,
+        "gt": 4,
+        "ge": 5,
+        "mul": 6,
+        "min": 7,
+        "max": 8,
+        "pow2": 9,
+        "range": 10,
     }
 
     def _write_predicate_list(

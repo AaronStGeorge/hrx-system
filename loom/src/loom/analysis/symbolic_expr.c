@@ -855,6 +855,9 @@ static bool loom_symbolic_expr_predicate_relation(
     case LOOM_PREDICATE_EQ:
       *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
       return true;
+    case LOOM_PREDICATE_NE:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_NE;
+      return true;
     case LOOM_PREDICATE_LT:
       *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT;
       return true;
@@ -921,28 +924,59 @@ static bool loom_symbolic_expr_value_is_integer_domain(
 }
 
 static bool loom_symbolic_expr_predicate_proves_relation(
+    const loom_symbolic_expr_context_t* context,
     const loom_predicate_t* predicate,
     loom_symbolic_integer_relation_t queried_relation,
     loom_value_id_t left_value, loom_value_id_t right_value, bool* out_result) {
   if (predicate->arg_count != 2 ||
-      predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE ||
-      predicate->arg_tags[1] != LOOM_PRED_ARG_VALUE) {
+      predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE) {
     return false;
   }
 
   loom_value_id_t predicate_left = (loom_value_id_t)predicate->args[0];
-  loom_value_id_t predicate_right = (loom_value_id_t)predicate->args[1];
   loom_symbolic_integer_relation_t implied_relation =
       LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
   if (!loom_symbolic_expr_predicate_relation(predicate, &implied_relation)) {
     return false;
   }
 
-  if (predicate_left == left_value && predicate_right == right_value) {
+  bool ordered_operands_match = false;
+  bool swapped_operands_match = false;
+  switch ((loom_predicate_arg_tag_t)predicate->arg_tags[1]) {
+    case LOOM_PRED_ARG_VALUE: {
+      loom_value_id_t predicate_right = (loom_value_id_t)predicate->args[1];
+      ordered_operands_match =
+          predicate_left == left_value && predicate_right == right_value;
+      swapped_operands_match =
+          predicate_left == right_value && predicate_right == left_value;
+      break;
+    }
+    case LOOM_PRED_ARG_CONST: {
+      int64_t constant = predicate->args[1];
+      int64_t left_constant = 0;
+      int64_t right_constant = 0;
+      ordered_operands_match =
+          predicate_left == left_value &&
+          loom_symbolic_expr_exact_integer_facts(
+              loom_symbolic_expr_lookup_facts(context, right_value),
+              &right_constant) &&
+          right_constant == constant;
+      swapped_operands_match =
+          predicate_left == right_value &&
+          loom_symbolic_expr_exact_integer_facts(
+              loom_symbolic_expr_lookup_facts(context, left_value),
+              &left_constant) &&
+          left_constant == constant;
+      break;
+    }
+    default:
+      return false;
+  }
+  if (ordered_operands_match) {
     return loom_symbolic_integer_relation_implies(implied_relation,
                                                   queried_relation, out_result);
   }
-  if (predicate_left == right_value && predicate_right == left_value) {
+  if (swapped_operands_match) {
     return loom_symbolic_integer_relation_implies(
         loom_symbolic_integer_relation_swap(implied_relation), queried_relation,
         out_result);
@@ -951,14 +985,15 @@ static bool loom_symbolic_expr_predicate_proves_relation(
 }
 
 static bool loom_symbolic_expr_predicate_list_proves_relation(
+    const loom_symbolic_expr_context_t* context,
     const loom_predicate_t* predicates, uint16_t predicate_count,
     loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
     loom_value_id_t right_value, loom_symbolic_proof_result_t* out_result) {
   for (uint16_t i = 0; i < predicate_count; ++i) {
     bool relation_result = false;
-    if (!loom_symbolic_expr_predicate_proves_relation(&predicates[i], relation,
-                                                      left_value, right_value,
-                                                      &relation_result)) {
+    if (!loom_symbolic_expr_predicate_proves_relation(
+            context, &predicates[i], relation, left_value, right_value,
+            &relation_result)) {
       continue;
     }
     *out_result =
@@ -1001,14 +1036,14 @@ static bool loom_symbolic_expr_prove_assumed_value_relation(
 
   if (has_left_predicates &&
       loom_symbolic_expr_predicate_list_proves_relation(
-          left_predicates, left_predicate_count, relation, left_value,
+          context, left_predicates, left_predicate_count, relation, left_value,
           right_value, out_result)) {
     return true;
   }
   if (has_right_predicates &&
       loom_symbolic_expr_predicate_list_proves_relation(
-          right_predicates, right_predicate_count, relation, left_value,
-          right_value, out_result)) {
+          context, right_predicates, right_predicate_count, relation,
+          left_value, right_value, out_result)) {
     return true;
   }
   return false;

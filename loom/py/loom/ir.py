@@ -791,6 +791,7 @@ def _canonicalize_encoding_param_value(value: Any) -> Any:
 # (None means variable, e.g., range takes 3).
 PREDICATE_KINDS: dict[str, int | None] = {
     "eq": 2,
+    "ne": 2,
     "lt": 2,
     "le": 2,
     "gt": 2,
@@ -861,6 +862,8 @@ def evaluate_predicate(predicate: Predicate, values: dict[str, int]) -> bool:
     match predicate.kind:
         case "eq":
             return args[0] == args[1]
+        case "ne":
+            return args[0] != args[1]
         case "lt":
             return args[0] < args[1]
         case "le":

@@ -1183,6 +1183,13 @@ class TestPredicateBytecodeRoundTrip:
                 ),
             ),
             Predicate(
+                kind="ne",
+                args=(
+                    PredicateArg(tag="value", value="N"),
+                    PredicateArg(tag="const", value=0),
+                ),
+            ),
+            Predicate(
                 kind="pow2",
                 args=(PredicateArg(tag="value", value="N"),),
             ),
@@ -1212,7 +1219,7 @@ class TestPredicateBytecodeRoundTrip:
         loaded_op = loaded.symbols[0].op
         assert loaded_op is not None
         loaded_preds = loaded_op.attributes.get("predicates", [])
-        assert len(loaded_preds) == 4
+        assert len(loaded_preds) == 5
 
         # Verify each predicate survived.
         assert loaded_preds[0].kind == "mul"
@@ -1225,11 +1232,14 @@ class TestPredicateBytecodeRoundTrip:
         assert loaded_preds[1].kind == "lt"
         assert loaded_preds[1].args[1].value == 1024
 
-        assert loaded_preds[2].kind == "pow2"
-        assert len(loaded_preds[2].args) == 1
+        assert loaded_preds[2].kind == "ne"
+        assert loaded_preds[2].args[1].value == 0
 
-        assert loaded_preds[3].kind == "range"
-        assert len(loaded_preds[3].args) == 3
+        assert loaded_preds[3].kind == "pow2"
+        assert len(loaded_preds[3].args) == 1
+
+        assert loaded_preds[4].kind == "range"
+        assert len(loaded_preds[4].args) == 3
 
     def test_empty_predicates_roundtrip(self) -> None:
         """Function with no predicates survives bytecode round-trip."""

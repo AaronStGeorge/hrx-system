@@ -45,6 +45,16 @@ static iree_status_t loom_condition_fact_set_append_integer_relation(
   return iree_ok_status();
 }
 
+static iree_status_t loom_condition_fact_set_append_all(
+    loom_condition_fact_set_t* facts,
+    const loom_condition_fact_set_t* new_facts) {
+  for (iree_host_size_t i = 0; i < new_facts->integer_relation_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_condition_fact_set_append_integer_relation(
+        facts, new_facts->integer_relations[i]));
+  }
+  return iree_ok_status();
+}
+
 static loom_value_facts_t loom_condition_lookup_facts(
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id) {
   if (!fact_table) return loom_value_facts_unknown();
@@ -69,6 +79,26 @@ static bool loom_condition_values_are_non_negative(
              loom_condition_lookup_facts(fact_table, left_value)) &&
          loom_value_facts_is_non_negative(
              loom_condition_lookup_facts(fact_table, right_value));
+}
+
+static bool loom_condition_value_is_i1(const loom_module_t* module,
+                                       loom_value_id_t value_id) {
+  if (!module || value_id >= module->values.count) return false;
+  loom_type_t type = loom_module_value_type(module, value_id);
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+}
+
+static bool loom_condition_value_exact_bool(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
+    bool* out_value) {
+  int64_t value = 0;
+  if (!loom_condition_value_exact_integer(fact_table, value_id, &value)) {
+    return false;
+  }
+  if (value != 0 && value != 1) return false;
+  *out_value = value != 0;
+  return true;
 }
 
 static bool loom_condition_index_predicate_relation(
@@ -207,14 +237,109 @@ static iree_status_t loom_condition_facts_query_integer_compare(
   return loom_condition_fact_set_append_integer_relation(facts, assertion);
 }
 
-iree_status_t loom_condition_facts_query(
+static iree_status_t loom_condition_facts_query_impl(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t condition_value, bool assumed_truth,
-    loom_condition_fact_set_t* out_facts) {
-  if (!out_facts) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "output condition fact set is required");
+    loom_condition_fact_set_t* out_facts, uint8_t recursion_depth);
+
+static iree_status_t loom_condition_facts_query_child(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t condition_value, bool assumed_truth,
+    loom_condition_fact_set_t* out_facts, uint8_t recursion_depth) {
+  loom_condition_integer_relation_t relation_storage[16];
+  loom_condition_fact_set_t child_facts;
+  loom_condition_fact_set_initialize(
+      relation_storage, IREE_ARRAYSIZE(relation_storage), &child_facts);
+  IREE_RETURN_IF_ERROR(loom_condition_facts_query_impl(
+      module, fact_table, condition_value, assumed_truth, &child_facts,
+      (uint8_t)(recursion_depth + 1)));
+  return loom_condition_fact_set_append_all(out_facts, &child_facts);
+}
+
+static iree_status_t loom_condition_facts_query_boolean_and(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t lhs, loom_value_id_t rhs, bool assumed_truth,
+    loom_condition_fact_set_t* out_facts, uint8_t recursion_depth) {
+  if (assumed_truth) {
+    IREE_RETURN_IF_ERROR(loom_condition_facts_query_child(
+        module, fact_table, lhs, true, out_facts, recursion_depth));
+    return loom_condition_facts_query_child(module, fact_table, rhs, true,
+                                            out_facts, recursion_depth);
   }
+
+  bool lhs_truth = false;
+  bool rhs_truth = false;
+  if (loom_condition_value_exact_bool(fact_table, lhs, &lhs_truth)) {
+    if (lhs_truth) {
+      return loom_condition_facts_query_child(module, fact_table, rhs, false,
+                                              out_facts, recursion_depth);
+    }
+    return iree_ok_status();
+  }
+  if (loom_condition_value_exact_bool(fact_table, rhs, &rhs_truth)) {
+    if (rhs_truth) {
+      return loom_condition_facts_query_child(module, fact_table, lhs, false,
+                                              out_facts, recursion_depth);
+    }
+    return iree_ok_status();
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_condition_facts_query_boolean_or(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t lhs, loom_value_id_t rhs, bool assumed_truth,
+    loom_condition_fact_set_t* out_facts, uint8_t recursion_depth) {
+  if (!assumed_truth) {
+    IREE_RETURN_IF_ERROR(loom_condition_facts_query_child(
+        module, fact_table, lhs, false, out_facts, recursion_depth));
+    return loom_condition_facts_query_child(module, fact_table, rhs, false,
+                                            out_facts, recursion_depth);
+  }
+
+  bool lhs_truth = false;
+  bool rhs_truth = false;
+  if (loom_condition_value_exact_bool(fact_table, lhs, &lhs_truth)) {
+    if (!lhs_truth) {
+      return loom_condition_facts_query_child(module, fact_table, rhs, true,
+                                              out_facts, recursion_depth);
+    }
+    return iree_ok_status();
+  }
+  if (loom_condition_value_exact_bool(fact_table, rhs, &rhs_truth)) {
+    if (!rhs_truth) {
+      return loom_condition_facts_query_child(module, fact_table, lhs, true,
+                                              out_facts, recursion_depth);
+    }
+    return iree_ok_status();
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_condition_facts_query_boolean_xor(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t lhs, loom_value_id_t rhs, bool assumed_truth,
+    loom_condition_fact_set_t* out_facts, uint8_t recursion_depth) {
+  bool lhs_truth = false;
+  bool rhs_truth = false;
+  if (loom_condition_value_exact_bool(fact_table, lhs, &lhs_truth)) {
+    return loom_condition_facts_query_child(module, fact_table, rhs,
+                                            assumed_truth != lhs_truth,
+                                            out_facts, recursion_depth);
+  }
+  if (loom_condition_value_exact_bool(fact_table, rhs, &rhs_truth)) {
+    return loom_condition_facts_query_child(module, fact_table, lhs,
+                                            assumed_truth != rhs_truth,
+                                            out_facts, recursion_depth);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_condition_facts_query_impl(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t condition_value, bool assumed_truth,
+    loom_condition_fact_set_t* out_facts, uint8_t recursion_depth) {
+  if (recursion_depth > 16) return iree_ok_status();
   loom_condition_fact_set_reset(out_facts);
   if (!module || condition_value >= module->values.count) {
     return iree_ok_status();
@@ -237,9 +362,61 @@ iree_status_t loom_condition_facts_query(
           loom_scalar_cmpi_rhs(defining_op),
           loom_scalar_cmpi_predicate(defining_op), assumed_truth,
           loom_condition_scalar_cmpi_predicate_relation);
+    case LOOM_OP_SCALAR_ANDI:
+      if (!loom_condition_value_is_i1(module,
+                                      loom_op_const_results(defining_op)[0]) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_andi_lhs(defining_op)) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_andi_rhs(defining_op))) {
+        return iree_ok_status();
+      }
+      return loom_condition_facts_query_boolean_and(
+          module, fact_table, loom_scalar_andi_lhs(defining_op),
+          loom_scalar_andi_rhs(defining_op), assumed_truth, out_facts,
+          recursion_depth);
+    case LOOM_OP_SCALAR_ORI:
+      if (!loom_condition_value_is_i1(module,
+                                      loom_op_const_results(defining_op)[0]) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_ori_lhs(defining_op)) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_ori_rhs(defining_op))) {
+        return iree_ok_status();
+      }
+      return loom_condition_facts_query_boolean_or(
+          module, fact_table, loom_scalar_ori_lhs(defining_op),
+          loom_scalar_ori_rhs(defining_op), assumed_truth, out_facts,
+          recursion_depth);
+    case LOOM_OP_SCALAR_XORI:
+      if (!loom_condition_value_is_i1(module,
+                                      loom_op_const_results(defining_op)[0]) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_xori_lhs(defining_op)) ||
+          !loom_condition_value_is_i1(module,
+                                      loom_scalar_xori_rhs(defining_op))) {
+        return iree_ok_status();
+      }
+      return loom_condition_facts_query_boolean_xor(
+          module, fact_table, loom_scalar_xori_lhs(defining_op),
+          loom_scalar_xori_rhs(defining_op), assumed_truth, out_facts,
+          recursion_depth);
     default:
       return iree_ok_status();
   }
+}
+
+iree_status_t loom_condition_facts_query(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t condition_value, bool assumed_truth,
+    loom_condition_fact_set_t* out_facts) {
+  if (!out_facts) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "output condition fact set is required");
+  }
+  return loom_condition_facts_query_impl(module, fact_table, condition_value,
+                                         assumed_truth, out_facts,
+                                         /*recursion_depth=*/0);
 }
 
 static bool loom_condition_relation_to_predicate_kind(
@@ -247,6 +424,9 @@ static bool loom_condition_relation_to_predicate_kind(
   switch (relation) {
     case LOOM_SYMBOLIC_INTEGER_RELATION_EQ:
       *out_kind = LOOM_PREDICATE_EQ;
+      return true;
+    case LOOM_SYMBOLIC_INTEGER_RELATION_NE:
+      *out_kind = LOOM_PREDICATE_NE;
       return true;
     case LOOM_SYMBOLIC_INTEGER_RELATION_LT:
       *out_kind = LOOM_PREDICATE_LT;
@@ -260,7 +440,6 @@ static bool loom_condition_relation_to_predicate_kind(
     case LOOM_SYMBOLIC_INTEGER_RELATION_GE:
       *out_kind = LOOM_PREDICATE_GE;
       return true;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_NE:
     default:
       return false;
   }
@@ -272,37 +451,16 @@ static bool loom_condition_operand_matches_value(
          operand.value_id == value_id;
 }
 
-static bool loom_condition_operand_exact_integer(
-    loom_condition_integer_operand_t operand,
-    const loom_value_fact_table_t* fact_table, int64_t* out_value) {
-  switch (operand.kind) {
-    case LOOM_CONDITION_INTEGER_OPERAND_CONSTANT:
-      *out_value = operand.constant;
-      return true;
-    case LOOM_CONDITION_INTEGER_OPERAND_VALUE:
-      return loom_condition_value_exact_integer(fact_table, operand.value_id,
-                                                out_value);
-    default:
-      return false;
-  }
-}
-
-bool loom_condition_integer_relation_apply_to_value_facts(
+bool loom_condition_integer_relation_make_predicate_for_value(
     const loom_condition_integer_relation_t* relation,
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
-    loom_value_facts_t* inout_facts) {
+    loom_predicate_t* out_predicate) {
   loom_symbolic_integer_relation_t normalized_relation = relation->relation;
-  int64_t constant = 0;
+  loom_condition_integer_operand_t other = {0};
   if (loom_condition_operand_matches_value(relation->left, value_id)) {
-    if (!loom_condition_operand_exact_integer(relation->right, fact_table,
-                                              &constant)) {
-      return false;
-    }
+    other = relation->right;
   } else if (loom_condition_operand_matches_value(relation->right, value_id)) {
-    if (!loom_condition_operand_exact_integer(relation->left, fact_table,
-                                              &constant)) {
-      return false;
-    }
+    other = relation->left;
     normalized_relation =
         loom_symbolic_integer_relation_swap(normalized_relation);
   } else {
@@ -314,12 +472,45 @@ bool loom_condition_integer_relation_apply_to_value_facts(
                                                  &predicate_kind)) {
     return false;
   }
-  loom_predicate_t predicate = {
+
+  *out_predicate = (loom_predicate_t){
       .kind = predicate_kind,
       .arg_count = 2,
-      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST, 0},
-      .args = {value_id, constant, 0},
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_NONE, LOOM_PRED_ARG_NONE},
+      .args = {value_id, 0, 0},
   };
+  switch (other.kind) {
+    case LOOM_CONDITION_INTEGER_OPERAND_CONSTANT:
+      out_predicate->arg_tags[1] = LOOM_PRED_ARG_CONST;
+      out_predicate->args[1] = other.constant;
+      return true;
+    case LOOM_CONDITION_INTEGER_OPERAND_VALUE: {
+      int64_t constant = 0;
+      if (loom_condition_value_exact_integer(fact_table, other.value_id,
+                                             &constant)) {
+        out_predicate->arg_tags[1] = LOOM_PRED_ARG_CONST;
+        out_predicate->args[1] = constant;
+      } else {
+        out_predicate->arg_tags[1] = LOOM_PRED_ARG_VALUE;
+        out_predicate->args[1] = other.value_id;
+      }
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+bool loom_condition_integer_relation_apply_to_value_facts(
+    const loom_condition_integer_relation_t* relation,
+    const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
+    loom_value_facts_t* inout_facts) {
+  loom_predicate_t predicate = {0};
+  if (!loom_condition_integer_relation_make_predicate_for_value(
+          relation, fact_table, value_id, &predicate)) {
+    return false;
+  }
+  if (predicate.arg_tags[1] != LOOM_PRED_ARG_CONST) return false;
   loom_value_facts_apply_predicate(inout_facts, &predicate);
   return true;
 }

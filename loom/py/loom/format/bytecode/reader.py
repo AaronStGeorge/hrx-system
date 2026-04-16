@@ -903,6 +903,7 @@ class BytecodeReader:
     # Predicate kind byte → name mapping (inverse of writer).
     _PRED_KIND_NAMES: ClassVar[list[str]] = [
         "eq",
+        "ne",
         "lt",
         "le",
         "gt",

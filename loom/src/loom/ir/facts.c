@@ -80,14 +80,41 @@ void loom_value_facts_recompute_flags(loom_value_facts_t* facts) {
 
 void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
                                       const loom_predicate_t* predicate) {
-  // The constant argument is in args[1] for most predicates. For
-  // RANGE, lo is in args[1] and hi is in args[2].
+  // This scalar fact lattice can consume predicates with literal bounds. Value
+  // operands are still useful to symbolic relation analysis, but treating a
+  // value ID as an integer literal here would corrupt range facts.
+  if (predicate->kind == LOOM_PREDICATE_POW2) {
+    if (predicate->arg_count < 1 ||
+        predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE) {
+      return;
+    }
+  } else if (predicate->kind == LOOM_PREDICATE_RANGE) {
+    if (predicate->arg_count < 3 ||
+        predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE ||
+        predicate->arg_tags[1] != LOOM_PRED_ARG_CONST ||
+        predicate->arg_tags[2] != LOOM_PRED_ARG_CONST) {
+      return;
+    }
+  } else if (predicate->arg_count < 2 ||
+             predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE ||
+             predicate->arg_tags[1] != LOOM_PRED_ARG_CONST) {
+    return;
+  }
+
+  // The constant argument is in args[1] for most predicates. For RANGE, lo is
+  // in args[1] and hi is in args[2].
   int64_t constant = predicate->args[1];
 
   switch ((loom_predicate_kind_t)predicate->kind) {
     case LOOM_PREDICATE_EQ:
       *facts = loom_value_facts_exact_i64(constant);
       return;  // exact_i64 already computes all flags.
+
+    case LOOM_PREDICATE_NE:
+      // A not-equal predicate excludes one value. This lattice has intervals
+      // rather than disjoint ranges, so there is no generally-sound tightening
+      // unless another predicate has already excluded the value by range.
+      break;
 
     case LOOM_PREDICATE_LT:
       // a < N → range_hi = min(range_hi, N - 1).

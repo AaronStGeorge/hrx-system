@@ -1740,12 +1740,12 @@ TEST(PredicateLayout, FieldOffsets) {
 TEST(PredicateLayout, AllKindsValid) {
   // Verify all predicate kinds can be stored and retrieved.
   loom_predicate_kind_t kinds[] = {
-      LOOM_PREDICATE_EQ,    LOOM_PREDICATE_LT,  LOOM_PREDICATE_LE,
-      LOOM_PREDICATE_GT,    LOOM_PREDICATE_GE,  LOOM_PREDICATE_MUL,
-      LOOM_PREDICATE_MIN,   LOOM_PREDICATE_MAX, LOOM_PREDICATE_POW2,
-      LOOM_PREDICATE_RANGE,
+      LOOM_PREDICATE_EQ,   LOOM_PREDICATE_NE,    LOOM_PREDICATE_LT,
+      LOOM_PREDICATE_LE,   LOOM_PREDICATE_GT,    LOOM_PREDICATE_GE,
+      LOOM_PREDICATE_MUL,  LOOM_PREDICATE_MIN,   LOOM_PREDICATE_MAX,
+      LOOM_PREDICATE_POW2, LOOM_PREDICATE_RANGE,
   };
-  for (int i = 0; i < (int)(sizeof(kinds) / sizeof(kinds[0])); ++i) {
+  for (int i = 0; i < (int)IREE_ARRAYSIZE(kinds); ++i) {
     loom_predicate_t predicate = {0};
     predicate.kind = (uint8_t)kinds[i];
     EXPECT_EQ(predicate.kind, (uint8_t)i);
@@ -2051,8 +2051,8 @@ TEST_F(PrintPredicateTest, EmptyPredicateList) {
 }
 
 TEST_F(PrintPredicateTest, AllPredicateKinds) {
-  // Verify all 10 predicate kinds print their correct name.
-  const char* expected_names[] = {"eq",  "lt",  "le",  "gt",   "ge",
+  // Verify all predicate kinds print their correct name.
+  const char* expected_names[] = {"eq",  "ne",  "lt",  "le",   "gt",   "ge",
                                   "mul", "min", "max", "pow2", "range"};
   for (int kind = 0; kind <= LOOM_PREDICATE_RANGE; ++kind) {
     loom_predicate_t predicates[1] = {};
