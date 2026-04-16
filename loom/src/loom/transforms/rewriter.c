@@ -31,8 +31,12 @@ static iree_status_t loom_rewriter_on_op_finalized(void* user_data,
   loom_rewriter_t* rewriter = (loom_rewriter_t*)user_data;
   IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, op));
   if (rewriter->fact_table.entries) {
-    IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op(
-        &rewriter->fact_table, rewriter->module, op));
+    bool facts_changed = false;
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op_and_report(
+        &rewriter->fact_table, rewriter->module, op, &facts_changed));
+    if (facts_changed) {
+      rewriter->flags |= LOOM_REWRITER_FLAG_FACTS_CHANGED;
+    }
   }
   return iree_ok_status();
 }
@@ -123,12 +127,23 @@ iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
 
 iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
                                             loom_func_like_t function) {
+  return loom_rewriter_enable_analysis_with_seed_facts(rewriter, function,
+                                                       NULL);
+}
+
+iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
+    loom_rewriter_t* rewriter, loom_func_like_t function,
+    const loom_value_fact_table_t* seed_facts) {
   iree_host_size_t value_count = rewriter->module->values.count;
   // Allocate with headroom for new values created during the pass.
   iree_host_size_t capacity = value_count + value_count / 2;
   if (capacity < 256) capacity = 256;
   IREE_RETURN_IF_ERROR(loom_value_fact_table_initialize(
       &rewriter->fact_table, rewriter->arena, capacity));
+  if (seed_facts) {
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_defined_facts(
+        &rewriter->fact_table, seed_facts));
+  }
   return loom_value_fact_table_compute(&rewriter->fact_table, rewriter->module,
                                        function);
 }
@@ -154,8 +169,12 @@ iree_status_t loom_rewriter_try_fold(loom_rewriter_t* rewriter, loom_op_t* op,
   if (!vtable || !vtable->infer_facts) return iree_ok_status();
 
   // Compute facts for this op (updates the table, reuses table scratch).
-  IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op(&rewriter->fact_table,
-                                                        rewriter->module, op));
+  bool facts_changed = false;
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_compute_op_and_report(
+      &rewriter->fact_table, rewriter->module, op, &facts_changed));
+  if (facts_changed) {
+    rewriter->flags |= LOOM_REWRITER_FLAG_FACTS_CHANGED;
+  }
 
   // Ensure downstream ops are revisited with potentially-updated facts.
   // The worklist dedup flag makes this cheap for ops already queued.
@@ -593,7 +612,8 @@ iree_status_t loom_rewriter_set_value_type(loom_rewriter_t* rewriter,
   IREE_RETURN_IF_ERROR(
       loom_module_set_value_type(rewriter->module, value_id, new_type));
   IREE_RETURN_IF_ERROR(loom_rewriter_add_users_to_worklist(rewriter, value_id));
-  rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
+  rewriter->flags |=
+      LOOM_REWRITER_FLAG_CHANGED | LOOM_REWRITER_FLAG_TYPE_CHANGED;
   return iree_ok_status();
 }
 

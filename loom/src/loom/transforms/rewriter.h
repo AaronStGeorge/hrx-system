@@ -49,6 +49,10 @@ enum loom_rewriter_flag_bits_e {
   // Set by any mutation (create, erase, RAUW, set_operand).
   // Cleared by the driver before each pattern invocation.
   LOOM_REWRITER_FLAG_CHANGED = 1u << 0,
+  // Set when a mutation changes a value type.
+  LOOM_REWRITER_FLAG_TYPE_CHANGED = 1u << 1,
+  // Set when incremental fact recomputation changes a value's facts.
+  LOOM_REWRITER_FLAG_FACTS_CHANGED = 1u << 2,
 };
 typedef uint8_t loom_rewriter_flags_t;
 
@@ -115,6 +119,14 @@ iree_status_t loom_rewriter_seed_function(loom_rewriter_t* rewriter,
 // loop. Patterns can then query facts via loom_rewriter_value_facts.
 iree_status_t loom_rewriter_enable_analysis(loom_rewriter_t* rewriter,
                                             loom_func_like_t function);
+
+// Enables value analysis and first clones caller-provided seed facts into the
+// rewriter-owned fact table. Extension payloads are re-interned so seed facts
+// can come from a different analysis context. Block-argument seeders preserve
+// already-defined facts from |seed_facts|.
+iree_status_t loom_rewriter_enable_analysis_with_seed_facts(
+    loom_rewriter_t* rewriter, loom_func_like_t function,
+    const loom_value_fact_table_t* seed_facts);
 
 // Looks up facts from the rewriter's fact table. Returns unknown
 // facts if analysis is not enabled or the value is not defined.

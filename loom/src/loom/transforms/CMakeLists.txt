@@ -65,6 +65,7 @@ loom_cc_library(
     loom::src::loom::ops::scalar
     loom::src::loom::ops::special_values
     loom::src::loom::ops::vector
+    loom::src::loom::util::fact_table
   PUBLIC
 )
 

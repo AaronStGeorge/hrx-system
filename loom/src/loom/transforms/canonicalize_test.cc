@@ -405,6 +405,87 @@ TEST_F(CanonicalizeTest, FixedPointConvergence) {
   EXPECT_EQ(constant_value(loom_op_operands(use)[0]), 42);
 }
 
+TEST_F(CanonicalizeTest, DriverAcceptsSeedFacts) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
+
+  loom_op_t* const_two = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), i32,
+                                          LOOM_LOCATION_UNKNOWN, &const_two));
+  loom_value_id_t two = loom_test_constant_result(const_two);
+
+  loom_op_t* addi = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder_, arg, two, i32,
+                                      LOOM_LOCATION_UNKNOWN, &addi));
+  loom_value_id_t addi_result = loom_test_addi_result(addi);
+
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &addi_result, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+
+  iree_arena_allocator_t seed_arena;
+  iree_arena_initialize(&block_pool_, &seed_arena);
+  loom_value_fact_table_t seed_facts;
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&seed_facts, &seed_arena, 8));
+  IREE_ASSERT_OK(loom_value_fact_table_define(&seed_facts, arg,
+                                              loom_value_facts_exact_i64(40)));
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_canonicalizer_t canonicalizer;
+  IREE_ASSERT_OK(
+      loom_canonicalizer_initialize(module_, &pass_arena, &canonicalizer));
+  loom_canonicalizer_result_t result;
+  loom_canonicalizer_options_t options = {
+      .seed_facts = &seed_facts,
+  };
+  IREE_ASSERT_OK(loom_canonicalizer_run_function(&canonicalizer, func_like_,
+                                                 &options, &result));
+
+  EXPECT_TRUE(result.changed);
+  EXPECT_TRUE(result.boundary_maybe_changed);
+  EXPECT_EQ(constant_value(loom_op_operands(use)[0]), 42);
+  const loom_value_fact_table_t* final_facts =
+      loom_canonicalizer_fact_table(&canonicalizer);
+  ASSERT_NE(final_facts, nullptr);
+  EXPECT_TRUE(loom_value_facts_is_exact(
+      loom_value_fact_table_lookup(final_facts, arg)));
+  loom_value_facts_t addi_facts =
+      loom_value_fact_table_lookup(final_facts, addi_result);
+  EXPECT_TRUE(loom_value_facts_is_exact(addi_facts));
+  EXPECT_EQ(addi_facts.range_lo, 42);
+
+  loom_canonicalizer_deinitialize(&canonicalizer);
+  iree_arena_deinitialize(&pass_arena);
+  iree_arena_deinitialize(&seed_arena);
+}
+
+TEST_F(CanonicalizeTest, DriverResetsScratchArenaBetweenRuns) {
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_canonicalizer_t canonicalizer;
+  IREE_ASSERT_OK(
+      loom_canonicalizer_initialize(module_, &pass_arena, &canonicalizer));
+
+  loom_canonicalizer_result_t result;
+  IREE_ASSERT_OK(loom_canonicalizer_run_function(&canonicalizer, func_like_,
+                                                 NULL, &result));
+  EXPECT_GT(canonicalizer.scratch_arena.used_allocation_size, 0u);
+  EXPECT_NE(loom_canonicalizer_fact_table(&canonicalizer), nullptr);
+
+  loom_func_like_t empty_func = {};
+  IREE_ASSERT_OK(loom_canonicalizer_run_function(&canonicalizer, empty_func,
+                                                 NULL, &result));
+  EXPECT_EQ(canonicalizer.scratch_arena.used_allocation_size, 0u);
+  EXPECT_EQ(loom_canonicalizer_fact_table(&canonicalizer), nullptr);
+
+  loom_canonicalizer_deinitialize(&canonicalizer);
+  iree_arena_deinitialize(&pass_arena);
+}
+
 TEST_F(CanonicalizeTest, OpWithoutCanonicalizeUntouched) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 

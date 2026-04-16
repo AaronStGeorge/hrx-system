@@ -278,12 +278,30 @@ iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts);
 
+// Clones |facts| from |source| into |target|, re-interning any context-local
+// extension payloads in the target table. The returned facts are valid for
+// |target|'s fact context and preserve scalar range/divisibility fields.
+iree_status_t loom_value_fact_table_clone_fact(
+    loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
+    loom_value_facts_t facts, loom_value_facts_t* out_facts);
+
+// Clones all defined source entries into |target|. Undefined entries remain
+// unset in |target| so normal block-argument and op fact seeding can fill them.
+iree_status_t loom_value_fact_table_clone_defined_facts(
+    loom_value_fact_table_t* target, const loom_value_fact_table_t* source);
+
 // Computes facts for a single op by calling its vtable fact inference function.
 // Gathers operand facts from the table, calls the callback, and defines result
 // facts. No-op if the op has no inference function.
 iree_status_t loom_value_fact_table_compute_op(loom_value_fact_table_t* table,
                                                const loom_module_t* module,
                                                const loom_op_t* op);
+
+// Computes facts for a single op and reports whether any result facts changed
+// relative to the table's previous entries. No-op ops report false.
+iree_status_t loom_value_fact_table_compute_op_and_report(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_op_t* op, bool* out_changed);
 
 // Seeds the table by running a forward pass over all ops in a
 // function. For each op with an inference function, calls compute_op.

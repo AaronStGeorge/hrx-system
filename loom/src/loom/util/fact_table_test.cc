@@ -375,5 +375,49 @@ TEST_F(FactTableTest, EncodingSummaryStridedLayoutInternsStrideFacts) {
   EXPECT_EQ(result.address_layout.strides[1].range_lo, 1);
 }
 
+TEST_F(FactTableTest, CloneDefinedFactsReinternsExtensions) {
+  loom_value_fact_table_t source = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 0));
+
+  loom_value_facts_t strides[] = {
+      loom_value_facts_make(16, 64, 16),
+      loom_value_facts_exact_i64(1),
+  };
+  loom_value_fact_encoding_summary_t summary = {
+      .role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
+      .static_spec_encoding_id = 0,
+      .address_layout =
+          {
+              .kind = LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED,
+              .rank = IREE_ARRAYSIZE(strides),
+              .strides = strides,
+          },
+  };
+  loom_value_facts_t source_facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_encoding_summary(
+      &source.context, summary, &source_facts));
+  IREE_ASSERT_OK(loom_value_fact_table_define(&source, 7, source_facts));
+
+  iree_arena_allocator_t target_arena;
+  iree_arena_initialize(&block_pool_, &target_arena);
+  loom_value_fact_table_t target = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 0));
+  IREE_ASSERT_OK(loom_value_fact_table_clone_defined_facts(&target, &source));
+
+  loom_value_facts_t cloned_facts = loom_value_fact_table_lookup(&target, 7);
+  EXPECT_NE(cloned_facts.extension_id, LOOM_VALUE_FACT_EXTENSION_ID_NONE);
+  EXPECT_TRUE(loom_value_facts_query_encoding_summary(&target.context,
+                                                      cloned_facts, &summary));
+  EXPECT_EQ(summary.address_layout.kind,
+            LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED);
+  EXPECT_EQ(summary.address_layout.rank, IREE_ARRAYSIZE(strides));
+  EXPECT_NE(summary.address_layout.strides, strides);
+  EXPECT_EQ(summary.address_layout.strides[0].range_lo, 16);
+  EXPECT_EQ(summary.address_layout.strides[0].range_hi, 64);
+  EXPECT_EQ(summary.address_layout.strides[1].range_lo, 1);
+
+  iree_arena_deinitialize(&target_arena);
+}
+
 }  // namespace
 }  // namespace loom

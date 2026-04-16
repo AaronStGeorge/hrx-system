@@ -111,8 +111,6 @@ const loom_pass_info_t* loom_canonicalize_pass_info(void) {
 // Implementation
 //===----------------------------------------------------------------------===//
 
-#define LOOM_CANONICALIZE_DEFAULT_MAX_ITERATIONS 10
-
 static bool loom_canonicalize_value_type_has_poison(loom_type_t type) {
   if (loom_type_is_scalar(type)) return true;
   if (loom_type_is_vector(type)) {
@@ -553,43 +551,142 @@ static iree_status_t loom_canonicalize_try_symbolic_index_cleanup(
                                                   op, out_changed);
 }
 
-iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
-                                    loom_func_like_t function) {
+struct loom_canonicalizer_state_t {
+  // Rewriter state for the most recent run. Its fact table remains queryable
+  // until the next run or deinitialize.
+  loom_rewriter_t rewriter;
+
+  // True when rewriter currently owns live worklist bits that must be cleared
+  // before resetting scratch storage.
+  bool rewriter_initialized;
+};
+
+static void loom_canonicalizer_reset_run_state(
+    loom_canonicalizer_t* canonicalizer) {
+  if (canonicalizer->state && canonicalizer->state->rewriter_initialized) {
+    loom_rewriter_deinitialize(&canonicalizer->state->rewriter);
+    canonicalizer->state->rewriter_initialized = false;
+  }
+  if (canonicalizer->scratch_arena_initialized) {
+    iree_arena_reset(&canonicalizer->scratch_arena);
+  }
+}
+
+static void loom_canonicalizer_record_rewriter_flags(
+    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter) {
+  if (!result) return;
+  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_FACTS_CHANGED)) {
+    result->facts_changed = true;
+  }
+  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_TYPE_CHANGED)) {
+    result->types_changed = true;
+  }
+}
+
+static void loom_canonicalizer_record_rewrite(
+    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter,
+    bool count_modified_op) {
+  if (!result) return;
+  result->changed = true;
+  loom_canonicalizer_record_rewriter_flags(result, rewriter);
+  if (count_modified_op) ++result->ops_modified;
+}
+
+iree_status_t loom_canonicalizer_initialize(
+    loom_module_t* module, iree_arena_allocator_t* parent_arena,
+    loom_canonicalizer_t* out_canonicalizer) {
+  if (!module || !parent_arena || !parent_arena->block_pool ||
+      !out_canonicalizer) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "module, parent arena with block pool, and output canonicalizer are "
+        "required");
+  }
+  memset(out_canonicalizer, 0, sizeof(*out_canonicalizer));
+  loom_canonicalizer_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(parent_arena, sizeof(*state), (void**)&state));
+  memset(state, 0, sizeof(*state));
+  out_canonicalizer->module = module;
+  out_canonicalizer->parent_arena = parent_arena;
+  out_canonicalizer->state = state;
+  iree_arena_initialize(parent_arena->block_pool,
+                        &out_canonicalizer->scratch_arena);
+  out_canonicalizer->scratch_arena_initialized = true;
+  return iree_ok_status();
+}
+
+void loom_canonicalizer_deinitialize(loom_canonicalizer_t* canonicalizer) {
+  if (!canonicalizer) return;
+  loom_canonicalizer_reset_run_state(canonicalizer);
+  if (canonicalizer->scratch_arena_initialized) {
+    iree_arena_deinitialize(&canonicalizer->scratch_arena);
+  }
+  memset(canonicalizer, 0, sizeof(*canonicalizer));
+}
+
+const loom_value_fact_table_t* loom_canonicalizer_fact_table(
+    const loom_canonicalizer_t* canonicalizer) {
+  if (!canonicalizer || !canonicalizer->state ||
+      !canonicalizer->state->rewriter_initialized) {
+    return NULL;
+  }
+  if (!canonicalizer->state->rewriter.fact_table.entries) return NULL;
+  return &canonicalizer->state->rewriter.fact_table;
+}
+
+iree_status_t loom_canonicalizer_run_function(
+    loom_canonicalizer_t* canonicalizer, loom_func_like_t function,
+    const loom_canonicalizer_options_t* options,
+    loom_canonicalizer_result_t* out_result) {
+  if (!canonicalizer || !canonicalizer->module || !canonicalizer->state) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "initialized canonicalizer required");
+  }
+  if (out_result) memset(out_result, 0, sizeof(*out_result));
+  loom_canonicalizer_reset_run_state(canonicalizer);
   if (!loom_func_like_body(function)) return iree_ok_status();
 
-  uint32_t max_iterations = LOOM_CANONICALIZE_DEFAULT_MAX_ITERATIONS;
+  uint32_t max_iterations = options && options->max_iterations > 0
+                                ? options->max_iterations
+                                : LOOM_CANONICALIZER_DEFAULT_MAX_ITERATIONS;
 
-  loom_rewriter_t rewriter;
-  IREE_RETURN_IF_ERROR(
-      loom_rewriter_initialize(&rewriter, module, pass->arena));
-  rewriter.materialize_constant = loom_canonicalize_materialize_constant;
-  iree_status_t status = loom_rewriter_enable_analysis(&rewriter, function);
-  if (!iree_status_is_ok(status)) {
-    loom_rewriter_deinitialize(&rewriter);
-    return status;
-  }
+  loom_rewriter_t* rewriter = &canonicalizer->state->rewriter;
+  IREE_RETURN_IF_ERROR(loom_rewriter_initialize(rewriter, canonicalizer->module,
+                                                &canonicalizer->scratch_arena));
+  canonicalizer->state->rewriter_initialized = true;
+  rewriter->materialize_constant = loom_canonicalize_materialize_constant;
+
+  iree_status_t status = loom_rewriter_enable_analysis_with_seed_facts(
+      rewriter, function, options ? options->seed_facts : NULL);
   loom_symbolic_expr_context_t expression_context;
-  loom_symbolic_expr_context_initialize(module, &rewriter.fact_table,
-                                        pass->arena, &expression_context);
+  if (iree_status_is_ok(status)) {
+    loom_symbolic_expr_context_initialize(
+        canonicalizer->module, &rewriter->fact_table,
+        &canonicalizer->scratch_arena, &expression_context);
+  }
 
   for (uint32_t iteration = 0;
        iree_status_is_ok(status) && iteration < max_iterations; ++iteration) {
-    status = loom_rewriter_seed_function(&rewriter, function);
+    status = loom_rewriter_seed_function(rewriter, function);
     if (!iree_status_is_ok(status)) break;
     bool any_changed = false;
 
     loom_op_t* op = NULL;
-    while ((op = loom_rewriter_pop(&rewriter)) != NULL) {
+    while ((op = loom_rewriter_pop(rewriter)) != NULL) {
       // Mini-DCE: erase trivially dead ops before fold/canonicalize.
       bool erased = false;
+      rewriter->flags = 0;
       iree_status_t dce_status =
-          loom_rewriter_erase_if_dead(&rewriter, op, &erased);
+          loom_rewriter_erase_if_dead(rewriter, op, &erased);
       if (!iree_status_is_ok(dce_status)) {
-        loom_rewriter_deinitialize(&rewriter);
-        return dce_status;
+        status = dce_status;
+        break;
       }
       if (erased) {
         any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/false);
         loom_symbolic_expr_context_reset(&expression_context);
         continue;
       }
@@ -598,18 +695,15 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       // Handle them before poison propagation so zero-lane computations and
       // zero-footprint memory effects disappear without observing operands.
       bool empty_elided = false;
-      status = loom_canonicalize_try_elide_empty_vector_op(&rewriter, op,
+      rewriter->flags = 0;
+      status = loom_canonicalize_try_elide_empty_vector_op(rewriter, op,
                                                            &empty_elided);
-      if (!iree_status_is_ok(status)) {
-        loom_rewriter_deinitialize(&rewriter);
-        return status;
-      }
+      if (!iree_status_is_ok(status)) break;
       if (empty_elided) {
         any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/true);
         loom_symbolic_expr_context_reset(&expression_context);
-        if (pass->statistics) {
-          loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
-        }
         continue;
       }
 
@@ -617,34 +711,29 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       // operand become typed poison values. Boundary diagnostics decide later
       // whether the remaining poison is observable.
       bool poison_propagated = false;
-      status = loom_canonicalize_try_propagate_poison(&rewriter, op,
+      rewriter->flags = 0;
+      status = loom_canonicalize_try_propagate_poison(rewriter, op,
                                                       &poison_propagated);
-      if (!iree_status_is_ok(status)) {
-        loom_rewriter_deinitialize(&rewriter);
-        return status;
-      }
+      if (!iree_status_is_ok(status)) break;
       if (poison_propagated) {
         any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/true);
         loom_symbolic_expr_context_reset(&expression_context);
-        if (pass->statistics) {
-          loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
-        }
         continue;
       }
 
       // Try fold: constant fold via facts and replace with constants.
       bool folded = false;
-      status = loom_rewriter_try_fold(&rewriter, op, &folded);
-      if (!iree_status_is_ok(status)) {
-        loom_rewriter_deinitialize(&rewriter);
-        return status;
-      }
+      rewriter->flags = 0;
+      status = loom_rewriter_try_fold(rewriter, op, &folded);
+      loom_canonicalizer_record_rewriter_flags(out_result, rewriter);
+      if (!iree_status_is_ok(status)) break;
       if (folded) {
         any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/true);
         loom_symbolic_expr_context_reset(&expression_context);
-        if (pass->statistics) {
-          loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
-        }
         continue;
       }
 
@@ -652,43 +741,65 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
       // for exact linear cancellation and relation proofs that are awkward as
       // op-local patterns.
       bool symbolic_changed = false;
+      rewriter->flags = 0;
       status = loom_canonicalize_try_symbolic_index_cleanup(
-          &rewriter, &expression_context, op, &symbolic_changed);
-      if (!iree_status_is_ok(status)) {
-        loom_rewriter_deinitialize(&rewriter);
-        return status;
-      }
+          rewriter, &expression_context, op, &symbolic_changed);
+      if (!iree_status_is_ok(status)) break;
       if (symbolic_changed) {
         any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/true);
         loom_symbolic_expr_context_reset(&expression_context);
-        if (pass->statistics) {
-          loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
-        }
         continue;
       }
 
       // Structural canonicalization patterns.
-      const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+      const loom_op_vtable_t* vtable =
+          loom_op_vtable(canonicalizer->module, op);
       if (!vtable || !vtable->canonicalize) continue;
 
-      rewriter.flags = 0;
-      status = vtable->canonicalize(op, &rewriter);
-      if (!iree_status_is_ok(status)) {
-        loom_rewriter_deinitialize(&rewriter);
-        return status;
-      }
-      if (rewriter.flags & LOOM_REWRITER_FLAG_CHANGED) {
+      rewriter->flags = 0;
+      status = vtable->canonicalize(op, rewriter);
+      if (!iree_status_is_ok(status)) break;
+      if (rewriter->flags & LOOM_REWRITER_FLAG_CHANGED) {
         any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/true);
         loom_symbolic_expr_context_reset(&expression_context);
-        if (pass->statistics) {
-          loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED, 1);
-        }
+      } else {
+        loom_canonicalizer_record_rewriter_flags(out_result, rewriter);
       }
     }
 
     if (!any_changed) break;
   }
 
-  loom_rewriter_deinitialize(&rewriter);
+  if (out_result) {
+    out_result->boundary_maybe_changed = out_result->changed ||
+                                         out_result->facts_changed ||
+                                         out_result->types_changed;
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_rewriter_deinitialize(rewriter);
+    canonicalizer->state->rewriter_initialized = false;
+    iree_arena_reset(&canonicalizer->scratch_arena);
+  }
+  return status;
+}
+
+iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
+                                    loom_func_like_t function) {
+  loom_canonicalizer_t canonicalizer;
+  IREE_RETURN_IF_ERROR(
+      loom_canonicalizer_initialize(module, pass->arena, &canonicalizer));
+
+  loom_canonicalizer_result_t result;
+  iree_status_t status = loom_canonicalizer_run_function(
+      &canonicalizer, function, /*options=*/NULL, &result);
+  if (iree_status_is_ok(status) && pass->statistics) {
+    loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED,
+                            result.ops_modified);
+  }
+  loom_canonicalizer_deinitialize(&canonicalizer);
   return status;
 }
