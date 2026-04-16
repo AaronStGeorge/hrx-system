@@ -106,10 +106,11 @@ static inline loom_type_t loom_block_arg_type(const loom_module_t* module,
   return loom_module_value_type(module, block->arg_ids[arg_index]);
 }
 
-// Defines a fresh SSA value in the module's value table with the given
-// type. Returns the value ID (index into module->values.entries[]).
-// The value's def pointer is unset — the builder fills it when
-// finalizing the defining op (or loom_block_add_arg for block args).
+// Defines a fresh SSA value in the module's value table with the given type.
+// The stored type is canonicalized through the module type interner unless it
+// is NONE. Returns the value ID (index into module->values.entries[]). The
+// value's def pointer is unset; the builder fills it when finalizing the
+// defining op or loom_block_add_arg fills it for block arguments.
 iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
                                        loom_value_id_t* out_value_id);
 
@@ -228,12 +229,14 @@ static inline const loom_encoding_t* loom_module_encoding(
 const loom_encoding_vtable_t* loom_module_encoding_vtable(
     const loom_module_t* module, uint16_t encoding_id);
 
-// Interns a type in the module's type table. If a structurally identical
-// type already exists, returns the existing entry (by value). Otherwise,
-// appends a new entry. Any heap-backed payload owned by |type| (overflow dims,
-// function signatures, dialect params) is recursively copied into the module
-// arena before storage, so callers may pass temporary or foreign-allocator
-// payloads.
+// Interns a type in the module's type table. If a structurally identical type
+// already exists, returns the existing entry by value. Otherwise appends a new
+// entry. Structural dependencies such as shaped element types, function
+// argument/result types, and dialect type parameters are interned first so the
+// type table always contains the closure required by serializers. Any
+// heap-backed payload owned by |type| (overflow dims, function signatures,
+// dialect params) is recursively copied into the module arena before storage,
+// so callers may pass temporary or foreign-allocator payloads.
 iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
                                       loom_type_t* out_interned_type);
 
@@ -244,8 +247,9 @@ iree_status_t loom_module_intern_type_id(loom_module_t* module,
 
 // Interns a function type directly from argument and result type arrays. If a
 // structurally identical function type already exists, returns the canonical
-// module-owned entry without cloning. Otherwise, recursively clones the
-// signature payload into the module arena and appends a new interned type.
+// module-owned entry without cloning. Otherwise, recursively interns signature
+// dependencies, clones the signature payload into the module arena, and appends
+// a new interned type.
 //
 // |arg_types| and |result_types| may point to temporary parser scratch as long
 // as they remain valid for the duration of this call.

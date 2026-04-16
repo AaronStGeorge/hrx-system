@@ -78,6 +78,21 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_fuzz(
+  NAME
+    writer_fuzz
+  SRCS
+    "writer_fuzz.cc"
+  DEPS
+    ::writer
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    loom::src::loom::testing::gen
+)
+
 loom_cc_benchmark(
   NAME
     varint_benchmark

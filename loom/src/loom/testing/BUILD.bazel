@@ -113,6 +113,7 @@ loom_cc_fuzz(
     srcs = ["gen_fuzz.cc"],
     deps = [
         ":gen",
+        "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/scalar",

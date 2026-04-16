@@ -130,46 +130,6 @@ static void fuzz_strategy_raw_parse(const uint8_t* data, size_t size) {
   iree_arena_block_pool_deinitialize(&block_pool);
 }
 
-//===----------------------------------------------------------------------===//
-// Generated valid-module strategy
-//===----------------------------------------------------------------------===//
-
-static loom_test_gen_module_config_t fuzz_generated_module_config(
-    uint8_t preset, uint8_t scale) {
-  switch (preset % 5) {
-    case 0:
-      return loom_test_gen_module_config_representative(scale);
-    case 1: {
-      loom_test_gen_module_config_t config = {0};
-      config.function_count = 2;
-      config.body_config = loom_test_gen_body_config_cse_stress(scale);
-      config.body_config.block_arg_count = 0;
-      return config;
-    }
-    case 2: {
-      loom_test_gen_module_config_t config = {0};
-      config.function_count = 2;
-      config.body_config = loom_test_gen_body_config_dce_stress(scale);
-      config.body_config.block_arg_count = 0;
-      return config;
-    }
-    case 3: {
-      loom_test_gen_module_config_t config = {0};
-      config.function_count = 1;
-      config.body_config = loom_test_gen_body_config_nesting_stress(scale);
-      config.body_config.block_arg_count = 0;
-      return config;
-    }
-    default: {
-      loom_test_gen_module_config_t config = {0};
-      config.function_count = 2;
-      config.body_config = loom_test_gen_body_config_format_stress(scale);
-      config.body_config.block_arg_count = 0;
-      return config;
-    }
-  }
-}
-
 static void fuzz_strategy_generated_roundtrip(const uint8_t* data,
                                               size_t size) {
   if (size < 2) return;
@@ -183,7 +143,7 @@ static void fuzz_strategy_generated_roundtrip(const uint8_t* data,
   iree_arena_block_pool_initialize(4096, iree_allocator_system(), &block_pool);
 
   loom_test_gen_module_config_t config =
-      fuzz_generated_module_config(preset, scale);
+      loom_test_gen_module_config_fuzz_preset(preset, scale);
   loom_test_gen_t generator;
   loom_test_gen_initialize_fuzz(random_data, random_size, &generator);
 

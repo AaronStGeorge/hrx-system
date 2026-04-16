@@ -949,3 +949,41 @@ loom_test_gen_module_config_t loom_test_gen_module_config_representative(
   config.body_config.block_arg_count = 0;
   return config;
 }
+
+loom_test_gen_module_config_t loom_test_gen_module_config_fuzz_preset(
+    uint8_t preset_index, uint32_t scale) {
+  if (scale == 0) scale = 1;
+  if (scale > 10) scale = 10;
+  switch (preset_index % 5) {
+    case 0:
+      return loom_test_gen_module_config_representative(scale);
+    case 1: {
+      loom_test_gen_module_config_t config = {0};
+      config.function_count = 2;
+      config.body_config = loom_test_gen_body_config_cse_stress(scale);
+      config.body_config.block_arg_count = 0;
+      return config;
+    }
+    case 2: {
+      loom_test_gen_module_config_t config = {0};
+      config.function_count = 2;
+      config.body_config = loom_test_gen_body_config_dce_stress(scale);
+      config.body_config.block_arg_count = 0;
+      return config;
+    }
+    case 3: {
+      loom_test_gen_module_config_t config = {0};
+      config.function_count = 1;
+      config.body_config = loom_test_gen_body_config_nesting_stress(scale);
+      config.body_config.block_arg_count = 0;
+      return config;
+    }
+    default: {
+      loom_test_gen_module_config_t config = {0};
+      config.function_count = 2;
+      config.body_config = loom_test_gen_body_config_format_stress(scale);
+      config.body_config.block_arg_count = 0;
+      return config;
+    }
+  }
+}

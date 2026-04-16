@@ -125,6 +125,7 @@ loom_cc_fuzz(
   DEPS
     ::gen
     iree::base
+    loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::scalar

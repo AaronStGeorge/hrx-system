@@ -565,14 +565,58 @@ TEST_F(WriterTest, CanonicalAttrDictInputOrderDoesNotAffectBytes) {
   loom_module_free(module_b);
 }
 
+TEST_F(WriterTest, OptionalAbsentBodyAttrWrites) {
+  loom_module_t* module = CreateModule("optional_absent_attr");
+
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+
+  loom_string_id_t func_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("f"), &func_name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, func_name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, &f32_type, 1,
+      &f32_type, 1, nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+
+  loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* arg_ids =
+      loom_func_like_arg_ids(func_like, &arg_count);
+  ASSERT_EQ(arg_count, 1);
+
+  loom_builder_t body_builder;
+  loom_builder_initialize(
+      module, &module->arena,
+      loom_region_entry_block(loom_func_like_body(func_like)), &body_builder);
+  loom_op_t* attrs_op = nullptr;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &body_builder, arg_ids[0], loom_make_named_attr_slice(nullptr, 0),
+      f32_type, LOOM_LOCATION_UNKNOWN, &attrs_op));
+  const loom_value_id_t result_ids[1] = {loom_op_results(attrs_op)[0]};
+  loom_op_t* yield_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&body_builder, result_ids, 1,
+                                       LOOM_LOCATION_UNKNOWN, &yield_op));
+
+  auto bytes = WriteModule(module);
+  EXPECT_GT(bytes.size(), 0u);
+
+  loom_module_free(module);
+}
+
 TEST_F(WriterTest, ZeroExtentVectorTypeWrites) {
   loom_module_t* module = CreateModule("test");
 
-  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
-  IREE_ASSERT_OK(loom_module_intern_type(module, f32_type, &f32_type));
   loom_type_t vector_type = loom_type_shaped_1d(
       LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(0), 0);
-  IREE_ASSERT_OK(loom_module_intern_type(module, vector_type, &vector_type));
 
   loom_builder_t module_builder;
   loom_builder_initialize(module, &module->arena, loom_module_block(module),

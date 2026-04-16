@@ -541,8 +541,9 @@ typedef enum loom_bytecode_section_kind_e {
 //       For each tied result:
 //         [result_index: varint]
 //         [operand_index: varint]
-//       [attr_count: varint]
-//       For each attribute:
+//       [attr_count: varint]     (present attributes only; absent optional
+//                                op attribute slots are omitted)
+//       For each present attribute:
 //         [key_id: varint]
 //         [value_kind: byte]
 //         [value_data: ...]
@@ -560,6 +561,11 @@ typedef enum loom_bytecode_section_kind_e {
 // Readers should verify this with a one-pass previous-key comparison and
 // reject `current_key <= previous_key`; writers trust canonical IR and emit
 // entries as-is without re-sorting.
+//
+// Attribute value_kind bytes are dense wire tags, not loom_attr_kind_t enum
+// values: 0=I64, 1=F64, 2=STRING, 3=BOOL, 4=ENUM, 5=I64_ARRAY, 6=SYMBOL,
+// 7=TYPE, 8=PREDICATE_LIST, 9=DICT, 10=ENCODING. ABSENT is never encoded as a
+// payload value.
 //       [region_count: varint]
 //       For each region:
 //         (recursive: block_count, blocks...)

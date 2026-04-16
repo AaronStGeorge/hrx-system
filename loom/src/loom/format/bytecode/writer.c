@@ -724,6 +724,18 @@ static iree_status_t loom_bytecode_number_attr_value(
       }
       break;
     }
+    case LOOM_ATTR_TYPE: {
+      if (attr.type_id >= numbering->module->types.count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "type attribute id %u out of range (module has %" PRIhsz " types)",
+            (unsigned)attr.type_id, numbering->module->types.count);
+      }
+      loom_type_t type = numbering->module->types.entries[attr.type_id];
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_numbering_intern_type(numbering, type, &unused_id));
+      break;
+    }
     case LOOM_ATTR_DICT: {
       for (uint16_t i = 0; i < attr.count; ++i) {
         IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
@@ -737,6 +749,25 @@ static iree_status_t loom_bytecode_number_attr_value(
       break;
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_op_attr_is_present(
+    const loom_op_t* op, const loom_attr_descriptor_t* descriptor,
+    loom_attribute_t attr, bool* out_present) {
+  if (attr.kind != LOOM_ATTR_ABSENT) {
+    *out_present = true;
+    return iree_ok_status();
+  }
+  if (descriptor && iree_all_bits_set(descriptor->flags, LOOM_ATTR_OPTIONAL)) {
+    *out_present = false;
+    return iree_ok_status();
+  }
+  iree_string_view_t attr_name =
+      descriptor ? loom_attr_descriptor_name(descriptor) : IREE_SV("<unknown>");
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "op kind 0x%04x has absent required attribute '%.*s'",
+                          (unsigned)op->kind, (int)attr_name.size,
+                          attr_name.data);
 }
 
 static iree_status_t loom_bytecode_number_function(
@@ -867,17 +898,21 @@ static iree_status_t loom_bytecode_number_operation(
       loom_context_resolve_op(numbering->module->context, op->kind);
   const loom_attribute_t* attrs = loom_op_attrs(op);
   for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor =
+        (vtable && vtable->attr_descriptors) ? &vtable->attr_descriptors[i]
+                                             : NULL;
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (!present) continue;
+
     // Attribute key name (from vtable descriptor).
-    if (vtable && vtable->attr_descriptors) {
-      iree_string_view_t key_name =
-          loom_attr_descriptor_name(&vtable->attr_descriptors[i]);
+    if (descriptor) {
+      iree_string_view_t key_name = loom_attr_descriptor_name(descriptor);
       IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
           numbering, key_name, &unused_id));
     }
     // Attribute value strings.
-    const loom_attr_descriptor_t* descriptor =
-        (vtable && vtable->attr_descriptors) ? &vtable->attr_descriptors[i]
-                                             : NULL;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_number_attr_value(numbering, attrs[i], descriptor));
   }
@@ -1112,12 +1147,16 @@ static iree_status_t loom_bytecode_write_attr_value(
       break;
     }
     case LOOM_ATTR_TYPE: {
-      uint32_t type_writer_id = 0;
-      if (attr.type_id < numbering->module->types.count) {
-        loom_type_t type = numbering->module->types.entries[attr.type_id];
-        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_type(
-            numbering, type, &type_writer_id));
+      if (attr.type_id >= numbering->module->types.count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "type attribute id %u out of range (module has %" PRIhsz " types)",
+            (unsigned)attr.type_id, numbering->module->types.count);
       }
+      loom_type_t type = numbering->module->types.entries[attr.type_id];
+      uint32_t type_writer_id = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_type(
+          numbering, type, &type_writer_id));
       IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(writer, 7));
       IREE_RETURN_IF_ERROR(
           loom_bytecode_page_writer_write_uvarint(writer, type_writer_id));
@@ -1260,9 +1299,21 @@ static iree_status_t loom_bytecode_write_operation(
         "op kind 0x%04x has %d attributes but no attr_descriptors in vtable",
         (unsigned)op->kind, (int)op->attribute_count);
   }
-  IREE_RETURN_IF_ERROR(
-      loom_bytecode_page_writer_write_uvarint(writer, op->attribute_count));
+  uint8_t present_attr_count = 0;
   for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    bool present = false;
+    IREE_RETURN_IF_ERROR(loom_bytecode_op_attr_is_present(
+        op, &vtable->attr_descriptors[i], attrs[i], &present));
+    if (present) ++present_attr_count;
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_page_writer_write_uvarint(writer, present_attr_count));
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    bool present = false;
+    IREE_RETURN_IF_ERROR(loom_bytecode_op_attr_is_present(
+        op, &vtable->attr_descriptors[i], attrs[i], &present));
+    if (!present) continue;
+
     iree_string_view_t key_name =
         loom_attr_descriptor_name(&vtable->attr_descriptors[i]);
     uint32_t key_writer_id = 0;
@@ -1725,8 +1776,9 @@ static iree_status_t loom_bytecode_write_types_section(
             page_writer, func_data->arg_count));
         IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
             page_writer, func_data->result_count));
-        for (uint16_t i = 0; i < func_data->arg_count + func_data->result_count;
-             ++i) {
+        iree_host_size_t type_count =
+            (iree_host_size_t)func_data->arg_count + func_data->result_count;
+        for (iree_host_size_t i = 0; i < type_count; ++i) {
           uint32_t sub_type_id = 0;
           IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_type(
               numbering, func_data->types[i], &sub_type_id));

@@ -552,6 +552,12 @@ loom_test_gen_body_config_t loom_test_gen_body_config_format_stress(
 loom_test_gen_module_config_t loom_test_gen_module_config_representative(
     uint32_t scale);
 
+// Module config selected from the built-in fuzz presets. The preset index is
+// modulo the available preset count. Scale 0 selects 1, and oversized values
+// are clamped to keep fuzz iterations bounded.
+loom_test_gen_module_config_t loom_test_gen_module_config_fuzz_preset(
+    uint8_t preset_index, uint32_t scale);
+
 #ifdef __cplusplus
 }
 #endif

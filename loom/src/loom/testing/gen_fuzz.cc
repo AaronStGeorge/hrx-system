@@ -25,8 +25,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
+#include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
@@ -41,6 +43,13 @@
 
 static loom_context_t g_context;
 static bool g_initialized = false;
+
+static void trap_with_status(iree_status_t status) {
+  if (iree_status_is_ok(status)) return;
+  iree_status_fprint(stderr, status);
+  iree_status_ignore(status);
+  __builtin_trap();
+}
 
 static void ensure_context() {
   if (g_initialized) return;
@@ -81,49 +90,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   const uint8_t* fuzz_data = data + 2;
   size_t fuzz_size = size - 2;
 
-  // Select a module config based on the preset byte.
-  loom_test_gen_module_config_t config;
-  switch (preset_index) {
-    case 0:
-      config = loom_test_gen_module_config_representative(scale);
-      break;
-    case 1: {
-      loom_test_gen_body_config_t body =
-          loom_test_gen_body_config_cse_stress(scale);
-      config = {};
-      config.function_count = 2;
-      config.body_config = body;
-      config.body_config.block_arg_count = 0;
-      break;
-    }
-    case 2: {
-      loom_test_gen_body_config_t body =
-          loom_test_gen_body_config_dce_stress(scale);
-      config = {};
-      config.function_count = 2;
-      config.body_config = body;
-      config.body_config.block_arg_count = 0;
-      break;
-    }
-    case 3: {
-      loom_test_gen_body_config_t body =
-          loom_test_gen_body_config_nesting_stress(scale);
-      config = {};
-      config.function_count = 1;
-      config.body_config = body;
-      config.body_config.block_arg_count = 0;
-      break;
-    }
-    case 4: {
-      loom_test_gen_body_config_t body =
-          loom_test_gen_body_config_format_stress(scale);
-      config = {};
-      config.function_count = 2;
-      config.body_config = body;
-      config.body_config.block_arg_count = 0;
-      break;
-    }
-  }
+  loom_test_gen_module_config_t config =
+      loom_test_gen_module_config_fuzz_preset(preset_index, scale);
 
   // Per-iteration block pool. Freed after each iteration so the fuzzer
   // doesn't accumulate memory across runs.
@@ -142,18 +110,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // Verify the generated module. Verification errors mean the generator
     // produced invalid IR — that's a generator bug, so we trap.
     loom_verify_options_t options = {};
+    options.sink = {loom_diagnostic_stderr_sink, NULL};
     loom_verify_result_t result = {};
     status = loom_verify_module(module, &options, &result);
+    trap_with_status(status);
     if (iree_status_is_ok(status) && result.error_count > 0) {
       __builtin_trap();
     }
-    iree_status_ignore(status);
     loom_module_free(module);
   } else {
     // Generation itself failed — also a generator bug (it should always
     // succeed on any input).
-    iree_status_ignore(status);
-    __builtin_trap();
+    trap_with_status(status);
   }
 
   iree_arena_block_pool_deinitialize(&block_pool);

@@ -218,6 +218,28 @@ TEST_F(ModuleTest, DefineValue) {
   loom_value_t* value = &module->values.entries[id];
   EXPECT_EQ(loom_type_kind(value->type), LOOM_TYPE_SCALAR);
   EXPECT_EQ(loom_type_element_type(value->type), LOOM_SCALAR_TYPE_F32);
+  EXPECT_EQ(module->types.count, 1u);
+  EXPECT_TRUE(loom_type_equal(module->types.entries[0], f32));
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, DefineValueInternsShapedTypeClosure) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_type_t vector_type = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+  loom_value_id_t id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, vector_type, &id));
+
+  ASSERT_EQ(module->types.count, 2u);
+  EXPECT_TRUE(loom_type_equal(module->types.entries[0],
+                              loom_type_scalar(LOOM_SCALAR_TYPE_F32)));
+  EXPECT_TRUE(loom_type_equal(module->types.entries[1], vector_type));
+  EXPECT_TRUE(loom_type_equal(module->values.entries[id].type,
+                              module->types.entries[1]));
+
   loom_module_free(module);
 }
 
@@ -1076,7 +1098,10 @@ TEST_F(ModuleTest, InternShapedType) {
   EXPECT_EQ(interned1.header, interned2.header);
   EXPECT_EQ(interned1.dims[0], interned2.dims[0]);
   EXPECT_EQ(interned1.dims[1], interned2.dims[1]);
-  EXPECT_EQ(module->types.count, 1u);
+  ASSERT_EQ(module->types.count, 2u);
+  EXPECT_TRUE(loom_type_equal(module->types.entries[0],
+                              loom_type_scalar(LOOM_SCALAR_TYPE_F32)));
+  EXPECT_TRUE(loom_type_equal(module->types.entries[1], interned1));
   loom_module_free(module);
 }
 
@@ -1102,7 +1127,7 @@ TEST_F(ModuleTest, InternFunctionTypeDedupsStructurallyAndOwnsPayload) {
   IREE_ASSERT_OK(loom_module_intern_type(module, source_a, &interned_a));
   IREE_ASSERT_OK(loom_module_intern_type(module, source_b, &interned_b));
 
-  EXPECT_EQ(module->types.count, 1u);
+  EXPECT_EQ(module->types.count, 3u);
   EXPECT_TRUE(loom_type_equal(interned_a, interned_b));
   EXPECT_EQ(loom_type_hash(interned_a), loom_type_hash(interned_b));
   EXPECT_NE(loom_type_func_data(interned_a), source_a_data);
@@ -1149,7 +1174,7 @@ TEST_F(ModuleTest, InternFunctionTypeDirectAndPackedFormsDedup) {
   IREE_ASSERT_OK(
       loom_module_intern_type(module, packed_source, &packed_interned));
 
-  EXPECT_EQ(module->types.count, 1u);
+  EXPECT_EQ(module->types.count, 4u);
   EXPECT_TRUE(loom_type_equal(direct_interned, packed_interned));
   EXPECT_EQ(loom_type_func_data(direct_interned),
             loom_type_func_data(packed_interned));
@@ -1202,7 +1227,7 @@ TEST_F(ModuleTest, InternDialectTypeCopiesTemporaryParamsAndPreservesNameId) {
   IREE_ASSERT_OK(
       loom_module_intern_type(module, duplicate_source, &duplicate_interned));
 
-  EXPECT_EQ(module->types.count, 1u);
+  EXPECT_EQ(module->types.count, 4u);
   EXPECT_TRUE(loom_type_equal(interned, duplicate_interned));
 
   loom_module_free(module);

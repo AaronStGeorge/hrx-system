@@ -1093,6 +1093,15 @@ static iree_status_t loom_type_use_table_add_outgoing_for_value(
   return loom_type_walk_value_refs(type, loom_type_use_add_callback, &add);
 }
 
+static iree_status_t loom_module_canonicalize_value_type(
+    loom_module_t* module, loom_type_t type, loom_type_t* out_type) {
+  if (loom_type_kind(type) == LOOM_TYPE_NONE) {
+    *out_type = type;
+    return iree_ok_status();
+  }
+  return loom_module_intern_type(module, type, out_type);
+}
+
 iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
                                        loom_value_id_t* out_value_id) {
   // Value IDs are 32-bit and LOOM_VALUE_ID_INVALID is the null sentinel.
@@ -1109,20 +1118,23 @@ iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
       loom_value_table_ensure_capacity(&module->arena, &module->values));
   IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_value_capacity(
       &module->arena, &module->type_uses, module->values.capacity));
+  loom_type_t canonical_type = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_module_canonicalize_value_type(module, type, &canonical_type));
   iree_host_size_t reference_count = 0;
   IREE_RETURN_IF_ERROR(
-      loom_type_use_prepare_for_type(module, type, &reference_count));
+      loom_type_use_prepare_for_type(module, canonical_type, &reference_count));
 
   loom_value_id_t id = (loom_value_id_t)module->values.count;
   loom_value_t* value = &module->values.entries[id];
-  value->type = type;
+  value->type = canonical_type;
   value->name_id = LOOM_STRING_ID_INVALID;
   value->def = loom_value_def_make_none();
   module->values.count++;
 
   if (reference_count > 0) {
     IREE_RETURN_IF_ERROR(
-        loom_type_use_table_add_outgoing_for_value(module, id, type));
+        loom_type_use_table_add_outgoing_for_value(module, id, canonical_type));
   }
 
   *out_value_id = id;
@@ -1139,12 +1151,15 @@ iree_status_t loom_module_set_value_type(loom_module_t* module,
                             (unsigned)value_id, module->values.count);
   }
   loom_value_t* value = &module->values.entries[value_id];
-  if (loom_type_equal(value->type, type)) {
+  loom_type_t canonical_type = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_module_canonicalize_value_type(module, type, &canonical_type));
+  if (loom_type_equal(value->type, canonical_type)) {
     return loom_module_refresh_value_type_uses(module, value_id);
   }
 
   loom_type_use_table_remove_outgoing_for_value(&module->type_uses, value_id);
-  value->type = type;
+  value->type = canonical_type;
   return loom_module_refresh_value_type_uses(module, value_id);
 }
 
@@ -2071,15 +2086,88 @@ static iree_status_t loom_module_intern_type_impl(
   return iree_ok_status();
 }
 
-iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
-                                      loom_type_t* out_interned_type) {
+static iree_status_t loom_module_intern_type_with_dependencies(
+    loom_module_t* module, loom_type_t type, loom_type_t* out_interned_type,
+    loom_type_id_t* out_type_id) {
+  switch (loom_type_kind(type)) {
+    case LOOM_TYPE_TILE:
+    case LOOM_TYPE_TENSOR:
+    case LOOM_TYPE_VECTOR:
+    case LOOM_TYPE_VIEW: {
+      loom_type_t element_type = {0};
+      IREE_RETURN_IF_ERROR(loom_module_intern_type_with_dependencies(
+          module, loom_type_scalar(loom_type_element_type(type)), &element_type,
+          /*out_type_id=*/NULL));
+      break;
+    }
+    case LOOM_TYPE_FUNCTION: {
+      const loom_func_type_data_t* func_data = loom_type_func_data(type);
+      if (!func_data) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "function type has a NULL argument/result payload");
+      }
+      for (uint16_t i = 0; i < func_data->arg_count; ++i) {
+        loom_type_t subtype = {0};
+        IREE_RETURN_IF_ERROR(loom_module_intern_type_with_dependencies(
+            module, func_data->types[i], &subtype, /*out_type_id=*/NULL));
+      }
+      for (uint16_t i = 0; i < func_data->result_count; ++i) {
+        loom_type_t subtype = {0};
+        IREE_RETURN_IF_ERROR(loom_module_intern_type_with_dependencies(
+            module, func_data->types[func_data->arg_count + i], &subtype,
+            /*out_type_id=*/NULL));
+      }
+      break;
+    }
+    case LOOM_TYPE_DIALECT: {
+      uint16_t param_count = loom_type_dialect_param_count(type);
+      const loom_type_t* params = loom_type_dialect_params(type);
+      if (param_count > 0 && !params) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "dialect type '%u' has %u params but a NULL payload",
+            (unsigned)loom_type_dialect_name_id(type), (unsigned)param_count);
+      }
+      for (uint16_t i = 0; i < param_count; ++i) {
+        loom_type_t param_type = {0};
+        IREE_RETURN_IF_ERROR(loom_module_intern_type_with_dependencies(
+            module, params[i], &param_type, /*out_type_id=*/NULL));
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
   uint32_t hash = loom_type_hash(type);
   loom_type_equal_context_t equal_context = {module, type};
+  return loom_module_intern_type_impl(module, hash, loom_type_equal_fn,
+                                      &equal_context,
+                                      loom_module_clone_type_from_context,
+                                      &type, out_interned_type, out_type_id);
+}
 
-  return loom_module_intern_type_impl(
-      module, hash, loom_type_equal_fn, &equal_context,
-      loom_module_clone_type_from_context, &type, out_interned_type,
-      /*out_type_id=*/NULL);
+static iree_status_t loom_module_intern_function_type_dependencies(
+    loom_module_t* module, const loom_type_t* arg_types, uint16_t arg_count,
+    const loom_type_t* result_types, uint16_t result_count) {
+  for (uint16_t i = 0; i < arg_count; ++i) {
+    loom_type_t arg_type = {0};
+    IREE_RETURN_IF_ERROR(loom_module_intern_type_with_dependencies(
+        module, arg_types[i], &arg_type, /*out_type_id=*/NULL));
+  }
+  for (uint16_t i = 0; i < result_count; ++i) {
+    loom_type_t result_type = {0};
+    IREE_RETURN_IF_ERROR(loom_module_intern_type_with_dependencies(
+        module, result_types[i], &result_type, /*out_type_id=*/NULL));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_module_intern_type(loom_module_t* module, loom_type_t type,
+                                      loom_type_t* out_interned_type) {
+  return loom_module_intern_type_with_dependencies(
+      module, type, out_interned_type, /*out_type_id=*/NULL);
 }
 
 iree_status_t loom_module_intern_type_id(loom_module_t* module,
@@ -2090,12 +2178,9 @@ iree_status_t loom_module_intern_type_id(loom_module_t* module,
                             "type id output is NULL");
   }
   *out_type_id = LOOM_TYPE_ID_INVALID;
-  uint32_t hash = loom_type_hash(type);
-  loom_type_equal_context_t equal_context = {module, type};
   loom_type_t interned_type = {0};
-  return loom_module_intern_type_impl(
-      module, hash, loom_type_equal_fn, &equal_context,
-      loom_module_clone_type_from_context, &type, &interned_type, out_type_id);
+  return loom_module_intern_type_with_dependencies(module, type, &interned_type,
+                                                   out_type_id);
 }
 
 iree_status_t loom_module_intern_function_type(loom_module_t* module,
@@ -2116,6 +2201,8 @@ iree_status_t loom_module_intern_function_type(loom_module_t* module,
         "function type has %u results but a NULL result type payload",
         (unsigned)result_count);
   }
+  IREE_RETURN_IF_ERROR(loom_module_intern_function_type_dependencies(
+      module, arg_types, arg_count, result_types, result_count));
 
   loom_function_type_equal_context_t equal_context = {
       module, arg_types, result_types, arg_count, result_count,

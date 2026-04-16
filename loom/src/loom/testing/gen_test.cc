@@ -353,6 +353,25 @@ TEST_F(GenTest, FuzzModeArbitraryBytes) {
   }
 }
 
+TEST_F(GenTest, FuzzPresetRegressionBytes) {
+  static const uint8_t input[] = {0xFF, 0x2B, 0x0A};
+  loom_test_gen_t gen;
+  loom_test_gen_initialize_fuzz(input + 2, IREE_ARRAYSIZE(input) - 2, &gen);
+  loom_test_gen_module_config_t config =
+      loom_test_gen_module_config_fuzz_preset(input[0], (input[1] % 5) + 1);
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(
+      loom_test_gen_module(&gen, &config, &context_, &block_pool_, &module));
+
+  loom_verify_options_t options = {};
+  options.sink = {loom_diagnostic_stderr_sink, NULL};
+  loom_verify_result_t result = {};
+  IREE_ASSERT_OK(loom_verify_module(module, &options, &result));
+  EXPECT_EQ(result.error_count, 0);
+  loom_module_free(module);
+}
+
 //===----------------------------------------------------------------------===//
 // Value set unit tests
 //===----------------------------------------------------------------------===//

@@ -114,15 +114,11 @@ static iree_status_t loom_test_gen_hook_test_simple(
       return iree_ok_status();
     }
     case SIMPLE_CMP: {
-      // test.cmp: binary comparison → i1 result.
+      // test.cmp: integer binary comparison → i1 result.
       loom_value_id_t lhs, rhs;
       loom_type_t operand_type;
-      bool found =
-          loom_test_gen_values_pick_binary_integer(
-              context->gen, context->values, &lhs, &rhs, &operand_type) ||
-          loom_test_gen_values_pick_binary_float(context->gen, context->values,
-                                                 &lhs, &rhs, &operand_type);
-      if (!found) {
+      if (!loom_test_gen_values_pick_binary_integer(
+              context->gen, context->values, &lhs, &rhs, &operand_type)) {
         *out_result = LOOM_TEST_GEN_HOOK_SKIPPED;
         return iree_ok_status();
       }
