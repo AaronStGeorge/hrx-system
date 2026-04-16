@@ -1038,6 +1038,8 @@ typedef struct loom_op_t {
   uint16_t tied_result_count;
   // Number of child region pointers in trailing storage.
   uint8_t region_count;
+  // Number of successor block pointers in trailing storage.
+  uint8_t successor_count;
   // Number of attributes in trailing storage.
   uint8_t attribute_count;
   // Per-op lifecycle/worklist flags.
@@ -1069,10 +1071,9 @@ typedef struct loom_op_t {
   struct loom_op_t* prev_op;
   // Next live op in parent_block's ordered list. NULL for the last op.
   struct loom_op_t* next_op;
-  // Reserved padding to keep the fixed op header at one cache line.
-  uint64_t reserved;
   // Variable-length trailing data (arena-allocated, accessed via helpers).
   // Pointer-sized fields first for natural alignment:
+  //   loom_block_t*      successors[successor_count]
   //   loom_region_t*     regions[region_count]
   //   loom_value_id_t    operands[operand_count]
   //   loom_value_id_t    results[result_count]
@@ -1092,6 +1093,7 @@ static_assert(sizeof(loom_op_t) == 64, "loom_op_t must be 64 bytes");
 // header (arena-allocated in one bump). Pointer-sized fields come first
 // so they are naturally aligned after the header:
 //
+//   loom_block_t*      successors[successor_count] (8 bytes each, aligned)
 //   loom_region_t*     regions[region_count]       (8 bytes each, aligned)
 //   loom_value_id_t    operands[operand_count]     (4 bytes each)
 //   loom_value_id_t    results[result_count]        (4 bytes each)
@@ -1100,9 +1102,18 @@ static_assert(sizeof(loom_op_t) == 64, "loom_op_t must be 64 bytes");
 //   <padding to alignof(loom_attribute_t)>
 //   loom_attribute_t   attributes[attribute_count]  (16 bytes each)
 
-// Returns a pointer to the region pointer array (first in trailing data).
+// Returns a pointer to the successor block pointer array.
+static inline loom_block_t** loom_op_successors(const loom_op_t* op) {
+  return (loom_block_t**)((uint8_t*)op + sizeof(loom_op_t));
+}
+static inline loom_block_t* const* loom_op_const_successors(
+    const loom_op_t* op) {
+  return (loom_block_t* const*)loom_op_successors(op);
+}
+
+// Returns a pointer to the region pointer array (after successors).
 static inline loom_region_t** loom_op_regions(const loom_op_t* op) {
-  return (loom_region_t**)((uint8_t*)op + sizeof(loom_op_t));
+  return (loom_region_t**)(loom_op_successors(op) + op->successor_count);
 }
 
 // Returns a pointer to the operand value ID array (after regions).

@@ -214,6 +214,44 @@ TEST_F(BuilderTest, AllocBinaryOp) {
   EXPECT_EQ(op->attribute_count, 0);
 }
 
+TEST_F(BuilderTest, AllocOpWithSuccessorsKeepsTrailingFieldsDistinct) {
+  loom_block_t* then_block = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module_, module_->body, &then_block));
+  loom_block_t* else_block = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module_, module_->body, &else_block));
+
+  loom_region_t* child_region = NULL;
+  IREE_ASSERT_OK(loom_module_allocate_region(module_, 1, &child_region));
+
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_builder_allocate_op_with_successors(
+      &builder_, LOOM_OP_TEST_MAP,
+      /*operand_count=*/1,
+      /*result_count=*/1,
+      /*successor_count=*/2,
+      /*region_count=*/1,
+      /*tied_result_count=*/0,
+      /*attribute_count=*/1, LOOM_LOCATION_UNKNOWN, &op));
+
+  ASSERT_NE(op, nullptr);
+  EXPECT_EQ(op->successor_count, 2u);
+  EXPECT_EQ(op->region_count, 1u);
+
+  loom_op_successors(op)[0] = then_block;
+  loom_op_successors(op)[1] = else_block;
+  loom_op_regions(op)[0] = child_region;
+  loom_op_operands(op)[0] = 42;
+  loom_op_results(op)[0] = 7;
+  loom_op_attrs(op)[0] = loom_attr_i64(99);
+
+  EXPECT_EQ(loom_op_const_successors(op)[0], then_block);
+  EXPECT_EQ(loom_op_const_successors(op)[1], else_block);
+  EXPECT_EQ(loom_op_regions(op)[0], child_region);
+  EXPECT_EQ(loom_op_operands(op)[0], 42u);
+  EXPECT_EQ(loom_op_results(op)[0], 7u);
+  EXPECT_EQ(loom_attr_as_i64(loom_op_attrs(op)[0]), 99);
+}
+
 TEST_F(BuilderTest, OperandAccessors) {
   loom_op_t* op = NULL;
   IREE_ASSERT_OK(loom_builder_allocate_op(&builder_, LOOM_OP_TEST_ADDI, 2, 1, 0,

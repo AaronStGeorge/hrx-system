@@ -95,6 +95,7 @@ typedef enum loom_location_field_kind_e {
   LOOM_LOCATION_FIELD_RESULT = 1,
   LOOM_LOCATION_FIELD_ATTRIBUTE = 2,
   LOOM_LOCATION_FIELD_REGION = 3,
+  LOOM_LOCATION_FIELD_SUCCESSOR = 4,
 } loom_location_field_kind_t;
 
 // Source span for one concrete op field inside a file location.

@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "iree/base/internal/unicode.h"
@@ -261,6 +262,134 @@ static iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
     return loom_output_stream_write_format(stream, "%" PRIu32, value_id);
   }
   return loom_output_stream_write_cstring(stream, "%?");
+}
+
+static bool loom_print_block_has_label(const loom_print_context_t* ctx,
+                                       const loom_block_t* block) {
+  return block->label_id != LOOM_STRING_ID_INVALID &&
+         block->label_id < ctx->module->strings.count;
+}
+
+static bool loom_print_region_label_exists(const loom_print_context_t* ctx,
+                                           const loom_region_t* region,
+                                           iree_string_view_t label) {
+  if (!region) return false;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(region, block_index);
+    if (!loom_print_block_has_label(ctx, block)) continue;
+    if (iree_string_view_equal(ctx->module->strings.entries[block->label_id],
+                               label)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_print_region_find_block_index(const loom_region_t* region,
+                                               const loom_block_t* block,
+                                               uint16_t* out_block_index) {
+  if (!region || !block) return false;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    if (loom_region_const_block(region, block_index) == block) {
+      *out_block_index = block_index;
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_print_block_label_view(
+    const loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_block_t* block, char* synthetic_buffer,
+    iree_host_size_t synthetic_buffer_capacity, iree_string_view_t* out_label) {
+  if (loom_print_block_has_label(ctx, block)) {
+    *out_label = ctx->module->strings.entries[block->label_id];
+    return iree_ok_status();
+  }
+  uint16_t block_index = 0;
+  if (!loom_print_region_find_block_index(region, block, &block_index)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "successor target block is not in the printed "
+                            "region and has no explicit label");
+  }
+  for (uint32_t suffix = 0;; ++suffix) {
+    int length =
+        suffix == 0
+            ? snprintf(synthetic_buffer, synthetic_buffer_capacity, "_bb%u",
+                       (unsigned)block_index)
+            : snprintf(synthetic_buffer, synthetic_buffer_capacity, "_bb%u_%u",
+                       (unsigned)block_index, (unsigned)suffix);
+    if (length < 0 || (iree_host_size_t)length >= synthetic_buffer_capacity) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "synthetic block label exceeds buffer capacity");
+    }
+    iree_string_view_t candidate =
+        iree_make_string_view(synthetic_buffer, (iree_host_size_t)length);
+    if (!loom_print_region_label_exists(ctx, region, candidate)) {
+      *out_label = candidate;
+      return iree_ok_status();
+    }
+  }
+}
+
+static bool loom_print_region_needs_synthetic_labels(
+    const loom_print_context_t* ctx, const loom_region_t* region) {
+  if (!region) return false;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(region, block_index);
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      loom_block_t* const* successors = loom_op_const_successors(op);
+      for (uint8_t i = 0; i < op->successor_count; ++i) {
+        const loom_block_t* target = successors[i];
+        if (target && !loom_print_block_has_label(ctx, target)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_print_successor_ref(loom_print_context_t* ctx,
+                                              const loom_op_t* op,
+                                              uint8_t successor_index) {
+  if (successor_index >= op->successor_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "format SUCCESSOR_REF field_index %u out of range (op has %u "
+        "successors)",
+        successor_index, op->successor_count);
+  }
+  const loom_block_t* target = loom_op_const_successors(op)[successor_index];
+  if (!target) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "successor %u target is NULL", successor_index);
+  }
+  const loom_region_t* region = op->parent_block
+                                    ? op->parent_block->parent_region
+                                    : target->parent_region;
+  if (target->parent_region && region && target->parent_region != region) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "successor %u target belongs to a different region",
+                            successor_index);
+  }
+  char label_buffer[64];
+  iree_string_view_t label = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_print_block_label_view(
+      ctx, region, target, label_buffer, sizeof(label_buffer), &label));
+
+  iree_host_size_t successor_start =
+      loom_print_next_token_start_offset(ctx, false, '^');
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '^'));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write(ctx->stream, label));
+  loom_print_did_write(ctx);
+  loom_print_report_field(
+      ctx, loom_print_field_ref(LOOM_PRINT_FIELD_SUCCESSOR, successor_index),
+      successor_start, ctx->stream->offset);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_print_canonical_encoding(
@@ -1516,6 +1645,11 @@ static iree_status_t loom_printer_walk_format(loom_print_context_t* ctx,
         }
         break;
       }
+      case LOOM_FORMAT_KIND_SUCCESSOR_REF: {
+        IREE_RETURN_IF_ERROR(
+            loom_print_successor_ref(ctx, op, element->field_index));
+        break;
+      }
       case LOOM_FORMAT_KIND_ATTR_VALUE: {
         if (element->field_index >= op->attribute_count) {
           return iree_make_status(
@@ -2116,46 +2250,53 @@ static bool loom_print_should_elide_implicit_terminator(
          op->attribute_count == 0 && op->instance_flags == 0;
 }
 
+static iree_status_t loom_print_block_label_line(loom_print_context_t* ctx,
+                                                 const loom_region_t* region,
+                                                 const loom_block_t* block) {
+  char label_buffer[64];
+  iree_string_view_t label = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_print_block_label_view(
+      ctx, region, block, label_buffer, sizeof(label_buffer), &label));
+  IREE_RETURN_IF_ERROR(loom_print_block_comments(ctx, block));
+  IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '^'));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write(ctx->stream, label));
+  if (block->arg_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '('));
+    for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
+      if (arg_index > 0) {
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(ctx->stream, ", "));
+      }
+      char name_buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
+      loom_value_id_t arg_id = loom_block_arg_id(block, arg_index);
+      IREE_RETURN_IF_ERROR(loom_output_stream_write(
+          ctx->stream, loom_resolve_value_name(ctx->module, arg_id, name_buffer,
+                                               sizeof(name_buffer))));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(ctx->stream, " : "));
+      IREE_RETURN_IF_ERROR(
+          loom_text_print_type(loom_module_value_type(ctx->module, arg_id),
+                               ctx->module, ctx->stream));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
+  }
+  return loom_output_stream_write_cstring(ctx->stream, ":\n");
+}
+
 static iree_status_t loom_print_region_body(
     loom_print_context_t* ctx, const loom_region_t* region,
     const loom_region_descriptor_t* region_descriptor) {
   IREE_ASSERT_ARGUMENT(region_descriptor);
+  const bool needs_synthetic_labels =
+      loom_print_region_needs_synthetic_labels(ctx, region);
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
 
-    // Print block label if present: ^label(%arg: type, ...):
-    if (block->label_id != LOOM_STRING_ID_INVALID &&
-        block->label_id < ctx->module->strings.count) {
-      IREE_RETURN_IF_ERROR(loom_print_block_comments(ctx, block));
-      IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '^'));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write(
-          ctx->stream, ctx->module->strings.entries[block->label_id]));
-      if (block->arg_count > 0) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '('));
-        for (uint16_t arg_index = 0; arg_index < block->arg_count;
-             ++arg_index) {
-          if (arg_index > 0) {
-            IREE_RETURN_IF_ERROR(
-                loom_output_stream_write_cstring(ctx->stream, ", "));
-          }
-          char name_buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
-          loom_value_id_t arg_id = loom_block_arg_id(block, arg_index);
-          IREE_RETURN_IF_ERROR(loom_output_stream_write(
-              ctx->stream,
-              loom_resolve_value_name(ctx->module, arg_id, name_buffer,
-                                      sizeof(name_buffer))));
-          IREE_RETURN_IF_ERROR(
-              loom_output_stream_write_cstring(ctx->stream, " : "));
-          IREE_RETURN_IF_ERROR(
-              loom_text_print_type(loom_module_value_type(ctx->module, arg_id),
-                                   ctx->module, ctx->stream));
-        }
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
-      }
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(ctx->stream, ":\n"));
+    // Print block label if present or needed by a successor reference.
+    if (loom_print_block_has_label(ctx, block) || needs_synthetic_labels) {
+      IREE_RETURN_IF_ERROR(loom_print_block_label_line(ctx, region, block));
     }
 
     bool printed_any = false;
@@ -2189,41 +2330,14 @@ static iree_status_t loom_print_region_body(
 
 static iree_status_t loom_print_module_body(loom_print_context_t* ctx,
                                             const loom_region_t* region) {
+  const bool needs_synthetic_labels =
+      loom_print_region_needs_synthetic_labels(ctx, region);
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
 
-    if (block->label_id != LOOM_STRING_ID_INVALID &&
-        block->label_id < ctx->module->strings.count) {
-      IREE_RETURN_IF_ERROR(loom_print_block_comments(ctx, block));
-      IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '^'));
-      IREE_RETURN_IF_ERROR(loom_output_stream_write(
-          ctx->stream, ctx->module->strings.entries[block->label_id]));
-      if (block->arg_count > 0) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '('));
-        for (uint16_t arg_index = 0; arg_index < block->arg_count;
-             ++arg_index) {
-          if (arg_index > 0) {
-            IREE_RETURN_IF_ERROR(
-                loom_output_stream_write_cstring(ctx->stream, ", "));
-          }
-          char name_buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
-          loom_value_id_t arg_id = loom_block_arg_id(block, arg_index);
-          IREE_RETURN_IF_ERROR(loom_output_stream_write(
-              ctx->stream,
-              loom_resolve_value_name(ctx->module, arg_id, name_buffer,
-                                      sizeof(name_buffer))));
-          IREE_RETURN_IF_ERROR(
-              loom_output_stream_write_cstring(ctx->stream, " : "));
-          IREE_RETURN_IF_ERROR(
-              loom_text_print_type(loom_module_value_type(ctx->module, arg_id),
-                                   ctx->module, ctx->stream));
-        }
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
-      }
-      IREE_RETURN_IF_ERROR(
-          loom_output_stream_write_cstring(ctx->stream, ":\n"));
+    if (loom_print_block_has_label(ctx, block) || needs_synthetic_labels) {
+      IREE_RETURN_IF_ERROR(loom_print_block_label_line(ctx, region, block));
     }
 
     bool printed_any = false;

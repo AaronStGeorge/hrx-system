@@ -2076,6 +2076,34 @@ static uint8_t loom_bytecode_instance_flags_mask(
   return (uint8_t)((1u << vtable->instance_flags_case_count) - 1u);
 }
 
+static iree_status_t loom_bytecode_find_successor_block_index(
+    const loom_op_t* op, const loom_block_t* target,
+    uint16_t* out_block_index) {
+  if (!target) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "operation successor target is NULL");
+  }
+  if (!op->parent_block || !op->parent_block->parent_region) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operation with successors is not attached to a region");
+  }
+  const loom_region_t* region = op->parent_block->parent_region;
+  if (target->parent_region && target->parent_region != region) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operation successor target belongs to a different region");
+  }
+  for (uint16_t i = 0; i < region->block_count; ++i) {
+    if (loom_region_const_block(region, i) == target) {
+      *out_block_index = i;
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "operation successor target is not in its region");
+}
+
 static iree_status_t loom_bytecode_write_operation(
     loom_bytecode_page_writer_t* writer, loom_bytecode_numbering_t* numbering,
     const loom_bytecode_value_numbering_t* value_numbering, const loom_op_t* op,
@@ -2131,6 +2159,19 @@ static iree_status_t loom_bytecode_write_operation(
         value_numbering, operands[i], &value_number));
     IREE_RETURN_IF_ERROR(
         loom_bytecode_page_writer_write_uvarint(writer, value_number));
+  }
+
+  // Successors are encoded as region-local block ordinals. This keeps bytecode
+  // independent from optional text labels and makes forward edges cheap.
+  loom_block_t* const* successors = loom_op_const_successors(op);
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_page_writer_write_uvarint(writer, op->successor_count));
+  for (uint8_t i = 0; i < op->successor_count; ++i) {
+    uint16_t block_index = 0;
+    IREE_RETURN_IF_ERROR(loom_bytecode_find_successor_block_index(
+        op, successors[i], &block_index));
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_page_writer_write_uvarint(writer, block_index));
   }
 
   // Results.

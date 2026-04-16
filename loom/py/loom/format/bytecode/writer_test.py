@@ -1145,6 +1145,27 @@ class TestOpPatterns:
         assert len(map_loaded.regions[0].blocks) == 1
         assert len(map_loaded.regions[0].blocks[0].ops) == 2
 
+    def test_successor_reference(self) -> None:
+        module = Module(name="test")
+        exit_block = Block(label="exit", ops=[Operation(name="test.yield")])
+        entry_block = Block(
+            label="entry",
+            ops=[Operation(name="test.br", successors=[exit_block])],
+        )
+        body = Region(blocks=[entry_block, exit_block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        loaded = self._roundtrip_ops(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        assert loaded_op.regions
+        loaded_body = loaded_op.regions[0]
+        assert len(loaded_body.blocks) == 2
+        branch = loaded_body.blocks[0].ops[0]
+        assert branch.name == "test.br"
+        assert branch.successors == [loaded_body.blocks[1]]
+        assert branch.successors[0].label == "exit"
+
     def test_no_results_op(self) -> None:
         module = Module(name="test")
         a = module.add_value(Value(name="a", type=F32))

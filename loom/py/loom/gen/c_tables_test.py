@@ -11,6 +11,7 @@ from loom.assembly import (
     Attr,
     AttrDict,
     AttrTable,
+    BlockRef,
     Flags,
     OperandDict,
     Ref,
@@ -37,6 +38,7 @@ from loom.dsl import (
     PositiveBitWidthAttr,
     Result,
     SameType,
+    Successor,
     TotalBitCountEqual,
     TypeConstraint,
     UnpackedPayloadBitCountMatchesStorage,
@@ -212,6 +214,26 @@ def test_generate_builders_preserve_named_operands_for_non_binary_shapes() -> No
     assert "LOOM_DEFINE_BINARY_OP_BUILDER" not in builders_c
     assert "loom_op_operands(*out_op)[0] = table;" in builders_c
     assert "loom_op_operands(*out_op)[1] = indices;" in builders_c
+
+
+def test_generate_builders_emit_successor_fields() -> None:
+    op = Op(
+        "test.br",
+        group=Dialect("test"),
+        successors=[Successor("dest")],
+        format=[BlockRef("dest")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_DEFINE_SUCCESSOR(loom_test_br_dest, 0)" in ops_h
+    assert "loom_block_t* dest" in ops_h
+    assert "loom_builder_allocate_op_with_successors" in builders_c
+    assert "loom_op_successors(*out_op)[0] = dest;" in builders_c
+    assert ".fixed_successor_count" not in tables_c
+    assert "{LOOM_FORMAT_KIND_SUCCESSOR_REF, 0, 0}," in tables_c
 
 
 def test_generate_tables_preserves_operand_and_result_descriptor_names() -> None:

@@ -13,6 +13,7 @@ from loom.assembly import (
     COLON,
     EQUALS,
     Attr,
+    BlockRef,
     IndexList,
     Keyword,
     Ref,
@@ -100,6 +101,7 @@ from loom.dsl import (
     SameKind,
     SameShape,
     SameType,
+    Successor,
     TotalBitCountEqual,
     TypeConstraint,
     UnpackedPayloadBitCountMatchesStorage,
@@ -1113,13 +1115,15 @@ class TestOp:
             "test.op",
             operands=[Operand("x", ANY)],
             results=[Result("y", ANY)],
+            successors=[Successor("dest")],
             traits=[PURE],
             constraints=[SameType("x", "y")],
-            format=[Ref("x"), COLON, TypeOf("y")],
+            format=[Ref("x"), BlockRef("dest"), COLON, TypeOf("y")],
             examples=["example"],
         )
         assert isinstance(op.operands, tuple)
         assert isinstance(op.results, tuple)
+        assert isinstance(op.successors, tuple)
         assert isinstance(op.traits, tuple)
         assert isinstance(op.constraints, tuple)
         assert isinstance(op.format, tuple)
@@ -1147,6 +1151,11 @@ class TestOp:
         op = Op("test.op", attrs=[AttrDef("axis", "i64")])
         assert op.attr("axis") is not None
         assert op.attr("missing") is None
+
+    def test_lookup_successor(self) -> None:
+        op = Op("test.op", successors=[Successor("dest")])
+        assert op.successor("dest") is not None
+        assert op.successor("missing") is None
 
     def test_lookup_region(self) -> None:
         op = Op("test.op", regions=[RegionDef("body")])
@@ -1190,6 +1199,15 @@ class TestOp:
                 results=[Result("result", ANY)],
                 format=[Ref("source"), COLON, TypeOf("result")],  # Wrong name.
             )
+
+    def test_format_field_validation_accepts_successor(self) -> None:
+        """BlockRef fields are validated against declared successors."""
+        op = Op(
+            "test.br",
+            successors=[Successor("dest")],
+            format=[BlockRef("dest")],
+        )
+        assert op.successor("dest") is not None
 
     def test_format_field_validation_allows_implicit(self) -> None:
         """Implicit fields (iv, args, predicates) are allowed."""

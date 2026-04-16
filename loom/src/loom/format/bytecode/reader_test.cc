@@ -227,6 +227,45 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateSuccessorFunctionModule() {
+    loom_module_t* module = CreateModule("reader_successor");
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("cfg"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee,
+        /*arg_types=*/nullptr, 0, /*result_types=*/nullptr, 0,
+        /*arg_names=*/nullptr, 0, /*result_names=*/nullptr, 0,
+        LOOM_LOCATION_UNKNOWN, &func_op));
+
+    loom_region_t* body = loom_test_func_body(func_op);
+    loom_block_t* entry_block = loom_region_entry_block(body);
+    loom_block_t* exit_block = nullptr;
+    IREE_CHECK_OK(loom_region_append_block(module, body, &exit_block));
+
+    loom_builder_t entry_builder;
+    loom_builder_initialize(module, &module->arena, entry_block,
+                            &entry_builder);
+    loom_op_t* br_op = nullptr;
+    IREE_CHECK_OK(loom_test_br_build(&entry_builder, exit_block,
+                                     LOOM_LOCATION_UNKNOWN, &br_op));
+
+    loom_builder_t exit_builder;
+    loom_builder_initialize(module, &module->arena, exit_block, &exit_builder);
+    loom_op_t* yield_op = nullptr;
+    IREE_CHECK_OK(loom_test_yield_build(&exit_builder, nullptr, 0,
+                                        LOOM_LOCATION_UNKNOWN, &yield_op));
+    return module;
+  }
+
   loom_module_t* CreateDynamicDimFunctionModule() {
     loom_module_t* module = CreateModule("reader_dynamic_dim");
     loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
@@ -957,6 +996,10 @@ class ReaderTest : public ::testing::Test {
     for (uint64_t i = 0; i < operand_count; ++i) {
       ReadUVarint(bytes, &offset);
     }
+    uint64_t successor_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < successor_count; ++i) {
+      ReadUVarint(bytes, &offset);
+    }
     uint64_t result_count = ReadUVarint(bytes, &offset);
     for (uint64_t i = 0; i < result_count; ++i) {
       ReadValueDefOffsets(bytes, &offset);
@@ -981,6 +1024,10 @@ class ReaderTest : public ::testing::Test {
     SkipCommentList(bytes, &offset);
     uint64_t operand_count = ReadUVarint(bytes, &offset);
     for (uint64_t i = 0; i < operand_count; ++i) {
+      ReadUVarint(bytes, &offset);
+    }
+    uint64_t successor_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < successor_count; ++i) {
       ReadUVarint(bytes, &offset);
     }
     uint64_t result_count = ReadUVarint(bytes, &offset);
@@ -1077,6 +1124,10 @@ class ReaderTest : public ::testing::Test {
         SkipCommentList(bytes, offset);
         uint64_t operand_count = ReadUVarint(bytes, offset);
         for (uint64_t i = 0; i < operand_count; ++i) {
+          ReadUVarint(bytes, offset);
+        }
+        uint64_t successor_count = ReadUVarint(bytes, offset);
+        for (uint64_t i = 0; i < successor_count; ++i) {
           ReadUVarint(bytes, offset);
         }
         uint64_t result_count = ReadUVarint(bytes, offset);
@@ -1387,6 +1438,36 @@ TEST_F(ReaderTest, ReadsMultiBlockFunctionBodyModule) {
   loom_module_free(module);
 }
 
+TEST_F(ReaderTest, ReadsFunctionBodySuccessorReferences) {
+  loom_module_t* module = CreateSuccessorFunctionModule();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  loom_op_t* func_op = read_module->symbols.entries[0].defining_op;
+  ASSERT_TRUE(loom_test_func_isa(func_op));
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(body->block_count, 2u);
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  ASSERT_NE(entry_block, nullptr);
+  ASSERT_EQ(entry_block->op_count, 1u);
+  loom_op_t* br_op = loom_block_op(entry_block, 0);
+  ASSERT_TRUE(loom_test_br_isa(br_op));
+  ASSERT_EQ(br_op->successor_count, 1u);
+  EXPECT_EQ(loom_test_br_dest(br_op), loom_region_block(body, 1));
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
 TEST_F(ReaderTest, ReadsNestedRegionBodyModule) {
   loom_module_t* module = CreateTiedBodyOpModule();
   auto bytes = WriteModule(module);
@@ -1516,6 +1597,10 @@ TEST_F(ReaderTest, CanonicalRoundTripPreservesBodyShapes) {
   loom_module_t* multi_block_module = CreateMultiBlockFunctionModule();
   ExpectCanonicalBytecodeRoundTrip(multi_block_module);
   loom_module_free(multi_block_module);
+
+  loom_module_t* successor_module = CreateSuccessorFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(successor_module);
+  loom_module_free(successor_module);
 
   loom_module_t* nested_module = CreateTiedBodyOpModule();
   ExpectCanonicalBytecodeRoundTrip(nested_module);

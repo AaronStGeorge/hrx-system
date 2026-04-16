@@ -528,6 +528,48 @@ TEST_F(VerifyTest, WrongOperandCountDetected) {
   ExpectU32Param(*entry, 2, 2);
 }
 
+TEST_F(VerifyTest, MissingSuccessorTargetDetected) {
+  EnterTestFunc(nullptr, 0, nullptr);
+
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_builder_allocate_op_with_successors(
+      &builder_, LOOM_OP_TEST_BR, /*operand_count=*/0, /*result_count=*/0,
+      /*successor_count=*/1, /*region_count=*/0, /*tied_result_count=*/0,
+      /*attribute_count=*/0, LOOM_LOCATION_UNKNOWN, &op));
+  loom_op_successors(op)[0] = nullptr;
+
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 23));
+  ASSERT_NE(entry, nullptr) << "Expected STRUCTURE/023 successor target error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "test.br");
+  ExpectU32Param(*entry, 1, 0);
+  ExpectFieldRefParam(*entry, 1, LOOM_DIAGNOSTIC_FIELD_SUCCESSOR, 0);
+}
+
+TEST_F(VerifyTest, SuccessorOutsideParentRegionDetected) {
+  EnterTestFunc(nullptr, 0, nullptr);
+
+  loom_region_t* foreign_region = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate_region(module_, 1, &foreign_region));
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_br_build(&builder_,
+                                    loom_region_entry_block(foreign_region),
+                                    LOOM_LOCATION_UNKNOWN, &op));
+
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 24));
+  ASSERT_NE(entry, nullptr) << "Expected STRUCTURE/024 successor-region error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "test.br");
+  ExpectU32Param(*entry, 1, 0);
+  ExpectFieldRefParam(*entry, 1, LOOM_DIAGNOSTIC_FIELD_SUCCESSOR, 0);
+}
+
 TEST_F(VerifyTest, OpAfterTerminatorDetected) {
   EnterTestFunc(nullptr, 0, nullptr);
   TerminateFunc();

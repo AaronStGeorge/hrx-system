@@ -32,6 +32,7 @@ from loom.assembly import (
     AttrTable,
     BindingList,
     BlockArgs,
+    BlockRef,
     Flags,
     FormatElement,
     FuncArgs,
@@ -844,14 +845,26 @@ def _translate_format_elements(
 
                 case Refs(field=name):
                     kind, index = _resolve_field(name)
+                    if kind != FieldKind.OPERAND:
+                        raise ValueError(f"Op '{op.name}': Refs('{name}') references {kind.name}, expected OPERAND")
                     elements.append(("LOOM_FORMAT_KIND_OPERAND_REFS", index, "0"))
+
+                case BlockRef(field=name):
+                    kind, index = _resolve_field(name)
+                    if kind != FieldKind.SUCCESSOR:
+                        raise ValueError(f"Op '{op.name}': BlockRef('{name}') references {kind.name}, expected SUCCESSOR")
+                    elements.append(("LOOM_FORMAT_KIND_SUCCESSOR_REF", index, "0"))
 
                 case Attr(field=name):
                     kind, index = _resolve_field(name)
+                    if kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': Attr('{name}') references {kind.name}, expected ATTR")
                     elements.append(("LOOM_FORMAT_KIND_ATTR_VALUE", index, "0"))
 
                 case SymbolRef(field=name):
                     kind, index = _resolve_field(name)
+                    if kind != FieldKind.ATTR:
+                        raise ValueError(f"Op '{op.name}': SymbolRef('{name}') references {kind.name}, expected ATTR")
                     elements.append(("LOOM_FORMAT_KIND_SYMBOL_REF", index, "0"))
 
                 case TypeOf(field=name):
@@ -874,10 +887,14 @@ def _translate_format_elements(
 
                 case ResultType(field=name):
                     kind, index = _resolve_field(name)
+                    if kind != FieldKind.RESULT:
+                        raise ValueError(f"Op '{op.name}': ResultType('{name}') references {kind.name}, expected RESULT")
                     elements.append(("LOOM_FORMAT_KIND_RESULT_TYPE_SINGLE", index, "0"))
 
                 case ResultTypeList(field=name, parens=parens):
                     kind, index = _resolve_field(name)
+                    if kind != FieldKind.RESULT:
+                        raise ValueError(f"Op '{op.name}': ResultTypeList('{name}') references {kind.name}, expected RESULT")
                     payload = "LOOM_RESULT_TYPE_LIST_PARENS" if parens else "0"
                     elements.append(("LOOM_FORMAT_KIND_RESULT_TYPE_LIST", index, payload))
 
@@ -1378,6 +1395,20 @@ def _extract_c_params(op: Op) -> list[dict[str, Any]]:
                         }
                     )
 
+                case BlockRef(field=name):
+                    desc = layout.fields.get(name)
+                    if desc is None or desc.kind != FieldKind.SUCCESSOR:
+                        kind_name = desc.kind.name if desc else "UNKNOWN"
+                        raise ValueError(f"Op '{op.name}': BlockRef('{name}') references {kind_name}, expected SUCCESSOR")
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "successor",
+                            "c_type": "loom_block_t*",
+                            "index": desc.index,
+                        }
+                    )
+
                 case OperandDict(operands=operand_field, names=names_field):
                     params.append(
                         {
@@ -1665,6 +1696,8 @@ def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pr
         match param["kind"]:
             case "operand":
                 c_params.append(f"{consume}loom_value_id_t {param['name']}")
+            case "successor":
+                c_params.append(f"loom_block_t* {param['name']}")
             case "operand_variadic":
                 c_params.append(f"{consume}const loom_value_id_t* {param['name']}")
                 c_params.append(f"iree_host_size_t {param['name']}_count")
@@ -1844,6 +1877,8 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
     else:
         result_count_expr = str(layout.fixed_result_count)
 
+    successor_count_expr = str(len(op.successors))
+
     region_count_expr = str(len(op.regions))
     for param in params:
         if param["kind"] == "auto_region_table":
@@ -1861,14 +1896,21 @@ def _generate_builder_implementation(op: Op, prefix: str, enum_name: str) -> lis
     else:
         tied_count_expr = "0"
 
-    lines.append("  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(")
+    allocate_fn = "loom_builder_allocate_op_with_successors" if op.successors else "loom_builder_allocate_op"
+    lines.append(f"  IREE_RETURN_IF_ERROR({allocate_fn}(")
     lines.append(f"      builder, {enum_name}, {operand_count_expr},")
-    lines.append(f"      {result_count_expr}, {region_count_expr}, {tied_count_expr},")
+    if op.successors:
+        lines.append(f"      {result_count_expr}, {successor_count_expr}, {region_count_expr}, {tied_count_expr},")
+    else:
+        lines.append(f"      {result_count_expr}, {region_count_expr}, {tied_count_expr},")
     lines.append(f"      {attr_count}, location, out_op));")
     lines.extend(f"  (*out_op)->instance_flags = {param['name']};" for param in params if param["kind"] == "instance_flags")
 
     # Fill in fixed operands.
     lines.extend(f"  loom_op_operands(*out_op)[{param['index']}] = {param['name']};" for param in params if param["kind"] == "operand")
+
+    # Fill in fixed successors.
+    lines.extend(f"  loom_op_successors(*out_op)[{param['index']}] = {param['name']};" for param in params if param["kind"] == "successor")
 
     # Fill in variadic operands (memcpy from the array parameter).
     for param in params:
@@ -2273,6 +2315,13 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             else:
                 lines.append(f"LOOM_DEFINE_RESULT({prefix}_{result.name}, {desc.index})")
 
+        for successor in op.successors:
+            desc = layout.fields[successor.name]
+            if successor.variadic:
+                lines.append(f"LOOM_DEFINE_VARIADIC_SUCCESSORS({prefix}_{successor.name}, {desc.index})")
+            else:
+                lines.append(f"LOOM_DEFINE_SUCCESSOR({prefix}_{successor.name}, {desc.index})")
+
         # Regular attribute accessors (excludes flags attrs).
         non_flags_index = 0
         for attr_def in op.attrs:
@@ -2634,6 +2683,8 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 field = layout.fields.get(arg_name)
                 if field is None:
                     raise ValueError(f"Op '{op.name}' constraint {constraint.name}: unknown field '{arg_name}'")
+                if field.kind == FieldKind.SUCCESSOR:
+                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: successor field '{arg_name}' cannot be encoded as a value/type constraint argument")
                 category = FIELD_CATEGORY_MAP[field.kind]
                 arg_refs.append(
                     _constraint_arg_ref(

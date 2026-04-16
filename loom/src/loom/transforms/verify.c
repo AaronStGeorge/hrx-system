@@ -585,6 +585,9 @@ static bool loom_verify_print_field_ref(
     case LOOM_DIAGNOSTIC_FIELD_REGION:
       kind = LOOM_PRINT_FIELD_REGION;
       break;
+    case LOOM_DIAGNOSTIC_FIELD_SUCCESSOR:
+      kind = LOOM_PRINT_FIELD_SUCCESSOR;
+      break;
     case LOOM_DIAGNOSTIC_FIELD_NONE:
     default:
       return false;
@@ -630,6 +633,9 @@ static bool loom_verify_print_field_ref_from_location_field(
       break;
     case LOOM_LOCATION_FIELD_REGION:
       kind = LOOM_PRINT_FIELD_REGION;
+      break;
+    case LOOM_LOCATION_FIELD_SUCCESSOR:
+      kind = LOOM_PRINT_FIELD_SUCCESSOR;
       break;
     default:
       return false;
@@ -1312,6 +1318,50 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
     loom_verify_emit_structured(
         state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 4),
         params, IREE_ARRAYSIZE(params));
+  }
+}
+
+static bool loom_verify_region_directly_contains_block(
+    const loom_region_t* region, const loom_block_t* target) {
+  if (!region || !target) return false;
+  for (uint16_t i = 0; i < region->block_count; ++i) {
+    if (loom_region_const_block(region, i) == target) return true;
+  }
+  return false;
+}
+
+static void loom_verify_successor_targets(loom_verify_state_t* state,
+                                          const loom_op_t* op,
+                                          const loom_op_vtable_t* vtable) {
+  if (op->successor_count == 0) return;
+  const loom_region_t* parent_region =
+      op->parent_block ? op->parent_block->parent_region : NULL;
+  iree_string_view_t op_name = loom_op_vtable_name(vtable);
+  loom_block_t* const* successors = loom_op_const_successors(op);
+  for (uint8_t i = 0; i < op->successor_count; ++i) {
+    loom_diagnostic_field_ref_t successor_ref =
+        loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_SUCCESSOR, i);
+    if (!successors[i]) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(op_name),
+          loom_param_with_field_ref(loom_param_u32(i), successor_ref),
+      };
+      loom_verify_emit_structured(
+          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 23),
+          params, IREE_ARRAYSIZE(params));
+      continue;
+    }
+    if (successors[i]->parent_region != parent_region ||
+        !loom_verify_region_directly_contains_block(parent_region,
+                                                    successors[i])) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(op_name),
+          loom_param_with_field_ref(loom_param_u32(i), successor_ref),
+      };
+      loom_verify_emit_structured(
+          state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 24),
+          params, IREE_ARRAYSIZE(params));
+    }
   }
 }
 
@@ -4118,6 +4168,11 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   // Structural checks: operand/result/attr/region counts match the
   // vtable declaration. Must pass before per-field checks below.
   loom_verify_op_structure(state, op, vtable);
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
+
+  // Successor targets are direct block pointers. Reject malformed edges before
+  // region-structure and dominance-sensitive checks observe CFG shape.
+  loom_verify_successor_targets(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Per-instance trait callbacks may refine the static vtable declaration but

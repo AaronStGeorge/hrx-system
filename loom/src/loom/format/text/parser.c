@@ -1058,6 +1058,9 @@ void loom_parsed_op_initialize(loom_parsed_op_t* parsed) {
   memset(parsed, 0, sizeof(*parsed));
   parsed->operand_ids = parsed->inline_operand_ids;
   parsed->operand_capacity = LOOM_PARSED_OP_INLINE_OPERANDS;
+  parsed->successors = parsed->inline_successors;
+  parsed->successor_label_tokens = parsed->inline_successor_label_tokens;
+  parsed->successor_capacity = LOOM_PARSED_OP_INLINE_SUCCESSORS;
   parsed->result_ids = parsed->inline_result_ids;
   parsed->result_name_tokens = parsed->inline_result_name_tokens;
   parsed->result_capacity = LOOM_PARSED_OP_INLINE_RESULTS;
@@ -1073,6 +1076,7 @@ void loom_parsed_op_initialize(loom_parsed_op_t* parsed) {
 
 void loom_parsed_op_reset(loom_parsed_op_t* parsed) {
   parsed->operand_count = 0;
+  parsed->successor_count = 0;
   parsed->result_count = 0;
   parsed->tied_result_count = 0;
   parsed->field_span_count = 0;
@@ -1136,6 +1140,37 @@ iree_status_t loom_parsed_op_set_operand(loom_parsed_op_t* parsed,
     parsed->operand_ids[parsed->operand_count++] = LOOM_VALUE_ID_INVALID;
   }
   parsed->operand_ids[index] = value_id;
+  return iree_ok_status();
+}
+
+iree_status_t loom_parsed_op_set_successor(loom_parsed_op_t* parsed,
+                                           iree_arena_allocator_t* arena,
+                                           uint8_t index, loom_block_t* block,
+                                           loom_token_t label_token) {
+  if (index == UINT8_MAX) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "successor field index exceeds storage limit");
+  }
+  iree_host_size_t required_capacity = (iree_host_size_t)index + 1;
+  if (required_capacity > parsed->successor_capacity) {
+    iree_host_size_t capacity = parsed->successor_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, parsed->successor_count, required_capacity,
+        sizeof(loom_block_t*), &capacity, (void**)&parsed->successors));
+    iree_host_size_t token_capacity = parsed->successor_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        arena, parsed->successor_count, capacity, sizeof(loom_token_t),
+        &token_capacity, (void**)&parsed->successor_label_tokens));
+    IREE_ASSERT(token_capacity == capacity);
+    parsed->successor_capacity = (uint8_t)capacity;
+  }
+  while (parsed->successor_count <= index) {
+    parsed->successors[parsed->successor_count] = NULL;
+    parsed->successor_label_tokens[parsed->successor_count] = loom_token_none();
+    ++parsed->successor_count;
+  }
+  parsed->successors[index] = block;
+  parsed->successor_label_tokens[index] = label_token;
   return iree_ok_status();
 }
 
@@ -1946,6 +1981,71 @@ static void loom_parser_set_region_parent_op(loom_region_t* region,
   }
 }
 
+static loom_block_t* loom_parser_find_block_by_label(
+    const loom_parser_t* parser, loom_region_t* region,
+    iree_string_view_t label) {
+  if (!region) return NULL;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    loom_block_t* block = loom_region_block(region, block_index);
+    if (block->label_id == LOOM_STRING_ID_INVALID ||
+        block->label_id >= parser->module->strings.count) {
+      continue;
+    }
+    if (iree_string_view_equal(parser->module->strings.entries[block->label_id],
+                               label)) {
+      return block;
+    }
+  }
+  return NULL;
+}
+
+static iree_status_t loom_parser_add_pending_successor_ref(
+    loom_parser_t* parser, loom_region_t* region, loom_op_t* op,
+    uint8_t successor_index, loom_token_t label_token) {
+  loom_parser_pending_successor_refs_t* pending =
+      &parser->pending_successor_refs;
+  if (pending->count >= pending->capacity) {
+    iree_host_size_t capacity = pending->capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        &parser->parser_arena, pending->count, pending->count + 1,
+        sizeof(loom_parser_pending_successor_ref_t), &capacity,
+        (void**)&pending->entries));
+    pending->capacity = capacity;
+  }
+  pending->entries[pending->count++] = (loom_parser_pending_successor_ref_t){
+      .region = region,
+      .op = op,
+      .label_token = label_token,
+      .successor_index = successor_index,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parser_resolve_pending_successor_refs(
+    loom_parser_t* parser, loom_region_t* region,
+    iree_host_size_t pending_start) {
+  loom_parser_pending_successor_refs_t* pending =
+      &parser->pending_successor_refs;
+  for (iree_host_size_t i = pending_start; i < pending->count; ++i) {
+    loom_parser_pending_successor_ref_t ref = pending->entries[i];
+    if (ref.region != region) continue;
+    loom_block_t* target =
+        loom_parser_find_block_by_label(parser, region, ref.label_token.text);
+    if (!target) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(ref.label_token.text),
+      };
+      return loom_parser_emit(
+          parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 32), params,
+          IREE_ARRAYSIZE(params), ref.label_token);
+    }
+    loom_op_successors(ref.op)[ref.successor_index] = target;
+  }
+  pending->count = pending_start;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_finalize_op(
     loom_parser_t* parser, loom_op_kind_t kind, const loom_op_vtable_t* vtable,
     loom_parsed_op_t* parsed, loom_location_id_t location, loom_op_t** out_op) {
@@ -1957,15 +2057,39 @@ static iree_status_t loom_finalize_op(
   // allocated. The allocation is zero-filled, so unset optional
   // attributes at higher indices read as zero (LOOM_ATTR_NONE).
   loom_op_t* op = NULL;
-  IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
-      &parser->builder, kind, parsed->operand_count, parsed->result_count,
-      parsed->region_count, parsed->tied_result_count, vtable->attribute_count,
-      location, &op));
+  if (parsed->successor_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_builder_allocate_op_with_successors(
+        &parser->builder, kind, parsed->operand_count, parsed->result_count,
+        parsed->successor_count, parsed->region_count,
+        parsed->tied_result_count, vtable->attribute_count, location, &op));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
+        &parser->builder, kind, parsed->operand_count, parsed->result_count,
+        parsed->region_count, parsed->tied_result_count,
+        vtable->attribute_count, location, &op));
+  }
 
   // Copy operands.
   if (parsed->operand_count > 0) {
     memcpy(loom_op_operands(op), parsed->operand_ids,
            parsed->operand_count * sizeof(loom_value_id_t));
+  }
+
+  // Copy successors and record labels that need region-end resolution. Forward
+  // references intentionally remain NULL until the enclosing region has parsed
+  // every block label.
+  if (parsed->successor_count > 0) {
+    memcpy(loom_op_successors(op), parsed->successors,
+           parsed->successor_count * sizeof(loom_block_t*));
+    loom_region_t* successor_region =
+        op->parent_block ? op->parent_block->parent_region : NULL;
+    for (uint8_t i = 0; i < parsed->successor_count; ++i) {
+      if (parsed->successor_label_tokens[i].kind == LOOM_TOKEN_BLOCK_LABEL) {
+        IREE_RETURN_IF_ERROR(loom_parser_add_pending_successor_ref(
+            parser, successor_region, op, i,
+            parsed->successor_label_tokens[i]));
+      }
+    }
   }
 
   // Fill in implicit result types from result descriptors. When the
@@ -2314,6 +2438,14 @@ static iree_status_t loom_parse_region_body(
       loom_string_id_t label_id = 0;
       IREE_RETURN_IF_ERROR(loom_module_intern_string(
           parser->module, label_token.text, &label_id));
+      if (loom_parser_find_block_by_label(parser, region, label_token.text)) {
+        loom_diagnostic_param_t params[] = {
+            loom_param_string(label_token.text),
+        };
+        return loom_parser_emit(
+            parser, loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 33), params,
+            IREE_ARRAYSIZE(params), label_token);
+      }
       block->label_id = label_id;
       IREE_RETURN_IF_ERROR(loom_module_attach_block_comments(
           parser->module, block, comments, comment_count));
@@ -2392,14 +2524,23 @@ iree_status_t loom_parse_region(
   // Save and set builder insertion point.
   loom_builder_ip_t saved_ip = loom_builder_save(&parser->builder);
 
+  iree_host_size_t pending_successor_start =
+      parser->pending_successor_refs.count;
   bool region_end_consumed = false;
   iree_status_t status = loom_parse_region_body(parser, region_descriptor,
                                                 region, &region_end_consumed);
+  if (iree_status_is_ok(status) && parser->error_count == errors_before) {
+    status = loom_parser_resolve_pending_successor_refs(
+        parser, region, pending_successor_start);
+  }
   if (parser->error_count > errors_before && !region_end_consumed &&
       !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
     loom_parser_sync_to_brace(parser);
   }
   loom_parser_pending_block_args_clear(&parser->pending_block_args);
+  if (parser->error_count > errors_before || !iree_status_is_ok(status)) {
+    parser->pending_successor_refs.count = pending_successor_start;
+  }
 
   // Restore scope and insertion point.
   loom_parser_scope_pop(parser);
@@ -2546,6 +2687,13 @@ iree_status_t loom_text_parse(iree_string_view_t source,
   // Check for tokenizer scan errors.
   if (iree_status_is_ok(status)) {
     status = loom_tokenizer_consume_status(&parser.tokenizer);
+  }
+
+  // Resolve any module-level successor labels after the top-level block has
+  // been fully parsed. Nested region references resolve at each region exit.
+  if (iree_status_is_ok(status) && parser.error_count == 0) {
+    status = loom_parser_resolve_pending_successor_refs(&parser, module->body,
+                                                        /*pending_start=*/0);
   }
 
   // Build use-def chains in one pass.

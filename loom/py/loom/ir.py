@@ -13,8 +13,8 @@ Hierarchy: Context -> Module -> Symbol/Region/Block/Operation/Value.
 
 Table-owned entities such as strings, types, locations, and values are
 referenced by integer IDs. Container ownership uses ordinary Python object
-references: symbols own their defining op, ops own regions, and regions own
-blocks.
+references: symbols own their defining op, ops own regions, regions own
+blocks, and CFG successor edges reference their target blocks directly.
 """
 
 from __future__ import annotations
@@ -1143,6 +1143,7 @@ class Operation:
     """A single IR operation.
 
     Operands and results are value IDs (indices into module's value table).
+    Successors are direct references to blocks in the enclosing region.
     The op kind is an integer ID indexing into the context's op vtable.
     """
 
@@ -1150,6 +1151,7 @@ class Operation:
     operands: list[int] = field(default_factory=list)
     results: list[int] = field(default_factory=list)
     tied_results: list[TiedResult] = field(default_factory=list)
+    successors: list[Block] = field(default_factory=list)
     attributes: Mapping[str, Any] = field(default_factory=CanonicalAttrDict)
     regions: list[Region] = field(default_factory=list)
     location_id: int = LOCATION_UNKNOWN

@@ -328,6 +328,27 @@ TEST(JsonSink, SerializesSourceRangesAndHighlights) {
             std::string::npos);
 }
 
+TEST(JsonSink, SerializesSuccessorFieldRefs) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("test.br")),
+      loom_param_with_field_ref(
+          loom_param_u32(0),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_SUCCESSOR, 0)),
+  };
+
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_ERROR;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 23);
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+
+  std::string json = EmitJson(&diagnostic);
+  EXPECT_NE(json.find("\"param_fields\":{\"successor_index\":{"
+                      "\"kind\":\"successor\",\"index\":0,"
+                      "\"occurrence\":0}}"),
+            std::string::npos);
+}
+
 TEST(JsonSink, SerializesClippedSourceExcerpt) {
   std::string source(320, 'a');
   source.replace(160, 3, "xyz");

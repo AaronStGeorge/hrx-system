@@ -353,6 +353,37 @@ ERR_STRUCTURE_022 = ErrorDef(
     fix_hint="Use a predicate argument tag from the predicate vocabulary",
 )
 
+# ERR_STRUCTURE_023: Successor target is missing.
+ERR_STRUCTURE_023 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=23,
+    severity=Severity.ERROR,
+    summary="Successor target is missing.",
+    message="successor {successor_index} of '{op_name}' has no target block",
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("successor_index", ParamKind.U32),
+    ),
+    fix_hint="Set every successor field to a block in the op's enclosing region",
+)
+
+# ERR_STRUCTURE_024: Successor target is outside the enclosing region.
+ERR_STRUCTURE_024 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=24,
+    severity=Severity.ERROR,
+    summary="Successor target is outside the enclosing region.",
+    message=(
+        "successor {successor_index} of '{op_name}' targets a block outside "
+        "the op's enclosing region"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("successor_index", ParamKind.U32),
+    ),
+    fix_hint="Branch only to blocks in the same region as the branch op",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -376,4 +407,6 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_020,
     ERR_STRUCTURE_021,
     ERR_STRUCTURE_022,
+    ERR_STRUCTURE_023,
+    ERR_STRUCTURE_024,
 )

@@ -56,6 +56,13 @@ typedef struct loom_region_slice_t {
   uint8_t count;
 } loom_region_slice_t;
 
+// A typed range of successor block pointers. Returned by variadic successor
+// accessors on CFG terminators.
+typedef struct loom_successor_slice_t {
+  loom_block_t** blocks;
+  uint8_t count;
+} loom_successor_slice_t;
+
 // Returns the value ID at |index| in the slice.
 static inline loom_value_id_t loom_value_slice_get(loom_value_slice_t slice,
                                                    uint16_t index) {
@@ -211,6 +218,10 @@ typedef enum loom_format_kind_e {
   // Region entry block arguments: (%a: type, %b: type).
   // field_index = region index whose entry block args are printed or parsed.
   LOOM_FORMAT_KIND_BLOCK_ARGS = 25,
+
+  // CFG successor block reference: ^label.
+  // field_index = successor index whose target block is printed or parsed.
+  LOOM_FORMAT_KIND_SUCCESSOR_REF = 26,
 };
 typedef uint8_t loom_format_kind_t;
 
@@ -972,6 +983,12 @@ bool loom_region_branch_region_yield_only_operands(
     return loom_op_regions(op)[(index)];                        \
   }
 
+// Defines a function that reads a successor block by index.
+#define LOOM_DEFINE_SUCCESSOR(func_name, index)                \
+  static inline loom_block_t* func_name(const loom_op_t* op) { \
+    return loom_op_successors(op)[(index)];                    \
+  }
+
 // Defines a function that returns the variadic region tail as a slice.
 // |fixed_count| is the number of non-variadic regions before the tail.
 #define LOOM_DEFINE_VARIADIC_REGIONS(func_name, fixed_count)         \
@@ -980,6 +997,16 @@ bool loom_region_branch_region_yield_only_operands(
     slice.regions = loom_op_regions(op) + (fixed_count);             \
     slice.count = (uint8_t)(op->region_count - (fixed_count));       \
     return slice;                                                    \
+  }
+
+// Defines a function that returns the variadic successor tail as a slice.
+// |fixed_count| is the number of non-variadic successors before the tail.
+#define LOOM_DEFINE_VARIADIC_SUCCESSORS(func_name, fixed_count)         \
+  static inline loom_successor_slice_t func_name(const loom_op_t* op) { \
+    loom_successor_slice_t slice;                                       \
+    slice.blocks = loom_op_successors(op) + (fixed_count);              \
+    slice.count = (uint8_t)(op->successor_count - (fixed_count));       \
+    return slice;                                                       \
   }
 
 // Each LOOM_DEFINE_ATTR_* macro defines both a typed accessor function
@@ -1226,11 +1253,22 @@ iree_status_t loom_builder_define_block_arg(loom_builder_t* builder,
 // builder's current insertion point. This is the low-level primitive
 // that generated builders call. The caller fills in trailing data
 // (operands, results, regions, tied results, attributes) through the
-// accessor functions above.
+// accessor functions above. Successor storage is omitted.
 iree_status_t loom_builder_allocate_op(
     loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
     uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
     uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op);
+
+// Allocates an op with explicit successor storage and inserts it at the
+// builder's current insertion point. Successor slots are semantic block
+// targets used by CFG terminators; labels remain display names and parser
+// syntax. The caller fills successors through loom_op_successors(op), then
+// fills the ordinary trailing fields through their accessors.
+iree_status_t loom_builder_allocate_op_with_successors(
+    loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    uint16_t result_count, uint8_t successor_count, uint8_t region_count,
+    uint16_t tied_result_count, uint8_t attribute_count,
+    loom_location_id_t location, loom_op_t** out_op);
 
 // Removes selected results from a variadic-result op and compacts trailing
 // storage in-place.

@@ -53,6 +53,7 @@ __all__ = [
     # Element types.
     "Ref",
     "Refs",
+    "BlockRef",
     "Attr",
     "SymbolRef",
     "TypeOf",
@@ -136,6 +137,22 @@ class Refs:
     parser consumes SSA value tokens until a non-value token.
 
     For builders: maps to a list[Value] parameter.
+    """
+
+    field: str
+
+
+@dataclass(frozen=True, slots=True)
+class BlockRef:
+    """A single CFG successor block reference.
+
+    Prints/parses: ^label
+
+    The field names a successor on the op declaration. Labels are only the
+    textual spelling: after parsing, operations store direct Block references
+    so CFG analyses and rewrites do not depend on display names.
+
+    For builders: maps to a single Block parameter.
     """
 
     field: str
@@ -695,6 +712,7 @@ BINDING_ELEMENT = "element"
 type FormatElement = (
     Ref
     | Refs
+    | BlockRef
     | Attr
     | SymbolRef
     | TypeOf

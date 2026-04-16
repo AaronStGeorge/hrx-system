@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 from loom.builder import IRBuilder, TiedResultSpec, ValueRef
-from loom.ir import Predicate, Region, Type
+from loom.ir import Block, Predicate, Region, Type
 
 
 class TestBuilders:
@@ -246,6 +246,19 @@ class TestBuilders:
         _regions: list[Region] = []
         _operands.extend(values)
         self._b.build("test.yield", _operands, attributes=_attributes, regions=_regions)
+
+    def br(self, *, dest: Block) -> None:
+        """Test CFG branch terminator with a semantic successor edge.
+
+        Example::
+            test.br ^ dest
+        """
+        _operands: list[ValueRef | int] = []
+        _successors: list[Block] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _successors.append(dest)
+        self._b.build("test.br", _operands, successors=_successors, attributes=_attributes, regions=_regions)
 
     def func(
         self,

@@ -9,13 +9,14 @@
 from loom.assembly import (
     AttrDict,
     AttrTable,
+    BlockRef,
     IndexList,
     OperandDict,
     Ref,
     ResultType,
     ResultTypeList,
 )
-from loom.dsl import ANY, ATTR_TYPE_I64_ARRAY, AttrDef, EnumCase, EnumDef, Op, Operand, Result
+from loom.dsl import ANY, ATTR_TYPE_I64_ARRAY, AttrDef, EnumCase, EnumDef, Op, Operand, Result, Successor
 from loom.gen.builders import generate_builders
 
 
@@ -146,3 +147,22 @@ def test_builder_params_include_attr_table_as_flattened_values() -> None:
     assert "_operands.append(selector)" in generated
     assert "_operands.extend(values)" in generated
     assert '_attributes["case_keys"] = case_keys' in generated
+
+
+def test_builder_params_include_successors() -> None:
+    generated = generate_builders(
+        [
+            Op(
+                "test.br",
+                successors=[Successor("dest")],
+                format=[BlockRef("dest")],
+            ),
+        ],
+        "TestBuilders",
+    )
+
+    assert "from loom.ir import Block" in generated
+    assert "def br(self, *, dest: Block) -> None:" in generated
+    assert "_successors: list[Block] = []" in generated
+    assert "_successors.append(dest)" in generated
+    assert "successors=_successors" in generated

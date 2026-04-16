@@ -87,6 +87,7 @@ __all__ = [
     "Operand",
     "Result",
     "TiedResult",
+    "Successor",
     "AttrDef",
     "AttrType",
     "ATTR_TYPE_I64",
@@ -389,6 +390,23 @@ class TiedResult:
     doc: str = ""
     variadic: bool = False
     allocates: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Successor:
+    """A CFG successor edge to another block in the enclosing region.
+
+    name: Field name, used in format specs and builders.
+    doc: Human-readable description.
+    variadic: If True, this is a trailing zero-or-more successor field.
+
+    Successors are semantic block references. Textual labels are parser/printer
+    syntax and may be synthesized without changing the graph.
+    """
+
+    name: str
+    doc: str = ""
+    variadic: bool = False
 
 
 # Allowed attribute type strings. Using Literal for static checking.
@@ -2011,6 +2029,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
         AttrTable,
         BindingList,
         BlockArgs,
+        BlockRef,
         EncodingOf,
         Flags,
         FuncArgs,
@@ -2038,7 +2057,7 @@ def _collect_format_fields(elements: tuple[FormatElement, ...]) -> set[str]:
     fields: set[str] = set()
     for elem in elements:
         match elem:
-            case Ref(field=f) | Refs(field=f):
+            case Ref(field=f) | Refs(field=f) | BlockRef(field=f):
                 fields.add(f)
             case (
                 Attr(field=f)
@@ -2104,6 +2123,7 @@ def _validate_format_fields(
     operands: tuple[Operand, ...],
     results: tuple[Result | TiedResult, ...],
     attrs: tuple[AttrDef, ...],
+    successors: tuple[Successor, ...],
     regions: tuple[RegionDef, ...],
 ) -> None:
     """Validate that all fields in format elements are declared on the op."""
@@ -2112,6 +2132,7 @@ def _validate_format_fields(
         {o.name for o in operands}
         | {r.name for r in results}
         | {a.name for a in attrs}
+        | {s.name for s in successors}
         | {r.name for r in regions}
         | _IMPLICIT_FORMAT_FIELDS
     )
@@ -2394,6 +2415,7 @@ class Op:
     operands: List of Operand descriptors.
     results: List of Result descriptors.
     attrs: List of AttrDef descriptors.
+    successors: List of Successor descriptors.
     regions: List of RegionDef descriptors.
     constraints: List of Constraint instances.
     traits: List of Trait instances.
@@ -2413,6 +2435,7 @@ class Op:
     operands: tuple[Operand, ...] = ()
     results: tuple[Result | TiedResult, ...] = ()
     attrs: tuple[AttrDef, ...] = ()
+    successors: tuple[Successor, ...] = ()
     regions: tuple[RegionDef, ...] = ()
     constraints: tuple[Constraint, ...] = ()
     traits: tuple[Trait, ...] = ()
@@ -2439,6 +2462,7 @@ class Op:
         operands: list[Operand] | tuple[Operand, ...] = (),
         results: list[Result | TiedResult] | tuple[Result | TiedResult, ...] = (),
         attrs: list[AttrDef] | tuple[AttrDef, ...] = (),
+        successors: list[Successor] | tuple[Successor, ...] = (),
         regions: list[RegionDef] | tuple[RegionDef, ...] = (),
         constraints: list[Constraint] | tuple[Constraint, ...] = (),
         traits: list[Trait] | tuple[Trait, ...] = (),
@@ -2459,12 +2483,14 @@ class Op:
         frozen_operands = tuple(operands)
         frozen_results = tuple(results)
         frozen_attrs = tuple(attrs)
+        frozen_successors = tuple(successors)
         frozen_regions = tuple(regions)
         frozen_effects = tuple(effects)
         frozen_format = tuple(format)
         object.__setattr__(self, "operands", frozen_operands)
         object.__setattr__(self, "results", frozen_results)
         object.__setattr__(self, "attrs", frozen_attrs)
+        object.__setattr__(self, "successors", frozen_successors)
         object.__setattr__(self, "regions", frozen_regions)
         object.__setattr__(self, "constraints", tuple(constraints))
         object.__setattr__(self, "traits", tuple(traits))
@@ -2490,6 +2516,7 @@ class Op:
                 frozen_operands,
                 frozen_results,
                 frozen_attrs,
+                frozen_successors,
                 frozen_regions,
             )
         _validate_region_arg_sources(
@@ -2523,6 +2550,13 @@ class Op:
         for a in self.attrs:
             if a.name == name:
                 return a
+        return None
+
+    def successor(self, name: str) -> Successor | None:
+        """Find a successor by name."""
+        for s in self.successors:
+            if s.name == name:
+                return s
         return None
 
     def region(self, name: str) -> RegionDef | None:

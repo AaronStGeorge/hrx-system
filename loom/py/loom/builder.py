@@ -429,6 +429,7 @@ class IRBuilder:
         op_name: str,
         operands: Sequence[ValueRef | int] | None = None,
         *,
+        successors: Sequence[Block] | None = None,
         func_args: Sequence[ValueRef | int] | None = None,
         results: Sequence[Type | TiedResultSpec] | None = None,
         result_names: Sequence[str] | None = None,
@@ -440,6 +441,7 @@ class IRBuilder:
         Parameters:
           op_name: Full op name (e.g., "test.addi").
           operands: ValueRefs or ints for operands.
+          successors: Target blocks for CFG terminator edges.
           func_args: Func-like signature argument ValueRefs. Declaration-style
             funcs store these as op operands; bodyful funcs store them as body
             entry block args.
@@ -500,6 +502,7 @@ class IRBuilder:
             operands=operand_ids,
             results=result_ids,
             tied_results=tied_results,
+            successors=list(successors) if successors else [],
             attributes=attr_dict,
             regions=region_list,
         )

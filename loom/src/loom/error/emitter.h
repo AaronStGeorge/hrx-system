@@ -33,6 +33,7 @@ typedef enum loom_diagnostic_field_kind_e {
   LOOM_DIAGNOSTIC_FIELD_RESULT = 2,
   LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE = 3,
   LOOM_DIAGNOSTIC_FIELD_REGION = 4,
+  LOOM_DIAGNOSTIC_FIELD_SUCCESSOR = 5,
 } loom_diagnostic_field_kind_t;
 
 // A zero-based |occurrence| disambiguates repeated source spellings of the

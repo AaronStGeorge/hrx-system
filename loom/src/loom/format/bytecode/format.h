@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 5)
+//   4       1     format_version (currently 7)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 6
+#define LOOM_BYTECODE_FORMAT_VERSION 7
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -639,6 +639,9 @@ typedef enum loom_bytecode_section_kind_e {
 //       [operand_count: varint]
 //       For each operand (these REFERENCE existing SSA values):
 //         [value_ref: varint]   (just the value ref, no type info)
+//       [successor_count: varint]
+//       For each successor:
+//         [block_index: varint]  Region-local index of the target block.
 //       [result_count: varint]
 //       For each result (these DEFINE SSA values):
 //         [name_id: varint]     0 = no SSA name; otherwise STRINGS id.

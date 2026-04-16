@@ -20,6 +20,7 @@ from loom.dsl import (
     Operand,
     RegionDef,
     Result,
+    Successor,
     binary_op,
     unary_op,
 )
@@ -133,6 +134,31 @@ class TestComputeLayout:
         assert layout.fields["body"].kind == FieldKind.REGION
         assert layout.fields["body"].index == 0
         assert layout.fields["else_body"].index == 1
+
+    def test_successors(self) -> None:
+        op = Op(
+            "test.br",
+            successors=[Successor("dest"), Successor("fallback")],
+        )
+        layout = compute_layout(op)
+        assert layout.fields["dest"].kind == FieldKind.SUCCESSOR
+        assert layout.fields["dest"].index == 0
+        assert layout.fields["fallback"].index == 1
+        assert layout.fixed_successor_count == 2
+        assert layout.variadic_successor is None
+
+    def test_trailing_variadic_successor(self) -> None:
+        op = Op(
+            "test.switch",
+            successors=[Successor("default"), Successor("cases", variadic=True)],
+        )
+        layout = compute_layout(op)
+        assert layout.fields["default"].index == 0
+        assert not layout.fields["default"].variadic
+        assert layout.fields["cases"].index == 1
+        assert layout.fields["cases"].variadic
+        assert layout.fixed_successor_count == 1
+        assert layout.variadic_successor == "cases"
 
     def test_non_trailing_variadic_rejected(self) -> None:
         with pytest.raises(ValueError, match="must be the last operand"):
@@ -262,6 +288,15 @@ class TestResolveSingular:
         resolved_region = fields.region("then_region")
         assert len(resolved_region.blocks) == 1
 
+    def test_successor(self) -> None:
+        module = Module(name="test")
+        target = Block(label="exit")
+        decl = Op("test.br", successors=[Successor("dest")])
+        op = Operation(kind=1, name="test.br", successors=[target])
+        fields = resolve_fields(compute_layout(decl), op, module)
+        assert fields.successor("dest") is target
+        assert fields.successors("dest") == [target]
+
     def test_variadic_region(self) -> None:
         module = Module(name="test")
         case0 = Region(blocks=[Block(ops=[Operation(kind=0, name="test.yield")])])
@@ -363,6 +398,24 @@ class TestResolveVariadic:
         assert result_ids == vids
         types = fields.types_of("results")
         assert types == [I32, F32, INDEX]
+
+    def test_variadic_successor(self) -> None:
+        module = Module(name="test")
+        default = Block(label="default")
+        case0 = Block(label="case0")
+        case1 = Block(label="case1")
+        decl = Op(
+            "test.switch",
+            successors=[Successor("default"), Successor("cases", variadic=True)],
+        )
+        op = Operation(
+            kind=1,
+            name="test.switch",
+            successors=[default, case0, case1],
+        )
+        fields = resolve_fields(compute_layout(decl), op, module)
+        assert fields.successor("default") is default
+        assert fields.successors("cases") == [case0, case1]
 
     def test_empty_variadic(self) -> None:
         module, [src_id] = _make_module_with_values(("src", _tile_4xf32))
@@ -494,6 +547,20 @@ class TestPresence:
         op = Operation(kind=1, name="test.yield", operands=[])
         fields = resolve_fields(compute_layout(decl), op, module)
         assert not fields.is_present("values")
+
+    def test_present_successor(self) -> None:
+        module = Module(name="test")
+        decl = Op("test.br", successors=[Successor("dest")])
+        op = Operation(kind=1, name="test.br", successors=[Block(label="exit")])
+        fields = resolve_fields(compute_layout(decl), op, module)
+        assert fields.is_present("dest")
+
+    def test_absent_successor(self) -> None:
+        module = Module(name="test")
+        decl = Op("test.br", successors=[Successor("dest")])
+        op = Operation(kind=1, name="test.br", successors=[])
+        fields = resolve_fields(compute_layout(decl), op, module)
+        assert not fields.is_present("dest")
 
     def test_present_region(self) -> None:
         module = Module(name="test")

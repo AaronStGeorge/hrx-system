@@ -81,6 +81,7 @@ typedef enum loom_print_field_kind_e {
   LOOM_PRINT_FIELD_RESULT = 1,
   LOOM_PRINT_FIELD_ATTR = 2,
   LOOM_PRINT_FIELD_REGION = 3,
+  LOOM_PRINT_FIELD_SUCCESSOR = 4,
 } loom_print_field_kind_t;
 
 // Identifies a concrete op field emitted by the text printer.
@@ -108,8 +109,9 @@ static inline bool loom_print_field_ref_equal(loom_print_field_ref_t lhs,
 }
 
 // Called by the printer for each field it emits in the output.
-// Fires for operand %names, result %names, attribute values, and region bodies
-// — every semantically meaningful token span that corresponds to an op field.
+// Fires for operand %names, result %names, attribute values, successor labels,
+// and region bodies — every semantically meaningful token span that corresponds
+// to an op field.
 // |field_ref| identifies the field category and index. |start| and |end| are
 // byte offsets in the output stream.
 typedef void (*loom_print_field_fn_t)(void* user_data,

@@ -119,7 +119,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 6
+FORMAT_VERSION = 7
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -764,11 +764,16 @@ class BytecodeWriter:
     ) -> None:
         """Write a region (block_count + blocks)."""
         buf.write_varint(len(region.blocks))
+        block_indices = {id(block): index for index, block in enumerate(region.blocks)}
         for block in region.blocks:
-            self._write_block(buf, block, value_numbers)
+            self._write_block(buf, block, value_numbers, block_indices)
 
     def _write_block(
-        self, buf: ByteBuffer, block: Block, value_numbers: dict[int, int]
+        self,
+        buf: ByteBuffer,
+        block: Block,
+        value_numbers: dict[int, int],
+        block_indices: dict[int, int],
     ) -> None:
         """Write a block (label, args, ops)."""
         has_label = bool(block.label)
@@ -786,7 +791,7 @@ class BytecodeWriter:
         live_ops = [op for op in block.ops if not op.is_dead]
         buf.write_varint(len(live_ops))
         for op in live_ops:
-            self._write_operation(buf, op, value_numbers)
+            self._write_operation(buf, op, value_numbers, block_indices)
 
     def _write_dim_bindings(
         self, buf: ByteBuffer, value: Value, value_numbers: dict[int, int]
@@ -842,7 +847,11 @@ class BytecodeWriter:
         }
 
     def _write_operation(
-        self, buf: ByteBuffer, op: Operation, value_numbers: dict[int, int]
+        self,
+        buf: ByteBuffer,
+        op: Operation,
+        value_numbers: dict[int, int],
+        block_indices: dict[int, int],
     ) -> None:
         """Write a single operation."""
         buf.write_varint(self._ctx.ops[op.name] + 1)
@@ -860,6 +869,19 @@ class BytecodeWriter:
                 value_numbers, operand_id, "operation operand"
             )
             buf.write_varint(value_number)
+
+        # Successors are encoded as region-local block ordinals instead of
+        # labels. Labels are optional text metadata; the edge is semantic.
+        buf.write_varint(len(op.successors))
+        for successor in op.successors:
+            try:
+                block_index = block_indices[id(successor)]
+            except KeyError as exc:
+                raise ValueError(
+                    f"operation {op.name} successor targets a block outside "
+                    "its enclosing region"
+                ) from exc
+            buf.write_varint(block_index)
 
         # Results.
         buf.write_varint(len(op.results))

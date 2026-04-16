@@ -42,10 +42,11 @@ typedef struct loom_ir_move_block_options_t {
 
 // Clones |source_op| at the builder insertion point.
 //
-// Source operands, result types, attributes, nested region payloads, locations,
-// strings, encodings, and symbols are remapped through |remap|. Source result
-// values are mapped to their cloned target result values before result types
-// are remapped, so co-result dynamic type references are preserved.
+// Source operands, successors, result types, attributes, nested region
+// payloads, locations, strings, encodings, and symbols are remapped through
+// |remap|. Source result values are mapped to their cloned target result values
+// before result types are remapped, so co-result dynamic type references are
+// preserved.
 iree_status_t loom_ir_clone_op(loom_builder_t* builder,
                                const loom_op_t* source_op,
                                loom_ir_remap_t* remap,
@@ -62,13 +63,14 @@ iree_status_t loom_ir_clone_region(loom_builder_t* builder,
                                    loom_ir_remap_t* remap,
                                    loom_region_t** out_target_region);
 
-// Rewrites every SSA-bearing payload in an existing op subtree through |remap|.
+// Rewrites every remappable payload in an existing op subtree through |remap|.
 //
-// This mutates ordinary operands, result types, attributes, nested block
-// argument types, and nested child ops in-place through |rewriter| so use
-// lists, type-use lists, effect summaries, and worklist state remain coherent.
-// Result values and nested block arguments keep their existing IDs; this helper
-// is for same-module move/consume transforms, not cross-module cloning.
+// This mutates ordinary operands, explicitly mapped successor targets, result
+// types, attributes, nested block argument types, and nested child ops in-place
+// through |rewriter| so use lists, type-use lists, effect summaries, and
+// worklist state remain coherent. Result values and nested block arguments keep
+// their existing IDs; this helper is for same-module move/consume transforms,
+// not cross-module cloning.
 iree_status_t loom_ir_remap_op_references(loom_rewriter_t* rewriter,
                                           loom_op_t* op,
                                           loom_ir_remap_t* remap);

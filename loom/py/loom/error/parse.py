@@ -366,6 +366,28 @@ ERR_PARSE_031 = ErrorDef(
     fix_hint="Use the predicate arity defined by the predicate vocabulary",
 )
 
+# ERR_PARSE_032: Undefined block label.
+ERR_PARSE_032 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=32,
+    severity=Severity.ERROR,
+    summary="Undefined block label.",
+    message="undefined block label '^{label_name}'",
+    params=(ErrorParam("label_name", ParamKind.STRING),),
+    fix_hint="Define the target block label in the same region",
+)
+
+# ERR_PARSE_033: Duplicate block label.
+ERR_PARSE_033 = ErrorDef(
+    domain=ErrorDomain.PARSE,
+    code=33,
+    severity=Severity.ERROR,
+    summary="Duplicate block label.",
+    message="block label '^{label_name}' is already defined in this region",
+    params=(ErrorParam("label_name", ParamKind.STRING),),
+    fix_hint="Each block label must be unique within its region",
+)
+
 ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_001,
     ERR_PARSE_002,
@@ -398,4 +420,6 @@ ALL_PARSE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_PARSE_029,
     ERR_PARSE_030,
     ERR_PARSE_031,
+    ERR_PARSE_032,
+    ERR_PARSE_033,
 )

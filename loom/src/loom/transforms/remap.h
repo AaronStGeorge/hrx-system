@@ -59,6 +59,14 @@ typedef struct loom_ir_remap_t {
   loom_value_id_t* value_map;
   // Number of source value IDs covered by value_map.
   iree_host_size_t value_map_count;
+  // Source block pointer table for successor target remapping.
+  const loom_block_t** block_map_sources;
+  // Target block pointer table parallel to block_map_sources.
+  loom_block_t** block_map_targets;
+  // Number of source -> target block mappings installed.
+  iree_host_size_t block_map_count;
+  // Allocated capacity of block_map_sources and block_map_targets.
+  iree_host_size_t block_map_capacity;
   // Allows same-module unmapped SSA refs to keep their original ID.
   bool allow_unmapped_values;
   // Optional callback for cross-module symbol reference remapping.
@@ -108,6 +116,24 @@ bool loom_ir_remap_try_lookup_value(const loom_ir_remap_t* remap,
 iree_status_t loom_ir_remap_resolve_value(const loom_ir_remap_t* remap,
                                           loom_value_id_t source_value,
                                           loom_value_id_t* out_target_value);
+
+// Adds or replaces one block mapping used by successor edges during IR
+// materialization.
+iree_status_t loom_ir_remap_map_block(loom_ir_remap_t* remap,
+                                      const loom_block_t* source_block,
+                                      loom_block_t* target_block);
+
+// Looks up a mapped block. Returns false when no explicit mapping exists.
+bool loom_ir_remap_try_lookup_block(const loom_ir_remap_t* remap,
+                                    const loom_block_t* source_block,
+                                    loom_block_t** out_target_block);
+
+// Resolves one successor block reference according to the remap's missing-block
+// policy. Same-module remaps keep unmapped blocks unchanged; cross-module
+// remaps require every successor target to have an explicit block mapping.
+iree_status_t loom_ir_remap_resolve_block(const loom_ir_remap_t* remap,
+                                          const loom_block_t* source_block,
+                                          loom_block_t** out_target_block);
 
 // Remaps one interned string ID into the target module. When |allow_invalid| is
 // true, LOOM_STRING_ID_INVALID maps to itself.

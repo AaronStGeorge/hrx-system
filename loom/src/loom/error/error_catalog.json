@@ -1663,6 +1663,52 @@
     "fix_hint_template": "Use a predicate argument tag from the predicate vocabulary"
   },
   {
+    "error_id": "ERR_STRUCTURE_023",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 23,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Successor target is missing.",
+    "message_template": "successor {successor_index} of '{op_name}' has no target block",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "successor_index",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Set every successor field to a block in the op's enclosing region"
+  },
+  {
+    "error_id": "ERR_STRUCTURE_024",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 24,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Successor target is outside the enclosing region.",
+    "message_template": "successor {successor_index} of '{op_name}' targets a block outside the op's enclosing region",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "successor_index",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Branch only to blocks in the same region as the branch op"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",
@@ -2557,6 +2603,42 @@
       }
     ],
     "fix_hint_template": "Use the predicate arity defined by the predicate vocabulary"
+  },
+  {
+    "error_id": "ERR_PARSE_032",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 32,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Undefined block label.",
+    "message_template": "undefined block label '^{label_name}'",
+    "params": [
+      {
+        "name": "label_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Define the target block label in the same region"
+  },
+  {
+    "error_id": "ERR_PARSE_033",
+    "domain": 7,
+    "domain_name": "PARSE",
+    "code": 33,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate block label.",
+    "message_template": "block label '^{label_name}' is already defined in this region",
+    "params": [
+      {
+        "name": "label_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Each block label must be unique within its region"
   },
   {
     "error_id": "ERR_BYTECODE_001",

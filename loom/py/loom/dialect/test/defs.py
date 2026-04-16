@@ -32,6 +32,7 @@ from loom.assembly import (
     AttrTable,
     BindingList,
     BlockArgs,
+    BlockRef,
     FuncArgs,
     IndexList,
     OperandDict,
@@ -88,6 +89,7 @@ from loom.dsl import (
     Result,
     SameElementType,
     SameType,
+    Successor,
     TiedResult,
     Writes,
     YieldCountMatchesResults,
@@ -875,6 +877,20 @@ test_yield = Op(
 )
 
 # ============================================================================
+# test.br — CFG-style branch terminator
+# ============================================================================
+
+test_br = Op(
+    "test.br",
+    group=test_ops,
+    doc="Test CFG branch terminator with a semantic successor edge.",
+    successors=[Successor("dest", doc="Destination block.")],
+    traits=[TERMINATOR],
+    format=[BlockRef("dest")],
+    examples=["test.br ^dest"],
+)
+
+# ============================================================================
 # test.func / test.decl — function definitions and declarations
 # ============================================================================
 
@@ -1380,6 +1396,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_branch,
     test_implicit_yield,
     test_yield,
+    test_br,
     test_func,
     test_decl,
     test_attrs,

@@ -1486,6 +1486,18 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
         break;
       }
 
+      case LOOM_FORMAT_KIND_SUCCESSOR_REF: {
+        loom_token_t token = loom_token_none();
+        LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BLOCK_LABEL, &token);
+        IREE_RETURN_IF_ERROR(loom_parsed_op_set_successor(
+            parsed, &parser->parser_arena, element->field_index,
+            /*block=*/NULL, token));
+        IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+            parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_SUCCESSOR,
+            element->field_index, token, token.line, token.end_column));
+        break;
+      }
+
       case LOOM_FORMAT_KIND_ATTR_VALUE: {
         loom_token_t start_token = loom_tokenizer_peek(&parser->tokenizer);
         const loom_attr_descriptor_t* descriptor =

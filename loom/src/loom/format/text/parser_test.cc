@@ -1074,6 +1074,40 @@ TEST_F(ParserTest, TestFuncMultipleBlocks) {
   }
 }
 
+TEST_F(ParserTest, TestFuncForwardSuccessorReference) {
+  loom_module_t* module = ParseOk(
+      "test.func @cfg() {\n"
+      "^entry:\n"
+      "  test.br ^exit\n"
+      "^exit:\n"
+      "  test.yield\n"
+      "}\n");
+  if (module) {
+    loom_op_t* func_op = GetFirstFunctionOp(module);
+    ASSERT_NE(func_op, nullptr);
+    ASSERT_EQ(func_op->region_count, 1u);
+    loom_region_t* body = loom_op_regions(func_op)[0];
+    ASSERT_NE(body, nullptr);
+    ASSERT_EQ(body->block_count, 2u);
+
+    loom_block_t* entry = loom_region_entry_block(body);
+    loom_block_t* exit = loom_region_block(body, 1);
+    ASSERT_NE(entry, nullptr);
+    ASSERT_NE(exit, nullptr);
+    ASSERT_EQ(entry->op_count, 1u);
+    loom_op_t* branch_op = loom_block_op(entry, 0);
+    ASSERT_NE(branch_op, nullptr);
+    ASSERT_TRUE(loom_test_br_isa(branch_op));
+    ASSERT_EQ(branch_op->successor_count, 1u);
+    EXPECT_EQ(loom_test_br_dest(branch_op), exit);
+
+    std::string text = PrintModule(module);
+    EXPECT_NE(text.find("test.br ^exit"), std::string::npos) << text;
+    EXPECT_NE(text.find("^exit:"), std::string::npos) << text;
+    loom_module_free(module);
+  }
+}
+
 TEST_F(ParserTest, NestedMapRegion) {
   loom_module_t* module = ParseOk(
       "%tile = test.constant 0 : f32\n"
@@ -1579,6 +1613,37 @@ TEST_F(ParserTest, DuplicateBlockArgName) {
   EXPECT_EQ(GetStringParam(diagnostics[0], 0), "x");
   EXPECT_EQ(diagnostics[0].origin_line, 2u);
   EXPECT_EQ(diagnostics[0].origin_column, 15u);
+}
+
+TEST_F(ParserTest, UndefinedSuccessorBlockLabel) {
+  const auto& diagnostics = ParseExpectErrors(
+      "test.func @bad_cfg() {\n"
+      "  test.br ^missing\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 32));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "missing");
+  EXPECT_EQ(diagnostics[0].origin_line, 2u);
+  EXPECT_EQ(diagnostics[0].origin_column, 11u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 19u);
+}
+
+TEST_F(ParserTest, DuplicateBlockLabel) {
+  const auto& diagnostics = ParseExpectErrors(
+      "test.func @dup_label() {\n"
+      "^again:\n"
+      "  test.yield\n"
+      "^again:\n"
+      "  test.yield\n"
+      "}\n");
+  ASSERT_GE(diagnostics.size(), 1u);
+  ExpectError(diagnostics[0],
+              loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 33));
+  EXPECT_EQ(GetStringParam(diagnostics[0], 0), "again");
+  EXPECT_EQ(diagnostics[0].origin_line, 4u);
+  EXPECT_EQ(diagnostics[0].origin_column, 1u);
+  EXPECT_EQ(diagnostics[0].origin_end_column, 7u);
 }
 
 TEST_F(ParserTest, DuplicateOpResultName) {

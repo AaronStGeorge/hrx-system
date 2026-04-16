@@ -816,6 +816,101 @@ TEST_F(WriterTest, FunctionBodySummaryAndOpTableRefsUseNewWireShape) {
   loom_module_free(module);
 }
 
+TEST_F(WriterTest, FunctionBodySuccessorsUseRegionBlockOrdinals) {
+  loom_module_t* module = CreateModule("successors");
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t func_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_intern_string(&module_builder, IREE_SV("cfg"),
+                                            &func_name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, func_name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee,
+      /*arg_types=*/nullptr, 0, /*result_types=*/nullptr, 0,
+      /*arg_names=*/nullptr, 0, /*result_names=*/nullptr, 0,
+      LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_region_t* body = loom_test_func_body(func_op);
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  loom_block_t* exit_block = nullptr;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &exit_block));
+
+  loom_builder_t body_builder;
+  loom_builder_initialize(module, &module->arena, entry_block, &body_builder);
+  loom_op_t* br_op = nullptr;
+  IREE_ASSERT_OK(loom_test_br_build(&body_builder, exit_block,
+                                    LOOM_LOCATION_UNKNOWN, &br_op));
+
+  auto bytes = WriteModule(module);
+  size_t dir_offset = 24;
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  SectionEntry ir_entry = {};
+  ASSERT_TRUE(FindSection(entries, LOOM_BYTECODE_SECTION_IR, &ir_entry));
+
+  const uint8_t* ir_data =
+      bytes.data() + (size_t)module_offset + (size_t)ir_entry.offset;
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(ir_data, (iree_host_size_t)ir_entry.length,
+                                  &cursor);
+
+  uint64_t value_count = 0;
+  uint64_t region_count = 0;
+  uint64_t block_count = 0;
+  uint64_t op_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &value_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &region_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &op_count));
+  EXPECT_EQ(value_count, 0u);
+  EXPECT_EQ(region_count, 1u);
+  EXPECT_EQ(block_count, 2u);
+  EXPECT_EQ(op_count, 1u);
+
+  uint64_t root_block_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_block_count));
+  ASSERT_EQ(root_block_count, 2u);
+  uint8_t has_label = 0;
+  IREE_ASSERT_OK(loom_bytecode_cursor_read_u8(&cursor, &has_label));
+  ASSERT_EQ(has_label, 0u);
+  uint64_t block_comment_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_comment_count));
+  ASSERT_EQ(block_comment_count, 0u);
+  uint64_t block_arg_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_arg_count));
+  ASSERT_EQ(block_arg_count, 0u);
+  uint64_t block_op_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_op_count));
+  ASSERT_EQ(block_op_count, 1u);
+
+  uint64_t unused = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &unused));  // op_table_index
+  uint8_t flags = 0;
+  IREE_ASSERT_OK(loom_bytecode_cursor_read_u8(&cursor, &flags));
+  EXPECT_EQ(flags, 0u);
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &unused));  // location_id
+  uint64_t op_comment_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &op_comment_count));
+  ASSERT_EQ(op_comment_count, 0u);
+  uint64_t operand_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &operand_count));
+  ASSERT_EQ(operand_count, 0u);
+  uint64_t successor_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &successor_count));
+  ASSERT_EQ(successor_count, 1u);
+  uint64_t successor_block_index = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &successor_block_index));
+  EXPECT_EQ(successor_block_index, 1u);
+
+  loom_module_free(module);
+}
+
 TEST_F(WriterTest, CanonicalAttrDictInputOrderDoesNotAffectBytes) {
   loom_module_t* module_a = CreateAttrsModule(/*reverse_attr_order=*/false);
   loom_module_t* module_b = CreateAttrsModule(/*reverse_attr_order=*/true);

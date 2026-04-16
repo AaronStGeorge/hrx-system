@@ -945,30 +945,33 @@ iree_status_t loom_builder_set_operand_dict(
       out_names_attr);
 }
 
-iree_status_t loom_builder_allocate_op(
+static iree_status_t loom_builder_allocate_op_storage(
     loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
-    uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
-    uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op) {
+    uint16_t result_count, uint8_t successor_count, uint8_t region_count,
+    uint16_t tied_result_count, uint8_t attribute_count,
+    loom_location_id_t location, loom_op_t** out_op) {
   *out_op = NULL;
   if (!builder->ip.block || !builder->module) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "builder has no insertion block or module");
   }
 
+  iree_host_size_t successors_size =
+      (iree_host_size_t)successor_count * sizeof(loom_block_t*);
+  iree_host_size_t regions_size =
+      (iree_host_size_t)region_count * sizeof(loom_region_t*);
   iree_host_size_t operands_size =
       (iree_host_size_t)operand_count * sizeof(loom_value_id_t);
   iree_host_size_t results_size =
       (iree_host_size_t)result_count * sizeof(loom_value_id_t);
-  iree_host_size_t regions_size =
-      (iree_host_size_t)region_count * sizeof(loom_region_t*);
   iree_host_size_t tied_size =
       (iree_host_size_t)tied_result_count * sizeof(loom_tied_result_t);
   iree_host_size_t operand_use_indices_size =
       (iree_host_size_t)operand_count * sizeof(loom_use_index_t);
 
-  iree_host_size_t before_attrs = sizeof(loom_op_t) + operands_size +
-                                  results_size + regions_size + tied_size +
-                                  operand_use_indices_size;
+  iree_host_size_t before_attrs = sizeof(loom_op_t) + successors_size +
+                                  regions_size + operands_size + results_size +
+                                  tied_size + operand_use_indices_size;
   iree_host_size_t aligned_before_attrs =
       attribute_count > 0
           ? iree_host_align(before_attrs, iree_alignof(loom_attribute_t))
@@ -986,6 +989,7 @@ iree_status_t loom_builder_allocate_op(
   op->kind = kind;
   op->operand_count = operand_count;
   op->result_count = result_count;
+  op->successor_count = successor_count;
   op->region_count = region_count;
   op->tied_result_count = tied_result_count;
   op->attribute_count = attribute_count;
@@ -1006,6 +1010,25 @@ iree_status_t loom_builder_allocate_op(
 
   *out_op = op;
   return iree_ok_status();
+}
+
+iree_status_t loom_builder_allocate_op(
+    loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
+    uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op) {
+  return loom_builder_allocate_op_storage(
+      builder, kind, operand_count, result_count, /*successor_count=*/0,
+      region_count, tied_result_count, attribute_count, location, out_op);
+}
+
+iree_status_t loom_builder_allocate_op_with_successors(
+    loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    uint16_t result_count, uint8_t successor_count, uint8_t region_count,
+    uint16_t tied_result_count, uint8_t attribute_count,
+    loom_location_id_t location, loom_op_t** out_op) {
+  return loom_builder_allocate_op_storage(
+      builder, kind, operand_count, result_count, successor_count, region_count,
+      tied_result_count, attribute_count, location, out_op);
 }
 
 iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,

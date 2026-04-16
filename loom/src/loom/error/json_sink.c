@@ -74,6 +74,8 @@ static const char* loom_json_diagnostic_field_kind_name(
       return "attribute";
     case LOOM_DIAGNOSTIC_FIELD_REGION:
       return "region";
+    case LOOM_DIAGNOSTIC_FIELD_SUCCESSOR:
+      return "successor";
     case LOOM_DIAGNOSTIC_FIELD_NONE:
     default:
       return NULL;

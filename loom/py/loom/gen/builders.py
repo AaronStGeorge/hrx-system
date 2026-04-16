@@ -28,6 +28,7 @@ from loom.assembly import (
     AttrTable,
     BindingList,
     BlockArgs,
+    BlockRef,
     Flags,
     FormatElement,
     FuncArgs,
@@ -137,6 +138,16 @@ def _extract_params(op: Op) -> list[dict[str, Any]]:
                             "kind": "operand_variadic",
                             "type_hint": "list[ValueRef]",
                             "doc": f"Variadic operands: {name}",
+                        }
+                    )
+
+                case BlockRef(field=name):
+                    params.append(
+                        {
+                            "name": name,
+                            "kind": "successor",
+                            "type_hint": "Block",
+                            "doc": f"Successor: {name}",
                         }
                     )
 
@@ -397,7 +408,7 @@ def generate_builders(ops: Sequence[Op], class_name: str) -> str:
     lines.append("from typing import Any, cast")
     lines.append("")
     lines.append(f"from loom.builder import {', '.join(sorted(builder_imports))}")
-    ir_imports = ["Region", "Type"]
+    ir_imports = ["Block", "Region", "Type"] if "list[Block]" in body_text else ["Region", "Type"]
     if needs_predicate:
         ir_imports.append("Predicate")
     lines.append(f"from loom.ir import {', '.join(sorted(ir_imports))}")
@@ -476,6 +487,7 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
     # Check if results are always from ResultTypeList (needs explicit results param)
     has_result_type_list = any(p["kind"] == "result_types" for p in params)
     has_func_args = any(p["kind"] == "func_args" for p in params)
+    has_successors = any(p["kind"] == "successor" for p in params)
     # If no ResultTypeList but op has results, add result_types param.
     if not has_result_type_list and result_count > 0:
         keyword_param_strs.append("result_types: list[Type]")
@@ -500,8 +512,10 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
         lines.extend(f"            {example_line}" for example_line in op.examples[0].split("\n"))
     lines.append('        """')
 
-    # Body: collect operands, attributes, regions.
+    # Body: collect operands, successors, attributes, regions.
     lines.append("        _operands: list[ValueRef | int] = []")
+    if has_successors:
+        lines.append("        _successors: list[Block] = []")
     if has_func_args:
         lines.append("        _func_args: list[ValueRef | int] = []")
     lines.append("        _attributes: builtins.dict[str, Any] = {}")
@@ -530,6 +544,8 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
                     lines.append(f'        _attributes["{param["name"]}"] = {param["name"]}')
             case "binding_list" | "index_list" | "operand" | "operand_variadic":
                 pass
+            case "successor":
+                lines.append(f"        _successors.append({param['name']})")
             case "func_args":
                 lines.append(f"        if {param['name']} is not None:")
                 lines.append(f"            _func_args.extend({param['name']})")
@@ -584,33 +600,61 @@ def _generate_method(op: Op, method_name: str) -> list[str]:
     # Build call and return with appropriate type narrowing.
     if has_result_type_list:
         if return_type == "None":
-            lines.append(f'        self._b.build("{op.name}", _operands,')
-            if has_func_args:
-                lines.append("            func_args=_func_args, results=results,")
+            if has_successors:
+                lines.append(f'        self._b.build("{op.name}", _operands,')
+                lines.append("            successors=_successors,")
+                if has_func_args:
+                    lines.append("            func_args=_func_args, results=results,")
+                else:
+                    lines.append("            results=results,")
+                lines.append("            attributes=_attributes, regions=_regions)")
             else:
-                lines.append("            results=results,")
-            lines.append("            attributes=_attributes, regions=_regions)")
+                if has_func_args:
+                    lines.append(f'        self._b.build("{op.name}", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions)')
+                else:
+                    lines.append(f'        self._b.build("{op.name}", _operands, results=results, attributes=_attributes, regions=_regions)')
         else:
-            lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands,')
-            if has_func_args:
-                lines.append("            func_args=_func_args, results=results,")
+            if has_successors:
+                lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands,')
+                lines.append("            successors=_successors,")
+                if has_func_args:
+                    lines.append("            func_args=_func_args, results=results,")
+                else:
+                    lines.append("            results=results,")
+                lines.append("            attributes=_attributes, regions=_regions))")
             else:
-                lines.append("            results=results,")
-            lines.append("            attributes=_attributes, regions=_regions))")
+                if has_func_args:
+                    lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))')
+                else:
+                    lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands, results=results, attributes=_attributes, regions=_regions))')
     elif result_count > 0:
-        lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands,')
-        if has_func_args:
-            lines.append("            func_args=_func_args, results=result_types,")
+        if has_successors:
+            lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands,')
+            lines.append("            successors=_successors,")
+            if has_func_args:
+                lines.append("            func_args=_func_args, results=result_types,")
+            else:
+                lines.append("            results=result_types,")
+            lines.append("            attributes=_attributes, regions=_regions))")
         else:
-            lines.append("            results=result_types,")
-        lines.append("            attributes=_attributes, regions=_regions))")
+            if has_func_args:
+                lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands, func_args=_func_args, results=result_types, attributes=_attributes, regions=_regions))')
+            else:
+                lines.append(f'        return cast({return_type}, self._b.build("{op.name}", _operands, results=result_types, attributes=_attributes, regions=_regions))')
     else:
-        lines.append(f'        self._b.build("{op.name}", _operands,')
-        if has_func_args:
-            lines.append("            func_args=_func_args, attributes=_attributes,")
+        if has_successors:
+            lines.append(f'        self._b.build("{op.name}", _operands,')
+            lines.append("            successors=_successors,")
+            if has_func_args:
+                lines.append("            func_args=_func_args, attributes=_attributes,")
+            else:
+                lines.append("            attributes=_attributes,")
+            lines.append("            regions=_regions)")
         else:
-            lines.append("            attributes=_attributes,")
-        lines.append("            regions=_regions)")
+            if has_func_args:
+                lines.append(f'        self._b.build("{op.name}", _operands, func_args=_func_args, attributes=_attributes, regions=_regions)')
+            else:
+                lines.append(f'        self._b.build("{op.name}", _operands, attributes=_attributes, regions=_regions)')
 
     return lines
 

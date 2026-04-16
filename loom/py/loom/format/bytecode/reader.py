@@ -1001,12 +1001,11 @@ class BytecodeReader:
         predefined_values: list[int],
     ) -> tuple[Region, int]:
         block_count, offset = decode_varint(data, offset)
-        blocks = []
-        for _ in range(block_count):
-            block, offset = self._read_block(
-                data, offset, module, value_map, predefined_values
+        blocks = [Block() for _ in range(block_count)]
+        for block in blocks:
+            offset = self._read_block(
+                data, offset, module, value_map, predefined_values, block, blocks
             )
-            blocks.append(block)
         return Region(blocks=blocks), offset
 
     def _read_block(
@@ -1016,7 +1015,9 @@ class BytecodeReader:
         module: Module,
         value_map: list[int],
         predefined_values: list[int],
-    ) -> tuple[Block, int]:
+        block: Block,
+        region_blocks: list[Block],
+    ) -> int:
         has_label = data[offset]
         offset += 1
         label = ""
@@ -1040,10 +1041,16 @@ class BytecodeReader:
         op_count, offset = decode_varint(data, offset)
         ops = []
         for _ in range(op_count):
-            op, offset = self._read_operation(data, offset, module, value_map)
+            op, offset = self._read_operation(
+                data, offset, module, value_map, region_blocks
+            )
             ops.append(op)
 
-        return Block(label=label, arg_ids=arg_ids, ops=ops, comments=comments), offset
+        block.label = label
+        block.arg_ids = arg_ids
+        block.ops = ops
+        block.comments = comments
+        return offset
 
     def _read_operation(
         self,
@@ -1051,6 +1058,7 @@ class BytecodeReader:
         offset: int,
         module: Module,
         value_map: list[int],
+        region_blocks: list[Block],
     ) -> tuple[Operation, int]:
         op_table_index_plus1, offset = decode_varint(data, offset)
         if op_table_index_plus1 == 0:
@@ -1071,6 +1079,18 @@ class BytecodeReader:
         for _ in range(operand_count):
             value_ref, offset = decode_varint(data, offset)
             operands.append(self._map_value_ref(value_ref, value_map))
+
+        # Successors are region-local block ordinals. Region blocks are
+        # preallocated before block bodies are decoded so forward edges can
+        # resolve directly to their target Block objects.
+        successor_count, offset = decode_varint(data, offset)
+        successors = []
+        for _ in range(successor_count):
+            block_index, offset = decode_varint(data, offset)
+            try:
+                successors.append(region_blocks[block_index])
+            except IndexError as exc:
+                raise BytecodeError("successor block index is out of range") from exc
 
         # Results.
         result_count, offset = decode_varint(data, offset)
@@ -1115,6 +1135,7 @@ class BytecodeReader:
             operands=operands,
             results=result_ids,
             tied_results=tied_results,
+            successors=successors,
             attributes=attributes,
             regions=regions,
             location_id=location_id,

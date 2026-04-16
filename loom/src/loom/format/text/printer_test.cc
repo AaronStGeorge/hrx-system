@@ -602,6 +602,45 @@ TEST_F(PrintOpTest, YieldNoOperands) {
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT), "test.yield\n");
 }
 
+TEST_F(PrintOpTest, SuccessorReferenceSynthesizesBlockLabels) {
+  loom_symbol_ref_t callee = make_symbol("cfg");
+
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_test_func_build(&builder_, 0, 0, 0, callee, NULL, 0, NULL,
+                                      0, NULL, 0, NULL, 0,
+                                      LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  loom_block_t* exit_block = nullptr;
+  IREE_ASSERT_OK(loom_region_append_block(module_, body, &exit_block));
+  ASSERT_NE(exit_block, nullptr);
+
+  loom_builder_ip_t saved = loom_builder_enter_region(&builder_, func_op, body);
+  loom_op_t* branch_op = NULL;
+  IREE_ASSERT_OK(loom_test_br_build(&builder_, exit_block,
+                                    LOOM_LOCATION_UNKNOWN, &branch_op));
+  loom_builder_restore(&builder_, saved);
+  ASSERT_EQ(loom_test_br_dest(branch_op), exit_block);
+
+  std::vector<CapturedPrintField> fields;
+  std::string output =
+      PrintOpWithFields(func_op, LOOM_TEXT_PRINT_DEFAULT, &fields);
+  EXPECT_EQ(output,
+            "test.func @cfg() {\n"
+            "  ^_bb0:\n"
+            "  test.br ^_bb1\n"
+            "  ^_bb1:\n"
+            "}\n");
+
+  const CapturedPrintField* successor_field =
+      FindCapturedPrintField(fields, LOOM_PRINT_FIELD_SUCCESSOR, 0);
+  ASSERT_NE(successor_field, nullptr);
+  EXPECT_EQ(output.substr(successor_field->start,
+                          successor_field->end - successor_field->start),
+            "^_bb1");
+}
+
 //===----------------------------------------------------------------------===//
 // Index list ops
 //===----------------------------------------------------------------------===//

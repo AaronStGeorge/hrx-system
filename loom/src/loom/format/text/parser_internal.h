@@ -47,6 +47,25 @@ typedef struct loom_parser_pending_block_args_t {
   uint16_t capacity;
 } loom_parser_pending_block_args_t;
 
+// A successor edge whose textual target label is resolved after the enclosing
+// region has parsed all of its block labels. The op is already allocated with a
+// NULL successor slot when this entry is recorded.
+typedef struct loom_parser_pending_successor_ref_t {
+  loom_region_t* region;
+  loom_op_t* op;
+  loom_token_t label_token;
+  uint8_t successor_index;
+} loom_parser_pending_successor_ref_t;
+
+// Growable scratch list of unresolved CFG successor labels. Entries are scoped
+// by region parse depth: each region records the count on entry, patches and
+// truncates its suffix on exit, and leaves outer-region entries intact.
+typedef struct loom_parser_pending_successor_refs_t {
+  loom_parser_pending_successor_ref_t* entries;
+  iree_host_size_t count;
+  iree_host_size_t capacity;
+} loom_parser_pending_successor_refs_t;
+
 // Placeholder SSA value created by ARG-mode type parsing inside the current
 // Scope(...). |resolved| tracks whether a later declaration in the same scope
 // bound that placeholder name, and |name_token| is retained so scope-exit
@@ -340,6 +359,10 @@ typedef struct loom_parser_t {
   // drains their value IDs into regular operands after the format walk.
   loom_parser_pending_block_args_t pending_block_args;
 
+  // Pending CFG successor labels awaiting the end of their enclosing region so
+  // forward references can resolve without pre-creating placeholder blocks.
+  loom_parser_pending_successor_refs_t pending_successor_refs;
+
   // Placeholder values created by ARG-mode type parsing inside the one active
   // Scope(...) declaration wrapper.
   loom_parser_unresolved_placeholders_t unresolved_placeholders;
@@ -456,6 +479,7 @@ void loom_parser_sync_to_brace(loom_parser_t* parser);
 //===----------------------------------------------------------------------===//
 
 #define LOOM_PARSED_OP_INLINE_OPERANDS 16
+#define LOOM_PARSED_OP_INLINE_SUCCESSORS 4
 #define LOOM_PARSED_OP_INLINE_RESULTS 8
 #define LOOM_PARSED_OP_INLINE_ATTRS 8
 #define LOOM_PARSED_OP_INLINE_REGIONS 4
@@ -473,6 +497,8 @@ struct loom_parsed_op_t {
   loom_parsed_op_t* next_free;
 
   loom_value_id_t* operand_ids;
+  loom_block_t** successors;
+  loom_token_t* successor_label_tokens;
   loom_value_id_t* result_ids;
   loom_token_t* result_name_tokens;
   loom_attribute_t* attributes;
@@ -482,6 +508,8 @@ struct loom_parsed_op_t {
 
   uint16_t operand_count;
   uint16_t operand_capacity;
+  uint8_t successor_count;
+  uint8_t successor_capacity;
   uint16_t result_count;
   uint16_t result_capacity;
   uint16_t tied_result_count;
@@ -496,6 +524,8 @@ struct loom_parsed_op_t {
   uint8_t reserved_;
 
   loom_value_id_t inline_operand_ids[LOOM_PARSED_OP_INLINE_OPERANDS];
+  loom_block_t* inline_successors[LOOM_PARSED_OP_INLINE_SUCCESSORS];
+  loom_token_t inline_successor_label_tokens[LOOM_PARSED_OP_INLINE_SUCCESSORS];
   loom_value_id_t inline_result_ids[LOOM_PARSED_OP_INLINE_RESULTS];
   loom_token_t inline_result_name_tokens[LOOM_PARSED_OP_INLINE_RESULTS];
   loom_attribute_t inline_attributes[LOOM_PARSED_OP_INLINE_ATTRS];
@@ -534,6 +564,15 @@ iree_status_t loom_parsed_op_set_operand(loom_parsed_op_t* parsed,
                                          iree_arena_allocator_t* arena,
                                          uint16_t index,
                                          loom_value_id_t value_id);
+
+// Sets a parsed successor by storage index, growing the parsed successor list
+// and filling any intervening slots with NULL / no-token placeholders. If
+// |label_token| is a block label token, finalization records a pending patch
+// that resolves after the enclosing region has parsed all blocks.
+iree_status_t loom_parsed_op_set_successor(loom_parsed_op_t* parsed,
+                                           iree_arena_allocator_t* arena,
+                                           uint8_t index, loom_block_t* block,
+                                           loom_token_t label_token);
 
 // Appends a result value ID and its defining token. Parser-synthesized results
 // without a user-authored LHS name should pass loom_token_none(). Spills to

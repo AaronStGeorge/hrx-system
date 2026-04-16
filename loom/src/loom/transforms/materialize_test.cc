@@ -183,6 +183,55 @@ TEST_F(MaterializeTest, ClonesNestedRegionsAndBlockArguments) {
             loom_region_entry_arg_id(cloned_body, 0));
 }
 
+TEST_F(MaterializeTest, ClonesRegionSuccessorsToClonedBlocks) {
+  loom_region_t* source_region = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate_region(source_, 2, &source_region));
+  loom_block_t* source_entry = loom_region_block(source_region, 0);
+  loom_block_t* source_dest = loom_region_block(source_region, 1);
+  loom_builder_t source_region_builder = {};
+  loom_builder_initialize(source_, &source_->arena, source_entry,
+                          &source_region_builder);
+  loom_op_t* branch_op = nullptr;
+  IREE_ASSERT_OK(loom_test_br_build(&source_region_builder, source_dest,
+                                    LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  loom_ir_remap_t remap = InitializeRemap();
+  loom_region_t* cloned_region = nullptr;
+  IREE_ASSERT_OK(loom_ir_clone_region(&target_builder_, source_region, &remap,
+                                      &cloned_region));
+
+  ASSERT_NE(cloned_region, nullptr);
+  ASSERT_EQ(cloned_region->block_count, 2u);
+  loom_block_t* cloned_entry = loom_region_block(cloned_region, 0);
+  loom_block_t* cloned_dest = loom_region_block(cloned_region, 1);
+  ASSERT_EQ(cloned_entry->op_count, 1u);
+  const loom_op_t* cloned_branch = loom_block_const_op(cloned_entry, 0);
+  ASSERT_TRUE(loom_test_br_isa(cloned_branch));
+  EXPECT_EQ(loom_test_br_dest(cloned_branch), cloned_dest);
+  EXPECT_NE(loom_test_br_dest(cloned_branch), source_dest);
+}
+
+TEST_F(MaterializeTest, RejectsCrossModuleCloneWithUnmappedSuccessor) {
+  loom_region_t* source_region = nullptr;
+  IREE_ASSERT_OK(loom_module_allocate_region(source_, 2, &source_region));
+  loom_block_t* source_entry = loom_region_block(source_region, 0);
+  loom_block_t* source_dest = loom_region_block(source_region, 1);
+  loom_builder_t source_region_builder = {};
+  loom_builder_initialize(source_, &source_->arena, source_entry,
+                          &source_region_builder);
+  loom_op_t* branch_op = nullptr;
+  IREE_ASSERT_OK(loom_test_br_build(&source_region_builder, source_dest,
+                                    LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  loom_ir_remap_t remap = InitializeRemap();
+  loom_op_t* cloned_op = nullptr;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_NOT_FOUND,
+      loom_ir_clone_op(&target_builder_, branch_op, &remap, &cloned_op));
+  EXPECT_EQ(cloned_op, nullptr);
+  EXPECT_EQ(loom_module_block(target_)->op_count, 0u);
+}
+
 TEST_F(MaterializeTest, ClonesOperandDictOps) {
   loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);

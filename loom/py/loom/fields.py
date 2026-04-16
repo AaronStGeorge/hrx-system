@@ -7,9 +7,9 @@
 """Field layout and resolution: the bridge between Op declarations and IR data.
 
 Op declarations (dsl.py) describe operations structurally: named operands,
-results, attributes, regions. Operations in the IR (ir.py) store data
-positionally: operand value IDs in an array, result value IDs in an array,
-attributes in a dict, regions in a list.
+results, successors, attributes, regions. Operations in the IR (ir.py) store
+data positionally: operand value IDs in an array, result value IDs in an array,
+successor block references in an array, attributes in a dict, regions in a list.
 
 This module bridges the two: given an Op declaration, it computes a
 FieldLayout that maps field names to positional indices. Given a
@@ -41,6 +41,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from loom.dsl import Op
 from loom.ir import (
+    Block,
     Module,
     Operation,
     Region,
@@ -76,6 +77,8 @@ class FormatFields(Protocol):
 
     def attr(self, name: str) -> Any: ...
     def is_present(self, name: str) -> bool: ...
+    def successor(self, name: str) -> Block: ...
+    def successors(self, name: str) -> list[Block]: ...
     def region(self, name: str) -> Region | None: ...
     def regions(self, name: str) -> list[Region]: ...
     def tied_result_map(self) -> dict[int, TiedResult]: ...
@@ -102,6 +105,7 @@ class FieldKind(IntEnum):
     RESULT = 1
     ATTR = 2
     REGION = 3
+    SUCCESSOR = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +114,7 @@ class FieldDesc:
 
     Maps a field name to its position in the operation's data arrays.
 
-    kind: Whether this is an operand, result, attribute, or region.
+    kind: Whether this is an operand, result, successor, attribute, or region.
     index: Starting index in the relevant array.
     variadic: If True, this field spans from index to the end of the
         array (for the trailing variadic operand/result pattern).
@@ -143,9 +147,11 @@ class FieldLayout:
     fields: dict[str, FieldDesc]
     fixed_operand_count: int
     fixed_result_count: int
+    fixed_successor_count: int
     fixed_region_count: int
     variadic_operand: str | None  # Name of the variadic operand, if any.
     variadic_result: str | None  # Name of the variadic result, if any.
+    variadic_successor: str | None  # Name of the variadic successor, if any.
     variadic_region: str | None  # Name of the variadic region, if any.
 
 
@@ -158,9 +164,11 @@ def compute_layout(op_decl: Op) -> FieldLayout:
     fields: dict[str, FieldDesc] = {}
     fixed_operand_count = 0
     fixed_result_count = 0
+    fixed_successor_count = 0
     fixed_region_count = 0
     variadic_operand: str | None = None
     variadic_result: str | None = None
+    variadic_successor: str | None = None
     variadic_region: str | None = None
 
     # Operands: sequential indices, variadic must be last.
@@ -206,6 +214,25 @@ def compute_layout(op_decl: Op) -> FieldLayout:
     for i, attr in enumerate(op_decl.attrs):
         fields[attr.name] = FieldDesc(FieldKind.ATTR, i)
 
+    # Successors: sequential indices, variadic must be last.
+    for i, successor in enumerate(op_decl.successors):
+        if successor.variadic:
+            if variadic_successor is not None:
+                raise ValueError(
+                    f"Op '{op_decl.name}': multiple variadic successors "
+                    f"('{variadic_successor}' and '{successor.name}')."
+                )
+            if i != len(op_decl.successors) - 1:
+                raise ValueError(
+                    f"Op '{op_decl.name}': variadic successor "
+                    f"'{successor.name}' must be the last successor."
+                )
+            variadic_successor = successor.name
+            fields[successor.name] = FieldDesc(FieldKind.SUCCESSOR, i, variadic=True)
+        else:
+            fields[successor.name] = FieldDesc(FieldKind.SUCCESSOR, i)
+            fixed_successor_count += 1
+
     # Regions: sequential indices, variadic must be last.
     for i, region in enumerate(op_decl.regions):
         if region.variadic:
@@ -229,9 +256,11 @@ def compute_layout(op_decl: Op) -> FieldLayout:
         fields=fields,
         fixed_operand_count=fixed_operand_count,
         fixed_result_count=fixed_result_count,
+        fixed_successor_count=fixed_successor_count,
         fixed_region_count=fixed_region_count,
         variadic_operand=variadic_operand,
         variadic_result=variadic_result,
+        variadic_successor=variadic_successor,
         variadic_region=variadic_region,
     )
 
@@ -338,6 +367,24 @@ class ResolvedFields:
             raise TypeError(f"Field '{name}' is {desc.kind.name}, not an attribute.")
         return self._op.attributes.get(name)
 
+    # --- Successors ---
+
+    def successor(self, name: str) -> Block:
+        """Get a successor block by name."""
+        desc = self._desc(name)
+        if desc.kind != FieldKind.SUCCESSOR:
+            raise TypeError(f"Field '{name}' is {desc.kind.name}, not a successor.")
+        return self._op.successors[desc.index]
+
+    def successors(self, name: str) -> list[Block]:
+        """Get blocks for a variadic successor field."""
+        desc = self._desc(name)
+        if desc.kind != FieldKind.SUCCESSOR:
+            raise TypeError(f"Field '{name}' is {desc.kind.name}, not a successor.")
+        if desc.variadic:
+            return self._op.successors[desc.index :]
+        return [self._op.successors[desc.index]]
+
     # --- Regions ---
 
     def region(self, name: str) -> Region:
@@ -435,6 +482,10 @@ class ResolvedFields:
         if desc.kind == FieldKind.ATTR:
             value = self._op.attributes.get(name)
             return value is not None
+        if desc.kind == FieldKind.SUCCESSOR:
+            if desc.variadic:
+                return len(self._op.successors) > desc.index
+            return desc.index < len(self._op.successors)
         if desc.kind == FieldKind.REGION:
             if desc.variadic:
                 return len(self._op.regions) > desc.index
