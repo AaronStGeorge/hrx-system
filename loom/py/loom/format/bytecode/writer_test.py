@@ -1172,6 +1172,38 @@ class TestCrossFormatRoundTrip:
 
         assert _roundtrip_text_through_bytecode(text, include_vector=True) == text
 
+    def test_kernel_cluster_gather_ops_survive_bytecode(self) -> None:
+        text = (
+            "func.def @async_cluster_gather_bytecode(%source_buffer: buffer, "
+            "%source_offset: offset, %in_bounds: i1) {\n"
+            "  %zero = index.constant 0 : offset\n"
+            "  %bytes = index.constant 1024 : offset\n"
+            "  %layout = encoding.layout.dense : encoding<layout>\n"
+            "  %cluster_mask = scalar.constant 15 : i32\n"
+            "  %source_global = buffer.assume.memory_space %source_buffer "
+            "{memory_space = global} : buffer\n"
+            "  %source = buffer.view %source_global[%source_offset] : buffer -> "
+            "view<16xi8, %layout>\n"
+            "  %scratch = buffer.alloca %bytes {base_alignment = 64, "
+            "memory_space = workgroup} : buffer\n"
+            "  %dest = buffer.view %scratch[%zero] : buffer -> view<16xi8, %layout>\n"
+            "  %copy = kernel.async.cluster.gather %source to %dest using "
+            "%cluster_mask {cache_scope = se, cache_temporal = high_temporal} : "
+            "view<16xi8, %layout> to view<16xi8, %layout>, i32 -> "
+            "kernel.async.token\n"
+            "  %masked = kernel.async.cluster.gather.mask %source to %dest using "
+            "%cluster_mask, %in_bounds {cache_scope = cu, cache_temporal = regular} "
+            ": view<16xi8, %layout> to view<16xi8, %layout>, i32, i1 -> "
+            "kernel.async.token\n"
+            "  %group = kernel.async.group %copy, %masked : kernel.async.token, "
+            "kernel.async.token -> kernel.async.group\n"
+            "  kernel.async.wait %group {newer_groups = 0} : kernel.async.group\n"
+            "  func.return\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_kernel=True) == text
+
     def test_kernel_tensor_lds_ops_survive_bytecode(self) -> None:
         text = (
             "func.def @async_tensor_lds_bytecode(%source_buffer: buffer, "

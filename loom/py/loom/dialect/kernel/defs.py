@@ -28,6 +28,7 @@ from loom.dsl import (
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
     I1,
+    INTEGER,
     UNKNOWN_EFFECTS,
     VECTOR,
     VIEW,
@@ -437,6 +438,110 @@ kernel_async_gather_mask = Op(
 )
 
 # ============================================================================
+# kernel.async.cluster.gather — AMDGPU cluster broadcast into LDS
+# ============================================================================
+
+kernel_async_cluster_gather = Op(
+    name="kernel.async.cluster.gather",
+    group=kernel_ops,
+    doc=(
+        "Initiate an AMDGPU gfx1250+ cluster asynchronous load from a "
+        "global-like source view into a workgroup/LDS destination view. The "
+        "required i32 cluster_mask is the hardware workgroup broadcast mask "
+        "loaded through M0. Source and destination must have the same static "
+        "byte footprint, and that footprint must be exactly 1, 4, 8, or 16 "
+        "bytes; target lowering maps those widths to "
+        "llvm.amdgcn.cluster.load.async.to.lds.b8/b32/b64/b128. The LLVM "
+        "offset and cache-policy immediate operands are lowering choices "
+        "derived from the view address and cache attributes, not separate Loom "
+        "semantics. The returned token must be committed to exactly one "
+        "kernel.async.group."
+    ),
+    operands=[
+        Operand("source", VIEW, doc="Global-like source fragment broadcast across the cluster."),
+        Operand("dest", VIEW, doc="Workgroup/LDS destination fragment for this workgroup."),
+        Operand("cluster_mask", INTEGER, doc="i32 workgroup-cluster broadcast mask consumed by the target M0 operand."),
+    ],
+    results=[
+        Result("token", ANY, doc="Opaque async-copy token for the cluster gather."),
+    ],
+    attrs=_async_cache_attrs(),
+    effects=[Reads("source"), Writes("dest")],
+    verify="loom_kernel_async_cluster_gather_verify",
+    format=[
+        Ref("source"),
+        kw("to"),
+        Ref("dest"),
+        kw("using"),
+        Ref("cluster_mask"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        kw("to"),
+        TypeOf("dest"),
+        COMMA,
+        TypeOf("cluster_mask"),
+        ARROW,
+        ResultType("token"),
+    ],
+    examples=[
+        "%copy = kernel.async.cluster.gather %src to %lds using %mask {cache_scope = se, cache_temporal = high_temporal} : view<16xi8> to view<16xi8>, i32 -> kernel.async.token",
+    ],
+)
+
+# ============================================================================
+# kernel.async.cluster.gather.mask — predicated AMDGPU cluster gather
+# ============================================================================
+
+kernel_async_cluster_gather_mask = Op(
+    name="kernel.async.cluster.gather.mask",
+    group=kernel_ops,
+    doc=(
+        "Predicated form of kernel.async.cluster.gather. False predicates "
+        "perform no source or destination access for the current invocation "
+        "but still produce a completed token, preserving a uniform async group "
+        "shape for tails and guarded tiles. The cluster_mask remains the "
+        "target workgroup broadcast mask and is distinct from the scalar i1 "
+        "predicate."
+    ),
+    operands=[
+        Operand("source", VIEW, doc="Global-like source fragment broadcast across the cluster."),
+        Operand("dest", VIEW, doc="Workgroup/LDS destination fragment for this workgroup."),
+        Operand("cluster_mask", INTEGER, doc="i32 workgroup-cluster broadcast mask consumed by the target M0 operand."),
+        Operand("predicate", I1, doc="Scalar predicate controlling this invocation's cluster gather."),
+    ],
+    results=[
+        Result("token", ANY, doc="Opaque async-copy token for the predicated cluster gather."),
+    ],
+    attrs=_async_cache_attrs(),
+    effects=[Reads("source"), Writes("dest")],
+    verify="loom_kernel_async_cluster_gather_mask_verify",
+    format=[
+        Ref("source"),
+        kw("to"),
+        Ref("dest"),
+        kw("using"),
+        Ref("cluster_mask"),
+        COMMA,
+        Ref("predicate"),
+        AttrDict(),
+        COLON,
+        TypeOf("source"),
+        kw("to"),
+        TypeOf("dest"),
+        COMMA,
+        TypeOf("cluster_mask"),
+        COMMA,
+        TypeOf("predicate"),
+        ARROW,
+        ResultType("token"),
+    ],
+    examples=[
+        "%copy = kernel.async.cluster.gather.mask %src to %lds using %mask, %in_bounds {cache_scope = cu, cache_temporal = regular} : view<4xi8> to view<4xi8>, i32, i1 -> kernel.async.token",
+    ],
+)
+
+# ============================================================================
 # kernel.async.tensor.load.to.lds — AMDGPU tensor-memory global-to-LDS transfer
 # ============================================================================
 
@@ -544,18 +649,18 @@ kernel_async_group = Op(
     name="kernel.async.group",
     group=kernel_ops,
     doc=(
-        "Commit zero or more async copy/gather/tensor tokens into the ordered async "
-        "stream. Empty groups are valid pipeline markers. The resulting group "
-        "completes after all committed transfers complete. Groups are ordered "
-        "by program order; waiting a group also completes older groups in the "
-        "same stream."
+        "Commit zero or more async copy/gather/cluster/tensor tokens into the "
+        "ordered async stream. Empty groups are valid pipeline markers. The "
+        "resulting group completes after all committed transfers complete. "
+        "Groups are ordered by program order; waiting a group also completes "
+        "older groups in the same stream."
     ),
     operands=[
         Operand(
             "tokens",
             ANY,
             variadic=True,
-            doc="Async copy, gather, or tensor-memory tokens to commit into this group.",
+            doc="Async copy, gather, cluster-gather, or tensor-memory tokens to commit into this group.",
         ),
     ],
     results=[
@@ -638,4 +743,6 @@ ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_tensor_lds_descriptor,
     kernel_async_tensor_load_to_lds,
     kernel_async_tensor_store_from_lds,
+    kernel_async_cluster_gather,
+    kernel_async_cluster_gather_mask,
 )

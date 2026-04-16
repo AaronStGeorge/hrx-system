@@ -66,7 +66,7 @@ class KernelBuilders:
         _operands.append(predicate)
         return cast(ValueRef, self._b.build("kernel.async.copy.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def gather(self, *, source: ValueRef, dest: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def async_gather(self, *, source: ValueRef, dest: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Initiate a subgroup-collective asynchronous gather from each invocation's source view into a lane-contiguous workgroup destination view. The destination view has one leading subgroup-lane axis and a trailing lane slot with enough static bytes to hold one source payload. If the lane slot is larger than the source footprint, the extra destination bytes are padding bytes with unspecified contents. The destination denotes the subgroup-uniform base tile; the current subgroup lane is applied by the op semantics and must not be pre-applied by forming a lane subview. This directly represents AMDGPU global_load_lds-style staging, including padded narrow loads, without requiring a later pass to rediscover that a set of per-lane copies was really one subgroup LDS DMA operation.
 
         Example::
@@ -98,7 +98,7 @@ class KernelBuilders:
         return cast(ValueRef, self._b.build("kernel.async.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def group(self, *, tokens: list[ValueRef], results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Commit zero or more async copy/gather/tensor tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
+        """Commit zero or more async copy/gather/cluster/tensor tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
 
         Example::
             %empty = kernel.async.group -> kernel.async.group
@@ -165,3 +165,38 @@ class KernelBuilders:
         _operands.append(dest)
         _operands.append(descriptor)
         return cast(ValueRef, self._b.build("kernel.async.tensor.store.from.lds", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def async_cluster_gather(self, *, source: ValueRef, dest: ValueRef, cluster_mask: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Initiate an AMDGPU gfx1250+ cluster asynchronous load from a global-like source view into a workgroup/LDS destination view. The required i32 cluster_mask is the hardware workgroup broadcast mask loaded through M0. Source and destination must have the same static byte footprint, and that footprint must be exactly 1, 4, 8, or 16 bytes; target lowering maps those widths to llvm.amdgcn.cluster.load.async.to.lds.b8/b32/b64/b128. The LLVM offset and cache-policy immediate operands are lowering choices derived from the view address and cache attributes, not separate Loom semantics. The returned token must be committed to exactly one kernel.async.group.
+
+        Example::
+            %copy = kernel.async.cluster.gather %src to %lds using %mask {cache_scope = se, cache_temporal = high_temporal} : view<16xi8> to view<16xi8>, i32 -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _operands.append(source)
+        _operands.append(dest)
+        _operands.append(cluster_mask)
+        return cast(ValueRef, self._b.build("kernel.async.cluster.gather", _operands, results=results, attributes=_attributes, regions=_regions))
+
+    def async_cluster_gather_mask(
+        self, *, source: ValueRef, dest: ValueRef, cluster_mask: ValueRef, predicate: ValueRef, cache_scope: str, cache_temporal: str, results: list[Type | TiedResultSpec]
+    ) -> ValueRef:
+        """Predicated form of kernel.async.cluster.gather. False predicates perform no source or destination access for the current invocation but still produce a completed token, preserving a uniform async group shape for tails and guarded tiles. The cluster_mask remains the target workgroup broadcast mask and is distinct from the scalar i1 predicate.
+
+        Example::
+            %copy = kernel.async.cluster.gather.mask %src to %lds using %mask, %in_bounds {cache_scope = cu, cache_temporal = regular} : view<4xi8> to view<4xi8>, i32, i1 -> kernel.async.token
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["cache_scope"] = cache_scope
+        _attributes["cache_temporal"] = cache_temporal
+        _operands.append(source)
+        _operands.append(dest)
+        _operands.append(cluster_mask)
+        _operands.append(predicate)
+        return cast(ValueRef, self._b.build("kernel.async.cluster.gather.mask", _operands, results=results, attributes=_attributes, regions=_regions))

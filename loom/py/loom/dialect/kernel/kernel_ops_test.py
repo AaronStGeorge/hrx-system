@@ -14,6 +14,8 @@ from loom.dialect.kernel import (
     KernelMemorySpace,
     KernelOrdering,
     KernelScope,
+    kernel_async_cluster_gather,
+    kernel_async_cluster_gather_mask,
     kernel_async_copy,
     kernel_async_copy_mask,
     kernel_async_gather,
@@ -29,7 +31,7 @@ from loom.dialect.kernel import (
     kernel_tensor_lds_descriptor,
     kernel_tensor_lds_descriptor_type,
 )
-from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, UNKNOWN_EFFECTS, VECTOR, VIEW, Op
+from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_I64, I1, INTEGER, UNKNOWN_EFFECTS, VECTOR, VIEW, Op
 
 
 def _ops() -> dict[str, Op]:
@@ -57,10 +59,14 @@ class TestKernelDialect:
             "kernel.tensor.lds.descriptor",
             "kernel.async.tensor.load.to.lds",
             "kernel.async.tensor.store.from.lds",
+            "kernel.async.cluster.gather",
+            "kernel.async.cluster.gather.mask",
         ]
 
     def test_public_exports_match_registry(self) -> None:
         assert kernel_barrier in ALL_KERNEL_OPS
+        assert kernel_async_cluster_gather in ALL_KERNEL_OPS
+        assert kernel_async_cluster_gather_mask in ALL_KERNEL_OPS
         assert kernel_async_copy in ALL_KERNEL_OPS
         assert kernel_async_copy_mask in ALL_KERNEL_OPS
         assert kernel_async_gather in ALL_KERNEL_OPS
@@ -170,6 +176,56 @@ class TestKernelDialect:
         assert op.attrs[1].enum_def is CacheTemporal
         assert op.constraints == ()
         assert op.verify == "loom_kernel_async_gather_mask_verify"
+
+    def test_async_cluster_gather_shape(self) -> None:
+        op = _ops()["kernel.async.cluster.gather"]
+        assert [operand.name for operand in op.operands] == [
+            "source",
+            "dest",
+            "cluster_mask",
+        ]
+        assert [operand.type_constraint for operand in op.operands] == [
+            VIEW,
+            VIEW,
+            INTEGER,
+        ]
+        assert [result.name for result in op.results] == ["token"]
+        assert op.results[0].type_constraint == ANY
+        assert [attr.name for attr in op.attrs] == ["cache_scope", "cache_temporal"]
+        assert all(attr.attr_type == ATTR_TYPE_ENUM for attr in op.attrs)
+        assert op.attrs[0].enum_def is CacheScope
+        assert op.attrs[1].enum_def is CacheTemporal
+        assert [(effect.operand, effect.kind.value) for effect in op.effects] == [
+            ("source", "read"),
+            ("dest", "write"),
+        ]
+        assert op.verify == "loom_kernel_async_cluster_gather_verify"
+
+    def test_async_cluster_gather_mask_shape(self) -> None:
+        op = _ops()["kernel.async.cluster.gather.mask"]
+        assert [operand.name for operand in op.operands] == [
+            "source",
+            "dest",
+            "cluster_mask",
+            "predicate",
+        ]
+        assert [operand.type_constraint for operand in op.operands] == [
+            VIEW,
+            VIEW,
+            INTEGER,
+            I1,
+        ]
+        assert [result.name for result in op.results] == ["token"]
+        assert op.results[0].type_constraint == ANY
+        assert [attr.name for attr in op.attrs] == ["cache_scope", "cache_temporal"]
+        assert all(attr.attr_type == ATTR_TYPE_ENUM for attr in op.attrs)
+        assert op.attrs[0].enum_def is CacheScope
+        assert op.attrs[1].enum_def is CacheTemporal
+        assert [(effect.operand, effect.kind.value) for effect in op.effects] == [
+            ("source", "read"),
+            ("dest", "write"),
+        ]
+        assert op.verify == "loom_kernel_async_cluster_gather_mask_verify"
 
     def test_tensor_lds_descriptor_shape(self) -> None:
         op = _ops()["kernel.tensor.lds.descriptor"]

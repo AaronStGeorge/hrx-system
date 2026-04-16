@@ -260,6 +260,19 @@ static iree_status_t loom_kernel_verify_operand_tensor_lds_descriptor(
       IREE_SV("kernel.tensor.lds.descriptor"));
 }
 
+static iree_status_t loom_kernel_verify_operand_i32(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t operand_name,
+    loom_value_id_t operand_id) {
+  loom_type_t operand_type = loom_module_value_type(module, operand_id);
+  if (loom_type_is_scalar(operand_type) &&
+      loom_type_element_type(operand_type) == LOOM_SCALAR_TYPE_I32) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_operand_constraint(emitter, op, operand_name,
+                                             operand_type, IREE_SV("i32"));
+}
+
 static bool loom_kernel_try_get_local_buffer_memory_space(
     const loom_module_t* module, loom_value_id_t buffer_id,
     uint8_t* out_memory_space) {
@@ -402,6 +415,39 @@ static iree_status_t loom_kernel_verify_same_static_byte_count(
       IREE_SV("same static byte footprint as source"));
 }
 
+static bool loom_kernel_byte_count_is_cluster_load_supported(
+    int64_t byte_count) {
+  return byte_count == 1 || byte_count == 4 || byte_count == 8 ||
+         byte_count == 16;
+}
+
+static iree_status_t loom_kernel_verify_cluster_static_byte_count(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id) {
+  int64_t source_byte_count = 0;
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_static_byte_count(
+      module, emitter, op, IREE_SV("source"), source_id, &source_byte_count));
+
+  int64_t dest_byte_count = 0;
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_static_byte_count(
+      module, emitter, op, IREE_SV("dest"), dest_id, &dest_byte_count));
+
+  if (source_byte_count != dest_byte_count) {
+    loom_type_t dest_type = loom_module_value_type(module, dest_id);
+    return loom_kernel_emit_operand_constraint(
+        emitter, op, IREE_SV("dest"), dest_type,
+        IREE_SV("same static byte footprint as source"));
+  }
+
+  if (loom_kernel_byte_count_is_cluster_load_supported(source_byte_count)) {
+    return iree_ok_status();
+  }
+  loom_type_t source_type = loom_module_value_type(module, source_id);
+  return loom_kernel_emit_operand_constraint(
+      emitter, op, IREE_SV("source"), source_type,
+      IREE_SV("view with static 1, 4, 8, or 16 byte footprint"));
+}
+
 static iree_status_t loom_kernel_verify_async_copy_memory_spaces(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id,
@@ -496,6 +542,8 @@ static iree_status_t loom_kernel_verify_token_defined_by_copy(
        loom_kernel_async_copy_mask_isa(defining_op) ||
        loom_kernel_async_gather_isa(defining_op) ||
        loom_kernel_async_gather_mask_isa(defining_op) ||
+       loom_kernel_async_cluster_gather_isa(defining_op) ||
+       loom_kernel_async_cluster_gather_mask_isa(defining_op) ||
        loom_kernel_async_tensor_load_to_lds_isa(defining_op) ||
        loom_kernel_async_tensor_store_from_lds_isa(defining_op))) {
     return iree_ok_status();
@@ -612,6 +660,24 @@ static iree_status_t loom_kernel_verify_async_gather_like(
       module, emitter, op, source_id, dest_id));
   IREE_RETURN_IF_ERROR(loom_kernel_verify_gather_memory_spaces(
       module, emitter, op, source_id, dest_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_async_cache_policy(
+      emitter, op, cache_scope, cache_temporal, /*is_store=*/false));
+  return loom_kernel_verify_copy_token_group_use(module, emitter, op, token_id);
+}
+
+static iree_status_t loom_kernel_verify_async_cluster_gather_like(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_value_id_t source_id, loom_value_id_t dest_id,
+    loom_value_id_t cluster_mask_id, uint8_t cache_scope,
+    uint8_t cache_temporal, loom_value_id_t token_id) {
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_result_async_token(
+      module, emitter, op, IREE_SV("token"), token_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_cluster_static_byte_count(
+      module, emitter, op, source_id, dest_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_gather_memory_spaces(
+      module, emitter, op, source_id, dest_id));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_operand_i32(
+      module, emitter, op, IREE_SV("cluster_mask"), cluster_mask_id));
   IREE_RETURN_IF_ERROR(loom_kernel_verify_async_cache_policy(
       emitter, op, cache_scope, cache_temporal, /*is_store=*/false));
   return loom_kernel_verify_copy_token_group_use(module, emitter, op, token_id);
@@ -786,6 +852,30 @@ iree_status_t loom_kernel_async_gather_mask_verify(
       loom_kernel_async_gather_mask_cache_scope(op),
       loom_kernel_async_gather_mask_cache_temporal(op),
       loom_kernel_async_gather_mask_token(op));
+}
+
+iree_status_t loom_kernel_async_cluster_gather_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_cluster_gather_like(
+      module, emitter, op, loom_kernel_async_cluster_gather_source(op),
+      loom_kernel_async_cluster_gather_dest(op),
+      loom_kernel_async_cluster_gather_cluster_mask(op),
+      loom_kernel_async_cluster_gather_cache_scope(op),
+      loom_kernel_async_cluster_gather_cache_temporal(op),
+      loom_kernel_async_cluster_gather_token(op));
+}
+
+iree_status_t loom_kernel_async_cluster_gather_mask_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  return loom_kernel_verify_async_cluster_gather_like(
+      module, emitter, op, loom_kernel_async_cluster_gather_mask_source(op),
+      loom_kernel_async_cluster_gather_mask_dest(op),
+      loom_kernel_async_cluster_gather_mask_cluster_mask(op),
+      loom_kernel_async_cluster_gather_mask_cache_scope(op),
+      loom_kernel_async_cluster_gather_mask_cache_temporal(op),
+      loom_kernel_async_cluster_gather_mask_token(op));
 }
 
 iree_status_t loom_kernel_async_tensor_load_to_lds_verify(

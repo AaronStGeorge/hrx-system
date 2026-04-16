@@ -28,7 +28,9 @@ enum {
   LOOM_OP_KERNEL_TENSOR_LDS_DESCRIPTOR = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 7),
   LOOM_OP_KERNEL_ASYNC_TENSOR_LOAD_TO_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 8),
   LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 9),
-  LOOM_OP_KERNEL_COUNT_ = 10,
+  LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 10),
+  LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 11),
+  LOOM_OP_KERNEL_COUNT_ = 12,
 };
 
 // Target-independent cache scope for memory operations.
@@ -203,7 +205,7 @@ iree_status_t loom_kernel_async_gather_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_KERNEL_ASYNC_GROUP: Commit zero or more async copy/gather/tensor tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
+// LOOM_OP_KERNEL_ASYNC_GROUP: Commit zero or more async copy/gather/cluster/tensor tokens into the ordered async stream. Empty groups are valid pipeline markers. The resulting group completes after all committed transfers complete. Groups are ordered by program order; waiting a group also completes older groups in the same stream.
 // %empty = kernel.async.group -> kernel.async.group
 LOOM_DEFINE_ISA(loom_kernel_async_group_isa, LOOM_OP_KERNEL_ASYNC_GROUP)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_kernel_async_group_tokens, 0)
@@ -293,6 +295,54 @@ iree_status_t loom_kernel_async_tensor_store_from_lds_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_kernel_async_tensor_store_from_lds_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER: Initiate an AMDGPU gfx1250+ cluster asynchronous load from a global-like source view into a workgroup/LDS destination view. The required i32 cluster_mask is the hardware workgroup broadcast mask loaded through M0. Source and destination must have the same static byte footprint, and that footprint must be exactly 1, 4, 8, or 16 bytes; target lowering maps those widths to llvm.amdgcn.cluster.load.async.to.lds.b8/b32/b64/b128. The LLVM offset and cache-policy immediate operands are lowering choices derived from the view address and cache attributes, not separate Loom semantics. The returned token must be committed to exactly one kernel.async.group.
+// %copy = kernel.async.cluster.gather %src to %lds using %mask {cache_scope = se, cache_temporal = high_temporal} : view<16xi8> to view<16xi8>, i32 -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_cluster_gather_isa, LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER)
+LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_dest, 1)
+LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_cluster_mask, 2)
+LOOM_DEFINE_RESULT(loom_kernel_async_cluster_gather_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_cache_temporal, 1)
+iree_status_t loom_kernel_async_cluster_gather_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    loom_may_consume loom_value_id_t cluster_mask,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_cluster_gather_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK: Predicated form of kernel.async.cluster.gather. False predicates perform no source or destination access for the current invocation but still produce a completed token, preserving a uniform async group shape for tails and guarded tiles. The cluster_mask remains the target workgroup broadcast mask and is distinct from the scalar i1 predicate.
+// %copy = kernel.async.cluster.gather.mask %src to %lds using %mask, %in_bounds {cache_scope = cu, cache_temporal = regular} : view<4xi8> to view<4xi8>, i32, i1 -> kernel.async.token
+LOOM_DEFINE_ISA(loom_kernel_async_cluster_gather_mask_isa, LOOM_OP_KERNEL_ASYNC_CLUSTER_GATHER_MASK)
+LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_mask_source, 0)
+LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_mask_dest, 1)
+LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_mask_cluster_mask, 2)
+LOOM_DEFINE_OPERAND(loom_kernel_async_cluster_gather_mask_predicate, 3)
+LOOM_DEFINE_RESULT(loom_kernel_async_cluster_gather_mask_token, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_mask_cache_scope, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_kernel_async_cluster_gather_mask_cache_temporal, 1)
+iree_status_t loom_kernel_async_cluster_gather_mask_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t source,
+    loom_may_consume loom_value_id_t dest,
+    loom_may_consume loom_value_id_t cluster_mask,
+    loom_may_consume loom_value_id_t predicate,
+    uint8_t cache_scope,
+    uint8_t cache_temporal,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_async_cluster_gather_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

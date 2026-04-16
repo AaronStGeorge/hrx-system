@@ -297,6 +297,91 @@ func.def @async_gather_rejects_workgroup_source(%bytes: offset) {
 
 // ====
 
+func.def @async_cluster_gather_rejects_wrong_mask_type(%buffer: buffer, %offset: offset) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 1024 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %bad_mask = scalar.constant 15 : i64
+  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %source = buffer.view %global[%offset] : buffer -> view<4xi8, %layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<4xi8, %layout>
+  // ERROR@+1: TYPE/003 "cluster_mask" "i64" "i32"
+  %copy = kernel.async.cluster.gather %source to %dest using %bad_mask {cache_scope = cu, cache_temporal = regular} : view<4xi8, %layout> to view<4xi8, %layout>, i64 -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @async_cluster_gather_rejects_unsupported_width(%buffer: buffer, %offset: offset) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 1024 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %cluster_mask = scalar.constant 15 : i32
+  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %source = buffer.view %global[%offset] : buffer -> view<2xi8, %layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<2xi8, %layout>
+  // ERROR@+1: TYPE/003 "source" "view with static 1, 4, 8, or 16 byte footprint"
+  %copy = kernel.async.cluster.gather %source to %dest using %cluster_mask {cache_scope = cu, cache_temporal = regular} : view<2xi8, %layout> to view<2xi8, %layout>, i32 -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @async_cluster_gather_rejects_mismatched_width(%buffer: buffer, %offset: offset) {
+  %zero = index.constant 0 : offset
+  %bytes = index.constant 1024 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %cluster_mask = scalar.constant 15 : i32
+  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %source = buffer.view %global[%offset] : buffer -> view<8xi8, %layout>
+  %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
+  %dest = buffer.view %scratch[%zero] : buffer -> view<4xi8, %layout>
+  // ERROR@+1: TYPE/003 "dest" "same static byte footprint as source"
+  %copy = kernel.async.cluster.gather %source to %dest using %cluster_mask {cache_scope = cu, cache_temporal = regular} : view<8xi8, %layout> to view<4xi8, %layout>, i32 -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @async_cluster_gather_rejects_workgroup_source(%bytes: offset) {
+  %zero = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %cluster_mask = scalar.constant 15 : i32
+  %scratch = buffer.alloca %bytes {base_alignment = 64, memory_space = workgroup} : buffer
+  %source = buffer.view %scratch[%zero] : buffer -> view<4xi8, %layout>
+  %dest = buffer.view %scratch[%zero] : buffer -> view<4xi8, %layout>
+  // ERROR@+1: TYPE/003 "source" "global, constant, or descriptor memory-space fact"
+  %copy = kernel.async.cluster.gather %source to %dest using %cluster_mask {cache_scope = cu, cache_temporal = regular} : view<4xi8, %layout> to view<4xi8, %layout>, i32 -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @async_cluster_gather_rejects_global_dest(%buffer: buffer, %offset: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %cluster_mask = scalar.constant 15 : i32
+  %global = buffer.assume.memory_space %buffer {memory_space = global} : buffer
+  %source = buffer.view %global[%offset] : buffer -> view<4xi8, %layout>
+  %dest = buffer.view %global[%offset] : buffer -> view<4xi8, %layout>
+  // ERROR@+1: TYPE/003 "dest" "workgroup memory-space fact"
+  %copy = kernel.async.cluster.gather %source to %dest using %cluster_mask {cache_scope = cu, cache_temporal = regular} : view<4xi8, %layout> to view<4xi8, %layout>, i32 -> kernel.async.token
+  %group = kernel.async.group %copy : kernel.async.token -> kernel.async.group
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
 func.def @tensor_descriptor_rejects_three_dgroups() {
   %i32_zero = scalar.constant 0 : i32
   %d0 = vector.splat %i32_zero : vector<4xi32>
