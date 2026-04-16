@@ -455,7 +455,7 @@ iree_status_t loom_vector_extract_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_INSERT: Insert a scalar or tail subvector into a vector at explicit leading indices. The inserted value must match the destination tail shape remaining after the supplied indices, and the result type is the same as the destination type.
-// %r = vector.insert %x into %v[%i] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+// %r = vector.insert %x into %v[%i] : f32, vector<[%n]xf32>
 LOOM_DEFINE_ISA(loom_vector_insert_isa, LOOM_OP_VECTOR_INSERT)
 LOOM_DEFINE_OPERAND(loom_vector_insert_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_insert_dest, 1)
@@ -695,7 +695,7 @@ iree_status_t loom_vector_store_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_LOAD_MASK: Masked vector load from a typed view. Mask lanes with true values perform the same access as vector.load, while false lanes do not access memory and instead take the corresponding passthrough lane.
-// %v = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32> -> vector<4x8xf32>
+// %v = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32>
 LOOM_DEFINE_ISA(loom_vector_load_mask_isa, LOOM_OP_VECTOR_LOAD_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_load_mask_view, 0)
 LOOM_DEFINE_OPERAND(loom_vector_load_mask_mask, 1)
@@ -744,7 +744,7 @@ iree_status_t loom_vector_store_mask_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_LOAD_EXPAND: Rank-1 masked expand load from consecutive view elements. Active lanes consume memory densely in increasing lane order; inactive lanes do not consume memory and take the corresponding passthrough lane.
-// %v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+// %v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_load_expand_isa, LOOM_OP_VECTOR_LOAD_EXPAND)
 LOOM_DEFINE_OPERAND(loom_vector_load_expand_view, 0)
 LOOM_DEFINE_OPERAND(loom_vector_load_expand_mask, 1)
@@ -839,7 +839,7 @@ iree_status_t loom_vector_scatter_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_GATHER_MASK: Masked vector gather from per-lane signed logical offsets added to the last view axis. True mask lanes read the adjusted coordinate, while false mask lanes do not access memory and take the corresponding passthrough lane.
-// %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+// %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_gather_mask_isa, LOOM_OP_VECTOR_GATHER_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_gather_mask_view, 0)
 LOOM_DEFINE_OPERAND(loom_vector_gather_mask_offsets, 1)
@@ -951,7 +951,7 @@ iree_status_t loom_vector_atomic_reduce_mask_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_ATOMIC_RMW: Atomic read-modify-write at per-lane signed element offsets. Each lane atomically combines its value with origin + offsets[lane] and the result lane is the old memory value observed by that atomic operation.
-// %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
+// %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
 LOOM_DEFINE_ISA(loom_vector_atomic_rmw_isa, LOOM_OP_VECTOR_ATOMIC_RMW)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_view, 1)
@@ -982,7 +982,7 @@ iree_status_t loom_vector_atomic_rmw_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_ATOMIC_RMW_MASK: Masked atomic read-modify-write. True mask lanes perform vector.atomic.rmw, while false mask lanes do not access memory and take the corresponding passthrough lane in the result.
-// %old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+// %old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32>
 LOOM_DEFINE_ISA(loom_vector_atomic_rmw_mask_isa, LOOM_OP_VECTOR_ATOMIC_RMW_MASK)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_value, 0)
 LOOM_DEFINE_OPERAND(loom_vector_atomic_rmw_mask_view, 1)
@@ -2466,7 +2466,7 @@ iree_status_t loom_vector_bitfield_extracts_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BITFIELD_INSERT: Insert the low bits of each integer field lane into a fixed bitfield of the corresponding integer base lane. Bits outside the target field are preserved from the base lane.
-// %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
+// %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8>
 LOOM_DEFINE_ISA(loom_vector_bitfield_insert_isa, LOOM_OP_VECTOR_BITFIELD_INSERT)
 LOOM_DEFINE_OPERAND(loom_vector_bitfield_insert_field, 0)
 LOOM_DEFINE_OPERAND(loom_vector_bitfield_insert_base, 1)

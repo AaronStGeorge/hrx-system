@@ -69,7 +69,7 @@ func.def @atomic_reduce_mask_static(%buffer: buffer, %byte_offset: offset, %valu
 func.def @atomic_rmw_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xi32>, %offsets: vector<2xindex>) -> (vector<2xi32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xi32, %layout>
-  %old = vector.atomic.rmw<xchgi> %value, %view[3][%offsets] {ordering = acq_rel, scope = workgroup} : vector<2xi32>, view<8xi32, %layout>, vector<2xindex> -> vector<2xi32>
+  %old = vector.atomic.rmw<xchgi> %value, %view[3][%offsets] {ordering = acq_rel, scope = workgroup} : vector<2xi32>, view<8xi32, %layout>, vector<2xindex>
   func.return %old : vector<2xi32>
 }
 
@@ -96,7 +96,7 @@ func.def @atomic_rmw_static(%buffer: buffer, %byte_offset: offset, %value: vecto
 func.def @atomic_rmw_mask_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xf32>, %offsets: vector<2xi32>, %mask: vector<2xi1>, %passthrough: vector<2xf32>) -> (vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %old = vector.atomic.rmw.mask<addf> %value, %view[3][%offsets], %mask, %passthrough {ordering = seq_cst, scope = device} : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>, vector<2xf32> -> vector<2xf32>
+  %old = vector.atomic.rmw.mask<addf> %value, %view[3][%offsets], %mask, %passthrough {ordering = seq_cst, scope = device} : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>, vector<2xf32>
   func.return %old : vector<2xf32>
 }
 
@@ -195,7 +195,7 @@ func.def @atomic_reduce_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: o
 func.def @atomic_rmw_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index, %value: vector<[%n]xi32>, %offsets: vector<[%n]xindex>) -> (vector<[%n]xi32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xi32, %layout>
-  %old = vector.atomic.rmw<addi> %value, %view[%origin][%offsets] {ordering = acq_rel, scope = workgroup} : vector<[%n]xi32>, view<[%n]xi32, %layout>, vector<[%n]xindex> -> vector<[%n]xi32>
+  %old = vector.atomic.rmw<addi> %value, %view[%origin][%offsets] {ordering = acq_rel, scope = workgroup} : vector<[%n]xi32>, view<[%n]xi32, %layout>, vector<[%n]xindex>
   func.return %old : vector<[%n]xi32>
 }
 
@@ -211,7 +211,7 @@ func.def @atomic_rmw_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %
     %17 = vector.extract %offsets[%13] : vector<[%n]xindex> -> index
     %18 = index.add %origin, %17 : index
     %19 = view.atomic.rmw<addi> %16, %view[%18] {ordering = acq_rel, scope = workgroup} : i32, view<[%n]xi32, %layout> -> i32
-    %20 = vector.insert %19 into %14[%13] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    %20 = vector.insert %19 into %14[%13] : i32, vector<[%n]xi32>
     scf.yield %20 : vector<[%n]xi32>
   }
   func.return %old : vector<[%n]xi32>
@@ -222,7 +222,7 @@ func.def @atomic_rmw_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %
 func.def @atomic_rmw_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origin: index, %value: vector<[%n]xf32>, %offsets: vector<[%n]xindex>, %mask: vector<[%n]xi1>, %passthrough: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<[%n]xf32, %layout>
-  %old = vector.atomic.rmw.mask<addf> %value, %view[%origin][%offsets], %mask, %passthrough {ordering = acq_rel, scope = device} : vector<[%n]xf32>, view<[%n]xf32, %layout>, vector<[%n]xindex>, vector<[%n]xi1>, vector<[%n]xf32> -> vector<[%n]xf32>
+  %old = vector.atomic.rmw.mask<addf> %value, %view[%origin][%offsets], %mask, %passthrough {ordering = acq_rel, scope = device} : vector<[%n]xf32>, view<[%n]xf32, %layout>, vector<[%n]xindex>, vector<[%n]xi1>, vector<[%n]xf32>
   func.return %old : vector<[%n]xf32>
 }
 
@@ -244,7 +244,7 @@ func.def @atomic_rmw_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offs
       %23 = vector.extract %passthrough[%14] : vector<[%n]xf32> -> f32
       scf.yield %23 : f32
     }
-    %24 = vector.insert %18 into %15[%14] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    %24 = vector.insert %18 into %15[%14] : f32, vector<[%n]xf32>
     scf.yield %24 : vector<[%n]xf32>
   }
   func.return %old : vector<[%n]xf32>

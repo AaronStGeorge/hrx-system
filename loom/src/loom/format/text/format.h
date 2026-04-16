@@ -390,8 +390,10 @@
 //   SymbolRef(field)      Symbol reference: @name.
 //   TypeOf(field)         Type of a single field: f32, tile<4xf32>.
 //   TypesOf(field)        Types of variadic field: f32, tile<4xf32>.
-//   ResultType(field)     Single bare result type: -> type.
-//                           For single non-variadic results. No tied support.
+//   ResultType(field)     Single bare result type token.
+//                           Use an explicit ARROW keyword before it only when
+//                           the operation syntax needs `-> type`. For single
+//                           non-variadic results. No tied support.
 //   ResultTypeList(field) Result types with tied handling:
 //                           -> (type, %op as type). Always uses parens.
 //   Keyword(text)         Literal token: , : -> to step else ( ) etc.

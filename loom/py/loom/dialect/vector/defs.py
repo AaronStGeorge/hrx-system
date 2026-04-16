@@ -594,11 +594,9 @@ vector_insert = Op(
         COLON,
         TypeOf("value"),
         COMMA,
-        TypeOf("dest"),
-        ARROW,
         ResultType("result"),
     ],
-    examples=["%r = vector.insert %x into %v[%i] : f32, vector<[%n]xf32> -> vector<[%n]xf32>"],
+    examples=["%r = vector.insert %x into %v[%i] : f32, vector<[%n]xf32>"],
 )
 
 
@@ -1077,12 +1075,10 @@ vector_load_mask = Op(
         COMMA,
         TypeOf("mask"),
         COMMA,
-        TypeOf("passthrough"),
-        ARROW,
         ResultType("result"),
     ],
     examples=[
-        "%v = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32> -> vector<4x8xf32>",
+        "%v = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32>",
     ],
 )
 
@@ -1174,12 +1170,10 @@ vector_load_expand = Op(
         COMMA,
         TypeOf("mask"),
         COMMA,
-        TypeOf("passthrough"),
-        ARROW,
         ResultType("result"),
     ],
     examples=[
-        "%v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>",
+        "%v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32>",
     ],
 )
 
@@ -1377,12 +1371,10 @@ vector_gather_mask = Op(
         COMMA,
         TypeOf("mask"),
         COMMA,
-        TypeOf("passthrough"),
-        ARROW,
         ResultType("result"),
     ],
     examples=[
-        "%v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>",
+        "%v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32>",
     ],
 )
 
@@ -1591,16 +1583,14 @@ vector_atomic_rmw = Op(
         RBRACKET,
         AttrDict(),
         COLON,
-        TypeOf("value"),
+        ResultType("result"),
         COMMA,
         TypeOf("view"),
         COMMA,
         TypeOf("offsets"),
-        ARROW,
-        ResultType("result"),
     ],
     examples=[
-        "%old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>",
+        "%old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>",
     ],
 )
 
@@ -1651,12 +1641,10 @@ vector_atomic_rmw_mask = Op(
         COMMA,
         TypeOf("mask"),
         COMMA,
-        TypeOf("passthrough"),
-        ARROW,
         ResultType("result"),
     ],
     examples=[
-        "%old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>",
+        "%old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32>",
     ],
 )
 
@@ -2704,12 +2692,10 @@ vector_bitfield_insert = Op(
         COLON,
         TypeOf("field"),
         COMMA,
-        TypeOf("base"),
-        ARROW,
         ResultType("result"),
     ],
     examples=[
-        "%packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>",
+        "%packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8>",
     ],
 )
 

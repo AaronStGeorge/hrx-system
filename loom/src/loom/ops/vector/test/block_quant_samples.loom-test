@@ -138,8 +138,8 @@ func.def @q6_k_reference_chunk() -> (i1) {
   %high2 = vector.bitunpacku<2> %high_packed : vector<2xi8> -> vector<8xi8>
   %lo2 = vector.slice %high2[0] : vector<8xi8> -> vector<4xi8>
   %hi2 = vector.slice %high2[4] : vector<8xi8> -> vector<4xi8>
-  %lo6 = vector.bitfield.insert %lo2 into %lo4 {offset = 4, width = 2} : vector<4xi8>, vector<4xi8> -> vector<4xi8>
-  %hi6 = vector.bitfield.insert %hi2 into %hi4 {offset = 4, width = 2} : vector<4xi8>, vector<4xi8> -> vector<4xi8>
+  %lo6 = vector.bitfield.insert %lo2 into %lo4 {offset = 4, width = 2} : vector<4xi8>, vector<4xi8>
+  %hi6 = vector.bitfield.insert %hi2 into %hi4 {offset = 4, width = 2} : vector<4xi8>, vector<4xi8>
   %codes = vector.interleave<0> %lo6, %hi6 : vector<4xi8>, vector<4xi8> -> vector<8xi8>
   %bias = vector.constant -32 : vector<8xi8>
   %signed = vector.addi %codes, %bias : vector<8xi8>

@@ -23,7 +23,7 @@ func.def @construction(%x: f32, %i: i32, %n: index) {
   %c = vector.constant 0.0 : vector<4xf32>
   %wide = vector.broadcast %c : vector<4xf32> -> vector<4x4xf32>
   %lane0 = vector.extract %c[0] : vector<4xf32> -> f32
-  %updated = vector.insert %lane0 into %c[%n] : f32, vector<4xf32> -> vector<4xf32>
+  %updated = vector.insert %lane0 into %c[%n] : f32, vector<4xf32>
   %from = vector.from_elements %x, %x, %x, %x : f32, f32, f32, f32 -> vector<4xf32>
   test.use %ps, %pv, %empty, %vf, %empty_splat, %vi, %lanes, %int_lanes, %dyn_lanes, %tail, %int_tail, %wide, %updated, %from : f32, vector<4xf32>, vector<0xf32>, vector<16xf32>, vector<0xf32>, vector<[%n]xi32>, vector<16xindex>, vector<4xi32>, vector<[%n]xindex>, vector<16xi1>, vector<4xi1>, vector<4x4xf32>, vector<4xf32>, vector<4xf32>
   func.return
@@ -215,8 +215,8 @@ func.def @casts(%h: vector<8xf16>, %f: vector<8xf32>, %i8: vector<8xi8>, %i32: v
 func.def @bitfields(%bytes: vector<16xi8>, %zero: vector<16xi8>) {
   %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>
   %hi = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<16xi8> -> vector<16xi32>
-  %packed_lo = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
-  %packed = vector.bitfield.insert %hi into %packed_lo {offset = 4, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
+  %packed_lo = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8>
+  %packed = vector.bitfield.insert %hi into %packed_lo {offset = 4, width = 4} : vector<16xi32>, vector<16xi8>
   test.use %packed : vector<16xi8>
   func.return
 }
@@ -289,8 +289,8 @@ func.def @q6_k_register_decode(%scale_bytes: vector<2xi8>, %low_packed: vector<1
   %high2 = vector.bitunpacku<2> %high_packed : vector<8xi8> -> vector<32xi8>
   %lo2 = vector.slice %high2[0] : vector<32xi8> -> vector<16xi8>
   %hi2 = vector.slice %high2[16] : vector<32xi8> -> vector<16xi8>
-  %lo6 = vector.bitfield.insert %lo2 into %lo4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8> -> vector<16xi8>
-  %hi6 = vector.bitfield.insert %hi2 into %hi4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8> -> vector<16xi8>
+  %lo6 = vector.bitfield.insert %lo2 into %lo4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8>
+  %hi6 = vector.bitfield.insert %hi2 into %hi4 {offset = 4, width = 2} : vector<16xi8>, vector<16xi8>
   %logical = vector.interleave<0> %lo6, %hi6 : vector<16xi8>, vector<16xi8> -> vector<32xi8>
   test.use %scale, %logical : vector<1xf16>, vector<32xi8>
   func.return
@@ -414,7 +414,7 @@ func.def @strided_memory(%buffer: buffer, %offset: offset, %row_stride: index, %
 func.def @masked_tail_memory(%buffer: buffer, %offset: offset, %row: index, %col: index, %m: index, %n: index, %old: vector<4x8xf32>, %mask: vector<4x8xi1>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
-  %loaded = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32> -> vector<4x8xf32>
+  %loaded = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32>
   vector.store.mask %loaded, %view[%row, %col], %mask : vector<4x8xf32>, view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>
   func.return
 }
@@ -427,7 +427,7 @@ func.def @masked_tail_memory(%buffer: buffer, %offset: offset, %row: index, %col
 func.def @expanded_compressed_memory(%buffer: buffer, %offset: offset, %row: index, %col: index, %m: index, %n: index, %old: vector<4xf32>, %mask: vector<4xi1>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
-  %loaded = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  %loaded = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32>
   vector.store.compress %loaded, %view[%row, %col], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi1>
   func.return
 }
@@ -442,7 +442,7 @@ func.def @gather_scatter(%buffer: buffer, %offset: offset, %row: index, %col: in
   %view = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
   %gathered = vector.gather %view[%row, %col][%offsets] : view<[%m]x[%n]xf32, %layout>, vector<4xindex> -> vector<4xf32>
   vector.scatter %gathered, %view[%row, %col][%offsets] : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>
-  %masked = vector.gather.mask %view[%row, %col][%i32_offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  %masked = vector.gather.mask %view[%row, %col][%i32_offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32>
   vector.scatter.mask %masked, %view[%row, %col][%i32_offsets], %mask : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>
   func.return
 }
@@ -457,8 +457,8 @@ func.def @atomic_memory(%buffer: buffer, %offset: offset, %row: index, %col: ind
   %fview = buffer.view %buffer[%offset] : buffer -> view<[%m]x[%n]xf32, %layout>
   vector.atomic.reduce<addi> %iv, %iview[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
   vector.atomic.reduce.mask<addf> %fv, %fview[%row, %col][%i32_offsets], %mask {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>
-  %oldi = vector.atomic.rmw<xchgi> %iv, %iview[%row, %col][%offsets] {ordering = acq_rel, scope = system} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
-  %masked = vector.atomic.rmw.mask<addf> %fv, %fview[%row, %col][%i32_offsets], %mask, %oldf {ordering = seq_cst, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  %oldi = vector.atomic.rmw<xchgi> %iv, %iview[%row, %col][%offsets] {ordering = acq_rel, scope = system} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
+  %masked = vector.atomic.rmw.mask<addf> %fv, %fview[%row, %col][%i32_offsets], %mask, %oldf {ordering = seq_cst, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xi32>, vector<4xi1>, vector<4xf32>
   test.use %oldi, %masked : vector<4xi32>, vector<4xf32>
   func.return
 }

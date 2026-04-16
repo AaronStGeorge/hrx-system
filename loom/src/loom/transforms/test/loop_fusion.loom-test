@@ -112,13 +112,13 @@ func.def @fuses_load_then_lane_local_compute(%n: index, %buffer: buffer, %byte_o
   %loaded = scf.for %i = [%zero to %n step %one](%acc = %seed : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
     %address = index.add %origin, %i : index
     %lane = view.load %view[%address] : view<[%n]xf32, %layout> -> f32
-    %next = vector.insert %lane into %acc[%i] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    %next = vector.insert %lane into %acc[%i] : f32, vector<[%n]xf32>
     scf.yield %next : vector<[%n]xf32>
   }
   %doubled = scf.for %j = [%zero to %n step %one](%acc = %old : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
     %lane = vector.extract %loaded[%j] : vector<[%n]xf32> -> f32
     %twice = scalar.addf %lane, %lane : f32
-    %next = vector.insert %twice into %acc[%j] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    %next = vector.insert %twice into %acc[%j] : f32, vector<[%n]xf32>
     scf.yield %next : vector<[%n]xf32>
   }
   func.return %loaded, %doubled : vector<[%n]xf32>, vector<[%n]xf32>
@@ -133,10 +133,10 @@ func.def @fuses_load_then_lane_local_compute(%n: index, %buffer: buffer, %byte_o
   %loaded, %doubled = scf.for %24 = [%zero to %n step %one](%25 = %seed : vector<[%n]xf32>, %26 = %old : vector<[%n]xf32>) -> (vector<[%n]xf32>, vector<[%n]xf32>) {
     %address = index.add %origin, %24 : index
     %lane = view.load %view[%address] : view<[%n]xf32, %layout> -> f32
-    %next = vector.insert %lane into %25[%24] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    %next = vector.insert %lane into %25[%24] : f32, vector<[%n]xf32>
     %21 = vector.extract %next[%24] : vector<[%n]xf32> -> f32
     %22 = scalar.addf %21, %21 : f32
-    %23 = vector.insert %22 into %26[%24] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    %23 = vector.insert %22 into %26[%24] : f32, vector<[%n]xf32>
     scf.yield %next, %23 : vector<[%n]xf32>, vector<[%n]xf32>
   }
   func.return %loaded, %doubled : vector<[%n]xf32>, vector<[%n]xf32>
@@ -155,13 +155,13 @@ func.def @fuses_masked_lane_local_compute(%n: index, %mask: vector<[%n]xi1>, %se
       %old_lane = vector.extract %seed[%i] : vector<[%n]xi32> -> i32
       scf.yield %old_lane : i32
     }
-    %next = vector.insert %lane into %acc[%i] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    %next = vector.insert %lane into %acc[%i] : i32, vector<[%n]xi32>
     scf.yield %next : vector<[%n]xi32>
   }
   %incremented = scf.for %j = [%zero to %n step %one](%acc = %old : vector<[%n]xi32>) -> (vector<[%n]xi32>) {
     %lane = vector.extract %selected[%j] : vector<[%n]xi32> -> i32
     %next_lane = test.addi %lane, %one_i32 : i32
-    %next = vector.insert %next_lane into %acc[%j] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    %next = vector.insert %next_lane into %acc[%j] : i32, vector<[%n]xi32>
     scf.yield %next : vector<[%n]xi32>
   }
   func.return %selected, %incremented : vector<[%n]xi32>, vector<[%n]xi32>
@@ -179,10 +179,10 @@ func.def @fuses_masked_lane_local_compute(%n: index, %mask: vector<[%n]xi1>, %se
       %old_lane = vector.extract %seed[%22] : vector<[%n]xi32> -> i32
       scf.yield %old_lane : i32
     }
-    %next = vector.insert %lane into %23[%22] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    %next = vector.insert %lane into %23[%22] : i32, vector<[%n]xi32>
     %19 = vector.extract %next[%22] : vector<[%n]xi32> -> i32
     %20 = test.addi %19, %one_i32 : i32
-    %21 = vector.insert %20 into %24[%22] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    %21 = vector.insert %20 into %24[%22] : i32, vector<[%n]xi32>
     scf.yield %next, %21 : vector<[%n]xi32>, vector<[%n]xi32>
   }
   func.return %selected, %incremented : vector<[%n]xi32>, vector<[%n]xi32>
@@ -194,12 +194,12 @@ func.def @rejects_non_lane_local_forwarding(%n: index, %seed: vector<[%n]xi32>, 
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
   %built = scf.for %i = [%zero to %n step %one](%acc = %seed : vector<[%n]xi32>) -> (vector<[%n]xi32>) {
-    %next = vector.insert %lane_value into %acc[%i] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    %next = vector.insert %lane_value into %acc[%i] : i32, vector<[%n]xi32>
     scf.yield %next : vector<[%n]xi32>
   }
   %broadcast_first = scf.for %j = [%zero to %n step %one](%acc = %old : vector<[%n]xi32>) -> (vector<[%n]xi32>) {
     %first_lane = vector.extract %built[%zero] : vector<[%n]xi32> -> i32
-    %next = vector.insert %first_lane into %acc[%j] : i32, vector<[%n]xi32> -> vector<[%n]xi32>
+    %next = vector.insert %first_lane into %acc[%j] : i32, vector<[%n]xi32>
     scf.yield %next : vector<[%n]xi32>
   }
   func.return %built, %broadcast_first : vector<[%n]xi32>, vector<[%n]xi32>

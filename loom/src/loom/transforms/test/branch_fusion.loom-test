@@ -151,10 +151,10 @@ func.def @fuses_scalarized_vector_branch_cleanup(%cond: i1, %x: i32, %y: i32, %z
   }
   %next = scf.if %cond -> (vector<4xi32>) {
     %sum = test.addi %lane, %z : i32
-    %inserted = vector.insert %sum into %acc[%lane_index] : i32, vector<4xi32> -> vector<4xi32>
+    %inserted = vector.insert %sum into %acc[%lane_index] : i32, vector<4xi32>
     scf.yield %inserted : vector<4xi32>
   } else {
-    %inserted = vector.insert %lane into %acc[%lane_index] : i32, vector<4xi32> -> vector<4xi32>
+    %inserted = vector.insert %lane into %acc[%lane_index] : i32, vector<4xi32>
     scf.yield %inserted : vector<4xi32>
   }
   func.return %lane, %next : i32, vector<4xi32>
@@ -164,10 +164,10 @@ func.def @fuses_scalarized_vector_branch_cleanup(%cond: i1, %x: i32, %y: i32, %z
 func.def @fuses_scalarized_vector_branch_cleanup(%cond: i1, %x: i32, %y: i32, %z: i32, %acc: vector<4xi32>, %lane_index: index) -> (i32, vector<4xi32>) {
   %lane, %next = scf.if %cond -> (i32, vector<4xi32>) {
     %sum = test.addi %x, %z : i32
-    %inserted = vector.insert %sum into %acc[%lane_index] : i32, vector<4xi32> -> vector<4xi32>
+    %inserted = vector.insert %sum into %acc[%lane_index] : i32, vector<4xi32>
     scf.yield %x, %inserted : i32, vector<4xi32>
   } else {
-    %inserted = vector.insert %y into %acc[%lane_index] : i32, vector<4xi32> -> vector<4xi32>
+    %inserted = vector.insert %y into %acc[%lane_index] : i32, vector<4xi32>
     scf.yield %y, %inserted : i32, vector<4xi32>
   }
   func.return %lane, %next : i32, vector<4xi32>

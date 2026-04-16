@@ -279,7 +279,7 @@ func.def @load_mask_not_i1(%buffer: buffer, %offset: offset, %mask: vector<4xi32
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
   // ERROR@+1: TYPE/003 "i1_element"
-  %r = vector.load.mask %view[0], %mask, %old : view<4xf32, %layout>, vector<4xi32>, vector<4xf32> -> vector<4xf32>
+  %r = vector.load.mask %view[0], %mask, %old : view<4xf32, %layout>, vector<4xi32>, vector<4xf32>
   func.return
 }
 
@@ -302,7 +302,7 @@ func.def @load_expand_rank_mismatch(%buffer: buffer, %offset: offset, %mask: vec
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<4x4xf32, %layout>
   // ERROR@+1: TYPE/004 "rank-1 vector"
-  %r = vector.load.expand %view[0, 0], %mask, %old : view<4x4xf32, %layout>, vector<2x2xi1>, vector<2x2xf32> -> vector<2x2xf32>
+  %r = vector.load.expand %view[0, 0], %mask, %old : view<4x4xf32, %layout>, vector<2x2xi1>, vector<2x2xf32>
   func.return
 }
 
@@ -324,7 +324,7 @@ func.def @load_expand_mask_shape_mismatch(%buffer: buffer, %offset: offset, %mas
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
   // ERROR@+1: SHAPE/002
-  %r = vector.load.expand %view[0], %mask, %old : view<16xf32, %layout>, vector<8xi1>, vector<4xf32> -> vector<4xf32>
+  %r = vector.load.expand %view[0], %mask, %old : view<16xf32, %layout>, vector<8xi1>, vector<4xf32>
   func.return
 }
 
@@ -420,7 +420,7 @@ func.def @extract_tail_type_mismatch(%v: vector<4x4xf32>) {
 // Partial vector insert expects the inserted value to match the unindexed tail.
 func.def @insert_tail_type_mismatch(%x: f32, %v: vector<4x4xf32>) {
   // ERROR@+1: TYPE/003 "vector tail value"
-  %r = vector.insert %x into %v[0] : f32, vector<4x4xf32> -> vector<4x4xf32>
+  %r = vector.insert %x into %v[0] : f32, vector<4x4xf32>
   func.return
 }
 
@@ -960,7 +960,7 @@ func.def @bitfield_extract_result_too_narrow(%v: vector<4xi8>) {
 // Insert source field lanes must be wide enough to provide the selected bits.
 func.def @bitfield_insert_field_too_narrow(%field: vector<4xi1>, %base: vector<4xi8>) {
   // ERROR@+1: TYPE/003 "integer element type at least bitfield width"
-  %r = vector.bitfield.insert %field into %base {offset = 0, width = 4} : vector<4xi1>, vector<4xi8> -> vector<4xi8>
+  %r = vector.bitfield.insert %field into %base {offset = 0, width = 4} : vector<4xi1>, vector<4xi8>
   func.return
 }
 
@@ -969,7 +969,7 @@ func.def @bitfield_insert_field_too_narrow(%field: vector<4xi1>, %base: vector<4
 // Insert ranges must fit inside each base lane.
 func.def @bitfield_insert_range_overflow(%field: vector<4xi32>, %base: vector<4xi8>) {
   // ERROR@+1: STRUCTURE/014 "width" "4" "bitfield range within storage element width"
-  %r = vector.bitfield.insert %field into %base {offset = 6, width = 4} : vector<4xi32>, vector<4xi8> -> vector<4xi8>
+  %r = vector.bitfield.insert %field into %base {offset = 6, width = 4} : vector<4xi32>, vector<4xi8>
   func.return
 }
 
@@ -1199,7 +1199,7 @@ func.def @atomic_offsets_reject_i1(%buffer: buffer, %base: offset, %row: index, 
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%base] : buffer -> view<8x8xi32, %layout>
   // ERROR@+1: TYPE/003 "vector with index or non-i1 integer elements"
-  %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<8x8xi32, %layout>, vector<4xi1> -> vector<4xi32>
+  %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<8x8xi32, %layout>, vector<4xi1>
   func.return
 }
 

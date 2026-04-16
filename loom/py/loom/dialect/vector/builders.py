@@ -141,7 +141,7 @@ class VectorBuilders:
         """Insert a scalar or tail subvector into a vector at explicit leading indices. The inserted value must match the destination tail shape remaining after the supplied indices, and the result type is the same as the destination type.
 
         Example::
-            %r = vector.insert %x into %v[%i] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+            %r = vector.insert %x into %v[%i] : f32, vector<[%n]xf32>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -334,7 +334,7 @@ class VectorBuilders:
         """Masked vector load from a typed view. Mask lanes with true values perform the same access as vector.load, while false lanes do not access memory and instead take the corresponding passthrough lane.
 
         Example::
-            %v = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32> -> vector<4x8xf32>
+            %v = vector.load.mask %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4x8xi1>, vector<4x8xf32>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -380,7 +380,7 @@ class VectorBuilders:
         """Rank-1 masked expand load from consecutive view elements. Active lanes consume memory densely in increasing lane order; inactive lanes do not consume memory and take the corresponding passthrough lane.
 
         Example::
-            %v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+            %v = vector.load.expand %view[%row, %col], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xi1>, vector<4xf32>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -471,7 +471,7 @@ class VectorBuilders:
         """Masked vector gather from per-lane signed logical offsets added to the last view axis. True mask lanes read the adjusted coordinate, while false mask lanes do not access memory and take the corresponding passthrough lane.
 
         Example::
-            %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+            %v = vector.gather.mask %view[%row, %col][%offsets], %mask, %old : view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -572,7 +572,7 @@ class VectorBuilders:
         """Atomic read-modify-write at per-lane signed element offsets. Each lane atomically combines its value with origin + offsets[lane] and the result lane is the old memory value observed by that atomic operation.
 
         Example::
-            %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex> -> vector<4xi32>
+            %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<[%m]x[%n]xi32, %layout>, vector<4xindex>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -611,7 +611,7 @@ class VectorBuilders:
         """Masked atomic read-modify-write. True mask lanes perform vector.atomic.rmw, while false mask lanes do not access memory and take the corresponding passthrough lane in the result.
 
         Example::
-            %old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+            %old = vector.atomic.rmw.mask<addf> %v, %view[%row, %col][%offsets], %mask, %passthrough {ordering = relaxed, scope = device} : vector<4xf32>, view<[%m]x[%n]xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -1553,7 +1553,7 @@ class VectorBuilders:
         """Insert the low bits of each integer field lane into a fixed bitfield of the corresponding integer base lane. Bits outside the target field are preserved from the base lane.
 
         Example::
-            %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8> -> vector<16xi8>
+            %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8>
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}

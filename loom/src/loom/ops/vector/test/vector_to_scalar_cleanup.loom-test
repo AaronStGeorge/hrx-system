@@ -46,7 +46,7 @@ func.def @gather_iota_offsets(%n: index, %buffer: buffer, %byte_offset: offset, 
   %loaded = scf.for %14 = [%12 to %n step %13](%15 = %11 : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
     %19 = index.add %origin, %14 : index
     %20 = view.load %view[%19] : view<[%n]xf32, %layout> -> f32
-    %21 = vector.insert %20 into %15[%14] : f32, vector<[%n]xf32> -> vector<[%n]xf32>
+    %21 = vector.insert %20 into %15[%14] : f32, vector<[%n]xf32>
     scf.yield %21 : vector<[%n]xf32>
   }
   func.return %loaded : vector<[%n]xf32>
@@ -64,7 +64,7 @@ func.def @load_full_range_mask(%buffer: buffer, %byte_offset: offset) -> (vector
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
   %mask = vector.mask.range [%c0 to %c2 step %c1] : index -> vector<2xi1>
-  %loaded = vector.load.mask %view[3], %mask, %old : view<8xf32, %layout>, vector<2xi1>, vector<2xf32> -> vector<2xf32>
+  %loaded = vector.load.mask %view[3], %mask, %old : view<8xf32, %layout>, vector<2xi1>, vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
