@@ -34,6 +34,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "loop_fusion"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/loop_fusion.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "scf_index"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/scf_index.loom-test"

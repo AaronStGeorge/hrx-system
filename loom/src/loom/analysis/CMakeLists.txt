@@ -42,6 +42,35 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    loop_domain
+  HDRS
+    "loop_domain.h"
+  SRCS
+    "loop_domain.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    loop_domain_test
+  SRCS
+    "loop_domain_test.cc"
+  DEPS
+    ::loop_domain
+    iree::base::internal::arena
+    loom::src::loom::ir::facts
+    loom::src::loom::util::fact_table
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     motion
   HDRS
     "motion.h"

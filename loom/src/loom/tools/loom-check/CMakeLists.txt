@@ -69,6 +69,7 @@ loom_cc_library(
     loom::src::loom::transforms::cse
     loom::src::loom::transforms::dce
     loom::src::loom::transforms::licm
+    loom::src::loom::transforms::loop_fusion
     loom::src::loom::transforms::pass
     loom::src::loom::transforms::strip_hints
     loom::src::loom::transforms::vector_memory_footprint

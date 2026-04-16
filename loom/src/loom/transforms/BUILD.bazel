@@ -165,6 +165,24 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "loop_fusion",
+    srcs = ["loop_fusion.c"],
+    hdrs = ["loop_fusion.h"],
+    deps = [
+        ":materialize",
+        ":pass",
+        ":remap",
+        ":rewriter",
+        "//loom/src/loom/analysis:loop_domain",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/vector",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "materialize",
     srcs = ["materialize.c"],
     hdrs = ["materialize.h"],

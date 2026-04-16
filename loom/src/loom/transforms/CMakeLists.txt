@@ -184,6 +184,27 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    loop_fusion
+  HDRS
+    "loop_fusion.h"
+  SRCS
+    "loop_fusion.c"
+  DEPS
+    ::materialize
+    ::pass
+    ::remap
+    ::rewriter
+    iree::base
+    loom::src::loom::analysis::loop_domain
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::vector
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     materialize
   HDRS
     "materialize.h"

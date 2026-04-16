@@ -31,6 +31,7 @@
 #include "loom/transforms/cse.h"
 #include "loom/transforms/dce.h"
 #include "loom/transforms/licm.h"
+#include "loom/transforms/loop_fusion.h"
 #include "loom/transforms/pass.h"
 #include "loom/transforms/strip_hints.h"
 #include "loom/transforms/vector_memory_footprint.h"
@@ -324,6 +325,10 @@ static iree_status_t loom_check_run_pipeline(
       status = loom_pass_manager_add_function_pass(
           &manager, loom_licm_pass_info(), loom_licm_run, NULL, NULL,
           iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name, IREE_SV("loop-fusion"))) {
+      status = loom_pass_manager_add_function_pass(
+          &manager, loom_loop_fusion_pass_info(), loom_loop_fusion_run, NULL,
+          NULL, iree_string_view_empty());
     } else if (iree_string_view_equal(pass_name, IREE_SV("strip-hints"))) {
       status = loom_pass_manager_add_function_pass(
           &manager, loom_strip_hints_pass_info(), loom_strip_hints_run, NULL,
