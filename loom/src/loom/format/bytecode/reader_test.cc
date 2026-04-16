@@ -129,6 +129,30 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateMultiBlockFunctionModule() {
+    loom_module_t* module = CreateModule("reader_multi_block");
+    loom_op_t* func_op = AddSimpleFunction(module, "f");
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 1) {
+      ADD_FAILURE() << "expected one function argument";
+      return module;
+    }
+
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_block_t* second_block = nullptr;
+    IREE_CHECK_OK(loom_region_append_block(module, body, &second_block));
+    loom_builder_t block_builder;
+    loom_builder_initialize(module, &module->arena, second_block,
+                            &block_builder);
+    loom_op_t* use_op = nullptr;
+    IREE_CHECK_OK(loom_test_use_build(&block_builder, arg_ids, arg_count,
+                                      LOOM_LOCATION_UNKNOWN, &use_op));
+    return module;
+  }
+
   loom_module_t* CreateDynamicDimFunctionModule() {
     loom_module_t* module = CreateModule("reader_dynamic_dim");
     loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
@@ -240,6 +264,13 @@ class ReaderTest : public ::testing::Test {
     IREE_CHECK_OK(loom_test_map_build(&body_builder, arg_ids, arg_count,
                                       i32_type, &tied_result, 1,
                                       LOOM_LOCATION_UNKNOWN, &map_op));
+    loom_region_t* map_body = loom_test_map_body(map_op);
+    loom_builder_t map_builder;
+    loom_builder_initialize(module, &module->arena,
+                            loom_region_entry_block(map_body), &map_builder);
+    loom_op_t* use_op = nullptr;
+    IREE_CHECK_OK(loom_test_use_build(&map_builder, arg_ids, arg_count,
+                                      LOOM_LOCATION_UNKNOWN, &use_op));
     return module;
   }
 
@@ -389,12 +420,11 @@ class ReaderTest : public ::testing::Test {
   void SkipPredicateList(const std::vector<uint8_t>& bytes, size_t* offset) {
     uint64_t predicate_count = ReadUVarint(bytes, offset);
     for (uint64_t i = 0; i < predicate_count; ++i) {
-      ++*offset;  // predicate kind
+      *offset += 1;  // predicate kind
       uint8_t arg_count = bytes[(*offset)++];
       for (uint8_t arg_index = 0; arg_index < arg_count; ++arg_index) {
-        uint8_t tag = bytes[(*offset)++];
+        *offset += 1;  // argument tag
         ReadUVarint(bytes, offset);
-        (void)tag;
       }
     }
   }
@@ -705,6 +735,121 @@ TEST_F(ReaderTest, ReadsLocationTablesWithRemappedSources) {
   loom_module_free(read_module);
   loom_context_deinitialize(&read_context);
   loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsMultiBlockFunctionBodyModule) {
+  loom_module_t* module = CreateMultiBlockFunctionModule();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  loom_op_t* func_op = read_module->symbols.entries[0].defining_op;
+  ASSERT_TRUE(loom_test_func_isa(func_op));
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  ASSERT_EQ(body->block_count, 2u);
+  loom_block_t* second_block = loom_region_block(body, 1);
+  ASSERT_EQ(second_block->op_count, 1u);
+  EXPECT_TRUE(loom_test_use_isa(second_block->first_op));
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsNestedRegionBodyModule) {
+  loom_module_t* module = CreateTiedBodyOpModule();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  loom_op_t* func_op = read_module->symbols.entries[0].defining_op;
+  ASSERT_TRUE(loom_test_func_isa(func_op));
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  loom_block_t* entry = loom_region_entry_block(body);
+  ASSERT_EQ(entry->op_count, 1u);
+  ASSERT_TRUE(loom_test_map_isa(entry->first_op));
+  loom_region_t* map_body = loom_test_map_body(entry->first_op);
+  ASSERT_NE(map_body, nullptr);
+  EXPECT_EQ(map_body->block_count, 1u);
+  loom_block_t* map_entry = loom_region_entry_block(map_body);
+  ASSERT_EQ(map_entry->op_count, 1u);
+  EXPECT_TRUE(loom_test_use_isa(map_entry->first_op));
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsDynamicDimBindings) {
+  loom_module_t* dynamic_module = CreateDynamicDimFunctionModule();
+  auto dynamic_bytes = WriteModule(dynamic_module);
+
+  loom_module_t* read_dynamic_module = nullptr;
+  std::vector<std::string> dynamic_errors;
+  loom_bytecode_read_result_t dynamic_result =
+      ReadModule(dynamic_bytes, &read_dynamic_module, &dynamic_errors);
+
+  EXPECT_EQ(dynamic_result.error_count, 0u);
+  EXPECT_TRUE(dynamic_errors.empty());
+  ASSERT_NE(read_dynamic_module, nullptr);
+  loom_op_t* dynamic_func = read_dynamic_module->symbols.entries[0].defining_op;
+  loom_func_like_t dynamic_func_like =
+      loom_func_like_cast(read_dynamic_module, dynamic_func);
+  uint16_t dynamic_arg_count = 0;
+  const loom_value_id_t* dynamic_arg_ids =
+      loom_func_like_arg_ids(dynamic_func_like, &dynamic_arg_count);
+  ASSERT_EQ(dynamic_arg_count, 2u);
+  loom_type_t vector_type =
+      loom_module_value_type(read_dynamic_module, dynamic_arg_ids[1]);
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(vector_type, 0));
+  EXPECT_EQ(loom_dim_value_id(loom_type_dim(vector_type, 0)),
+            dynamic_arg_ids[0]);
+
+  loom_module_free(read_dynamic_module);
+  loom_module_free(dynamic_module);
+}
+
+TEST_F(ReaderTest, ReadsSsaEncodingBindings) {
+  loom_module_t* encoding_module = CreateSsaEncodingFunctionModule();
+  auto encoding_bytes = WriteModule(encoding_module);
+
+  loom_module_t* read_encoding_module = nullptr;
+  std::vector<std::string> encoding_errors;
+  loom_bytecode_read_result_t encoding_result =
+      ReadModule(encoding_bytes, &read_encoding_module, &encoding_errors);
+
+  EXPECT_EQ(encoding_result.error_count, 0u);
+  EXPECT_TRUE(encoding_errors.empty());
+  ASSERT_NE(read_encoding_module, nullptr);
+  loom_op_t* encoding_func =
+      read_encoding_module->symbols.entries[0].defining_op;
+  loom_func_like_t encoding_func_like =
+      loom_func_like_cast(read_encoding_module, encoding_func);
+  uint16_t encoding_arg_count = 0;
+  const loom_value_id_t* encoding_arg_ids =
+      loom_func_like_arg_ids(encoding_func_like, &encoding_arg_count);
+  ASSERT_EQ(encoding_arg_count, 2u);
+  loom_type_t view_type =
+      loom_module_value_type(read_encoding_module, encoding_arg_ids[1]);
+  ASSERT_TRUE(loom_type_has_ssa_encoding(view_type));
+  EXPECT_EQ(loom_type_encoding_value_id(view_type), encoding_arg_ids[0]);
+
+  loom_module_free(read_encoding_module);
+  loom_module_free(encoding_module);
 }
 
 TEST_F(ReaderTest, RejectsInvalidBodyValueReference) {
