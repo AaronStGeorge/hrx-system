@@ -56,6 +56,22 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_benchmark(
+  NAME
+    parser_scope_benchmark
+  SRCS
+    "parser_scope_benchmark.cc"
+  DEPS
+    ::parser
+    benchmark
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::test
+    iree::testing::benchmark_main
+  TESTONLY
+)
+
 loom_cc_library(
   NAME
     printer
