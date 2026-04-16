@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 3)
+//   4       1     format_version (currently 5)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 4
+#define LOOM_BYTECODE_FORMAT_VERSION 5
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -282,9 +282,10 @@ typedef enum loom_bytecode_section_kind_e {
 //     [length: varint]
 //     [utf8_data: length bytes]
 //
-// Strings are indexed 0..string_count-1. String 0 is typically the
-// module name. The order is determined by the writer (typically
-// insertion order during IR numbering).
+// Strings are indexed 0..string_count-1. String 0 is reserved as the empty
+// string so value-definition name_id fields can use 0 as "no SSA name".
+// The remaining order is determined by the writer, typically insertion order
+// during IR numbering.
 
 // ==========================================================================
 // SOURCES section
@@ -487,7 +488,9 @@ typedef enum loom_bytecode_section_kind_e {
 //     [source_module_id: varint]  (string table index: module name)
 //     [source_symbol_id: varint]) (string table index: symbol name
 //                                  in the source module — may differ
-//                                  from name_id for import aliasing)
+//                                  from name_id for import aliasing; presence
+//                                  in text is preserved by
+//                                  LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL)
 //
 //   For FUNC_DEF / FUNC_DECL / FUNC_TEMPLATE / FUNC_UKERNEL:
 //     [def_op_table_index_plus1: varint]
@@ -495,14 +498,29 @@ typedef enum loom_bytecode_section_kind_e {
 //                         name is OPS[N - 1]. The symbol kind is semantic
 //                         linkage metadata; this op reference preserves the
 //                         exact dialect op used to define the symbol.
+//     [comment_count: varint]
+//     For each leading comment attached to the symbol op:
+//       [comment_length: varint]
+//       [comment_data: comment_length bytes]  bytes after the leading // marker
 //     [calling_convention: byte]
+//     [purity: byte]
 //     [arg_count: varint]
 //     [result_count: varint]
 //     For each arg:
-//       [type_index: varint]  (into TYPES section)
+//       [name_id: varint]       0 = no SSA name; otherwise STRINGS id.
+//       [type_index: varint]    (structural type from TYPES section)
+//       [dim_binding_count: varint]
+//       For each dynamic dim:
+//         [value_ref: signed_varint]  Signature-local value number.
+//       [encoding_binding: varint]    0 = no binding, N > 0 = value number N-1.
 //     For each result:
 //       [is_tied: byte]
-//       [type_index: varint]
+//       [name_id: varint]       0 = no SSA name; otherwise STRINGS id.
+//       [type_index: varint]    (structural type from TYPES section)
+//       [dim_binding_count: varint]
+//       For each dynamic dim:
+//         [value_ref: signed_varint]  Signature-local value number.
+//       [encoding_binding: varint]    0 = no binding, N > 0 = value number N-1.
 //       (if tied: [tied_operand_index: varint])
 //     [tied_result_count: varint]
 //     [predicate_count: varint]
@@ -511,7 +529,7 @@ typedef enum loom_bytecode_section_kind_e {
 //       [arg_count: byte]
 //       For each arg:
 //         [tag: byte]      (1=value, 2=const)
-//         (VALUE:   [name_id: varint]  string table index)
+//         (VALUE:   [value_ref: varint] signature-local value number)
 //         (CONST:   [value: signed_varint])
 //
 //     // Template/ukernel metadata (FUNC_TEMPLATE or FUNC_UKERNEL):
@@ -549,6 +567,13 @@ typedef enum loom_bytecode_section_kind_e {
 //
 // Within a function's IR:
 //
+// Value definition groups are reserved before their individual definitions are
+// decoded. Dynamic dim and SSA encoding bindings may therefore reference any
+// value in the current block-argument, op-result, or function-signature group,
+// including co-results that appear later in the byte stream. Ordinary operands
+// and predicate value args still reference only values defined by earlier
+// definition groups.
+//
 //   [value_count: varint]   Function-local SSA values defined by block args
 //                           and operation results in this body.
 //   [region_count: varint]  Regions in this body, including nested regions.
@@ -560,9 +585,13 @@ typedef enum loom_bytecode_section_kind_e {
 //   For each block:
 //     [has_label: byte]
 //     (if has_label: [label_id: varint])
+//     [comment_count: varint]
+//     For each leading comment attached to the block label:
+//       [comment_length: varint]
+//       [comment_data: comment_length bytes]  bytes after the leading // marker
 //     [arg_count: varint]
 //     For each block arg (these DEFINE SSA values):
-//       [name_id: varint]       (SSA name for round-trip printing)
+//       [name_id: varint]       0 = no SSA name; otherwise STRINGS id.
 //       [type_index: varint]    (structural type from TYPES section)
 //       [dim_binding_count: varint]  (number of dynamic dims in this type)
 //       For each dynamic dim (in shape order, skipping static dims):
@@ -576,14 +605,20 @@ typedef enum loom_bytecode_section_kind_e {
 //       [op_table_index_plus1: varint]
 //                              0 is invalid for operation records.
 //                              N > 0: op name is OPS[N - 1].
-//       [flags: byte]           (encoding mask: which fields present)
+//       [instance_flags: byte]  Per-op-instance flags. Zero for ops without a
+//                               Flags format element.
 //       [location_id: varint]
+//       [comment_count: varint]
+//       For each leading comment attached to the op:
+//         [comment_length: varint]
+//         [comment_data: comment_length bytes] bytes after the leading //
+//         marker
 //       [operand_count: varint]
 //       For each operand (these REFERENCE existing SSA values):
 //         [value_ref: varint]   (just the value ref, no type info)
 //       [result_count: varint]
 //       For each result (these DEFINE SSA values):
-//         [name_id: varint]
+//         [name_id: varint]     0 = no SSA name; otherwise STRINGS id.
 //         [type_index: varint]
 //         [dim_binding_count: varint]
 //         For each dynamic dim:
@@ -849,6 +884,10 @@ enum loom_bytecode_symbol_flag_bits_e {
   // the flags field. The linker resolves the import against exports
   // from the named source module.
   LOOM_BYTECODE_SYMBOL_FLAG_IMPORT = 1u << 1,
+  // Imported symbol syntax explicitly provided source_symbol_id. When clear,
+  // source_symbol_id is still encoded for linker lookup but is the textual
+  // default derived from name_id.
+  LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL = 1u << 2,
 };
 typedef uint16_t loom_bytecode_symbol_flags_t;
 

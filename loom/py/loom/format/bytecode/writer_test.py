@@ -1422,11 +1422,14 @@ class TestPredicateBytecodeRoundTrip:
                 ),
             ),
         ]
+        m_id = module.add_value(Value(name="M", type=INDEX))
+        k_id = module.add_value(Value(name="K", type=INDEX))
+        n_id = module.add_value(Value(name="N", type=INDEX))
         arg_id = module.add_value(Value(name="", type=F32))
         result_id = module.add_value(Value(name="", type=F32))
         func_op = Operation(
             name="func.decl",
-            operands=[arg_id],
+            operands=[m_id, k_id, n_id, arg_id],
             results=[result_id],
             attributes={"callee": "test", "predicates": predicates},
         )

@@ -119,8 +119,12 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 4
+FORMAT_VERSION = 5
 PRODUCER = "loom-py"
+
+SYMBOL_FLAG_PUBLIC = 0x0001
+SYMBOL_FLAG_IMPORT = 0x0002
+SYMBOL_FLAG_IMPORT_SYMBOL = 0x0004
 
 
 # ============================================================================
@@ -141,6 +145,10 @@ class NumberingContext:
         self.sources: list[str] = []
         self._type_list: list[Type] = []
         self._type_lookup: dict[Type, int] = {}
+        # Value definitions use string id 0 as "no SSA name". Keep the empty
+        # string at bytecode string-table slot 0 so anonymous values do not
+        # accidentally pick up the first real symbol name during reading.
+        self.intern_string("")
 
     def intern_string(self, text: str) -> int:
         """Intern a string, returning its ID."""
@@ -273,7 +281,10 @@ class BytecodeWriter:
 
         # Result types.
         for result_id in op.results:
-            self._number_type(module.values[result_id].type)
+            value = module.values[result_id]
+            if value.name:
+                self._ctx.intern_string(value.name)
+            self._number_type(value.type)
 
         # Predicate value name strings.
         for predicate in op.attributes.get("predicates", []):
@@ -664,15 +675,12 @@ class BytecodeWriter:
         buf.write_u8(1 if has_label else 0)
         if has_label:
             buf.write_varint(self._ctx.strings[block.label])
+        self._write_comment_list(buf, block.comments)
 
         # Block args.
         buf.write_varint(len(block.arg_ids))
         for arg_id in block.arg_ids:
-            value = self._module.values[arg_id]
-            name_id = self._ctx.strings.get(value.name, 0)
-            buf.write_varint(name_id)
-            buf.write_varint(self._ctx.intern_type(value.type))
-            self._write_dim_bindings(buf, value, value_numbers)
+            self._write_value_def(buf, self._module.values[arg_id], value_numbers)
 
         # Operations.
         live_ops = [op for op in block.ops if not op.is_dead]
@@ -706,6 +714,27 @@ class BytecodeWriter:
         else:
             buf.write_varint(0)
 
+    def _write_comment_list(self, buf: ByteBuffer, comments: tuple[str, ...]) -> None:
+        buf.write_varint(len(comments))
+        for comment in comments:
+            encoded = comment.encode("utf-8")
+            buf.write_varint(len(encoded))
+            buf.write_bytes(encoded)
+
+    def _write_value_def(
+        self, buf: ByteBuffer, value: Value, value_numbers: dict[int, int]
+    ) -> None:
+        buf.write_varint(self._ctx.strings.get(value.name, 0))
+        buf.write_varint(self._ctx.intern_type(value.type))
+        self._write_dim_bindings(buf, value, value_numbers)
+
+    def _value_numbers_by_name(self, value_numbers: dict[int, int]) -> dict[str, int]:
+        return {
+            self._module.values[value_id].name: value_number
+            for value_id, value_number in value_numbers.items()
+            if self._module.values[value_id].name
+        }
+
     def _write_operation(
         self, buf: ByteBuffer, op: Operation, value_numbers: dict[int, int]
     ) -> None:
@@ -716,6 +745,7 @@ class BytecodeWriter:
             0 if self._location_mode == LOCATION_MODE_NO_LOCATIONS else op.location_id
         )
         buf.write_varint(location_id)
+        self._write_comment_list(buf, op.comments)
 
         # Operands.
         buf.write_varint(len(op.operands))
@@ -726,10 +756,7 @@ class BytecodeWriter:
         buf.write_varint(len(op.results))
         for result_id in op.results:
             value = self._module.values[result_id]
-            name_id = self._ctx.strings.get(value.name, 0)
-            buf.write_varint(name_id)
-            buf.write_varint(self._ctx.intern_type(value.type))
-            self._write_dim_bindings(buf, value, value_numbers)
+            self._write_value_def(buf, value, value_numbers)
 
         # Tied results.
         buf.write_varint(len(op.tied_results))
@@ -741,21 +768,27 @@ class BytecodeWriter:
         buf.write_varint(len(op.attributes))
         # Operation attributes are canonicalized at IR construction time, so
         # emit the stored order directly.
+        value_numbers_by_name = self._value_numbers_by_name(value_numbers)
         for key, value in op.attributes.items():
             buf.write_varint(self._ctx.strings[key])
-            self._write_attr_value(buf, value)
+            self._write_attr_value(buf, value, value_numbers_by_name)
 
         # Regions.
         buf.write_varint(len(op.regions))
         for region in op.regions:
             self._write_region(buf, region, value_numbers)
 
-    def _write_attr_value(self, buf: ByteBuffer, value: Any) -> None:
+    def _write_attr_value(
+        self,
+        buf: ByteBuffer,
+        value: Any,
+        value_numbers_by_name: dict[str, int] | None = None,
+    ) -> None:
         """Write an attribute value with its kind byte."""
         # Check for predicate list attribute (list of Predicate objects).
         if isinstance(value, list) and value and isinstance(value[0], Predicate):
             buf.write_u8(ATTR_KIND_PREDICATE_LIST)
-            self._write_predicate_list(buf, value)
+            self._write_predicate_list(buf, value, value_numbers_by_name)
             return
         if isinstance(value, bool):
             buf.write_u8(ATTR_KIND_BOOL)
@@ -775,7 +808,7 @@ class BytecodeWriter:
             # Nested dict attrs are also canonicalized up front.
             for k, v in value.items():
                 buf.write_varint(self._ctx.intern_string(k))
-                self._write_attr_value(buf, v)
+                self._write_attr_value(buf, v, value_numbers_by_name)
         elif isinstance(value, EncodingInstance):
             buf.write_u8(ATTR_KIND_ENCODING)
             buf.write_varint(self._module.add_encoding(value) + 1)
@@ -814,7 +847,10 @@ class BytecodeWriter:
     }
 
     def _write_predicate_list(
-        self, buf: ByteBuffer, predicates: list[Predicate]
+        self,
+        buf: ByteBuffer,
+        predicates: list[Predicate],
+        value_numbers_by_name: dict[str, int] | None = None,
     ) -> None:
         """Write a predicate list: count + per-predicate data."""
         buf.write_varint(len(predicates))
@@ -825,16 +861,23 @@ class BytecodeWriter:
             buf.write_u8(kind_byte)
             buf.write_u8(len(predicate.args))
             for arg in predicate.args:
-                self._write_predicate_arg(buf, arg)
+                self._write_predicate_arg(buf, arg, value_numbers_by_name)
 
-    def _write_predicate_arg(self, buf: ByteBuffer, arg: PredicateArg) -> None:
+    def _write_predicate_arg(
+        self,
+        buf: ByteBuffer,
+        arg: PredicateArg,
+        value_numbers_by_name: dict[str, int] | None = None,
+    ) -> None:
         """Write a single predicate argument: tag + value."""
         match arg.tag:
             case "value":
                 buf.write_u8(self._PRED_ARG_TAG_VALUE)
-                # Intern the value name string.
                 name = arg.value if isinstance(arg.value, str) else str(arg.value)
-                buf.write_varint(self._ctx.intern_string(name))
+                if value_numbers_by_name is not None:
+                    buf.write_varint(value_numbers_by_name[name])
+                else:
+                    buf.write_varint(self._ctx.intern_string(name))
             case "const":
                 buf.write_u8(self._PRED_ARG_TAG_CONST)
                 assert isinstance(arg.value, int)
@@ -857,8 +900,8 @@ class BytecodeWriter:
         import_indices: list[int] = []
         export_indices: list[int] = []
         for i, symbol in enumerate(symbols):
-            is_import = (symbol.flags & 0x0002) != 0
-            is_public = (symbol.flags & 0x0001) != 0
+            is_import = (symbol.flags & SYMBOL_FLAG_IMPORT) != 0
+            is_public = (symbol.flags & SYMBOL_FLAG_PUBLIC) != 0
             if is_import:
                 import_indices.append(i)
             elif is_public:
@@ -886,11 +929,14 @@ class BytecodeWriter:
             entry_offsets[symbol_index] = buf.position - entries_start
             buf.write_varint(self._ctx.strings[symbol.name])
             buf.write_u8(symbol.kind.value)
-            buf.write_u8(1 if (symbol.flags & 1) else 0)  # visibility
-            buf.write_u16_le(symbol.flags)
+            buf.write_u8(0 if (symbol.flags & SYMBOL_FLAG_PUBLIC) else 1)
+            bytecode_flags = symbol.flags
+            if symbol.source_symbol and symbol.source_symbol != symbol.name:
+                bytecode_flags |= SYMBOL_FLAG_IMPORT_SYMBOL
+            buf.write_u16_le(bytecode_flags)
 
             # Import metadata: source module and symbol for cross-module refs.
-            if symbol.flags & 0x0002:  # SYMBOL_FLAG_IMPORT
+            if symbol.flags & SYMBOL_FLAG_IMPORT:
                 buf.write_varint(self._ctx.strings[symbol.source_module])
                 # source_symbol defaults to the symbol's own name.
                 source_sym = symbol.source_symbol or symbol.name
@@ -910,41 +956,58 @@ class BytecodeWriter:
                 module = self._module
 
                 buf.write_varint(self._ctx.ops[op.name] + 1)
+                self._write_comment_list(buf, op.comments)
 
-                # CC: map attribute string to binary byte.
-                # 0=HOST (default/absent), 1=DEVICE, 2=INITIALIZER.
-                _cc_to_byte: dict[str, int] = {"host": 0, "device": 1, "initializer": 2}
+                _cc_to_byte: dict[str, int] = {
+                    "host": 1,
+                    "device": 2,
+                    "initializer": 3,
+                    "deinitializer": 4,
+                }
                 cc_byte = _cc_to_byte.get(op.attributes.get("cc", ""), 0)
                 buf.write_u8(cc_byte)
+                _purity_to_byte: dict[str, int] = {"pure": 1}
+                purity_byte = _purity_to_byte.get(op.attributes.get("purity", ""), 0)
+                buf.write_u8(purity_byte)
 
                 # Arg types: entry block args for defs, operands for decls.
                 if op.regions and op.regions[0].blocks:
                     arg_ids = op.regions[0].blocks[0].arg_ids
                 else:
                     arg_ids = op.operands
-                arg_types = [module.values[vid].type for vid in arg_ids]
 
                 # Result types and tied results.
                 result_ids = op.results
-                result_types = [module.values[vid].type for vid in result_ids]
                 tied_results = op.tied_results
+                signature_value_numbers = {
+                    value_id: value_number
+                    for value_number, value_id in enumerate([*arg_ids, *result_ids])
+                }
 
-                buf.write_varint(len(arg_types))
-                buf.write_varint(len(result_types))
+                buf.write_varint(len(arg_ids))
+                buf.write_varint(len(result_ids))
 
-                for arg_type in arg_types:
-                    buf.write_varint(self._ctx.intern_type(arg_type))
-                for i, result_type in enumerate(result_types):
+                for arg_id in arg_ids:
+                    self._write_value_def(
+                        buf, module.values[arg_id], signature_value_numbers
+                    )
+                for i, result_id in enumerate(result_ids):
                     is_tied = any(t.result_index == i for t in tied_results)
                     buf.write_u8(1 if is_tied else 0)
-                    buf.write_varint(self._ctx.intern_type(result_type))
+                    self._write_value_def(
+                        buf, module.values[result_id], signature_value_numbers
+                    )
                     if is_tied:
                         tied = next(t for t in tied_results if t.result_index == i)
                         buf.write_varint(tied.operand_index)
 
                 buf.write_varint(len(tied_results))
                 predicates = op.attributes.get("predicates", [])
-                self._write_predicate_list(buf, predicates)
+                self._write_predicate_list(
+                    buf,
+                    predicates,
+                    self._value_numbers_by_name(signature_value_numbers),
+                )
 
                 # Body reference.
                 has_body = symbol_index in ir_offsets

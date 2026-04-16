@@ -12,6 +12,7 @@
 #include "loom/format/bytecode/diagnostic.h"
 #include "loom/format/bytecode/varint.h"
 #include "loom/ir/attribute.h"
+#include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/op_defs.h"
 #include "loom/transforms/verify.h"
@@ -114,8 +115,13 @@ typedef struct loom_bytecode_body_reader_t {
   uint64_t body_offset;                  // Absolute byte offset of the body.
   loom_value_id_t* value_map;            // Function-local value number map.
   uint64_t value_capacity;               // Expected value count from summary.
-  uint64_t next_value_number;            // Next value number to define.
-  loom_bytecode_body_counts_t counts;    // Actual decoded body counts.
+  uint64_t next_value_number;            // Next value definition to decode.
+  uint64_t available_value_count;        // Reserved prefix available to types.
+  // Values already defined by the containing symbol signature.
+  const loom_value_id_t* predefined_values;
+  // Number of leading value definitions that must reuse predefined values.
+  uint16_t predefined_value_count;
+  loom_bytecode_body_counts_t counts;  // Actual decoded body counts.
 } loom_bytecode_body_reader_t;
 
 static void loom_bytecode_reader_cursor_initialize(
@@ -228,6 +234,18 @@ static iree_status_t loom_bytecode_reader_emit_invalid_ir_body(
   };
   return loom_bytecode_reader_emit(body_reader->reader, &loom_err_bytecode_016,
                                    params, IREE_ARRAYSIZE(params), offset, 0);
+}
+
+static iree_status_t loom_bytecode_body_reader_lookup_value(
+    loom_bytecode_body_reader_t* body_reader, uint64_t value_number,
+    uint64_t value_limit, uint64_t offset, iree_string_view_t reason,
+    loom_value_id_t* out_value_id) {
+  if (value_number >= value_limit) {
+    return loom_bytecode_reader_emit_invalid_ir_body(body_reader, offset,
+                                                     reason);
+  }
+  *out_value_id = body_reader->value_map[value_number];
+  return iree_ok_status();
 }
 
 static iree_status_t loom_bytecode_reader_emit_table_ref(
@@ -346,6 +364,57 @@ static iree_status_t loom_bytecode_reader_read_span(
         loom_bytecode_cursor_remaining(&cursor->cursor));
   }
   return loom_bytecode_cursor_read_span(&cursor->cursor, host_length, out_span);
+}
+
+static iree_status_t loom_bytecode_reader_read_comment_list(
+    loom_bytecode_reader_state_t* reader, loom_bytecode_reader_cursor_t* cursor,
+    iree_arena_allocator_t* arena, const iree_string_view_t** out_comments,
+    iree_host_size_t* out_comment_count) {
+  if (out_comments) *out_comments = NULL;
+  if (out_comment_count) *out_comment_count = 0;
+
+  uint64_t count_offset = loom_bytecode_reader_cursor_absolute_position(cursor);
+  uint64_t count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_reader_read_uvarint(reader, cursor, &count));
+  if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+  if (count > UINT16_MAX || count > IREE_HOST_SIZE_MAX) {
+    return loom_bytecode_reader_emit_invalid_field(
+        reader, cursor->range_name, IREE_SV("comment_list"), 0,
+        IREE_SV("comment_count"), count_offset,
+        IREE_SV("comment count exceeds field width"));
+  }
+
+  iree_string_view_t* comments = NULL;
+  if (out_comments && count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, (iree_host_size_t)count, sizeof(iree_string_view_t),
+        (void**)&comments));
+  }
+  for (uint64_t i = 0; i < count; ++i) {
+    uint64_t length_offset =
+        loom_bytecode_reader_cursor_absolute_position(cursor);
+    uint64_t length = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_reader_read_uvarint(reader, cursor, &length));
+    if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+    if (length > LOOM_BYTECODE_MAX_STRING_LENGTH) {
+      return loom_bytecode_reader_emit_invalid_field(
+          reader, cursor->range_name, IREE_SV("comment_list"), i,
+          IREE_SV("comment_length"), length_offset,
+          IREE_SV("comment length exceeds maximum"));
+    }
+    iree_const_byte_span_t span = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_reader_read_span(reader, cursor, length, &span));
+    if (comments) {
+      comments[i] =
+          iree_make_string_view((const char*)span.data, span.data_length);
+    }
+  }
+  if (out_comments) *out_comments = comments;
+  if (out_comment_count) *out_comment_count = (iree_host_size_t)count;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_bytecode_reader_expect_empty(
@@ -550,8 +619,8 @@ static iree_status_t loom_bytecode_reader_materialize_types(
 }
 
 static iree_status_t loom_bytecode_reader_skip_predicate_list(
-    loom_bytecode_reader_state_t* reader,
-    loom_bytecode_reader_cursor_t* cursor) {
+    loom_bytecode_reader_state_t* reader, loom_bytecode_reader_cursor_t* cursor,
+    bool value_args_are_strings) {
   uint64_t predicate_count = 0;
   IREE_RETURN_IF_ERROR(
       loom_bytecode_reader_read_uvarint(reader, cursor, &predicate_count));
@@ -580,16 +649,18 @@ static iree_status_t loom_bytecode_reader_skip_predicate_list(
       IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_u8(reader, cursor, &tag));
       if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
       if (tag == 1) {
-        uint64_t name_id = 0;
-        uint64_t name_offset =
+        uint64_t encoded_value = 0;
+        uint64_t value_offset =
             loom_bytecode_reader_cursor_absolute_position(cursor);
         IREE_RETURN_IF_ERROR(
-            loom_bytecode_reader_read_uvarint(reader, cursor, &name_id));
+            loom_bytecode_reader_read_uvarint(reader, cursor, &encoded_value));
         if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
-        iree_string_view_t unused = {0};
-        IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_string_ref(
-            reader, name_id, IREE_SV("predicate_value_name"), name_offset,
-            &unused));
+        if (value_args_are_strings) {
+          iree_string_view_t unused = {0};
+          IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_string_ref(
+              reader, encoded_value, IREE_SV("predicate_value_name"),
+              value_offset, &unused));
+        }
       } else if (tag == 2) {
         int64_t value = 0;
         IREE_RETURN_IF_ERROR(
@@ -678,7 +749,7 @@ static iree_status_t loom_bytecode_reader_skip_attr_value(
           reader, type_id, IREE_SV("attribute_type"), offset, &unused);
     }
     case LOOM_BYTECODE_ATTR_PREDICATE_LIST:
-      return loom_bytecode_reader_skip_predicate_list(reader, cursor);
+      return loom_bytecode_reader_skip_predicate_list(reader, cursor, true);
     case LOOM_BYTECODE_ATTR_DICT: {
       uint64_t entry_count = 0;
       IREE_RETURN_IF_ERROR(
@@ -740,7 +811,7 @@ static iree_status_t loom_bytecode_reader_skip_attr_value(
 
 static iree_status_t loom_bytecode_reader_read_predicate_list_attr(
     loom_bytecode_reader_state_t* reader, loom_bytecode_reader_cursor_t* cursor,
-    loom_attribute_t* out_attr) {
+    loom_bytecode_body_reader_t* body_reader, loom_attribute_t* out_attr) {
   uint64_t predicate_count = 0;
   uint64_t count_offset = loom_bytecode_reader_cursor_absolute_position(cursor);
   IREE_RETURN_IF_ERROR(
@@ -792,18 +863,32 @@ static iree_status_t loom_bytecode_reader_read_predicate_list_attr(
       if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
       switch (predicate->arg_tags[arg_index]) {
         case LOOM_PRED_ARG_VALUE: {
-          uint64_t name_offset =
+          uint64_t value_offset =
               loom_bytecode_reader_cursor_absolute_position(cursor);
-          uint64_t name_id = 0;
-          IREE_RETURN_IF_ERROR(
-              loom_bytecode_reader_read_uvarint(reader, cursor, &name_id));
+          uint64_t encoded_value = 0;
+          IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
+              reader, cursor, &encoded_value));
           if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
-          iree_string_view_t unused = {0};
-          IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_string_ref(
-              reader, name_id, IREE_SV("predicate_value_name"), name_offset,
-              &unused));
-          if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
-          predicate->args[arg_index] = (int64_t)name_id;
+          if (body_reader) {
+            loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+            IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_lookup_value(
+                body_reader, encoded_value, body_reader->next_value_number,
+                value_offset,
+                IREE_SV("predicate value reference must target a previously "
+                        "defined value"),
+                &value_id));
+            if (loom_bytecode_reader_has_errors(reader))
+              return iree_ok_status();
+            predicate->args[arg_index] = (int64_t)value_id;
+          } else {
+            iree_string_view_t unused = {0};
+            IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_string_ref(
+                reader, encoded_value, IREE_SV("predicate_value_name"),
+                value_offset, &unused));
+            if (loom_bytecode_reader_has_errors(reader))
+              return iree_ok_status();
+            predicate->args[arg_index] = (int64_t)encoded_value;
+          }
           break;
         }
         case LOOM_PRED_ARG_CONST: {
@@ -824,6 +909,7 @@ static iree_status_t loom_bytecode_reader_read_predicate_list_attr(
 
 static iree_status_t loom_bytecode_reader_read_attr_value(
     loom_bytecode_reader_state_t* reader, loom_bytecode_reader_cursor_t* cursor,
+    loom_bytecode_body_reader_t* body_reader,
     const loom_attr_descriptor_t* descriptor, uint8_t kind,
     loom_attribute_t* out_attr) {
   switch (kind) {
@@ -963,8 +1049,8 @@ static iree_status_t loom_bytecode_reader_read_attr_value(
       return iree_ok_status();
     }
     case LOOM_BYTECODE_ATTR_PREDICATE_LIST:
-      return loom_bytecode_reader_read_predicate_list_attr(reader, cursor,
-                                                           out_attr);
+      return loom_bytecode_reader_read_predicate_list_attr(
+          reader, cursor, body_reader, out_attr);
     case LOOM_BYTECODE_ATTR_DICT: {
       uint64_t count_offset =
           loom_bytecode_reader_cursor_absolute_position(cursor);
@@ -1017,7 +1103,8 @@ static iree_status_t loom_bytecode_reader_read_attr_value(
         entries[entry_index].name_id = (loom_string_id_t)key_id;
         entries[entry_index].reserved = 0;
         IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_attr_value(
-            reader, cursor, NULL, value_kind, &entries[entry_index].value));
+            reader, cursor, body_reader, NULL, value_kind,
+            &entries[entry_index].value));
         if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
       }
       return loom_module_make_canonical_attr_dict(
@@ -1282,7 +1369,7 @@ static iree_status_t loom_bytecode_reader_materialize_encodings(
       params[param_index].name_id = (loom_string_id_t)name_id;
       params[param_index].reserved = 0;
       IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_attr_value(
-          reader, &cursor, NULL, value_kind, &params[param_index].value));
+          reader, &cursor, NULL, NULL, value_kind, &params[param_index].value));
       if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
     }
 
@@ -2057,18 +2144,6 @@ static iree_status_t loom_bytecode_body_reader_read_region(
     loom_bytecode_reader_cursor_t* cursor, loom_builder_t* builder,
     loom_op_t* parent_op, uint32_t depth, loom_region_t** out_region);
 
-static iree_status_t loom_bytecode_body_reader_lookup_value(
-    loom_bytecode_body_reader_t* body_reader, uint64_t value_number,
-    uint64_t offset, loom_value_id_t* out_value_id) {
-  if (value_number >= body_reader->next_value_number) {
-    return loom_bytecode_reader_emit_invalid_ir_body(
-        body_reader, offset,
-        IREE_SV("value reference must target a previously defined value"));
-  }
-  *out_value_id = body_reader->value_map[value_number];
-  return iree_ok_status();
-}
-
 static iree_status_t loom_bytecode_body_reader_bind_type(
     loom_bytecode_body_reader_t* body_reader,
     loom_bytecode_reader_cursor_t* cursor, loom_type_t base_type,
@@ -2101,7 +2176,11 @@ static iree_status_t loom_bytecode_body_reader_bind_type(
     }
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_lookup_value(
-        body_reader, (uint64_t)value_number, ref_offset, &value_id));
+        body_reader, (uint64_t)value_number, body_reader->available_value_count,
+        ref_offset,
+        IREE_SV("dynamic dimension value reference must target an available "
+                "value"),
+        &value_id));
     if (loom_bytecode_reader_has_errors(body_reader->reader))
       return iree_ok_status();
     dims[i] = loom_dim_pack_dynamic(value_id);
@@ -2122,8 +2201,10 @@ static iree_status_t loom_bytecode_body_reader_bind_type(
     uint64_t value_number = encoding_binding - 1;
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_lookup_value(
-        body_reader, value_number,
-        loom_bytecode_reader_cursor_absolute_position(cursor), &value_id));
+        body_reader, value_number, body_reader->available_value_count,
+        loom_bytecode_reader_cursor_absolute_position(cursor),
+        IREE_SV("SSA encoding value reference must target an available value"),
+        &value_id));
     if (loom_bytecode_reader_has_errors(body_reader->reader))
       return iree_ok_status();
     if (value_id > UINT16_MAX) {
@@ -2190,10 +2271,10 @@ static iree_status_t loom_bytecode_body_reader_define_value(
   if (loom_bytecode_reader_has_errors(body_reader->reader))
     return iree_ok_status();
 
-  if (body_reader->next_value_number >= body_reader->value_capacity) {
+  if (body_reader->next_value_number >= body_reader->available_value_count) {
     return loom_bytecode_reader_emit_invalid_ir_body(
         body_reader, name_offset,
-        IREE_SV("function body defines more values than its summary"));
+        IREE_SV("value definition was not reserved before decoding"));
   }
   if (name_id != 0) {
     iree_string_view_t unused_name = {0};
@@ -2217,18 +2298,88 @@ static iree_status_t loom_bytecode_body_reader_define_value(
   if (loom_bytecode_reader_has_errors(body_reader->reader))
     return iree_ok_status();
 
-  loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_define_value(
-      body_reader->reader->output_module, type, &value_id));
-  if (name_id != 0) {
-    IREE_RETURN_IF_ERROR(
-        loom_module_set_value_name(body_reader->reader->output_module, value_id,
-                                   (loom_string_id_t)name_id));
+  loom_string_id_t value_name_id =
+      name_id == 0 ? LOOM_STRING_ID_INVALID : (loom_string_id_t)name_id;
+  loom_value_id_t value_id =
+      body_reader->value_map[body_reader->next_value_number];
+  if (body_reader->next_value_number < body_reader->predefined_value_count) {
+    if (value_id >= body_reader->reader->output_module->values.count) {
+      return loom_bytecode_reader_emit_invalid_ir_body(
+          body_reader, name_offset,
+          IREE_SV("predefined value is not present in the module"));
+    }
+    const loom_value_t* value =
+        &body_reader->reader->output_module->values.entries[value_id];
+    if (!loom_type_equal(value->type, type)) {
+      return loom_bytecode_reader_emit_invalid_ir_body(
+          body_reader, name_offset,
+          IREE_SV("predefined value type does not match body value type"));
+    }
+    if (value->name_id != value_name_id) {
+      return loom_bytecode_reader_emit_invalid_ir_body(
+          body_reader, name_offset,
+          IREE_SV("predefined value name does not match body value name"));
+    }
+    body_reader->value_map[body_reader->next_value_number++] = value_id;
+    ++body_reader->counts.value_count;
+    *out_value_id = value_id;
+    return iree_ok_status();
   }
-  body_reader->value_map[body_reader->next_value_number++] = value_id;
+
+  IREE_RETURN_IF_ERROR(loom_module_set_value_type(
+      body_reader->reader->output_module, value_id, type));
+  if (value_name_id != LOOM_STRING_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_module_set_value_name(
+        body_reader->reader->output_module, value_id, value_name_id));
+  }
+  ++body_reader->next_value_number;
   ++body_reader->counts.value_count;
   *out_value_id = value_id;
   return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_body_reader_reserve_value_defs(
+    loom_bytecode_body_reader_t* body_reader, uint64_t count,
+    loom_value_id_t* out_value_ids) {
+  if (body_reader->next_value_number > body_reader->value_capacity ||
+      count > body_reader->value_capacity - body_reader->next_value_number) {
+    return loom_bytecode_reader_emit_invalid_ir_body(
+        body_reader, body_reader->body_offset,
+        IREE_SV("function body defines more values than its summary"));
+  }
+  uint64_t start_value_number = body_reader->next_value_number;
+  uint64_t end_value_number = start_value_number + count;
+  for (uint64_t value_number = start_value_number;
+       value_number < end_value_number; ++value_number) {
+    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    if (value_number < body_reader->predefined_value_count) {
+      value_id = body_reader->predefined_values[value_number];
+      if (value_id >= body_reader->reader->output_module->values.count) {
+        return loom_bytecode_reader_emit_invalid_ir_body(
+            body_reader, body_reader->body_offset,
+            IREE_SV("predefined value is not present in the module"));
+      }
+    } else {
+      IREE_RETURN_IF_ERROR(loom_module_define_value(
+          body_reader->reader->output_module, loom_type_none(), &value_id));
+    }
+    body_reader->value_map[value_number] = value_id;
+    if (out_value_ids) {
+      out_value_ids[value_number - start_value_number] = value_id;
+    }
+  }
+  body_reader->available_value_count = end_value_number;
+  return iree_ok_status();
+}
+
+static uint8_t loom_bytecode_instance_flags_mask(
+    const loom_op_vtable_t* vtable) {
+  if (!iree_all_bits_set(vtable->vtable_flags,
+                         LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS)) {
+    return 0;
+  }
+  if (vtable->instance_flags_case_count >= 8) return UINT8_MAX;
+  return (uint8_t)((1u << vtable->instance_flags_case_count) - 1u);
 }
 
 static iree_status_t loom_bytecode_body_reader_read_op(
@@ -2247,14 +2398,16 @@ static iree_status_t loom_bytecode_body_reader_read_op(
   loom_op_kind_t op_kind =
       body_reader->reader->op_kinds[op_table_index_plus1 - 1];
 
-  uint8_t flags = 0;
-  uint64_t flags_offset = loom_bytecode_reader_cursor_absolute_position(cursor);
-  IREE_RETURN_IF_ERROR(
-      loom_bytecode_reader_read_u8(body_reader->reader, cursor, &flags));
-  if (flags != 0) {
+  uint8_t instance_flags = 0;
+  uint64_t instance_flags_offset =
+      loom_bytecode_reader_cursor_absolute_position(cursor);
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_u8(body_reader->reader, cursor,
+                                                    &instance_flags));
+  uint8_t instance_flags_mask = loom_bytecode_instance_flags_mask(vtable);
+  if (iree_any_bit_set(instance_flags, (uint8_t)~instance_flags_mask)) {
     return loom_bytecode_reader_emit_invalid_ir_body(
-        body_reader, flags_offset,
-        IREE_SV("operation flags byte must be zero in bytecode v4"));
+        body_reader, instance_flags_offset,
+        IREE_SV("operation instance flags contain undeclared bits"));
   }
   uint64_t location_id = 0;
   IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(body_reader->reader,
@@ -2268,6 +2421,14 @@ static iree_status_t loom_bytecode_body_reader_read_op(
     if (loom_bytecode_reader_has_errors(body_reader->reader))
       return iree_ok_status();
   }
+
+  const iree_string_view_t* op_comments = NULL;
+  iree_host_size_t op_comment_count = 0;
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_comment_list(
+      body_reader->reader, cursor, body_reader->arena, &op_comments,
+      &op_comment_count));
+  if (loom_bytecode_reader_has_errors(body_reader->reader))
+    return iree_ok_status();
 
   uint64_t operand_count = 0;
   uint64_t result_count = 0;
@@ -2291,7 +2452,10 @@ static iree_status_t loom_bytecode_body_reader_read_op(
     if (loom_bytecode_reader_has_errors(body_reader->reader))
       return iree_ok_status();
     IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_lookup_value(
-        body_reader, value_number, ref_offset, &operands[i]));
+        body_reader, value_number, body_reader->next_value_number, ref_offset,
+        IREE_SV("operand value reference must target a previously defined "
+                "value"),
+        &operands[i]));
     if (loom_bytecode_reader_has_errors(body_reader->reader))
       return iree_ok_status();
   }
@@ -2308,6 +2472,10 @@ static iree_status_t loom_bytecode_body_reader_read_op(
         body_reader->arena, (iree_host_size_t)result_count,
         sizeof(loom_value_id_t), (void**)&results));
   }
+  IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_reserve_value_defs(
+      body_reader, result_count, results));
+  if (loom_bytecode_reader_has_errors(body_reader->reader))
+    return iree_ok_status();
   for (uint64_t i = 0; i < result_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_define_value(
         body_reader, cursor, &results[i]));
@@ -2408,7 +2576,7 @@ static iree_status_t loom_bytecode_body_reader_read_op(
           LOOM_BYTECODE_ATTR_ENCODING + 1, value_kind_offset);
     }
     IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_attr_value(
-        body_reader->reader, cursor, descriptor, value_kind,
+        body_reader->reader, cursor, body_reader, descriptor, value_kind,
         &attrs[attr_index]));
     if (loom_bytecode_reader_has_errors(body_reader->reader))
       return iree_ok_status();
@@ -2443,6 +2611,7 @@ static iree_status_t loom_bytecode_body_reader_read_op(
     memcpy(loom_op_attrs(op), attrs,
            vtable->attribute_count * sizeof(loom_attribute_t));
   }
+  op->instance_flags = instance_flags;
   for (uint64_t i = 0; i < region_count; ++i) {
     loom_region_t* region = NULL;
     IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_read_region(
@@ -2452,7 +2621,12 @@ static iree_status_t loom_bytecode_body_reader_read_op(
     loom_op_regions(op)[i] = region;
   }
   ++body_reader->counts.op_count;
-  return loom_builder_finalize_op(builder, op);
+  IREE_RETURN_IF_ERROR(loom_builder_finalize_op(builder, op));
+  if (op_comment_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_module_attach_op_comments(
+        body_reader->reader->output_module, op, op_comments, op_comment_count));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_bytecode_body_reader_read_block(
@@ -2483,6 +2657,19 @@ static iree_status_t loom_bytecode_body_reader_read_block(
     block->label_id = (loom_string_id_t)label_id;
   }
 
+  const iree_string_view_t* block_comments = NULL;
+  iree_host_size_t block_comment_count = 0;
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_comment_list(
+      body_reader->reader, cursor, body_reader->arena, &block_comments,
+      &block_comment_count));
+  if (loom_bytecode_reader_has_errors(body_reader->reader))
+    return iree_ok_status();
+  if (block_comment_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_module_attach_block_comments(
+        body_reader->reader->output_module, block, block_comments,
+        block_comment_count));
+  }
+
   uint64_t arg_count = 0;
   uint64_t arg_count_offset =
       loom_bytecode_reader_cursor_absolute_position(cursor);
@@ -2493,6 +2680,10 @@ static iree_status_t loom_bytecode_body_reader_read_block(
         body_reader, arg_count_offset,
         IREE_SV("block argument count exceeds field width"));
   }
+  IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_reserve_value_defs(
+      body_reader, arg_count, NULL));
+  if (loom_bytecode_reader_has_errors(body_reader->reader))
+    return iree_ok_status();
   for (uint64_t i = 0; i < arg_count; ++i) {
     loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(
@@ -2501,6 +2692,11 @@ static iree_status_t loom_bytecode_body_reader_read_block(
       return iree_ok_status();
     IREE_RETURN_IF_ERROR(loom_block_add_arg(body_reader->reader->output_module,
                                             block, value_id));
+  }
+  if (body_reader->next_value_number < body_reader->predefined_value_count) {
+    return loom_bytecode_reader_emit_invalid_ir_body(
+        body_reader, arg_count_offset,
+        IREE_SV("function body entry block is missing signature arguments"));
   }
 
   loom_builder_set_block(builder, block);
@@ -2566,6 +2762,7 @@ static iree_status_t loom_bytecode_reader_read_function_body(
     loom_bytecode_reader_state_t* reader, iree_string_view_t symbol_name,
     const loom_bytecode_reader_section_t* ir_section, uint64_t ir_offset,
     uint32_t ir_length, loom_builder_t* builder, loom_op_t* parent_op,
+    const loom_value_id_t* predefined_values, uint16_t predefined_value_count,
     loom_region_t** out_region) {
   iree_arena_allocator_t body_arena;
   iree_arena_initialize(reader->block_pool, &body_arena);
@@ -2599,6 +2796,8 @@ static iree_status_t loom_bytecode_reader_read_function_body(
       .symbol_name = symbol_name,
       .body_offset = ir_section->absolute_offset + ir_offset,
       .value_capacity = value_count,
+      .predefined_values = predefined_values,
+      .predefined_value_count = predefined_value_count,
   };
   iree_host_size_t body_length = cursor.cursor.length;
   if (iree_status_is_ok(status) && !loom_bytecode_reader_has_errors(reader) &&
@@ -2606,6 +2805,12 @@ static iree_status_t loom_bytecode_reader_read_function_body(
     status = loom_bytecode_reader_emit_invalid_ir_body(
         &body_reader, body_reader.body_offset,
         IREE_SV("function body value count exceeds host size"));
+  }
+  if (iree_status_is_ok(status) && !loom_bytecode_reader_has_errors(reader) &&
+      predefined_value_count > value_count) {
+    status = loom_bytecode_reader_emit_invalid_ir_body(
+        &body_reader, body_reader.body_offset,
+        IREE_SV("predefined signature values exceed function body values"));
   }
   if (iree_status_is_ok(status) && !loom_bytecode_reader_has_errors(reader) &&
       (value_count > body_length || expected_region_count > body_length ||
@@ -2661,6 +2866,77 @@ static loom_symbol_kind_t loom_bytecode_reader_decode_symbol_kind(
   }
 }
 
+static iree_status_t loom_bytecode_reader_validate_func_enum(
+    loom_bytecode_reader_state_t* reader, uint64_t symbol_index,
+    const loom_op_vtable_t* vtable, uint8_t attr_index,
+    iree_string_view_t field_name, uint8_t value, uint64_t offset) {
+  if (value == 0) return iree_ok_status();
+  if (!vtable || attr_index == LOOM_ATTR_INDEX_NONE ||
+      attr_index >= vtable->attribute_count || !vtable->attr_descriptors) {
+    return loom_bytecode_reader_emit_invalid_field(
+        reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index, field_name,
+        offset, IREE_SV("function metadata field is not supported by op"));
+  }
+  const loom_attr_descriptor_t* descriptor =
+      &vtable->attr_descriptors[attr_index];
+  if (descriptor->attr_kind != LOOM_ATTR_ENUM) {
+    return loom_bytecode_reader_emit_invalid_field(
+        reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index, field_name,
+        offset, IREE_SV("function metadata field must target an enum attr"));
+  }
+  if (descriptor->enum_case_count > 0 && value >= descriptor->enum_case_count) {
+    return loom_bytecode_reader_emit_enum_value(
+        reader, field_name, value, descriptor->enum_case_count, offset);
+  }
+  return iree_ok_status();
+}
+
+static uint8_t loom_bytecode_find_op_attr_index_by_name(
+    const loom_op_vtable_t* vtable, iree_string_view_t name) {
+  if (!vtable->attr_descriptors) return LOOM_ATTR_INDEX_NONE;
+  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
+    if (iree_string_view_equal(
+            loom_attr_descriptor_name(&vtable->attr_descriptors[i]), name)) {
+      return i;
+    }
+  }
+  return LOOM_ATTR_INDEX_NONE;
+}
+
+static iree_status_t loom_bytecode_reader_skip_value_def(
+    loom_bytecode_reader_state_t* reader, loom_bytecode_reader_cursor_t* cursor,
+    iree_string_view_t field_name) {
+  uint64_t name_offset = loom_bytecode_reader_cursor_absolute_position(cursor);
+  uint64_t name_id = 0;
+  uint64_t type_id = 0;
+  uint64_t dim_binding_count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_reader_read_uvarint(reader, cursor, &name_id));
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_reader_read_uvarint(reader, cursor, &type_id));
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_reader_read_uvarint(reader, cursor, &dim_binding_count));
+  if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+  if (name_id != 0) {
+    iree_string_view_t unused_name = {0};
+    IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_string_ref(
+        reader, name_id, IREE_SV("value_name"), name_offset, &unused_name));
+    if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+  }
+  loom_type_t unused_type = {0};
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_type_ref(
+      reader, type_id, field_name, name_offset, &unused_type));
+  if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+  for (uint64_t i = 0; i < dim_binding_count; ++i) {
+    int64_t unused_value_ref = 0;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_reader_read_svarint(reader, cursor, &unused_value_ref));
+  }
+  uint64_t unused_encoding_ref = 0;
+  return loom_bytecode_reader_read_uvarint(reader, cursor,
+                                           &unused_encoding_ref);
+}
+
 static iree_status_t loom_bytecode_reader_skip_symbol_payload(
     loom_bytecode_reader_state_t* reader, loom_bytecode_reader_cursor_t* cursor,
     uint8_t kind) {
@@ -2669,6 +2945,10 @@ static iree_status_t loom_bytecode_reader_skip_symbol_payload(
     uint8_t byte_value = 0;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_uvarint(reader, cursor, &value));
+    IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_comment_list(
+        reader, cursor, reader->arena, NULL, NULL));
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_reader_read_u8(reader, cursor, &byte_value));
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_u8(reader, cursor, &byte_value));
     uint64_t arg_count = 0;
@@ -2678,14 +2958,14 @@ static iree_status_t loom_bytecode_reader_skip_symbol_payload(
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_uvarint(reader, cursor, &result_count));
     for (uint64_t i = 0; i < arg_count; ++i) {
-      IREE_RETURN_IF_ERROR(
-          loom_bytecode_reader_read_uvarint(reader, cursor, &value));
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_skip_value_def(
+          reader, cursor, IREE_SV("arg_type")));
     }
     for (uint64_t i = 0; i < result_count; ++i) {
       IREE_RETURN_IF_ERROR(
           loom_bytecode_reader_read_u8(reader, cursor, &byte_value));
-      IREE_RETURN_IF_ERROR(
-          loom_bytecode_reader_read_uvarint(reader, cursor, &value));
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_skip_value_def(
+          reader, cursor, IREE_SV("result_type")));
       if (byte_value) {
         IREE_RETURN_IF_ERROR(
             loom_bytecode_reader_read_uvarint(reader, cursor, &value));
@@ -2694,7 +2974,7 @@ static iree_status_t loom_bytecode_reader_skip_symbol_payload(
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_uvarint(reader, cursor, &value));
     IREE_RETURN_IF_ERROR(
-        loom_bytecode_reader_skip_predicate_list(reader, cursor));
+        loom_bytecode_reader_skip_predicate_list(reader, cursor, false));
     if (kind == LOOM_BYTECODE_SYMBOL_FUNC_TEMPLATE ||
         kind == LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL) {
       IREE_RETURN_IF_ERROR(
@@ -2800,7 +3080,8 @@ static iree_status_t loom_bytecode_reader_predeclare_symbols(
 static iree_status_t loom_bytecode_reader_materialize_function_symbol(
     loom_bytecode_reader_state_t* reader, loom_bytecode_reader_cursor_t* cursor,
     const loom_bytecode_reader_section_t* ir_section, uint64_t name_id,
-    uint8_t kind, uint16_t flags, loom_builder_t* builder) {
+    uint8_t kind, uint16_t flags, loom_string_id_t import_module_id,
+    loom_string_id_t import_symbol_id, loom_builder_t* builder) {
   uint16_t symbol_id =
       loom_module_find_symbol(reader->output_module, (loom_string_id_t)name_id);
   if (symbol_id == LOOM_SYMBOL_ID_INVALID) {
@@ -2830,9 +3111,28 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
   loom_op_kind_t op_kind = reader->op_kinds[op_table_index_plus1 - 1];
   const loom_func_like_vtable_t* func_like = vtable->func_like;
 
+  const iree_string_view_t* symbol_comments = NULL;
+  iree_host_size_t symbol_comment_count = 0;
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_comment_list(
+      reader, cursor, reader->arena, &symbol_comments, &symbol_comment_count));
+  if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+
   uint8_t calling_convention = 0;
+  uint64_t calling_convention_offset =
+      loom_bytecode_reader_cursor_absolute_position(cursor);
   IREE_RETURN_IF_ERROR(
       loom_bytecode_reader_read_u8(reader, cursor, &calling_convention));
+  uint8_t purity = 0;
+  uint64_t purity_offset =
+      loom_bytecode_reader_cursor_absolute_position(cursor);
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_u8(reader, cursor, &purity));
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_func_enum(
+      reader, symbol_id, vtable, func_like->cc_attr_index,
+      IREE_SV("calling_convention"), calling_convention,
+      calling_convention_offset));
+  IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_func_enum(
+      reader, symbol_id, vtable, func_like->purity_attr_index,
+      IREE_SV("purity"), purity, purity_offset));
   uint64_t arg_count = 0;
   uint64_t result_count = 0;
   IREE_RETURN_IF_ERROR(
@@ -2849,26 +3149,28 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
         IREE_SV("function signature count exceeds field width"));
   }
 
-  loom_type_t* arg_types = NULL;
-  loom_type_t* result_types = NULL;
-  if (arg_count > 0) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(reader->arena, (iree_host_size_t)arg_count,
-                                  sizeof(loom_type_t), (void**)&arg_types));
+  uint64_t signature_value_count = arg_count + result_count;
+  loom_value_id_t* signature_values = NULL;
+  if (signature_value_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        reader->arena, (iree_host_size_t)signature_value_count,
+        sizeof(loom_value_id_t), (void**)&signature_values));
   }
-  if (result_count > 0) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(reader->arena, (iree_host_size_t)result_count,
-                                  sizeof(loom_type_t), (void**)&result_types));
-  }
+  loom_bytecode_body_reader_t signature_reader = {
+      .reader = reader,
+      .arena = reader->arena,
+      .symbol_name = symbol_name,
+      .body_offset = loom_bytecode_reader_cursor_absolute_position(cursor),
+      .value_map = signature_values,
+      .value_capacity = signature_value_count,
+  };
+  IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_reserve_value_defs(
+      &signature_reader, signature_value_count, signature_values));
+  if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
   for (uint64_t i = 0; i < arg_count; ++i) {
-    uint64_t type_offset =
-        loom_bytecode_reader_cursor_absolute_position(cursor);
-    uint64_t type_id = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_bytecode_reader_read_uvarint(reader, cursor, &type_id));
-    IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_type_ref(
-        reader, type_id, IREE_SV("arg_type"), type_offset, &arg_types[i]));
+    loom_value_id_t arg_id = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_define_value(
+        &signature_reader, cursor, &arg_id));
     if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
   }
 
@@ -2883,14 +3185,11 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
     uint64_t result_offset =
         loom_bytecode_reader_cursor_absolute_position(cursor);
     uint8_t is_tied = 0;
-    uint64_t type_id = 0;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_u8(reader, cursor, &is_tied));
-    IREE_RETURN_IF_ERROR(
-        loom_bytecode_reader_read_uvarint(reader, cursor, &type_id));
-    IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_type_ref(
-        reader, type_id, IREE_SV("result_type"), result_offset,
-        &result_types[i]));
+    loom_value_id_t result_id = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_bytecode_body_reader_define_value(
+        &signature_reader, cursor, &result_id));
     if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
     if (is_tied) {
       uint64_t operand_index = 0;
@@ -2921,7 +3220,7 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
 
   loom_attribute_t predicates_attr = loom_attr_absent();
   IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_predicate_list_attr(
-      reader, cursor, &predicates_attr));
+      reader, cursor, &signature_reader, &predicates_attr));
   if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
 
   loom_string_id_t implements_id = LOOM_STRING_ID_INVALID;
@@ -2970,10 +3269,7 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
       tied_result_count, vtable->attribute_count, LOOM_LOCATION_NONE, &op));
   if (func_like->args_as_operands) {
     for (uint64_t i = 0; i < arg_count; ++i) {
-      loom_value_id_t arg_id = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(
-          loom_builder_define_value(builder, arg_types[i], &arg_id));
-      loom_op_operands(op)[i] = arg_id;
+      loom_op_operands(op)[i] = signature_values[i];
     }
   }
   loom_attribute_t* attrs = loom_op_attrs(op);
@@ -2985,6 +3281,32 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
   if (calling_convention != 0 &&
       func_like->cc_attr_index != LOOM_ATTR_INDEX_NONE) {
     attrs[func_like->cc_attr_index] = loom_attr_enum(calling_convention);
+  }
+  if (purity != 0 && func_like->purity_attr_index != LOOM_ATTR_INDEX_NONE) {
+    attrs[func_like->purity_attr_index] = loom_attr_enum(purity);
+  }
+  if (import_module_id != LOOM_STRING_ID_INVALID) {
+    uint8_t import_module_attr_index = loom_bytecode_find_op_attr_index_by_name(
+        vtable, IREE_SV("import_module"));
+    if (import_module_attr_index == LOOM_ATTR_INDEX_NONE) {
+      return loom_bytecode_reader_emit_invalid_field(
+          reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_id,
+          IREE_SV("import_module"), 0,
+          IREE_SV("imported symbol op has no import_module attr"));
+    }
+    attrs[import_module_attr_index] = loom_attr_string(import_module_id);
+    if (iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL)) {
+      uint8_t import_symbol_attr_index =
+          loom_bytecode_find_op_attr_index_by_name(vtable,
+                                                   IREE_SV("import_symbol"));
+      if (import_symbol_attr_index == LOOM_ATTR_INDEX_NONE) {
+        return loom_bytecode_reader_emit_invalid_field(
+            reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_id,
+            IREE_SV("import_symbol"), 0,
+            IREE_SV("imported symbol op has no import_symbol attr"));
+      }
+      attrs[import_symbol_attr_index] = loom_attr_string(import_symbol_id);
+    }
   }
   if (!loom_attr_is_absent(predicates_attr) && predicates_attr.count != 0 &&
       func_like->predicates_attr_index != LOOM_ATTR_INDEX_NONE) {
@@ -2998,10 +3320,7 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
     attrs[func_like->priority_attr_index] = loom_attr_i64(priority);
   }
   for (uint64_t i = 0; i < result_count; ++i) {
-    loom_value_id_t result_id = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_builder_define_value(builder, result_types[i], &result_id));
-    loom_op_results(op)[i] = result_id;
+    loom_op_results(op)[i] = signature_values[arg_count + i];
   }
   if (tied_result_count > 0) {
     memcpy(loom_op_tied_results(op), tied_results,
@@ -3011,11 +3330,16 @@ static iree_status_t loom_bytecode_reader_materialize_function_symbol(
     loom_region_t* body = NULL;
     IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_function_body(
         reader, symbol_name, ir_section, ir_offset, ir_length, builder, op,
-        &body));
+        signature_values, (uint16_t)arg_count, &body));
     if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
     loom_op_regions(op)[0] = body;
   }
-  return loom_builder_finalize_op(builder, op);
+  IREE_RETURN_IF_ERROR(loom_builder_finalize_op(builder, op));
+  if (symbol_comment_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_module_attach_op_comments(
+        reader->output_module, op, symbol_comments, symbol_comment_count));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_bytecode_reader_materialize_symbols(
@@ -3049,16 +3373,22 @@ static iree_status_t loom_bytecode_reader_materialize_symbols(
     IREE_RETURN_IF_ERROR(
         loom_bytecode_reader_read_u16_le(reader, &cursor, &flags));
     (void)visibility;
+    loom_string_id_t import_module_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t import_symbol_id = LOOM_STRING_ID_INVALID;
     if (flags & LOOM_BYTECODE_SYMBOL_FLAG_IMPORT) {
-      uint64_t unused = 0;
-      IREE_RETURN_IF_ERROR(
-          loom_bytecode_reader_read_uvarint(reader, &cursor, &unused));
-      IREE_RETURN_IF_ERROR(
-          loom_bytecode_reader_read_uvarint(reader, &cursor, &unused));
+      uint64_t encoded_import_module_id = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
+          reader, &cursor, &encoded_import_module_id));
+      import_module_id = (loom_string_id_t)encoded_import_module_id;
+      uint64_t encoded_import_symbol_id = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
+          reader, &cursor, &encoded_import_symbol_id));
+      import_symbol_id = (loom_string_id_t)encoded_import_symbol_id;
     }
     if (kind <= LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL) {
       IREE_RETURN_IF_ERROR(loom_bytecode_reader_materialize_function_symbol(
-          reader, &cursor, ir_section, name_id, kind, flags, &builder));
+          reader, &cursor, ir_section, name_id, kind, flags, import_module_id,
+          import_symbol_id, &builder));
     } else {
       return loom_bytecode_reader_emit_invalid_field(
           reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), i, IREE_SV("kind"),
@@ -3162,12 +3492,20 @@ static iree_status_t loom_bytecode_reader_read_symbols(
           reader, IREE_SV("symbol_visibility"), visibility,
           LOOM_BYTECODE_SYMBOL_VISIBILITY_COUNT_, kind_offset + 1);
     }
-    if (flags & ~(LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC |
-                  LOOM_BYTECODE_SYMBOL_FLAG_IMPORT)) {
+    if (flags &
+        ~(LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC | LOOM_BYTECODE_SYMBOL_FLAG_IMPORT |
+          LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL)) {
       return loom_bytecode_reader_emit_invalid_field(
           reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
           IREE_SV("flags"), kind_offset + 2,
           IREE_SV("symbol has unsupported flag bits"));
+    }
+    if (iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL) &&
+        !iree_any_bit_set(flags, LOOM_BYTECODE_SYMBOL_FLAG_IMPORT)) {
+      return loom_bytecode_reader_emit_invalid_field(
+          reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
+          IREE_SV("flags"), kind_offset + 2,
+          IREE_SV("explicit import symbol flag requires import flag"));
     }
     if (flags & LOOM_BYTECODE_SYMBOL_FLAG_IMPORT) {
       for (int i = 0; i < 2; ++i) {
@@ -3195,17 +3533,33 @@ static iree_status_t loom_bytecode_reader_read_symbols(
       IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_op_ref(
           reader, op_table_index_plus1, op_ref_offset, &unused_vtable));
       if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+      if (!unused_vtable->func_like) {
+        return loom_bytecode_reader_emit_invalid_field(
+            reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
+            IREE_SV("def_op_table_index_plus1"), op_ref_offset,
+            IREE_SV("function symbol defining op must implement FuncLike"));
+      }
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_comment_list(
+          reader, &cursor, reader->arena, NULL, NULL));
+      if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
 
       uint8_t calling_convention = 0;
       uint64_t cc_offset =
           loom_bytecode_reader_cursor_absolute_position(&cursor);
       IREE_RETURN_IF_ERROR(
           loom_bytecode_reader_read_u8(reader, &cursor, &calling_convention));
-      if (calling_convention > 2) {
-        return loom_bytecode_reader_emit_enum_value(
-            reader, IREE_SV("calling_convention"), calling_convention, 3,
-            cc_offset);
-      }
+      uint8_t purity = 0;
+      uint64_t purity_offset =
+          loom_bytecode_reader_cursor_absolute_position(&cursor);
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_reader_read_u8(reader, &cursor, &purity));
+      const loom_func_like_vtable_t* func_like = unused_vtable->func_like;
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_func_enum(
+          reader, symbol_index, unused_vtable, func_like->cc_attr_index,
+          IREE_SV("calling_convention"), calling_convention, cc_offset));
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_func_enum(
+          reader, symbol_index, unused_vtable, func_like->purity_attr_index,
+          IREE_SV("purity"), purity, purity_offset));
       uint64_t arg_count = 0;
       uint64_t result_count = 0;
       IREE_RETURN_IF_ERROR(
@@ -3219,14 +3573,8 @@ static iree_status_t loom_bytecode_reader_read_symbols(
             IREE_SV("function signature exceeds runtime field width"));
       }
       for (uint64_t i = 0; i < arg_count; ++i) {
-        uint64_t ref_offset =
-            loom_bytecode_reader_cursor_absolute_position(&cursor);
-        uint64_t type_id = 0;
-        IREE_RETURN_IF_ERROR(
-            loom_bytecode_reader_read_uvarint(reader, &cursor, &type_id));
-        loom_type_t unused = {0};
-        IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_type_ref(
-            reader, type_id, IREE_SV("arg_type"), ref_offset, &unused));
+        IREE_RETURN_IF_ERROR(loom_bytecode_reader_skip_value_def(
+            reader, &cursor, IREE_SV("arg_type")));
         if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
       }
       for (uint64_t i = 0; i < result_count; ++i) {
@@ -3239,12 +3587,8 @@ static iree_status_t loom_bytecode_reader_read_symbols(
           return loom_bytecode_reader_emit_enum_value(
               reader, IREE_SV("is_tied"), is_tied, 2, tie_offset);
         }
-        uint64_t type_id = 0;
-        IREE_RETURN_IF_ERROR(
-            loom_bytecode_reader_read_uvarint(reader, &cursor, &type_id));
-        loom_type_t unused = {0};
-        IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_type_ref(
-            reader, type_id, IREE_SV("result_type"), tie_offset, &unused));
+        IREE_RETURN_IF_ERROR(loom_bytecode_reader_skip_value_def(
+            reader, &cursor, IREE_SV("result_type")));
         if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
         if (is_tied) {
           uint64_t operand_index = 0;
@@ -3263,7 +3607,7 @@ static iree_status_t loom_bytecode_reader_read_symbols(
           reader, &cursor, &tied_result_count));
       (void)tied_result_count;
       IREE_RETURN_IF_ERROR(
-          loom_bytecode_reader_skip_predicate_list(reader, &cursor));
+          loom_bytecode_reader_skip_predicate_list(reader, &cursor, false));
       if (kind == LOOM_BYTECODE_SYMBOL_FUNC_TEMPLATE ||
           kind == LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL) {
         for (int i = 0; i < 2; ++i) {
@@ -3807,9 +4151,11 @@ static iree_status_t loom_bytecode_reader_allocate_output_module(
       .type_count = reader->type_count,
       .symbol_count = reader->symbol_count,
   };
-  return loom_module_allocate(reader->context, module->name, reader->block_pool,
-                              &hints, reader->host_allocator,
-                              &reader->output_module);
+  // Bytecode string IDs must materialize 1:1 into module string IDs. Allocate
+  // with an empty module name so STRINGS[0] can remain the value-name sentinel.
+  return loom_module_allocate(reader->context, iree_string_view_empty(),
+                              reader->block_pool, &hints,
+                              reader->host_allocator, &reader->output_module);
 }
 
 static iree_status_t loom_bytecode_reader_materialize_module(
@@ -3839,6 +4185,10 @@ static iree_status_t loom_bytecode_reader_materialize_module(
 
   IREE_RETURN_IF_ERROR(loom_bytecode_reader_materialize_strings(reader));
   if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+  loom_string_id_t module_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      reader->output_module, module->name, &module_name_id));
+  reader->output_module->name_id = module_name_id;
   IREE_RETURN_IF_ERROR(loom_bytecode_reader_materialize_sources(reader));
   if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
   IREE_RETURN_IF_ERROR(

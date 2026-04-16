@@ -525,13 +525,17 @@ TEST_F(WriterTest, StringsSectionContainsModuleName) {
 
   uint64_t string_count = 0;
   IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &string_count));
-  EXPECT_GE(string_count, 1u);
+  EXPECT_GE(string_count, 2u);
 
-  // The first string should be the module name "hello".
+  // The first string is reserved for the anonymous SSA value-name sentinel.
   uint64_t first_length = 0;
   IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &first_length));
-  EXPECT_EQ(first_length, 5u);
+  EXPECT_EQ(first_length, 0u);
 
+  // The next string should be the module name "hello".
+  uint64_t second_length = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &second_length));
+  EXPECT_EQ(second_length, 5u);
   iree_const_byte_span_t span = {0};
   IREE_ASSERT_OK(loom_bytecode_cursor_read_span(&cursor, 5, &span));
   EXPECT_EQ(memcmp(span.data, "hello", 5), 0);
@@ -751,6 +755,9 @@ TEST_F(WriterTest, FunctionBodySummaryAndOpTableRefsUseNewWireShape) {
   uint8_t has_label = 0;
   IREE_ASSERT_OK(loom_bytecode_cursor_read_u8(&cursor, &has_label));
   ASSERT_EQ(has_label, 0u);
+  uint64_t block_comment_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_comment_count));
+  ASSERT_EQ(block_comment_count, 0u);
   uint64_t block_arg_count = 0;
   IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_arg_count));
   ASSERT_EQ(block_arg_count, 2u);

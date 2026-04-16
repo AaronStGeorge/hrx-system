@@ -123,6 +123,7 @@ loom_cc_test(
     iree::io::stream
     loom::src::loom::error::diagnostic
     loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::test::corpus::text::golden_text_corpus
     loom::src::loom::testing::context

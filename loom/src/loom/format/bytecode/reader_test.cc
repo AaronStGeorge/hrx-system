@@ -238,6 +238,58 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateCoResultDimFunctionModule() {
+    loom_module_t* module = CreateModule("reader_co_result_dim");
+    loom_type_t input_type = loom_type_shaped_1d(
+        LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4),
+        /*encoding_id=*/0);
+    loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+    loom_type_t arg_types[1] = {input_type};
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), nullptr, 0, nullptr, 0, nullptr, 0,
+        LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 1) {
+      ADD_FAILURE() << "expected one function argument";
+      return module;
+    }
+
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_builder_t body_builder;
+    loom_builder_initialize(module, &module->arena,
+                            loom_region_entry_block(body), &body_builder);
+    loom_value_id_t result_ids[2] = {};
+    IREE_CHECK_OK(loom_builder_reserve_results(
+        &body_builder, IREE_ARRAYSIZE(result_ids), result_ids));
+    loom_type_t output_type =
+        loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                            loom_dim_pack_dynamic(result_ids[1]),
+                            /*encoding_id=*/0);
+    loom_type_t result_types[2] = {output_type, index_type};
+    loom_op_t* deflate_op = nullptr;
+    IREE_CHECK_OK(loom_test_deflate_build(
+        &body_builder, arg_ids[0], result_types, IREE_ARRAYSIZE(result_types),
+        nullptr, 0, LOOM_LOCATION_UNKNOWN, &deflate_op));
+    loom_op_t* yield_op = nullptr;
+    IREE_CHECK_OK(loom_test_yield_build(&body_builder, nullptr, 0,
+                                        LOOM_LOCATION_UNKNOWN, &yield_op));
+    return module;
+  }
+
   loom_module_t* CreateAttributeFunctionModule() {
     loom_module_t* module = CreateModule("reader_attrs");
     loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
@@ -608,6 +660,14 @@ class ReaderTest : public ::testing::Test {
     return value_def;
   }
 
+  void SkipCommentList(const std::vector<uint8_t>& bytes, size_t* offset) {
+    uint64_t comment_count = ReadUVarint(bytes, offset);
+    for (uint64_t i = 0; i < comment_count; ++i) {
+      uint64_t comment_length = ReadUVarint(bytes, offset);
+      *offset += (size_t)comment_length;
+    }
+  }
+
   void SkipPredicateList(const std::vector<uint8_t>& bytes, size_t* offset) {
     uint64_t predicate_count = ReadUVarint(bytes, offset);
     for (uint64_t i = 0; i < predicate_count; ++i) {
@@ -685,15 +745,17 @@ class ReaderTest : public ::testing::Test {
       }
       EXPECT_LE(kind, LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL);
       ReadUVarint(bytes, &offset);  // def_op_table_index_plus1
-      offset += 1;                  // calling_convention
+      SkipCommentList(bytes, &offset);
+      offset += 1;  // calling_convention
+      offset += 1;  // purity
       uint64_t arg_count = ReadUVarint(bytes, &offset);
       uint64_t result_count = ReadUVarint(bytes, &offset);
       for (uint64_t arg = 0; arg < arg_count; ++arg) {
-        ReadUVarint(bytes, &offset);
+        ReadValueDefOffsets(bytes, &offset);
       }
       for (uint64_t result = 0; result < result_count; ++result) {
         uint8_t is_tied = bytes[offset++];
-        ReadUVarint(bytes, &offset);
+        ReadValueDefOffsets(bytes, &offset);
         if (is_tied) ReadUVarint(bytes, &offset);
       }
       ReadUVarint(bytes, &offset);  // tied_result_count
@@ -780,6 +842,7 @@ class ReaderTest : public ::testing::Test {
     if (has_label) {
       ReadUVarint(bytes, &offset);
     }
+    SkipCommentList(bytes, &offset);
     *out_arg_count = ReadUVarint(bytes, &offset);
     return offset;
   }
@@ -807,6 +870,7 @@ class ReaderTest : public ::testing::Test {
     ReadUVarint(bytes, &offset);  // op_table_index_plus1
     ++offset;                     // flags
     ReadUVarint(bytes, &offset);  // location_id
+    SkipCommentList(bytes, &offset);
     uint64_t operand_count = ReadUVarint(bytes, &offset);
     EXPECT_GE(operand_count, 1u);
     return offset;
@@ -823,6 +887,7 @@ class ReaderTest : public ::testing::Test {
     ReadUVarint(bytes, &offset);  // op_table_index_plus1
     ++offset;                     // flags
     ReadUVarint(bytes, &offset);  // location_id
+    SkipCommentList(bytes, &offset);
     uint64_t operand_count = ReadUVarint(bytes, &offset);
     for (uint64_t i = 0; i < operand_count; ++i) {
       ReadUVarint(bytes, &offset);
@@ -848,6 +913,7 @@ class ReaderTest : public ::testing::Test {
     ReadUVarint(bytes, &offset);  // op_table_index_plus1
     ++offset;                     // flags
     ReadUVarint(bytes, &offset);  // location_id
+    SkipCommentList(bytes, &offset);
     uint64_t operand_count = ReadUVarint(bytes, &offset);
     for (uint64_t i = 0; i < operand_count; ++i) {
       ReadUVarint(bytes, &offset);
@@ -900,6 +966,7 @@ class ReaderTest : public ::testing::Test {
       if (has_label) {
         ReadUVarint(bytes, offset);
       }
+      SkipCommentList(bytes, offset);
       uint64_t arg_count = ReadUVarint(bytes, offset);
       for (uint64_t arg_index = 0; arg_index < arg_count; ++arg_index) {
         ReadValueDefOffsets(bytes, offset);
@@ -909,6 +976,7 @@ class ReaderTest : public ::testing::Test {
         ReadUVarint(bytes, offset);  // op_table_index_plus1
         *offset += 1;                // flags
         ReadUVarint(bytes, offset);  // location_id
+        SkipCommentList(bytes, offset);
         uint64_t operand_count = ReadUVarint(bytes, offset);
         for (uint64_t i = 0; i < operand_count; ++i) {
           ReadUVarint(bytes, offset);
@@ -1009,7 +1077,7 @@ TEST_F(ReaderTest, AcceptsEmptyModuleMetadata) {
   EXPECT_TRUE(error_ids.empty());
   EXPECT_EQ(result.module_count, 1u);
   EXPECT_EQ(result.location_mode, LOOM_BYTECODE_LOCATION_MODE_SOURCE_LOCATIONS);
-  EXPECT_EQ(result.first_module.string_count, 1u);
+  EXPECT_EQ(result.first_module.string_count, 2u);
   EXPECT_EQ(result.first_module.symbol_count, 0u);
 
   loom_module_free(module);
@@ -1216,6 +1284,38 @@ TEST_F(ReaderTest, ReadsSsaEncodingBindings) {
   loom_module_free(encoding_module);
 }
 
+TEST_F(ReaderTest, ReadsCoResultDynamicDimBindings) {
+  loom_module_t* module = CreateCoResultDimFunctionModule();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  loom_op_t* func_op = read_module->symbols.entries[0].defining_op;
+  ASSERT_TRUE(loom_test_func_isa(func_op));
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  loom_block_t* entry = loom_region_entry_block(body);
+  ASSERT_GE(entry->op_count, 1u);
+  loom_op_t* deflate_op = entry->first_op;
+  ASSERT_TRUE(loom_test_deflate_isa(deflate_op));
+  loom_value_slice_t results = loom_test_deflate_results(deflate_op);
+  ASSERT_EQ(results.count, 2u);
+  loom_type_t output_type =
+      loom_module_value_type(read_module, results.values[0]);
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(output_type, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(output_type, 0), results.values[1]);
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
 TEST_F(ReaderTest, CanonicalRoundTripPreservesBodyShapes) {
   loom_module_t* simple_module = CreateFunctionModule();
   ExpectCanonicalBytecodeRoundTrip(simple_module);
@@ -1228,6 +1328,10 @@ TEST_F(ReaderTest, CanonicalRoundTripPreservesBodyShapes) {
   loom_module_t* nested_module = CreateTiedBodyOpModule();
   ExpectCanonicalBytecodeRoundTrip(nested_module);
   loom_module_free(nested_module);
+
+  loom_module_t* co_result_module = CreateCoResultDimFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(co_result_module);
+  loom_module_free(co_result_module);
 }
 
 TEST_F(ReaderTest, CanonicalRoundTripPreservesTypesAttrsAndPredicates) {
@@ -1457,7 +1561,9 @@ TEST_F(ReaderTest, RejectsInvalidUtf8StringPayload) {
   size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_STRINGS);
   ReadUVarint(bytes, &offset);
   uint64_t first_length = ReadUVarint(bytes, &offset);
-  ASSERT_GT(first_length, 0u);
+  ASSERT_EQ(first_length, 0u);
+  uint64_t second_length = ReadUVarint(bytes, &offset);
+  ASSERT_GT(second_length, 0u);
   bytes[offset] = 0xFF;
 
   ExpectReadError(bytes, "ERR_BYTECODE_006");

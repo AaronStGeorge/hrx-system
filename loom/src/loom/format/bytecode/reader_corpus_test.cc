@@ -22,6 +22,7 @@
 #include "loom/format/bytecode/reader.h"
 #include "loom/format/bytecode/writer.h"
 #include "loom/format/text/parser.h"
+#include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/test/corpus/text/golden_text_corpus.h"
@@ -62,6 +63,17 @@ class ReaderCorpusTest : public ::testing::Test {
     EXPECT_NE(module, nullptr)
         << "parse failed for " << std::string(filename.data, filename.size);
     return module;
+  }
+
+  std::string Print(const loom_module_t* module) {
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    IREE_EXPECT_OK(loom_text_print_module_to_builder(module, &builder,
+                                                     LOOM_TEXT_PRINT_DEFAULT));
+    std::string printed(iree_string_builder_buffer(&builder),
+                        iree_string_builder_size(&builder));
+    iree_string_builder_deinitialize(&builder);
+    return printed;
   }
 
   bool ModuleHasUnsupportedBytecodeSymbols(const loom_module_t* module) {
@@ -155,6 +167,7 @@ TEST_F(ReaderCorpusTest, TextCorpusBytecodeRoundTripsCanonically) {
       continue;
     }
     IREE_EXPECT_OK(write_status);
+    std::string source_text = Print(module);
     loom_module_free(module);
     ++supported_count;
 
@@ -167,6 +180,8 @@ TEST_F(ReaderCorpusTest, TextCorpusBytecodeRoundTripsCanonically) {
     EXPECT_TRUE(error_ids.empty())
         << (error_ids.empty() ? "" : error_ids.front());
     ASSERT_NE(read_module, nullptr);
+
+    EXPECT_EQ(source_text, Print(read_module));
 
     std::vector<uint8_t> second;
     IREE_EXPECT_OK(WriteModule(read_module, &second));

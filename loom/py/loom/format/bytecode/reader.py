@@ -39,6 +39,8 @@ from loom.ir import (
     BUFFER_TYPE,
     ENCODING_TYPE,
     NONE_TYPE,
+    SYMBOL_FLAG_IMPORT,
+    SYMBOL_FLAG_PUBLIC,
     Block,
     CanonicalAttrDict,
     DialectType,
@@ -78,8 +80,20 @@ __all__ = [
 ]
 
 # Maps the cc byte to a cc attribute string.
-# 0=HOST (absent/default), 1=DEVICE, 2=INITIALIZER.
-_FUNC_CC_BYTES: list[str | None] = [None, "device", "initializer"]
+_FUNC_CC_BYTES: list[str | None] = [
+    None,
+    "host",
+    "device",
+    "initializer",
+    "deinitializer",
+]
+
+# Maps the purity byte to a purity attribute string.
+_FUNC_PURITY_BYTES: list[str | None] = [None, "pure"]
+
+# Bytecode-only flag bit recording whether an import explicitly wrote its
+# source symbol, even when the source name matches the local symbol name.
+_SYMBOL_FLAG_IMPORT_SYMBOL = 0x0004
 
 
 class BytecodeError(Exception):
@@ -587,6 +601,119 @@ class BytecodeReader:
                     offset += data_length
                     module.locations.add(OpaqueLocation(source_id, opaque_data, flags))
 
+    def _read_comment_list(
+        self, data: bytes, offset: int
+    ) -> tuple[tuple[str, ...], int]:
+        """Read a bytecode comment list encoded as raw UTF-8 strings."""
+        count, offset = decode_varint(data, offset)
+        comments: list[str] = []
+        for _ in range(count):
+            length, offset = decode_varint(data, offset)
+            comment_bytes = data[offset : offset + length]
+            if len(comment_bytes) != length:
+                raise BytecodeError("comment extends past end of data")
+            offset += length
+            comments.append(comment_bytes.decode("utf-8"))
+        return tuple(comments), offset
+
+    def _map_value_ref(self, value_ref: int, value_map: list[int]) -> int:
+        """Translate an available function-local value number to a module value id."""
+        if 0 <= value_ref < len(value_map):
+            return value_map[value_ref]
+        raise BytecodeError(
+            "value reference must target an available value: "
+            f"{value_ref} with {len(value_map)} value(s) available"
+        )
+
+    def _reserve_value_defs(
+        self,
+        module: Module,
+        value_map: list[int],
+        count: int,
+        predefined_values: list[int] | None = None,
+    ) -> list[int]:
+        """Reserve a definition group before decoding its value definitions.
+
+        Value definitions carry shape and encoding bindings that may reference
+        co-results in the same group. Reserving the group first gives those
+        bindings stable module value IDs while the definitions are decoded.
+        """
+        reserved: list[int] = []
+        predefined_values = predefined_values or []
+        for _ in range(count):
+            local_number = len(value_map)
+            if local_number < len(predefined_values):
+                value_id = predefined_values[local_number]
+            else:
+                value_id = module.add_value(Value(name="", type=NONE_TYPE))
+            value_map.append(value_id)
+            reserved.append(value_id)
+        return reserved
+
+    def _read_value_def(
+        self,
+        data: bytes,
+        offset: int,
+        module: Module,
+        value_map: list[int],
+        target_value_id: int | None = None,
+    ) -> tuple[int, int]:
+        """Read one SSA value definition and return its module value id."""
+        name_id, offset = decode_varint(data, offset)
+        if name_id != 0 and name_id >= len(self._strings):
+            raise BytecodeError(
+                f"value name string_id {name_id} out of range "
+                f"(string table has {len(self._strings)} entries)"
+            )
+        type_idx, offset = decode_varint(data, offset)
+        if type_idx >= len(self._types):
+            raise BytecodeError(
+                f"value type index {type_idx} out of range "
+                f"(type table has {len(self._types)} entries)"
+            )
+
+        dim_count, offset = decode_varint(data, offset)
+        dim_bindings: dict[int, int] = {}
+        for dimension_index in range(dim_count):
+            value_ref, offset = decode_signed_varint(data, offset)
+            dim_bindings[dimension_index] = self._map_value_ref(value_ref, value_map)
+
+        enc_binding_raw, offset = decode_varint(data, offset)
+        encoding_binding = enc_binding_raw - 1 if enc_binding_raw > 0 else -1
+        if encoding_binding >= 0:
+            encoding_binding = self._map_value_ref(encoding_binding, value_map)
+
+        value = Value(
+            name="" if name_id == 0 else self._strings[name_id],
+            type=self._types[type_idx],
+            dim_bindings=dim_bindings,
+            encoding_binding=encoding_binding,
+        )
+        if target_value_id is not None:
+            existing = module.values[target_value_id]
+            is_placeholder = (
+                existing.name == ""
+                and existing.type == NONE_TYPE
+                and not existing.dim_bindings
+                and existing.encoding_binding == -1
+            )
+            if is_placeholder:
+                existing.name = value.name
+                existing.type = value.type
+                existing.dim_bindings = value.dim_bindings
+                existing.encoding_binding = value.encoding_binding
+            elif (
+                existing.name != value.name
+                or existing.type != value.type
+                or existing.dim_bindings != value.dim_bindings
+                or existing.encoding_binding != value.encoding_binding
+            ):
+                raise BytecodeError(
+                    "predefined function signature value does not match body value"
+                )
+            return target_value_id, offset
+        return module.add_value(value), offset
+
     def _read_symbols_section(
         self,
         symbols_section: tuple[int, bytes],
@@ -615,9 +742,13 @@ class BytecodeReader:
             offset += 2
 
             name = self._strings[name_id]
+            if visibility not in (0, 1):
+                raise BytecodeError(f"unsupported symbol visibility byte: {visibility}")
+            if (visibility == 0) != ((flags & SYMBOL_FLAG_PUBLIC) != 0):
+                raise BytecodeError("symbol visibility byte does not match flags")
 
             # Import metadata: source module and symbol for cross-module refs.
-            is_import = (flags & 0x0002) != 0
+            is_import = (flags & SYMBOL_FLAG_IMPORT) != 0
             source_module = ""
             source_symbol = ""
             if is_import:
@@ -639,24 +770,43 @@ class BytecodeReader:
                         f"entry {op_table_index} but only {len(self._ops)} exist"
                     )
                 op_name = self._ops[op_table_index]
+                op_comments, offset = self._read_comment_list(sym_data, offset)
 
                 cc_byte = sym_data[offset]
+                offset += 1
+                purity_byte = sym_data[offset]
                 offset += 1
                 arg_count, offset = decode_varint(sym_data, offset)
                 result_count, offset = decode_varint(sym_data, offset)
 
-                arg_types: list[Type] = []
-                for _ in range(arg_count):
-                    type_idx, offset = decode_varint(sym_data, offset)
-                    arg_types.append(self._types[type_idx])
+                signature_value_map: list[int] = []
+                signature_value_ids = self._reserve_value_defs(
+                    module, signature_value_map, arg_count + result_count
+                )
+                arg_ids: list[int] = []
+                for i in range(arg_count):
+                    value_id, offset = self._read_value_def(
+                        sym_data,
+                        offset,
+                        module,
+                        signature_value_map,
+                        signature_value_ids[i],
+                    )
+                    arg_ids.append(value_id)
 
-                result_types: list[Type] = []
+                result_ids: list[int] = []
                 tied_results: list[TiedResult] = []
                 for i in range(result_count):
                     is_tied = sym_data[offset]
                     offset += 1
-                    type_idx, offset = decode_varint(sym_data, offset)
-                    result_types.append(self._types[type_idx])
+                    value_id, offset = self._read_value_def(
+                        sym_data,
+                        offset,
+                        module,
+                        signature_value_map,
+                        signature_value_ids[arg_count + i],
+                    )
+                    result_ids.append(value_id)
                     if is_tied:
                         tied_op_idx, offset = decode_varint(sym_data, offset)
                         tied_results.append(
@@ -664,7 +814,9 @@ class BytecodeReader:
                         )
 
                 _tied_count, offset = decode_varint(sym_data, offset)
-                predicates, offset = self._read_predicate_list(sym_data, offset)
+                predicates, offset = self._read_predicate_list(
+                    sym_data, offset, module, signature_value_map
+                )
 
                 has_body = sym_data[offset]
                 offset += 1
@@ -675,39 +827,39 @@ class BytecodeReader:
                     ir_length = struct.unpack_from("<I", sym_data, offset)[0]
                     offset += 4
                     body = self._read_function_body(
-                        ir_data[ir_offset : ir_offset + ir_length], module
+                        ir_data[ir_offset : ir_offset + ir_length],
+                        module,
+                        predefined_values=arg_ids,
                     )
 
                 # Build the attributes dict for this func-like op.
                 op_attrs: dict[str, Any] = {"callee": name}
-                if visibility:
+                if flags & SYMBOL_FLAG_PUBLIC:
                     op_attrs["visibility"] = "public"
                 cc_str = (
                     _FUNC_CC_BYTES[cc_byte] if cc_byte < len(_FUNC_CC_BYTES) else None
                 )
                 if cc_str is not None:
                     op_attrs["cc"] = cc_str
+                purity_str = (
+                    _FUNC_PURITY_BYTES[purity_byte]
+                    if purity_byte < len(_FUNC_PURITY_BYTES)
+                    else None
+                )
+                if purity_str is not None:
+                    op_attrs["purity"] = purity_str
                 if predicates:
                     op_attrs["predicates"] = predicates
                 if source_module:
                     op_attrs["import_module"] = source_module
-                    if source_symbol and source_symbol != name:
+                    if flags & _SYMBOL_FLAG_IMPORT_SYMBOL:
                         op_attrs["import_symbol"] = source_symbol
-
-                # Create anonymous result value IDs (symbol-level ops have no
-                # LHS SSA names; types are carried in the value table).
-                result_ids: list[int] = []
-                for result_type in result_types:
-                    vid = module.add_value(Value(name="", type=result_type))
-                    result_ids.append(vid)
 
                 # For declaration-style ops (no body), args are operands.
                 # For definition-style ops (with body), args are entry block args.
                 operand_ids: list[int] = []
                 if body is None:
-                    for arg_type in arg_types:
-                        vid = module.add_value(Value(name="", type=arg_type))
-                        operand_ids.append(vid)
+                    operand_ids = arg_ids
 
                 op = Operation(
                     name=op_name,
@@ -716,6 +868,7 @@ class BytecodeReader:
                     tied_results=tied_results,
                     attributes=op_attrs,
                     regions=[body] if body is not None else [],
+                    comments=op_comments,
                 )
                 symbol = Symbol(
                     name=name,
@@ -727,7 +880,12 @@ class BytecodeReader:
                 )
                 module.add_symbol(symbol)
 
-    def _read_function_body(self, data: bytes, module: Module) -> Region:
+    def _read_function_body(
+        self,
+        data: bytes,
+        module: Module,
+        predefined_values: list[int] | None = None,
+    ) -> Region:
         """Read a function body region from IR section data.
 
         The bytecode uses function-local sequential value numbers (0, 1, 2, ...)
@@ -741,7 +899,13 @@ class BytecodeReader:
         _region_count, offset = decode_varint(data, offset)
         _block_count, offset = decode_varint(data, offset)
         _op_count, offset = decode_varint(data, offset)
-        region, offset = self._read_region(data, offset, module, value_map)
+        region, offset = self._read_region(
+            data,
+            offset,
+            module,
+            value_map,
+            predefined_values=predefined_values or [],
+        )
         parsed_counts = self._count_region_tree(region)
         if parsed_counts != (_value_count, _region_count, _block_count, _op_count):
             raise BytecodeError("function body allocation summary does not match IR")
@@ -772,11 +936,14 @@ class BytecodeReader:
         offset: int,
         module: Module,
         value_map: list[int],
+        predefined_values: list[int],
     ) -> tuple[Region, int]:
         block_count, offset = decode_varint(data, offset)
         blocks = []
         for _ in range(block_count):
-            block, offset = self._read_block(data, offset, module, value_map)
+            block, offset = self._read_block(
+                data, offset, module, value_map, predefined_values
+            )
             blocks.append(block)
         return Region(blocks=blocks), offset
 
@@ -786,6 +953,7 @@ class BytecodeReader:
         offset: int,
         module: Module,
         value_map: list[int],
+        predefined_values: list[int],
     ) -> tuple[Block, int]:
         has_label = data[offset]
         offset += 1
@@ -793,40 +961,18 @@ class BytecodeReader:
         if has_label:
             label_id, offset = decode_varint(data, offset)
             label = self._strings[label_id]
+        comments, offset = self._read_comment_list(data, offset)
 
         # Block args.
         arg_count, offset = decode_varint(data, offset)
-        arg_ids = []
-        for _ in range(arg_count):
-            name_id, offset = decode_varint(data, offset)
-            type_idx, offset = decode_varint(data, offset)
-            dim_count, offset = decode_varint(data, offset)
-            dim_bindings = {}
-            for d in range(dim_count):
-                value_ref, offset = decode_signed_varint(data, offset)
-                value_ref = (
-                    value_map[value_ref] if value_ref < len(value_map) else value_ref
-                )
-                dim_bindings[d] = value_ref
-            # Encoding binding: 0 = none, else 1 + value_number.
-            enc_binding_raw, offset = decode_varint(data, offset)
-            encoding_binding = (enc_binding_raw - 1) if enc_binding_raw > 0 else -1
-            if encoding_binding >= 0 and encoding_binding < len(value_map):
-                encoding_binding = value_map[encoding_binding]
-            value_name = self._strings[name_id] if name_id < len(self._strings) else ""
-            value_type = (
-                self._types[type_idx] if type_idx < len(self._types) else NONE_TYPE
-            )
-            vid = module.add_value(
-                Value(
-                    name=value_name,
-                    type=value_type,
-                    dim_bindings=dim_bindings,
-                    encoding_binding=encoding_binding,
-                )
-            )
-            arg_ids.append(vid)
-            value_map.append(vid)
+        arg_ids = self._reserve_value_defs(
+            module, value_map, arg_count, predefined_values
+        )
+        for i, arg_id in enumerate(arg_ids):
+            vid, offset = self._read_value_def(data, offset, module, value_map, arg_id)
+            arg_ids[i] = vid
+        if len(value_map) < len(predefined_values):
+            raise BytecodeError("function body entry block is missing signature args")
 
         # Operations.
         op_count, offset = decode_varint(data, offset)
@@ -835,7 +981,7 @@ class BytecodeReader:
             op, offset = self._read_operation(data, offset, module, value_map)
             ops.append(op)
 
-        return Block(label=label, arg_ids=arg_ids, ops=ops), offset
+        return Block(label=label, arg_ids=arg_ids, ops=ops, comments=comments), offset
 
     def _read_operation(
         self,
@@ -845,14 +991,15 @@ class BytecodeReader:
         value_map: list[int],
     ) -> tuple[Operation, int]:
         op_table_index_plus1, offset = decode_varint(data, offset)
-        data[offset]
+        if op_table_index_plus1 == 0:
+            raise BytecodeError("operation op_table_index_plus1 must be nonzero")
+        _instance_flags = data[offset]
         offset += 1
         location_id, offset = decode_varint(data, offset)
         if self._location_mode == LOCATION_MODE_NO_LOCATIONS and location_id != 0:
             raise BytecodeError("NO_LOCATIONS bytecode op location must be 0")
+        comments, offset = self._read_comment_list(data, offset)
 
-        if op_table_index_plus1 == 0:
-            raise BytecodeError("operation op_table_index_plus1 must be nonzero")
         kind_id = op_table_index_plus1 - 1
         op_name = self._ops[kind_id] if kind_id < len(self._ops) else ""
 
@@ -861,43 +1008,16 @@ class BytecodeReader:
         operands = []
         for _ in range(operand_count):
             value_ref, offset = decode_varint(data, offset)
-            operands.append(
-                value_map[value_ref] if value_ref < len(value_map) else value_ref
-            )
+            operands.append(self._map_value_ref(value_ref, value_map))
 
         # Results.
         result_count, offset = decode_varint(data, offset)
-        result_ids = []
-        for _ in range(result_count):
-            name_id, offset = decode_varint(data, offset)
-            type_idx, offset = decode_varint(data, offset)
-            dim_count, offset = decode_varint(data, offset)
-            dim_bindings = {}
-            for d in range(dim_count):
-                value_ref, offset = decode_signed_varint(data, offset)
-                value_ref = (
-                    value_map[value_ref] if value_ref < len(value_map) else value_ref
-                )
-                dim_bindings[d] = value_ref
-            # Encoding binding: 0 = none, else 1 + value_number.
-            enc_binding_raw, offset = decode_varint(data, offset)
-            encoding_binding = (enc_binding_raw - 1) if enc_binding_raw > 0 else -1
-            if encoding_binding >= 0 and encoding_binding < len(value_map):
-                encoding_binding = value_map[encoding_binding]
-            value_name = self._strings[name_id] if name_id < len(self._strings) else ""
-            value_type = (
-                self._types[type_idx] if type_idx < len(self._types) else NONE_TYPE
+        result_ids = self._reserve_value_defs(module, value_map, result_count)
+        for i, result_id in enumerate(result_ids):
+            vid, offset = self._read_value_def(
+                data, offset, module, value_map, result_id
             )
-            vid = module.add_value(
-                Value(
-                    name=value_name,
-                    type=value_type,
-                    dim_bindings=dim_bindings,
-                    encoding_binding=encoding_binding,
-                )
-            )
-            result_ids.append(vid)
-            value_map.append(vid)
+            result_ids[i] = vid
 
         # Tied results.
         tied_count, offset = decode_varint(data, offset)
@@ -911,13 +1031,21 @@ class BytecodeReader:
 
         # Attributes.
         attr_count, offset = decode_varint(data, offset)
-        attributes, offset = self._read_attr_dict_entries(data, offset, attr_count)
+        attributes, offset = self._read_attr_dict_entries(
+            data, offset, attr_count, module, value_map
+        )
 
         # Regions.
         region_count, offset = decode_varint(data, offset)
         regions = []
         for _ in range(region_count):
-            region, offset = self._read_region(data, offset, module, value_map)
+            region, offset = self._read_region(
+                data,
+                offset,
+                module,
+                value_map,
+                predefined_values=[],
+            )
             regions.append(region)
 
         op = Operation(
@@ -928,10 +1056,17 @@ class BytecodeReader:
             attributes=attributes,
             regions=regions,
             location_id=location_id,
+            comments=comments,
         )
         return op, offset
 
-    def _read_attr_value(self, data: bytes, offset: int) -> tuple[Any, int]:
+    def _read_attr_value(
+        self,
+        data: bytes,
+        offset: int,
+        module: Module | None = None,
+        value_map: list[int] | None = None,
+    ) -> tuple[Any, int]:
         kind = data[offset]
         offset += 1
         match kind:
@@ -963,11 +1098,15 @@ class BytecodeReader:
                 type_idx, offset = decode_varint(data, offset)
                 return self._types[type_idx], offset
             case 8:  # PREDICATE_LIST
-                predicates, offset = self._read_predicate_list(data, offset)
+                predicates, offset = self._read_predicate_list(
+                    data, offset, module, value_map
+                )
                 return predicates, offset
             case 9:  # DICT
                 count, offset = decode_varint(data, offset)
-                return self._read_attr_dict_entries(data, offset, count)
+                return self._read_attr_dict_entries(
+                    data, offset, count, module, value_map
+                )
             case 10:  # ENCODING
                 encoding_id, offset = decode_varint(data, offset)
                 if encoding_id == 0 or encoding_id > len(self._encodings):
@@ -980,7 +1119,12 @@ class BytecodeReader:
                 raise BytecodeError(f"unknown attr value kind: {kind}")
 
     def _read_attr_dict_entries(
-        self, data: bytes, offset: int, count: int
+        self,
+        data: bytes,
+        offset: int,
+        count: int,
+        module: Module | None = None,
+        value_map: list[int] | None = None,
     ) -> tuple[CanonicalAttrDict, int]:
         """Read canonical dict attr entries and verify sorted/deduped order."""
         entries: list[tuple[str, Any]] = []
@@ -1000,7 +1144,7 @@ class BytecodeReader:
                     "dict attr keys are not in canonical order: "
                     f"{previous_key!r} appears before {key!r}"
                 )
-            value, offset = self._read_attr_value(data, offset)
+            value, offset = self._read_attr_value(data, offset, module, value_map)
             entries.append((key, value))
             previous_key = key
         return CanonicalAttrDict.from_sorted_items(entries), offset
@@ -1021,7 +1165,11 @@ class BytecodeReader:
     ]
 
     def _read_predicate_list(
-        self, data: bytes, offset: int
+        self,
+        data: bytes,
+        offset: int,
+        module: Module | None = None,
+        value_map: list[int] | None = None,
     ) -> tuple[list[Predicate], int]:
         """Read a predicate list: count + per-predicate data."""
         count, offset = decode_varint(data, offset)
@@ -1036,19 +1184,45 @@ class BytecodeReader:
             kind = self._PRED_KIND_NAMES[kind_byte]
             args: list[PredicateArg] = []
             for _ in range(arg_count):
-                arg, offset = self._read_predicate_arg(data, offset)
+                arg, offset = self._read_predicate_arg(data, offset, module, value_map)
                 args.append(arg)
             predicates.append(Predicate(kind=kind, args=tuple(args)))
         return predicates, offset
 
-    def _read_predicate_arg(self, data: bytes, offset: int) -> tuple[PredicateArg, int]:
+    def _read_predicate_arg(
+        self,
+        data: bytes,
+        offset: int,
+        module: Module | None = None,
+        value_map: list[int] | None = None,
+    ) -> tuple[PredicateArg, int]:
         """Read a single predicate argument: tag + value."""
         tag_byte = data[offset]
         offset += 1
         match tag_byte:
             case 1:  # VALUE
-                string_id, offset = decode_varint(data, offset)
-                return PredicateArg(tag="value", value=self._strings[string_id]), offset
+                encoded_value, offset = decode_varint(data, offset)
+                if module is not None and value_map is not None:
+                    if encoded_value >= len(value_map):
+                        raise BytecodeError(
+                            "predicate value number "
+                            f"{encoded_value} out of range "
+                            f"(function has {len(value_map)} values so far)"
+                        )
+                    value_id = value_map[encoded_value]
+                    return (
+                        PredicateArg(tag="value", value=module.values[value_id].name),
+                        offset,
+                    )
+                if encoded_value >= len(self._strings):
+                    raise BytecodeError(
+                        f"predicate value string_id {encoded_value} out of range "
+                        f"(string table has {len(self._strings)} entries)"
+                    )
+                return (
+                    PredicateArg(tag="value", value=self._strings[encoded_value]),
+                    offset,
+                )
             case 2:  # CONST
                 value, offset = decode_signed_varint(data, offset)
                 return PredicateArg(tag="const", value=value), offset

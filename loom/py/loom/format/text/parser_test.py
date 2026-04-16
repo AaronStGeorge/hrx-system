@@ -2173,16 +2173,13 @@ class TestImportCrossFormatRoundTrip:
         )
 
     def test_import_survives_bytecode(self) -> None:
-        # Arg names lost in bytecode (no IR section for declarations).
         self._cross_roundtrip(
             'func.decl import("linalg_lib") @matmul(%a: f32, %b: f32) -> (f32)\n',
-            'func.decl import("linalg_lib") @matmul(f32, f32) -> (f32)\n',
         )
 
     def test_import_alias_survives_bytecode(self) -> None:
         self._cross_roundtrip(
             'func.decl import("math_lib", "matmul") @my_matmul(%a: f32) -> (f32)\n',
-            'func.decl import("math_lib", "matmul") @my_matmul(f32) -> (f32)\n',
         )
 
     def test_import_metadata_preserved(self) -> None:
@@ -2198,15 +2195,8 @@ class TestImportCrossFormatRoundTrip:
         assert sym.name == "alias"
 
     def test_mixed_module_survives_bytecode(self) -> None:
-        # Declarations lose arg names (no IR section), but definitions
-        # recover them from the entry block's values.
         self._cross_roundtrip(
             'func.decl import("lib") @imported(%a: f32) -> (f32)\n'
-            "\n"
-            "func.def @local(%x: f32) -> (f32) {\n"
-            "  test.yield %x : f32\n"
-            "}\n",
-            'func.decl import("lib") @imported(f32) -> (f32)\n'
             "\n"
             "func.def @local(%x: f32) -> (f32) {\n"
             "  test.yield %x : f32\n"

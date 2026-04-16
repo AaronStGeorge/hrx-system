@@ -224,6 +224,10 @@ def _single_op_offset(data: bytes | bytearray) -> int:
         _count, offset = decode_varint(data, offset)
     _block_count, offset = decode_varint(data, offset)
     offset += 1  # block has_label byte.
+    comment_count, offset = decode_varint(data, offset)
+    for _ in range(comment_count):
+        comment_length, offset = decode_varint(data, offset)
+        offset += comment_length
     _arg_count, offset = decode_varint(data, offset)
     _op_count, offset = decode_varint(data, offset)
     return offset
@@ -1176,12 +1180,17 @@ class TestImportRoundTrips:
         """Import carries full type information for linker verification."""
         tile_t = ShapedType(TypeKind.TILE, F32, (DynamicDim(), StaticDim(4)))
         module = Module(name="test")
-        arg0_vid = module.add_value(Value(name="", type=tile_t))
+        dim_vid = module.add_value(Value(name="M", type=INDEX))
+        arg0_vid = module.add_value(
+            Value(name="", type=tile_t, dim_bindings={0: dim_vid})
+        )
         arg1_vid = module.add_value(Value(name="", type=I32))
-        result_vid = module.add_value(Value(name="", type=tile_t))
+        result_vid = module.add_value(
+            Value(name="", type=tile_t, dim_bindings={0: dim_vid})
+        )
         op = Operation(
             name="func.decl",
-            operands=[arg0_vid, arg1_vid],
+            operands=[dim_vid, arg0_vid, arg1_vid],
             results=[result_vid],
             attributes={"callee": "transform"},
         )
@@ -1201,8 +1210,8 @@ class TestImportRoundTrips:
         loaded_op = sym.op
         assert loaded_op is not None
         # func.decl: args as operands.
-        assert len(loaded_op.operands) == 2
-        assert loaded.values[loaded_op.operands[0]].type == tile_t
+        assert len(loaded_op.operands) == 3
+        assert loaded.values[loaded_op.operands[1]].type == tile_t
 
     def test_public_import_flags_both_survive(self) -> None:
         """Both PUBLIC and IMPORT flags survive round-trip."""
