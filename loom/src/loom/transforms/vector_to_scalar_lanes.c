@@ -12,6 +12,7 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/transforms/vector_to_scalar_internal.h"
+#include "loom/util/math.h"
 
 bool loom_vector_to_scalar_indices_are_dynamic(
     loom_vector_to_scalar_index_list_t indices) {
@@ -123,6 +124,140 @@ iree_status_t loom_vector_to_scalar_build_generic_lane_op(
   }
   IREE_RETURN_IF_ERROR(loom_builder_finalize_op(builder, scalar_op));
   *out_result = loom_op_results(scalar_op)[0];
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_to_scalar_build_scalar_binary(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t lhs, loom_value_id_t rhs, loom_type_t result_type,
+    loom_value_id_t* out_result) {
+  return loom_vector_to_scalar_build_generic_lane_op(
+      state, kind, 0, (loom_value_id_t[]){lhs, rhs}, 2, NULL, 0, result_type,
+      out_result);
+}
+
+int64_t loom_vector_to_scalar_integer_mask_value(int32_t bit_width,
+                                                 int64_t used_bits) {
+  if (used_bits <= 0) return 0;
+  if (used_bits >= bit_width) return bit_width == 1 ? 1 : -1;
+  return (int64_t)((UINT64_C(1) << (uint64_t)used_bits) - 1);
+}
+
+int64_t loom_vector_to_scalar_shifted_integer_mask_value(int32_t bit_width,
+                                                         int64_t offset,
+                                                         int64_t used_bits) {
+  if (used_bits <= 0) return 0;
+  uint64_t mask =
+      used_bits >= 64 ? UINT64_MAX : ((UINT64_C(1) << (uint64_t)used_bits) - 1);
+  mask <<= (uint64_t)offset;
+  if (bit_width < 64) mask &= (UINT64_C(1) << (uint32_t)bit_width) - 1;
+  if (bit_width == 1) return (mask & 1) ? 1 : 0;
+  return (int64_t)mask;
+}
+
+iree_status_t loom_vector_to_scalar_build_integer_mask(
+    loom_vector_to_scalar_state_t* state, loom_type_t type, int64_t used_bits,
+    loom_value_id_t* out_mask) {
+  int32_t bit_width = loom_scalar_type_bitwidth(loom_type_element_type(type));
+  if (bit_width <= 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected fixed-width integer scalar type");
+  }
+  return loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, type, state->location,
+      loom_vector_to_scalar_integer_mask_value(bit_width, used_bits), out_mask);
+}
+
+iree_status_t loom_vector_to_scalar_cast_integer_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t input,
+    loom_type_t input_type, loom_type_t result_type, bool signed_extend,
+    loom_value_id_t* out_result) {
+  if (loom_type_equal(input_type, result_type)) {
+    *out_result = input;
+    return iree_ok_status();
+  }
+
+  int32_t input_width =
+      loom_scalar_type_bitwidth(loom_type_element_type(input_type));
+  int32_t result_width =
+      loom_scalar_type_bitwidth(loom_type_element_type(result_type));
+  if (input_width <= 0 || result_width <= 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "expected fixed-width integer scalar types");
+  }
+
+  loom_op_t* cast_op = NULL;
+  if (input_width < result_width) {
+    if (signed_extend) {
+      IREE_RETURN_IF_ERROR(
+          loom_scalar_extsi_build(&state->rewriter->builder, input, input_type,
+                                  result_type, state->location, &cast_op));
+      *out_result = loom_scalar_extsi_result(cast_op);
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_scalar_extui_build(&state->rewriter->builder,
+                                                 input, input_type, result_type,
+                                                 state->location, &cast_op));
+    *out_result = loom_scalar_extui_result(cast_op);
+    return iree_ok_status();
+  }
+
+  if (input_width > result_width) {
+    IREE_RETURN_IF_ERROR(
+        loom_scalar_trunci_build(&state->rewriter->builder, input, input_type,
+                                 result_type, state->location, &cast_op));
+    *out_result = loom_scalar_trunci_result(cast_op);
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(&state->rewriter->builder,
+                                                 input, input_type, result_type,
+                                                 state->location, &cast_op));
+  *out_result = loom_scalar_bitcast_result(cast_op);
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_to_scalar_build_scalar_shift(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t input, loom_type_t type, int64_t amount,
+    loom_value_id_t* out_result) {
+  if (amount == 0) {
+    *out_result = input;
+    return iree_ok_status();
+  }
+  loom_value_id_t amount_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, type, state->location, amount, &amount_value));
+  if (kind == LOOM_OP_SCALAR_SHLI) {
+    loom_op_t* shift_op = NULL;
+    IREE_RETURN_IF_ERROR(loom_scalar_shli_build(&state->rewriter->builder, 0,
+                                                input, amount_value, type,
+                                                state->location, &shift_op));
+    *out_result = loom_scalar_shli_result(shift_op);
+    return iree_ok_status();
+  }
+  return loom_vector_to_scalar_build_scalar_binary(
+      state, kind, input, amount_value, type, out_result);
+}
+
+iree_status_t loom_vector_to_scalar_checked_static_bit_position(
+    int64_t ordinal, int64_t bit_width, int64_t* out_position) {
+  *out_position = 0;
+  if (!loom_checked_mul_i64(ordinal, bit_width, out_position)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "static bitstream position overflow");
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_to_scalar_checked_static_bit_end(int64_t start,
+                                                           int64_t bit_width,
+                                                           int64_t* out_end) {
+  *out_end = 0;
+  if (!loom_checked_add_i64(start, bit_width, out_end)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "static bitstream end overflow");
+  }
   return iree_ok_status();
 }
 

@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "loom/ir/module.h"
+#include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
@@ -297,12 +298,6 @@ iree_status_t loom_vector_to_scalar_build_concat_lane(
     loom_value_id_t input = loom_value_slice_get(inputs, input_ordinal);
     loom_type_t input_type =
         loom_module_value_type(state->rewriter->module, input);
-    if (loom_type_dim_is_dynamic_at(input_type, axis_u8)) {
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "vector-to-scalar cannot lower vector.concat with dynamic input "
-          "axis extents yet");
-    }
     int64_t extent = (int64_t)loom_type_dim_static_size_at(input_type, axis_u8);
     if (axis_index < prefix + extent) {
       loom_vector_to_scalar_index_term_t* source_terms = NULL;
@@ -364,7 +359,7 @@ iree_status_t loom_vector_to_scalar_build_shuffle_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
   if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "vector-to-scalar cannot lower dynamic "
                             "vector.shuffle lane selection");
   }
@@ -489,6 +484,193 @@ iree_status_t loom_vector_to_scalar_build_deinterleave_lane(
       out_lane);
 }
 
+static bool loom_vector_to_scalar_bitcast_integer_type(int32_t bit_width,
+                                                       loom_type_t* out_type) {
+  loom_scalar_type_t scalar_type = LOOM_SCALAR_TYPE_COUNT_;
+  switch (bit_width) {
+    case 1:
+      scalar_type = LOOM_SCALAR_TYPE_I1;
+      break;
+    case 8:
+      scalar_type = LOOM_SCALAR_TYPE_I8;
+      break;
+    case 16:
+      scalar_type = LOOM_SCALAR_TYPE_I16;
+      break;
+    case 32:
+      scalar_type = LOOM_SCALAR_TYPE_I32;
+      break;
+    case 64:
+      scalar_type = LOOM_SCALAR_TYPE_I64;
+      break;
+    default:
+      return false;
+  }
+  *out_type = loom_type_scalar(scalar_type);
+  return true;
+}
+
+static iree_status_t loom_vector_to_scalar_bitcast_lane_to_integer(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t lane,
+    loom_type_t lane_type, loom_type_t integer_type,
+    loom_value_id_t* out_integer_lane) {
+  if (loom_type_equal(lane_type, integer_type)) {
+    *out_integer_lane = lane;
+    return iree_ok_status();
+  }
+  loom_op_t* bitcast_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(&state->rewriter->builder,
+                                                 lane, lane_type, integer_type,
+                                                 state->location, &bitcast_op));
+  *out_integer_lane = loom_scalar_bitcast_result(bitcast_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_build_bitcast_piece(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t source_lane,
+    loom_type_t source_integer_type, int64_t source_shift, int64_t bit_count,
+    int64_t dest_shift, loom_type_t result_integer_type,
+    loom_value_id_t accumulator, loom_value_id_t* out_accumulator) {
+  loom_value_id_t source_bits = LOOM_VALUE_ID_INVALID;
+  int32_t source_width =
+      loom_scalar_type_bitwidth(loom_type_element_type(source_integer_type));
+  if (source_shift == 0 && bit_count == source_width) {
+    source_bits = source_lane;
+  } else {
+    loom_value_id_t shifted_source = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_shift(
+        state, LOOM_OP_SCALAR_SHRUI, source_lane, source_integer_type,
+        source_shift, &shifted_source));
+    loom_value_id_t source_mask = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_integer_mask(
+        state, source_integer_type, bit_count, &source_mask));
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_binary(
+        state, LOOM_OP_SCALAR_ANDI, shifted_source, source_mask,
+        source_integer_type, &source_bits));
+  }
+  loom_value_id_t result_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_cast_integer_lane(
+      state, source_bits, source_integer_type, result_integer_type,
+      /*signed_extend=*/false, &result_bits));
+  loom_value_id_t shifted_result_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_shift(
+      state, LOOM_OP_SCALAR_SHLI, result_bits, result_integer_type, dest_shift,
+      &shifted_result_bits));
+  if (accumulator == LOOM_VALUE_ID_INVALID) {
+    *out_accumulator = shifted_result_bits;
+    return iree_ok_status();
+  }
+  return loom_vector_to_scalar_build_scalar_binary(
+      state, LOOM_OP_SCALAR_ORI, accumulator, shifted_result_bits,
+      result_integer_type, out_accumulator);
+}
+
+// Shape-changing bitcasts reinterpret the source vector as a row-major linear
+// bitstream, with lane ordinal 0 providing the least-significant source bits.
+static iree_status_t loom_vector_to_scalar_build_static_aggregate_bitcast_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  if (loom_vector_to_scalar_indices_are_dynamic(indices)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "vector-to-scalar cannot lower dynamic shape-changing vector.bitcast");
+  }
+
+  loom_value_id_t input = loom_vector_bitcast_input(state->op);
+  loom_type_t input_type =
+      loom_module_value_type(state->rewriter->module, input);
+  if (!loom_type_is_all_static(input_type) ||
+      !loom_type_is_all_static(state->vector_type)) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "vector-to-scalar can only lower shape-changing vector.bitcast for "
+        "all-static vector types");
+  }
+
+  loom_type_t source_scalar_type = loom_vector_to_scalar_lane_type(input_type);
+  int32_t source_width =
+      loom_scalar_type_bitwidth(loom_type_element_type(source_scalar_type));
+  int32_t result_width = loom_scalar_type_bitwidth(
+      loom_type_element_type(state->result_scalar_type));
+  loom_type_t source_integer_type = {0};
+  loom_type_t result_integer_type = {0};
+  if (source_width <= 0 || result_width <= 0 ||
+      !loom_vector_to_scalar_bitcast_integer_type(source_width,
+                                                  &source_integer_type) ||
+      !loom_vector_to_scalar_bitcast_integer_type(result_width,
+                                                  &result_integer_type)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported vector.bitcast scalar bit width");
+  }
+
+  int64_t result_ordinal = loom_vector_to_scalar_linear_ordinal_static(
+      state->vector_type, indices.static_indices);
+  int64_t result_start = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
+      result_ordinal, result_width, &result_start));
+  int64_t result_end = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
+      result_start, result_width, &result_end));
+  int64_t first_source_ordinal = result_start / source_width;
+  int64_t last_source_ordinal = (result_end - 1) / source_width;
+
+  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+  uint8_t source_rank = loom_type_rank(input_type);
+  int64_t* source_indices = NULL;
+  if (source_rank > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(state->rewriter->arena,
+                                                   source_rank, sizeof(int64_t),
+                                                   (void**)&source_indices));
+  }
+  for (int64_t source_ordinal = first_source_ordinal;
+       source_ordinal <= last_source_ordinal; ++source_ordinal) {
+    int64_t source_start = 0;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_position(
+        source_ordinal, source_width, &source_start));
+    int64_t source_end = 0;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_checked_static_bit_end(
+        source_start, source_width, &source_end));
+    int64_t overlap_start =
+        result_start > source_start ? result_start : source_start;
+    int64_t overlap_end = result_end < source_end ? result_end : source_end;
+    int64_t bit_count = overlap_end - overlap_start;
+    if (bit_count <= 0) continue;
+
+    loom_vector_to_scalar_indices_from_ordinal(
+        input_type, (iree_host_size_t)source_ordinal, source_indices);
+    loom_vector_to_scalar_index_list_t source_index_list = {
+        .static_indices = source_indices,
+        .rank = source_rank,
+    };
+    loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+        state, input, source_index_list, &source_lane));
+    loom_value_id_t source_integer_lane = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_bitcast_lane_to_integer(
+        state, source_lane, source_scalar_type, source_integer_type,
+        &source_integer_lane));
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_bitcast_piece(
+        state, source_integer_lane, source_integer_type,
+        overlap_start - source_start, bit_count, overlap_start - result_start,
+        result_integer_type, accumulator, &accumulator));
+  }
+  if (accumulator == LOOM_VALUE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "vector.bitcast lane has no source bits");
+  }
+
+  if (loom_type_equal(result_integer_type, state->result_scalar_type)) {
+    *out_lane = accumulator;
+    return iree_ok_status();
+  }
+  loom_op_t* bitcast_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_bitcast_build(
+      &state->rewriter->builder, accumulator, result_integer_type,
+      state->result_scalar_type, state->location, &bitcast_op));
+  *out_lane = loom_scalar_bitcast_result(bitcast_op);
+  return iree_ok_status();
+}
+
 iree_status_t loom_vector_to_scalar_build_bitcast_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
@@ -496,9 +678,8 @@ iree_status_t loom_vector_to_scalar_build_bitcast_lane(
   loom_type_t input_type =
       loom_module_value_type(state->rewriter->module, input);
   if (!loom_type_shape_equals(input_type, state->vector_type)) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar cannot lower shape-changing vector.bitcast yet");
+    return loom_vector_to_scalar_build_static_aggregate_bitcast_lane(
+        state, indices, out_lane);
   }
   loom_scalar_type_t input_element_type = loom_type_element_type(input_type);
   loom_scalar_type_t result_element_type =
@@ -506,9 +687,8 @@ iree_status_t loom_vector_to_scalar_build_bitcast_lane(
   if (loom_scalar_type_bitwidth(input_element_type) !=
       loom_scalar_type_bitwidth(result_element_type)) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "vector-to-scalar cannot lower element-width-changing vector.bitcast "
-        "yet");
+        IREE_STATUS_INVALID_ARGUMENT,
+        "same-shape vector.bitcast element bit widths must match");
   }
 
   loom_value_id_t input_lane = LOOM_VALUE_ID_INVALID;

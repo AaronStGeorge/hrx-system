@@ -797,6 +797,43 @@ func.def @static_broadcast_transpose_bitcast(%v: vector<2xi32>) -> (vector<2x2xf
 
 // ====
 
+// Shape-changing bitcasts reinterpret the same linear register bitstream even
+// when source and result lane widths differ.
+func.def @static_shape_changing_bitcast(%bytes: vector<2xi8>, %half: vector<1xf16>) -> (vector<1xf16>, vector<2xi8>) {
+  %to_half = vector.bitcast %bytes : vector<2xi8> to vector<1xf16>
+  %to_bytes = vector.bitcast %half : vector<1xf16> to vector<2xi8>
+  func.return %to_half, %to_bytes : vector<1xf16>, vector<2xi8>
+}
+
+// ----
+func.def @static_shape_changing_bitcast(%bytes: vector<2xi8>, %half: vector<1xf16>) -> (vector<1xf16>, vector<2xi8>) {
+  %19 = vector.extract %bytes[0] : vector<2xi8> -> i8
+  %20 = scalar.extui %19 : i8 to i16
+  %21 = vector.extract %bytes[1] : vector<2xi8> -> i8
+  %22 = scalar.extui %21 : i8 to i16
+  %23 = scalar.constant 8 : i16
+  %24 = scalar.shli %22, %23 : i16
+  %25 = scalar.ori %20, %24 : i16
+  %26 = scalar.bitcast %25 : i16 to f16
+  %to_half = vector.from_elements %26 : f16 -> vector<1xf16>
+  %6 = vector.extract %half[0] : vector<1xf16> -> f16
+  %7 = scalar.bitcast %6 : f16 to i16
+  %8 = scalar.constant 255 : i16
+  %9 = scalar.andi %7, %8 : i16
+  %10 = scalar.trunci %9 : i16 to i8
+  %11 = vector.extract %half[0] : vector<1xf16> -> f16
+  %12 = scalar.bitcast %11 : f16 to i16
+  %13 = scalar.constant 8 : i16
+  %14 = scalar.shrui %12, %13 : i16
+  %15 = scalar.constant 255 : i16
+  %16 = scalar.andi %14, %15 : i16
+  %17 = scalar.trunci %16 : i16 to i8
+  %to_bytes = vector.from_elements %10, %17 : i8, i8 -> vector<2xi8>
+  func.return %to_half, %to_bytes : vector<1xf16>, vector<2xi8>
+}
+
+// ====
+
 // Multi-result deinterleave lowers each result independently and can see
 // through a static interleave producer.
 func.def @static_interleave_deinterleave(%a: vector<2xi8>, %b: vector<2xi8>) -> (vector<4xi8>, vector<2xi8>, vector<2xi8>) {

@@ -151,6 +151,39 @@ iree_status_t loom_vector_to_scalar_build_generic_lane_op(
     uint16_t operand_count, const loom_attribute_t* attrs, uint8_t attr_count,
     loom_type_t result_type, loom_value_id_t* out_result);
 
+iree_status_t loom_vector_to_scalar_build_scalar_binary(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t lhs, loom_value_id_t rhs, loom_type_t result_type,
+    loom_value_id_t* out_result);
+
+int64_t loom_vector_to_scalar_integer_mask_value(int32_t bit_width,
+                                                 int64_t used_bits);
+
+int64_t loom_vector_to_scalar_shifted_integer_mask_value(int32_t bit_width,
+                                                         int64_t offset,
+                                                         int64_t used_bits);
+
+iree_status_t loom_vector_to_scalar_build_integer_mask(
+    loom_vector_to_scalar_state_t* state, loom_type_t type, int64_t used_bits,
+    loom_value_id_t* out_mask);
+
+iree_status_t loom_vector_to_scalar_cast_integer_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t input,
+    loom_type_t input_type, loom_type_t result_type, bool signed_extend,
+    loom_value_id_t* out_result);
+
+iree_status_t loom_vector_to_scalar_build_scalar_shift(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t input, loom_type_t type, int64_t amount,
+    loom_value_id_t* out_result);
+
+iree_status_t loom_vector_to_scalar_checked_static_bit_position(
+    int64_t ordinal, int64_t bit_width, int64_t* out_position);
+
+iree_status_t loom_vector_to_scalar_checked_static_bit_end(int64_t start,
+                                                           int64_t bit_width,
+                                                           int64_t* out_end);
+
 iree_status_t loom_vector_to_scalar_build_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
