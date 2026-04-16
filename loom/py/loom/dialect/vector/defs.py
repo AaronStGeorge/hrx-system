@@ -139,6 +139,17 @@ IntegerDot8I4Kind = EnumDef(
     doc="Signedness variants for packed eight-lane i4 dot products accumulated into i32 lanes.",
 )
 
+FloatDot4F8Kind = EnumDef(
+    "FloatDot4F8Kind",
+    [
+        EnumCase("fp8bf8", 0, doc="Packed fp8/E4M3 lhs times packed bf8/E5M2 rhs."),
+        EnumCase("bf8fp8", 1, doc="Packed bf8/E5M2 lhs times packed fp8/E4M3 rhs."),
+        EnumCase("fp8fp8", 2, doc="Packed fp8/E4M3 lhs times packed fp8/E4M3 rhs."),
+        EnumCase("bf8bf8", 3, doc="Packed bf8/E5M2 lhs times packed bf8/E5M2 rhs."),
+    ],
+    doc="Format variants for packed four-lane fp8/bf8 dot products accumulated into f32 lanes.",
+)
+
 FloatAssumptionFlags = EnumDef(
     "FloatAssumptionFlags",
     [
@@ -2990,6 +3001,52 @@ vector_dot8i4 = Op(
     ],
 )
 
+vector_dot4f8 = Op(
+    "vector.dot4f8",
+    group=vector_ops,
+    doc=(
+        "Treat each i32 source lane as a little-endian pack of four 8-bit "
+        "floating-point fields, decode fields according to the fp8/bf8 "
+        "template, and add the four-product fused sum into the matching f32 "
+        "accumulator lane. The fp8 spelling names the E4M3 primitive float "
+        "format and bf8 names the E5M2 primitive float format. This is a "
+        "packed-storage register dot matching AMDGPU dot4.f32.fp8/bf8 "
+        "families without requiring unpacked f8 vector source lanes."
+    ),
+    operands=[
+        Operand("lhs", VECTOR, doc="i32 lanes holding packed lhs 8-bit float fields."),
+        Operand("rhs", VECTOR, doc="i32 lanes holding packed rhs 8-bit float fields."),
+        Operand("acc", VECTOR, doc="f32 accumulator lanes updated by each packed four-lane dot product."),
+    ],
+    results=[Result("result", VECTOR, doc="Updated f32 accumulator lanes.")],
+    attrs=[AttrDef("kind", ATTR_TYPE_ENUM, enum_def=FloatDot4F8Kind)],
+    constraints=[
+        HasIntegerElement("lhs"),
+        HasFloatElement("acc"),
+        SameType("lhs", "rhs"),
+        SameType("acc", "result"),
+        SameShape("lhs", "acc"),
+    ],
+    verify="loom_vector_dot4f8_verify",
+    traits=[PURE],
+    format=[
+        TemplateParam("kind"),
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COMMA,
+        Ref("acc"),
+        COLON,
+        TypeOf("lhs"),
+        COMMA,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf32>",
+        "%r = vector.dot4f8<bf8fp8> %lhs, %rhs, %acc : vector<[%N]xi32>, vector<[%N]xf32>",
+    ],
+)
+
 
 # ============================================================================
 # Reductions
@@ -3170,5 +3227,6 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_dot2f,
     vector_dot4i,
     vector_dot8i4,
+    vector_dot4f8,
     vector_reduce,
 )

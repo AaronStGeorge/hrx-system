@@ -1500,6 +1500,139 @@ func.def @dynamic_dot8i4(%n: index, %lhs: vector<[%n]xi32>, %rhs: vector<[%n]xi3
 
 // ====
 
+// dot4f8 consumes one packed i32 per result lane. Each i32 holds four
+// little-endian eight-bit float fields decoded according to the template.
+func.def @static_dot4f8(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xf32>) -> (vector<1xf32>) {
+  %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<1xi32>, vector<1xf32>
+  func.return %r : vector<1xf32>
+}
+
+// ----
+func.def @static_dot4f8(%lhs: vector<1xi32>, %rhs: vector<1xi32>, %acc: vector<1xf32>) -> (vector<1xf32>) {
+  %5 = vector.extract %lhs[0] : vector<1xi32> -> i32
+  %6 = vector.extract %rhs[0] : vector<1xi32> -> i32
+  %7 = vector.extract %acc[0] : vector<1xf32> -> f32
+  %8 = scalar.constant 255 : i32
+  %9 = scalar.constant 8 : i32
+  %10 = scalar.constant 16 : i32
+  %11 = scalar.constant 24 : i32
+  %12 = scalar.andi %5, %8 : i32
+  %13 = scalar.trunci %12 : i32 to i8
+  %14 = scalar.bitcast %13 : i8 to f8E4M3
+  %15 = scalar.extf %14 : f8E4M3 to f32
+  %16 = scalar.andi %6, %8 : i32
+  %17 = scalar.trunci %16 : i32 to i8
+  %18 = scalar.bitcast %17 : i8 to f8E5M2
+  %19 = scalar.extf %18 : f8E5M2 to f32
+  %20 = scalar.fmaf %15, %19, %7 : f32
+  %21 = scalar.shrui %5, %9 : i32
+  %22 = scalar.andi %21, %8 : i32
+  %23 = scalar.trunci %22 : i32 to i8
+  %24 = scalar.bitcast %23 : i8 to f8E4M3
+  %25 = scalar.extf %24 : f8E4M3 to f32
+  %26 = scalar.shrui %6, %9 : i32
+  %27 = scalar.andi %26, %8 : i32
+  %28 = scalar.trunci %27 : i32 to i8
+  %29 = scalar.bitcast %28 : i8 to f8E5M2
+  %30 = scalar.extf %29 : f8E5M2 to f32
+  %31 = scalar.fmaf %25, %30, %20 : f32
+  %32 = scalar.shrui %5, %10 : i32
+  %33 = scalar.andi %32, %8 : i32
+  %34 = scalar.trunci %33 : i32 to i8
+  %35 = scalar.bitcast %34 : i8 to f8E4M3
+  %36 = scalar.extf %35 : f8E4M3 to f32
+  %37 = scalar.shrui %6, %10 : i32
+  %38 = scalar.andi %37, %8 : i32
+  %39 = scalar.trunci %38 : i32 to i8
+  %40 = scalar.bitcast %39 : i8 to f8E5M2
+  %41 = scalar.extf %40 : f8E5M2 to f32
+  %42 = scalar.fmaf %36, %41, %31 : f32
+  %43 = scalar.shrui %5, %11 : i32
+  %44 = scalar.andi %43, %8 : i32
+  %45 = scalar.trunci %44 : i32 to i8
+  %46 = scalar.bitcast %45 : i8 to f8E4M3
+  %47 = scalar.extf %46 : f8E4M3 to f32
+  %48 = scalar.shrui %6, %11 : i32
+  %49 = scalar.andi %48, %8 : i32
+  %50 = scalar.trunci %49 : i32 to i8
+  %51 = scalar.bitcast %50 : i8 to f8E5M2
+  %52 = scalar.extf %51 : f8E5M2 to f32
+  %53 = scalar.fmaf %47, %52, %42 : f32
+  %r = vector.from_elements %53 : vector<1xf32>
+  func.return %r : vector<1xf32>
+}
+
+// ====
+
+// Dynamic dot4f8 carries the f32 accumulator aggregate through the loop while
+// each lane updates one packed i32 word.
+func.def @dynamic_dot4f8(%n: index, %lhs: vector<[%n]xi32>, %rhs: vector<[%n]xi32>, %acc: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+  %r = vector.dot4f8<bf8fp8> %lhs, %rhs, %acc : vector<[%n]xi32>, vector<[%n]xf32>
+  func.return %r : vector<[%n]xf32>
+}
+
+// ----
+func.def @dynamic_dot4f8(%n: index, %lhs: vector<[%n]xi32>, %rhs: vector<[%n]xi32>, %acc: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+  %6 = index.constant 0 : index
+  %7 = index.constant 1 : index
+  %r = scf.for %8 = [%6 to %n step %7](%9 = %acc : vector<[%n]xf32>) -> (vector<[%n]xf32>) {
+    %11 = vector.extract %lhs[%8] : vector<[%n]xi32> -> i32
+    %12 = vector.extract %rhs[%8] : vector<[%n]xi32> -> i32
+    %13 = vector.extract %acc[%8] : vector<[%n]xf32> -> f32
+    %14 = scalar.constant 255 : i32
+    %15 = scalar.constant 8 : i32
+    %16 = scalar.constant 16 : i32
+    %17 = scalar.constant 24 : i32
+    %18 = scalar.andi %11, %14 : i32
+    %19 = scalar.trunci %18 : i32 to i8
+    %20 = scalar.bitcast %19 : i8 to f8E5M2
+    %21 = scalar.extf %20 : f8E5M2 to f32
+    %22 = scalar.andi %12, %14 : i32
+    %23 = scalar.trunci %22 : i32 to i8
+    %24 = scalar.bitcast %23 : i8 to f8E4M3
+    %25 = scalar.extf %24 : f8E4M3 to f32
+    %26 = scalar.fmaf %21, %25, %13 : f32
+    %27 = scalar.shrui %11, %15 : i32
+    %28 = scalar.andi %27, %14 : i32
+    %29 = scalar.trunci %28 : i32 to i8
+    %30 = scalar.bitcast %29 : i8 to f8E5M2
+    %31 = scalar.extf %30 : f8E5M2 to f32
+    %32 = scalar.shrui %12, %15 : i32
+    %33 = scalar.andi %32, %14 : i32
+    %34 = scalar.trunci %33 : i32 to i8
+    %35 = scalar.bitcast %34 : i8 to f8E4M3
+    %36 = scalar.extf %35 : f8E4M3 to f32
+    %37 = scalar.fmaf %31, %36, %26 : f32
+    %38 = scalar.shrui %11, %16 : i32
+    %39 = scalar.andi %38, %14 : i32
+    %40 = scalar.trunci %39 : i32 to i8
+    %41 = scalar.bitcast %40 : i8 to f8E5M2
+    %42 = scalar.extf %41 : f8E5M2 to f32
+    %43 = scalar.shrui %12, %16 : i32
+    %44 = scalar.andi %43, %14 : i32
+    %45 = scalar.trunci %44 : i32 to i8
+    %46 = scalar.bitcast %45 : i8 to f8E4M3
+    %47 = scalar.extf %46 : f8E4M3 to f32
+    %48 = scalar.fmaf %42, %47, %37 : f32
+    %49 = scalar.shrui %11, %17 : i32
+    %50 = scalar.andi %49, %14 : i32
+    %51 = scalar.trunci %50 : i32 to i8
+    %52 = scalar.bitcast %51 : i8 to f8E5M2
+    %53 = scalar.extf %52 : f8E5M2 to f32
+    %54 = scalar.shrui %12, %17 : i32
+    %55 = scalar.andi %54, %14 : i32
+    %56 = scalar.trunci %55 : i32 to i8
+    %57 = scalar.bitcast %56 : i8 to f8E4M3
+    %58 = scalar.extf %57 : f8E4M3 to f32
+    %59 = scalar.fmaf %53, %58, %48 : f32
+    %60 = vector.insert %59 into %9[%8] : f32, vector<[%n]xf32>
+    scf.yield %60 : vector<[%n]xf32>
+  }
+  func.return %r : vector<[%n]xf32>
+}
+
+// ====
+
 // A q4 pair is the smallest useful bitpack example: two four-bit codes become
 // one packed byte.
 func.def @static_bitpack_q4_pair(%codes: vector<2xi8>) -> (vector<1xi8>) {

@@ -16,6 +16,7 @@ from loom.dialect.vector import (
     AtomicOrdering,
     AtomicScope,
     FloatAssumptionFlags,
+    FloatDot4F8Kind,
     IntegerDot4Kind,
     IntegerDot8I4Kind,
     QuantizeNaN,
@@ -660,6 +661,29 @@ def test_vector_dot8i4_is_pure_packed_i4_to_i32_dot() -> None:
     assert ("SameType", ("lhs", "rhs", "acc", "result")) in constraints
     assert "little-endian pack" in op.doc
     assert "sdot8/udot8/sudot8" in op.doc
+    assert "Pure" in trait_names
+    assert "Elementwise" not in trait_names
+    assert op.effects == ()
+
+
+def test_vector_dot4f8_is_pure_packed_f8_to_f32_dot() -> None:
+    op = _op_by_name()["vector.dot4f8"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+    trait_names = {trait.name for trait in op.traits}
+
+    assert [case.keyword for case in FloatDot4F8Kind.cases] == [
+        "fp8bf8",
+        "bf8fp8",
+        "fp8fp8",
+        "bf8bf8",
+    ]
+    assert ("HasIntegerElement", ("lhs",)) in constraints
+    assert ("HasFloatElement", ("acc",)) in constraints
+    assert ("SameType", ("lhs", "rhs")) in constraints
+    assert ("SameType", ("acc", "result")) in constraints
+    assert ("SameShape", ("lhs", "acc")) in constraints
+    assert "little-endian pack" in op.doc
+    assert "dot4.f32.fp8/bf8" in op.doc
     assert "Pure" in trait_names
     assert "Elementwise" not in trait_names
     assert op.effects == ()

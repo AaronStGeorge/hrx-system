@@ -151,8 +151,9 @@ enum {
   LOOM_OP_VECTOR_DOT2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 130),
   LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 131),
   LOOM_OP_VECTOR_DOT8I4 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 132),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 133),
-  LOOM_OP_VECTOR_COUNT_ = 134,
+  LOOM_OP_VECTOR_DOT4F8 = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 133),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 134),
+  LOOM_OP_VECTOR_COUNT_ = 135,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -294,6 +295,15 @@ typedef enum loom_vector_dot8i4_kind_e {
   LOOM_VECTOR_DOT8I4_KIND_U4U4 = 3,
   LOOM_VECTOR_DOT8I4_KIND_COUNT_ = 4,
 } loom_vector_dot8i4_kind_t;
+
+// Format variants for packed four-lane fp8/bf8 dot products accumulated into f32 lanes.
+typedef enum loom_vector_dot4f8_kind_e {
+  LOOM_VECTOR_DOT4F8_KIND_FP8BF8 = 0,
+  LOOM_VECTOR_DOT4F8_KIND_BF8FP8 = 1,
+  LOOM_VECTOR_DOT4F8_KIND_FP8FP8 = 2,
+  LOOM_VECTOR_DOT4F8_KIND_BF8BF8 = 3,
+  LOOM_VECTOR_DOT4F8_KIND_COUNT_ = 4,
+} loom_vector_dot4f8_kind_t;
 
 // Combining operations for vector reductions.
 typedef enum loom_vector_reduce_kind_e {
@@ -2794,6 +2804,27 @@ iree_status_t loom_vector_dot8i4_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_vector_dot8i4_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VECTOR_DOT4F8: Treat each i32 source lane as a little-endian pack of four 8-bit floating-point fields, decode fields according to the fp8/bf8 template, and add the four-product fused sum into the matching f32 accumulator lane. The fp8 spelling names the E4M3 primitive float format and bf8 names the E5M2 primitive float format. This is a packed-storage register dot matching AMDGPU dot4.f32.fp8/bf8 families without requiring unpacked f8 vector source lanes.
+// %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf32>
+LOOM_DEFINE_ISA(loom_vector_dot4f8_isa, LOOM_OP_VECTOR_DOT4F8)
+LOOM_DEFINE_OPERAND(loom_vector_dot4f8_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_dot4f8_rhs, 1)
+LOOM_DEFINE_OPERAND(loom_vector_dot4f8_acc, 2)
+LOOM_DEFINE_RESULT(loom_vector_dot4f8_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_vector_dot4f8_kind, 0)
+iree_status_t loom_vector_dot4f8_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_value_id_t lhs,
+    loom_value_id_t rhs,
+    loom_value_id_t acc,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_dot4f8_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

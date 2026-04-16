@@ -158,6 +158,20 @@ static bool loom_vector_to_scalar_dot8i4_rhs_is_signed(uint8_t kind) {
          kind == LOOM_VECTOR_DOT8I4_KIND_U4S4;
 }
 
+static bool loom_vector_to_scalar_dot4f8_lhs_is_fp8(uint8_t kind) {
+  return kind == LOOM_VECTOR_DOT4F8_KIND_FP8BF8 ||
+         kind == LOOM_VECTOR_DOT4F8_KIND_FP8FP8;
+}
+
+static bool loom_vector_to_scalar_dot4f8_rhs_is_fp8(uint8_t kind) {
+  return kind == LOOM_VECTOR_DOT4F8_KIND_BF8FP8 ||
+         kind == LOOM_VECTOR_DOT4F8_KIND_FP8FP8;
+}
+
+static loom_scalar_type_t loom_vector_to_scalar_dot4f8_field_type(bool is_fp8) {
+  return is_fp8 ? LOOM_SCALAR_TYPE_F8E4M3 : LOOM_SCALAR_TYPE_F8E5M2;
+}
+
 static iree_status_t loom_vector_to_scalar_build_grouped_source_indices(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t result_indices,
@@ -378,6 +392,102 @@ iree_status_t loom_vector_to_scalar_build_dot8i4_lane(
         state, LOOM_OP_SCALAR_ADDI, 0,
         (loom_value_id_t[]){accumulator, product}, 2, NULL, 0, i32_type,
         &accumulator));
+  }
+  *out_lane = accumulator;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_build_packed_f8_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t storage_lane,
+    loom_value_id_t byte_mask, loom_value_id_t field_shift,
+    loom_scalar_type_t float_type, loom_value_id_t* out_lane) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t i8_type = loom_type_scalar(LOOM_SCALAR_TYPE_I8);
+  loom_type_t f8_type = loom_type_scalar(float_type);
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+
+  loom_value_id_t shifted_storage = storage_lane;
+  if (field_shift != LOOM_VALUE_ID_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_generic_lane_op(
+        state, LOOM_OP_SCALAR_SHRUI, 0,
+        (loom_value_id_t[]){storage_lane, field_shift}, 2, NULL, 0, i32_type,
+        &shifted_storage));
+  }
+
+  loom_value_id_t unsigned_byte = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_binary(
+      state, LOOM_OP_SCALAR_ANDI, shifted_storage, byte_mask, i32_type,
+      &unsigned_byte));
+
+  loom_value_id_t byte_i8 = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_cast_integer_lane(
+      state, unsigned_byte, i32_type, i8_type, /*signed_extend=*/false,
+      &byte_i8));
+
+  loom_value_id_t byte_f8 = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_generic_lane_op(
+      state, LOOM_OP_SCALAR_BITCAST, 0, (loom_value_id_t[]){byte_i8}, 1, NULL,
+      0, f8_type, &byte_f8));
+
+  return loom_vector_to_scalar_build_generic_lane_op(
+      state, LOOM_OP_SCALAR_EXTF, 0, (loom_value_id_t[]){byte_f8}, 1, NULL, 0,
+      f32_type, out_lane);
+}
+
+iree_status_t loom_vector_to_scalar_build_dot4f8_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  uint8_t kind = loom_vector_dot4f8_kind(state->op);
+  if (kind >= LOOM_VECTOR_DOT4F8_KIND_COUNT_) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported vector.dot4f8 kind %u",
+                            (unsigned)kind);
+  }
+
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_value_id_t lhs_storage = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_dot4f8_lhs(state->op), indices, &lhs_storage));
+  loom_value_id_t rhs_storage = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_dot4f8_rhs(state->op), indices, &rhs_storage));
+  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_dot4f8_acc(state->op), indices, &accumulator));
+
+  loom_value_id_t byte_mask = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_build_integer_mask(state, i32_type, 8, &byte_mask));
+  loom_scalar_type_t lhs_float_type = loom_vector_to_scalar_dot4f8_field_type(
+      loom_vector_to_scalar_dot4f8_lhs_is_fp8(kind));
+  loom_scalar_type_t rhs_float_type = loom_vector_to_scalar_dot4f8_field_type(
+      loom_vector_to_scalar_dot4f8_rhs_is_fp8(kind));
+  loom_value_id_t field_shifts[4] = {
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+      LOOM_VALUE_ID_INVALID,
+  };
+  for (uint8_t field_ordinal = 1; field_ordinal < 4; ++field_ordinal) {
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+        &state->rewriter->builder, i32_type, state->location,
+        8 * (int64_t)field_ordinal, &field_shifts[field_ordinal]));
+  }
+  for (uint8_t field_ordinal = 0; field_ordinal < 4; ++field_ordinal) {
+    loom_value_id_t lhs_f32 = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_packed_f8_lane(
+        state, lhs_storage, byte_mask, field_shifts[field_ordinal],
+        lhs_float_type, &lhs_f32));
+    loom_value_id_t rhs_f32 = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_packed_f8_lane(
+        state, rhs_storage, byte_mask, field_shifts[field_ordinal],
+        rhs_float_type, &rhs_f32));
+
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_generic_lane_op(
+        state, LOOM_OP_SCALAR_FMAF, 0,
+        (loom_value_id_t[]){lhs_f32, rhs_f32, accumulator}, 3, NULL, 0,
+        f32_type, &accumulator));
   }
   *out_lane = accumulator;
   return iree_ok_status();

@@ -1288,6 +1288,36 @@ func.def @dot8i4_shape_mismatch(%lhs: vector<4xi32>, %rhs: vector<8xi32>, %acc: 
 
 // ====
 
+// Dot4f8 consumes packed i32 storage lanes; use vector.bitpack/bitcast first
+// when starting from byte vectors.
+func.def @dot4f8_source_not_i32(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<4xf32>) {
+  // ERROR@+1: TYPE/003 "i32 packed fp8/bf8 storage lanes"
+  %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xf32>
+  func.return
+}
+
+// ====
+
+// Dot4f8 accumulates into f32 lanes even though the packed source fields are
+// only eight bits wide.
+func.def @dot4f8_acc_not_f32(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xf16>) {
+  // ERROR@+1: TYPE/003 "f32 accumulator lanes"
+  %r = vector.dot4f8<bf8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf16>
+  func.return
+}
+
+// ====
+
+// Dot4f8 is lane-wise over packed storage words, so source and accumulator
+// vector shapes match.
+func.def @dot4f8_shape_mismatch(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<8xf32>) {
+  // ERROR@+1: SHAPE/002
+  %r = vector.dot4f8<fp8fp8> %lhs, %rhs, %acc : vector<4xi32>, vector<8xf32>
+  func.return
+}
+
+// ====
+
 // Reduce template parameters are tied to the vector element family.
 func.def @reduce_kind_mismatch(%v: vector<4xi32>, %zero: i32) {
   // ERROR@+1: TYPE/003 "floating-point element type for reduce kind"

@@ -234,6 +234,8 @@ static const loom_vector_to_scalar_descriptor_t kVectorToScalarDescriptors[] = {
      LOOM_VECTOR_TO_SCALAR_LANE_DOT4I, 0, 0, false, false, false, 2},
     {LOOM_OP_VECTOR_DOT8I4, LOOM_OP_KIND_UNKNOWN,
      LOOM_VECTOR_TO_SCALAR_LANE_DOT8I4, 0, 0, false, false, false, 2},
+    {LOOM_OP_VECTOR_DOT4F8, LOOM_OP_KIND_UNKNOWN,
+     LOOM_VECTOR_TO_SCALAR_LANE_DOT4F8, 0, 0, false, false, false, 2},
     {LOOM_OP_VECTOR_BITPACK, LOOM_OP_KIND_UNKNOWN,
      LOOM_VECTOR_TO_SCALAR_LANE_BITPACK, 0, 0, false, false, false, UINT8_MAX},
     {LOOM_OP_VECTOR_BITUNPACKU, LOOM_OP_KIND_UNKNOWN,

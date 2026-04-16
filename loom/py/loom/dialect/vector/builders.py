@@ -1792,6 +1792,21 @@ class VectorBuilders:
         _operands.append(acc)
         return cast(ValueRef, self._b.build("vector.dot8i4", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def dot4f8(self, *, kind: str, lhs: ValueRef, rhs: ValueRef, acc: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Treat each i32 source lane as a little-endian pack of four 8-bit floating-point fields, decode fields according to the fp8/bf8 template, and add the four-product fused sum into the matching f32 accumulator lane. The fp8 spelling names the E4M3 primitive float format and bf8 names the E5M2 primitive float format. This is a packed-storage register dot matching AMDGPU dot4.f32.fp8/bf8 families without requiring unpacked f8 vector source lanes.
+
+        Example::
+            %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _operands.append(lhs)
+        _operands.append(rhs)
+        _operands.append(acc)
+        return cast(ValueRef, self._b.build("vector.dot4f8", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def reduce(self, *, kind: str, input: ValueRef, init: ValueRef, result_types: list[Type]) -> ValueRef:
         """Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type.
 
