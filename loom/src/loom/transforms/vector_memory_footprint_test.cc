@@ -292,7 +292,7 @@ func.def @test(%buffer: buffer, %base: offset, %n: index, %iv: index, %old: vect
   %iv2 = index.assume %iv [range(%iv, 0, 4096)] : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]xf32, %layout>
   %mask = vector.mask.range [%iv2 to %n step %c1] : index -> vector<16xi1>
-  %loaded = vector.load.mask %view[%iv2], %mask, %old : view<[%n]xf32, %layout>, vector<16xi1>, vector<16xf32> -> vector<16xf32>
+  %loaded = vector.load.mask %view[%iv2], %mask, %old : view<[%n]xf32, %layout>, vector<16xi1>, vector<16xf32>
   func.return
 }
 )";
@@ -324,7 +324,7 @@ func.def @test(%buffer: buffer, %base: offset, %n: index, %iv: index, %old: vect
   %iv2 = index.assume %iv [range(%iv, 0, 4096)] : index
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]xf32, %layout>
   %mask = vector.mask.range [%iv2 to %n step %c1] : index -> vector<16xi1>
-  %loaded = vector.load.expand %view[%iv2], %mask, %old : view<[%n]xf32, %layout>, vector<16xi1>, vector<16xf32> -> vector<16xf32>
+  %loaded = vector.load.expand %view[%iv2], %mask, %old : view<[%n]xf32, %layout>, vector<16xi1>, vector<16xf32>
   vector.store.compress %value, %view[%iv2], %mask : vector<16xf32>, view<[%n]xf32, %layout>, vector<16xi1>
   func.return
 }
@@ -445,7 +445,7 @@ func.def @test(%buffer: buffer, %base: offset, %value: vector<4xi32>) -> (vector
   %c1 = index.constant 1 : index
   %view = buffer.view %buffer[%base] : buffer -> view<4xi32, %layout>
   %offsets = vector.iota %c0 step %c1 : vector<4xindex>
-  %old = vector.atomic.rmw<xchgi> %value, %view[%c0][%offsets] {ordering = acq_rel, scope = workgroup} : vector<4xi32>, view<4xi32, %layout>, vector<4xindex> -> vector<4xi32>
+  %old = vector.atomic.rmw<xchgi> %value, %view[%c0][%offsets] {ordering = acq_rel, scope = workgroup} : vector<4xi32>, view<4xi32, %layout>, vector<4xindex>
   func.return %old : vector<4xi32>
 }
 )";
@@ -463,10 +463,10 @@ func.def @test(%buffer: buffer, %base: offset, %value: vector<4xi32>) {
   %old = vector.constant 0 : vector<4xi32>
   %view = buffer.view %buffer[%base] : buffer -> view<4xi32, %layout>
   %offsets = vector.iota %c1 step %c1 : vector<4xindex>
-  %gathered = vector.gather.mask %view[%c0][%offsets], %mask, %old : view<4xi32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xi32> -> vector<4xi32>
+  %gathered = vector.gather.mask %view[%c0][%offsets], %mask, %old : view<4xi32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xi32>
   vector.scatter.mask %value, %view[%c0][%offsets], %mask : vector<4xi32>, view<4xi32, %layout>, vector<4xindex>, vector<4xi1>
   vector.atomic.reduce.mask<addi> %value, %view[%c0][%offsets], %mask {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<4xi32, %layout>, vector<4xindex>, vector<4xi1>
-  %rmw = vector.atomic.rmw.mask<xchgi> %value, %view[%c0][%offsets], %mask, %old {ordering = acq_rel, scope = workgroup} : vector<4xi32>, view<4xi32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xi32> -> vector<4xi32>
+  %rmw = vector.atomic.rmw.mask<xchgi> %value, %view[%c0][%offsets], %mask, %old {ordering = acq_rel, scope = workgroup} : vector<4xi32>, view<4xi32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xi32>
   func.return
 }
 )";
