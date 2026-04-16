@@ -187,7 +187,9 @@ class WriterTest : public ::testing::Test {
   }
 
   // Writes a module to bytecode and returns the raw bytes.
-  std::vector<uint8_t> WriteModule(const loom_module_t* module) {
+  std::vector<uint8_t> WriteModule(
+      const loom_module_t* module,
+      const loom_bytecode_write_options_t* options = nullptr) {
     iree_io_stream_t* stream = nullptr;
     IREE_CHECK_OK(iree_io_vec_stream_create(
         IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
@@ -195,7 +197,7 @@ class WriterTest : public ::testing::Test {
         4096, iree_allocator_system(), &stream));
 
     IREE_CHECK_OK(
-        loom_bytecode_write_module(module, stream, nullptr, &block_pool_));
+        loom_bytecode_write_module(module, stream, options, &block_pool_));
 
     // Read the bytes back from the stream.
     iree_io_stream_pos_t length = iree_io_stream_length(stream);
@@ -228,6 +230,64 @@ class WriterTest : public ::testing::Test {
     return value;
   }
 
+  // Reads an unsigned varint from raw bytes and advances |offset|.
+  uint64_t ReadUVarint(const std::vector<uint8_t>& bytes, size_t* offset) {
+    uint64_t value = 0;
+    uint32_t shift = 0;
+    while (*offset < bytes.size()) {
+      uint8_t byte = bytes[(*offset)++];
+      value |= (uint64_t)(byte & 0x7F) << shift;
+      if ((byte & 0x80) == 0) return value;
+      shift += 7;
+    }
+    return value;
+  }
+
+  struct SectionEntry {
+    // Section kind from loom_bytecode_section_kind_t.
+    uint16_t kind;
+    // Byte offset from the start of the module.
+    uint64_t offset;
+    // Byte length of the section payload.
+    uint64_t length;
+  };
+
+  // Reads the module section directory after the module allocation summary.
+  std::vector<SectionEntry> ReadSectionDirectory(
+      const std::vector<uint8_t>& bytes, uint64_t module_offset) {
+    size_t section_offset = (size_t)module_offset;
+    uint64_t section_count = ReadUVarint(bytes, &section_offset);
+    // Module allocation summary: value, region, block, and op counts.
+    ReadUVarint(bytes, &section_offset);
+    ReadUVarint(bytes, &section_offset);
+    ReadUVarint(bytes, &section_offset);
+    ReadUVarint(bytes, &section_offset);
+
+    std::vector<SectionEntry> entries;
+    entries.reserve((size_t)section_count);
+    for (uint64_t i = 0; i < section_count; ++i) {
+      entries.push_back(SectionEntry{
+          .kind = ReadU16LE(bytes, section_offset),
+          .offset = ReadU64LE(bytes, section_offset + 8),
+          .length = ReadU64LE(bytes, section_offset + 16),
+      });
+      section_offset += sizeof(loom_bytecode_section_dir_entry_t);
+    }
+    return entries;
+  }
+
+  // Finds a section entry by kind.
+  bool FindSection(const std::vector<SectionEntry>& entries, uint16_t kind,
+                   SectionEntry* out_entry) {
+    for (const SectionEntry& entry : entries) {
+      if (entry.kind == kind) {
+        *out_entry = entry;
+        return true;
+      }
+    }
+    return false;
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
 };
@@ -258,12 +318,29 @@ TEST_F(WriterTest, FileHeaderVersion) {
   loom_module_free(module);
 }
 
-TEST_F(WriterTest, FileHeaderFlags) {
+TEST_F(WriterTest, FileHeaderLocationMode) {
   loom_module_t* module = CreateModule("test");
   auto bytes = WriteModule(module);
 
-  // Default flags: 0.
-  EXPECT_EQ(bytes[5], 0);
+  EXPECT_EQ(bytes[5], LOOM_BYTECODE_LOCATION_MODE_SOURCE_LOCATIONS);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, NoLocationsModeOmitsLocationsSection) {
+  loom_module_t* module = CreateModule("test");
+  loom_bytecode_write_options_t options = {{0}};
+  options.location_mode = LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS;
+  auto bytes = WriteModule(module, &options);
+
+  EXPECT_EQ(bytes[5], LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS);
+
+  size_t dir_offset = 24;
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  SectionEntry locations_entry = {};
+  EXPECT_FALSE(
+      FindSection(entries, LOOM_BYTECODE_SECTION_LOCATIONS, &locations_entry));
 
   loom_module_free(module);
 }
@@ -347,7 +424,7 @@ TEST_F(WriterTest, ModuleDirectoryEntry) {
 // Section directory tests
 //===----------------------------------------------------------------------===//
 
-TEST_F(WriterTest, SectionDirectoryHasAllSections) {
+TEST_F(WriterTest, SectionDirectoryHasWrittenSections) {
   loom_module_t* module = CreateModule("test");
   auto bytes = WriteModule(module);
 
@@ -355,25 +432,24 @@ TEST_F(WriterTest, SectionDirectoryHasAllSections) {
   size_t dir_offset = 24;  // After header padding.
   uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
 
-  // Section directory is at the start of module data.
-  // 9 sections * 32 bytes each = 288 bytes.
-  ASSERT_GE(bytes.size(), module_offset + 288);
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  ASSERT_EQ(entries.size(), 8u);
 
-  // Each section should have a valid kind and nonzero offset (except
-  // possibly RESOURCES which we don't write).
   bool found_kinds[LOOM_BYTECODE_SECTION_COUNT] = {false};
-  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
-    size_t entry_offset = (size_t)module_offset + i * 32;
-    uint16_t kind = ReadU16LE(bytes, entry_offset);
+  uint64_t previous_end = 0;
+  for (const SectionEntry& entry : entries) {
+    uint16_t kind = entry.kind;
     EXPECT_LT(kind, (uint16_t)LOOM_BYTECODE_SECTION_COUNT)
-        << "section " << i << " has invalid kind " << kind;
+        << "section has invalid kind " << kind;
+    EXPECT_GE(entry.offset, previous_end);
+    previous_end = entry.offset + entry.length;
     found_kinds[kind] = true;
   }
 
-  // All section kinds should be present.
-  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
+  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT - 1; ++i) {
     EXPECT_TRUE(found_kinds[i]) << "missing section kind " << i;
   }
+  EXPECT_FALSE(found_kinds[LOOM_BYTECODE_SECTION_RESOURCES]);
 
   loom_module_free(module);
 }
@@ -386,12 +462,10 @@ TEST_F(WriterTest, SectionOffsetsAreWithinModule) {
   uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
   uint64_t module_length = ReadU64LE(bytes, dir_offset + 16);
 
-  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
-    size_t entry_offset = (size_t)module_offset + i * 32;
-    uint64_t section_offset = ReadU64LE(bytes, entry_offset + 8);
-    uint64_t section_length = ReadU64LE(bytes, entry_offset + 16);
-    EXPECT_LE(section_offset + section_length, module_length)
-        << "section " << i << " extends past module boundary";
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  for (const SectionEntry& entry : entries) {
+    EXPECT_LE(entry.offset + entry.length, module_length)
+        << "section " << entry.kind << " extends past module boundary";
   }
 
   loom_module_free(module);
@@ -409,25 +483,18 @@ TEST_F(WriterTest, StringsSectionContainsModuleName) {
   size_t dir_offset = 24;
   uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
 
-  // Scan section directory for STRINGS kind.
-  uint64_t strings_offset = 0;
-  uint64_t strings_length = 0;
-  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
-    size_t entry_offset = (size_t)module_offset + i * 32;
-    if (ReadU16LE(bytes, entry_offset) == LOOM_BYTECODE_SECTION_STRINGS) {
-      strings_offset = ReadU64LE(bytes, entry_offset + 8);
-      strings_length = ReadU64LE(bytes, entry_offset + 16);
-      break;
-    }
-  }
-  ASSERT_GT(strings_length, 0u);
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  SectionEntry strings_entry = {};
+  ASSERT_TRUE(
+      FindSection(entries, LOOM_BYTECODE_SECTION_STRINGS, &strings_entry));
+  ASSERT_GT(strings_entry.length, 0u);
 
   // Parse the strings section using a cursor.
   const uint8_t* section_data =
-      bytes.data() + (size_t)module_offset + (size_t)strings_offset;
+      bytes.data() + (size_t)module_offset + (size_t)strings_entry.offset;
   loom_bytecode_cursor_t cursor;
-  loom_bytecode_cursor_initialize(section_data,
-                                  (iree_host_size_t)strings_length, &cursor);
+  loom_bytecode_cursor_initialize(
+      section_data, (iree_host_size_t)strings_entry.length, &cursor);
 
   uint64_t string_count = 0;
   IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &string_count));
@@ -530,27 +597,112 @@ TEST_F(WriterTest, ModuleWithFunction) {
   // Find the OPS section and verify it contains "test.addi".
   size_t header_dir_offset = 24;
   uint64_t module_offset = ReadU64LE(bytes, header_dir_offset + 8);
-  uint64_t ops_offset = 0;
-  uint64_t ops_length = 0;
-  for (int i = 0; i < LOOM_BYTECODE_SECTION_COUNT; ++i) {
-    size_t entry_offset = (size_t)module_offset + i * 32;
-    if (ReadU16LE(bytes, entry_offset) == LOOM_BYTECODE_SECTION_OPS) {
-      ops_offset = ReadU64LE(bytes, entry_offset + 8);
-      ops_length = ReadU64LE(bytes, entry_offset + 16);
-      break;
-    }
-  }
-  EXPECT_GT(ops_length, 0u);
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  SectionEntry ops_entry = {};
+  ASSERT_TRUE(FindSection(entries, LOOM_BYTECODE_SECTION_OPS, &ops_entry));
+  EXPECT_GT(ops_entry.length, 0u);
 
   // Parse the OPS section: [count: uvarint], per-op [name_id: uvarint].
   const uint8_t* ops_data =
-      bytes.data() + (size_t)module_offset + (size_t)ops_offset;
+      bytes.data() + (size_t)module_offset + (size_t)ops_entry.offset;
   loom_bytecode_cursor_t cursor;
-  loom_bytecode_cursor_initialize(ops_data, (iree_host_size_t)ops_length,
+  loom_bytecode_cursor_initialize(ops_data, (iree_host_size_t)ops_entry.length,
                                   &cursor);
   uint64_t op_count = 0;
   IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &op_count));
   EXPECT_GE(op_count, 1u);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, FunctionBodySummaryAndOpTableRefsUseNewWireShape) {
+  loom_module_t* module = CreateModule("test");
+
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  IREE_ASSERT_OK(loom_module_intern_type(module, i32_type, &i32_type));
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t func_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("f"), &func_name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, func_name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+  loom_type_t arg_types[2] = {i32_type, i32_type};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types, 2,
+      /*result_types=*/nullptr, 0, /*arg_names=*/nullptr, 0,
+      /*result_names=*/nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* arg_ids =
+      loom_func_like_arg_ids(func_like, &arg_count);
+  ASSERT_EQ(arg_count, 2);
+
+  loom_builder_t body_builder;
+  loom_builder_initialize(
+      module, &module->arena,
+      loom_region_entry_block(loom_func_like_body(func_like)), &body_builder);
+  loom_op_t* addi_op = nullptr;
+  IREE_ASSERT_OK(loom_test_addi_build(&body_builder, arg_ids[0], arg_ids[1],
+                                      i32_type, LOOM_LOCATION_UNKNOWN,
+                                      &addi_op));
+
+  auto bytes = WriteModule(module);
+  size_t dir_offset = 24;
+  uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+  auto entries = ReadSectionDirectory(bytes, module_offset);
+  SectionEntry ir_entry = {};
+  ASSERT_TRUE(FindSection(entries, LOOM_BYTECODE_SECTION_IR, &ir_entry));
+
+  const uint8_t* ir_data =
+      bytes.data() + (size_t)module_offset + (size_t)ir_entry.offset;
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(ir_data, (iree_host_size_t)ir_entry.length,
+                                  &cursor);
+
+  uint64_t value_count = 0;
+  uint64_t region_count = 0;
+  uint64_t block_count = 0;
+  uint64_t op_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &value_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &region_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_count));
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &op_count));
+  EXPECT_EQ(value_count, 3u);
+  EXPECT_EQ(region_count, 1u);
+  EXPECT_EQ(block_count, 1u);
+  EXPECT_EQ(op_count, 1u);
+
+  uint64_t root_block_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &root_block_count));
+  ASSERT_EQ(root_block_count, 1u);
+  uint8_t has_label = 0;
+  IREE_ASSERT_OK(loom_bytecode_cursor_read_u8(&cursor, &has_label));
+  ASSERT_EQ(has_label, 0u);
+  uint64_t block_arg_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_arg_count));
+  ASSERT_EQ(block_arg_count, 2u);
+  for (uint64_t i = 0; i < block_arg_count; ++i) {
+    uint64_t unused = 0;
+    IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &unused));  // name_id
+    IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &unused));  // type_index
+    IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &unused));  // dim_count
+    ASSERT_EQ(unused, 0u);
+    IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &unused));  // encoding_binding
+    ASSERT_EQ(unused, 0u);
+  }
+  uint64_t block_op_count = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &block_op_count));
+  ASSERT_EQ(block_op_count, 1u);
+  uint64_t op_table_index_plus1 = 0;
+  IREE_ASSERT_OK(loom_uvarint_decode(&cursor, &op_table_index_plus1));
+  EXPECT_GT(op_table_index_plus1, 0u);
 
   loom_module_free(module);
 }

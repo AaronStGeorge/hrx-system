@@ -62,8 +62,8 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 2)
-//   5       1     flags (see loom_bytecode_file_flags_t)
+//   4       1     format_version (currently 3)
+//   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
 //   12      4     reserved (must be 0)
@@ -85,15 +85,22 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 2
+#define LOOM_BYTECODE_FORMAT_VERSION 3
 
-// File-level flags.
-enum loom_bytecode_file_flag_bits_e {
-  // Source locations have been stripped. No location data in any
-  // module. All ops reference LOOM_LOCATION_UNKNOWN.
-  LOOM_BYTECODE_FILE_FLAG_STRIPPED_LOCATIONS = 1u << 0,
+// File-level source-location mode stored in the file header.
+enum loom_bytecode_location_mode_e {
+  // Operation locations reference source/fused/opaque location records in the
+  // module's LOCATIONS section. This is the default writer mode.
+  LOOM_BYTECODE_LOCATION_MODE_SOURCE_LOCATIONS = 0,
+  // The file carries no location payload. Modules MUST omit the LOCATIONS
+  // section and every operation location reference MUST be 0.
+  LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS = 1,
+  // The file carries source locations plus per-field byte spans for operation
+  // syntax. This reserves the wire mode; writers should fail loud until they
+  // can populate the extra field-span payload completely.
+  LOOM_BYTECODE_LOCATION_MODE_FULL_LOCATIONS = 2,
 };
-typedef uint8_t loom_bytecode_file_flags_t;
+typedef uint8_t loom_bytecode_location_mode_t;
 
 // ==========================================================================
 // Module directory
@@ -123,10 +130,13 @@ typedef uint16_t loom_bytecode_module_flags_t;
 // Module structure
 // ==========================================================================
 //
-// Each module is a self-contained unit with its own section directory
-// and sections. A module can be parsed independently of other modules
-// in the same file.
+// Each module is a self-contained unit with its own allocation summary,
+// section directory, and sections. A module can be parsed independently of
+// other modules in the same file.
 //
+//   +-----------------------+
+//   | Module allocation     |  Counts needed before constructing IR tables.
+//   | summary               |
 //   +-----------------------+
 //   | Section directory     |  Section kind + offset + length for each.
 //   +-----------------------+
@@ -138,7 +148,7 @@ typedef uint16_t loom_bytecode_module_flags_t;
 //   +-----------------------+
 //   | ENCODINGS section     |  Encoding kind registry + instances.
 //   +-----------------------+
-//   | OPS section           |  Op kind registry (kind_id -> name).
+//   | OPS section           |  Op table registry (index -> name).
 //   +-----------------------+
 //   | LOCATIONS section     |  Location table.
 //   +-----------------------+
@@ -151,25 +161,45 @@ typedef uint16_t loom_bytecode_module_flags_t;
 //   |                       |  potentially multi-GB data at the end)
 //   +-----------------------+
 //
+// Module prefix:
+//
+//   [section_count: varint]
+//   [value_count: varint]   Total SSA value definitions serialized by symbols
+//                           and function bodies. Readers may reserve this
+//                           capacity before constructing body IR.
+//   [region_count: varint]  Total serialized function-body regions.
+//   [block_count: varint]   Total serialized function-body blocks.
+//   [op_count: varint]      Total serialized function-body operations.
+//
+// The allocation counts are construction hints and validation upper bounds for
+// this module. They avoid reader scan-ahead just to size tables, but the reader
+// still validates the actual parsed counts against the section/body payloads.
+//
 // Section directory entry:
 //
 //   offset  size  field
 //   0       2     section_kind (see loom_bytecode_section_kind_t)
-//   2       2     reserved
+//   2       2     flags (see loom_bytecode_section_flags_t)
 //   4       4     reserved
 //   8       8     offset (from module start)
-//   16      8     length (bytes, compressed if file flag set)
+//   16      8     length (bytes, compressed if section flag set)
 //   24      8     uncompressed_length (0 if not compressed)
 //
 // Total: 32 bytes per section directory entry.
-// Sections can appear in any order. Unknown section kinds are skipped.
+//
+// Directory entries are sorted by increasing offset and sections are physically
+// laid out in the same order. Readers validate non-overlap in one linear pass:
+// each entry's offset must be >= the end of the preceding directory/section,
+// and offset + length must be within the containing module. Section kinds must
+// not repeat. Unknown section kinds are skipped after the same offset, length,
+// and overlap validation.
 
 typedef enum loom_bytecode_section_kind_e {
   LOOM_BYTECODE_SECTION_STRINGS = 0,    // Interned string table.
   LOOM_BYTECODE_SECTION_SOURCES = 1,    // Source identifiers (filenames, tags).
   LOOM_BYTECODE_SECTION_TYPES = 2,      // Interned type table.
   LOOM_BYTECODE_SECTION_ENCODINGS = 3,  // Encoding kind registry + instances.
-  LOOM_BYTECODE_SECTION_OPS = 4,        // Op kind registry (kind_id -> name).
+  LOOM_BYTECODE_SECTION_OPS = 4,        // Op table registry (index -> name).
   LOOM_BYTECODE_SECTION_LOCATIONS = 5,  // Location table.
   LOOM_BYTECODE_SECTION_SYMBOLS = 6,    // Symbol table with full metadata.
   LOOM_BYTECODE_SECTION_IR = 7,  // Function bodies: ops, blocks, regions.
@@ -191,10 +221,12 @@ typedef enum loom_bytecode_section_kind_e {
 //
 // Offset/length validation (use iree checked-math helpers):
 //   - offset + length must not overflow uint64.
-//   - offset >= end of preceding fixed-size header/directory.
+//   - offset >= end of the preceding header, prefix, and directory.
 //   - offset + length <= containing region size (file for modules,
 //     module for sections).
-//   - Sections must not overlap.
+//   - Section directory entries must be sorted by offset with no duplicates.
+//   - Sections must not overlap. Because entries are offset-sorted this is a
+//     linear previous-end check, not an O(N^2) interval comparison.
 //
 // Varint validation:
 //   - Reject overlong LEB128 encodings (value fits in fewer bytes
@@ -341,8 +373,9 @@ typedef enum loom_bytecode_section_kind_e {
 //   [instance_count: varint]
 //   For each instance:
 //     [family_index: varint]  (index into the family list above)
-//     [alias_id: varint]      (string table index of bare alias for printing,
-//                              0 = no alias)
+//     [alias_string_id_plus1: varint]
+//                              0 = no alias.
+//                              N > 0: alias string is STRINGS[N - 1].
 //     [param_count: varint]   (number of named attribute parameters)
 //     For each parameter:
 //       [name_id: varint]     (string table index: "block", "group_size", etc.)
@@ -353,24 +386,30 @@ typedef enum loom_bytecode_section_kind_e {
 // OPS section
 // ==========================================================================
 //
-// Op kind registry: maps op kind IDs (used in the IR section) to
-// op names.
+// Op kind registry: maps op table indexes to op names.
 //
 //   [op_count: varint]
 //   For each op kind:
 //     [name_id: varint]       (string table index: "tile.contract", etc.)
 //
-// Op kind 0 is reserved (LOOM_OP_KIND_UNKNOWN). The reader looks up
-// each name in the runtime's op vtable registry. Unknown op names
-// are noted but not fatal (the function containing them is skippable).
+// OPS indexes are dense 0..op_count-1. The zero sentinel exists only on
+// references in the IR section via op_table_index_plus1; the in-memory compiler
+// and the OPS table remain dense. The reader looks up each name in the
+// runtime's op vtable registry. Unknown op names are noted but not fatal (the
+// function containing them is skippable).
 
 // ==========================================================================
 // LOCATIONS section
 // ==========================================================================
 //
 // Location table. Entry 0 is always kind=NONE (unknown).
-// If the file has STRIPPED_LOCATIONS, this section is empty and all
-// ops reference location index 0.
+//
+// LOOM_BYTECODE_LOCATION_MODE_SOURCE_LOCATIONS requires the normal LOCATIONS
+// section below. LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS omits this section
+// entirely and requires every op location reference to be 0.
+// LOOM_BYTECODE_LOCATION_MODE_FULL_LOCATIONS uses this section plus an
+// extension payload carrying per-field spans; that extension is reserved until
+// both writers and readers can produce and consume it completely.
 //
 // Locations are serialized with their own byte layout (not overlaid
 // on runtime structs). The reader constructs runtime location entries
@@ -506,6 +545,13 @@ typedef enum loom_bytecode_section_kind_e {
 //
 // Within a function's IR:
 //
+//   [value_count: varint]   Function-local SSA values defined by block args
+//                           and operation results in this body.
+//   [region_count: varint]  Regions in this body, including nested regions.
+//   [block_count: varint]   Blocks in this body, including nested regions.
+//   [op_count: varint]      Live operations in this body, including nested
+//                           regions.
+//   // Root body region follows:
 //   [block_count: varint]
 //   For each block:
 //     [has_label: byte]
@@ -523,7 +569,9 @@ typedef enum loom_bytecode_section_kind_e {
 //              referencing an encoding-typed SSA value.
 //     [op_count: varint]
 //     For each op:
-//       [kind_id: varint]       (index into OPS section)
+//       [op_table_index_plus1: varint]
+//                              0 is invalid for operation records.
+//                              N > 0: op name is OPS[N - 1].
 //       [flags: byte]           (encoding mask: which fields present)
 //       [location_id: varint]
 //       [operand_count: varint]
@@ -577,6 +625,10 @@ typedef enum loom_bytecode_section_kind_e {
 // Large binary blobs: compiled executables, embedded weights, constant
 // tensors, opaque data. Referenced by index from symbol table entries
 // (globals, executables) and op attributes (dense constants).
+//
+// GLOBAL symbols, EXECUTABLE symbols, and RESOURCES payload references are
+// explicit UNIMPLEMENTED holes until their IR contracts settle. Writers must
+// fail loud instead of emitting partial resource records.
 //
 // This section can be very large (GB of model weights). The reader
 // mmaps it and accesses by offset rather than loading entirely.
@@ -705,11 +757,17 @@ typedef enum loom_bytecode_encoding_attachment_e {
 // Total on-disk size: sizeof(header) + strlen(producer) + 1, padded
 // to 8-byte alignment.
 typedef struct loom_bytecode_file_header_t {
+  // ASCII "LOOM" magic bytes.
   uint8_t magic[LOOM_BYTECODE_MAGIC_LENGTH];
+  // Bytecode format version. Readers accept only the current version.
   uint8_t format_version;
-  loom_bytecode_file_flags_t flags;
+  // Source-location payload mode for every module in this file.
+  loom_bytecode_location_mode_t location_mode;
+  // Number of module directory entries following the padded header.
   uint16_t module_count;
+  // Byte length of the file string pool following the module directory.
   uint32_t file_string_pool_length;
+  // Reserved for future fixed header fields. Must be zero.
   uint32_t reserved;
   // Null-terminated UTF-8 string identifying the producing tool
   // (e.g., "loom-compile 1.0"). For diagnostics only.
@@ -722,6 +780,7 @@ typedef struct loom_bytecode_module_dir_entry_t {
   uint32_t name_offset;
   // Length of the module name in bytes.
   uint16_t name_length;
+  // Module-level flags.
   loom_bytecode_module_flags_t flags;
   // Absolute byte offset from file start to the module's first byte.
   uint64_t module_offset;
@@ -744,6 +803,7 @@ typedef struct loom_bytecode_section_dir_entry_t {
   uint16_t section_kind;
   // Per-section flags (compression, etc.).
   loom_bytecode_section_flags_t flags;
+  // Reserved for future section directory fields. Must be zero.
   uint32_t reserved;
   // Byte offset from the module's start.
   uint64_t offset;
@@ -770,7 +830,9 @@ typedef uint16_t loom_bytecode_symbol_flags_t;
 
 // Resource section header. Fixed-size for mmap overlay.
 typedef struct loom_bytecode_resource_section_header_t {
+  // Number of resource directory entries following this header.
   uint32_t entry_count;
+  // Reserved for future resource-section header fields. Must be zero.
   uint32_t reserved;
 } loom_bytecode_resource_section_header_t;
 
@@ -788,7 +850,9 @@ typedef struct loom_bytecode_resource_dir_entry_t {
   // cache line, 4096 for page). The writer ensures the data at
   // data_offset satisfies this alignment relative to the section start.
   uint16_t alignment;
+  // Reserved for future per-resource fields. Must be zero.
   uint16_t reserved_0;
+  // Reserved for future per-resource fields. Must be zero.
   uint32_t reserved_1;
 } loom_bytecode_resource_dir_entry_t;
 

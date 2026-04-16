@@ -216,7 +216,7 @@ class TestFileHeader:
         buf.write_bytes(b"LOOM")
         # Header field: format version.
         buf.write_u8(0)
-        # Header field: flags.
+        # Header field: location mode.
         buf.write_u8(0)
         # Header field: module count.
         buf.write_u16_le(1)
@@ -232,6 +232,6 @@ class TestFileHeader:
         data = buf.get_bytes()
         assert data[0:4] == b"LOOM"
         assert data[4] == 0  # version
-        assert data[5] == 0  # flags
+        assert data[5] == 0  # location_mode
         assert data[6:8] == b"\x01\x00"  # module_count = 1 (LE)
         assert len(data) % 8 == 0  # Aligned.

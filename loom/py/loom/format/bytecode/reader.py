@@ -22,6 +22,9 @@ from loom.format.bytecode.encoding import decode_signed_varint, decode_varint
 from loom.format.bytecode.writer import (
     BYTECODE_IR_KIND_BY_TYPE_KIND,
     FORMAT_VERSION,
+    LOCATION_MODE_FULL_LOCATIONS,
+    LOCATION_MODE_NO_LOCATIONS,
+    LOCATION_MODE_SOURCE_LOCATIONS,
     MAGIC,
     SECTION_ENCODINGS,
     SECTION_IR,
@@ -104,6 +107,11 @@ class BytecodeReader:
         self._ops: list[str] = []
         self._encodings: list[EncodingInstance] = []
         self._encoding_families: list[str] = []
+        self._location_mode = LOCATION_MODE_SOURCE_LOCATIONS
+        self._module_value_count = 0
+        self._module_region_count = 0
+        self._module_block_count = 0
+        self._module_op_count = 0
 
     def read(self) -> Module:
         """Read and return the module."""
@@ -113,7 +121,7 @@ class BytecodeReader:
 
         # Read module sections.
         self._offset = module_offset
-        sections = self._read_section_directory()
+        sections = self._read_section_directory(module_length)
 
         # Read sections in dependency order.
         if SECTION_STRINGS in sections:
@@ -132,6 +140,14 @@ class BytecodeReader:
         module.encodings = list(self._encodings)
         module.sources = list(self._sources)
 
+        if self._location_mode == LOCATION_MODE_NO_LOCATIONS:
+            if SECTION_LOCATIONS in sections:
+                raise BytecodeError(
+                    "NO_LOCATIONS bytecode must not contain a LOCATIONS section"
+                )
+        elif SECTION_LOCATIONS not in sections:
+            raise BytecodeError("bytecode with source locations must have LOCATIONS")
+
         # Read locations.
         if SECTION_LOCATIONS in sections:
             self._read_locations_section(sections[SECTION_LOCATIONS], module)
@@ -142,8 +158,32 @@ class BytecodeReader:
         if isinstance(symbols_data, tuple):
             self._read_symbols_section(symbols_data, ir_data, module)
 
+        allocation_counts = self._module_allocation_counts(module)
+        if allocation_counts != (
+            self._module_value_count,
+            self._module_region_count,
+            self._module_block_count,
+            self._module_op_count,
+        ):
+            raise BytecodeError("module allocation summary does not match IR")
+
         rebuild_value_metadata(module)
         return module
+
+    def _module_allocation_counts(self, module: Module) -> tuple[int, int, int, int]:
+        """Return module value, serialized region, block, and op counts."""
+        value_count = len(module.values)
+        region_count = 0
+        block_count = 0
+        op_count = 0
+        for symbol in module.symbols:
+            if symbol.op is None or not symbol.op.regions:
+                continue
+            counts = self._count_region_tree(symbol.op.regions[0])
+            region_count += counts[1]
+            block_count += counts[2]
+            op_count += counts[3]
+        return value_count, region_count, block_count, op_count
 
     # --- Low-level reads ---
 
@@ -209,7 +249,15 @@ class BytecodeReader:
         version = self._read_u8()
         if version != FORMAT_VERSION:
             raise BytecodeError(f"unsupported format version: {version}")
-        self._flags = self._read_u8()
+        self._location_mode = self._read_u8()
+        if self._location_mode not in (
+            LOCATION_MODE_SOURCE_LOCATIONS,
+            LOCATION_MODE_NO_LOCATIONS,
+            LOCATION_MODE_FULL_LOCATIONS,
+        ):
+            raise BytecodeError(f"unsupported location mode: {self._location_mode}")
+        if self._location_mode == LOCATION_MODE_FULL_LOCATIONS:
+            raise BytecodeError("FULL_LOCATIONS bytecode is not implemented")
         self._module_count = self._read_u16_le()
         self._string_pool_length = self._read_u32_le()
         self._reserved = self._read_u32_le()
@@ -239,42 +287,59 @@ class BytecodeReader:
             self._module_name = ""
         self._skip_to_alignment(8)
 
-    def _read_section_directory(self) -> dict[int, tuple[int, bytes]]:
+    def _read_section_directory(
+        self, module_length: int
+    ) -> dict[int, tuple[int, bytes]]:
         """Read section directory, return {kind: (offset, data)}."""
         sections: dict[int, tuple[int, bytes]] = {}
-        # Read section entries until we hit actual section data.
-        # The section directory is at the start of the module data.
         module_start = self._offset
-        # Count sections by reading until we find non-directory data.
-        # Each entry is 32 bytes.
+        module_end = module_start + module_length
+        if module_end > len(self._data):
+            raise BytecodeError("module extends past end of file")
+
+        section_count = self._read_varint()
+        self._module_value_count = self._read_varint()
+        self._module_region_count = self._read_varint()
+        self._module_block_count = self._read_varint()
+        self._module_op_count = self._read_varint()
+
         entries: list[tuple[int, int, int]] = []
-        # Read entries — we don't know the count, but entries are
-        # sequential 32-byte records. We detect the end when we'd
-        # read past the first section's offset.
-        first_section_offset = None
-        while True:
-            if self._offset + 32 > len(self._data):
-                break
+        seen_kinds: set[int] = set()
+        for _ in range(section_count):
+            if self._offset + 32 > module_end:
+                raise BytecodeError("section directory extends past module")
             kind = struct.unpack_from("<H", self._data, self._offset)[0]
-            struct.unpack_from("<H", self._data, self._offset + 2)[0]
-            struct.unpack_from("<I", self._data, self._offset + 4)[0]
+            flags = struct.unpack_from("<H", self._data, self._offset + 2)[0]
+            reserved = struct.unpack_from("<I", self._data, self._offset + 4)[0]
             offset = struct.unpack_from("<Q", self._data, self._offset + 8)[0]
             length = struct.unpack_from("<Q", self._data, self._offset + 16)[0]
-            struct.unpack_from("<Q", self._data, self._offset + 24)[0]
-
-            if first_section_offset is None:
-                first_section_offset = offset
-            elif self._offset - module_start >= first_section_offset:
-                break
-
+            uncompressed_length = struct.unpack_from(
+                "<Q", self._data, self._offset + 24
+            )[0]
+            if kind in seen_kinds:
+                raise BytecodeError(f"duplicate section kind: {kind}")
+            if reserved != 0:
+                raise BytecodeError(f"section {kind} reserved field must be zero")
+            if flags != 0:
+                raise BytecodeError(f"section {kind} has unsupported flags {flags}")
+            if uncompressed_length != 0:
+                raise BytecodeError(f"section {kind} uncompressed length must be zero")
+            seen_kinds.add(kind)
             entries.append((kind, offset, length))
             self._offset += 32
 
-        # Now read section data.
+        minimum_section_offset = self._offset - module_start
+        previous_end = minimum_section_offset
         for kind, offset, length in entries:
+            if offset < previous_end:
+                raise BytecodeError("section directory is not sorted by offset")
+            section_end = offset + length
+            if section_end > module_length:
+                raise BytecodeError(f"section {kind} extends past module")
             abs_offset = module_start + offset
             section_data = self._data[abs_offset : abs_offset + length]
             sections[kind] = (abs_offset, section_data)
+            previous_end = section_end
 
         return sections
 
@@ -323,16 +388,21 @@ class BytecodeReader:
                     f"encoding family index {family_index} out of range "
                     f"(family table has {len(self._encoding_families)} entries)"
                 )
-            alias_id, offset = decode_varint(data, offset)
-            if alias_id >= len(self._strings):
+            alias_string_id_plus1, offset = decode_varint(data, offset)
+            if alias_string_id_plus1 > len(self._strings):
+                alias_string_id = alias_string_id_plus1 - 1
                 raise BytecodeError(
-                    f"encoding alias string_id {alias_id} out of range "
+                    f"encoding alias string_id {alias_string_id} out of range "
                     f"(string table has {len(self._strings)} entries)"
                 )
             param_count, offset = decode_varint(data, offset)
 
             name = self._encoding_families[family_index]
-            alias = self._strings[alias_id] if alias_id > 0 else ""
+            alias = (
+                self._strings[alias_string_id_plus1 - 1]
+                if alias_string_id_plus1 > 0
+                else ""
+            )
             param_list: list[tuple[str, Any]] = []
             for _ in range(param_count):
                 param_name_id, offset = decode_varint(data, offset)
@@ -663,8 +733,34 @@ class BytecodeReader:
         """
         offset = 0
         value_map: list[int] = []
+        _value_count, offset = decode_varint(data, offset)
+        _region_count, offset = decode_varint(data, offset)
+        _block_count, offset = decode_varint(data, offset)
+        _op_count, offset = decode_varint(data, offset)
         region, offset = self._read_region(data, offset, module, value_map)
+        parsed_counts = self._count_region_tree(region)
+        if parsed_counts != (_value_count, _region_count, _block_count, _op_count):
+            raise BytecodeError("function body allocation summary does not match IR")
         return region
+
+    def _count_region_tree(self, region: Region) -> tuple[int, int, int, int]:
+        """Return value, region, block, and op counts for a parsed region tree."""
+        value_count = 0
+        region_count = 1
+        block_count = len(region.blocks)
+        op_count = 0
+        for block in region.blocks:
+            value_count += len(block.arg_ids)
+            for op in block.ops:
+                value_count += len(op.results)
+                op_count += 1
+                for nested_region in op.regions:
+                    nested_counts = self._count_region_tree(nested_region)
+                    value_count += nested_counts[0]
+                    region_count += nested_counts[1]
+                    block_count += nested_counts[2]
+                    op_count += nested_counts[3]
+        return value_count, region_count, block_count, op_count
 
     def _read_region(
         self,
@@ -744,11 +840,16 @@ class BytecodeReader:
         module: Module,
         value_map: list[int],
     ) -> tuple[Operation, int]:
-        kind_id, offset = decode_varint(data, offset)
+        op_table_index_plus1, offset = decode_varint(data, offset)
         data[offset]
         offset += 1
         location_id, offset = decode_varint(data, offset)
+        if self._location_mode == LOCATION_MODE_NO_LOCATIONS and location_id != 0:
+            raise BytecodeError("NO_LOCATIONS bytecode op location must be 0")
 
+        if op_table_index_plus1 == 0:
+            raise BytecodeError("operation op_table_index_plus1 must be nonzero")
+        kind_id = op_table_index_plus1 - 1
         op_name = self._ops[kind_id] if kind_id < len(self._ops) else ""
 
         # Operands: map function-local value numbers to module value IDs.

@@ -266,14 +266,19 @@ static void loom_bytecode_patch_u64_le(iree_string_builder_t* builder,
 // External string entry: a string from a vtable B-string, not in
 // the module's string table.
 typedef struct loom_bytecode_external_string_t {
+  // External string contents.
   iree_string_view_t view;
+  // Writer string ID assigned to view.
   uint32_t writer_id;
 } loom_bytecode_external_string_t;
 
 // Op name entry in the numbering context.
 typedef struct loom_bytecode_op_entry_t {
+  // Internal op kind represented by this bytecode op-table entry.
   loom_op_kind_t kind;
+  // Dense writer op-table index.
   uint32_t writer_op_id;
+  // Writer string ID naming this op kind.
   uint32_t string_writer_id;
 } loom_bytecode_op_entry_t;
 
@@ -286,21 +291,28 @@ typedef struct loom_bytecode_type_index_entry_t {
 } loom_bytecode_type_index_entry_t;
 
 typedef struct loom_bytecode_numbering_t {
+  // Module being serialized.
   const loom_module_t* module;
+  // Temporary arena that owns numbering tables.
   iree_arena_allocator_t* arena;
+  // File-level location mode controlling operation location references.
+  loom_bytecode_location_mode_t location_mode;
 
-  // Ordered list of all strings for the STRINGS section.
+  // Writer string ID to string view table for the STRINGS section.
   iree_string_view_t* string_entries;
+  // Number of writer strings assigned.
   iree_host_size_t string_count;
+  // Allocated capacity of string_entries.
   iree_host_size_t string_capacity;
 
-  // Fast lookup: module string_id → writer string_id.
-  // Parallel array sized module->strings.count.
+  // Module string ID to writer string ID map.
   uint32_t* module_string_map;
 
   // External strings not in the module table.
   loom_bytecode_external_string_t* external_strings;
+  // Number of external strings assigned.
   iree_host_size_t external_string_count;
+  // Allocated capacity of external_strings.
   iree_host_size_t external_string_capacity;
 
   // Type mapping: module type index → writer type_id.
@@ -311,12 +323,16 @@ typedef struct loom_bytecode_numbering_t {
   iree_host_size_t type_index_capacity;
   // Writer type_id → module type index (for section writing).
   iree_host_size_t* type_order;
+  // Number of writer types assigned.
   iree_host_size_t type_count;
+  // Allocated capacity of type_order.
   iree_host_size_t type_order_capacity;
 
   // Op name registry.
   loom_bytecode_op_entry_t* op_entries;
+  // Number of op names assigned.
   iree_host_size_t op_count;
+  // Allocated capacity of op_entries.
   iree_host_size_t op_capacity;
 } loom_bytecode_numbering_t;
 
@@ -1011,9 +1027,78 @@ static iree_status_t loom_bytecode_encoding_role_byte(loom_encoding_role_t role,
 // Writes the IR section: function bodies streamed through the page writer.
 // Returns per-symbol (offset, length) pairs for the SYMBOLS section.
 typedef struct loom_bytecode_ir_offset_t {
+  // Byte offset of the function body from the IR section start.
   uint64_t offset;
+  // Byte length of the function body.
   uint32_t length;
 } loom_bytecode_ir_offset_t;
+
+typedef struct loom_bytecode_body_counts_t {
+  // Number of SSA values described by this allocation summary.
+  uint64_t value_count;
+  // Number of serialized regions described by this allocation summary.
+  uint64_t region_count;
+  // Number of serialized blocks described by this allocation summary.
+  uint64_t block_count;
+  // Number of serialized live operations described by this allocation summary.
+  uint64_t op_count;
+} loom_bytecode_body_counts_t;
+
+static void loom_bytecode_count_region_tree(
+    const loom_region_t* region, loom_bytecode_body_counts_t* counts) {
+  ++counts->region_count;
+  counts->block_count += region->block_count;
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    const loom_block_t* block = loom_region_const_block(region, block_index);
+    counts->value_count += block->arg_count;
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      ++counts->op_count;
+      counts->value_count += op->result_count;
+      loom_region_t** regions = loom_op_regions(op);
+      for (uint8_t region_index = 0; region_index < op->region_count;
+           ++region_index) {
+        if (regions[region_index]) {
+          loom_bytecode_count_region_tree(regions[region_index], counts);
+        }
+      }
+    }
+  }
+}
+
+static loom_bytecode_body_counts_t loom_bytecode_count_serialized_bodies(
+    const loom_module_t* module) {
+  loom_bytecode_body_counts_t counts = {
+      .value_count = 0,
+      .region_count = 0,
+      .block_count = 0,
+      .op_count = 0,
+  };
+  for (iree_host_size_t symbol_index = 0; symbol_index < module->symbols.count;
+       ++symbol_index) {
+    const loom_symbol_t* symbol = &module->symbols.entries[symbol_index];
+    if (!loom_symbol_kind_is_function_like(symbol->kind) ||
+        !symbol->defining_op) {
+      continue;
+    }
+    loom_func_like_t func_like =
+        loom_func_like_cast(module, symbol->defining_op);
+    if (!loom_func_like_isa(func_like)) {
+      continue;
+    }
+    counts.value_count += func_like.op->result_count;
+    loom_region_t* body = loom_func_like_body(func_like);
+    if (body) {
+      loom_bytecode_count_region_tree(body, &counts);
+    } else {
+      uint16_t arg_count = 0;
+      loom_func_like_arg_ids(func_like, &arg_count);
+      counts.value_count += arg_count;
+    }
+  }
+  return counts;
+}
 
 // Forward declarations for recursive IR writing.
 static iree_status_t loom_bytecode_write_region(
@@ -1244,18 +1329,22 @@ static iree_status_t loom_bytecode_write_operation(
                             (unsigned)op->kind);
   }
 
-  // Op kind ID.
+  // Operation table index, plus one so 0 remains an invalid reference.
   uint32_t writer_op_id = 0;
   IREE_RETURN_IF_ERROR(
       loom_bytecode_numbering_intern_op(numbering, op, &writer_op_id));
   IREE_RETURN_IF_ERROR(
-      loom_bytecode_page_writer_write_uvarint(writer, writer_op_id));
+      loom_bytecode_page_writer_write_uvarint(writer, writer_op_id + 1));
 
   // Flags byte.
   IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(writer, 0));
 
+  loom_location_id_t location =
+      numbering->location_mode == LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS
+          ? LOOM_LOCATION_UNKNOWN
+          : op->location;
   IREE_RETURN_IF_ERROR(
-      loom_bytecode_page_writer_write_uvarint(writer, op->location));
+      loom_bytecode_page_writer_write_uvarint(writer, location));
 
   // Operands.
   const loom_value_id_t* operands = loom_op_const_operands(op);
@@ -1452,8 +1541,19 @@ static iree_status_t loom_bytecode_write_ir_section(
     // Assign value numbers.
     loom_bytecode_value_numbering_assign_region(&value_numbering, module, body);
 
-    // Write the function body.
+    loom_bytecode_body_counts_t body_counts = {0};
+    loom_bytecode_count_region_tree(body, &body_counts);
+
+    // Write the function body summary and root region.
     iree_host_size_t body_start = page_writer->total_written;
+    IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+        page_writer, body_counts.value_count));
+    IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+        page_writer, body_counts.region_count));
+    IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+        page_writer, body_counts.block_count));
+    IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+        page_writer, body_counts.op_count));
     IREE_RETURN_IF_ERROR(loom_bytecode_write_region(page_writer, numbering,
                                                     &value_numbering, body, 0));
     iree_host_size_t body_length = page_writer->total_written - body_start;
@@ -1906,14 +2006,16 @@ static iree_status_t loom_bytecode_write_encodings_section(
     IREE_RETURN_IF_ERROR(
         loom_bytecode_page_writer_write_uvarint(page_writer, family_index));
 
-    // Alias string ID (0 = no alias).
-    uint32_t alias_writer_id = 0;
+    // Alias string ID plus one (0 = no alias).
+    uint32_t alias_string_id_plus1 = 0;
     if (encoding->alias_id != LOOM_STRING_ID_INVALID) {
+      uint32_t alias_writer_id = 0;
       IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
           numbering, encoding->alias_id, &alias_writer_id));
+      alias_string_id_plus1 = alias_writer_id + 1;
     }
-    IREE_RETURN_IF_ERROR(
-        loom_bytecode_page_writer_write_uvarint(page_writer, alias_writer_id));
+    IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+        page_writer, alias_string_id_plus1));
 
     // Parameters as structured named attributes, using the same
     // attribute serialization as the IR section.
@@ -2051,7 +2153,21 @@ iree_status_t loom_bytecode_write_module(
   iree_string_view_t producer = (options && options->producer.size > 0)
                                     ? options->producer
                                     : IREE_SV(LOOM_BYTECODE_DEFAULT_PRODUCER);
-  loom_bytecode_file_flags_t file_flags = options ? options->flags : 0;
+  loom_bytecode_location_mode_t location_mode =
+      options ? options->location_mode
+              : LOOM_BYTECODE_LOCATION_MODE_SOURCE_LOCATIONS;
+  if (location_mode > LOOM_BYTECODE_LOCATION_MODE_FULL_LOCATIONS) {
+    IREE_TRACE_ZONE_END(z0);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported bytecode location mode %u",
+                            (unsigned)location_mode);
+  }
+  if (location_mode == LOOM_BYTECODE_LOCATION_MODE_FULL_LOCATIONS) {
+    IREE_TRACE_ZONE_END(z0);
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "FULL_LOCATIONS bytecode mode requires field span emission");
+  }
 
   // Temporary arena for all working memory. All numbering tables,
   // value maps, and scratch allocations come from here. Deinitialized
@@ -2067,6 +2183,7 @@ iree_status_t loom_bytecode_write_module(
   loom_bytecode_numbering_t numbering;
   iree_status_t status =
       loom_bytecode_numbering_initialize(&numbering, module, &arena);
+  numbering.location_mode = location_mode;
 
   // Pass 1: Number module metadata (names, sources, symbol names).
   // Function signatures and bodies are numbered during IR section writing.
@@ -2084,7 +2201,7 @@ iree_status_t loom_bytecode_write_module(
     }
   }
 
-  // File header: magic, version, flags, module count, producer string.
+  // File header: magic, version, location mode, module count, producer string.
   iree_string_view_t module_name = module->strings.entries[module->name_id];
 
   if (iree_status_is_ok(status)) {
@@ -2097,7 +2214,7 @@ iree_status_t loom_bytecode_write_module(
                                                 LOOM_BYTECODE_FORMAT_VERSION);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_bytecode_page_writer_write_u8(&page_writer, file_flags);
+    status = loom_bytecode_page_writer_write_u8(&page_writer, location_mode);
   }
   if (iree_status_is_ok(status)) {
     status = loom_bytecode_page_writer_write_u16_le(&page_writer,
@@ -2157,12 +2274,45 @@ iree_status_t loom_bytecode_write_module(
   // Module data starts at this offset.
   iree_host_size_t module_start = page_writer.total_written;
 
+  static const loom_bytecode_section_kind_t section_write_order[] = {
+      LOOM_BYTECODE_SECTION_IR,      LOOM_BYTECODE_SECTION_SYMBOLS,
+      LOOM_BYTECODE_SECTION_STRINGS, LOOM_BYTECODE_SECTION_SOURCES,
+      LOOM_BYTECODE_SECTION_TYPES,   LOOM_BYTECODE_SECTION_ENCODINGS,
+      LOOM_BYTECODE_SECTION_OPS,     LOOM_BYTECODE_SECTION_LOCATIONS,
+  };
+  uint32_t section_count = IREE_ARRAYSIZE(section_write_order);
+  if (location_mode == LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS) {
+    --section_count;
+  }
+  loom_bytecode_body_counts_t module_counts =
+      loom_bytecode_count_serialized_bodies(module);
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_bytecode_page_writer_write_uvarint(&page_writer, section_count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_bytecode_page_writer_write_uvarint(&page_writer,
+                                                     module_counts.value_count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_bytecode_page_writer_write_uvarint(
+        &page_writer, module_counts.region_count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_bytecode_page_writer_write_uvarint(&page_writer,
+                                                     module_counts.block_count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_bytecode_page_writer_write_uvarint(&page_writer,
+                                                     module_counts.op_count);
+  }
+
   // Section directory placeholder — patched after all sections are written.
   iree_host_size_t section_dir_patch_position = page_writer.total_written;
   if (iree_status_is_ok(status)) {
     status = loom_bytecode_page_writer_write_zeros(
-        &page_writer, LOOM_BYTECODE_SECTION_COUNT *
-                          sizeof(loom_bytecode_section_dir_entry_t));
+        &page_writer,
+        section_count * sizeof(loom_bytecode_section_dir_entry_t));
   }
 
   // Track section offsets and lengths.
@@ -2276,8 +2426,9 @@ iree_status_t loom_bytecode_write_module(
     }
   }
 
-  // Locations section: empty until the location table is on the module.
-  if (iree_status_is_ok(status)) {
+  // Locations section.
+  if (iree_status_is_ok(status) &&
+      location_mode != LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS) {
     section_offsets[LOOM_BYTECODE_SECTION_LOCATIONS] =
         page_writer.total_written - module_start;
     status = loom_bytecode_write_locations_section(&page_writer, module);
@@ -2301,13 +2452,24 @@ iree_status_t loom_bytecode_write_module(
                             (iree_io_stream_pos_t)section_dir_patch_position);
   }
   if (iree_status_is_ok(status)) {
-    for (int i = 0;
-         i < LOOM_BYTECODE_SECTION_COUNT && iree_status_is_ok(status); ++i) {
-      loom_bytecode_section_dir_entry_t entry = {0};
-      entry.section_kind = (uint16_t)i;
-      entry.offset = section_offsets[i];
-      entry.length = section_lengths[i];
-      status = iree_io_stream_write(stream, sizeof(entry), &entry);
+    for (iree_host_size_t i = 0;
+         i < IREE_ARRAYSIZE(section_write_order) && iree_status_is_ok(status);
+         ++i) {
+      loom_bytecode_section_kind_t kind = section_write_order[i];
+      if (kind == LOOM_BYTECODE_SECTION_LOCATIONS &&
+          location_mode == LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS) {
+        continue;
+      }
+      uint8_t entry[sizeof(loom_bytecode_section_dir_entry_t)] = {0};
+      entry[0] = (uint8_t)kind;
+      entry[1] = (uint8_t)((uint16_t)kind >> 8);
+      uint64_t section_offset = section_offsets[kind];
+      uint64_t section_length = section_lengths[kind];
+      for (int byte_index = 0; byte_index < 8; ++byte_index) {
+        entry[8 + byte_index] = (uint8_t)(section_offset >> (byte_index * 8));
+        entry[16 + byte_index] = (uint8_t)(section_length >> (byte_index * 8));
+      }
+      status = iree_io_stream_write(stream, sizeof(entry), entry);
     }
   }
 

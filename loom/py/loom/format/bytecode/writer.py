@@ -68,6 +68,21 @@ SECTION_SYMBOLS = 6
 SECTION_IR = 7
 SECTION_RESOURCES = 8
 
+SECTION_WRITE_ORDER = (
+    SECTION_IR,
+    SECTION_SYMBOLS,
+    SECTION_STRINGS,
+    SECTION_SOURCES,
+    SECTION_TYPES,
+    SECTION_ENCODINGS,
+    SECTION_OPS,
+    SECTION_LOCATIONS,
+)
+
+LOCATION_MODE_SOURCE_LOCATIONS = 0
+LOCATION_MODE_NO_LOCATIONS = 1
+LOCATION_MODE_FULL_LOCATIONS = 2
+
 # Attribute value kind bytes.
 ATTR_KIND_I64 = 0
 ATTR_KIND_F64 = 1
@@ -104,7 +119,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 PRODUCER = "loom-py"
 
 
@@ -352,7 +367,7 @@ class BytecodeWriter:
         ir_bytes, ir_offsets = self._write_ir()
         sections[SECTION_IR] = ir_bytes
         sections[SECTION_SYMBOLS] = self._write_symbols(ir_offsets)
-        return self._assemble(sections)
+        return self._assemble(sections, self._module_allocation_counts())
 
     def _write_strings(self) -> bytes:
         """Write the STRINGS section."""
@@ -393,8 +408,8 @@ class BytecodeWriter:
         buf.write_varint(len(encodings))
         for enc in encodings:
             buf.write_varint(family_map[enc.name])
-            alias_id = self._ctx.strings[enc.alias] if enc.alias else 0
-            buf.write_varint(alias_id)
+            alias_string_id_plus1 = self._ctx.strings[enc.alias] + 1 if enc.alias else 0
+            buf.write_varint(alias_string_id_plus1)
             # Structured parameters: same attribute serialization as IR.
             buf.write_varint(len(enc.params))
             for param_name, param_value in enc.params:
@@ -550,7 +565,11 @@ class BytecodeWriter:
         value_numbers: dict[int, int] = {}
         self._assign_value_numbers(body, value_numbers)
 
-        # Write the region.
+        value_count, region_count, block_count, op_count = self._count_region_tree(body)
+        buf.write_varint(value_count)
+        buf.write_varint(region_count)
+        buf.write_varint(block_count)
+        buf.write_varint(op_count)
         self._write_region(buf, body, value_numbers)
 
     def _assign_value_numbers(self, region: Region, numbers: dict[int, int]) -> None:
@@ -560,11 +579,53 @@ class BytecodeWriter:
                 if arg_id not in numbers:
                     numbers[arg_id] = len(numbers)
             for op in block.ops:
+                if op.is_dead:
+                    continue
                 for result_id in op.results:
                     if result_id not in numbers:
                         numbers[result_id] = len(numbers)
                 for nested_region in op.regions:
                     self._assign_value_numbers(nested_region, numbers)
+
+    def _count_region_tree(self, region: Region) -> tuple[int, int, int, int]:
+        """Return value, region, block, and op counts for a live region tree."""
+        value_count = 0
+        region_count = 1
+        block_count = len(region.blocks)
+        op_count = 0
+        for block in region.blocks:
+            value_count += len(block.arg_ids)
+            for op in block.ops:
+                if op.is_dead:
+                    continue
+                value_count += len(op.results)
+                op_count += 1
+                for nested_region in op.regions:
+                    nested_counts = self._count_region_tree(nested_region)
+                    value_count += nested_counts[0]
+                    region_count += nested_counts[1]
+                    block_count += nested_counts[2]
+                    op_count += nested_counts[3]
+        return value_count, region_count, block_count, op_count
+
+    def _module_allocation_counts(self) -> tuple[int, int, int, int]:
+        """Return module value, serialized region, block, and op counts."""
+        value_count = 0
+        region_count = 0
+        block_count = 0
+        op_count = 0
+        for symbol in self._module.symbols:
+            if symbol.op is None or not symbol.op.regions:
+                if symbol.op is not None:
+                    value_count += len(symbol.op.operands) + len(symbol.op.results)
+                continue
+            value_count += len(symbol.op.results)
+            counts = self._count_region_tree(symbol.op.regions[0])
+            value_count += counts[0]
+            region_count += counts[1]
+            block_count += counts[2]
+            op_count += counts[3]
+        return value_count, region_count, block_count, op_count
 
     def _write_region(
         self, buf: ByteBuffer, region: Region, value_numbers: dict[int, int]
@@ -593,10 +654,10 @@ class BytecodeWriter:
             self._write_dim_bindings(buf, value, value_numbers)
 
         # Operations.
-        buf.write_varint(len(block.ops))
-        for op in block.ops:
-            if not op.is_dead:
-                self._write_operation(buf, op, value_numbers)
+        live_ops = [op for op in block.ops if not op.is_dead]
+        buf.write_varint(len(live_ops))
+        for op in live_ops:
+            self._write_operation(buf, op, value_numbers)
 
     def _write_dim_bindings(
         self, buf: ByteBuffer, value: Value, value_numbers: dict[int, int]
@@ -628,7 +689,7 @@ class BytecodeWriter:
         self, buf: ByteBuffer, op: Operation, value_numbers: dict[int, int]
     ) -> None:
         """Write a single operation."""
-        buf.write_varint(self._ctx.ops[op.name])
+        buf.write_varint(self._ctx.ops[op.name] + 1)
         buf.write_u8(0)  # flags
         buf.write_varint(op.location_id)
 
@@ -883,14 +944,16 @@ class BytecodeWriter:
 
     # --- File assembly ---
 
-    def _assemble(self, sections: dict[int, bytes]) -> bytes:
+    def _assemble(
+        self, sections: dict[int, bytes], allocation_counts: tuple[int, int, int, int]
+    ) -> bytes:
         """Assemble the complete .loombc file."""
         buf = ByteBuffer()
 
         # File header.
         buf.write_bytes(MAGIC)
         buf.write_u8(FORMAT_VERSION)
-        buf.write_u8(0)  # flags
+        buf.write_u8(LOCATION_MODE_SOURCE_LOCATIONS)
         buf.write_u16_le(1)  # module_count = 1
         # File string pool: just the module name for now.
         module_name = self._module.name.encode("utf-8")
@@ -915,9 +978,11 @@ class BytecodeWriter:
         module_start = buf.position
         buf.patch_u64_le(module_offset_patch, module_start)
 
-        # Section directory.
-        section_kinds = sorted(sections.keys())
-        len(section_kinds)
+        # Module allocation summary and section directory.
+        section_kinds = [kind for kind in SECTION_WRITE_ORDER if kind in sections]
+        buf.write_varint(len(section_kinds))
+        for count in allocation_counts:
+            buf.write_varint(count)
 
         # Reserve space for section directory (32 bytes per entry).
         section_dir_entries: list[int] = []

@@ -27,6 +27,7 @@ from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import (
     FORMAT_VERSION,
+    LOCATION_MODE_SOURCE_LOCATIONS,
     write_module,
 )
 from loom.format.text.parser import Parser
@@ -332,9 +333,9 @@ class TestFileHeader:
         data = write_module(Module(name="test"))
         assert data[4] == FORMAT_VERSION
 
-    def test_flags_zero(self) -> None:
+    def test_location_mode_source(self) -> None:
         data = write_module(Module(name="test"))
-        assert data[5] == 0
+        assert data[5] == LOCATION_MODE_SOURCE_LOCATIONS
 
     def test_module_count_one(self) -> None:
         data = write_module(Module(name="test"))
