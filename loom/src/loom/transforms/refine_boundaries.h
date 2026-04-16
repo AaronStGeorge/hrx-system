@@ -24,10 +24,22 @@ extern "C" {
 // Returns immutable metadata for the refine-boundaries pass.
 const loom_pass_info_t* loom_refine_boundaries_pass_info(void);
 
+typedef struct loom_refine_boundaries_options_t {
+  // Maximum number of outer boundary fixed-point iterations. Zero selects the
+  // pass default.
+  uint32_t max_iterations;
+} loom_refine_boundaries_options_t;
+
 // Propagates direct-call boundary facts and type refinements through the
 // module.
 iree_status_t loom_refine_boundaries_run(loom_pass_t* pass,
                                          loom_module_t* module);
+
+// Propagates direct-call boundary facts and type refinements through the module
+// using explicit driver options.
+iree_status_t loom_refine_boundaries_run_with_options(
+    loom_pass_t* pass, loom_module_t* module,
+    const loom_refine_boundaries_options_t* options);
 
 #ifdef __cplusplus
 }

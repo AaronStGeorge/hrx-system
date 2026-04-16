@@ -391,6 +391,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::analysis::scc
     loom::src::loom::analysis::type_refinement
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ir::type_refinement
@@ -411,6 +412,7 @@ loom_cc_test(
     ::pass
     ::refine_boundaries
     iree::base::internal::arena
+    loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func

@@ -6,11 +6,13 @@
 
 #include "loom/transforms/refine_boundaries.h"
 
+#include <string>
 #include <vector>
 
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -21,6 +23,40 @@ namespace loom {
 namespace {
 
 using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
+struct DiagnosticEmissionCollector {
+  // Number of structured diagnostics collected.
+  int count = 0;
+
+  // Last structured error definition emitted.
+  const loom_error_def_t* error = nullptr;
+
+  // Last pass name parameter.
+  std::string pass_name;
+
+  // Last scope parameter.
+  std::string scope;
+
+  // Last reason parameter.
+  std::string reason;
+};
+
+static std::string CopyString(iree_string_view_t value) {
+  return std::string(value.data, value.size);
+}
+
+static iree_status_t CollectDiagnosticEmission(
+    void* user_data, const loom_diagnostic_emission_t* emission) {
+  auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
+  ++collector->count;
+  collector->error = emission->error;
+  if (emission->error == &loom_err_lowering_002 && emission->param_count >= 3) {
+    collector->pass_name = CopyString(emission->params[0].string);
+    collector->scope = CopyString(emission->params[1].string);
+    collector->reason = CopyString(emission->params[2].string);
+  }
+  return iree_ok_status();
+}
 
 class RefineBoundariesTest : public ::testing::Test {
  protected:
@@ -52,8 +88,10 @@ class RefineBoundariesTest : public ::testing::Test {
                            &block_pool_, &parse_options, out_module);
   }
 
-  iree_status_t RunRefineBoundaries(loom_module_t* module,
-                                    std::vector<int64_t>* statistics) {
+  iree_status_t RunRefineBoundaries(
+      loom_module_t* module, std::vector<int64_t>* statistics,
+      const loom_refine_boundaries_options_t* options = nullptr,
+      DiagnosticEmissionCollector* collector = nullptr) {
     const loom_pass_info_t* info = loom_refine_boundaries_pass_info();
     statistics->assign(info->statistic_count, 0);
 
@@ -64,7 +102,12 @@ class RefineBoundariesTest : public ::testing::Test {
     pass.instance_arena = &pass_arena;
     pass.arena = &pass_arena;
     pass.statistics = statistics->data();
-    iree_status_t status = loom_refine_boundaries_run(&pass, module);
+    if (collector) {
+      pass.diagnostic_emitter.fn = CollectDiagnosticEmission;
+      pass.diagnostic_emitter.user_data = collector;
+    }
+    iree_status_t status =
+        loom_refine_boundaries_run_with_options(&pass, module, options);
     iree_arena_deinitialize(&pass_arena);
     return status;
   }
@@ -115,6 +158,39 @@ func.def public @caller(%dynamic: index) -> (index, index) {
 
   EXPECT_GT(StatisticValue(statistics, IREE_SV("function-fact-cache-hits")), 0);
   EXPECT_GT(StatisticValue(statistics, IREE_SV("functions-canonicalized")), 0);
+}
+
+TEST_F(RefineBoundariesTest, EmitsDiagnosticWhenFactsDoNotConverge) {
+  const char* source = R"(
+func.def @identity(%value: index) -> (index) {
+  func.return %value : index
+}
+
+func.def public @caller() -> (index) {
+  %zero = index.constant 0 : index
+  %result = func.call @identity(%zero) : (index) -> (index)
+  func.return %result : index
+}
+)";
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(ParseModule(source, &module));
+  ASSERT_NE(module, nullptr);
+
+  loom_refine_boundaries_options_t options = {};
+  options.max_iterations = 1;
+  std::vector<int64_t> statistics;
+  DiagnosticEmissionCollector collector;
+  iree_status_t status =
+      RunRefineBoundaries(module, &statistics, &options, &collector);
+  loom_module_free(module);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED, status);
+
+  EXPECT_EQ(collector.count, 1);
+  EXPECT_EQ(collector.error, &loom_err_lowering_002);
+  EXPECT_EQ(collector.pass_name, "refine-boundaries");
+  EXPECT_EQ(collector.scope, "module");
+  EXPECT_NE(collector.reason.find("did not converge"), std::string::npos);
 }
 
 }  // namespace

@@ -344,6 +344,7 @@ loom_cc_library(
         ":remap",
         "//loom/src/loom/analysis:scc",
         "//loom/src/loom/analysis:type_refinement",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ir:type_refinement",
@@ -362,6 +363,7 @@ loom_cc_test(
     deps = [
         ":pass",
         ":refine_boundaries",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",

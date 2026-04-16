@@ -2064,6 +2064,25 @@ const loom_error_def_t loom_err_lowering_001 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_lowering_002_params[] = {
+    {"pass_name", LOOM_PARAM_STRING},
+    {"scope", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+const loom_error_def_t loom_err_lowering_002 = {
+    .error_id = "ERR_LOWERING_002",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 2,
+    .summary = "Pass refinement failed.",
+    .message_template = "{pass_name} failed while refining {scope}: {reason}",
+    .fix_hint_template =
+        "Refine boundary facts/types, specialize incompatible call paths, or "
+        "split the recursive/SCC structure before running {pass_name}",
+    .param_defs = loom_err_lowering_002_params,
+    .param_count = 3,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2102,6 +2121,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_bytecode_003,  &loom_err_bytecode_004,  &loom_err_bytecode_005,
     &loom_err_fold_001,      &loom_err_fold_002,      &loom_err_fold_003,
     &loom_err_fold_004,      &loom_err_fold_005,      &loom_err_lowering_001,
+    &loom_err_lowering_002,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

@@ -24,4 +24,23 @@ ERR_LOWERING_001 = ErrorDef(
     "{pass_name}, or lower it with a pass that supports this operation",
 )
 
-ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (ERR_LOWERING_001,)
+# ERR_LOWERING_002: Pass-level refinement failed.
+ERR_LOWERING_002 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=2,
+    severity=Severity.ERROR,
+    summary="Pass refinement failed.",
+    message="{pass_name} failed while refining {scope}: {reason}",
+    params=(
+        ErrorParam("pass_name", ParamKind.STRING),
+        ErrorParam("scope", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint="Refine boundary facts/types, specialize incompatible call paths, "
+    "or split the recursive/SCC structure before running {pass_name}",
+)
+
+ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
+    ERR_LOWERING_001,
+    ERR_LOWERING_002,
+)
