@@ -160,6 +160,8 @@ typedef uint32_t loom_amdgpu_matrix_contract_flags_t;
 #define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_OPSEL ((uint32_t)1u << 8)
 // A zero scale can refine to an unscaled contract with the same shape.
 #define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_ZERO_SCALE_FALLBACK ((uint32_t)1u << 9)
+// Contract consumes scale-format selector operands.
+#define LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS ((uint32_t)1u << 10)
 
 typedef struct loom_amdgpu_matrix_tile_shape_t {
   // Contracted result rows in the target-native tile.
@@ -174,10 +176,11 @@ typedef struct loom_amdgpu_matrix_payload_shape_t {
   // Logical numeric type represented by this operand or result.
   loom_amdgpu_matrix_numeric_type_t numeric_type;
   // Number of 32-bit VGPR payload registers in a fixed LLVM signature. Zero
-  // means the descriptor needs a later format-specific fragment signature.
+  // means the descriptor needs a later wave- or format-specific fragment
+  // signature.
   uint16_t register_count;
   // Number of logical scalar elements represented by the payload. Zero means
-  // the descriptor needs a later format-specific fragment signature.
+  // the descriptor needs a later wave- or format-specific fragment signature.
   uint16_t element_count;
 } loom_amdgpu_matrix_payload_shape_t;
 

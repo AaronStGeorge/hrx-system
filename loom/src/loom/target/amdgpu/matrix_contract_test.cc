@@ -194,9 +194,111 @@ TEST(MatrixContractTest, Gfx1250WmmaScale16Descriptor) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_WMMA);
   EXPECT_EQ(descriptor->tile_shape.reduction_count, 128);
+  EXPECT_EQ(descriptor->result_payload.register_count, 8);
   EXPECT_EQ(descriptor->scale_kind, LOOM_AMDGPU_MATRIX_SCALE_16);
+  EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS);
   EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE,
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE);
+}
+
+TEST(MatrixContractTest, Gfx1250WmmaModifierDescriptors) {
+  const loom_amdgpu_matrix_contract_descriptor_t* f32_descriptor =
+      FindDescriptor("wmma.f32.16x16x4.f32");
+  ASSERT_NE(f32_descriptor, nullptr);
+  EXPECT_EQ(f32_descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_WMMA);
+  EXPECT_EQ(f32_descriptor->tile_shape.reduction_count, 4);
+  EXPECT_EQ(f32_descriptor->lhs_payload.register_count, 2);
+  EXPECT_EQ(f32_descriptor->result_payload.register_count, 8);
+  EXPECT_EQ(
+      f32_descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_AB_MODIFIERS,
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_AB_MODIFIERS);
+  EXPECT_EQ(f32_descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_REUSE);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* mixed_descriptor =
+      FindDescriptor("wmma.bf16f32.16x16x32.bf16");
+  ASSERT_NE(mixed_descriptor, nullptr);
+  EXPECT_EQ(mixed_descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF16);
+  EXPECT_EQ(mixed_descriptor->accumulator_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32);
+  EXPECT_EQ(mixed_descriptor->result_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF16);
+  EXPECT_EQ(mixed_descriptor->result_payload.register_count, 4);
+}
+
+TEST(MatrixContractTest, Gfx1250WmmaF4Descriptors) {
+  const loom_amdgpu_matrix_contract_descriptor_t* unscaled =
+      FindDescriptor("wmma.f32.32x16x128.f4");
+  ASSERT_NE(unscaled, nullptr);
+  EXPECT_EQ(unscaled->tile_shape.result_row_count, 32);
+  EXPECT_EQ(unscaled->tile_shape.result_column_count, 16);
+  EXPECT_EQ(unscaled->lhs_payload.numeric_type, LOOM_AMDGPU_MATRIX_NUMERIC_FP4);
+  EXPECT_EQ(unscaled->lhs_payload.element_count, 128);
+  EXPECT_EQ(unscaled->rhs_payload.element_count, 64);
+  EXPECT_EQ(unscaled->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_C_MODIFIER,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_C_MODIFIER);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* scaled =
+      FindDescriptor("wmma.scale.f32.32x16x128.f4");
+  ASSERT_NE(scaled, nullptr);
+  EXPECT_EQ(scaled->scale_kind, LOOM_AMDGPU_MATRIX_SCALE_32);
+  EXPECT_EQ(scaled->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED);
+  EXPECT_EQ(scaled->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALE_FORMATS);
+  EXPECT_EQ(scaled->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS,
+            0u);
+}
+
+TEST(MatrixContractTest, Gfx12SwmmacBaseDescriptors) {
+  const loom_amdgpu_matrix_contract_descriptor_t* f16_descriptor =
+      FindDescriptor("swmmac.f32.16x16x32.f16");
+  ASSERT_NE(f16_descriptor, nullptr);
+  EXPECT_EQ(f16_descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_SWMMAC);
+  EXPECT_EQ(f16_descriptor->required_feature_bits,
+            LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12);
+  EXPECT_EQ(f16_descriptor->wave_size_bits, LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY);
+  EXPECT_EQ(f16_descriptor->tile_shape.reduction_count, 32);
+  EXPECT_EQ(f16_descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F16);
+  EXPECT_EQ(f16_descriptor->lhs_payload.register_count, 0);
+  EXPECT_EQ(f16_descriptor->result_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32);
+  EXPECT_EQ(f16_descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* bf16_descriptor =
+      FindDescriptor("swmmac.bf16.16x16x32.bf16");
+  ASSERT_NE(bf16_descriptor, nullptr);
+  EXPECT_EQ(bf16_descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF16);
+  EXPECT_EQ(bf16_descriptor->result_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF16);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* iu8_descriptor =
+      FindDescriptor("swmmac.i32.16x16x32.iu8");
+  ASSERT_NE(iu8_descriptor, nullptr);
+  EXPECT_EQ(iu8_descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_IU8);
+  EXPECT_EQ(iu8_descriptor->rhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_IU8);
+  EXPECT_EQ(iu8_descriptor->result_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_I32);
+  EXPECT_EQ(iu8_descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
+  EXPECT_EQ(
+      iu8_descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT,
+      LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SIGN_SELECT);
+  EXPECT_EQ(iu8_descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP,
+            LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_CLAMP);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* iu4_descriptor =
+      FindDescriptor("swmmac.i32.16x16x32.iu4");
+  ASSERT_NE(iu4_descriptor, nullptr);
+  EXPECT_EQ(iu4_descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_IU4);
 }
 
 TEST(MatrixContractTest, SparseDescriptorsCarrySparseFlag) {
@@ -237,6 +339,22 @@ TEST(MatrixContractTest, SparseFp8CrossProductDescriptors) {
   EXPECT_EQ(swmmac->rhs_payload.numeric_type, LOOM_AMDGPU_MATRIX_NUMERIC_BF8);
   EXPECT_EQ(swmmac->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* gfx1250_swmmac =
+      FindDescriptor("swmmac.f16.16x16x128.bf8.fp8");
+  ASSERT_NE(gfx1250_swmmac, nullptr);
+  EXPECT_EQ(gfx1250_swmmac->family, LOOM_AMDGPU_MATRIX_FAMILY_SWMMAC);
+  EXPECT_EQ(gfx1250_swmmac->required_feature_bits,
+            LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX1250);
+  EXPECT_EQ(gfx1250_swmmac->tile_shape.reduction_count, 128);
+  EXPECT_EQ(gfx1250_swmmac->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_BF8);
+  EXPECT_EQ(gfx1250_swmmac->rhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
+  EXPECT_EQ(gfx1250_swmmac->lhs_payload.register_count, 8);
+  EXPECT_EQ(gfx1250_swmmac->rhs_payload.register_count, 16);
+  EXPECT_EQ(gfx1250_swmmac->result_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F16);
 }
 
 TEST(MatrixContractTest, WmmaFp8CrossProductDescriptors) {
