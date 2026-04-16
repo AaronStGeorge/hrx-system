@@ -3111,6 +3111,7 @@ vector_dot4f8 = Op(
         SameType("acc", "result"),
         SameShape("lhs", "acc"),
     ],
+    facts="loom_vector_dot4f8_facts",
     traits=[PURE],
     format=[
         TemplateParam("kind"),

@@ -753,6 +753,81 @@ func.def @dot8i4_uniform_dynamic_identity(%n: index) -> (i32) {
 
 // ====
 
+// Packed fp8/bf8 dot facts decode little-endian bytes according to the
+// template kind. 0x38 is fp8(E4M3) 1.0, and 0x3c is bf8(E5M2) 1.0.
+func.def @dot4f8_small_static_lanes() -> (f32, f32) {
+  %lhs0 = scalar.constant 0x38383838 : i32
+  %rhs0 = scalar.constant 0x3c3c3c3c : i32
+  %lhs1 = scalar.constant 0 : i32
+  %rhs1 = scalar.constant 0 : i32
+  %acc0 = scalar.constant 5.0 : f32
+  %acc1 = scalar.constant -3.0 : f32
+  %lhs = vector.from_elements %lhs0, %lhs1 : vector<2xi32>
+  %rhs = vector.from_elements %rhs0, %rhs1 : vector<2xi32>
+  %acc = vector.from_elements %acc0, %acc1 : vector<2xf32>
+  %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<2xi32>, vector<2xf32>
+  %r0 = vector.extract %r[0] : vector<2xf32> -> f32
+  %r1 = vector.extract %r[1] : vector<2xf32> -> f32
+  func.return %r0, %r1 : f32, f32
+}
+// ----
+func.def @dot4f8_small_static_lanes() -> (f32, f32) {
+  %r0 = scalar.constant 9.0 : f32
+  %r1 = scalar.constant -3.0 : f32
+  func.return %r0, %r1 : f32, f32
+}
+
+// ====
+
+// All template spellings decode the selected lhs/rhs field formats.
+func.def @dot4f8_all_kind_ones() -> (f32, f32, f32, f32) {
+  %fp8_ones = scalar.constant 0x38383838 : i32
+  %bf8_ones = scalar.constant 0x3c3c3c3c : i32
+  %zero = scalar.constant 0.0 : f32
+  %fp8 = vector.from_elements %fp8_ones : vector<1xi32>
+  %bf8 = vector.from_elements %bf8_ones : vector<1xi32>
+  %acc = vector.from_elements %zero : vector<1xf32>
+  %r0v = vector.dot4f8<fp8bf8> %fp8, %bf8, %acc : vector<1xi32>, vector<1xf32>
+  %r1v = vector.dot4f8<bf8fp8> %bf8, %fp8, %acc : vector<1xi32>, vector<1xf32>
+  %r2v = vector.dot4f8<fp8fp8> %fp8, %fp8, %acc : vector<1xi32>, vector<1xf32>
+  %r3v = vector.dot4f8<bf8bf8> %bf8, %bf8, %acc : vector<1xi32>, vector<1xf32>
+  %r0 = vector.extract %r0v[0] : vector<1xf32> -> f32
+  %r1 = vector.extract %r1v[0] : vector<1xf32> -> f32
+  %r2 = vector.extract %r2v[0] : vector<1xf32> -> f32
+  %r3 = vector.extract %r3v[0] : vector<1xf32> -> f32
+  func.return %r0, %r1, %r2, %r3 : f32, f32, f32, f32
+}
+// ----
+func.def @dot4f8_all_kind_ones() -> (f32, f32, f32, f32) {
+  %r0 = scalar.constant 4.0 : f32
+  %r1 = scalar.constant 4.0 : f32
+  %r2 = scalar.constant 4.0 : f32
+  %r3 = scalar.constant 4.0 : f32
+  func.return %r0, %r1, %r2, %r3 : f32, f32, f32, f32
+}
+
+// ====
+
+// Uniform packed fp8/bf8 facts stay shape-independent on dynamic vectors.
+func.def @dot4f8_uniform_dynamic_extract(%n: index) -> (f32) {
+  %lhs0 = scalar.constant 0x38383838 : i32
+  %rhs0 = scalar.constant 0x3c3c3c3c : i32
+  %zero = scalar.constant 0.0 : f32
+  %lhs = vector.splat %lhs0 : vector<[%n]xi32>
+  %rhs = vector.splat %rhs0 : vector<[%n]xi32>
+  %acc = vector.splat %zero : vector<[%n]xf32>
+  %dot = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<[%n]xi32>, vector<[%n]xf32>
+  %r = vector.extract %dot[0] : vector<[%n]xf32> -> f32
+  func.return %r : f32
+}
+// ----
+func.def @dot4f8_uniform_dynamic_extract(%n: index) -> (f32) {
+  %r = scalar.constant 4.0 : f32
+  func.return %r : f32
+}
+
+// ====
+
 // Oversized explicit vectors deliberately degrade to unknown facts instead of
 // allocating unbounded per-lane analysis payloads.
 func.def @oversized_from_elements_degrades_to_unknown() -> (i64) {
