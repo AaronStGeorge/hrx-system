@@ -699,6 +699,7 @@ vector_transpose = Op(
     ],
     constraints=[SameElementType("source", "result")],
     verify="loom_vector_transpose_verify",
+    type_transfer="loom_vector_transpose_type_transfer",
     traits=[PURE],
     format=[
         TemplateParam("permutation"),

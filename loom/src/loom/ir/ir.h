@@ -120,6 +120,7 @@ typedef struct loom_rewriter_t loom_rewriter_t;
 typedef struct loom_func_like_vtable_t loom_func_like_vtable_t;
 typedef struct loom_loop_like_vtable_t loom_loop_like_vtable_t;
 typedef struct loom_region_branch_vtable_t loom_region_branch_vtable_t;
+typedef struct loom_type_transfer_context_t loom_type_transfer_context_t;
 
 //===----------------------------------------------------------------------===//
 // References
@@ -743,6 +744,13 @@ typedef iree_status_t (*loom_op_infer_facts_fn_t)(
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
+// Semantic type-transfer callback. Feeds op-specific candidate refinements into
+// the transactional type propagator. The callback must not mutate IR directly;
+// it may only seed candidates through loom_type_transfer_context_t helpers.
+typedef iree_status_t (*loom_type_transfer_fn_t)(
+    loom_type_transfer_context_t* context, const loom_module_t* module,
+    loom_op_t* op);
+
 //===----------------------------------------------------------------------===//
 // FuncLike interface vtable
 //===----------------------------------------------------------------------===//
@@ -902,8 +910,8 @@ typedef struct loom_region_branch_t {
 // Layout is cache-optimized for compiler pass inner loops:
 //
 //   Cache line 1 (bytes 0-63): scalars and pointers touched by every
-//   pass on every op — traits, counts, canonicalize/fact fn pointers,
-//   attr/operand descriptors.
+//   pass on every op — traits, counts, canonicalize/fact/type-transfer fn
+//   pointers, attr/operand descriptors.
 //
 //   Cache line 2 (bytes 64-127): verification, parse/print, and
 //   diagnostics — descriptor arrays only needed by the verifier,
@@ -942,8 +950,7 @@ struct loom_op_vtable_t {
   loom_effective_traits_fn_t effective_traits;
   const loom_attr_descriptor_t* attr_descriptors;
   const loom_operand_descriptor_t* operand_descriptors;
-  // 8 bytes padding to fill cache line 1.
-  uint64_t _padding_line1;
+  loom_type_transfer_fn_t type_transfer;
 
   // --- Cache line 2: verify + parse/print + diagnostics (64-127) ---
 

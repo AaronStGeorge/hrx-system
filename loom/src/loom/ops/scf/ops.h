@@ -76,6 +76,9 @@ iree_status_t loom_scf_if_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_scf_if_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_scf_region_branch_type_transfer(
+    loom_type_transfer_context_t* context,
+    const loom_module_t* module, loom_op_t* op);
 
 // LOOM_OP_SCF_SWITCH: Multi-way branch over an index selector. Case keys are sorted unique i64 literals. The default region is mandatory and is selected when the selector does not equal any explicit case key. Every region must terminate with scf.yield matching the switch result tuple.
 // scf.switch %selector {

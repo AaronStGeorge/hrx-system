@@ -20,6 +20,7 @@ loom_cc_library(
     "canonicalize.c"
     "facts.c"
     "tables.c"
+    "type_transfer.c"
     "verify.c"
   DEPS
     loom::src::loom::analysis::availability
@@ -30,6 +31,7 @@ loom_cc_library(
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_defs
     loom::src::loom::transforms::rewriter
+    loom::src::loom::transforms::type_propagation
     loom::src::loom::util::math
   PUBLIC
 )

@@ -13,7 +13,9 @@
 #include "loom/ir/module.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scf/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 
 namespace loom {
@@ -28,6 +30,8 @@ class TypePropagationTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VIEW, loom_view_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_SCF, loom_scf_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, NULL,
@@ -344,6 +348,250 @@ TEST_F(TypePropagationTest, TypeUseUsersAreQueuedOnCommit) {
 
   loom_rewriter_deinitialize(&rewriter);
   iree_arena_deinitialize(&pass_arena);
+}
+
+TEST_F(TypePropagationTest, VectorTransposeNarrowsPermutedResultShape) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* dim0_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), index_type, &dim0_op));
+  loom_op_t* dim1_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), index_type, &dim1_op));
+
+  loom_type_t source_type =
+      loom_type_shaped_2d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+                          loom_dim_pack_static(4), loom_dim_pack_static(8), 0);
+  loom_type_t result_type = loom_type_shaped_2d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+      loom_dim_pack_dynamic(loom_test_constant_result(dim0_op)),
+      loom_dim_pack_dynamic(loom_test_constant_result(dim1_op)), 0);
+
+  loom_op_t* source_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), source_type, &source_op));
+  int64_t permutation[] = {1, 0};
+  loom_op_t* transpose_op = NULL;
+  IREE_ASSERT_OK(loom_vector_transpose_build(
+      &builder_, permutation, IREE_ARRAYSIZE(permutation),
+      loom_test_constant_result(source_op), result_type, LOOM_LOCATION_UNKNOWN,
+      &transpose_op));
+
+  bool changed = false;
+  IREE_EXPECT_OK(Propagate(transpose_op, &changed));
+
+  EXPECT_TRUE(changed);
+  loom_type_t refined_type = loom_module_value_type(
+      module_, loom_vector_transpose_result(transpose_op));
+  EXPECT_FALSE(loom_type_dim_is_dynamic_at(refined_type, 0));
+  EXPECT_FALSE(loom_type_dim_is_dynamic_at(refined_type, 1));
+  EXPECT_EQ(loom_type_dim_static_size_at(refined_type, 0), 8);
+  EXPECT_EQ(loom_type_dim_static_size_at(refined_type, 1), 4);
+}
+
+TEST_F(TypePropagationTest, ViewRefineNarrowsSourceStaticShapeAndEncoding) {
+  loom_op_t* layout_op = NULL;
+  IREE_ASSERT_OK(loom_encoding_layout_dense_build(
+      &builder_, loom_type_encoding(), LOOM_LOCATION_UNKNOWN, &layout_op));
+  loom_value_id_t layout = loom_encoding_layout_dense_result(layout_op);
+
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), index_type, &dim_op));
+
+  loom_type_t source_type = loom_type_shaped_1d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+      loom_dim_pack_dynamic(loom_test_constant_result(dim_op)), 0);
+  source_type.encoding_id = (uint16_t)layout;
+  source_type.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+
+  loom_type_t result_type = loom_type_shaped_1d(
+      LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(16), 7);
+
+  loom_op_t* source_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), source_type, &source_op));
+  loom_op_t* refine_op = NULL;
+  IREE_ASSERT_OK(
+      loom_view_refine_build(&builder_, loom_test_constant_result(source_op),
+                             result_type, LOOM_LOCATION_UNKNOWN, &refine_op));
+
+  bool changed = false;
+  IREE_EXPECT_OK(Propagate(refine_op, &changed));
+
+  EXPECT_TRUE(changed);
+  loom_type_t refined_source =
+      loom_module_value_type(module_, loom_test_constant_result(source_op));
+  EXPECT_FALSE(loom_type_dim_is_dynamic_at(refined_source, 0));
+  EXPECT_EQ(loom_type_dim_static_size_at(refined_source, 0), 16);
+  EXPECT_TRUE(loom_type_has_static_encoding(refined_source));
+  EXPECT_EQ(refined_source.encoding_id, 7);
+}
+
+TEST_F(TypePropagationTest, RegionBranchNarrowsResultFromYieldedValues) {
+  loom_type_t i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_op_t* condition_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_bool(true), i1_type, &condition_op));
+
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), index_type, &dim_op));
+
+  loom_type_t static_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(16), 0);
+  loom_type_t dynamic_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+      loom_dim_pack_dynamic(loom_test_constant_result(dim_op)), 0);
+
+  loom_op_t* then_value_op = NULL;
+  IREE_ASSERT_OK(
+      BuildConstant(loom_attr_i64(0), static_vector, &then_value_op));
+  loom_op_t* else_value_op = NULL;
+  IREE_ASSERT_OK(
+      BuildConstant(loom_attr_i64(0), static_vector, &else_value_op));
+
+  loom_op_t* if_op = NULL;
+  IREE_ASSERT_OK(loom_scf_if_build(
+      &builder_, loom_test_constant_result(condition_op), &dynamic_vector, 1,
+      NULL, 0, LOOM_LOCATION_UNKNOWN, &if_op));
+
+  loom_builder_t then_builder;
+  loom_builder_initialize(
+      module_, &module_->arena,
+      loom_region_entry_block(loom_scf_if_then_region(if_op)), &then_builder);
+  loom_value_id_t then_value = loom_test_constant_result(then_value_op);
+  loom_op_t* then_yield = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&then_builder, &then_value, 1,
+                                      LOOM_LOCATION_UNKNOWN, &then_yield));
+
+  loom_builder_t else_builder;
+  loom_builder_initialize(
+      module_, &module_->arena,
+      loom_region_entry_block(loom_scf_if_else_region(if_op)), &else_builder);
+  loom_value_id_t else_value = loom_test_constant_result(else_value_op);
+  loom_op_t* else_yield = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&else_builder, &else_value, 1,
+                                      LOOM_LOCATION_UNKNOWN, &else_yield));
+
+  bool changed = false;
+  IREE_EXPECT_OK(Propagate(if_op, &changed));
+
+  EXPECT_TRUE(changed);
+  loom_type_t refined_result = loom_module_value_type(
+      module_, loom_value_slice_get(loom_scf_if_results(if_op), 0));
+  EXPECT_FALSE(loom_type_dim_is_dynamic_at(refined_result, 0));
+  EXPECT_EQ(loom_type_dim_static_size_at(refined_result, 0), 16);
+}
+
+TEST_F(TypePropagationTest, RegionBranchNarrowsSwitchResultFromYieldedValues) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* selector_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), index_type, &selector_op));
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), index_type, &dim_op));
+
+  loom_type_t static_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(16), 0);
+  loom_type_t dynamic_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+      loom_dim_pack_dynamic(loom_test_constant_result(dim_op)), 0);
+
+  loom_op_t* case_value_op = NULL;
+  IREE_ASSERT_OK(
+      BuildConstant(loom_attr_i64(0), static_vector, &case_value_op));
+  loom_op_t* default_value_op = NULL;
+  IREE_ASSERT_OK(
+      BuildConstant(loom_attr_i64(0), static_vector, &default_value_op));
+
+  int64_t case_keys[] = {0};
+  loom_op_t* switch_op = NULL;
+  IREE_ASSERT_OK(loom_scf_switch_build(
+      &builder_, loom_test_constant_result(selector_op), &dynamic_vector, 1,
+      NULL, 0, case_keys, IREE_ARRAYSIZE(case_keys), LOOM_LOCATION_UNKNOWN,
+      &switch_op));
+
+  loom_builder_t default_builder;
+  loom_builder_initialize(
+      module_, &module_->arena,
+      loom_region_entry_block(loom_scf_switch_default_region(switch_op)),
+      &default_builder);
+  loom_value_id_t default_value = loom_test_constant_result(default_value_op);
+  loom_op_t* default_yield = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&default_builder, &default_value, 1,
+                                      LOOM_LOCATION_UNKNOWN, &default_yield));
+
+  loom_region_slice_t case_regions = loom_scf_switch_case_regions(switch_op);
+  ASSERT_EQ(case_regions.count, 1);
+  loom_builder_t case_builder;
+  loom_builder_initialize(module_, &module_->arena,
+                          loom_region_entry_block(case_regions.regions[0]),
+                          &case_builder);
+  loom_value_id_t case_value = loom_test_constant_result(case_value_op);
+  loom_op_t* case_yield = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&case_builder, &case_value, 1,
+                                      LOOM_LOCATION_UNKNOWN, &case_yield));
+
+  bool changed = false;
+  IREE_EXPECT_OK(Propagate(switch_op, &changed));
+
+  EXPECT_TRUE(changed);
+  loom_type_t refined_result = loom_module_value_type(
+      module_, loom_value_slice_get(loom_scf_switch_results(switch_op), 0));
+  EXPECT_FALSE(loom_type_dim_is_dynamic_at(refined_result, 0));
+  EXPECT_EQ(loom_type_dim_static_size_at(refined_result, 0), 16);
+}
+
+TEST_F(TypePropagationTest, RegionBranchRejectsConflictingYieldedShapes) {
+  loom_type_t i1_type = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_op_t* condition_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_bool(true), i1_type, &condition_op));
+
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* dim_op = NULL;
+  IREE_ASSERT_OK(BuildConstant(loom_attr_i64(0), index_type, &dim_op));
+
+  loom_type_t static_vector_16 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(16), 0);
+  loom_type_t static_vector_32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(32), 0);
+  loom_type_t dynamic_vector = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+      loom_dim_pack_dynamic(loom_test_constant_result(dim_op)), 0);
+
+  loom_op_t* then_value_op = NULL;
+  IREE_ASSERT_OK(
+      BuildConstant(loom_attr_i64(0), static_vector_16, &then_value_op));
+  loom_op_t* else_value_op = NULL;
+  IREE_ASSERT_OK(
+      BuildConstant(loom_attr_i64(0), static_vector_32, &else_value_op));
+
+  loom_op_t* if_op = NULL;
+  IREE_ASSERT_OK(loom_scf_if_build(
+      &builder_, loom_test_constant_result(condition_op), &dynamic_vector, 1,
+      NULL, 0, LOOM_LOCATION_UNKNOWN, &if_op));
+
+  loom_builder_t then_builder;
+  loom_builder_initialize(
+      module_, &module_->arena,
+      loom_region_entry_block(loom_scf_if_then_region(if_op)), &then_builder);
+  loom_value_id_t then_value = loom_test_constant_result(then_value_op);
+  loom_op_t* then_yield = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&then_builder, &then_value, 1,
+                                      LOOM_LOCATION_UNKNOWN, &then_yield));
+
+  loom_builder_t else_builder;
+  loom_builder_initialize(
+      module_, &module_->arena,
+      loom_region_entry_block(loom_scf_if_else_region(if_op)), &else_builder);
+  loom_value_id_t else_value = loom_test_constant_result(else_value_op);
+  loom_op_t* else_yield = NULL;
+  IREE_ASSERT_OK(loom_scf_yield_build(&else_builder, &else_value, 1,
+                                      LOOM_LOCATION_UNKNOWN, &else_yield));
+
+  bool changed = false;
+  IREE_EXPECT_OK(Propagate(if_op, &changed));
+
+  EXPECT_FALSE(changed);
+  EXPECT_TRUE(loom_type_equal(
+      loom_module_value_type(
+          module_, loom_value_slice_get(loom_scf_if_results(if_op), 0)),
+      dynamic_vector));
 }
 
 }  // namespace

@@ -12,7 +12,9 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/transforms/rewriter.h"
 
 namespace loom {
@@ -29,6 +31,12 @@ class CanonicalizeTest : public ::testing::Test {
         loom_test_dialect_vtables(&vtable_count);
     IREE_ASSERT_OK(loom_context_register_dialect(
         &context_, LOOM_DIALECT_TEST, vtables, (uint16_t)vtable_count));
+    vtables = loom_scalar_dialect_vtables(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_SCALAR, vtables, (uint16_t)vtable_count));
+    vtables = loom_vector_dialect_vtables(&vtable_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(
+        &context_, LOOM_DIALECT_VECTOR, vtables, (uint16_t)vtable_count));
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"),
                                         &block_pool_, NULL,
@@ -350,6 +358,101 @@ TEST_F(CanonicalizeTest, WorklistDedupPreventsRedundantWork) {
 
   // All three addi ops fold: a=42, b=42, c=84. neg uses 84.
   EXPECT_EQ(constant_value(loom_op_operands(use)[0]), 84);
+}
+
+TEST_F(CanonicalizeTest, ScalarPoisonPropagatesThroughPureOp) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t x = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &x));
+
+  loom_op_t* poison = NULL;
+  IREE_ASSERT_OK(
+      loom_scalar_poison_build(&builder_, i32, LOOM_LOCATION_UNKNOWN, &poison));
+
+  loom_op_t* addi = NULL;
+  IREE_ASSERT_OK(loom_scalar_addi_build(&builder_, /*instance_flags=*/0,
+                                        loom_scalar_poison_result(poison), x,
+                                        i32, LOOM_LOCATION_UNKNOWN, &addi));
+  loom_value_id_t result = loom_scalar_addi_result(addi);
+
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(
+      loom_test_use_build(&builder_, &result, 1, LOOM_LOCATION_UNKNOWN, &use));
+
+  IREE_ASSERT_OK(run_canonicalize());
+
+  loom_value_id_t observed = loom_op_operands(use)[0];
+  loom_op_t* def = loom_value_def_op(loom_module_value(module_, observed));
+  ASSERT_NE(def, nullptr);
+  EXPECT_TRUE(loom_scalar_poison_isa(def));
+  EXPECT_NE(observed, result);
+}
+
+TEST_F(CanonicalizeTest, VectorPoisonPropagatesThroughPureOp) {
+  loom_type_t v4f32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(4), 0);
+
+  loom_value_id_t x = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), v4f32, &x));
+
+  loom_op_t* poison = NULL;
+  IREE_ASSERT_OK(loom_vector_poison_build(&builder_, v4f32,
+                                          LOOM_LOCATION_UNKNOWN, &poison));
+
+  loom_op_t* addf = NULL;
+  IREE_ASSERT_OK(loom_vector_addf_build(&builder_, /*instance_flags=*/0,
+                                        loom_vector_poison_result(poison), x,
+                                        v4f32, LOOM_LOCATION_UNKNOWN, &addf));
+  loom_value_id_t result = loom_vector_addf_result(addf);
+
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(
+      loom_test_use_build(&builder_, &result, 1, LOOM_LOCATION_UNKNOWN, &use));
+
+  IREE_ASSERT_OK(run_canonicalize());
+
+  loom_value_id_t observed = loom_op_operands(use)[0];
+  loom_op_t* def = loom_value_def_op(loom_module_value(module_, observed));
+  ASSERT_NE(def, nullptr);
+  EXPECT_TRUE(loom_vector_poison_isa(def));
+  EXPECT_NE(observed, result);
+}
+
+TEST_F(CanonicalizeTest, PoisonBeatsFmaiZeroMultiplier) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t c = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &c));
+
+  loom_op_t* poison = NULL;
+  IREE_ASSERT_OK(
+      loom_scalar_poison_build(&builder_, i32, LOOM_LOCATION_UNKNOWN, &poison));
+  loom_op_t* zero_op = NULL;
+  IREE_ASSERT_OK(loom_scalar_constant_build(&builder_, loom_attr_i64(0), i32,
+                                            LOOM_LOCATION_UNKNOWN, &zero_op));
+
+  loom_op_t* fmai = NULL;
+  IREE_ASSERT_OK(loom_scalar_fmai_build(&builder_, /*instance_flags=*/0,
+                                        loom_scalar_poison_result(poison),
+                                        loom_scalar_constant_result(zero_op), c,
+                                        i32, LOOM_LOCATION_UNKNOWN, &fmai));
+  loom_value_id_t result = loom_scalar_fmai_result(fmai);
+
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(
+      loom_test_use_build(&builder_, &result, 1, LOOM_LOCATION_UNKNOWN, &use));
+
+  IREE_ASSERT_OK(run_canonicalize());
+
+  loom_value_id_t observed = loom_op_operands(use)[0];
+  loom_op_t* def = loom_value_def_op(loom_module_value(module_, observed));
+  ASSERT_NE(def, nullptr);
+  EXPECT_TRUE(loom_scalar_poison_isa(def));
+  EXPECT_NE(observed, c);
 }
 
 //===----------------------------------------------------------------------===//

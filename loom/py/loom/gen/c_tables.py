@@ -2118,6 +2118,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
 
     # Per-op sections.
     emitted_canonicalize_declarations: set[str] = set()
+    emitted_type_transfer_declarations: set[str] = set()
     for op in ops:
         prefix = _c_prefix(op)
         enum_name = _c_enum_name(op)
@@ -2246,6 +2247,13 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             lines.append("    const loom_module_t* module, const loom_op_t* op,")
             lines.append("    const loom_value_facts_t* operand_facts,")
             lines.append("    loom_value_facts_t* result_facts);")
+
+        # Semantic type-transfer function declaration (hand-written, linked in).
+        if op.type_transfer and op.type_transfer not in emitted_type_transfer_declarations:
+            lines.append(f"iree_status_t {op.type_transfer}(")
+            lines.append("    loom_type_transfer_context_t* context,")
+            lines.append("    const loom_module_t* module, loom_op_t* op);")
+            emitted_type_transfer_declarations.add(op.type_transfer)
 
         # Verify function declaration (hand-written, linked in).
         if op.verify:
@@ -2540,6 +2548,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         constraint_count = len(op.constraints) if op.constraints else 0
         canon = op.canonicalize or "NULL"
         infer_facts_fn = op.facts or "NULL"
+        type_transfer_fn = op.type_transfer or "NULL"
         verify_fn = op.verify or "NULL"
         eff_traits = op.effective_traits or "NULL"
         interface_ptrs = {spec.vtable_field: _interface_vtable_ptr(op, spec) for spec in _INTERFACES}
@@ -2566,6 +2575,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         lines.append(f"    .effective_traits = {eff_traits},")
         lines.append(f"    .attr_descriptors = {attr_desc_ptr},")
         lines.append(f"    .operand_descriptors = {operand_desc_ptr},")
+        lines.append(f"    .type_transfer = {type_transfer_fn},")
 
         # Cache line 2: verify + parse/print + diagnostics.
         lines.append(f"    .result_descriptors = {result_desc_ptr},")

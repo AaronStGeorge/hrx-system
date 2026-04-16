@@ -82,7 +82,9 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scalar
     loom::src::loom::ops::test
+    loom::src::loom::ops::vector
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -414,7 +416,9 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
     loom::src::loom::ops::test
+    loom::src::loom::ops::vector
     loom::src::loom::ops::view
     iree::testing::gtest
     iree::testing::gtest_main

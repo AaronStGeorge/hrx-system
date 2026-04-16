@@ -21,6 +21,7 @@ loom_cc_library(
     "facts.c"
     "reference.c"
     "tables.c"
+    "type_transfer.c"
     "verify.c"
   DEPS
     loom::src::loom::error::emitter
@@ -29,6 +30,7 @@ loom_cc_library(
     loom::src::loom::ops::atomic
     loom::src::loom::ops::encoding
     loom::src::loom::ops::op_defs
+    loom::src::loom::transforms::type_propagation
     loom::src::loom::util::fact_table
     loom::src::loom::util::math
   PUBLIC

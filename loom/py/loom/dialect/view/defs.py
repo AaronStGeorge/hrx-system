@@ -135,6 +135,7 @@ view_refine = Op(
     traits=[PURE],
     verify="loom_view_refine_verify",
     facts="loom_view_refine_facts",
+    type_transfer="loom_view_refine_type_transfer",
     format=[
         Ref("source"),
         COLON,

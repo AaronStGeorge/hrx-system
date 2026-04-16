@@ -81,6 +81,11 @@ struct loom_type_propagator_t {
   bool conflict;
 };
 
+struct loom_type_transfer_context_t {
+  // Propagator owning the active transaction.
+  loom_type_propagator_t* propagator;
+};
+
 static bool loom_type_propagator_valid_value_id(
     const loom_type_propagator_t* propagator, loom_value_id_t value_id) {
   return value_id != LOOM_VALUE_ID_INVALID &&
@@ -274,6 +279,9 @@ static bool loom_type_propagator_has_candidate(
 
 static loom_type_t loom_type_propagator_value_type(
     const loom_type_propagator_t* propagator, loom_value_id_t value_id) {
+  if (!loom_type_propagator_valid_value_id(propagator, value_id)) {
+    return loom_type_none();
+  }
   if (loom_type_propagator_has_candidate(propagator, value_id)) {
     return propagator->candidate_types[value_id];
   }
@@ -412,6 +420,135 @@ static iree_status_t loom_type_propagator_seed_candidate(
   propagator->candidate_generations[value_id] =
       propagator->transaction_generation;
   return loom_type_propagator_enqueue_value(propagator, value_id);
+}
+
+loom_type_t loom_type_transfer_value_type(
+    const loom_type_transfer_context_t* context, loom_value_id_t value_id) {
+  if (!context || !context->propagator) return loom_type_none();
+  return loom_type_propagator_value_type(context->propagator, value_id);
+}
+
+iree_status_t loom_type_transfer_seed_candidate(
+    loom_type_transfer_context_t* context, loom_value_id_t value_id,
+    loom_type_t candidate_type, loom_constraint_property_t property) {
+  if (!context || !context->propagator) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type transfer requires an active context");
+  }
+  return loom_type_propagator_seed_candidate(context->propagator, value_id,
+                                             candidate_type, property);
+}
+
+iree_status_t loom_type_transfer_seed_shape_dims(
+    loom_type_transfer_context_t* context, loom_value_id_t value_id,
+    const uint64_t* candidate_dimensions, uint8_t candidate_rank) {
+  if (!context || !context->propagator) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type transfer requires an active context");
+  }
+  loom_type_propagator_t* propagator = context->propagator;
+  if (propagator->conflict ||
+      !loom_type_propagator_valid_value_id(propagator, value_id)) {
+    return iree_ok_status();
+  }
+  loom_type_t current_type =
+      loom_type_propagator_value_type(propagator, value_id);
+  loom_type_t refined_type = current_type;
+  loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
+  IREE_RETURN_IF_ERROR(loom_type_refine_shape_with_dims(
+      current_type, candidate_dimensions, candidate_rank, propagator->arena,
+      &refined_type, &result));
+  if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
+    propagator->conflict = true;
+    return iree_ok_status();
+  }
+  if (result == LOOM_TYPE_REFINEMENT_UNCHANGED) return iree_ok_status();
+  return loom_type_propagator_seed_candidate(propagator, value_id, refined_type,
+                                             LOOM_PROPERTY_SHAPE);
+}
+
+iree_status_t loom_type_transfer_seed_encoding_attachment(
+    loom_type_transfer_context_t* context, loom_value_id_t value_id,
+    uint16_t candidate_encoding_id,
+    loom_encoding_flags_t candidate_encoding_flags) {
+  if (!context || !context->propagator) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type transfer requires an active context");
+  }
+  loom_type_propagator_t* propagator = context->propagator;
+  if (propagator->conflict ||
+      !loom_type_propagator_valid_value_id(propagator, value_id)) {
+    return iree_ok_status();
+  }
+  loom_type_t current_type =
+      loom_type_propagator_value_type(propagator, value_id);
+  loom_type_t refined_type = current_type;
+  loom_type_refinement_result_t result = LOOM_TYPE_REFINEMENT_UNCHANGED;
+  IREE_RETURN_IF_ERROR(loom_type_refine_encoding_with_attachment(
+      current_type, candidate_encoding_id, candidate_encoding_flags,
+      propagator->arena, &refined_type, &result));
+  if (result == LOOM_TYPE_REFINEMENT_CONFLICT) {
+    propagator->conflict = true;
+    return iree_ok_status();
+  }
+  if (result == LOOM_TYPE_REFINEMENT_UNCHANGED) return iree_ok_status();
+  return loom_type_propagator_seed_candidate(propagator, value_id, refined_type,
+                                             LOOM_PROPERTY_ENCODING);
+}
+
+iree_status_t loom_type_transfer_seed_static_structure_from_type(
+    loom_type_transfer_context_t* context, loom_value_id_t value_id,
+    loom_type_t candidate_type) {
+  if (!context || !context->propagator) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "type transfer requires an active context");
+  }
+  loom_type_propagator_t* propagator = context->propagator;
+  if (propagator->conflict ||
+      !loom_type_propagator_valid_value_id(propagator, value_id)) {
+    return iree_ok_status();
+  }
+  if (loom_type_kind(candidate_type) == LOOM_TYPE_NONE) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(loom_type_propagator_seed_candidate(
+      propagator, value_id, candidate_type, LOOM_PROPERTY_KIND));
+  if (propagator->conflict) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_type_propagator_seed_candidate(
+      propagator, value_id, candidate_type, LOOM_PROPERTY_ELEMENT_TYPE));
+  if (propagator->conflict) return iree_ok_status();
+
+  loom_type_t current_type =
+      loom_type_propagator_value_type(propagator, value_id);
+  if (loom_type_is_shaped(current_type) &&
+      loom_type_is_shaped(candidate_type) &&
+      loom_type_rank(current_type) == loom_type_rank(candidate_type)) {
+    uint8_t rank = loom_type_rank(candidate_type);
+    uint64_t candidate_dimensions[LOOM_TYPE_MAX_RANK] = {0};
+    bool has_static_candidate_dimension = false;
+    for (uint8_t i = 0; i < rank; ++i) {
+      uint64_t candidate_dimension = loom_type_dim(candidate_type, i);
+      if (loom_dim_is_dynamic(candidate_dimension)) {
+        candidate_dimensions[i] = loom_type_dim(current_type, i);
+      } else {
+        candidate_dimensions[i] = candidate_dimension;
+        has_static_candidate_dimension = true;
+      }
+    }
+    if (has_static_candidate_dimension) {
+      IREE_RETURN_IF_ERROR(loom_type_transfer_seed_shape_dims(
+          context, value_id, candidate_dimensions, rank));
+      if (propagator->conflict) return iree_ok_status();
+    }
+  }
+
+  if (loom_type_has_static_encoding(candidate_type)) {
+    IREE_RETURN_IF_ERROR(loom_type_transfer_seed_encoding_attachment(
+        context, value_id, candidate_type.encoding_id,
+        candidate_type.encoding_flags));
+  }
+  return iree_ok_status();
 }
 
 static bool loom_type_propagator_field_is_variadic(
@@ -771,41 +908,50 @@ static iree_status_t loom_type_propagator_process_op_constraints(
   if (propagator->conflict) return iree_ok_status();
 
   const loom_op_vtable_t* vtable = loom_op_vtable(propagator->module, op);
-  if (!vtable || vtable->constraint_count == 0 || !vtable->constraints) {
+  if (!vtable) {
     return iree_ok_status();
   }
-  for (uint8_t i = 0; i < vtable->constraint_count; ++i) {
-    const loom_constraint_t* constraint = &vtable->constraints[i];
-    switch ((enum loom_constraint_relation_e)constraint->relation) {
-      case LOOM_RELATION_PAIRWISE_EQ: {
-        IREE_RETURN_IF_ERROR(loom_type_propagator_relation_pairwise_eq(
-            propagator, op, vtable, constraint));
-        break;
+
+  if (vtable->constraint_count > 0 && vtable->constraints) {
+    for (uint8_t i = 0; i < vtable->constraint_count; ++i) {
+      const loom_constraint_t* constraint = &vtable->constraints[i];
+      switch ((enum loom_constraint_relation_e)constraint->relation) {
+        case LOOM_RELATION_PAIRWISE_EQ: {
+          IREE_RETURN_IF_ERROR(loom_type_propagator_relation_pairwise_eq(
+              propagator, op, vtable, constraint));
+          break;
+        }
+        case LOOM_RELATION_ALL_SAME: {
+          IREE_RETURN_IF_ERROR(loom_type_propagator_relation_all_same(
+              propagator, op, vtable, constraint));
+          break;
+        }
+        case LOOM_RELATION_REGION_ARG_MATCH: {
+          IREE_RETURN_IF_ERROR(loom_type_propagator_relation_region_arg_match(
+              propagator, op, vtable, constraint));
+          break;
+        }
+        case LOOM_RELATION_YIELD_MATCH: {
+          IREE_RETURN_IF_ERROR(loom_type_propagator_relation_yield_match(
+              propagator, op, vtable, constraint));
+          break;
+        }
+        case LOOM_RELATION_VARIADIC_MATCH: {
+          IREE_RETURN_IF_ERROR(loom_type_propagator_relation_variadic_match(
+              propagator, op, vtable, constraint));
+          break;
+        }
+        default:
+          break;
       }
-      case LOOM_RELATION_ALL_SAME: {
-        IREE_RETURN_IF_ERROR(loom_type_propagator_relation_all_same(
-            propagator, op, vtable, constraint));
-        break;
-      }
-      case LOOM_RELATION_REGION_ARG_MATCH: {
-        IREE_RETURN_IF_ERROR(loom_type_propagator_relation_region_arg_match(
-            propagator, op, vtable, constraint));
-        break;
-      }
-      case LOOM_RELATION_YIELD_MATCH: {
-        IREE_RETURN_IF_ERROR(loom_type_propagator_relation_yield_match(
-            propagator, op, vtable, constraint));
-        break;
-      }
-      case LOOM_RELATION_VARIADIC_MATCH: {
-        IREE_RETURN_IF_ERROR(loom_type_propagator_relation_variadic_match(
-            propagator, op, vtable, constraint));
-        break;
-      }
-      default:
-        break;
+      if (propagator->conflict) return iree_ok_status();
     }
-    if (propagator->conflict) return iree_ok_status();
+  }
+
+  if (vtable->type_transfer) {
+    loom_type_transfer_context_t context = {.propagator = propagator};
+    IREE_RETURN_IF_ERROR(
+        vtable->type_transfer(&context, propagator->module, op));
   }
   return iree_ok_status();
 }

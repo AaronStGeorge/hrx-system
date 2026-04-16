@@ -405,6 +405,7 @@ scf_if = Op(
     group=scf_ops,
     doc="Conditional execution with required else region.",
     canonicalize="loom_scf_if_canonicalize",
+    type_transfer="loom_scf_region_branch_type_transfer",
     operands=[Operand("condition", I1)],
     results=[Result("results", ANY, variadic=True)],
     regions=[
@@ -466,6 +467,7 @@ scf_switch = Op(
     ),
     canonicalize="loom_scf_switch_canonicalize",
     verify="loom_scf_switch_verify",
+    type_transfer="loom_scf_region_branch_type_transfer",
     operands=[Operand("selector", INDEX)],
     results=[Result("results", ANY, variadic=True)],
     attrs=[

@@ -1813,6 +1813,7 @@ class Op:
         ""  # C function name for per-instance trait computation, or "".
     )
     facts: str = ""  # C function name for fact inference, or "".
+    type_transfer: str = ""  # C function name for semantic type transfer, or "".
     verify: str = ""  # C function name for op-specific verification, or "".
     interfaces: tuple[
         Any, ...
@@ -1836,6 +1837,7 @@ class Op:
         canonicalize: str = "",
         effective_traits: str = "",
         facts: str = "",
+        type_transfer: str = "",
         verify: str = "",
         interfaces: list[Any] | tuple[Any, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
@@ -1861,6 +1863,7 @@ class Op:
         object.__setattr__(self, "canonicalize", canonicalize)
         object.__setattr__(self, "effective_traits", effective_traits)
         object.__setattr__(self, "facts", facts)
+        object.__setattr__(self, "type_transfer", type_transfer)
         object.__setattr__(self, "verify", verify)
         object.__setattr__(self, "interfaces", tuple(interfaces))
         object.__setattr__(self, "format", frozen_format)
