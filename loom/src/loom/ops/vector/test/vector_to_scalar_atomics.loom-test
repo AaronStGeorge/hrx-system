@@ -3,7 +3,7 @@
 func.def @atomic_reduce_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xi32>, %offsets: vector<2xindex>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xi32, %layout>
-  vector.atomic.reduce<addi> %value, %view[3][%offsets] {ordering = relaxed, scope = workgroup} : vector<2xi32>, view<8xi32, %layout>, vector<2xindex>
+  vector.atomic.reduce<addi> %value, %view[3][%offsets] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = workgroup} : vector<2xi32>, view<8xi32, %layout>, vector<2xindex>
   func.return
 }
 
@@ -15,12 +15,12 @@ func.def @atomic_reduce_static(%buffer: buffer, %byte_offset: offset, %value: ve
   %7 = vector.extract %offsets[0] : vector<2xindex> -> index
   %8 = index.constant 3 : index
   %9 = index.add %8, %7 : index
-  view.atomic.reduce<addi> %6, %view[%9] {ordering = relaxed, scope = workgroup} : i32, view<8xi32, %layout>
+  view.atomic.reduce<addi> %6, %view[%9] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = workgroup} : i32, view<8xi32, %layout>
   %10 = vector.extract %value[1] : vector<2xi32> -> i32
   %11 = vector.extract %offsets[1] : vector<2xindex> -> index
   %12 = index.constant 3 : index
   %13 = index.add %12, %11 : index
-  view.atomic.reduce<addi> %10, %view[%13] {ordering = relaxed, scope = workgroup} : i32, view<8xi32, %layout>
+  view.atomic.reduce<addi> %10, %view[%13] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = workgroup} : i32, view<8xi32, %layout>
   func.return
 }
 
@@ -29,7 +29,7 @@ func.def @atomic_reduce_static(%buffer: buffer, %byte_offset: offset, %value: ve
 func.def @atomic_reduce_mask_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xf32>, %offsets: vector<2xi32>, %mask: vector<2xi1>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  vector.atomic.reduce.mask<addf> %value, %view[3][%offsets], %mask {ordering = relaxed, scope = device} : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>
+  vector.atomic.reduce.mask<addf> %value, %view[3][%offsets], %mask {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = device} : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>
   func.return
 }
 
@@ -44,7 +44,7 @@ func.def @atomic_reduce_mask_static(%buffer: buffer, %byte_offset: offset, %valu
     %10 = index.cast %9 : i32 to index
     %11 = index.constant 3 : index
     %12 = index.add %11, %10 : index
-    view.atomic.reduce<addf> %8, %view[%12] {ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
+    view.atomic.reduce<addf> %8, %view[%12] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -56,7 +56,7 @@ func.def @atomic_reduce_mask_static(%buffer: buffer, %byte_offset: offset, %valu
     %16 = index.cast %15 : i32 to index
     %17 = index.constant 3 : index
     %18 = index.add %17, %16 : index
-    view.atomic.reduce<addf> %14, %view[%18] {ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
+    view.atomic.reduce<addf> %14, %view[%18] {cache_scope = device, cache_temporal = non_temporal, ordering = relaxed, scope = device} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -69,7 +69,7 @@ func.def @atomic_reduce_mask_static(%buffer: buffer, %byte_offset: offset, %valu
 func.def @atomic_rmw_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xi32>, %offsets: vector<2xindex>) -> (vector<2xi32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xi32, %layout>
-  %old = vector.atomic.rmw<xchgi> %value, %view[3][%offsets] {ordering = acq_rel, scope = workgroup} : vector<2xi32>, view<8xi32, %layout>, vector<2xindex>
+  %old = vector.atomic.rmw<xchgi> %value, %view[3][%offsets] {cache_scope = device, cache_temporal = non_temporal, ordering = acq_rel, scope = workgroup} : vector<2xi32>, view<8xi32, %layout>, vector<2xindex>
   func.return %old : vector<2xi32>
 }
 
@@ -81,12 +81,12 @@ func.def @atomic_rmw_static(%buffer: buffer, %byte_offset: offset, %value: vecto
   %9 = vector.extract %offsets[0] : vector<2xindex> -> index
   %10 = index.constant 3 : index
   %11 = index.add %10, %9 : index
-  %12 = view.atomic.rmw<xchgi> %8, %view[%11] {ordering = acq_rel, scope = workgroup} : i32, view<8xi32, %layout> -> i32
+  %12 = view.atomic.rmw<xchgi> %8, %view[%11] {cache_scope = device, cache_temporal = non_temporal, ordering = acq_rel, scope = workgroup} : i32, view<8xi32, %layout> -> i32
   %13 = vector.extract %value[1] : vector<2xi32> -> i32
   %14 = vector.extract %offsets[1] : vector<2xindex> -> index
   %15 = index.constant 3 : index
   %16 = index.add %15, %14 : index
-  %17 = view.atomic.rmw<xchgi> %13, %view[%16] {ordering = acq_rel, scope = workgroup} : i32, view<8xi32, %layout> -> i32
+  %17 = view.atomic.rmw<xchgi> %13, %view[%16] {cache_scope = device, cache_temporal = non_temporal, ordering = acq_rel, scope = workgroup} : i32, view<8xi32, %layout> -> i32
   %old = vector.from_elements %12, %17 : vector<2xi32>
   func.return %old : vector<2xi32>
 }
@@ -96,7 +96,7 @@ func.def @atomic_rmw_static(%buffer: buffer, %byte_offset: offset, %value: vecto
 func.def @atomic_rmw_mask_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xf32>, %offsets: vector<2xi32>, %mask: vector<2xi1>, %passthrough: vector<2xf32>) -> (vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %old = vector.atomic.rmw.mask<addf> %value, %view[3][%offsets], %mask, %passthrough {ordering = seq_cst, scope = device} : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>, vector<2xf32>
+  %old = vector.atomic.rmw.mask<addf> %value, %view[3][%offsets], %mask, %passthrough {cache_scope = device, cache_temporal = non_temporal, ordering = seq_cst, scope = device} : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>, vector<2xf32>
   func.return %old : vector<2xf32>
 }
 
@@ -111,7 +111,7 @@ func.def @atomic_rmw_mask_static(%buffer: buffer, %byte_offset: offset, %value: 
     %14 = index.cast %13 : i32 to index
     %15 = index.constant 3 : index
     %16 = index.add %15, %14 : index
-    %17 = view.atomic.rmw<addf> %12, %view[%16] {ordering = seq_cst, scope = device} : f32, view<8xf32, %layout> -> f32
+    %17 = view.atomic.rmw<addf> %12, %view[%16] {cache_scope = device, cache_temporal = non_temporal, ordering = seq_cst, scope = device} : f32, view<8xf32, %layout> -> f32
     scf.yield %17 : f32
   } else {
     %18 = vector.extract %passthrough[0] : vector<2xf32> -> f32
@@ -124,7 +124,7 @@ func.def @atomic_rmw_mask_static(%buffer: buffer, %byte_offset: offset, %value: 
     %23 = index.cast %22 : i32 to index
     %24 = index.constant 3 : index
     %25 = index.add %24, %23 : index
-    %26 = view.atomic.rmw<addf> %21, %view[%25] {ordering = seq_cst, scope = device} : f32, view<8xf32, %layout> -> f32
+    %26 = view.atomic.rmw<addf> %21, %view[%25] {cache_scope = device, cache_temporal = non_temporal, ordering = seq_cst, scope = device} : f32, view<8xf32, %layout> -> f32
     scf.yield %26 : f32
   } else {
     %27 = vector.extract %passthrough[1] : vector<2xf32> -> f32

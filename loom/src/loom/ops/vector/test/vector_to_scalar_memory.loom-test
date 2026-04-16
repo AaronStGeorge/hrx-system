@@ -3,7 +3,7 @@
 func.def @load_static(%buffer: buffer, %byte_offset: offset) -> (vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %loaded = vector.load %view[3] : view<8xf32, %layout> -> vector<2xf32>
+  %loaded = vector.load %view[3] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -11,8 +11,8 @@ func.def @load_static(%buffer: buffer, %byte_offset: offset) -> (vector<2xf32>) 
 func.def @load_static(%buffer: buffer, %byte_offset: offset) -> (vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %6 = view.load %view[3] : view<8xf32, %layout> -> f32
-  %7 = view.load %view[4] : view<8xf32, %layout> -> f32
+  %6 = view.load %view[3] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32
+  %7 = view.load %view[4] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32
   %loaded = vector.from_elements %6, %7 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
@@ -47,7 +47,7 @@ func.def @load_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origin
 func.def @load_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector<2xi1>, %old: vector<2xf32>) -> (vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %loaded = vector.load.mask %view[3], %mask, %old : view<8xf32, %layout>, vector<2xi1>, vector<2xf32>
+  %loaded = vector.load.mask %view[3], %mask, %old {cache_scope = device, cache_temporal = high_temporal} : view<8xf32, %layout>, vector<2xi1>, vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -57,7 +57,7 @@ func.def @load_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector<
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
   %8 = vector.extract %mask[0] : vector<2xi1> -> i1
   %9 = scf.if %8 -> (f32) {
-    %10 = view.load %view[3] : view<8xf32, %layout> -> f32
+    %10 = view.load %view[3] {cache_scope = device, cache_temporal = high_temporal} : view<8xf32, %layout> -> f32
     scf.yield %10 : f32
   } else {
     %11 = vector.extract %old[0] : vector<2xf32> -> f32
@@ -65,7 +65,7 @@ func.def @load_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector<
   }
   %12 = vector.extract %mask[1] : vector<2xi1> -> i1
   %13 = scf.if %12 -> (f32) {
-    %14 = view.load %view[4] : view<8xf32, %layout> -> f32
+    %14 = view.load %view[4] {cache_scope = device, cache_temporal = high_temporal} : view<8xf32, %layout> -> f32
     scf.yield %14 : f32
   } else {
     %15 = vector.extract %old[1] : vector<2xf32> -> f32
@@ -111,7 +111,7 @@ func.def @load_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %o
 func.def @load_expand_static(%buffer: buffer, %byte_offset: offset, %mask: vector<3xi1>, %old: vector<3xf32>) -> (vector<3xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %loaded = vector.load.expand %view[3], %mask, %old : view<8xf32, %layout>, vector<3xi1>, vector<3xf32>
+  %loaded = vector.load.expand %view[3], %mask, %old {cache_scope = device, cache_temporal = high_temporal} : view<8xf32, %layout>, vector<3xi1>, vector<3xf32>
   func.return %loaded : vector<3xf32>
 }
 
@@ -121,7 +121,7 @@ func.def @load_expand_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
   %8 = vector.extract %mask[0] : vector<3xi1> -> i1
   %9 = scf.if %8 -> (f32) {
-    %10 = view.load %view[3] : view<8xf32, %layout> -> f32
+    %10 = view.load %view[3] {cache_scope = device, cache_temporal = high_temporal} : view<8xf32, %layout> -> f32
     scf.yield %10 : f32
   } else {
     %11 = vector.extract %old[0] : vector<3xf32> -> f32
@@ -135,7 +135,7 @@ func.def @load_expand_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
   %17 = scf.if %16 -> (f32) {
     %18 = index.constant 3 : index
     %19 = index.add %18, %15 : index
-    %20 = view.load %view[%19] : view<8xf32, %layout> -> f32
+    %20 = view.load %view[%19] {cache_scope = device, cache_temporal = high_temporal} : view<8xf32, %layout> -> f32
     scf.yield %20 : f32
   } else {
     %21 = vector.extract %old[1] : vector<3xf32> -> f32
@@ -154,7 +154,7 @@ func.def @load_expand_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
   %32 = scf.if %31 -> (f32) {
     %33 = index.constant 3 : index
     %34 = index.add %33, %30 : index
-    %35 = view.load %view[%34] : view<8xf32, %layout> -> f32
+    %35 = view.load %view[%34] {cache_scope = device, cache_temporal = high_temporal} : view<8xf32, %layout> -> f32
     scf.yield %35 : f32
   } else {
     %36 = vector.extract %old[2] : vector<3xf32> -> f32
@@ -210,7 +210,7 @@ func.def @load_expand_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, 
 func.def @gather_static(%buffer: buffer, %byte_offset: offset, %offsets: vector<2xindex>) -> (vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %loaded = vector.gather %view[3][%offsets] : view<8xf32, %layout>, vector<2xindex> -> vector<2xf32>
+  %loaded = vector.gather %view[3][%offsets] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout>, vector<2xindex> -> vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -221,11 +221,11 @@ func.def @gather_static(%buffer: buffer, %byte_offset: offset, %offsets: vector<
   %7 = vector.extract %offsets[0] : vector<2xindex> -> index
   %8 = index.constant 3 : index
   %9 = index.add %8, %7 : index
-  %10 = view.load %view[%9] : view<8xf32, %layout> -> f32
+  %10 = view.load %view[%9] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32
   %11 = vector.extract %offsets[1] : vector<2xindex> -> index
   %12 = index.constant 3 : index
   %13 = index.add %12, %11 : index
-  %14 = view.load %view[%13] : view<8xf32, %layout> -> f32
+  %14 = view.load %view[%13] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32
   %loaded = vector.from_elements %10, %14 : vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
@@ -261,7 +261,7 @@ func.def @gather_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %orig
 func.def @gather_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector<2xi1>, %old: vector<2xf32>, %offsets: vector<2xi32>) -> (vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  %loaded = vector.gather.mask %view[3][%offsets], %mask, %old : view<8xf32, %layout>, vector<2xi32>, vector<2xi1>, vector<2xf32>
+  %loaded = vector.gather.mask %view[3][%offsets], %mask, %old {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout>, vector<2xi32>, vector<2xi1>, vector<2xf32>
   func.return %loaded : vector<2xf32>
 }
 
@@ -275,7 +275,7 @@ func.def @gather_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
     %12 = index.cast %11 : i32 to index
     %13 = index.constant 3 : index
     %14 = index.add %13, %12 : index
-    %15 = view.load %view[%14] : view<8xf32, %layout> -> f32
+    %15 = view.load %view[%14] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32
     scf.yield %15 : f32
   } else {
     %16 = vector.extract %old[0] : vector<2xf32> -> f32
@@ -287,7 +287,7 @@ func.def @gather_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vecto
     %20 = index.cast %19 : i32 to index
     %21 = index.constant 3 : index
     %22 = index.add %21, %20 : index
-    %23 = view.load %view[%22] : view<8xf32, %layout> -> f32
+    %23 = view.load %view[%22] {cache_scope = device, cache_temporal = non_temporal} : view<8xf32, %layout> -> f32
     scf.yield %23 : f32
   } else {
     %24 = vector.extract %old[1] : vector<2xf32> -> f32
@@ -334,7 +334,7 @@ func.def @gather_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, 
 func.def @store_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  vector.store %value, %view[3] : vector<2xf32>, view<8xf32, %layout>
+  vector.store %value, %view[3] {cache_scope = system, cache_temporal = writeback} : vector<2xf32>, view<8xf32, %layout>
   func.return
 }
 
@@ -343,9 +343,9 @@ func.def @store_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xf
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
   %5 = vector.extract %value[0] : vector<2xf32> -> f32
-  view.store %5, %view[3] : f32, view<8xf32, %layout>
+  view.store %5, %view[3] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
   %6 = vector.extract %value[1] : vector<2xf32> -> f32
-  view.store %6, %view[4] : f32, view<8xf32, %layout>
+  view.store %6, %view[4] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
   func.return
 }
 
@@ -378,7 +378,7 @@ func.def @store_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %origi
 func.def @store_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector<2xi1>, %value: vector<2xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  vector.store.mask %value, %view[3], %mask : vector<2xf32>, view<8xf32, %layout>, vector<2xi1>
+  vector.store.mask %value, %view[3], %mask {cache_scope = system, cache_temporal = writeback} : vector<2xf32>, view<8xf32, %layout>, vector<2xi1>
   func.return
 }
 
@@ -389,7 +389,7 @@ func.def @store_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector
   %6 = vector.extract %mask[0] : vector<2xi1> -> i1
   scf.if %6 {
     %7 = vector.extract %value[0] : vector<2xf32> -> f32
-    view.store %7, %view[3] : f32, view<8xf32, %layout>
+    view.store %7, %view[3] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -397,7 +397,7 @@ func.def @store_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector
   %8 = vector.extract %mask[1] : vector<2xi1> -> i1
   scf.if %8 {
     %9 = vector.extract %value[1] : vector<2xf32> -> f32
-    view.store %9, %view[4] : f32, view<8xf32, %layout>
+    view.store %9, %view[4] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -440,7 +440,7 @@ func.def @store_mask_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %
 func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: vector<3xi1>, %value: vector<3xf32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  vector.store.compress %value, %view[3], %mask : vector<3xf32>, view<8xf32, %layout>, vector<3xi1>
+  vector.store.compress %value, %view[3], %mask {cache_scope = system, cache_temporal = writeback} : vector<3xf32>, view<8xf32, %layout>, vector<3xi1>
   func.return
 }
 
@@ -451,7 +451,7 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
   %6 = vector.extract %mask[0] : vector<3xi1> -> i1
   scf.if %6 {
     %7 = vector.extract %value[0] : vector<3xf32> -> f32
-    view.store %7, %view[3] : f32, view<8xf32, %layout>
+    view.store %7, %view[3] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -465,7 +465,7 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
     %13 = vector.extract %value[1] : vector<3xf32> -> f32
     %14 = index.constant 3 : index
     %15 = index.add %14, %11 : index
-    view.store %13, %view[%15] : f32, view<8xf32, %layout>
+    view.store %13, %view[%15] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -484,7 +484,7 @@ func.def @store_compress_static(%buffer: buffer, %byte_offset: offset, %mask: ve
     %26 = vector.extract %value[2] : vector<3xf32> -> f32
     %27 = index.constant 3 : index
     %28 = index.add %27, %24 : index
-    view.store %26, %view[%28] : f32, view<8xf32, %layout>
+    view.store %26, %view[%28] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -537,7 +537,7 @@ func.def @store_compress_dynamic(%n: index, %buffer: buffer, %byte_offset: offse
 func.def @scatter_static(%buffer: buffer, %byte_offset: offset, %value: vector<2xf32>, %offsets: vector<2xindex>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  vector.scatter %value, %view[3][%offsets] : vector<2xf32>, view<8xf32, %layout>, vector<2xindex>
+  vector.scatter %value, %view[3][%offsets] {cache_scope = system, cache_temporal = writeback} : vector<2xf32>, view<8xf32, %layout>, vector<2xindex>
   func.return
 }
 
@@ -549,12 +549,12 @@ func.def @scatter_static(%buffer: buffer, %byte_offset: offset, %value: vector<2
   %7 = vector.extract %offsets[0] : vector<2xindex> -> index
   %8 = index.constant 3 : index
   %9 = index.add %8, %7 : index
-  view.store %6, %view[%9] : f32, view<8xf32, %layout>
+  view.store %6, %view[%9] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
   %10 = vector.extract %value[1] : vector<2xf32> -> f32
   %11 = vector.extract %offsets[1] : vector<2xindex> -> index
   %12 = index.constant 3 : index
   %13 = index.add %12, %11 : index
-  view.store %10, %view[%13] : f32, view<8xf32, %layout>
+  view.store %10, %view[%13] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
   func.return
 }
 
@@ -588,7 +588,7 @@ func.def @scatter_dynamic(%n: index, %buffer: buffer, %byte_offset: offset, %ori
 func.def @scatter_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vector<2xi1>, %value: vector<2xf32>, %offsets: vector<2xi32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%byte_offset] : buffer -> view<8xf32, %layout>
-  vector.scatter.mask %value, %view[3][%offsets], %mask : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>
+  vector.scatter.mask %value, %view[3][%offsets], %mask {cache_scope = system, cache_temporal = writeback} : vector<2xf32>, view<8xf32, %layout>, vector<2xi32>, vector<2xi1>
   func.return
 }
 
@@ -603,7 +603,7 @@ func.def @scatter_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vect
     %10 = index.cast %9 : i32 to index
     %11 = index.constant 3 : index
     %12 = index.add %11, %10 : index
-    view.store %8, %view[%12] : f32, view<8xf32, %layout>
+    view.store %8, %view[%12] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield
@@ -615,7 +615,7 @@ func.def @scatter_mask_static(%buffer: buffer, %byte_offset: offset, %mask: vect
     %16 = index.cast %15 : i32 to index
     %17 = index.constant 3 : index
     %18 = index.add %17, %16 : index
-    view.store %14, %view[%18] : f32, view<8xf32, %layout>
+    view.store %14, %view[%18] {cache_scope = system, cache_temporal = writeback} : f32, view<8xf32, %layout>
     scf.yield
   } else {
     scf.yield

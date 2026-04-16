@@ -69,12 +69,38 @@ typedef struct loom_vector_memory_access_t {
   loom_value_facts_t layout_strides[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];
 } loom_vector_memory_access_t;
 
+// Generated-builder flags shared by vector and view memory ops.
+typedef enum loom_vector_memory_cache_policy_build_flag_e {
+  // cache_scope is present in the optional attribute dictionary.
+  LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE = 1u << 0,
+  // cache_temporal is present in the optional attribute dictionary.
+  LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL = 1u << 1,
+} loom_vector_memory_cache_policy_build_flag_t;
+
+// Optional cache policy attached to a vector memory op.
+typedef struct loom_vector_memory_cache_policy_t {
+  // Optional-attribute flags for forwarding this policy through builders.
+  uint32_t build_flags;
+
+  // cache_scope enum payload when the corresponding build flag is set.
+  uint8_t cache_scope;
+
+  // cache_temporal enum payload when the corresponding build flag is set.
+  uint8_t cache_temporal;
+} loom_vector_memory_cache_policy_t;
+
 // Describes a view/vector access. Returns false when the types are not a view
 // and a rank-1+ vector, or when the vector rank exceeds the view rank. Unknown
 // layouts still produce a valid access with layout_kind UNKNOWN.
 bool loom_vector_memory_access_describe(
     const loom_module_t* module, loom_type_t view_type, loom_type_t vector_type,
     loom_vector_memory_access_t* out_access);
+
+// Extracts the optional cache policy from a vector memory op. Returns false
+// for non-memory ops or malformed cache attrs so callers do not rewrite away
+// verifier-owned diagnostics.
+bool loom_vector_memory_cache_policy_from_op(
+    const loom_op_t* op, loom_vector_memory_cache_policy_t* out_policy);
 
 // Returns the static element extent touched along a view axis. Leading view
 // axes not covered by the vector have extent 1. Trailing axes use the

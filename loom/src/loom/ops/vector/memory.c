@@ -7,6 +7,7 @@
 #include "loom/ops/vector/memory.h"
 
 #include "loom/ir/scalar_type.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/util/fact_table.h"
 
 static loom_vector_memory_layout_kind_t loom_vector_memory_layout_kind(
@@ -83,6 +84,55 @@ bool loom_vector_memory_access_describe(
     out_access->layout_summary.strides = out_access->layout_strides;
   }
   return true;
+}
+
+static bool loom_vector_memory_cache_policy_from_attrs(
+    loom_attribute_t cache_scope_attr, loom_attribute_t cache_temporal_attr,
+    loom_vector_memory_cache_policy_t* out_policy) {
+  *out_policy = (loom_vector_memory_cache_policy_t){0};
+  if (!loom_attr_is_absent(cache_scope_attr)) {
+    if (cache_scope_attr.kind != LOOM_ATTR_ENUM) return false;
+    out_policy->build_flags |= LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE;
+    out_policy->cache_scope = loom_attr_as_enum(cache_scope_attr);
+  }
+  if (!loom_attr_is_absent(cache_temporal_attr)) {
+    if (cache_temporal_attr.kind != LOOM_ATTR_ENUM) return false;
+    out_policy->build_flags |=
+        LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL;
+    out_policy->cache_temporal = loom_attr_as_enum(cache_temporal_attr);
+  }
+  return true;
+}
+
+bool loom_vector_memory_cache_policy_from_op(
+    const loom_op_t* op, loom_vector_memory_cache_policy_t* out_policy) {
+  if (!out_policy) return false;
+  *out_policy = (loom_vector_memory_cache_policy_t){0};
+  if (!op) return false;
+  switch (op->kind) {
+    case LOOM_OP_VECTOR_LOAD:
+    case LOOM_OP_VECTOR_STORE:
+    case LOOM_OP_VECTOR_LOAD_MASK:
+    case LOOM_OP_VECTOR_STORE_MASK:
+    case LOOM_OP_VECTOR_LOAD_EXPAND:
+    case LOOM_OP_VECTOR_STORE_COMPRESS:
+    case LOOM_OP_VECTOR_GATHER:
+    case LOOM_OP_VECTOR_SCATTER:
+    case LOOM_OP_VECTOR_GATHER_MASK:
+    case LOOM_OP_VECTOR_SCATTER_MASK:
+      if (op->attribute_count < 2) return false;
+      return loom_vector_memory_cache_policy_from_attrs(
+          loom_op_attrs(op)[0], loom_op_attrs(op)[1], out_policy);
+    case LOOM_OP_VECTOR_ATOMIC_REDUCE:
+    case LOOM_OP_VECTOR_ATOMIC_REDUCE_MASK:
+    case LOOM_OP_VECTOR_ATOMIC_RMW:
+    case LOOM_OP_VECTOR_ATOMIC_RMW_MASK:
+      if (op->attribute_count < 5) return false;
+      return loom_vector_memory_cache_policy_from_attrs(
+          loom_op_attrs(op)[3], loom_op_attrs(op)[4], out_policy);
+    default:
+      return false;
+  }
 }
 
 bool loom_vector_memory_access_static_axis_extent(
