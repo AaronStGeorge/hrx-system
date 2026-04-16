@@ -337,7 +337,7 @@ iree_status_t loom_vector_splat_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_vector_uniform_result_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_splat_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -417,6 +417,7 @@ iree_status_t loom_vector_from_elements_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_from_elements_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_from_elements_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -443,6 +444,7 @@ iree_status_t loom_vector_extract_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_extract_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_extract_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -546,6 +548,7 @@ iree_status_t loom_vector_shuffle_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_shuffle_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_shuffle_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -712,6 +715,7 @@ iree_status_t loom_vector_load_mask_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_masked_memory_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_load_mask_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -806,6 +810,7 @@ iree_status_t loom_vector_gather_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_gather_scatter_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_gather_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
@@ -1026,6 +1031,7 @@ iree_status_t loom_vector_select_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_select_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_select_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -1044,6 +1050,7 @@ iree_status_t loom_vector_cmpi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t operand_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
+iree_status_t loom_vector_comparison_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 
 // LOOM_OP_VECTOR_CMPF: Lanewise floating-point comparison producing an i1 mask vector. The predicate attribute uses the scalar.cmpf ordered/unordered predicate names and applies independently to each lane.
 // %m = vector.cmpf olt, %lhs, %rhs : vector<16xf32> -> vector<16xi1>
@@ -1305,6 +1312,7 @@ iree_status_t loom_vector_addi_build(
     loom_value_id_t lhs, loom_value_id_t rhs,
     loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_binary_identity_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_addi_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
@@ -2586,6 +2594,7 @@ iree_status_t loom_vector_reduce_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_vector_reduce_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 iree_status_t loom_vector_reduce_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,

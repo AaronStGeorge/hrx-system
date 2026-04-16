@@ -17,10 +17,6 @@
 // predicates tighten facts. Arithmetic transfer functions compute
 // output facts from input facts.
 //
-// Constructors and predicates are inline (called in tight pattern
-// matching loops). Transfer functions and predicate application are
-// out-of-line in facts.c (called once per op during propagation).
-//
 // Transfer functions take facts by pointer and write the result into
 // an output parameter. The output MAY alias one input for in-place
 // accumulation (e.g., computing element counts by chaining muli):
@@ -117,7 +113,7 @@ static_assert(sizeof(loom_value_facts_t) == 32,
               "loom_value_facts_t must be 32 bytes");
 
 //===----------------------------------------------------------------------===//
-// Constructors (inline)
+// Constructors
 //===----------------------------------------------------------------------===//
 
 // Unknown facts: the conservative default. No information about the
@@ -150,7 +146,7 @@ loom_value_facts_t loom_value_facts_make(int64_t lo, int64_t hi,
                                          int64_t known_divisor);
 
 //===----------------------------------------------------------------------===//
-// Predicates (inline)
+// Predicates
 //===----------------------------------------------------------------------===//
 
 static inline bool loom_value_facts_is_exact(loom_value_facts_t facts) {
@@ -195,7 +191,7 @@ static inline bool loom_value_facts_is_unknown(loom_value_facts_t facts) {
 }
 
 //===----------------------------------------------------------------------===//
-// Comparison (inline)
+// Comparison
 //===----------------------------------------------------------------------===//
 
 // Equality check for propagation damping. 32-byte memcmp.
@@ -205,7 +201,7 @@ static inline bool loom_value_facts_equal(loom_value_facts_t a,
 }
 
 //===----------------------------------------------------------------------===//
-// Meet (inline)
+// Meet
 //===----------------------------------------------------------------------===//
 
 // Conservative join: widens range to the outer bounds, weakens divisor
@@ -221,7 +217,7 @@ static inline void loom_value_facts_meet(
 }
 
 //===----------------------------------------------------------------------===//
-// Predicate application (defined in facts.c)
+// Predicate application
 //===----------------------------------------------------------------------===//
 
 // Recomputes the cached flags from range_lo, range_hi, and
@@ -235,7 +231,7 @@ void loom_value_facts_apply_predicate(loom_value_facts_t* facts,
                                       const loom_predicate_t* predicate);
 
 //===----------------------------------------------------------------------===//
-// Transfer functions (defined in facts.c)
+// Transfer functions
 //===----------------------------------------------------------------------===//
 //
 // Compute output facts from input facts for each arithmetic operation.

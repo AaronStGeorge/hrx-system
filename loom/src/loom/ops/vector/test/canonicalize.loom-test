@@ -425,6 +425,90 @@ func.def @scatter_mask_all_false_erases(%buffer: buffer, %offset: offset, %offse
 
 // ====
 
+// A rank-1 gather with iota(0, 1) offsets is the regular contiguous vector
+// load form.
+func.def @gather_iota_to_load(%n: index, %buffer: buffer, %offset: offset, %origin: index) -> (vector<[%n]xf32>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<[%n]xf32, %layout>
+  %offsets = vector.iota %c0 step %c1 : vector<[%n]xindex>
+  %r = vector.gather %view[%origin][%offsets] : view<[%n]xf32, %layout>, vector<[%n]xindex> -> vector<[%n]xf32>
+  func.return %r : vector<[%n]xf32>
+}
+// ----
+func.def @gather_iota_to_load(%n: index, %buffer: buffer, %offset: offset, %origin: index) -> (vector<[%n]xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<[%n]xf32, %layout>
+  %r = vector.load %view[%origin] : view<[%n]xf32, %layout> -> vector<[%n]xf32>
+  func.return %r : vector<[%n]xf32>
+}
+
+// ====
+
+// The same contiguous-offset proof preserves masked load inactive-lane
+// semantics instead of forcing a gather spelling downstream.
+func.def @gather_mask_iota_to_load_mask(%buffer: buffer, %offset: offset, %origin: index, %mask: vector<4xi1>, %old: vector<4xf32>) -> (vector<4xf32>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %offsets = vector.iota %c0 step %c1 : vector<4xindex>
+  %r = vector.gather.mask %view[%origin][%offsets], %mask, %old : view<16xf32, %layout>, vector<4xindex>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+// ----
+func.def @gather_mask_iota_to_load_mask(%buffer: buffer, %offset: offset, %origin: index, %mask: vector<4xi1>, %old: vector<4xf32>) -> (vector<4xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %r = vector.load.mask %view[%origin], %mask, %old : view<16xf32, %layout>, vector<4xi1>, vector<4xf32> -> vector<4xf32>
+  func.return %r : vector<4xf32>
+}
+
+// ====
+
+// A rank-1 scatter with iota(0, 1) offsets is the regular contiguous vector
+// store form.
+func.def @scatter_iota_to_store(%buffer: buffer, %offset: offset, %origin: index, %value: vector<4xf32>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %offsets = vector.iota %c0 step %c1 : vector<4xindex>
+  vector.scatter %value, %view[%origin][%offsets] : vector<4xf32>, view<16xf32, %layout>, vector<4xindex>
+  func.return
+}
+// ----
+func.def @scatter_iota_to_store(%buffer: buffer, %offset: offset, %origin: index, %value: vector<4xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  vector.store %value, %view[%origin] : vector<4xf32>, view<16xf32, %layout>
+  func.return
+}
+
+// ====
+
+// Masked contiguous scatters become masked stores and keep the same inactive
+// lane behavior.
+func.def @scatter_mask_iota_to_store_mask(%buffer: buffer, %offset: offset, %origin: index, %mask: vector<4xi1>, %value: vector<4xf32>) {
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  %offsets = vector.iota %c0 step %c1 : vector<4xindex>
+  vector.scatter.mask %value, %view[%origin][%offsets], %mask : vector<4xf32>, view<16xf32, %layout>, vector<4xindex>, vector<4xi1>
+  func.return
+}
+// ----
+func.def @scatter_mask_iota_to_store_mask(%buffer: buffer, %offset: offset, %origin: index, %mask: vector<4xi1>, %value: vector<4xf32>) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, %layout>
+  vector.store.mask %value, %view[%origin], %mask : vector<4xf32>, view<16xf32, %layout>, vector<4xi1>
+  func.return
+}
+
+// ====
+
 // All-false atomic RMW masks return passthrough and do not touch memory.
 func.def @atomic_rmw_mask_all_false_to_passthrough(%buffer: buffer, %offset: offset, %offsets: vector<4xindex>, %value: vector<4xi32>, %old: vector<4xi32>) -> (vector<4xi32>) {
   %layout = encoding.layout.dense : encoding<layout>

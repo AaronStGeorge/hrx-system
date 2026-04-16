@@ -431,7 +431,7 @@ vector_splat = Op(
     results=[Result("result", VECTOR)],
     constraints=[SameElementType("scalar", "result")],
     facts="loom_vector_splat_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE],
     format=[Ref("scalar"), COLON, ResultType("result")],
     examples=[
@@ -502,7 +502,7 @@ vector_mask_range = Op(
     ],
     verify="loom_vector_mask_range_verify",
     facts="loom_vector_mask_range_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE],
     format=[
         LBRACKET,
@@ -550,7 +550,7 @@ vector_from_elements = Op(
     constraints=[SameElementType("elements", "result")],
     verify="loom_vector_from_elements_verify",
     facts="loom_vector_from_elements_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_from_elements_canonicalize",
     traits=[PURE],
     format=[
         Refs("elements"),
@@ -591,7 +591,7 @@ vector_extract = Op(
     constraints=[SameElementType("source", "result")],
     verify="loom_vector_extract_verify",
     facts="loom_vector_extract_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_extract_canonicalize",
     traits=[PURE],
     format=[
         Ref("source"),
@@ -779,7 +779,7 @@ vector_shuffle = Op(
     constraints=[SameType("source", "result")],
     verify="loom_vector_shuffle_verify",
     facts="loom_vector_shuffle_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_shuffle_canonicalize",
     traits=[PURE],
     format=[
         TemplateParam("source_lanes"),
@@ -1110,7 +1110,7 @@ vector_load_mask = Op(
     ],
     effects=[Reads("view")],
     verify="loom_vector_load_mask_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         Ref("view"),
         IndexList("indices", "static_indices"),
@@ -1156,7 +1156,7 @@ vector_store_mask = Op(
     ],
     effects=[Writes("view")],
     verify="loom_vector_store_mask_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         Ref("value"),
         COMMA,
@@ -1207,7 +1207,7 @@ vector_load_expand = Op(
     ],
     effects=[Reads("view")],
     verify="loom_vector_load_expand_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         Ref("view"),
         IndexList("indices", "static_indices"),
@@ -1253,7 +1253,7 @@ vector_store_compress = Op(
     ],
     effects=[Writes("view")],
     verify="loom_vector_store_compress_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         Ref("value"),
         COMMA,
@@ -1301,6 +1301,7 @@ vector_gather = Op(
     ],
     effects=[Reads("view")],
     verify="loom_vector_gather_verify",
+    canonicalize="loom_vector_gather_scatter_canonicalize",
     format=[
         Ref("view"),
         IndexList("indices", "static_indices"),
@@ -1349,6 +1350,7 @@ vector_scatter = Op(
     ],
     effects=[Writes("view")],
     verify="loom_vector_scatter_verify",
+    canonicalize="loom_vector_gather_scatter_canonicalize",
     format=[
         Ref("value"),
         COMMA,
@@ -1402,7 +1404,7 @@ vector_gather_mask = Op(
     ],
     effects=[Reads("view")],
     verify="loom_vector_gather_mask_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         Ref("view"),
         IndexList("indices", "static_indices"),
@@ -1457,7 +1459,7 @@ vector_scatter_mask = Op(
     ],
     effects=[Writes("view")],
     verify="loom_vector_scatter_mask_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         Ref("value"),
         COMMA,
@@ -1571,7 +1573,7 @@ vector_atomic_reduce_mask = Op(
     ],
     effects=[ReadWrites("view")],
     verify="loom_vector_atomic_reduce_mask_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         TemplateParam("kind"),
         Ref("value"),
@@ -1670,7 +1672,7 @@ vector_atomic_rmw_mask = Op(
     ],
     effects=[ReadWrites("view")],
     verify="loom_vector_atomic_rmw_mask_verify",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_masked_memory_canonicalize",
     format=[
         TemplateParam("kind"),
         Ref("value"),
@@ -1726,7 +1728,7 @@ vector_select = Op(
         SameType("true_value", "false_value", "result"),
     ],
     facts="loom_vector_select_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_select_canonicalize",
     traits=[PURE, ELEMENTWISE],
     format=[
         Ref("condition"),
@@ -1758,7 +1760,7 @@ vector_cmpi = Op(
         SameElementType("lhs", "rhs"),
     ],
     traits=[PURE, ELEMENTWISE],
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_comparison_canonicalize",
     format=[
         Attr("predicate"),
         COMMA,
@@ -1791,7 +1793,7 @@ vector_cmpf = Op(
         SameElementType("lhs", "rhs"),
     ],
     traits=[PURE, ELEMENTWISE],
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_comparison_canonicalize",
     format=[
         Attr("predicate"),
         COMMA,
@@ -1820,7 +1822,7 @@ vector_addf = _lanewise_binary(
     commutative=True,
     flags=_VF,
     facts="loom_vector_addf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_subf = _lanewise_binary(
@@ -1829,7 +1831,7 @@ vector_subf = _lanewise_binary(
     doc=("Lanewise floating-point subtraction of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change the required element type or shape."),
     flags=_VF,
     facts="loom_vector_subf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_mulf = _lanewise_binary(
@@ -1839,7 +1841,7 @@ vector_mulf = _lanewise_binary(
     commutative=True,
     flags=_VF,
     facts="loom_vector_mulf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_divf = _lanewise_binary(
@@ -1848,7 +1850,7 @@ vector_divf = _lanewise_binary(
     doc=("Lanewise floating-point division of same-typed vector operands. Optional assumptions flags constrain lane value domains; they do not change division-by-zero or NaN semantics."),
     flags=_VF,
     facts="loom_vector_divf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_remf = _lanewise_binary(
@@ -1857,7 +1859,7 @@ vector_remf = _lanewise_binary(
     doc=("Lanewise floating-point remainder with C fmod semantics over same-typed vector operands."),
     flags=_VF,
     facts="loom_vector_remf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_negf = _lanewise_unary(
@@ -1867,7 +1869,7 @@ vector_negf = _lanewise_unary(
     traits=[INVOLUTION],
     flags=_VF,
     facts="loom_vector_negf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_absf = _lanewise_unary(
@@ -1877,7 +1879,7 @@ vector_absf = _lanewise_unary(
     traits=[IDEMPOTENT],
     flags=_VF,
     facts="loom_vector_absf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_minimumf = _lanewise_binary(
@@ -1887,7 +1889,7 @@ vector_minimumf = _lanewise_binary(
     commutative=True,
     flags=_VF,
     facts="loom_vector_minimumf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_maximumf = _lanewise_binary(
@@ -1897,7 +1899,7 @@ vector_maximumf = _lanewise_binary(
     commutative=True,
     flags=_VF,
     facts="loom_vector_maximumf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_minnumf = _lanewise_binary(
@@ -1907,7 +1909,7 @@ vector_minnumf = _lanewise_binary(
     commutative=True,
     flags=_VF,
     facts="loom_vector_minnumf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_maxnumf = _lanewise_binary(
@@ -1917,7 +1919,7 @@ vector_maxnumf = _lanewise_binary(
     commutative=True,
     flags=_VF,
     facts="loom_vector_maxnumf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_copysignf = _lanewise_binary(
@@ -1926,7 +1928,7 @@ vector_copysignf = _lanewise_binary(
     doc=("Lanewise copy sign of rhs lanes onto lhs lane magnitudes."),
     flags=_VF,
     facts="loom_vector_copysignf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_fmaf = Op(
@@ -1956,7 +1958,7 @@ vector_fmaf = Op(
         SameType("a", "b", "c", "result"),
     ],
     facts="loom_vector_fmaf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE, ELEMENTWISE],
     format=[
         Flags("assumptions"),
@@ -1978,7 +1980,7 @@ vector_addi = _lanewise_binary(
     commutative=True,
     flags=("overflow", IntOverflowFlags),
     facts="loom_vector_addi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_subi = _lanewise_binary(
@@ -1987,7 +1989,7 @@ vector_subi = _lanewise_binary(
     doc=("Lanewise integer subtraction of same-typed vector operands. Optional overflow flags state required no-wrap facts for every lane."),
     flags=("overflow", IntOverflowFlags),
     facts="loom_vector_subi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_muli = _lanewise_binary(
@@ -1997,7 +1999,7 @@ vector_muli = _lanewise_binary(
     commutative=True,
     flags=("overflow", IntOverflowFlags),
     facts="loom_vector_muli_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_divsi = _lanewise_binary(
@@ -2005,7 +2007,7 @@ vector_divsi = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise signed integer division of same-typed vector operands; each lane rounds toward zero.",
     facts="loom_vector_divsi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_divui = _lanewise_binary(
@@ -2013,7 +2015,7 @@ vector_divui = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise unsigned integer division of same-typed vector operands.",
     facts="loom_vector_divui_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_remsi = _lanewise_binary(
@@ -2021,7 +2023,7 @@ vector_remsi = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise signed integer remainder of same-typed vector operands.",
     facts="loom_vector_remsi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_remui = _lanewise_binary(
@@ -2029,7 +2031,7 @@ vector_remui = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise unsigned integer remainder of same-typed vector operands.",
     facts="loom_vector_remui_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_ceildivsi = _lanewise_binary(
@@ -2056,7 +2058,7 @@ vector_negi = _lanewise_unary(
     doc="Lanewise integer negation of a same-typed vector operand.",
     traits=[INVOLUTION],
     facts="loom_vector_negi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_absi = _lanewise_unary(
@@ -2065,7 +2067,7 @@ vector_absi = _lanewise_unary(
     doc="Lanewise integer absolute value of a same-typed vector operand.",
     traits=[IDEMPOTENT],
     facts="loom_vector_absi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_minsi = _lanewise_binary(
@@ -2074,7 +2076,7 @@ vector_minsi = _lanewise_binary(
     doc="Lanewise signed integer minimum of same-typed vector operands.",
     commutative=True,
     facts="loom_vector_minsi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_maxsi = _lanewise_binary(
@@ -2083,7 +2085,7 @@ vector_maxsi = _lanewise_binary(
     doc="Lanewise signed integer maximum of same-typed vector operands.",
     commutative=True,
     facts="loom_vector_maxsi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_minui = _lanewise_binary(
@@ -2092,7 +2094,7 @@ vector_minui = _lanewise_binary(
     doc="Lanewise unsigned integer minimum of same-typed vector operands.",
     commutative=True,
     facts="loom_vector_minui_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_maxui = _lanewise_binary(
@@ -2101,7 +2103,7 @@ vector_maxui = _lanewise_binary(
     doc="Lanewise unsigned integer maximum of same-typed vector operands.",
     commutative=True,
     facts="loom_vector_maxui_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_fmai = Op(
@@ -2121,7 +2123,7 @@ vector_fmai = Op(
     ],
     traits=[PURE, ELEMENTWISE],
     facts="loom_vector_fmai_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     format=[
         Flags("overflow"),
         Ref("a"),
@@ -2141,7 +2143,7 @@ vector_andi = _lanewise_binary(
     doc="Lanewise bitwise AND of same-typed integer vector operands.",
     commutative=True,
     facts="loom_vector_andi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_ori = _lanewise_binary(
@@ -2150,7 +2152,7 @@ vector_ori = _lanewise_binary(
     doc="Lanewise bitwise OR of same-typed integer vector operands.",
     commutative=True,
     facts="loom_vector_ori_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_xori = _lanewise_binary(
@@ -2159,7 +2161,7 @@ vector_xori = _lanewise_binary(
     doc="Lanewise bitwise XOR of same-typed integer vector operands.",
     commutative=True,
     facts="loom_vector_xori_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_binary_identity_canonicalize",
 )
 
 vector_shli = _lanewise_binary(
@@ -2168,7 +2170,7 @@ vector_shli = _lanewise_binary(
     doc="Lanewise left shift of same-typed integer vector operands.",
     flags=("overflow", IntOverflowFlags),
     facts="loom_vector_shli_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_shrsi = _lanewise_binary(
@@ -2176,7 +2178,7 @@ vector_shrsi = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise arithmetic right shift of same-typed integer vector operands.",
     facts="loom_vector_shrsi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_shrui = _lanewise_binary(
@@ -2184,7 +2186,7 @@ vector_shrui = _lanewise_binary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise logical right shift of same-typed integer vector operands.",
     facts="loom_vector_shrui_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_rotli = _lanewise_binary(
@@ -2204,7 +2206,7 @@ vector_ctlzi = _lanewise_unary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise count leading zeros over integer lanes.",
     facts="loom_vector_ctlzi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_cttzi = _lanewise_unary(
@@ -2212,7 +2214,7 @@ vector_cttzi = _lanewise_unary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise count trailing zeros over integer lanes.",
     facts="loom_vector_cttzi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_ctpopi = _lanewise_unary(
@@ -2220,7 +2222,7 @@ vector_ctpopi = _lanewise_unary(
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise population count over integer lanes. Each result lane is the number of set bits in the corresponding input lane and has the same integer element type as the input."),
     facts="loom_vector_ctpopi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_expf = _lanewise_unary(
@@ -2229,7 +2231,7 @@ vector_expf = _lanewise_unary(
     doc=("Lanewise natural exponential e^x."),
     flags=_VF,
     facts="loom_vector_expf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_exp2f = _lanewise_unary(
@@ -2238,7 +2240,7 @@ vector_exp2f = _lanewise_unary(
     doc=("Lanewise base-2 exponential 2^x."),
     flags=_VF,
     facts="loom_vector_exp2f_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_expm1f = _lanewise_unary(
@@ -2247,7 +2249,7 @@ vector_expm1f = _lanewise_unary(
     doc=("Lanewise exp(x)-1, preserving the scalar operation's near-zero numerical semantics."),
     flags=_VF,
     facts="loom_vector_expm1f_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_logf = _lanewise_unary(
@@ -2256,7 +2258,7 @@ vector_logf = _lanewise_unary(
     doc=("Lanewise natural logarithm ln(x)."),
     flags=_VF,
     facts="loom_vector_logf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_log2f = _lanewise_unary(
@@ -2265,7 +2267,7 @@ vector_log2f = _lanewise_unary(
     doc=("Lanewise base-2 logarithm."),
     flags=_VF,
     facts="loom_vector_log2f_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_log10f = _lanewise_unary(
@@ -2274,7 +2276,7 @@ vector_log10f = _lanewise_unary(
     doc=("Lanewise base-10 logarithm."),
     flags=_VF,
     facts="loom_vector_log10f_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_log1pf = _lanewise_unary(
@@ -2283,7 +2285,7 @@ vector_log1pf = _lanewise_unary(
     doc=("Lanewise log(1+x), preserving the scalar operation's near-zero numerical semantics."),
     flags=_VF,
     facts="loom_vector_log1pf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_powf = _lanewise_binary(
@@ -2292,7 +2294,7 @@ vector_powf = _lanewise_binary(
     doc=("Lanewise floating-point power lhs^rhs over same-typed vector operands."),
     flags=_VF,
     facts="loom_vector_powf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_sqrtf = _lanewise_unary(
@@ -2301,7 +2303,7 @@ vector_sqrtf = _lanewise_unary(
     doc=("Lanewise floating-point square root. Optional assumptions flags constrain lane value domains for optimization and lowering."),
     flags=_VF,
     facts="loom_vector_sqrtf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_rsqrtf = _lanewise_unary(
@@ -2310,7 +2312,7 @@ vector_rsqrtf = _lanewise_unary(
     doc=("Lanewise reciprocal square root 1/sqrt(x)."),
     flags=_VF,
     facts="loom_vector_rsqrtf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_cbrtf = _lanewise_unary(
@@ -2319,7 +2321,7 @@ vector_cbrtf = _lanewise_unary(
     doc=("Lanewise cube root."),
     flags=_VF,
     facts="loom_vector_cbrtf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_sinf = _lanewise_unary(
@@ -2328,7 +2330,7 @@ vector_sinf = _lanewise_unary(
     doc=("Lanewise sine."),
     flags=_VF,
     facts="loom_vector_sinf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_cosf = _lanewise_unary(
@@ -2337,7 +2339,7 @@ vector_cosf = _lanewise_unary(
     doc=("Lanewise cosine."),
     flags=_VF,
     facts="loom_vector_cosf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_tanf = _lanewise_unary(
@@ -2346,7 +2348,7 @@ vector_tanf = _lanewise_unary(
     doc=("Lanewise tangent."),
     flags=_VF,
     facts="loom_vector_tanf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_asinf = _lanewise_unary(
@@ -2355,7 +2357,7 @@ vector_asinf = _lanewise_unary(
     doc=("Lanewise arcsine."),
     flags=_VF,
     facts="loom_vector_asinf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_acosf = _lanewise_unary(
@@ -2364,7 +2366,7 @@ vector_acosf = _lanewise_unary(
     doc=("Lanewise arccosine."),
     flags=_VF,
     facts="loom_vector_acosf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_atanf = _lanewise_unary(
@@ -2373,7 +2375,7 @@ vector_atanf = _lanewise_unary(
     doc=("Lanewise arctangent."),
     flags=_VF,
     facts="loom_vector_atanf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_atan2f = _lanewise_binary(
@@ -2382,7 +2384,7 @@ vector_atan2f = _lanewise_binary(
     doc=("Lanewise two-argument arctangent atan2(lhs, rhs) over same-typed vector operands."),
     flags=_VF,
     facts="loom_vector_atan2f_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_sinhf = _lanewise_unary(
@@ -2391,7 +2393,7 @@ vector_sinhf = _lanewise_unary(
     doc=("Lanewise hyperbolic sine."),
     flags=_VF,
     facts="loom_vector_sinhf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_coshf = _lanewise_unary(
@@ -2400,7 +2402,7 @@ vector_coshf = _lanewise_unary(
     doc=("Lanewise hyperbolic cosine."),
     flags=_VF,
     facts="loom_vector_coshf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_tanhf = _lanewise_unary(
@@ -2409,7 +2411,7 @@ vector_tanhf = _lanewise_unary(
     doc=("Lanewise hyperbolic tangent."),
     flags=_VF,
     facts="loom_vector_tanhf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_asinhf = _lanewise_unary(
@@ -2418,7 +2420,7 @@ vector_asinhf = _lanewise_unary(
     doc=("Lanewise inverse hyperbolic sine."),
     flags=_VF,
     facts="loom_vector_asinhf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_acoshf = _lanewise_unary(
@@ -2427,7 +2429,7 @@ vector_acoshf = _lanewise_unary(
     doc=("Lanewise inverse hyperbolic cosine."),
     flags=_VF,
     facts="loom_vector_acoshf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_atanhf = _lanewise_unary(
@@ -2436,7 +2438,7 @@ vector_atanhf = _lanewise_unary(
     doc=("Lanewise inverse hyperbolic tangent."),
     flags=_VF,
     facts="loom_vector_atanhf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_erff = _lanewise_unary(
@@ -2445,7 +2447,7 @@ vector_erff = _lanewise_unary(
     doc=("Lanewise error function, used by GeLU-style activations."),
     flags=_VF,
     facts="loom_vector_erff_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_erfcf = _lanewise_unary(
@@ -2454,7 +2456,7 @@ vector_erfcf = _lanewise_unary(
     doc=("Lanewise complementary error function 1-erf(x)."),
     flags=_VF,
     facts="loom_vector_erfcf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_ceilf = _lanewise_unary(
@@ -2464,7 +2466,7 @@ vector_ceilf = _lanewise_unary(
     traits=[IDEMPOTENT],
     flags=_VF,
     facts="loom_vector_ceilf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_floorf = _lanewise_unary(
@@ -2474,7 +2476,7 @@ vector_floorf = _lanewise_unary(
     traits=[IDEMPOTENT],
     flags=_VF,
     facts="loom_vector_floorf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_roundf = _lanewise_unary(
@@ -2484,7 +2486,7 @@ vector_roundf = _lanewise_unary(
     traits=[IDEMPOTENT],
     flags=_VF,
     facts="loom_vector_roundf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_roundevenf = _lanewise_unary(
@@ -2494,7 +2496,7 @@ vector_roundevenf = _lanewise_unary(
     traits=[IDEMPOTENT],
     flags=_VF,
     facts="loom_vector_roundevenf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_truncf = _lanewise_unary(
@@ -2504,7 +2506,7 @@ vector_truncf = _lanewise_unary(
     traits=[IDEMPOTENT],
     flags=_VF,
     facts="loom_vector_truncf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_isnanf = _lanewise_unary_shape_change(
@@ -2513,7 +2515,7 @@ vector_isnanf = _lanewise_unary_shape_change(
     result_constraint=I1_ELEMENT,
     doc="Lanewise floating-point NaN test producing an i1 mask vector.",
     facts="loom_vector_isnanf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_isinff = _lanewise_unary_shape_change(
@@ -2522,7 +2524,7 @@ vector_isinff = _lanewise_unary_shape_change(
     result_constraint=I1_ELEMENT,
     doc="Lanewise floating-point infinity test producing an i1 mask vector.",
     facts="loom_vector_isinff_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_isfinitef = _lanewise_unary_shape_change(
@@ -2531,7 +2533,7 @@ vector_isfinitef = _lanewise_unary_shape_change(
     result_constraint=I1_ELEMENT,
     doc="Lanewise floating-point finite test producing an i1 mask vector.",
     facts="loom_vector_isfinitef_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_signf = _lanewise_unary(
@@ -2539,7 +2541,7 @@ vector_signf = _lanewise_unary(
     result_constraint=FLOAT_ELEMENT,
     doc="Lanewise floating-point sign, returning -1.0, 0.0, or 1.0 per lane.",
     facts="loom_vector_signf_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_signi = _lanewise_unary(
@@ -2547,7 +2549,7 @@ vector_signi = _lanewise_unary(
     result_constraint=INTEGER_ELEMENT,
     doc="Lanewise integer sign, returning -1, 0, or 1 per lane.",
     facts="loom_vector_signi_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 
@@ -2891,7 +2893,6 @@ vector_dotf = Op(
         SameElementType("lhs", "rhs", "init"),
     ],
     facts="loom_vector_dotf_facts",
-    canonicalize="loom_vector_canonicalize",
     traits=[PURE],
     format=[
         Ref("lhs"),
@@ -2982,7 +2983,7 @@ vector_reduce = Op(
     ],
     verify="loom_vector_reduce_verify",
     facts="loom_vector_reduce_facts",
-    canonicalize="loom_vector_canonicalize",
+    canonicalize="loom_vector_reduce_canonicalize",
     traits=[PURE],
     format=[
         TemplateParam("kind"),
