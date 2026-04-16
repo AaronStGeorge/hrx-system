@@ -18,11 +18,16 @@ extern "C" {
 
 // Infers the target-independent packed-dot match request represented by |op|.
 //
-// The helper accepts vector.dot2f, vector.dot4i, and vector.dot8i4 when their
-// register shapes are fully static and representable by the CPU descriptor
-// contract. Target feature bits and optional family restrictions remain caller
-// policy; the inferred request leaves those fields clear for the selected CPU
-// lowering profile to populate before calling loom_cpu_packed_dot_select.
+// The helper accepts vector.dot2f and vector.dot4i when their register shapes
+// are fully static and representable by the CPU descriptor contract. Target
+// feature bits and optional family restrictions remain caller policy; the
+// inferred request leaves those fields clear for the selected CPU lowering
+// profile to populate before calling loom_cpu_packed_dot_select.
+//
+// vector.dot8i4 is deliberately excluded: its i32 lanes contain packed nibbles,
+// while CPU byte-dot descriptors consume byte fields. Q4 paths must expand,
+// repack, or match a transform-aware higher-level contract before selecting CPU
+// byte-dot instructions.
 //
 // Returns false for non-packed-dot ops, dynamic shapes, malformed IR, and
 // vector dot forms that have no CPU packed-dot descriptor payload vocabulary.

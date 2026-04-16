@@ -237,7 +237,7 @@ func.def @s8s8_dot4_wide(%lhs: vector<64xi8>, %rhs: vector<64xi8>, %acc: vector<
   EXPECT_EQ(ToString(descriptor->name), "x86.avx10.2.vpdpbssd.512");
 }
 
-TEST_F(PackedDotContractFixtureTest, ParsedDot8I4FallsBackWithoutNativeShape) {
+TEST_F(PackedDotContractFixtureTest, ParsedDot8I4DoesNotInferCpuRequest) {
   static const char kSource[] = R"(
 func.def @packed_i4_dot(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xi32>) -> (vector<4xi32>) {
   %r = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<4xi32>
@@ -252,14 +252,28 @@ func.def @packed_i4_dot(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4
   const loom_op_t* op = FirstVectorDotOp(module_ptr.get());
   ASSERT_NE(op, nullptr);
   loom_cpu_packed_dot_match_request_t request = {};
-  ASSERT_TRUE(loom_cpu_packed_dot_match_request_from_vector_op(module_ptr.get(),
-                                                               op, &request));
-  IREE_ASSERT_OK(loom_cpu_packed_dot_feature_bits_for_name(
-      IREE_SV("x86-avx-vnni-int8"), &request.feature_bits));
+  EXPECT_FALSE(loom_cpu_packed_dot_match_request_from_vector_op(
+      module_ptr.get(), op, &request));
+}
 
-  loom_cpu_packed_dot_match_diagnostic_t diagnostic = {};
-  EXPECT_EQ(loom_cpu_packed_dot_select(&request, &diagnostic), nullptr);
-  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CPU_PACKED_DOT_REJECTION_SHAPE);
+TEST_F(PackedDotContractFixtureTest,
+       ParsedDot8I4DoesNotInferCpuRequestForByteDotShape) {
+  static const char kSource[] = R"(
+func.def @packed_i4_dot_vnni_shaped(%lhs: vector<8xi32>, %rhs: vector<8xi32>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  %r = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<8xi32>
+  func.return %r : vector<8xi32>
+}
+)";
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(ParseAndVerify(kSource, &module));
+  ModulePtr module_ptr(module);
+
+  const loom_op_t* op = FirstVectorDotOp(module_ptr.get());
+  ASSERT_NE(op, nullptr);
+  loom_cpu_packed_dot_match_request_t request = {};
+  EXPECT_FALSE(loom_cpu_packed_dot_match_request_from_vector_op(
+      module_ptr.get(), op, &request));
 }
 
 TEST_F(PackedDotContractFixtureTest, DynamicDot4DoesNotInferNativeRequest) {

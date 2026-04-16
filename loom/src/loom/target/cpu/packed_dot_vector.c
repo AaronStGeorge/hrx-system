@@ -135,35 +135,6 @@ static bool loom_cpu_packed_dot_dot4i_numeric_types(
   }
 }
 
-static bool loom_cpu_packed_dot_dot8i4_numeric_types(
-    loom_vector_dot8i4_kind_t kind,
-    loom_cpu_packed_dot_numeric_type_t* out_lhs_type,
-    loom_cpu_packed_dot_numeric_type_t* out_rhs_type) {
-  *out_lhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_UNKNOWN;
-  *out_rhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_UNKNOWN;
-  switch (kind) {
-    case LOOM_VECTOR_DOT8I4_KIND_S4S4:
-      *out_lhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_I8;
-      *out_rhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_I8;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_U4S4:
-      *out_lhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_U8;
-      *out_rhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_I8;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_S4U4:
-      *out_lhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_I8;
-      *out_rhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_U8;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_U4U4:
-      *out_lhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_U8;
-      *out_rhs_type = LOOM_CPU_PACKED_DOT_NUMERIC_U8;
-      return true;
-    case LOOM_VECTOR_DOT8I4_KIND_COUNT_:
-    default:
-      return false;
-  }
-}
-
 static bool loom_cpu_packed_dot_match_request_from_dot2f_op(
     const loom_module_t* module, const loom_op_t* op,
     loom_cpu_packed_dot_match_request_t* out_request) {
@@ -306,79 +277,6 @@ static bool loom_cpu_packed_dot_match_request_from_dot4i_op(
   return true;
 }
 
-static bool loom_cpu_packed_dot_match_request_from_dot8i4_op(
-    const loom_module_t* module, const loom_op_t* op,
-    loom_cpu_packed_dot_match_request_t* out_request) {
-  if (!loom_vector_dot8i4_isa(op)) return false;
-
-  loom_cpu_packed_dot_numeric_type_t lhs_numeric_type =
-      LOOM_CPU_PACKED_DOT_NUMERIC_UNKNOWN;
-  loom_cpu_packed_dot_numeric_type_t rhs_numeric_type =
-      LOOM_CPU_PACKED_DOT_NUMERIC_UNKNOWN;
-  if (!loom_cpu_packed_dot_dot8i4_numeric_types(
-          (loom_vector_dot8i4_kind_t)loom_vector_dot8i4_kind(op),
-          &lhs_numeric_type, &rhs_numeric_type)) {
-    return false;
-  }
-
-  loom_type_t lhs_type = loom_type_none();
-  loom_type_t rhs_type = loom_type_none();
-  loom_type_t acc_type = loom_type_none();
-  loom_type_t result_type = loom_type_none();
-  if (!loom_cpu_packed_dot_value_type(module, loom_vector_dot8i4_lhs(op),
-                                      &lhs_type) ||
-      !loom_cpu_packed_dot_value_type(module, loom_vector_dot8i4_rhs(op),
-                                      &rhs_type) ||
-      !loom_cpu_packed_dot_value_type(module, loom_vector_dot8i4_acc(op),
-                                      &acc_type) ||
-      !loom_cpu_packed_dot_value_type(module, loom_vector_dot8i4_result(op),
-                                      &result_type)) {
-    return false;
-  }
-  if (loom_type_element_type(lhs_type) != LOOM_SCALAR_TYPE_I32 ||
-      loom_type_element_type(rhs_type) != LOOM_SCALAR_TYPE_I32 ||
-      loom_type_element_type(acc_type) != LOOM_SCALAR_TYPE_I32 ||
-      loom_type_element_type(result_type) != LOOM_SCALAR_TYPE_I32 ||
-      !loom_type_shape_equals(lhs_type, rhs_type) ||
-      !loom_type_shape_equals(lhs_type, acc_type) ||
-      !loom_type_shape_equals(lhs_type, result_type)) {
-    return false;
-  }
-
-  uint64_t packed_lane_count = 0;
-  uint64_t rhs_packed_lane_count = 0;
-  uint64_t accumulator_lane_count = 0;
-  uint64_t result_lane_count = 0;
-  if (!loom_cpu_packed_dot_static_vector_element_count(lhs_type,
-                                                       &packed_lane_count) ||
-      !loom_cpu_packed_dot_static_vector_element_count(
-          rhs_type, &rhs_packed_lane_count) ||
-      !loom_cpu_packed_dot_static_vector_element_count(
-          acc_type, &accumulator_lane_count) ||
-      !loom_cpu_packed_dot_static_vector_element_count(result_type,
-                                                       &result_lane_count) ||
-      rhs_packed_lane_count != packed_lane_count ||
-      accumulator_lane_count != packed_lane_count ||
-      result_lane_count != packed_lane_count) {
-    return false;
-  }
-
-  if (!loom_cpu_packed_dot_assign_scaled_uint16(
-          packed_lane_count, 32, &out_request->shape.vector_bit_width) ||
-      !loom_cpu_packed_dot_assign_scaled_uint16(
-          packed_lane_count, 8, &out_request->shape.input_lane_count) ||
-      !loom_cpu_packed_dot_assign_uint16(
-          packed_lane_count, &out_request->shape.result_lane_count)) {
-    return false;
-  }
-  out_request->shape.reduction_group_size = 8;
-  out_request->lhs_numeric_type = lhs_numeric_type;
-  out_request->rhs_numeric_type = rhs_numeric_type;
-  out_request->accumulator_numeric_type = LOOM_CPU_PACKED_DOT_NUMERIC_I32;
-  out_request->result_numeric_type = LOOM_CPU_PACKED_DOT_NUMERIC_I32;
-  return true;
-}
-
 bool loom_cpu_packed_dot_match_request_from_vector_op(
     const loom_module_t* module, const loom_op_t* op,
     loom_cpu_packed_dot_match_request_t* out_request) {
@@ -388,8 +286,7 @@ bool loom_cpu_packed_dot_match_request_from_vector_op(
 
   loom_cpu_packed_dot_match_request_t request = {0};
   if (loom_cpu_packed_dot_match_request_from_dot2f_op(module, op, &request) ||
-      loom_cpu_packed_dot_match_request_from_dot4i_op(module, op, &request) ||
-      loom_cpu_packed_dot_match_request_from_dot8i4_op(module, op, &request)) {
+      loom_cpu_packed_dot_match_request_from_dot4i_op(module, op, &request)) {
     *out_request = request;
     return true;
   }
