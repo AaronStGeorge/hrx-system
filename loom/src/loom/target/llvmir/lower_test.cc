@@ -750,15 +750,20 @@ TEST_F(LlvmIrLowerTest, LowersCpuPackedDotIntrinsics) {
             std::string::npos)
       << text;
   EXPECT_NE(text.find("declare <8 x i32> "
-                      "@llvm.x86.avx2.vpdpbssd.256(<8 x i32>, <32 x i8>, "
-                      "<32 x i8>)\n"),
+                      "@llvm.x86.avx2.vpdpbssd.256(<8 x i32>, <8 x i32>, "
+                      "<8 x i32>)\n"),
             std::string::npos)
       << text;
-  EXPECT_NE(text.find("  %dot = call <8 x i32> "
-                      "@llvm.x86.avx2.vpdpbssd.256(<8 x i32> %acc, "
-                      "<32 x i8> %lhs, <32 x i8> %rhs)\n"),
-            std::string::npos)
+  EXPECT_TRUE(
+      TextHasLineContaining(text, "bitcast <32 x i8> %lhs", "to <8 x i32>"))
       << text;
+  EXPECT_TRUE(
+      TextHasLineContaining(text, "bitcast <32 x i8> %rhs", "to <8 x i32>"))
+      << text;
+  EXPECT_TRUE(TextHasLineContaining(
+      text, "call <8 x i32> @llvm.x86.avx2.vpdpbssd.256", "<8 x i32> %acc"))
+      << text;
+  VerifyTextWithLlvmTools(text);
 }
 
 TEST_F(LlvmIrLowerTest, RejectsCpuPackedDotWithoutTargetFeatures) {
@@ -789,6 +794,25 @@ TEST_F(LlvmIrLowerTest, CompilesCpuPackedBfloatDotToX86Assembly) {
   CompileX86TextToAssembly(text, extra_arguments,
                            IREE_ARRAYSIZE(extra_arguments), &assembly);
   EXPECT_NE(assembly.find("vdpbf16ps"), std::string::npos) << assembly;
+}
+
+TEST_F(LlvmIrLowerTest, CompilesCpuPackedS8Dot4ToX86Assembly) {
+  BuildDot4S8S8Function(IREE_SV("dot4_s8s8"));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits =
+      LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX_VNNI_INT8;
+  std::string text = LowerToText(&profile);
+
+  iree_string_view_t extra_arguments[] = {
+      IREE_SV("-mtriple=x86_64-unknown-linux-gnu"),
+      IREE_SV("-mattr=+avxvnniint8"),
+  };
+  std::string assembly;
+  CompileX86TextToAssembly(text, extra_arguments,
+                           IREE_ARRAYSIZE(extra_arguments), &assembly);
+  EXPECT_NE(assembly.find("vpdpbssd"), std::string::npos) << assembly;
 }
 
 TEST_F(LlvmIrLowerTest, LowersVectorNumericOps) {

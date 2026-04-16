@@ -77,6 +77,15 @@ typedef enum loom_cpu_packed_dot_numeric_type_e {
   LOOM_CPU_PACKED_DOT_NUMERIC_F32,
 } loom_cpu_packed_dot_numeric_type_t;
 
+typedef enum loom_cpu_packed_dot_llvm_source_abi_e {
+  // Unknown or uninitialized LLVM intrinsic source operand ABI.
+  LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_UNKNOWN = 0,
+  // LLVM intrinsic source operands use the logical payload vector type.
+  LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_PAYLOAD,
+  // LLVM intrinsic source operands use the accumulator register vector type.
+  LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_ACCUMULATOR_VECTOR,
+} loom_cpu_packed_dot_llvm_source_abi_t;
+
 // Bitset of semantic flags required by a packed-dot descriptor.
 typedef uint32_t loom_cpu_packed_dot_contract_flags_t;
 
@@ -99,6 +108,8 @@ typedef struct loom_cpu_packed_dot_descriptor_t {
   iree_string_view_t name;
   // LLVM intrinsic name when Loom lowers through an intrinsic call.
   iree_string_view_t llvm_intrinsic_name;
+  // Source operand ABI required by the LLVM intrinsic declaration and call.
+  loom_cpu_packed_dot_llvm_source_abi_t llvm_source_abi;
   // Assembly mnemonic expected after LLVM instruction selection.
   iree_string_view_t instruction_mnemonic;
   // CPU instruction family used by this descriptor.

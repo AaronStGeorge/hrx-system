@@ -97,6 +97,8 @@ TEST(PackedDotContractTest, Avx512VnniByteDescriptor) {
   EXPECT_EQ(descriptor->family, LOOM_CPU_PACKED_DOT_FAMILY_X86_AVX512_VNNI);
   EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
             "llvm.x86.avx512.vpdpbusd.512");
+  EXPECT_EQ(descriptor->llvm_source_abi,
+            LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_ACCUMULATOR_VECTOR);
   EXPECT_EQ(ToString(descriptor->instruction_mnemonic), "vpdpbusd");
   EXPECT_EQ(descriptor->required_feature_bits,
             LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_VNNI);
@@ -116,6 +118,8 @@ TEST(PackedDotContractTest, AvxVnniInt8SignedSignedDescriptor) {
   EXPECT_EQ(descriptor->family, LOOM_CPU_PACKED_DOT_FAMILY_X86_AVX_VNNI_INT8);
   EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
             "llvm.x86.avx2.vpdpbssd.256");
+  EXPECT_EQ(descriptor->llvm_source_abi,
+            LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_ACCUMULATOR_VECTOR);
   EXPECT_EQ(descriptor->shape.vector_bit_width, 256);
   EXPECT_EQ(descriptor->lhs_numeric_type, LOOM_CPU_PACKED_DOT_NUMERIC_I8);
   EXPECT_EQ(descriptor->rhs_numeric_type, LOOM_CPU_PACKED_DOT_NUMERIC_I8);
@@ -128,6 +132,8 @@ TEST(PackedDotContractTest, Avx10Fp16Descriptor) {
   EXPECT_EQ(descriptor->family, LOOM_CPU_PACKED_DOT_FAMILY_X86_AVX10_2);
   EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
             "llvm.x86.avx10.vdpphps.512");
+  EXPECT_EQ(descriptor->llvm_source_abi,
+            LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_PAYLOAD);
   EXPECT_EQ(descriptor->shape.reduction_group_size, 2);
   EXPECT_EQ(descriptor->lhs_numeric_type, LOOM_CPU_PACKED_DOT_NUMERIC_F16);
   EXPECT_EQ(descriptor->accumulator_numeric_type,
@@ -142,6 +148,8 @@ TEST(PackedDotContractTest, Avx512Bf16Descriptor) {
   EXPECT_EQ(descriptor->required_feature_bits,
             LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_BF16 |
                 LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_VL);
+  EXPECT_EQ(descriptor->llvm_source_abi,
+            LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_PAYLOAD);
   EXPECT_EQ(ToString(descriptor->instruction_mnemonic), "vdpbf16ps");
   EXPECT_EQ(descriptor->lhs_numeric_type, LOOM_CPU_PACKED_DOT_NUMERIC_BF16);
   EXPECT_EQ(descriptor->result_numeric_type, LOOM_CPU_PACKED_DOT_NUMERIC_F32);

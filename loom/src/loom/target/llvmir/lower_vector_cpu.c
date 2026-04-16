@@ -53,6 +53,53 @@ static iree_status_t loom_llvmir_lowering_cpu_packed_dot_vector_type(
                                             element_type, out_type);
 }
 
+static iree_status_t
+loom_llvmir_lowering_cpu_packed_dot_intrinsic_source_vector_type(
+    loom_llvmir_lowering_state_t* state,
+    const loom_cpu_packed_dot_descriptor_t* descriptor,
+    loom_cpu_packed_dot_numeric_type_t logical_numeric_type,
+    loom_llvmir_type_id_t* out_type) {
+  switch (descriptor->llvm_source_abi) {
+    case LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_PAYLOAD:
+      return loom_llvmir_lowering_cpu_packed_dot_vector_type(
+          state, logical_numeric_type, descriptor->shape.input_lane_count,
+          out_type);
+    case LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_ACCUMULATOR_VECTOR:
+      return loom_llvmir_lowering_cpu_packed_dot_vector_type(
+          state, descriptor->accumulator_numeric_type,
+          descriptor->shape.result_lane_count, out_type);
+    case LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_UNKNOWN:
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown CPU packed-dot LLVM source ABI");
+  }
+}
+
+static iree_status_t loom_llvmir_lowering_adapt_cpu_packed_dot_source_operand(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_cpu_packed_dot_descriptor_t* descriptor,
+    loom_llvmir_value_id_t source_value,
+    loom_cpu_packed_dot_numeric_type_t logical_numeric_type,
+    loom_llvmir_value_id_t* out_value) {
+  if (descriptor->llvm_source_abi ==
+      LOOM_CPU_PACKED_DOT_LLVM_SOURCE_ABI_PAYLOAD) {
+    *out_value = source_value;
+    return iree_ok_status();
+  }
+  loom_llvmir_type_id_t abi_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_cpu_packed_dot_intrinsic_source_vector_type(
+          state, descriptor, logical_numeric_type, &abi_type));
+  return loom_llvmir_build_cast(target_block,
+                                &(loom_llvmir_cast_desc_t){
+                                    .result_name = iree_string_view_empty(),
+                                    .result_type = abi_type,
+                                    .op = LOOM_LLVMIR_CAST_BITCAST,
+                                    .value = source_value,
+                                },
+                                out_value);
+}
+
 static iree_status_t loom_llvmir_lowering_declare_cpu_packed_dot_intrinsic(
     loom_llvmir_lowering_state_t* state,
     const loom_cpu_packed_dot_descriptor_t* descriptor,
@@ -81,12 +128,12 @@ static iree_status_t loom_llvmir_lowering_declare_cpu_packed_dot_intrinsic(
   IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cpu_packed_dot_vector_type(
       state, descriptor->accumulator_numeric_type,
       descriptor->shape.result_lane_count, &accumulator_type));
-  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cpu_packed_dot_vector_type(
-      state, descriptor->lhs_numeric_type, descriptor->shape.input_lane_count,
-      &lhs_type));
-  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cpu_packed_dot_vector_type(
-      state, descriptor->rhs_numeric_type, descriptor->shape.input_lane_count,
-      &rhs_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_cpu_packed_dot_intrinsic_source_vector_type(
+          state, descriptor, descriptor->lhs_numeric_type, &lhs_type));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_cpu_packed_dot_intrinsic_source_vector_type(
+          state, descriptor, descriptor->rhs_numeric_type, &rhs_type));
 
   loom_llvmir_function_t* function = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_module_add_function(
@@ -179,6 +226,12 @@ iree_status_t loom_llvmir_lowering_lower_vector_cpu_packed_dot(
       loom_llvmir_lowering_lookup_value(state, operands[0], &args[1]));
   IREE_RETURN_IF_ERROR(
       loom_llvmir_lowering_lookup_value(state, operands[1], &args[2]));
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_adapt_cpu_packed_dot_source_operand(
+      state, target_block, descriptor, args[1], descriptor->lhs_numeric_type,
+      &args[1]));
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_adapt_cpu_packed_dot_source_operand(
+      state, target_block, descriptor, args[2], descriptor->rhs_numeric_type,
+      &args[2]));
 
   loom_llvmir_function_t* intrinsic = NULL;
   IREE_RETURN_IF_ERROR(loom_llvmir_lowering_declare_cpu_packed_dot_intrinsic(
