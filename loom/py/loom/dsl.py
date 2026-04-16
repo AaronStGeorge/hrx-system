@@ -173,6 +173,7 @@ __all__ = [
     "YieldTypesMatchResults",
     "YieldElementTypesMatchResults",
     "IterArgsMatchResults",
+    "AttrMatchesElementType",
     # Op group.
     "Dialect",
     # Interfaces.
@@ -1345,6 +1346,64 @@ def PositiveBitWidthAttr(attr: str) -> Constraint:
     return Constraint(
         "PositiveBitWidthAttr",
         (attr,),
+        validate=_validate,
+    )
+
+
+def _attr_matches_scalar_type(value: Any, element_type: Any) -> bool:
+    """Returns true if a Python literal can spell a scalar element payload."""
+    from loom.ir import ScalarType, ScalarTypeKind
+
+    if not isinstance(element_type, ScalarType):
+        return True
+    element_kind = element_type.kind
+    if element_kind == ScalarTypeKind.I1:
+        return isinstance(value, bool) or (type(value) is int and value in (0, 1))
+    if element_kind in {
+        ScalarTypeKind.INDEX,
+        ScalarTypeKind.OFFSET,
+        ScalarTypeKind.I8,
+        ScalarTypeKind.I16,
+        ScalarTypeKind.I32,
+        ScalarTypeKind.I64,
+    }:
+        return type(value) is int
+    if element_kind in {
+        ScalarTypeKind.F8E4M3,
+        ScalarTypeKind.F8E5M2,
+        ScalarTypeKind.F16,
+        ScalarTypeKind.BF16,
+        ScalarTypeKind.F32,
+        ScalarTypeKind.F64,
+    }:
+        return type(value) is float
+    return False
+
+
+def AttrMatchesElementType(attr: str, field: str) -> Constraint:
+    """An attribute literal kind must match a field's scalar element type."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        value = values.get(attr)
+        if value is None:
+            return (True, "")
+        element_type = _field_element_type(values.get(field))
+        if element_type is None:
+            return (True, "")
+        if _attr_matches_scalar_type(value, element_type):
+            return (True, "")
+        return (
+            False,
+            f"'{attr}' literal {value!r} does not match "
+            f"'{field}' element type {element_type}",
+        )
+
+    from loom.error.type import ERR_TYPE_005
+
+    return Constraint(
+        "AttrMatchesElementType",
+        (attr, field),
+        error=ERR_TYPE_005,
         validate=_validate,
     )
 

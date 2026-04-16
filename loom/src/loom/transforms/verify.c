@@ -2175,6 +2175,16 @@ static bool loom_verify_resolve_i64_attr_field(const loom_op_t* op,
   return true;
 }
 
+static bool loom_verify_resolve_attr_field(const loom_op_t* op,
+                                           uint8_t attr_ref,
+                                           loom_attribute_t* out_attr) {
+  if (LOOM_FIELD_REF_CATEGORY(attr_ref) != LOOM_FIELD_ATTR) return false;
+  uint8_t attr_index = LOOM_FIELD_REF_INDEX(attr_ref);
+  if (attr_index >= op->attribute_count) return false;
+  *out_attr = loom_op_attrs(op)[attr_index];
+  return true;
+}
+
 static void loom_verify_emit_i64_attr_constraint(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, uint8_t attr_ref, int64_t actual_value,
@@ -2189,6 +2199,24 @@ static void loom_verify_emit_i64_attr_constraint(
   };
   loom_verify_emit_structured(state, op, &loom_err_structure_014, params,
                               IREE_ARRAYSIZE(params));
+}
+
+static void loom_verify_emit_attr_kind_mismatch(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, uint8_t attr_ref,
+    const loom_error_def_t* error, loom_attr_kind_t actual_kind,
+    loom_attr_kind_t expected_kind) {
+  char attr_name_buffer[32];
+  iree_string_view_t attr_name = loom_verify_field_name(
+      vtable, attr_ref, attr_name_buffer, sizeof(attr_name_buffer));
+  if (!error) error = &loom_err_type_005;
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(attr_name, attr_ref),
+      loom_param_u32(actual_kind),
+      loom_param_u32(expected_kind),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 3 ? error->param_count : 3);
 }
 
 static void loom_verify_emit_value_field_constraint(
@@ -2209,6 +2237,38 @@ static void loom_verify_emit_value_field_constraint(
   };
   loom_verify_emit_structured(state, op, error, params,
                               error->param_count < 3 ? error->param_count : 3);
+}
+
+// ATTR_MATCHES_ELEMENT_TYPE: an attribute literal payload kind matches the
+// scalar element type of a value field. Args: (attr field, value field).
+static void loom_verify_relation_attr_matches_element_type(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  if (constraint->property != LOOM_PROPERTY_ELEMENT_TYPE) return;
+  uint8_t attr_ref = constraint->args[0];
+  uint8_t field_ref = constraint->args[1];
+  if (loom_verify_is_variadic_field(vtable, field_ref)) return;
+
+  loom_attribute_t attr = {0};
+  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  if (!loom_verify_resolve_attr_field(op, attr_ref, &attr) ||
+      value_id == LOOM_VALUE_ID_INVALID || loom_attr_is_absent(attr)) {
+    return;
+  }
+
+  loom_type_t value_type = loom_verify_value_type(state, value_id);
+  if (!loom_type_is_scalar(value_type) && !loom_type_is_shaped(value_type)) {
+    return;
+  }
+
+  loom_attr_kind_t expected_kind = LOOM_ATTR_ANY;
+  if (loom_attr_matches_scalar_type(attr, loom_type_element_type(value_type),
+                                    &expected_kind)) {
+    return;
+  }
+  loom_verify_emit_attr_kind_mismatch(
+      state, op, vtable, attr_ref, constraint->error, attr.kind, expected_kind);
 }
 
 // ATTR_I64_PREDICATE: an i64 attribute satisfies a predicate stored in the
@@ -3126,6 +3186,8 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_FIELD_SATISFIES] = loom_verify_relation_field_satisfies,
     [LOOM_RELATION_ATTR_I64_PREDICATE] =
         loom_verify_relation_attr_i64_predicate,
+    [LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE] =
+        loom_verify_relation_attr_matches_element_type,
     [LOOM_RELATION_ELEMENT_WIDTH_ORDER] =
         loom_verify_relation_element_width_order,
     [LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR] =

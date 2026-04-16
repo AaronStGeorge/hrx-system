@@ -6,7 +6,6 @@
 
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
-#include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
 #include "loom/ops/index/ops.h"
 
@@ -104,28 +103,6 @@ static iree_status_t loom_index_emit_assume_type_mismatch(
       loom_param_type(result_type),
   };
   return loom_index_emit(emitter, op, &loom_err_type_001, params,
-                         IREE_ARRAYSIZE(params));
-}
-
-iree_status_t loom_index_constant_verify(const loom_module_t* module,
-                                         const loom_op_t* op,
-                                         iree_diagnostic_emitter_t emitter) {
-  loom_type_t result_type =
-      loom_module_value_type(module, loom_index_constant_result(op));
-  if (!loom_index_type_is_address(result_type)) return iree_ok_status();
-  loom_attribute_t value = loom_index_constant_value(op);
-  loom_attr_kind_t expected_kind = LOOM_ATTR_ANY;
-  if (loom_attr_matches_scalar_type(value, loom_type_element_type(result_type),
-                                    &expected_kind)) {
-    return iree_ok_status();
-  }
-
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(IREE_SV("value")),
-      loom_param_u32(value.kind),
-      loom_param_u32(expected_kind),
-  };
-  return loom_index_emit(emitter, op, &loom_err_type_005, params,
                          IREE_ARRAYSIZE(params));
 }
 

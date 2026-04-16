@@ -180,6 +180,7 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_ALL_SAME] = "AllSame",
       [LOOM_RELATION_FIELD_SATISFIES] = "FieldSatisfies",
       [LOOM_RELATION_ATTR_I64_PREDICATE] = "AttrI64Predicate",
+      [LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE] = "AttrMatchesElementType",
       [LOOM_RELATION_ELEMENT_WIDTH_ORDER] = "ElementWidthOrder",
       [LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR] = "ElementWidthAtLeastAttr",
       [LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH] =

@@ -413,6 +413,11 @@ enum loom_constraint_relation_e {
   // property slot. Args: (i64 attr field). Used by PositiveBitWidthAttr.
   LOOM_RELATION_ATTR_I64_PREDICATE,
 
+  // An attribute literal payload kind matches the scalar element type of a
+  // value field. Args: (attr field, value field). Used by
+  // AttrMatchesElementType.
+  LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE,
+
   // The scalar or shaped element bit width of the first value field is
   // strictly ordered against the second value field. The property slot stores
   // the order predicate. Args: (checked value field, reference value field).

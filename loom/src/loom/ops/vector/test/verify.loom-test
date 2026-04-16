@@ -102,6 +102,14 @@ func.def @constant_payload_mismatch() {
 
 // ====
 
+func.def @constant_i1_payload_mismatch() {
+  // ERROR@+1: TYPE/005 "value"
+  %r = vector.constant 2 : vector<4xi1>
+  func.return
+}
+
+// ====
+
 // Static zero-lane vectors are empty aggregates, not poison.
 func.def @poison_static_zero_lane() {
   // ERROR@+1: TYPE/004 "use vector.empty"

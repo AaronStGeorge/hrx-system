@@ -59,6 +59,7 @@ from loom.dsl import (
     AllShapesMatch,
     AllTypesMatch,
     AttrDef,
+    AttrMatchesElementType,
     BitRangeWithinElementWidth,
     BlockArgCount,
     BlockArgsMatchElementTypes,
@@ -613,6 +614,66 @@ class TestConstraints:
         assert constraint.check({"width": 1})[0]
         assert not constraint.check({"width": 0})[0]
         assert not constraint.check({"width": -1})[0]
+
+    def test_attr_matches_element_type(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        constraint = AttrMatchesElementType("value", "result")
+        assert constraint.name == "AttrMatchesElementType"
+        assert constraint.args == ("value", "result")
+        assert constraint.check(
+            {
+                "value": 0.0,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),))),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "value": 0,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),))),
+            }
+        )[0]
+        assert constraint.check(
+            {
+                "value": 7,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "value": True,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+            }
+        )[0]
+        assert constraint.check(
+            {
+                "value": True,
+                "result": FakeValue(
+                    ShapedType(TypeKind.VECTOR, ir.I1, (StaticDim(4),))
+                ),
+            }
+        )[0]
+        assert constraint.check(
+            {
+                "value": 1,
+                "result": FakeValue(
+                    ShapedType(TypeKind.VECTOR, ir.I1, (StaticDim(4),))
+                ),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "value": 2,
+                "result": FakeValue(
+                    ShapedType(TypeKind.VECTOR, ir.I1, (StaticDim(4),))
+                ),
+            }
+        )[0]
+        assert constraint.check({"value": 4, "result": FakeValue(ir.INDEX)})[0]
+        assert constraint.check({"value": 4, "result": FakeValue(ir.OFFSET)})[0]
+        assert not constraint.check({"value": True, "result": FakeValue(ir.INDEX)})[0]
 
     def test_total_bit_count_equal(self) -> None:
         class FakeValue:

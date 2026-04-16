@@ -38,7 +38,11 @@ class TestIndexDialect:
 
     def test_constant_is_address_only(self) -> None:
         op = _ops()["index.constant"]
+        constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+
         assert op.results[0].type_constraint == ADDRESS
+        assert ("AttrMatchesElementType", ("value", "result")) in constraints
+        assert not op.verify
 
     def test_cast_accepts_scalar_and_verifies_address_boundary(self) -> None:
         op = _ops()["index.cast"]

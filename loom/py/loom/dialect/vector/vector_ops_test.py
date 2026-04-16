@@ -615,6 +615,14 @@ def test_vector_bitcast_is_whole_register_not_lanewise_only() -> None:
     assert "Elementwise" not in trait_names
 
 
+def test_vector_constant_payload_type_is_generated_constraint() -> None:
+    op = _op_by_name()["vector.constant"]
+    constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
+
+    assert ("AttrMatchesElementType", ("value", "result")) in constraints
+    assert not op.verify
+
+
 def test_vector_bitfield_ops_are_pure_integer_register_ops() -> None:
     ops = _op_by_name()
 

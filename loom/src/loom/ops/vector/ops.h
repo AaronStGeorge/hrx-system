@@ -341,9 +341,6 @@ iree_status_t loom_vector_constant_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
-iree_status_t loom_vector_constant_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_POISON: Materialize a typed Loom poison vector. Poison represents an invalid vector value and propagates through pure vector ops until dead-code elimination removes it or a boundary diagnoses it. A zero-lane vector such as vector<0xf32> is not poison: it is an empty aggregate whose pure lane-wise computation and zero-lane memory effects should canonicalize away. Poison is introduced when IR observes something that cannot exist, such as a lane extracted from a vector proven to have zero lanes.
 // %p = vector.poison : vector<4xf32>

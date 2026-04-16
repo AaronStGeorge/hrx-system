@@ -679,24 +679,6 @@ static iree_status_t loom_vector_verify_optional_cache_policy(
       loom_cache_policy_error_expected_constraint(error));
 }
 
-iree_status_t loom_vector_constant_verify(const loom_module_t* module,
-                                          const loom_op_t* op,
-                                          iree_diagnostic_emitter_t emitter) {
-  loom_type_t result_type =
-      loom_module_value_type(module, loom_vector_constant_result(op));
-  if (!loom_type_is_vector(result_type)) return iree_ok_status();
-
-  loom_attribute_t value = loom_vector_constant_value(op);
-  loom_attr_kind_t expected_kind = LOOM_ATTR_ANY;
-  if (loom_attr_matches_scalar_type(value, loom_type_element_type(result_type),
-                                    &expected_kind)) {
-    return iree_ok_status();
-  }
-  return loom_vector_emit_attribute_kind_mismatch(emitter, op, IREE_SV("value"),
-                                                  (loom_attr_kind_t)value.kind,
-                                                  expected_kind);
-}
-
 iree_status_t loom_vector_poison_verify(const loom_module_t* module,
                                         const loom_op_t* op,
                                         iree_diagnostic_emitter_t emitter) {

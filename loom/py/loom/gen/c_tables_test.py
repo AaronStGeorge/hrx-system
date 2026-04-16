@@ -24,6 +24,7 @@ from loom.dsl import (
     ATTR_TYPE_I64_ARRAY,
     INTEGER,
     AttrDef,
+    AttrMatchesElementType,
     BitRangeWithinElementWidth,
     Dialect,
     ElementWidthAtLeastAttr,
@@ -107,6 +108,22 @@ def test_generate_tables_emits_bit_width_attr_constraints() -> None:
     assert "LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR" in tables_c
     assert "LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH" in tables_c
     assert "LOOM_FIELD_REF(2, 0), LOOM_FIELD_REF(2, 1)" in tables_c
+
+
+def test_generate_tables_emits_attr_matches_element_type_constraint() -> None:
+    op = Op(
+        "test.constant",
+        group=Dialect("test"),
+        results=[Result("result", INTEGER)],
+        attrs=[AttrDef("value", "any")],
+        constraints=[AttrMatchesElementType("value", "result")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE" in tables_c
+    assert "LOOM_PROPERTY_ELEMENT_TYPE" in tables_c
+    assert "LOOM_FIELD_REF(2, 0), LOOM_FIELD_REF(1, 0)" in tables_c
 
 
 def test_generate_tables_emits_bit_count_constraints() -> None:

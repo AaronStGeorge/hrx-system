@@ -29,6 +29,7 @@ from loom.dsl import (
     PURE,
     SCALAR,
     AttrDef,
+    AttrMatchesElementType,
     Dialect,
     EnumCase,
     EnumDef,
@@ -84,9 +85,9 @@ index_constant = Op(
     ),
     results=[Result("result", ADDRESS)],
     attrs=[AttrDef("value", "any", doc="The constant integer value.")],
+    constraints=[AttrMatchesElementType("value", "result")],
     traits=[PURE, CONSTANT_LIKE],
     facts="loom_index_constant_facts",
-    verify="loom_index_constant_verify",
     format=[Attr("value"), COLON, TypeOf("result")],
     examples=[
         "%c0 = index.constant 0 : index",

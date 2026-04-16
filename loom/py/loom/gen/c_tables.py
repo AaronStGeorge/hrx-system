@@ -245,6 +245,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_ATTR_I64_PREDICATE",
         "LOOM_PROPERTY_BIT_WIDTH_POSITIVE",
     ),
+    "AttrMatchesElementType": (
+        "LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE",
+        "LOOM_PROPERTY_ELEMENT_TYPE",
+    ),
     "TotalBitCountEqual": (
         "LOOM_RELATION_TOTAL_BIT_COUNT_EQUAL",
         "LOOM_PROPERTY_TOTAL_BIT_COUNT",

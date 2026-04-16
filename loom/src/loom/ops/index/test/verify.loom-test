@@ -18,6 +18,14 @@ func.def @constant_rejects_float_payload() -> (index) {
 
 // ====
 
+func.def @constant_rejects_bool_payload() -> (offset) {
+  // ERROR@+1: TYPE/005 "value"
+  %c = index.constant true : offset
+  func.return %c : offset
+}
+
+// ====
+
 func.def @cast_rejects_float_input(%x: f32) -> (index) {
   // ERROR@+1: TYPE/003 "input" "f32" "integer, index, or offset"
   %i = index.cast %x : f32 to index
