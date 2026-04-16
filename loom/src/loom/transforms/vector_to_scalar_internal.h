@@ -185,6 +185,21 @@ iree_status_t loom_vector_to_scalar_build_scalar_shift(
     loom_value_id_t input, loom_type_t type, int64_t amount,
     loom_value_id_t* out_result);
 
+iree_status_t loom_vector_to_scalar_build_scalar_shift_term(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t input, loom_type_t type,
+    loom_vector_to_scalar_index_term_t amount, loom_value_id_t* out_result);
+
+iree_status_t loom_vector_to_scalar_build_bitstream_base_term(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_term_t lane_ordinal, int64_t lane_bit_width,
+    loom_vector_to_scalar_index_term_t* out_position);
+
+iree_status_t loom_vector_to_scalar_build_single_bit_extract(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t lane,
+    loom_type_t lane_type, loom_vector_to_scalar_index_term_t bit_shift,
+    loom_value_id_t one_mask, loom_value_id_t* out_bit);
+
 iree_status_t loom_vector_to_scalar_checked_static_bit_position(
     int64_t ordinal, int64_t bit_width, int64_t* out_position);
 
@@ -199,6 +214,11 @@ iree_status_t loom_vector_to_scalar_build_lane(
 iree_status_t loom_vector_to_scalar_materialize_lane(
     loom_vector_to_scalar_state_t* state, loom_value_id_t value,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_materialize_linear_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
+    loom_type_t vector_type, loom_vector_to_scalar_index_term_t ordinal,
+    loom_value_id_t* out_lane);
 
 iree_status_t loom_vector_to_scalar_insert_lane(
     loom_vector_to_scalar_state_t* state, loom_value_id_t lane,

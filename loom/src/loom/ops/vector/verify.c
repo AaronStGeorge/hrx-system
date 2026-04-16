@@ -2127,6 +2127,80 @@ iree_status_t loom_vector_trunci_verify(const loom_module_t* module,
       IREE_SV("narrower integer element type"));
 }
 
+typedef struct loom_vector_total_bit_count_expr_t {
+  // Product of all static dimensions and the element bit width.
+  uint64_t static_factor;
+  // Sorted dynamic dimension value IDs participating in the product.
+  loom_value_id_t dynamic_dims[LOOM_TYPE_MAX_RANK];
+  // Number of entries used in dynamic_dims.
+  uint8_t dynamic_dim_count;
+} loom_vector_total_bit_count_expr_t;
+
+static void loom_vector_sort_dynamic_dims(loom_value_id_t* dims,
+                                          uint8_t dim_count) {
+  for (uint8_t i = 1; i < dim_count; ++i) {
+    loom_value_id_t value = dims[i];
+    uint8_t j = i;
+    while (j > 0 && dims[j - 1] > value) {
+      dims[j] = dims[j - 1];
+      --j;
+    }
+    dims[j] = value;
+  }
+}
+
+static bool loom_vector_total_bit_count_expr(
+    loom_type_t type, int32_t element_width,
+    loom_vector_total_bit_count_expr_t* out_expr) {
+  *out_expr = (loom_vector_total_bit_count_expr_t){
+      .static_factor = (uint64_t)element_width,
+  };
+  if (element_width <= 0 || !loom_type_is_vector(type)) return false;
+
+  uint8_t rank = loom_type_rank(type);
+  for (uint8_t i = 0; i < rank; ++i) {
+    if (loom_type_dim_is_dynamic_at(type, i)) {
+      if (out_expr->dynamic_dim_count >=
+          IREE_ARRAYSIZE(out_expr->dynamic_dims)) {
+        return false;
+      }
+      out_expr->dynamic_dims[out_expr->dynamic_dim_count++] =
+          loom_type_dim_value_id_at(type, i);
+      continue;
+    }
+
+    int64_t dimension_size = loom_type_dim_static_size_at(type, i);
+    if (dimension_size < 0) return false;
+    if (dimension_size == 0) {
+      out_expr->static_factor = 0;
+      out_expr->dynamic_dim_count = 0;
+      return true;
+    }
+    uint64_t dimension_size_u64 = (uint64_t)dimension_size;
+    if (out_expr->static_factor > UINT64_MAX / dimension_size_u64) {
+      return false;
+    }
+    out_expr->static_factor *= dimension_size_u64;
+  }
+
+  loom_vector_sort_dynamic_dims(out_expr->dynamic_dims,
+                                out_expr->dynamic_dim_count);
+  return true;
+}
+
+static bool loom_vector_total_bit_count_expr_equal(
+    const loom_vector_total_bit_count_expr_t* lhs,
+    const loom_vector_total_bit_count_expr_t* rhs) {
+  if (lhs->static_factor != rhs->static_factor ||
+      lhs->dynamic_dim_count != rhs->dynamic_dim_count) {
+    return false;
+  }
+  for (uint8_t i = 0; i < lhs->dynamic_dim_count; ++i) {
+    if (lhs->dynamic_dims[i] != rhs->dynamic_dims[i]) return false;
+  }
+  return true;
+}
+
 iree_status_t loom_vector_bitcast_verify(const loom_module_t* module,
                                          const loom_op_t* op,
                                          iree_diagnostic_emitter_t emitter) {
@@ -2145,26 +2219,20 @@ iree_status_t loom_vector_bitcast_verify(const loom_module_t* module,
     return iree_ok_status();
   }
 
-  uint64_t input_element_count = 0;
-  bool input_element_count_is_static =
-      loom_type_static_element_count(input_type, &input_element_count);
-  uint64_t result_element_count = 0;
-  bool result_element_count_is_static =
-      loom_type_static_element_count(result_type, &result_element_count);
-  if (input_element_count_is_static && result_element_count_is_static) {
-    uint64_t input_bit_count = 0;
-    uint64_t result_bit_count = 0;
-    if (input_element_count <= UINT64_MAX / (uint64_t)input_width &&
-        result_element_count <= UINT64_MAX / (uint64_t)result_width) {
-      input_bit_count = input_element_count * (uint64_t)input_width;
-      result_bit_count = result_element_count * (uint64_t)result_width;
-      if (input_bit_count == result_bit_count) return iree_ok_status();
-    }
+  loom_vector_total_bit_count_expr_t input_bit_count = {0};
+  loom_vector_total_bit_count_expr_t result_bit_count = {0};
+  if (loom_vector_total_bit_count_expr(input_type, input_width,
+                                       &input_bit_count) &&
+      loom_vector_total_bit_count_expr(result_type, result_width,
+                                       &result_bit_count) &&
+      loom_vector_total_bit_count_expr_equal(&input_bit_count,
+                                             &result_bit_count)) {
+    return iree_ok_status();
   }
 
   return loom_vector_emit_result_constraint(
       emitter, op, IREE_SV("result"), result_type,
-      IREE_SV("statically provable same total bit count as input"));
+      IREE_SV("provably same total bit count as input"));
 }
 
 static iree_status_t loom_vector_verify_bitfield_range(

@@ -441,6 +441,74 @@ void loom_vector_to_scalar_indices_from_ordinal(loom_type_t vector_type,
   }
 }
 
+static iree_status_t loom_vector_to_scalar_indices_from_ordinal_term(
+    loom_vector_to_scalar_state_t* state, loom_type_t vector_type,
+    loom_vector_to_scalar_index_term_t ordinal,
+    loom_vector_to_scalar_index_list_t* out_indices) {
+  uint8_t rank = loom_type_rank(vector_type);
+  if (!ordinal.is_dynamic && ordinal.static_value < 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "negative static vector lane ordinal");
+  }
+  if (!ordinal.is_dynamic && loom_type_is_all_static(vector_type)) {
+    int64_t* static_indices = NULL;
+    if (rank > 0) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(state->rewriter->arena,
+                                                     rank, sizeof(int64_t),
+                                                     (void**)&static_indices));
+    }
+    loom_vector_to_scalar_indices_from_ordinal(
+        vector_type, (iree_host_size_t)ordinal.static_value, static_indices);
+    *out_indices = (loom_vector_to_scalar_index_list_t){
+        .static_indices = static_indices,
+        .rank = rank,
+    };
+    return iree_ok_status();
+  }
+
+  if (rank == 1) {
+    loom_vector_to_scalar_index_term_t* terms = NULL;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->rewriter->arena, 1, sizeof(loom_vector_to_scalar_index_term_t),
+        (void**)&terms));
+    terms[0] = ordinal;
+    return loom_vector_to_scalar_terms_to_index_list(state, terms, 1,
+                                                     out_indices);
+  }
+
+  loom_vector_to_scalar_index_term_t* terms = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->rewriter->arena, rank, sizeof(loom_vector_to_scalar_index_term_t),
+      (void**)&terms));
+  loom_vector_to_scalar_index_term_t remaining = ordinal;
+  for (uint8_t reverse_axis = 0; reverse_axis < rank; ++reverse_axis) {
+    uint8_t axis = (uint8_t)(rank - reverse_axis - 1);
+    if (axis == 0) {
+      terms[axis] = remaining;
+      break;
+    }
+    loom_vector_to_scalar_index_term_t dim =
+        loom_vector_to_scalar_dim_bound_term(state, vector_type, axis);
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+        state, LOOM_OP_INDEX_REM, remaining, dim, &terms[axis]));
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+        state, LOOM_OP_INDEX_DIV, remaining, dim, &remaining));
+  }
+  return loom_vector_to_scalar_terms_to_index_list(state, terms, rank,
+                                                   out_indices);
+}
+
+iree_status_t loom_vector_to_scalar_materialize_linear_lane(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t vector_value,
+    loom_type_t vector_type, loom_vector_to_scalar_index_term_t ordinal,
+    loom_value_id_t* out_lane) {
+  loom_vector_to_scalar_index_list_t indices = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_indices_from_ordinal_term(
+      state, vector_type, ordinal, &indices));
+  return loom_vector_to_scalar_materialize_lane(state, vector_value, indices,
+                                                out_lane);
+}
+
 loom_vector_to_scalar_index_term_t loom_vector_to_scalar_dim_bound_term(
     loom_vector_to_scalar_state_t* state, loom_type_t vector_type,
     uint8_t axis) {

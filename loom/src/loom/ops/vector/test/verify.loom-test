@@ -958,9 +958,9 @@ func.def @trunci_wrong_width(%v: vector<4xi8>) {
 
 // ====
 
-// Bitcasts require statically provable total register bit preservation.
+// Bitcasts require provable total register bit preservation.
 func.def @bitcast_width_mismatch(%v: vector<4xf32>) {
-  // ERROR@+1: TYPE/004 "statically provable same total bit count as input"
+  // ERROR@+1: TYPE/004 "provably same total bit count as input"
   %r = vector.bitcast %v : vector<4xf32> to vector<4xi16>
   func.return
 }
@@ -969,8 +969,17 @@ func.def @bitcast_width_mismatch(%v: vector<4xf32>) {
 
 // Aggregate bitcasts can reinterpret packed bytes as narrower element counts.
 func.def @bitcast_aggregate_width_mismatch(%v: vector<3xi8>) {
-  // ERROR@+1: TYPE/004 "statically provable same total bit count as input"
+  // ERROR@+1: TYPE/004 "provably same total bit count as input"
   %r = vector.bitcast %v : vector<3xi8> to vector<1xf16>
+  func.return
+}
+
+// ====
+
+// Dynamic shape-changing bitcasts require the same symbolic total bit count.
+func.def @bitcast_dynamic_symbol_mismatch(%n: index, %m: index, %v: vector<[%n]x2xi8>) {
+  // ERROR@+1: TYPE/004 "provably same total bit count as input"
+  %r = vector.bitcast %v : vector<[%n]x2xi8> to vector<[%m]xf16>
   func.return
 }
 

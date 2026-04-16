@@ -834,6 +834,96 @@ func.def @static_shape_changing_bitcast(%bytes: vector<2xi8>, %half: vector<1xf1
 
 // ====
 
+// Dynamic shape-changing bitcasts use the same linear bitstream model as the
+// static aggregate path when symbolic total bit counts match.
+func.def @dynamic_shape_changing_bitcast(%n: index, %bytes: vector<[%n]x2xi8>, %halves: vector<[%n]xf16>) -> (vector<[%n]xf16>, vector<[%n]x2xi8>) {
+  %to_half = vector.bitcast %bytes : vector<[%n]x2xi8> to vector<[%n]xf16>
+  %to_bytes = vector.bitcast %halves : vector<[%n]xf16> to vector<[%n]x2xi8>
+  func.return %to_half, %to_bytes : vector<[%n]xf16>, vector<[%n]x2xi8>
+}
+
+// ----
+func.def @dynamic_shape_changing_bitcast(%n: index, %bytes: vector<[%n]x2xi8>, %halves: vector<[%n]xf16>) -> (vector<[%n]xf16>, vector<[%n]x2xi8>) {
+  %47 = vector.constant 0.0 : vector<[%n]xf16>
+  %48 = index.constant 0 : index
+  %49 = index.constant 1 : index
+  %to_half = scf.for %50 = [%48 to %n step %49](%51 = %47 : vector<[%n]xf16>) -> (vector<[%n]xf16>) {
+    %53 = index.constant 16 : index
+    %54 = index.mul %50, %53 : index
+    %55 = index.constant 0 : index
+    %56 = index.constant 16 : index
+    %57 = index.constant 1 : index
+    %58 = scalar.constant 1 : i8
+    %59 = scalar.constant 0 : i16
+    %62 = scf.for %60 = [%55 to %56 step %57](%61 = %59 : i16) -> (i16) {
+      %63 = index.add %54, %60 : index
+      %64 = index.constant 8 : index
+      %65 = index.div %63, %64 : index
+      %66 = index.constant 8 : index
+      %67 = index.rem %63, %66 : index
+      %68 = index.constant 2 : index
+      %69 = index.rem %65, %68 : index
+      %70 = index.constant 2 : index
+      %71 = index.div %65, %70 : index
+      %72 = vector.extract %bytes[%71, %69] : vector<[%n]x2xi8> -> i8
+      %73 = index.cast %67 : index to i8
+      %74 = scalar.shrui %72, %73 : i8
+      %75 = scalar.andi %74, %58 : i8
+      %76 = scalar.extui %75 : i8 to i16
+      %77 = index.cast %60 : index to i16
+      %78 = scalar.shli %76, %77 : i16
+      %79 = scalar.ori %61, %78 : i16
+      scf.yield %79 : i16
+    }
+    %80 = scalar.bitcast %62 : i16 to f16
+    %81 = vector.insert %80 into %51[%50] : f16, vector<[%n]xf16>
+    scf.yield %81 : vector<[%n]xf16>
+  }
+  %7 = vector.constant 0 : vector<[%n]x2xi8>
+  %8 = index.constant 0 : index
+  %9 = index.constant 1 : index
+  %to_bytes = scf.for %10 = [%8 to %n step %9](%11 = %7 : vector<[%n]x2xi8>) -> (vector<[%n]x2xi8>) {
+    %13 = index.constant 0 : index
+    %14 = index.constant 1 : index
+    %15 = index.constant 2 : index
+    %18 = scf.for %16 = [%13 to %15 step %14](%17 = %11 : vector<[%n]x2xi8>) -> (vector<[%n]x2xi8>) {
+      %19 = index.constant 2 : index
+      %20 = index.mul %10, %19 : index
+      %21 = index.add %20, %16 : index
+      %22 = index.constant 8 : index
+      %23 = index.mul %21, %22 : index
+      %24 = index.constant 0 : index
+      %25 = index.constant 8 : index
+      %26 = index.constant 1 : index
+      %27 = scalar.constant 1 : i16
+      %28 = scalar.constant 0 : i8
+      %31 = scf.for %29 = [%24 to %25 step %26](%30 = %28 : i8) -> (i8) {
+        %32 = index.add %23, %29 : index
+        %33 = index.constant 16 : index
+        %34 = index.div %32, %33 : index
+        %35 = index.constant 16 : index
+        %36 = index.rem %32, %35 : index
+        %37 = vector.extract %halves[%34] : vector<[%n]xf16> -> f16
+        %38 = scalar.bitcast %37 : f16 to i16
+        %39 = index.cast %36 : index to i16
+        %40 = scalar.shrui %38, %39 : i16
+        %41 = scalar.andi %40, %27 : i16
+        %42 = scalar.trunci %41 : i16 to i8
+        %43 = index.cast %29 : index to i8
+        %44 = scalar.shli %42, %43 : i8
+        %45 = scalar.ori %30, %44 : i8
+        scf.yield %45 : i8
+      }
+      %46 = vector.insert %31 into %17[%10, %16] : i8, vector<[%n]x2xi8>
+      scf.yield %46 : vector<[%n]x2xi8>
+    }
+    scf.yield %18 : vector<[%n]x2xi8>
+  }
+  func.return %to_half, %to_bytes : vector<[%n]xf16>, vector<[%n]x2xi8>
+}
+
+// ====
+
 // Multi-result deinterleave lowers each result independently and can see
 // through a static interleave producer.
 func.def @static_interleave_deinterleave(%a: vector<2xi8>, %b: vector<2xi8>) -> (vector<4xi8>, vector<2xi8>, vector<2xi8>) {
