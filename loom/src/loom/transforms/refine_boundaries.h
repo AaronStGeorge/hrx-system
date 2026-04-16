@@ -4,12 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Whole-program boundary fact refinement.
+// Whole-program boundary fact and type refinement.
 //
 // This module pass propagates stable value facts across direct function
-// boundaries and drives the reusable canonicalizer until those boundary facts
-// stop changing. It is intentionally a boundary driver, not a local pattern
-// collection: local simplification still happens through canonicalize.
+// boundaries, uses those facts to refine private boundary types, and drives the
+// reusable canonicalizer until those boundary summaries stop changing. It is
+// intentionally a boundary driver, not a local pattern collection: local
+// simplification still happens through canonicalize.
 
 #ifndef LOOM_TRANSFORMS_REFINE_BOUNDARIES_H_
 #define LOOM_TRANSFORMS_REFINE_BOUNDARIES_H_
@@ -23,7 +24,8 @@ extern "C" {
 // Returns immutable metadata for the refine-boundaries pass.
 const loom_pass_info_t* loom_refine_boundaries_pass_info(void);
 
-// Propagates direct-call boundary facts through the module.
+// Propagates direct-call boundary facts and type refinements through the
+// module.
 iree_status_t loom_refine_boundaries_run(loom_pass_t* pass,
                                          loom_module_t* module);
 

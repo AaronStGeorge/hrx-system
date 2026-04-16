@@ -388,8 +388,10 @@ loom_cc_library(
     ::pass
     iree::base
     loom::src::loom::analysis::scc
+    loom::src::loom::analysis::type_refinement
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ir::type_refinement
     loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
