@@ -2191,6 +2191,26 @@ static void loom_verify_emit_i64_attr_constraint(
                               IREE_ARRAYSIZE(params));
 }
 
+static void loom_verify_emit_value_field_constraint(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, uint8_t field_ref, loom_type_t actual_type,
+    iree_string_view_t expected_constraint) {
+  char field_name_buffer[32];
+  iree_string_view_t field_name = loom_verify_field_name(
+      vtable, field_ref, field_name_buffer, sizeof(field_name_buffer));
+  const loom_error_def_t* error =
+      LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
+          ? &loom_err_type_004
+          : &loom_err_type_003;
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(field_name, field_ref),
+      loom_param_type(actual_type),
+      loom_param_string(expected_constraint),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 3 ? error->param_count : 3);
+}
+
 // ATTR_I64_PREDICATE: an i64 attribute satisfies a predicate stored in the
 // property slot. Args: (i64 attr field).
 static void loom_verify_relation_attr_i64_predicate(
@@ -2377,6 +2397,251 @@ static void loom_verify_relation_bit_range_within_element_width(
   loom_verify_emit_i64_attr_constraint(
       state, op, vtable, width_ref, width,
       IREE_SV("bitfield range within storage element width"));
+}
+
+typedef struct loom_verify_total_bit_count_expr_t {
+  // Product of all static dimensions and the element bit width.
+  uint64_t static_factor;
+  // Sorted dynamic dimension value IDs participating in the product.
+  loom_value_id_t dynamic_dims[LOOM_TYPE_MAX_RANK];
+  // Number of entries used in dynamic_dims.
+  uint8_t dynamic_dim_count;
+} loom_verify_total_bit_count_expr_t;
+
+static void loom_verify_sort_dynamic_dims(loom_value_id_t* dims,
+                                          uint8_t dim_count) {
+  for (uint8_t i = 1; i < dim_count; ++i) {
+    loom_value_id_t value_id = dims[i];
+    uint8_t j = i;
+    while (j > 0 && dims[j - 1] > value_id) {
+      dims[j] = dims[j - 1];
+      --j;
+    }
+    dims[j] = value_id;
+  }
+}
+
+static bool loom_verify_total_bit_count_expr(
+    loom_type_t type, int32_t element_width,
+    loom_verify_total_bit_count_expr_t* out_expr) {
+  *out_expr = (loom_verify_total_bit_count_expr_t){
+      .static_factor = (uint64_t)element_width,
+  };
+  if (element_width <= 0) return false;
+  if (loom_type_is_scalar(type)) return true;
+  if (!loom_type_is_shaped(type)) return false;
+
+  uint8_t rank = loom_type_rank(type);
+  for (uint8_t i = 0; i < rank; ++i) {
+    if (loom_type_dim_is_dynamic_at(type, i)) {
+      if (out_expr->dynamic_dim_count >=
+          IREE_ARRAYSIZE(out_expr->dynamic_dims)) {
+        return false;
+      }
+      loom_value_id_t dimension_value_id = loom_type_dim_value_id_at(type, i);
+      if (dimension_value_id == LOOM_VALUE_ID_INVALID) return false;
+      out_expr->dynamic_dims[out_expr->dynamic_dim_count++] =
+          dimension_value_id;
+      continue;
+    }
+
+    int64_t dimension_size = loom_type_dim_static_size_at(type, i);
+    if (dimension_size < 0) return false;
+    if (dimension_size == 0) {
+      out_expr->static_factor = 0;
+      out_expr->dynamic_dim_count = 0;
+      return true;
+    }
+    uint64_t dimension_size_u64 = (uint64_t)dimension_size;
+    if (out_expr->static_factor > UINT64_MAX / dimension_size_u64) {
+      return false;
+    }
+    out_expr->static_factor *= dimension_size_u64;
+  }
+
+  loom_verify_sort_dynamic_dims(out_expr->dynamic_dims,
+                                out_expr->dynamic_dim_count);
+  return true;
+}
+
+static bool loom_verify_total_bit_count_expr_equal(
+    const loom_verify_total_bit_count_expr_t* lhs,
+    const loom_verify_total_bit_count_expr_t* rhs) {
+  if (lhs->static_factor != rhs->static_factor ||
+      lhs->dynamic_dim_count != rhs->dynamic_dim_count) {
+    return false;
+  }
+  for (uint8_t i = 0; i < lhs->dynamic_dim_count; ++i) {
+    if (lhs->dynamic_dims[i] != rhs->dynamic_dims[i]) return false;
+  }
+  return true;
+}
+
+// TOTAL_BIT_COUNT_EQUAL: two value fields must have the same total bit count
+// when expressed as element-bit-width times element count. Dynamic dimensions
+// are compared by SSA identity after sorting, so vector<[%m]x2xi8> and
+// vector<[%m]xi16> prove equal without needing arithmetic facts. Args:
+// (lhs value field, rhs value field).
+static void loom_verify_relation_total_bit_count_equal(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint8_t lhs_ref = constraint->args[0];
+  uint8_t rhs_ref = constraint->args[1];
+  if (loom_verify_is_variadic_field(vtable, lhs_ref) ||
+      loom_verify_is_variadic_field(vtable, rhs_ref)) {
+    return;
+  }
+
+  loom_value_id_t lhs_value_id = loom_verify_resolve_value_field(op, lhs_ref);
+  loom_value_id_t rhs_value_id = loom_verify_resolve_value_field(op, rhs_ref);
+  if (lhs_value_id == LOOM_VALUE_ID_INVALID ||
+      rhs_value_id == LOOM_VALUE_ID_INVALID) {
+    return;
+  }
+
+  loom_type_t lhs_type = loom_verify_value_type(state, lhs_value_id);
+  loom_type_t rhs_type = loom_verify_value_type(state, rhs_value_id);
+  int32_t lhs_width = 0;
+  int32_t rhs_width = 0;
+  if (!loom_verify_query_element_bit_width(lhs_type, &lhs_width) ||
+      !loom_verify_query_element_bit_width(rhs_type, &rhs_width)) {
+    return;
+  }
+
+  if (lhs_width == rhs_width && loom_type_shape_equals(lhs_type, rhs_type)) {
+    return;
+  }
+
+  loom_verify_total_bit_count_expr_t lhs_bit_count = {0};
+  loom_verify_total_bit_count_expr_t rhs_bit_count = {0};
+  bool counts_match =
+      loom_verify_total_bit_count_expr(lhs_type, lhs_width, &lhs_bit_count) &&
+      loom_verify_total_bit_count_expr(rhs_type, rhs_width, &rhs_bit_count) &&
+      loom_verify_total_bit_count_expr_equal(&lhs_bit_count, &rhs_bit_count);
+  if (counts_match) return;
+
+  char lhs_name_buffer[32];
+  char expected_buffer[96];
+  iree_string_view_t lhs_name = loom_verify_field_name(
+      vtable, lhs_ref, lhs_name_buffer, sizeof(lhs_name_buffer));
+  iree_snprintf(expected_buffer, sizeof(expected_buffer),
+                "provably same total bit count as %.*s", (int)lhs_name.size,
+                lhs_name.data);
+  loom_verify_emit_value_field_constraint(
+      state, op, vtable, rhs_ref, rhs_type,
+      iree_make_cstring_view(expected_buffer));
+}
+
+static bool loom_verify_static_bit_count(loom_type_t type,
+                                         int64_t bit_width_per_element,
+                                         bool* out_is_static,
+                                         uint64_t* out_bit_count) {
+  *out_is_static = false;
+  *out_bit_count = 0;
+  if (bit_width_per_element < 0) return false;
+
+  uint64_t element_count = 0;
+  if (loom_type_is_scalar(type)) {
+    element_count = 1;
+  } else if (!loom_type_static_element_count(type, &element_count)) {
+    return true;
+  }
+
+  *out_is_static = true;
+  if (bit_width_per_element == 0) return true;
+  uint64_t bit_width = (uint64_t)bit_width_per_element;
+  if (element_count > UINT64_MAX / bit_width) return false;
+  *out_bit_count = element_count * bit_width;
+  return true;
+}
+
+static iree_string_view_t loom_verify_payload_bit_count_mismatch_constraint(
+    loom_constraint_property_t property) {
+  switch ((enum loom_constraint_property_e)property) {
+    case LOOM_PROPERTY_PACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE:
+      return IREE_SV(
+          "packed payload bit count equal to result storage bit count");
+    case LOOM_PROPERTY_UNPACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE:
+      return IREE_SV(
+          "unpacked payload bit count equal to source storage bit count");
+    default:
+      return IREE_SV("payload bit count equal to storage bit count");
+  }
+}
+
+// PAYLOAD_BIT_COUNT_MATCHES_STORAGE: a payload field with a fixed element bit
+// width stored in an i64 attr must have the same static total bit count as a
+// storage value field. Dynamic shapes are accepted here because the relation is
+// only intended to catch concrete bitstream-size mistakes without requiring a
+// symbolic arithmetic solver. Args: (payload value field, width i64 attr field,
+// storage value field, diagnostic value field).
+static void loom_verify_relation_payload_bit_count_matches_storage(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 4) return;
+  uint8_t payload_ref = constraint->args[0];
+  uint8_t width_ref = constraint->args[1];
+  uint8_t storage_ref = constraint->args[2];
+  uint8_t diagnostic_ref = constraint->args[3];
+  if (loom_verify_is_variadic_field(vtable, payload_ref) ||
+      loom_verify_is_variadic_field(vtable, storage_ref) ||
+      loom_verify_is_variadic_field(vtable, diagnostic_ref)) {
+    return;
+  }
+
+  loom_value_id_t payload_value_id =
+      loom_verify_resolve_value_field(op, payload_ref);
+  loom_value_id_t storage_value_id =
+      loom_verify_resolve_value_field(op, storage_ref);
+  loom_value_id_t diagnostic_value_id =
+      loom_verify_resolve_value_field(op, diagnostic_ref);
+  int64_t payload_width = 0;
+  if (payload_value_id == LOOM_VALUE_ID_INVALID ||
+      storage_value_id == LOOM_VALUE_ID_INVALID ||
+      diagnostic_value_id == LOOM_VALUE_ID_INVALID ||
+      !loom_verify_resolve_i64_attr_field(op, width_ref, &payload_width) ||
+      payload_width <= 0) {
+    return;
+  }
+
+  loom_type_t payload_type = loom_verify_value_type(state, payload_value_id);
+  loom_type_t storage_type = loom_verify_value_type(state, storage_value_id);
+  loom_type_t diagnostic_type =
+      loom_verify_value_type(state, diagnostic_value_id);
+  int32_t storage_width = 0;
+  if (!loom_verify_query_element_bit_width(storage_type, &storage_width)) {
+    return;
+  }
+
+  bool payload_bit_count_is_static = false;
+  uint64_t payload_bit_count = 0;
+  if (!loom_verify_static_bit_count(payload_type, payload_width,
+                                    &payload_bit_count_is_static,
+                                    &payload_bit_count)) {
+    loom_verify_emit_value_field_constraint(
+        state, op, vtable, payload_ref, payload_type,
+        IREE_SV("representable static payload bit count"));
+    return;
+  }
+
+  bool storage_bit_count_is_static = false;
+  uint64_t storage_bit_count = 0;
+  if (!loom_verify_static_bit_count(storage_type, storage_width,
+                                    &storage_bit_count_is_static,
+                                    &storage_bit_count)) {
+    loom_verify_emit_value_field_constraint(
+        state, op, vtable, storage_ref, storage_type,
+        IREE_SV("representable static storage bit count"));
+    return;
+  }
+
+  if (!payload_bit_count_is_static || !storage_bit_count_is_static) return;
+  if (payload_bit_count == storage_bit_count) return;
+
+  loom_verify_emit_value_field_constraint(
+      state, op, vtable, diagnostic_ref, diagnostic_type,
+      loom_verify_payload_bit_count_mismatch_constraint(constraint->property));
 }
 
 static iree_string_view_t loom_verify_grouped_last_axis_divisibility_constraint(
@@ -2867,6 +3132,10 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
         loom_verify_relation_element_width_at_least_attr,
     [LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH] =
         loom_verify_relation_bit_range_within_element_width,
+    [LOOM_RELATION_TOTAL_BIT_COUNT_EQUAL] =
+        loom_verify_relation_total_bit_count_equal,
+    [LOOM_RELATION_PAYLOAD_BIT_COUNT_MATCHES_STORAGE] =
+        loom_verify_relation_payload_bit_count_matches_storage,
     [LOOM_RELATION_COUNT_MATCHES_RANK] =
         loom_verify_relation_count_matches_rank,
     [LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT] =

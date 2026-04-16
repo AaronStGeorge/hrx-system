@@ -88,6 +88,7 @@ from loom.dsl import (
     OffsetCountMatchesRank,
     Op,
     Operand,
+    PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
     RanksMatch,
     Reads,
@@ -98,7 +99,9 @@ from loom.dsl import (
     SameKind,
     SameShape,
     SameType,
+    TotalBitCountEqual,
     TypeConstraint,
+    UnpackedPayloadBitCountMatchesStorage,
     ValueCountMatchesStaticElementCount,
     Writes,
     YieldCountMatchesResults,
@@ -610,6 +613,108 @@ class TestConstraints:
         assert constraint.check({"width": 1})[0]
         assert not constraint.check({"width": 0})[0]
         assert not constraint.check({"width": -1})[0]
+
+    def test_total_bit_count_equal(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        constraint = TotalBitCountEqual("input", "result")
+        assert constraint.name == "TotalBitCountEqual"
+        assert constraint.args == ("input", "result")
+        assert constraint.check(
+            {
+                "input": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I32, (StaticDim(1),))),
+            }
+        )[0]
+        assert constraint.check(
+            {
+                "input": FakeValue(I32),
+                "result": FakeValue(F32),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "input": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(3),))),
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I16, (StaticDim(1),))),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "input": FakeValue(I16),
+                "result": FakeValue(F32),
+            }
+        )[0]
+        assert constraint.check(
+            {
+                "input": FakeValue(
+                    ShapedType(TypeKind.VECTOR, I8, (DynamicDim(), StaticDim(2)))
+                ),
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I16, (DynamicDim(),))),
+            }
+        )[0]
+
+    def test_payload_bit_count_matches_storage_constraints(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        def vector_type(element_type: ScalarType, *sizes: int | None) -> ShapedType:
+            return ShapedType(
+                TypeKind.VECTOR,
+                element_type,
+                tuple(
+                    DynamicDim() if size is None else StaticDim(size) for size in sizes
+                ),
+            )
+
+        pack = PackedPayloadBitCountMatchesStorage(
+            "source", "width", "result", "result"
+        )
+        assert pack.name == "PackedPayloadBitCountMatchesStorage"
+        assert pack.args == ("source", "width", "result", "result")
+        assert pack.check(
+            {
+                "source": FakeValue(vector_type(I8, 32)),
+                "width": 4,
+                "result": FakeValue(vector_type(I8, 16)),
+            }
+        )[0]
+        assert not pack.check(
+            {
+                "source": FakeValue(vector_type(I8, 32)),
+                "width": 4,
+                "result": FakeValue(vector_type(I8, 15)),
+            }
+        )[0]
+        assert pack.check(
+            {
+                "source": FakeValue(vector_type(I8, None)),
+                "width": 4,
+                "result": FakeValue(vector_type(I8, None)),
+            }
+        )[0]
+
+        unpack = UnpackedPayloadBitCountMatchesStorage(
+            "result", "width", "source", "result"
+        )
+        assert unpack.name == "UnpackedPayloadBitCountMatchesStorage"
+        assert unpack.args == ("result", "width", "source", "result")
+        assert unpack.check(
+            {
+                "source": FakeValue(vector_type(I8, 16)),
+                "width": 4,
+                "result": FakeValue(vector_type(I8, 32)),
+            }
+        )[0]
+        assert not unpack.check(
+            {
+                "source": FakeValue(vector_type(I8, 16)),
+                "width": 4,
+                "result": FakeValue(vector_type(I8, 31)),
+            }
+        )[0]
 
     def test_offset_count_matches_rank(self) -> None:
         c = OffsetCountMatchesRank("src", "offsets")

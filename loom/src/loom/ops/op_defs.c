@@ -184,6 +184,9 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR] = "ElementWidthAtLeastAttr",
       [LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH] =
           "BitRangeWithinElementWidth",
+      [LOOM_RELATION_TOTAL_BIT_COUNT_EQUAL] = "TotalBitCountEqual",
+      [LOOM_RELATION_PAYLOAD_BIT_COUNT_MATCHES_STORAGE] =
+          "PayloadBitCountMatchesStorage",
       [LOOM_RELATION_COUNT_MATCHES_RANK] = "CountMatchesRank",
       [LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT] =
           "CountMatchesStaticElementCount",
@@ -215,6 +218,11 @@ const char* loom_constraint_property_name(loom_constraint_property_t property) {
       [LOOM_PROPERTY_ELEMENT_WIDTH_AT_LEAST_ATTR] = "ElementWidthAtLeastAttr",
       [LOOM_PROPERTY_BIT_RANGE_WITHIN_ELEMENT_WIDTH] =
           "BitRangeWithinElementWidth",
+      [LOOM_PROPERTY_TOTAL_BIT_COUNT] = "TotalBitCount",
+      [LOOM_PROPERTY_PACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE] =
+          "PackedPayloadBitCountMatchesStorage",
+      [LOOM_PROPERTY_UNPACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE] =
+          "UnpackedPayloadBitCountMatchesStorage",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_PROPERTY_COUNT_,
                 "property names out of sync with enum");

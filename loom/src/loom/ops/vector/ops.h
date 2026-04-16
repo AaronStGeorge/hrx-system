@@ -2587,9 +2587,6 @@ iree_status_t loom_vector_bitcast_build(
     loom_builder_t* builder, loom_value_id_t input,
     loom_type_t input_type, loom_type_t result_type,
     loom_location_id_t location, loom_op_t** out_op);
-iree_status_t loom_vector_bitcast_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BITFIELD_EXTRACTU: Extract one fixed bitfield from each integer source lane and zero-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width.
 // %lo = vector.bitfield.extractu %bytes {offset = 0, width = 4} : vector<16xi8> -> vector<16xi32>
@@ -2654,9 +2651,6 @@ iree_status_t loom_vector_bitpack_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_bitpack_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BITUNPACKU: Unpack unsigned fixed-width fields from a contiguous little-endian integer bitstream into zero-extended integer result lanes. Result lanes are produced in logical lane order.
 // %codes = vector.bitunpacku<4> %packed : vector<16xi8> -> vector<32xi8>
@@ -2671,9 +2665,6 @@ iree_status_t loom_vector_bitunpacku_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_bitunpacku_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BITUNPACKS: Unpack signed fixed-width fields from a contiguous little-endian integer bitstream into sign-extended integer result lanes. Result lanes are produced in logical lane order.
 // %deltas = vector.bitunpacks<3> %packed : vector<12xi8> -> vector<32xi8>
@@ -2688,9 +2679,6 @@ iree_status_t loom_vector_bitunpacks_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_bitunpacks_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_DOTF: Compute a same-element floating-point dot product with an explicit scalar accumulator. Semantics are equivalent to accumulating scalar.fmaf(lhs_lane, rhs_lane, acc) over lanes in logical lane order; use vector.mulf followed by vector.reduce<addf> when separately rounded products and additions are required. The source vectors must have the same shape and element type, and the init/result scalar type matches that element type. Zero-lane inputs return init.
 // %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32

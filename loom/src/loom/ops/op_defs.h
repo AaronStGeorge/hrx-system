@@ -430,6 +430,19 @@ enum loom_constraint_relation_e {
   // BitRangeWithinElementWidth.
   LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH,
 
+  // Two value fields have the same total bit count, allowing static and simple
+  // symbolic dynamic shaped types. Args: (lhs value field, rhs value field).
+  // Used by TotalBitCountEqual.
+  LOOM_RELATION_TOTAL_BIT_COUNT_EQUAL,
+
+  // A payload value field with a fixed bit-width attribute has the same static
+  // bit count as a storage value field. The fourth arg is the value field used
+  // for the mismatch diagnostic. Args: (payload value field, width i64 attr
+  // field, storage value field, diagnostic value field). Used by
+  // PackedPayloadBitCountMatchesStorage and
+  // UnpackedPayloadBitCountMatchesStorage.
+  LOOM_RELATION_PAYLOAD_BIT_COUNT_MATCHES_STORAGE,
+
   // The element count of a variadic value field equals the rank of a
   // shaped value field. Args: (shaped value field, variadic value
   // field). Used by OffsetCountMatchesRank.
@@ -518,6 +531,14 @@ enum loom_constraint_property_e {
   // Static bit range is contained within an element width. Used by
   // BitRangeWithinElementWidth.
   LOOM_PROPERTY_BIT_RANGE_WITHIN_ELEMENT_WIDTH = 10,
+  // Total value bit count. Used by TotalBitCountEqual.
+  LOOM_PROPERTY_TOTAL_BIT_COUNT = 11,
+  // Packed payload bit count equals storage bit count. Used by
+  // PackedPayloadBitCountMatchesStorage.
+  LOOM_PROPERTY_PACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE = 12,
+  // Unpacked payload bit count equals storage bit count. Used by
+  // UnpackedPayloadBitCountMatchesStorage.
+  LOOM_PROPERTY_UNPACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE = 13,
   LOOM_PROPERTY_COUNT_,
 };
 typedef uint8_t loom_constraint_property_t;

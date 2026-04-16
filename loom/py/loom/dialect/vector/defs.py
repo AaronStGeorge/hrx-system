@@ -82,6 +82,7 @@ from loom.dsl import (
     LastAxisGroupedBy,
     Op,
     Operand,
+    PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
     Reads,
     ReadWrites,
@@ -90,8 +91,10 @@ from loom.dsl import (
     SameKind,
     SameShape,
     SameType,
+    TotalBitCountEqual,
     Trait,
     TypeConstraint,
+    UnpackedPayloadBitCountMatchesStorage,
     ValueCountMatchesStaticElementCount,
     Writes,
 )
@@ -2631,7 +2634,7 @@ vector_bitcast = Op(
     doc=("Bitwise reinterpretation between vector register types with the same total bit count. No numeric conversion is performed; only the lane shape and element interpretation change."),
     operands=[Operand("input", VECTOR)],
     results=[Result("result", VECTOR)],
-    verify="loom_vector_bitcast_verify",
+    constraints=[TotalBitCountEqual("input", "result")],
     traits=[PURE],
     format=[
         Ref("input"),
@@ -2784,8 +2787,8 @@ vector_bitpack = Op(
         HasIntegerElement("result"),
         PositiveBitWidthAttr("width"),
         ElementWidthAtLeastAttr("source", "width"),
+        PackedPayloadBitCountMatchesStorage("source", "width", "result", "result"),
     ],
-    verify="loom_vector_bitpack_verify",
     traits=[PURE],
     format=[
         TemplateParam("width"),
@@ -2819,8 +2822,8 @@ vector_bitunpacku = Op(
         HasIntegerElement("result"),
         PositiveBitWidthAttr("width"),
         ElementWidthAtLeastAttr("result", "width"),
+        UnpackedPayloadBitCountMatchesStorage("result", "width", "source", "result"),
     ],
-    verify="loom_vector_bitunpacku_verify",
     traits=[PURE],
     format=[
         TemplateParam("width"),
@@ -2854,8 +2857,8 @@ vector_bitunpacks = Op(
         HasIntegerElement("result"),
         PositiveBitWidthAttr("width"),
         ElementWidthAtLeastAttr("result", "width"),
+        UnpackedPayloadBitCountMatchesStorage("result", "width", "source", "result"),
     ],
-    verify="loom_vector_bitunpacks_verify",
     traits=[PURE],
     format=[
         TemplateParam("width"),

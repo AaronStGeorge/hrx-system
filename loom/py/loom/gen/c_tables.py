@@ -245,6 +245,18 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_ATTR_I64_PREDICATE",
         "LOOM_PROPERTY_BIT_WIDTH_POSITIVE",
     ),
+    "TotalBitCountEqual": (
+        "LOOM_RELATION_TOTAL_BIT_COUNT_EQUAL",
+        "LOOM_PROPERTY_TOTAL_BIT_COUNT",
+    ),
+    "PackedPayloadBitCountMatchesStorage": (
+        "LOOM_RELATION_PAYLOAD_BIT_COUNT_MATCHES_STORAGE",
+        "LOOM_PROPERTY_PACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE",
+    ),
+    "UnpackedPayloadBitCountMatchesStorage": (
+        "LOOM_RELATION_PAYLOAD_BIT_COUNT_MATCHES_STORAGE",
+        "LOOM_PROPERTY_UNPACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE",
+    ),
     "OffsetCountMatchesRank": (
         "LOOM_RELATION_COUNT_MATCHES_RANK",
         "LOOM_PROPERTY_RANK",

@@ -158,6 +158,9 @@ __all__ = [
     "ElementWidthAtLeastAttr",
     "BitRangeWithinElementWidth",
     "PositiveBitWidthAttr",
+    "TotalBitCountEqual",
+    "PackedPayloadBitCountMatchesStorage",
+    "UnpackedPayloadBitCountMatchesStorage",
     "OffsetCountMatchesRank",
     "ValueCountMatchesStaticElementCount",
     "DimIndexInBounds",
@@ -1343,6 +1346,129 @@ def PositiveBitWidthAttr(attr: str) -> Constraint:
         "PositiveBitWidthAttr",
         (attr,),
         validate=_validate,
+    )
+
+
+def _static_element_count(item: Any) -> int | None:
+    """Returns the static scalar/shaped element count, or None for dynamic."""
+    from loom.ir import ScalarType, StaticDim
+
+    value_type = _field_value_type(item)
+    if isinstance(value_type, ScalarType):
+        return 1
+    dims = getattr(value_type, "dims", None)
+    if dims is None:
+        return None
+    count = 1
+    for dim in dims:
+        if not isinstance(dim, StaticDim):
+            return None
+        count *= dim.size
+    return count
+
+
+def _static_total_bit_count(item: Any, bit_width_per_element: int) -> int | None:
+    """Returns static element count times element width when both are known."""
+    element_count = _static_element_count(item)
+    if element_count is None or bit_width_per_element < 0:
+        return None
+    return element_count * bit_width_per_element
+
+
+def _static_type_total_bit_count(item: Any) -> int | None:
+    """Returns static shaped total bit count using the type element width."""
+    element_width = _field_element_bitwidth(item)
+    if element_width is None:
+        return None
+    return _static_total_bit_count(item, element_width)
+
+
+def TotalBitCountEqual(lhs: str, rhs: str) -> Constraint:
+    """Two shaped fields must have the same total bit count when provable."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        lhs_bit_count = _static_type_total_bit_count(values.get(lhs))
+        rhs_bit_count = _static_type_total_bit_count(values.get(rhs))
+        if lhs_bit_count is None or rhs_bit_count is None:
+            return (True, "")
+        if lhs_bit_count == rhs_bit_count:
+            return (True, "")
+        return (
+            False,
+            f"'{lhs}' total bit count {lhs_bit_count} != "
+            f"'{rhs}' total bit count {rhs_bit_count}",
+        )
+
+    return Constraint(
+        "TotalBitCountEqual",
+        (lhs, rhs),
+        validate=_validate,
+    )
+
+
+def _payload_bit_count_matches_storage(
+    name: str,
+    payload: str,
+    width_attr: str,
+    storage: str,
+    diagnostic: str,
+) -> Constraint:
+    """Builds a static payload-width-times-count equals storage-count check."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        width = _field_i64_attr_value(values.get(width_attr))
+        if width is None or width <= 0:
+            return (True, "")
+        payload_bit_count = _static_total_bit_count(values.get(payload), width)
+        storage_bit_count = _static_type_total_bit_count(values.get(storage))
+        if payload_bit_count is None or storage_bit_count is None:
+            return (True, "")
+        if payload_bit_count == storage_bit_count:
+            return (True, "")
+        return (
+            False,
+            f"'{payload}' payload bit count {payload_bit_count} != "
+            f"'{storage}' storage bit count {storage_bit_count}",
+        )
+
+    return Constraint(
+        name,
+        (payload, width_attr, storage, diagnostic),
+        validate=_validate,
+    )
+
+
+def PackedPayloadBitCountMatchesStorage(
+    payload: str,
+    width_attr: str,
+    storage: str,
+    diagnostic: str,
+) -> Constraint:
+    """Packed payload bit count must equal the static storage bit count."""
+
+    return _payload_bit_count_matches_storage(
+        "PackedPayloadBitCountMatchesStorage",
+        payload,
+        width_attr,
+        storage,
+        diagnostic,
+    )
+
+
+def UnpackedPayloadBitCountMatchesStorage(
+    payload: str,
+    width_attr: str,
+    storage: str,
+    diagnostic: str,
+) -> Constraint:
+    """Unpacked payload bit count must equal the static storage bit count."""
+
+    return _payload_bit_count_matches_storage(
+        "UnpackedPayloadBitCountMatchesStorage",
+        payload,
+        width_attr,
+        storage,
+        diagnostic,
     )
 
 

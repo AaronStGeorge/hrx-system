@@ -32,10 +32,13 @@ from loom.dsl import (
     EnumDef,
     Op,
     Operand,
+    PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
     Result,
     SameType,
+    TotalBitCountEqual,
     TypeConstraint,
+    UnpackedPayloadBitCountMatchesStorage,
 )
 from loom.gen.c_tables import (
     TYPE_CONSTRAINT_MAP,
@@ -104,6 +107,32 @@ def test_generate_tables_emits_bit_width_attr_constraints() -> None:
     assert "LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR" in tables_c
     assert "LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH" in tables_c
     assert "LOOM_FIELD_REF(2, 0), LOOM_FIELD_REF(2, 1)" in tables_c
+
+
+def test_generate_tables_emits_bit_count_constraints() -> None:
+    op = Op(
+        "test.bitstream",
+        group=Dialect("test"),
+        operands=[Operand("source", INTEGER)],
+        results=[Result("result", INTEGER)],
+        attrs=[AttrDef("width", "i64")],
+        constraints=[
+            TotalBitCountEqual("source", "result"),
+            PackedPayloadBitCountMatchesStorage("source", "width", "result", "result"),
+            UnpackedPayloadBitCountMatchesStorage("result", "width", "source", "result"),
+        ],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_RELATION_TOTAL_BIT_COUNT_EQUAL" in tables_c
+    assert "LOOM_PROPERTY_TOTAL_BIT_COUNT" in tables_c
+    assert "LOOM_RELATION_PAYLOAD_BIT_COUNT_MATCHES_STORAGE" in tables_c
+    assert "LOOM_PROPERTY_PACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE" in tables_c
+    assert "LOOM_PROPERTY_UNPACKED_PAYLOAD_BIT_COUNT_MATCHES_STORAGE" in tables_c
+    assert "LOOM_FIELD_REF(0, 0), LOOM_FIELD_REF(1, 0)" in tables_c
+    assert ("LOOM_FIELD_REF(0, 0), LOOM_FIELD_REF(2, 0), LOOM_FIELD_REF(1, 0), LOOM_FIELD_REF(1, 0)") in tables_c
+    assert ("LOOM_FIELD_REF(1, 0), LOOM_FIELD_REF(2, 0), LOOM_FIELD_REF(0, 0), LOOM_FIELD_REF(1, 0)") in tables_c
 
 
 def test_generate_builders_use_explicit_flags_for_optional_scalar_attrs() -> None:

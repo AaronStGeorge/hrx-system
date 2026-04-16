@@ -610,6 +610,7 @@ def test_vector_bitcast_is_whole_register_not_lanewise_only() -> None:
     trait_names = {trait.name for trait in op.traits}
 
     assert ("SameShape", ("input", "result")) not in constraints
+    assert ("TotalBitCountEqual", ("input", "result")) in constraints
     assert "Pure" in trait_names
     assert "Elementwise" not in trait_names
 
@@ -653,10 +654,22 @@ def test_vector_bitpack_ops_are_pure_register_pack_ops() -> None:
 
     assert ("HasIntegerElement", ("source",)) in pack_constraints
     assert ("HasIntegerElement", ("result",)) in pack_constraints
+    assert (
+        "PackedPayloadBitCountMatchesStorage",
+        ("source", "width", "result", "result"),
+    ) in pack_constraints
     assert ("HasIntegerElement", ("source",)) in unpacku_constraints
     assert ("HasIntegerElement", ("result",)) in unpacku_constraints
+    assert (
+        "UnpackedPayloadBitCountMatchesStorage",
+        ("result", "width", "source", "result"),
+    ) in unpacku_constraints
     assert ("HasIntegerElement", ("source",)) in unpacks_constraints
     assert ("HasIntegerElement", ("result",)) in unpacks_constraints
+    assert (
+        "UnpackedPayloadBitCountMatchesStorage",
+        ("result", "width", "source", "result"),
+    ) in unpacks_constraints
 
     for name in (
         "vector.bitpack",
