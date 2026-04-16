@@ -1,0 +1,22 @@
+global.constant @weights : tile<16x32xi8, #q8_0<block=32>>
+
+global.variable @state : f32 = 0.0
+
+global.variable @kv_cache : tile<128x64xf32>
+
+func.def initializer @init_state(%value: f32) {
+  global.store %value, @state : f32
+  func.return
+}
+
+func.def @load_weights() {
+  %tile = global.load @weights : tile<16x32xi8, #q8_0<block=32>>
+  test.use %tile : tile<16x32xi8, #q8_0<block=32>>
+  func.return
+}
+
+func.def deinitializer @cleanup() {
+  %value = global.load @state : f32
+  test.use %value : f32
+  func.return
+}

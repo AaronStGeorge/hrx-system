@@ -57,6 +57,7 @@ from loom.dsl import (
     AttrDef,
     Op,
     ShapeParam,
+    TypeConstraint,
     TypeDef,
 )
 from loom.fields import FieldKind, FieldLayout, compute_layout
@@ -69,10 +70,17 @@ from loom.format.text.tokenizer import (
 )
 from loom.ir import (
     BUFFER_TYPE,
+    ENCODING_LAYOUT_TYPE,
     ENCODING_ROLE_BY_NAME,
+    ENCODING_SCHEMA_TYPE,
+    ENCODING_STORAGE_TYPE,
+    ENCODING_TRANSFORM_TYPE,
     ENCODING_TYPE,
     GROUP_SCOPE_BY_NAME,
+    I1,
+    INDEX,
     NONE_TYPE,
+    OFFSET,
     PREDICATE_KINDS,
     VALUE_DEF_BLOCK_NONE,
     Block,
@@ -139,6 +147,31 @@ def _parse_special_float(text: str) -> float | None:
             return float("inf")
         case "-inf":
             return float("-inf")
+        case _:
+            return None
+
+
+def _concrete_type_for_constraint(constraint: TypeConstraint) -> Type | None:
+    """Returns the concrete type implied by a singleton type constraint."""
+    match constraint:
+        case TypeConstraint.I1:
+            return I1
+        case TypeConstraint.INDEX:
+            return INDEX
+        case TypeConstraint.OFFSET:
+            return OFFSET
+        case TypeConstraint.BUFFER:
+            return BUFFER_TYPE
+        case TypeConstraint.ANY_ENCODING:
+            return ENCODING_TYPE
+        case TypeConstraint.ENCODING_LAYOUT:
+            return ENCODING_LAYOUT_TYPE
+        case TypeConstraint.ENCODING_SCHEMA:
+            return ENCODING_SCHEMA_TYPE
+        case TypeConstraint.ENCODING_STORAGE:
+            return ENCODING_STORAGE_TYPE
+        case TypeConstraint.ENCODING_TRANSFORM:
+            return ENCODING_TRANSFORM_TYPE
         case _:
             return None
 
@@ -975,6 +1008,7 @@ class ParsedFields:
         "tied_results",
         "implicit_values",
         "func_arg_ids",
+        "operand_fields",
     )
 
     def __init__(self) -> None:
@@ -987,6 +1021,7 @@ class ParsedFields:
         self.tied_results: list[IRTiedResult] = []
         self.implicit_values: dict[str, int] = {}
         self.func_arg_ids: list[int] = []
+        self.operand_fields: dict[str, list[int]] = {}
 
 
 class Parser:
@@ -1162,6 +1197,43 @@ class Parser:
             self._layouts[op_decl.name] = layout
         return layout
 
+    def _record_operand_id(
+        self,
+        parsed: ParsedFields,
+        op_decl: Op,
+        field_name: str,
+        value_id: int,
+    ) -> None:
+        parsed.operand_ids.append(value_id)
+        self._record_operand_ids(parsed, op_decl, field_name, [value_id])
+
+    def _record_operand_ids(
+        self,
+        parsed: ParsedFields,
+        op_decl: Op,
+        field_name: str,
+        value_ids: Sequence[int],
+    ) -> None:
+        field_desc = self._layout(op_decl).fields.get(field_name)
+        if field_desc is not None and field_desc.kind == FieldKind.OPERAND:
+            parsed.operand_fields.setdefault(field_name, []).extend(value_ids)
+
+    def _canonical_operand_ids(self, op_decl: Op, parsed: ParsedFields) -> list[int]:
+        if not parsed.operand_fields:
+            return parsed.operand_ids
+        operand_ids: list[int] = []
+        for operand in op_decl.operands:
+            field_values = parsed.operand_fields.get(operand.name)
+            if not field_values:
+                if operand.variadic:
+                    continue
+                return parsed.operand_ids
+            if operand.variadic:
+                operand_ids.extend(field_values)
+            else:
+                operand_ids.append(field_values[0])
+        return operand_ids
+
     # --- Op parsing ---
 
     def parse_operation_from_text(
@@ -1240,6 +1312,7 @@ class Parser:
         self._walk_format(op_decl.format, op_decl, parsed)
         self._reserved_result_names = []
         self._reserved_result_ids = []
+        parsed.operand_ids = self._canonical_operand_ids(op_decl, parsed)
 
         # After format walk: resolve func-arg semantics.
         # For declaration-style ops (no body region), func args become operands.
@@ -1264,6 +1337,17 @@ class Parser:
                     value.type = parsed.result_types[i]
                     value.dim_bindings = dim_bindings
                     value.encoding_binding = encoding_binding
+                else:
+                    result_decl = (
+                        op_decl.results[i] if i < len(op_decl.results) else None
+                    )
+                    inferred_type = (
+                        _concrete_type_for_constraint(result_decl.type_constraint)
+                        if result_decl is not None and not result_decl.variadic
+                        else None
+                    )
+                    if inferred_type is not None:
+                        value.type = inferred_type
                 if i < len(parsed.result_ids):
                     parsed.result_ids[i] = value_id
                 else:
@@ -1520,9 +1604,10 @@ class Parser:
                                 ssa_tok.location,
                                 tok._filename,
                             ) from None
-                        parsed.operand_ids.append(value_id)
+                        self._record_operand_id(parsed, op_decl, name, value_id)
 
                 case Refs(field=name):
+                    value_ids: list[int] = []
                     if tok.at(TokenKind.SSA_VALUE):
                         ssa_tok = tok.next()
                         try:
@@ -1533,7 +1618,7 @@ class Parser:
                                 ssa_tok.location,
                                 tok._filename,
                             ) from None
-                        parsed.operand_ids.append(value_id)
+                        value_ids.append(value_id)
                         while tok.try_consume(TokenKind.COMMA):
                             if not tok.at(TokenKind.SSA_VALUE):
                                 break
@@ -1546,7 +1631,10 @@ class Parser:
                                     ssa_tok.location,
                                     tok._filename,
                                 ) from None
-                            parsed.operand_ids.append(value_id)
+                            value_ids.append(value_id)
+                    if value_ids:
+                        parsed.operand_ids.extend(value_ids)
+                        self._record_operand_ids(parsed, op_decl, name, value_ids)
 
                 case Attr(field=name):
                     attr_def = op_decl.attr(name)
@@ -1613,7 +1701,7 @@ class Parser:
                         self._parse_attr_dict(parsed, dict_field)
 
                 case AttrTable(keys=keys_field, values=values_field):
-                    self._parse_attr_table(parsed, keys_field, values_field)
+                    self._parse_attr_table(parsed, op_decl, keys_field, values_field)
 
                 case RegionTable(
                     keys=keys_field,
@@ -1630,7 +1718,9 @@ class Parser:
 
                 case OperandDict(operands=operand_field, names=names_field):
                     if tok.at(TokenKind.LBRACE):
-                        self._parse_operand_dict(parsed, operand_field, names_field)
+                        self._parse_operand_dict(
+                            parsed, op_decl, operand_field, names_field
+                        )
 
                 case RegionFmt(field=name):
                     implicit_terminator_decl = self._implicit_terminator_decl(op_decl)
@@ -1653,10 +1743,10 @@ class Parser:
                     parsed.regions.append(region)
 
                 case IndexList(dynamic=dynamic_field, static=static_field):
-                    self._parse_index_list(parsed, dynamic_field, static_field)
+                    self._parse_index_list(parsed, op_decl, dynamic_field, static_field)
 
                 case BindingList(field=name, kind=binding_kind):
-                    self._parse_binding_list(parsed, name, binding_kind)
+                    self._parse_binding_list(parsed, op_decl, name, binding_kind)
 
                 case BlockArgs(region=name):
                     self._parse_block_args(parsed, name)
@@ -1752,6 +1842,9 @@ class Parser:
             case Keyword(text="->"):
                 result = tok.at(TokenKind.ARROW)
                 return result
+            case Keyword(text="="):
+                result = tok.at(TokenKind.EQUALS)
+                return result
             case Keyword(text="{"):
                 result = tok.at(TokenKind.LBRACE)
                 return result
@@ -1821,7 +1914,10 @@ class Parser:
                     tok._filename,
                 )
             case "enum":
-                ident = tok.expect(TokenKind.BARE_IDENT)
+                if tok.at(TokenKind.BARE_IDENT) or tok.at(TokenKind.OP_NAME):
+                    ident = tok.next()
+                else:
+                    ident = tok.expect(TokenKind.BARE_IDENT)
                 if attr_def.enum_def and ident.text not in attr_def.enum_def.keywords:
                     raise ParseError(
                         f"invalid enum value '{ident.text}', expected one "
@@ -2034,7 +2130,11 @@ class Parser:
     # --- Index list ---
 
     def _parse_index_list(
-        self, parsed: ParsedFields, dynamic_field: str, static_field: str
+        self,
+        parsed: ParsedFields,
+        op_decl: Op,
+        dynamic_field: str,
+        static_field: str,
     ) -> None:
         """Parse [0, %x, 4] — mixed static/dynamic indices."""
         tok = self._tokenizer
@@ -2051,6 +2151,7 @@ class Parser:
         tok.expect(TokenKind.RBRACKET)
         parsed.attributes[static_field] = static_values
         parsed.operand_ids.extend(dynamic_ids)
+        self._record_operand_ids(parsed, op_decl, dynamic_field, dynamic_ids)
 
     def _parse_one_index_entry(
         self,
@@ -2078,7 +2179,11 @@ class Parser:
     # --- Binding list ---
 
     def _parse_binding_list(
-        self, parsed: ParsedFields, field_name: str, kind: str = "capture"
+        self,
+        parsed: ParsedFields,
+        op_decl: Op,
+        field_name: str,
+        kind: str = "capture",
     ) -> None:
         """Parse (%block_arg = %operand : type, ...).
 
@@ -2092,11 +2197,13 @@ class Parser:
         block_arg_types: list[Type] = []
 
         if not tok.at(TokenKind.RPAREN):
-            name, arg_type = self._parse_one_binding(parsed, kind)
+            name, arg_type = self._parse_one_binding(parsed, op_decl, field_name, kind)
             block_arg_names.append(name)
             block_arg_types.append(arg_type)
             while tok.try_consume(TokenKind.COMMA):
-                name, arg_type = self._parse_one_binding(parsed, kind)
+                name, arg_type = self._parse_one_binding(
+                    parsed, op_decl, field_name, kind
+                )
                 block_arg_names.append(name)
                 block_arg_types.append(arg_type)
 
@@ -2135,6 +2242,8 @@ class Parser:
     def _parse_one_binding(
         self,
         parsed: ParsedFields,
+        op_decl: Op,
+        field_name: str,
         kind: str,
     ) -> tuple[str, Type]:
         """Parse one binding: %block_arg = %operand : type.
@@ -2152,6 +2261,7 @@ class Parser:
         )
         operand_id = self._scope.lookup(operand_name)
         parsed.operand_ids.append(operand_id)
+        self._record_operand_ids(parsed, op_decl, field_name, [operand_id])
 
         # Derive block arg type based on binding kind.
         if kind == "element":
@@ -2411,7 +2521,11 @@ class Parser:
     # --- Operand dict ---
 
     def _parse_operand_dict(
-        self, parsed: ParsedFields, _operand_field: str, names_field: str
+        self,
+        parsed: ParsedFields,
+        op_decl: Op,
+        operand_field: str,
+        names_field: str,
     ) -> None:
         """Parse {key = %value : type, ...} into keyed variadic operands."""
         tok = self._tokenizer
@@ -2463,6 +2577,7 @@ class Parser:
         for ordinal, (key, value_id) in enumerate(sorted_entries):
             name_entries.append((key, ordinal))
             parsed.operand_ids.append(value_id)
+            self._record_operand_ids(parsed, op_decl, operand_field, [value_id])
         if name_entries:
             parsed.attributes[names_field] = CanonicalAttrDict(name_entries)
 
@@ -2494,7 +2609,11 @@ class Parser:
         return row
 
     def _parse_attr_table(
-        self, parsed: ParsedFields, keys_field: str, _values_field: str
+        self,
+        parsed: ParsedFields,
+        op_decl: Op,
+        keys_field: str,
+        values_field: str,
     ) -> None:
         """Parse {key = (%row), ...} default(%row) into flattened operands."""
         tok = self._tokenizer
@@ -2532,6 +2651,7 @@ class Parser:
         values.extend(default_row)
         parsed.attributes[keys_field] = keys
         parsed.operand_ids.extend(values)
+        self._record_operand_ids(parsed, op_decl, values_field, values)
 
     def _parse_region_table(
         self,
