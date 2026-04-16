@@ -123,3 +123,111 @@ func.def public @joined_call_result_divisibility() -> (index) {
   %sum = index.constant 0 : index
   func.return %sum : index
 }
+
+// ====
+
+// If every direct call to a private callee passes the same SSA value to two
+// argument slots, the callee can treat those slots as equal and simplify with
+// ordinary local canonicalization.
+func.def @same_actual_arguments(%lhs: index, %rhs: index) -> (index) {
+  %delta = index.sub %lhs, %rhs : index
+  func.return %delta : index
+}
+
+func.def public @call_same_actual(%n: index) -> (index) {
+  %result = func.call @same_actual_arguments(%n, %n) : (index, index) -> (index)
+  %one = index.constant 1 : index
+  %biased = index.add %result, %one : index
+  func.return %biased : index
+}
+
+// ----
+func.def @same_actual_arguments(%lhs: index, %rhs: index) -> (index) {
+  %delta = index.constant 0 : index
+  func.return %delta : index
+}
+
+func.def public @call_same_actual(%n: index) -> (index) {
+  %biased = index.constant 1 : index
+  func.return %biased : index
+}
+
+// ====
+
+// Return forwarding is body-intrinsic, so it applies even for public callees
+// whose argument facts cannot be inferred from only the local module callers.
+func.def public @public_forward_first(%x: index, %y: index) -> (index) {
+  func.return %x : index
+}
+
+func.def public @call_public_forwarded_dynamic(%x: index, %y: index) -> (index) {
+  %result = func.call @public_forward_first(%x, %y) : (index, index) -> (index)
+  %sum = index.add %result, %y : index
+  func.return %sum : index
+}
+
+// ----
+func.def public @public_forward_first(%x: index, %y: index) -> (index) {
+  func.return %x : index
+}
+
+func.def public @call_public_forwarded_dynamic(%x: index, %y: index) -> (index) {
+  %sum = index.add %x, %y : index
+  func.return %sum : index
+}
+
+// ====
+
+// Replacement application walks nested regions, so a forwarded result inside a
+// branch can still expose the branch to ordinary selectification.
+func.def public @public_forward_first(%x: index, %y: index) -> (index) {
+  func.return %x : index
+}
+
+func.def public @call_public_forwarded_nested(%cond: i1, %x: index, %y: index) -> (index) {
+  %chosen = scf.if %cond -> (index) {
+    %result = func.call @public_forward_first(%x, %y) : (index, index) -> (index)
+    scf.yield %result : index
+  } else {
+    scf.yield %y : index
+  }
+  func.return %chosen : index
+}
+
+// ----
+func.def public @public_forward_first(%x: index, %y: index) -> (index) {
+  func.return %x : index
+}
+
+func.def public @call_public_forwarded_nested(%cond: i1, %x: index, %y: index) -> (index) {
+  %chosen = scf.select %cond, %x, %y : index
+  func.return %chosen : index
+}
+
+// ====
+
+// A single disagreeing direct call blocks argument equality. This keeps the
+// callee valid for all call sites instead of over-specializing from one lucky
+// caller.
+func.def @conflicting_actual_arguments(%lhs: index, %rhs: index) -> (index) {
+  %delta = index.sub %lhs, %rhs : index
+  func.return %delta : index
+}
+
+func.def public @call_conflicting_actuals(%x: index, %y: index) -> (index, index) {
+  %same = func.call @conflicting_actual_arguments(%x, %x) : (index, index) -> (index)
+  %different = func.call @conflicting_actual_arguments(%x, %y) : (index, index) -> (index)
+  func.return %same, %different : index, index
+}
+
+// ----
+func.def @conflicting_actual_arguments(%lhs: index, %rhs: index) -> (index) {
+  %delta = index.sub %lhs, %rhs : index
+  func.return %delta : index
+}
+
+func.def public @call_conflicting_actuals(%x: index, %y: index) -> (index, index) {
+  %same = func.call pure @conflicting_actual_arguments(%x, %x) : (index, index) -> (index)
+  %different = func.call pure @conflicting_actual_arguments(%x, %y) : (index, index) -> (index)
+  func.return %same, %different : index, index
+}
