@@ -73,6 +73,7 @@ loom_cc_library(
     "callable.h"
   SRCS
     "callable.c"
+    "callable_outline.c"
   DEPS
     ::materialize
     ::remap

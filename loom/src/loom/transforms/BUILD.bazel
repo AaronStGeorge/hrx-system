@@ -63,7 +63,10 @@ loom_cc_test(
 
 loom_cc_library(
     name = "callable",
-    srcs = ["callable.c"],
+    srcs = [
+        "callable.c",
+        "callable_outline.c",
+    ],
     hdrs = ["callable.h"],
     deps = [
         ":materialize",

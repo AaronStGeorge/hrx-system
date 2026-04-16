@@ -68,6 +68,14 @@ typedef struct loom_callable_import_options_t {
   void* external_symbol_user_data;
 } loom_callable_import_options_t;
 
+// Result handles produced by callable outlining.
+typedef struct loom_callable_outline_result_t {
+  // Function-like definition that owns the outlined body.
+  loom_func_like_t outlined;
+  // Call op inserted at the original range position.
+  loom_op_t* call_op;
+} loom_callable_outline_result_t;
+
 // Clones |source| from |source_module| into |builder|'s target module.
 //
 // The source callee symbol is recreated in the target module with the same name
@@ -79,6 +87,23 @@ iree_status_t loom_callable_import_definition(
     loom_builder_t* builder, const loom_module_t* source_module,
     loom_func_like_t source, const loom_callable_import_options_t* options,
     loom_func_like_t* out_imported, iree_arena_allocator_t* scratch_arena);
+
+// Outlines a contiguous same-block op range into a new private func.def.
+//
+// |first_op| is included. |after_last_op| is excluded and may be NULL to
+// outline through the end of the block. All selected root ops must be live,
+// linked, non-terminator ops in the same block. |outlined_ref| must name an
+// existing target-module symbol with no defining op; the helper binds it to the
+// created func.def instead of inventing or renaming symbols.
+//
+// Captures and live-outs are derived structurally from SSA operands, dynamic
+// type references, value-bearing attributes, predicate lists, nested regions,
+// and type-use lists. The replacement func.call returns every selected value
+// needed outside the range, including values needed only by dynamic result
+// types, so erasing the original range leaves no dangling SSA or type refs.
+iree_status_t loom_callable_outline_range(
+    loom_rewriter_t* rewriter, loom_op_t* first_op, loom_op_t* after_last_op,
+    loom_symbol_ref_t outlined_ref, loom_callable_outline_result_t* out_result);
 
 #ifdef __cplusplus
 }
