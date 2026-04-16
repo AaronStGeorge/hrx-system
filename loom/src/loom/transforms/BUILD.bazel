@@ -49,6 +49,7 @@ loom_cc_library(
     deps = [
         ":pass",
         ":rewriter",
+        ":type_propagation",
         "//loom/src/loom/analysis:symbolic_expr",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
@@ -339,6 +340,38 @@ loom_cc_library(
         "//loom/src/loom/ops/view",
         "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "type_propagation",
+    srcs = ["type_propagation.c"],
+    hdrs = ["type_propagation.h"],
+    deps = [
+        ":rewriter",
+        "//loom/src/loom/analysis:type_refinement",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ir:type_refinement",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "type_propagation_test",
+    srcs = ["type_propagation_test.cc"],
+    deps = [
+        ":rewriter",
+        ":type_propagation",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/ops/view",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

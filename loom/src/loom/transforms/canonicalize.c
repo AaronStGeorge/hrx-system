@@ -18,6 +18,7 @@
 #include "loom/ops/special_values.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/transforms/rewriter.h"
+#include "loom/transforms/type_propagation.h"
 
 //===----------------------------------------------------------------------===//
 // Constant materialization
@@ -665,9 +666,16 @@ iree_status_t loom_canonicalizer_run_function(
         canonicalizer->module, &rewriter->fact_table,
         &canonicalizer->scratch_arena, &expression_context);
   }
+  loom_type_propagator_t* type_propagator = NULL;
+  if (iree_status_is_ok(status)) {
+    status = loom_type_propagator_allocate(
+        canonicalizer->module, &canonicalizer->scratch_arena, &type_propagator);
+  }
 
   for (uint32_t iteration = 0;
        iree_status_is_ok(status) && iteration < max_iterations; ++iteration) {
+    status = loom_type_propagator_prepare_function(type_propagator, function);
+    if (!iree_status_is_ok(status)) break;
     status = loom_rewriter_seed_function(rewriter, function);
     if (!iree_status_is_ok(status)) break;
     bool any_changed = false;
@@ -730,6 +738,22 @@ iree_status_t loom_canonicalizer_run_function(
       loom_canonicalizer_record_rewriter_flags(out_result, rewriter);
       if (!iree_status_is_ok(status)) break;
       if (folded) {
+        any_changed = true;
+        loom_canonicalizer_record_rewrite(out_result, rewriter,
+                                          /*count_modified_op=*/true);
+        loom_symbolic_expr_context_reset(&expression_context);
+        continue;
+      }
+
+      // Table-driven type propagation: generated equality constraints and
+      // value facts can narrow dynamic shapes, encoding roles, and static
+      // attachments without hand-writing one pattern per op family.
+      bool types_propagated = false;
+      rewriter->flags = 0;
+      status = loom_type_propagator_apply_op(type_propagator, rewriter, op,
+                                             &types_propagated);
+      if (!iree_status_is_ok(status)) break;
+      if (types_propagated) {
         any_changed = true;
         loom_canonicalizer_record_rewrite(out_result, rewriter,
                                           /*count_modified_op=*/true);

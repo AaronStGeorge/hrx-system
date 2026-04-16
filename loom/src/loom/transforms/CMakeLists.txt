@@ -56,6 +56,7 @@ loom_cc_library(
   DEPS
     ::pass
     ::rewriter
+    ::type_propagation
     iree::base
     loom::src::loom::analysis::symbolic_expr
     loom::src::loom::ir
@@ -381,6 +382,42 @@ loom_cc_library(
     loom::src::loom::ops::view
     loom::src::loom::util::math
   PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    type_propagation
+  HDRS
+    "type_propagation.h"
+  SRCS
+    "type_propagation.c"
+  DEPS
+    ::rewriter
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::type_refinement
+    loom::src::loom::ir
+    loom::src::loom::ir::type_refinement
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    type_propagation_test
+  SRCS
+    "type_propagation_test.cc"
+  DEPS
+    ::rewriter
+    ::type_propagation
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::encoding
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::ops::view
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_library(
