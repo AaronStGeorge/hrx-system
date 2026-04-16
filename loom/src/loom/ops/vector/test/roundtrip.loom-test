@@ -251,6 +251,18 @@ func.def @dotf(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %acc: f32, %n: index,
 
 // ====
 
+// Two-lane floating dot products widen f16/bf16 sources into f32 accumulator
+// lanes and group the last source axis by pairs.
+func.def @dot2f(%lhs: vector<16xf16>, %rhs: vector<16xf16>, %acc: vector<8xf32>, %lhs2: vector<2x16xbf16>, %rhs2: vector<2x16xbf16>, %acc2: vector<2x8xf32>, %n: index, %m: index, %dyn_lhs: vector<[%n]xf16>, %dyn_rhs: vector<[%n]xf16>, %dyn_acc: vector<[%m]xf32>) {
+  %f16 = vector.dot2f %lhs, %rhs, %acc : vector<16xf16>, vector<16xf16>, vector<8xf32>
+  %bf16 = vector.dot2f %lhs2, %rhs2, %acc2 : vector<2x16xbf16>, vector<2x16xbf16>, vector<2x8xf32>
+  %dyn = vector.dot2f %dyn_lhs, %dyn_rhs, %dyn_acc : vector<[%n]xf16>, vector<[%n]xf16>, vector<[%m]xf32>
+  test.use %f16, %bf16, %dyn : vector<8xf32>, vector<2x8xf32>, vector<[%m]xf32>
+  func.return
+}
+
+// ====
+
 // Four-lane integer dot products keep signedness explicit and group the last
 // source axis into i32 accumulator lanes.
 func.def @dot4i(%lhs: vector<16xi8>, %rhs: vector<16xi8>, %acc: vector<4xi32>, %lhs2: vector<2x16xi8>, %rhs2: vector<2x16xi8>, %acc2: vector<2x4xi32>, %n: index, %m: index, %dyn_lhs: vector<[%n]xi8>, %dyn_rhs: vector<[%n]xi8>, %dyn_acc: vector<[%m]xi32>) {

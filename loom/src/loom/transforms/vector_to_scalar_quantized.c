@@ -148,7 +148,7 @@ static bool loom_vector_to_scalar_dot4i_rhs_is_signed(uint8_t kind) {
          kind == LOOM_VECTOR_DOT4I_KIND_U8S8;
 }
 
-static iree_status_t loom_vector_to_scalar_build_dot4i_source_indices(
+static iree_status_t loom_vector_to_scalar_build_grouped_source_indices(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t result_indices,
     loom_vector_to_scalar_index_term_t grouped_axis_base, uint8_t group_lane,
@@ -170,6 +170,55 @@ static iree_status_t loom_vector_to_scalar_build_dot4i_source_indices(
       &source_terms[grouped_axis]));
   return loom_vector_to_scalar_terms_to_index_list(state, source_terms, rank,
                                                    out_source_indices);
+}
+
+iree_status_t loom_vector_to_scalar_build_dot2f_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  if (indices.rank == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "vector.dot2f requires rank-1-or-higher vectors");
+  }
+
+  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, loom_vector_dot2f_acc(state->op), indices, &accumulator));
+  uint8_t grouped_axis = (uint8_t)(indices.rank - 1);
+  loom_vector_to_scalar_index_term_t grouped_axis_base = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_OP_INDEX_MUL,
+      loom_vector_to_scalar_lane_term(state, indices, grouped_axis),
+      loom_vector_to_scalar_static_term(2), &grouped_axis_base));
+
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  for (uint8_t group_lane = 0; group_lane < 2; ++group_lane) {
+    loom_vector_to_scalar_index_list_t source_indices = {0};
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_grouped_source_indices(
+        state, indices, grouped_axis_base, group_lane, &source_indices));
+
+    loom_value_id_t lhs_lane = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+        state, loom_vector_dot2f_lhs(state->op), source_indices, &lhs_lane));
+    loom_value_id_t rhs_lane = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+        state, loom_vector_dot2f_rhs(state->op), source_indices, &rhs_lane));
+
+    loom_value_id_t lhs_f32 = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_generic_lane_op(
+        state, LOOM_OP_SCALAR_EXTF, 0, (loom_value_id_t[]){lhs_lane}, 1, NULL,
+        0, f32_type, &lhs_f32));
+    loom_value_id_t rhs_f32 = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_generic_lane_op(
+        state, LOOM_OP_SCALAR_EXTF, 0, (loom_value_id_t[]){rhs_lane}, 1, NULL,
+        0, f32_type, &rhs_f32));
+
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_generic_lane_op(
+        state, LOOM_OP_SCALAR_FMAF, 0,
+        (loom_value_id_t[]){lhs_f32, rhs_f32, accumulator}, 3, NULL, 0,
+        f32_type, &accumulator));
+  }
+  *out_lane = accumulator;
+  return iree_ok_status();
 }
 
 iree_status_t loom_vector_to_scalar_build_dot4i_lane(
@@ -199,7 +248,7 @@ iree_status_t loom_vector_to_scalar_build_dot4i_lane(
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   for (uint8_t group_lane = 0; group_lane < 4; ++group_lane) {
     loom_vector_to_scalar_index_list_t source_indices = {0};
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_dot4i_source_indices(
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_grouped_source_indices(
         state, indices, grouped_axis_base, group_lane, &source_indices));
 
     loom_value_id_t lhs_lane = LOOM_VALUE_ID_INVALID;

@@ -1748,6 +1748,20 @@ class VectorBuilders:
         _operands.append(init)
         return cast(ValueRef, self._b.build("vector.dotf", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
+    def dot2f(self, *, lhs: ValueRef, rhs: ValueRef, acc: ValueRef, result_types: list[Type]) -> ValueRef:
+        """Group adjacent two-lane f16 or bf16 products along the last axis and add each two-product fused sum into an f32 accumulator lane. Semantics are equivalent to extending each source lane to f32, then accumulating scalar.fmaf(lhs0_f32, rhs0_f32, acc) followed by scalar.fmaf(lhs1_f32, rhs1_f32, partial) for each result lane. This models AMDGPU fdot2-style widened register dots without making f16 dot accumulation implicit in vector.dotf.
+
+        Example::
+            %r = vector.dot2f %lhs, %rhs, %acc : vector<16xf16>, vector<16xf16>, vector<8xf32>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _operands.append(lhs)
+        _operands.append(rhs)
+        _operands.append(acc)
+        return cast(ValueRef, self._b.build("vector.dot2f", _operands, results=result_types, attributes=_attributes, regions=_regions))
+
     def dot4i(self, *, kind: str, lhs: ValueRef, rhs: ValueRef, acc: ValueRef, result_types: list[Type]) -> ValueRef:
         """Group adjacent four-lane i8 products along the last axis and add each four-product sum into an i32 accumulator lane. The signedness template chooses how lhs and rhs i8 lanes are interpreted, matching dp4a/VNNI-style hardware operations.
 

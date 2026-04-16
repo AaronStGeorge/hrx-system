@@ -1181,6 +1181,67 @@ func.def @static_bitfields(%bytes: vector<2xi8>, %zero: vector<2xi8>) -> (vector
 
 // ====
 
+// dot2f extends each f16/bf16 source lane to f32 before feeding scalar.fmaf,
+// preserving the widened fused pair-dot semantics used by AMDGPU fdot2.
+func.def @static_dot2f(%lhs: vector<2xf16>, %rhs: vector<2xf16>, %acc: vector<1xf32>) -> (vector<1xf32>) {
+  %r = vector.dot2f %lhs, %rhs, %acc : vector<2xf16>, vector<2xf16>, vector<1xf32>
+  func.return %r : vector<1xf32>
+}
+
+// ----
+func.def @static_dot2f(%lhs: vector<2xf16>, %rhs: vector<2xf16>, %acc: vector<1xf32>) -> (vector<1xf32>) {
+  %5 = vector.extract %acc[0] : vector<1xf32> -> f32
+  %6 = vector.extract %lhs[0] : vector<2xf16> -> f16
+  %7 = vector.extract %rhs[0] : vector<2xf16> -> f16
+  %8 = scalar.extf %6 : f16 to f32
+  %9 = scalar.extf %7 : f16 to f32
+  %10 = scalar.fmaf %8, %9, %5 : f32
+  %11 = vector.extract %lhs[1] : vector<2xf16> -> f16
+  %12 = vector.extract %rhs[1] : vector<2xf16> -> f16
+  %13 = scalar.extf %11 : f16 to f32
+  %14 = scalar.extf %12 : f16 to f32
+  %15 = scalar.fmaf %13, %14, %10 : f32
+  %r = vector.from_elements %15 : vector<1xf32>
+  func.return %r : vector<1xf32>
+}
+
+// ====
+
+// Dynamic dot2f uses index arithmetic to map each result lane to the two
+// source lanes in its group.
+func.def @dynamic_dot2f(%n: index, %m: index, %lhs: vector<[%n]xbf16>, %rhs: vector<[%n]xbf16>, %acc: vector<[%m]xf32>) -> (vector<[%m]xf32>) {
+  %r = vector.dot2f %lhs, %rhs, %acc : vector<[%n]xbf16>, vector<[%n]xbf16>, vector<[%m]xf32>
+  func.return %r : vector<[%m]xf32>
+}
+
+// ----
+func.def @dynamic_dot2f(%n: index, %m: index, %lhs: vector<[%n]xbf16>, %rhs: vector<[%n]xbf16>, %acc: vector<[%m]xf32>) -> (vector<[%m]xf32>) {
+  %7 = index.constant 0 : index
+  %8 = index.constant 1 : index
+  %r = scf.for %9 = [%7 to %m step %8](%10 = %acc : vector<[%m]xf32>) -> (vector<[%m]xf32>) {
+    %12 = vector.extract %acc[%9] : vector<[%m]xf32> -> f32
+    %13 = index.constant 2 : index
+    %14 = index.mul %9, %13 : index
+    %15 = vector.extract %lhs[%14] : vector<[%n]xbf16> -> bf16
+    %16 = vector.extract %rhs[%14] : vector<[%n]xbf16> -> bf16
+    %17 = scalar.extf %15 : bf16 to f32
+    %18 = scalar.extf %16 : bf16 to f32
+    %19 = scalar.fmaf %17, %18, %12 : f32
+    %20 = index.constant 1 : index
+    %21 = index.add %14, %20 : index
+    %22 = vector.extract %lhs[%21] : vector<[%n]xbf16> -> bf16
+    %23 = vector.extract %rhs[%21] : vector<[%n]xbf16> -> bf16
+    %24 = scalar.extf %22 : bf16 to f32
+    %25 = scalar.extf %23 : bf16 to f32
+    %26 = scalar.fmaf %24, %25, %19 : f32
+    %27 = vector.insert %26 into %10[%9] : f32, vector<[%m]xf32>
+    scf.yield %27 : vector<[%m]xf32>
+  }
+  func.return %r : vector<[%m]xf32>
+}
+
+// ====
+
 // dot4i groups the last source axis into four-lane scalar multiply/add chains
 // while preserving the signedness template at each scalar extension.
 func.def @static_dot4i(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<1xi32>) -> (vector<1xi32>) {

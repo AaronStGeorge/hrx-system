@@ -48,18 +48,19 @@ typedef enum loom_vector_to_scalar_lane_kind_e {
   LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_EXTRACTU = 13,
   LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_EXTRACTS = 14,
   LOOM_VECTOR_TO_SCALAR_LANE_BITFIELD_INSERT = 15,
-  LOOM_VECTOR_TO_SCALAR_LANE_DOT4I = 16,
-  LOOM_VECTOR_TO_SCALAR_LANE_BITPACK = 17,
-  LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKU = 18,
-  LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKS = 19,
-  LOOM_VECTOR_TO_SCALAR_LANE_TABLE_LOOKUP = 20,
-  LOOM_VECTOR_TO_SCALAR_LANE_TABLE_QUANTIZE = 21,
-  LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM = 22,
-  LOOM_VECTOR_TO_SCALAR_LANE_LOAD = 23,
-  LOOM_VECTOR_TO_SCALAR_LANE_LOAD_MASK = 24,
-  LOOM_VECTOR_TO_SCALAR_LANE_GATHER = 25,
-  LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK = 26,
-  LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND = 27,
+  LOOM_VECTOR_TO_SCALAR_LANE_DOT2F = 16,
+  LOOM_VECTOR_TO_SCALAR_LANE_DOT4I = 17,
+  LOOM_VECTOR_TO_SCALAR_LANE_BITPACK = 18,
+  LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKU = 19,
+  LOOM_VECTOR_TO_SCALAR_LANE_BITUNPACKS = 20,
+  LOOM_VECTOR_TO_SCALAR_LANE_TABLE_LOOKUP = 21,
+  LOOM_VECTOR_TO_SCALAR_LANE_TABLE_QUANTIZE = 22,
+  LOOM_VECTOR_TO_SCALAR_LANE_TRANSFORM = 23,
+  LOOM_VECTOR_TO_SCALAR_LANE_LOAD = 24,
+  LOOM_VECTOR_TO_SCALAR_LANE_LOAD_MASK = 25,
+  LOOM_VECTOR_TO_SCALAR_LANE_GATHER = 26,
+  LOOM_VECTOR_TO_SCALAR_LANE_GATHER_MASK = 27,
+  LOOM_VECTOR_TO_SCALAR_LANE_LOAD_EXPAND = 28,
 } loom_vector_to_scalar_lane_kind_t;
 
 typedef struct loom_vector_to_scalar_descriptor_t {
@@ -351,6 +352,10 @@ iree_status_t loom_vector_to_scalar_build_bitfield_extract_lane(
     loom_value_id_t* out_lane);
 
 iree_status_t loom_vector_to_scalar_build_bitfield_insert_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
+
+iree_status_t loom_vector_to_scalar_build_dot2f_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane);
 

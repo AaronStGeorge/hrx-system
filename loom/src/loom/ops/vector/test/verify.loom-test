@@ -1177,6 +1177,52 @@ func.def @dotf_reject_arrow_result(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %ac
 
 // ====
 
+// Dot2 source lanes are f16/bf16 lanes because the op spells a widened
+// two-lane hardware-shaped floating dot.
+func.def @dot2f_source_not_f16_or_bf16(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: vector<2xf32>) {
+  // ERROR@+1: TYPE/003 "f16 or bf16 element type"
+  %r = vector.dot2f %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, vector<2xf32>
+  func.return
+}
+
+// ====
+
+// Dot2 accumulates into f32 lanes, not into the source lane width.
+func.def @dot2f_acc_not_f32(%lhs: vector<4xf16>, %rhs: vector<4xf16>, %acc: vector<2xf16>) {
+  // ERROR@+1: TYPE/003 "f32 element type"
+  %r = vector.dot2f %lhs, %rhs, %acc : vector<4xf16>, vector<4xf16>, vector<2xf16>
+  func.return
+}
+
+// ====
+
+// The last source axis is grouped by pairs.
+func.def @dot2f_source_last_axis_not_multiple_of_two(%lhs: vector<5xf16>, %rhs: vector<5xf16>, %acc: vector<2xf32>) {
+  // ERROR@+1: TYPE/003 "last axis extent divisible by 2"
+  %r = vector.dot2f %lhs, %rhs, %acc : vector<5xf16>, vector<5xf16>, vector<2xf32>
+  func.return
+}
+
+// ====
+
+// Static accumulator/result lanes must be the grouped last-axis source extent.
+func.def @dot2f_result_axis_mismatch(%lhs: vector<6xbf16>, %rhs: vector<6xbf16>, %acc: vector<4xf32>) {
+  // ERROR@+1: TYPE/004 "last axis extent equal to lhs last axis extent divided by 2"
+  %r = vector.dot2f %lhs, %rhs, %acc : vector<6xbf16>, vector<6xbf16>, vector<4xf32>
+  func.return
+}
+
+// ====
+
+// Leading axes are preserved while the last axis is grouped.
+func.def @dot2f_leading_axis_mismatch(%lhs: vector<2x4xf16>, %rhs: vector<2x4xf16>, %acc: vector<3x2xf32>) {
+  // ERROR@+1: SHAPE/002
+  %r = vector.dot2f %lhs, %rhs, %acc : vector<2x4xf16>, vector<2x4xf16>, vector<3x2xf32>
+  func.return
+}
+
+// ====
+
 // Dot4 source lanes are byte lanes; larger integer lanes are not silently
 // reinterpreted.
 func.def @dot4i_source_not_i8(%lhs: vector<16xi32>, %rhs: vector<16xi8>, %acc: vector<4xi32>) {

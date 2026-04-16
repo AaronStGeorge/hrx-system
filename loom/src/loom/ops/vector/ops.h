@@ -148,9 +148,10 @@ enum {
   LOOM_OP_VECTOR_BITUNPACKU = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 127),
   LOOM_OP_VECTOR_BITUNPACKS = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 128),
   LOOM_OP_VECTOR_DOTF = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 129),
-  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 130),
-  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 131),
-  LOOM_OP_VECTOR_COUNT_ = 132,
+  LOOM_OP_VECTOR_DOT2F = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 130),
+  LOOM_OP_VECTOR_DOT4I = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 131),
+  LOOM_OP_VECTOR_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VECTOR, 132),
+  LOOM_OP_VECTOR_COUNT_ = 133,
 };
 
 // Floating-point value-domain assumptions for vector operations.
@@ -2724,6 +2725,25 @@ iree_status_t loom_vector_dotf_facts(
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
+
+// LOOM_OP_VECTOR_DOT2F: Group adjacent two-lane f16 or bf16 products along the last axis and add each two-product fused sum into an f32 accumulator lane. Semantics are equivalent to extending each source lane to f32, then accumulating scalar.fmaf(lhs0_f32, rhs0_f32, acc) followed by scalar.fmaf(lhs1_f32, rhs1_f32, partial) for each result lane. This models AMDGPU fdot2-style widened register dots without making f16 dot accumulation implicit in vector.dotf.
+// %r = vector.dot2f %lhs, %rhs, %acc : vector<16xf16>, vector<16xf16>, vector<8xf32>
+LOOM_DEFINE_ISA(loom_vector_dot2f_isa, LOOM_OP_VECTOR_DOT2F)
+LOOM_DEFINE_OPERAND(loom_vector_dot2f_lhs, 0)
+LOOM_DEFINE_OPERAND(loom_vector_dot2f_rhs, 1)
+LOOM_DEFINE_OPERAND(loom_vector_dot2f_acc, 2)
+LOOM_DEFINE_RESULT(loom_vector_dot2f_result, 0)
+iree_status_t loom_vector_dot2f_build(
+    loom_builder_t* builder,
+    loom_value_id_t lhs,
+    loom_value_id_t rhs,
+    loom_value_id_t acc,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_vector_dot2f_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_DOT4I: Group adjacent four-lane i8 products along the last axis and add each four-product sum into an i32 accumulator lane. The signedness template chooses how lhs and rhs i8 lanes are interpreted, matching dp4a/VNNI-style hardware operations.
 // %r = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<16xi8>, vector<16xi8>, vector<4xi32>

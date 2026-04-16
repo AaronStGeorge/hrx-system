@@ -2847,6 +2847,53 @@ vector_dotf = Op(
     ],
 )
 
+vector_dot2f = Op(
+    "vector.dot2f",
+    group=vector_ops,
+    doc=(
+        "Group adjacent two-lane f16 or bf16 products along the last axis and "
+        "add each two-product fused sum into an f32 accumulator lane. "
+        "Semantics are equivalent to extending each source lane to f32, then "
+        "accumulating scalar.fmaf(lhs0_f32, rhs0_f32, acc) followed by "
+        "scalar.fmaf(lhs1_f32, rhs1_f32, partial) for each result lane. This "
+        "models AMDGPU fdot2-style widened register dots without making f16 "
+        "dot accumulation implicit in vector.dotf."
+    ),
+    operands=[
+        Operand("lhs", VECTOR, doc="f16 or bf16 source lanes grouped in pairs along the last axis."),
+        Operand("rhs", VECTOR, doc="f16 or bf16 source lanes grouped in pairs along the last axis."),
+        Operand("acc", VECTOR, doc="f32 accumulator lanes updated by each two-lane dot product."),
+    ],
+    results=[Result("result", VECTOR, doc="Updated f32 accumulator lanes.")],
+    constraints=[
+        HasFloatElement("lhs"),
+        HasFloatElement("rhs"),
+        HasFloatElement("acc"),
+        SameShape("lhs", "rhs"),
+        SameElementType("lhs", "rhs"),
+        SameType("acc", "result"),
+    ],
+    verify="loom_vector_dot2f_verify",
+    traits=[PURE],
+    format=[
+        Ref("lhs"),
+        COMMA,
+        Ref("rhs"),
+        COMMA,
+        Ref("acc"),
+        COLON,
+        TypeOf("lhs"),
+        COMMA,
+        TypeOf("rhs"),
+        COMMA,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%r = vector.dot2f %lhs, %rhs, %acc : vector<16xf16>, vector<16xf16>, vector<8xf32>",
+        "%r = vector.dot2f %lhs, %rhs, %acc : vector<2x16xbf16>, vector<2x16xbf16>, vector<2x8xf32>",
+    ],
+)
+
 vector_dot4i = Op(
     "vector.dot4i",
     group=vector_ops,
@@ -3069,6 +3116,7 @@ ALL_VECTOR_OPS: tuple[Op, ...] = (
     vector_bitunpacku,
     vector_bitunpacks,
     vector_dotf,
+    vector_dot2f,
     vector_dot4i,
     vector_reduce,
 )
