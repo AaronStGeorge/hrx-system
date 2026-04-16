@@ -9,6 +9,7 @@
 #define LOOM_OPS_OP_REGISTRY_H_
 
 #include "iree/base/api.h"
+#include "loom/ir/context.h"
 #include "loom/ops/op_defs.h"
 
 #ifdef __cplusplus
@@ -34,6 +35,21 @@ const loom_op_registry_entry_t* loom_op_registry_entries(void);
 // Returns true and sets *out_kind on success, false if not found.
 bool loom_op_registry_lookup(iree_string_view_t name,
                              loom_op_kind_t* out_kind);
+
+// Registers all checked-in dialect vtables and built-in encoding families.
+//
+// The context must have been initialized and must not have been
+// finalized yet. This is the production/tooling registration path; tests
+// should use it instead of owning a separate dialect list.
+iree_status_t loom_op_registry_register_all_dialects(
+    loom_context_t* context);
+
+// Initializes |out_context| with all checked-in dialects and encodings.
+//
+// On failure the partially initialized context is deinitialized before
+// returning.
+iree_status_t loom_op_registry_initialize_context(
+    iree_allocator_t allocator, loom_context_t* out_context);
 
 #ifdef __cplusplus
 }

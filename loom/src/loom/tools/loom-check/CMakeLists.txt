@@ -28,8 +28,10 @@ loom_cc_library(
   NAME
     execute
   HDRS
+    "diagnostics.h"
     "execute.h"
   SRCS
+    "diagnostics.c"
     "emit.c"
     "execute.c"
     "roundtrip.c"
@@ -48,19 +50,7 @@ loom_cc_library(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::encoding
-    loom::src::loom::ops::func
-    loom::src::loom::ops::global
-    loom::src::loom::ops::index
-    loom::src::loom::ops::kernel
-    loom::src::loom::ops::llvmir
-    loom::src::loom::ops::pool
-    loom::src::loom::ops::scalar
-    loom::src::loom::ops::scf
-    loom::src::loom::ops::test
-    loom::src::loom::ops::vector
-    loom::src::loom::ops::view
+    loom::src::loom::ops::op_registry
     loom::src::loom::target::llvmir
     loom::src::loom::target::llvmir::lower
     loom::src::loom::testing::diff

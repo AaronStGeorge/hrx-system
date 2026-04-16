@@ -12,21 +12,9 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-#include "loom/ops/buffer/ops.h"
-#include "loom/ops/encoding/families.h"
-#include "loom/ops/encoding/ops.h"
-#include "loom/ops/func/ops.h"
-#include "loom/ops/global/ops.h"
-#include "loom/ops/index/ops.h"
-#include "loom/ops/kernel/ops.h"
-#include "loom/ops/llvmir/ops.h"
-#include "loom/ops/pool/ops.h"
-#include "loom/ops/scalar/ops.h"
-#include "loom/ops/scf/ops.h"
-#include "loom/ops/test/ops.h"
-#include "loom/ops/vector/ops.h"
-#include "loom/ops/view/ops.h"
+#include "loom/ops/op_registry.h"
 #include "loom/testing/diff.h"
+#include "loom/tools/loom-check/diagnostics.h"
 #include "loom/transforms/branch_fusion.h"
 #include "loom/transforms/branch_sink.h"
 #include "loom/transforms/canonicalize.h"
@@ -165,8 +153,9 @@ iree_status_t loom_check_diagnostic_capture_sink(
 }
 
 typedef struct loom_check_pass_diagnostic_capture_t {
-  // Diagnostic sink shared with parser, verifier, and pass-mode reporting.
-  loom_check_diagnostic_capture_t* diagnostic_capture;
+  // Diagnostic collector shared with parser, verifier, and pass-mode
+  // reporting.
+  loom_check_diagnostic_collector_t* diagnostic_collector;
 
   // Module being transformed by the pass pipeline.
   const loom_module_t* module;
@@ -226,50 +215,14 @@ static iree_status_t loom_check_pass_diagnostic_emitter(
       diagnostic.source_location = source_location;
     }
   }
-  IREE_RETURN_IF_ERROR(loom_check_diagnostic_capture_sink(
-      capture->diagnostic_capture, &diagnostic));
+  IREE_RETURN_IF_ERROR(loom_check_diagnostic_collector_sink(
+      capture->diagnostic_collector, &diagnostic));
   ++capture->emission_count;
   return iree_ok_status();
 }
 
-// Registers a single dialect's vtable array with the context.
-static iree_status_t loom_check_register_dialect(
-    loom_context_t* context, uint8_t dialect_id,
-    const loom_op_vtable_t* const* (*vtable_fn)(iree_host_size_t*)) {
-  iree_host_size_t count = 0;
-  const loom_op_vtable_t* const* vtables = vtable_fn(&count);
-  return loom_context_register_dialect(context, dialect_id, vtables,
-                                       (uint16_t)count);
-}
-
 iree_status_t loom_check_context_initialize(loom_context_t* context) {
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_TEST,
-                                                   loom_test_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_FUNC,
-                                                   loom_func_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
-      context, LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
-      context, LOOM_DIALECT_ENCODING, loom_encoding_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_POOL,
-                                                   loom_pool_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
-      context, LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_INDEX,
-                                                   loom_index_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
-      context, LOOM_DIALECT_KERNEL, loom_kernel_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
-      context, LOOM_DIALECT_LLVMIR, loom_llvmir_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_SCF,
-                                                   loom_scf_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
-      context, LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(context, LOOM_DIALECT_VIEW,
-                                                   loom_view_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_check_register_dialect(
-      context, LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables));
-  IREE_RETURN_IF_ERROR(loom_context_register_builtin_encoding_vtables(context));
+  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
   return loom_context_finalize(context);
 }
 
@@ -301,8 +254,9 @@ iree_status_t loom_check_execute_case(
       break;
     }
     case LOOM_CHECK_MODE_PASS: {
-      IREE_RETURN_IF_ERROR(loom_check_execute_pass(
-          test_case, filename, context, block_pool, allocator, result));
+      IREE_RETURN_IF_ERROR(
+          loom_check_execute_pass(test_case, case_index, report, filename,
+                                  context, block_pool, allocator, result));
       break;
     }
     case LOOM_CHECK_MODE_FORMAT: {
@@ -441,8 +395,8 @@ static iree_status_t loom_check_run_pipeline(
 
 static iree_status_t loom_check_verify_pass_output(
     const loom_check_case_t* test_case, iree_string_view_t filename,
-    loom_check_diagnostic_capture_t* diagnostic_capture, loom_module_t* module,
-    bool* out_failed_verification) {
+    loom_check_diagnostic_collector_t* diagnostic_collector,
+    loom_module_t* module, bool* out_failed_verification) {
   *out_failed_verification = false;
   loom_source_entry_t source_entry = {0};
   loom_source_table_resolver_t resolver_data = {0};
@@ -450,8 +404,8 @@ static iree_status_t loom_check_verify_pass_output(
       module->context, filename, test_case->input, &source_entry,
       &resolver_data));
   loom_verify_options_t verify_options = {
-      .sink = {.fn = loom_check_diagnostic_capture_sink,
-               .user_data = diagnostic_capture},
+      .sink = {.fn = loom_check_diagnostic_collector_sink,
+               .user_data = diagnostic_collector},
       .max_errors = 100,
       .source_resolver = {.fn = loom_source_table_resolve,
                           .user_data = &resolver_data},
@@ -463,42 +417,75 @@ static iree_status_t loom_check_verify_pass_output(
   return iree_ok_status();
 }
 
-iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
-                                      iree_string_view_t filename,
-                                      loom_context_t* context,
-                                      iree_arena_block_pool_t* block_pool,
-                                      iree_allocator_t allocator,
-                                      loom_check_result_t* result) {
-  // Parse the input.
+static iree_status_t loom_check_finish_diagnostics_if_needed(
+    loom_check_diagnostic_collector_t* diagnostic_collector,
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_allocator_t allocator,
+    loom_check_result_t* result, bool* out_failed) {
+  *out_failed = false;
+  if (diagnostic_collector->count == 0 && test_case->annotation_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_check_diagnostic_collector_finish(
+      diagnostic_collector, test_case, case_index, report, allocator, result));
+  *out_failed = result->raw_outcome == LOOM_CHECK_FAIL;
+  return iree_ok_status();
+}
+
+static bool loom_check_case_has_expected_output(
+    const loom_check_case_t* test_case) {
+  return !iree_string_view_is_empty(iree_string_view_trim(test_case->expected));
+}
+
+iree_status_t loom_check_execute_pass(
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, loom_check_result_t* result) {
   loom_module_t* module = NULL;
-  loom_check_diagnostic_capture_t diagnostic_capture = {
-      .detail = &result->detail,
+  iree_arena_allocator_t diagnostic_arena;
+  iree_arena_initialize(block_pool, &diagnostic_arena);
+  loom_check_diagnostic_collector_t diagnostic_collector = {
+      .arena = &diagnostic_arena,
+      .host_allocator = allocator,
       .result = result,
   };
   loom_text_parse_options_t parse_options = {
-      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
-                          .user_data = &diagnostic_capture},
+      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
+                          .user_data = &diagnostic_collector},
       .max_errors = 20,
   };
-  iree_status_t parse_status = loom_text_parse(
-      test_case->input, filename, context, block_pool, &parse_options, &module);
-  if (!iree_status_is_ok(parse_status)) return parse_status;
+  iree_status_t status = loom_text_parse(test_case->input, filename, context,
+                                         block_pool, &parse_options, &module);
+  diagnostic_collector.module = module;
   if (!module) {
-    result->raw_outcome = LOOM_CHECK_FAIL;
-    return iree_ok_status();
+    if (iree_status_is_ok(status)) {
+      status = loom_check_diagnostic_collector_finish(
+          &diagnostic_collector, test_case, case_index, report, allocator,
+          result);
+    }
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+
+  if (iree_status_is_ok(status) && diagnostic_collector.count > 0) {
+    status = loom_check_diagnostic_collector_finish(&diagnostic_collector,
+                                                    test_case, case_index,
+                                                    report, allocator, result);
+  }
+  if (!iree_status_is_ok(status) || diagnostic_collector.count > 0) {
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
   }
 
   // Build and run the pass pipeline.
   loom_source_entry_t source_entry = {0};
   loom_source_table_resolver_t resolver_data = {0};
-  iree_status_t resolver_status = loom_check_source_resolver_for_case(
+  status = loom_check_source_resolver_for_case(
       context, filename, test_case->input, &source_entry, &resolver_data);
-  if (!iree_status_is_ok(resolver_status)) {
-    loom_module_free(module);
-    return resolver_status;
-  }
   loom_check_pass_diagnostic_capture_t pass_diagnostic_capture = {
-      .diagnostic_capture = &diagnostic_capture,
+      .diagnostic_collector = &diagnostic_collector,
       .module = module,
       .source_resolver = {.fn = loom_source_table_resolve,
                           .user_data = &resolver_data},
@@ -507,58 +494,67 @@ iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
       .fn = loom_check_pass_diagnostic_emitter,
       .user_data = &pass_diagnostic_capture,
   };
-  iree_status_t pipeline_status = loom_check_run_pipeline(
-      test_case->pipeline, block_pool, pass_diagnostic_emitter, module);
-  if (!iree_status_is_ok(pipeline_status)) {
-    loom_module_free(module);
-    if (pass_diagnostic_capture.emission_count > 0) {
-      result->raw_outcome = LOOM_CHECK_FAIL;
-      return iree_status_ignore(pipeline_status);
+  if (iree_status_is_ok(status)) {
+    status = loom_check_run_pipeline(test_case->pipeline, block_pool,
+                                     pass_diagnostic_emitter, module);
+  }
+  if (!iree_status_is_ok(status)) {
+    if (pass_diagnostic_capture.emission_count > 0 ||
+        diagnostic_collector.count > 0 || test_case->annotation_count > 0) {
+      iree_status_ignore(status);
+      status = loom_check_diagnostic_collector_finish(
+          &diagnostic_collector, test_case, case_index, report, allocator,
+          result);
     }
-    return pipeline_status;
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
   }
 
   bool failed_verification = false;
-  iree_status_t verify_status = loom_check_verify_pass_output(
-      test_case, filename, &diagnostic_capture, module, &failed_verification);
-  if (!iree_status_is_ok(verify_status)) {
-    loom_module_free(module);
-    return verify_status;
+  status = loom_check_verify_pass_output(
+      test_case, filename, &diagnostic_collector, module, &failed_verification);
+  bool diagnostics_failed = false;
+  if (iree_status_is_ok(status)) {
+    status = loom_check_finish_diagnostics_if_needed(
+        &diagnostic_collector, test_case, case_index, report, allocator, result,
+        &diagnostics_failed);
   }
-  if (failed_verification) {
+  bool has_expected_output = loom_check_case_has_expected_output(test_case);
+  if (!iree_status_is_ok(status) || diagnostics_failed || failed_verification ||
+      (diagnostic_collector.count > 0 && !has_expected_output)) {
     loom_module_free(module);
-    result->raw_outcome = LOOM_CHECK_FAIL;
-    return iree_ok_status();
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
   }
 
   // Print the result (stripping comments for comparison).
-  iree_status_t print_status = loom_text_print_module_to_builder(
-      module, &result->actual_output, LOOM_TEXT_PRINT_DEFAULT);
+  status = loom_text_print_module_to_builder(module, &result->actual_output,
+                                             LOOM_TEXT_PRINT_DEFAULT);
   loom_module_free(module);
-  IREE_RETURN_IF_ERROR(print_status);
 
   // Strip comments from the expected section.
   iree_string_builder_t stripped_expected;
   iree_string_builder_initialize(allocator, &stripped_expected);
-  IREE_RETURN_IF_ERROR(
-      loom_check_strip_comments(test_case->expected, &stripped_expected));
-
-  // Compare.
-  iree_string_view_t actual_trimmed =
-      iree_string_view_trim(iree_string_builder_view(&result->actual_output));
-  iree_string_view_t expected_trimmed =
-      iree_string_view_trim(iree_string_builder_view(&stripped_expected));
-
-  iree_status_t status = iree_ok_status();
-  if (iree_string_view_equal(actual_trimmed, expected_trimmed)) {
-    result->raw_outcome = LOOM_CHECK_PASS;
-  } else {
-    result->raw_outcome = LOOM_CHECK_FAIL;
-    status = loom_check_result_record_diff(expected_trimmed, actual_trimmed,
-                                           allocator, result);
+  if (iree_status_is_ok(status)) {
+    status = loom_check_strip_comments(test_case->expected, &stripped_expected);
+  }
+  if (iree_status_is_ok(status)) {
+    iree_string_view_t actual_trimmed =
+        iree_string_view_trim(iree_string_builder_view(&result->actual_output));
+    iree_string_view_t expected_trimmed =
+        iree_string_view_trim(iree_string_builder_view(&stripped_expected));
+    if (iree_string_view_equal(actual_trimmed, expected_trimmed)) {
+      result->raw_outcome = LOOM_CHECK_PASS;
+    } else {
+      result->raw_outcome = LOOM_CHECK_FAIL;
+      status = loom_check_result_record_diff(expected_trimmed, actual_trimmed,
+                                             allocator, result);
+    }
   }
 
   iree_string_builder_deinitialize(&stripped_expected);
+  iree_arena_deinitialize(&diagnostic_arena);
   return status;
 }
 

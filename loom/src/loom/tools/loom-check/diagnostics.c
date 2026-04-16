@@ -1,0 +1,508 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/tools/loom-check/diagnostics.h"
+
+#include <string.h>
+
+#include "loom/error/renderer.h"
+#include "loom/format/text/printer.h"
+#include "loom/util/json.h"
+#include "loom/util/stream.h"
+
+//===----------------------------------------------------------------------===//
+// Diagnostic collection
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_check_diagnostic_collector_grow(
+    loom_check_diagnostic_collector_t* collector) {
+  iree_host_size_t new_capacity =
+      collector->capacity == 0 ? 16 : collector->capacity * 2;
+  loom_check_collected_diagnostic_t* new_diagnostics = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      collector->arena,
+      new_capacity * sizeof(loom_check_collected_diagnostic_t),
+      (void**)&new_diagnostics));
+  if (collector->count > 0) {
+    memcpy(new_diagnostics, collector->diagnostics,
+           collector->count * sizeof(loom_check_collected_diagnostic_t));
+  }
+  collector->diagnostics = new_diagnostics;
+  collector->capacity = new_capacity;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_format_type(loom_type_t type, void* user_data,
+                                            loom_output_stream_t* stream) {
+  const loom_module_t* module = (const loom_module_t*)user_data;
+  if (!module) {
+    return loom_type_format_minimal(type, NULL, stream);
+  }
+  return loom_text_print_type(type, module, stream);
+}
+
+static iree_status_t loom_check_diagnostic_collector_copy_string(
+    loom_check_diagnostic_collector_t* collector, iree_string_view_t source,
+    iree_string_view_t* out_copy) {
+  *out_copy = iree_string_view_empty();
+  if (iree_string_view_is_empty(source)) return iree_ok_status();
+  char* target = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(collector->arena, source.size, (void**)&target));
+  memcpy(target, source.data, source.size);
+  *out_copy = iree_make_string_view(target, source.size);
+  return iree_ok_status();
+}
+
+iree_status_t loom_check_diagnostic_collector_sink(
+    void* user_data, const loom_diagnostic_t* diagnostic) {
+  loom_check_diagnostic_collector_t* collector =
+      (loom_check_diagnostic_collector_t*)user_data;
+  if (collector->count >= collector->capacity) {
+    IREE_RETURN_IF_ERROR(loom_check_diagnostic_collector_grow(collector));
+  }
+
+  iree_string_builder_t message_builder;
+  iree_string_builder_initialize(collector->host_allocator, &message_builder);
+  loom_output_stream_t message_stream;
+  loom_output_stream_for_builder(&message_builder, &message_stream);
+  loom_type_formatter_t type_formatter = {loom_check_format_type,
+                                          (void*)collector->module};
+  iree_status_t render_status = loom_diagnostic_render_message(
+      diagnostic->error, diagnostic->params, diagnostic->param_count,
+      type_formatter, &message_stream);
+  if (!iree_status_is_ok(render_status)) {
+    iree_string_builder_deinitialize(&message_builder);
+    return render_status;
+  }
+
+  iree_string_view_t message = iree_string_view_empty();
+  iree_status_t copy_status = loom_check_diagnostic_collector_copy_string(
+      collector, iree_string_builder_view(&message_builder), &message);
+  iree_string_builder_deinitialize(&message_builder);
+  IREE_RETURN_IF_ERROR(copy_status);
+
+  iree_string_builder_t formatted_builder;
+  iree_string_builder_initialize(collector->host_allocator, &formatted_builder);
+  loom_output_stream_t formatted_stream;
+  loom_output_stream_for_builder(&formatted_builder, &formatted_stream);
+  iree_status_t format_status =
+      loom_diagnostic_format(diagnostic, &formatted_stream);
+  iree_string_view_t formatted_diagnostic = iree_string_view_empty();
+  if (iree_status_is_ok(format_status)) {
+    format_status = loom_check_diagnostic_collector_copy_string(
+        collector, iree_string_builder_view(&formatted_builder),
+        &formatted_diagnostic);
+  }
+  iree_string_builder_deinitialize(&formatted_builder);
+  IREE_RETURN_IF_ERROR(format_status);
+
+  collector->diagnostics[collector->count++] =
+      (loom_check_collected_diagnostic_t){
+          .severity = diagnostic->severity,
+          .domain = diagnostic->error->domain,
+          .code = diagnostic->error->code,
+          .origin_line = diagnostic->origin.start_line,
+          .message = message,
+          .formatted_diagnostic = formatted_diagnostic,
+      };
+  loom_check_diagnostic_capture_t diagnostic_capture = {
+      .result = collector->result,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_check_diagnostic_capture_sink(&diagnostic_capture, diagnostic));
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Annotation matching
+//===----------------------------------------------------------------------===//
+
+static bool loom_check_diagnostic_matches_annotation(
+    const loom_check_collected_diagnostic_t* diagnostic,
+    const loom_check_annotation_t* annotation) {
+  if (diagnostic->severity != annotation->severity) return false;
+
+  if (annotation->domain != LOOM_ERROR_DOMAIN_COUNT_ &&
+      diagnostic->domain != annotation->domain) {
+    return false;
+  }
+
+  if (annotation->code != 0 && diagnostic->code != annotation->code) {
+    return false;
+  }
+
+  if (diagnostic->origin_line != (uint32_t)annotation->target_line) {
+    return false;
+  }
+
+  for (uint8_t i = 0; i < annotation->message_substring_count; ++i) {
+    if (iree_string_view_find(diagnostic->message,
+                              annotation->message_substrings[i],
+                              0) == IREE_STRING_VIEW_NPOS) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static iree_status_t loom_check_match_annotations(
+    loom_check_collected_diagnostic_t* diagnostics,
+    iree_host_size_t diagnostic_count,
+    const loom_check_annotation_t* annotations,
+    iree_host_size_t annotation_count, loom_check_file_report_t* report,
+    iree_host_size_t case_index) {
+  for (iree_host_size_t a = 0; a < annotation_count; ++a) {
+    for (iree_host_size_t d = 0; d < diagnostic_count; ++d) {
+      if (diagnostics[d].matched) continue;
+      if (loom_check_diagnostic_matches_annotation(&diagnostics[d],
+                                                   &annotations[a])) {
+        diagnostics[d].matched = true;
+        IREE_RETURN_IF_ERROR(loom_check_file_report_mark_annotation_matched(
+            report, case_index, a));
+        break;
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
+// Result assembly
+//===----------------------------------------------------------------------===//
+
+static const char* loom_check_annotation_severity_name(
+    loom_diagnostic_severity_t severity) {
+  switch (severity) {
+    case LOOM_DIAGNOSTIC_ERROR:
+      return "ERROR";
+    case LOOM_DIAGNOSTIC_WARNING:
+      return "WARNING";
+    case LOOM_DIAGNOSTIC_REMARK:
+      return "REMARK";
+    case LOOM_DIAGNOSTIC_COUNT_:
+      break;
+  }
+  return "ERROR";
+}
+
+static iree_status_t loom_check_append_diagnostic_annotation_line(
+    const loom_check_collected_diagnostic_t* diagnostic,
+    iree_host_size_t line_offset, iree_string_view_t indentation,
+    iree_string_builder_t* builder) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(builder, indentation));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "// %s@+%zu: %s",
+      loom_check_annotation_severity_name(diagnostic->severity), line_offset,
+      loom_error_domain_name(diagnostic->domain)));
+  if (diagnostic->code != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_format(builder, "/%03u", diagnostic->code));
+  }
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
+  return iree_ok_status();
+}
+
+static bool loom_check_find_input_line_start(
+    const loom_check_case_t* test_case, iree_host_size_t target_line,
+    loom_check_source_range_t* out_range, iree_string_view_t* out_indentation) {
+  *out_indentation = iree_string_view_empty();
+
+  if (target_line == 0 || !test_case->input.data) return false;
+
+  iree_string_view_t scanner = test_case->input;
+  iree_host_size_t line_number = 1;
+  while (true) {
+    const char* line_start =
+        scanner.data ? scanner.data
+                     : test_case->input.data + test_case->input.size;
+    if (line_number == target_line) {
+      if (line_start < test_case->input.data ||
+          line_start > test_case->input.data + test_case->input.size) {
+        return false;
+      }
+      iree_host_size_t line_offset =
+          (iree_host_size_t)(line_start - test_case->input.data);
+      iree_host_size_t source_offset =
+          test_case->input_range.start_byte + line_offset;
+      *out_range = (loom_check_source_range_t){
+          .start_byte = source_offset,
+          .end_byte = source_offset,
+      };
+
+      iree_host_size_t remaining_length =
+          (iree_host_size_t)(test_case->input.data + test_case->input.size -
+                             line_start);
+      iree_string_view_t line =
+          iree_make_string_view(line_start, remaining_length);
+      intptr_t newline = iree_string_view_find_char(line, '\n', 0);
+      if (newline >= 0) {
+        line = iree_string_view_substr(line, 0, (iree_host_size_t)newline);
+      }
+      iree_host_size_t indentation_length = 0;
+      while (indentation_length < line.size &&
+             (line.data[indentation_length] == ' ' ||
+              line.data[indentation_length] == '\t')) {
+        ++indentation_length;
+      }
+      *out_indentation = iree_string_view_substr(line, 0, indentation_length);
+      return true;
+    }
+    if (iree_string_view_is_empty(scanner)) break;
+
+    intptr_t newline = iree_string_view_find_char(scanner, '\n', 0);
+    if (newline < 0) {
+      scanner = iree_string_view_empty();
+    } else {
+      scanner = iree_string_view_substr(scanner, (iree_host_size_t)newline + 1,
+                                        IREE_HOST_SIZE_MAX);
+    }
+    ++line_number;
+  }
+  return false;
+}
+
+static loom_check_source_range_t loom_check_annotation_delete_range(
+    const loom_check_case_t* test_case,
+    const loom_check_annotation_t* annotation) {
+  loom_check_source_range_t range = annotation->source_range;
+  if (!test_case->input.data ||
+      range.start_byte < test_case->input_range.start_byte ||
+      range.end_byte > test_case->input_range.end_byte) {
+    return range;
+  }
+
+  iree_host_size_t relative_end =
+      range.end_byte - test_case->input_range.start_byte;
+  if (relative_end < test_case->input.size) {
+    if (test_case->input.data[relative_end] == '\r') {
+      ++range.end_byte;
+      ++relative_end;
+    }
+    if (relative_end < test_case->input.size &&
+        test_case->input.data[relative_end] == '\n') {
+      ++range.end_byte;
+    }
+  }
+  return range;
+}
+
+static iree_status_t loom_check_append_annotation_edit_json(
+    loom_check_result_t* result, loom_check_update_edit_kind_t kind,
+    loom_check_source_range_t range, iree_host_size_t target_line,
+    iree_string_view_t text) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&result->annotation_edits.json, &stream);
+  if (result->annotation_edits.count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\n"));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "\"kind\": "));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      &stream, loom_check_update_edit_kind_name(kind)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream,
+      ", \"range\": {\"start_byte\": %zu, \"end_byte\": %zu}, "
+      "\"target_line\": %zu, \"text\": ",
+      range.start_byte, range.end_byte, target_line));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, text));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
+  ++result->annotation_edits.count;
+  return iree_ok_status();
+}
+
+static bool loom_check_previous_unmatched_diagnostic_on_line(
+    const loom_check_collected_diagnostic_t* diagnostics,
+    iree_host_size_t begin, uint32_t origin_line) {
+  for (iree_host_size_t i = 0; i < begin; ++i) {
+    if (!diagnostics[i].matched && diagnostics[i].origin_line == origin_line) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_host_size_t loom_check_count_unmatched_diagnostics_on_line(
+    const loom_check_collected_diagnostic_t* diagnostics,
+    iree_host_size_t diagnostic_count, uint32_t origin_line) {
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0; i < diagnostic_count; ++i) {
+    if (!diagnostics[i].matched && diagnostics[i].origin_line == origin_line) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+static iree_status_t loom_check_build_annotation_edits(
+    const loom_check_collected_diagnostic_t* diagnostics,
+    iree_host_size_t diagnostic_count,
+    const loom_check_annotation_t* annotations,
+    iree_host_size_t annotation_count, const loom_check_file_report_t* report,
+    iree_host_size_t case_index, const loom_check_case_t* test_case,
+    iree_allocator_t allocator, loom_check_result_t* result) {
+  for (iree_host_size_t a = 0; a < annotation_count; ++a) {
+    bool annotation_matched = false;
+    IREE_RETURN_IF_ERROR(loom_check_file_report_annotation_matched(
+        report, case_index, a, &annotation_matched));
+    if (annotation_matched) continue;
+    const loom_check_annotation_t* annotation = &annotations[a];
+    loom_check_source_range_t delete_range =
+        loom_check_annotation_delete_range(test_case, annotation);
+    IREE_RETURN_IF_ERROR(loom_check_append_annotation_edit_json(
+        result, LOOM_CHECK_UPDATE_EDIT_DELETE_DIAGNOSTIC_ANNOTATION,
+        delete_range, annotation->target_line, iree_string_view_empty()));
+  }
+
+  for (iree_host_size_t d = 0; d < diagnostic_count; ++d) {
+    const loom_check_collected_diagnostic_t* diagnostic = &diagnostics[d];
+    if (diagnostic->matched || diagnostic->origin_line == 0) continue;
+    if (loom_check_previous_unmatched_diagnostic_on_line(
+            diagnostics, d, diagnostic->origin_line)) {
+      continue;
+    }
+
+    loom_check_source_range_t insert_range = loom_check_source_range_empty();
+    iree_string_view_t indentation = iree_string_view_empty();
+    if (!loom_check_find_input_line_start(test_case, diagnostic->origin_line,
+                                          &insert_range, &indentation)) {
+      continue;
+    }
+
+    iree_string_builder_t text;
+    iree_string_builder_initialize(allocator, &text);
+    iree_status_t status = iree_ok_status();
+    iree_host_size_t line_diagnostic_count =
+        loom_check_count_unmatched_diagnostics_on_line(
+            diagnostics, diagnostic_count, diagnostic->origin_line);
+    iree_host_size_t line_offset = line_diagnostic_count;
+    for (iree_host_size_t i = d;
+         iree_status_is_ok(status) && i < diagnostic_count; ++i) {
+      if (diagnostics[i].matched ||
+          diagnostics[i].origin_line != diagnostic->origin_line) {
+        continue;
+      }
+      status = loom_check_append_diagnostic_annotation_line(
+          &diagnostics[i], line_offset, indentation, &text);
+      --line_offset;
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_check_append_annotation_edit_json(
+          result, LOOM_CHECK_UPDATE_EDIT_INSERT_DIAGNOSTIC_ANNOTATIONS,
+          insert_range, diagnostic->origin_line,
+          iree_string_builder_view(&text));
+    }
+    iree_string_builder_deinitialize(&text);
+    IREE_RETURN_IF_ERROR(status);
+  }
+
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_assemble_diagnostic_match_detail(
+    const loom_check_collected_diagnostic_t* diagnostics,
+    iree_host_size_t diagnostic_count,
+    const loom_check_annotation_t* annotations,
+    iree_host_size_t annotation_count, const loom_check_file_report_t* report,
+    iree_host_size_t case_index, iree_string_builder_t* detail) {
+  for (iree_host_size_t a = 0; a < annotation_count; ++a) {
+    bool annotation_matched = false;
+    IREE_RETURN_IF_ERROR(loom_check_file_report_annotation_matched(
+        report, case_index, a, &annotation_matched));
+    if (annotation_matched) continue;
+    const loom_check_annotation_t* annotation = &annotations[a];
+    const char* severity_name =
+        loom_diagnostic_severity_name(annotation->severity);
+    if (annotation->domain != LOOM_ERROR_DOMAIN_COUNT_ &&
+        annotation->code != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          detail, "unmatched annotation line %zu: expected %s %s/%03u",
+          annotation->target_line, severity_name,
+          loom_error_domain_name(annotation->domain), annotation->code));
+    } else if (annotation->domain != LOOM_ERROR_DOMAIN_COUNT_) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          detail, "unmatched annotation line %zu: expected %s %s/*",
+          annotation->target_line, severity_name,
+          loom_error_domain_name(annotation->domain)));
+    } else if (annotation->code != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          detail, "unmatched annotation line %zu: expected %s */%03u",
+          annotation->target_line, severity_name, annotation->code));
+    } else {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          detail, "unmatched annotation line %zu: expected %s",
+          annotation->target_line, severity_name));
+    }
+    for (uint8_t i = 0; i < annotation->message_substring_count; ++i) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          detail, " \"%.*s\"", (int)annotation->message_substrings[i].size,
+          annotation->message_substrings[i].data));
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(detail, "\n"));
+  }
+
+  for (iree_host_size_t d = 0; d < diagnostic_count; ++d) {
+    if (diagnostics[d].matched) continue;
+    const loom_check_collected_diagnostic_t* diagnostic = &diagnostics[d];
+    const char* severity_name =
+        loom_diagnostic_severity_name(diagnostic->severity);
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        detail, "unexpected %s at line %u: [%s/%03u] %.*s\n", severity_name,
+        diagnostic->origin_line, loom_error_domain_name(diagnostic->domain),
+        diagnostic->code, (int)diagnostic->message.size,
+        diagnostic->message.data));
+    if (!iree_string_view_is_empty(diagnostic->formatted_diagnostic)) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+          detail, diagnostic->formatted_diagnostic));
+    }
+  }
+
+  return iree_ok_status();
+}
+
+iree_status_t loom_check_diagnostic_collector_finish(
+    loom_check_diagnostic_collector_t* collector,
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_allocator_t allocator,
+    loom_check_result_t* result) {
+  IREE_RETURN_IF_ERROR(loom_check_match_annotations(
+      collector->diagnostics, collector->count, test_case->annotations,
+      test_case->annotation_count, report, case_index));
+
+  bool all_annotations_matched = true;
+  for (iree_host_size_t i = 0; i < test_case->annotation_count; ++i) {
+    bool annotation_matched = false;
+    IREE_RETURN_IF_ERROR(loom_check_file_report_annotation_matched(
+        report, case_index, i, &annotation_matched));
+    if (!annotation_matched) {
+      all_annotations_matched = false;
+      break;
+    }
+  }
+
+  bool all_diagnostics_matched = true;
+  for (iree_host_size_t i = 0; i < collector->count; ++i) {
+    if (!collector->diagnostics[i].matched) {
+      all_diagnostics_matched = false;
+      break;
+    }
+  }
+
+  if (all_annotations_matched && all_diagnostics_matched) {
+    result->raw_outcome = LOOM_CHECK_PASS;
+    return iree_ok_status();
+  }
+
+  result->raw_outcome = LOOM_CHECK_FAIL;
+  IREE_RETURN_IF_ERROR(loom_check_assemble_diagnostic_match_detail(
+      collector->diagnostics, collector->count, test_case->annotations,
+      test_case->annotation_count, report, case_index, &result->detail));
+  return loom_check_build_annotation_edits(
+      collector->diagnostics, collector->count, test_case->annotations,
+      test_case->annotation_count, report, case_index, test_case, allocator,
+      result);
+}

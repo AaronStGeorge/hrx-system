@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/op_registry.h"
@@ -75,6 +76,24 @@ TEST(OpRegistry, AllEntriesValid) {
     EXPECT_EQ(kind, entries[i].kind)
         << "entry " << i << " kind mismatch after round-trip lookup";
   }
+}
+
+TEST(OpRegistry, RegistersCompleteContextSurface) {
+  loom_context_t context;
+  IREE_ASSERT_OK(
+      loom_op_registry_initialize_context(iree_allocator_system(), &context));
+
+  loom_op_kind_t kind = 0;
+  const loom_op_vtable_t* vtable = loom_context_lookup_op_by_name(
+      &context, iree_make_cstring_view("func.def"), &kind);
+  ASSERT_NE(vtable, nullptr);
+  EXPECT_EQ(kind, LOOM_OP_FUNC_DEF);
+
+  EXPECT_NE(loom_context_lookup_encoding_vtable(
+                &context, iree_make_cstring_view("dense")),
+            nullptr);
+
+  loom_context_deinitialize(&context);
 }
 
 //===----------------------------------------------------------------------===//

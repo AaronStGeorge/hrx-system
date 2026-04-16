@@ -63,6 +63,7 @@ loom_cc_library(
   DEPS
     ::op_defs
     iree::base
+    loom::src::loom::ir
     loom::src::loom::ops::buffer
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func

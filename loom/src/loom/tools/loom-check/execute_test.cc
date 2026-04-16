@@ -162,7 +162,7 @@ TEST_F(ExecuteTest, RoundtripLlvmIrInlineAsm) {
       ExecuteFirst("// RUN: roundtrip\n"
                    "func.def @inline_asm_add(%lhs: i32, %rhs: i32) -> (i32) {\n"
                    "  %sum = llvmir.inline_asm<sideeffect> \"addl $2, $0\", "
-                   "\"=r,0,r\" (%lhs, %rhs) : (i32, i32) -> i32\n"
+                   "\"=r,0,r\"(%lhs, %rhs) : (i32, i32) -> i32\n"
                    "  func.return %sum : i32\n"
                    "}\n",
                    &result));

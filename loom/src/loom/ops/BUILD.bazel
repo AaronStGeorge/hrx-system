@@ -51,6 +51,7 @@ loom_cc_library(
     hdrs = ["op_registry.h"],
     deps = [
         ":op_defs",
+        "//loom/src/loom/ir",
         "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/encoding",
         "//loom/src/loom/ops/func",

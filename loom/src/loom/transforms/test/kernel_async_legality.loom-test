@@ -15,3 +15,64 @@ func.def @two_group_pipeline_waits_oldest_first() {
   kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
   func.return
 }
+
+// ====
+
+func.def @rejects_wrong_newer_group_count() {
+  %load0 = kernel.async.group -> kernel.async.group
+  %load1 = kernel.async.group -> kernel.async.group
+  // ERROR@+1: LOWERING/001 "kernel.async.wait" "kernel-async-legality" "newer_groups is 0 but 1 younger async group(s) remain outstanding"
+  kernel.async.wait %load0 {newer_groups = 0} : kernel.async.group
+  kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_wait_before_local_group(%group: kernel.async.group) {
+  // ERROR@+1: LOWERING/001 "kernel.async.wait" "kernel-async-legality" "waited async group is not committed in the current straight-line async stream"
+  kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_completed_group_wait() {
+  %load0 = kernel.async.group -> kernel.async.group
+  %load1 = kernel.async.group -> kernel.async.group
+  kernel.async.wait %load1 {newer_groups = 0} : kernel.async.group
+  // ERROR@+1: LOWERING/001 "kernel.async.wait" "kernel-async-legality" "async group was already completed by an earlier wait in the current stream"
+  kernel.async.wait %load0 {newer_groups = 0} : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_carried_group_use() {
+  // ERROR@+1: LOWERING/001 "kernel.async.group" "kernel-async-legality" "carried async groups require pipeline-aware legality analysis before lowering"
+  %group = kernel.async.group -> kernel.async.group
+  test.use %group : kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_unwaited_group() {
+  // ERROR@+1: LOWERING/001 "kernel.async.group" "kernel-async-legality" "async group has no wait in the current async stream"
+  %group = kernel.async.group -> kernel.async.group
+  func.return
+}
+
+// ====
+
+func.def @rejects_region_wait_without_parent_wait(%cond: i1) {
+  // ERROR@+1: LOWERING/001 "kernel.async.group" "kernel-async-legality" "async group is not waited before leaving its block"
+  %group = kernel.async.group -> kernel.async.group
+  scf.if %cond {
+    kernel.async.wait %group {newer_groups = 0} : kernel.async.group
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return
+}

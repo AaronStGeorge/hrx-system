@@ -10,4 +10,56 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    convert
+  HDRS
+    "convert.h"
+  SRCS
+    "convert.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::error::diagnostic
+    loom::src::loom::format::bytecode::format
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_binary(
+  NAME
+    loom-format
+  SRCS
+    "loom-format.c"
+  DEPS
+    ::convert
+    iree::base
+    iree::base::internal::arena
+    iree::base::tooling::flags
+    iree::io::file_handle
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ops::op_registry
+    loom::src::loom::util::stream
+)
+
+loom_cc_test(
+  NAME
+    convert_test
+  SRCS
+    "convert_test.cc"
+  DEPS
+    ::convert
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::bytecode::format
+    loom::src::loom::ops::op_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
