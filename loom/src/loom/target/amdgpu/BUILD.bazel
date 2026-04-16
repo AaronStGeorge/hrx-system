@@ -19,11 +19,32 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
+loom_cc_library(
+    name = "matrix_facts",
+    srcs = ["matrix_facts.c"],
+    hdrs = ["matrix_facts.h"],
+    deps = [
+        ":matrix_contract",
+        "//loom/src/loom/util:fact_table",
+    ],
+)
+
 loom_cc_test(
     name = "matrix_contract_test",
     srcs = ["matrix_contract_test.cc"],
     deps = [
         ":matrix_contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "matrix_facts_test",
+    srcs = ["matrix_facts_test.cc"],
+    deps = [
+        ":matrix_contract",
+        ":matrix_facts",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

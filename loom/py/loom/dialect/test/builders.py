@@ -642,6 +642,19 @@ class TestBuilders:
         _operands.append(value)
         return cast(ValueRef, self._b.build("test.fact_encoding_layout_stride_hi", _operands, results=results, attributes=_attributes, regions=_regions))
 
+    def fact_encoding_matrix_field(self, *, value: ValueRef, field: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Exposes a packed matrix storage-schema summary field as an i64 constant. Supported fields are format, scale_kind, scale_format, scale_placement, scale_conversion, packed_registers, packed_elements, zero_scale_fallback, and static_spec.
+
+        Example::
+            %format = test.fact_encoding_matrix_field %schema["format"] : encoding<schema> -> i64
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["field"] = field
+        _operands.append(value)
+        return cast(ValueRef, self._b.build("test.fact_encoding_matrix_field", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def fact_is_buffer_reference(self, *, value: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
         """Returns 1 if the input has a buffer-reference analysis summary, 0 otherwise.
 

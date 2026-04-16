@@ -166,7 +166,7 @@ iree_status_t loom_test_fact_encoding_layout_stride_hi_facts(
     loom_value_facts_t* result_facts) {
   loom_value_fact_encoding_summary_t summary =
       loom_test_encoding_summary_or_empty(context, operand_facts[0]);
-  int64_t axis = loom_attr_as_i64(loom_op_attrs(op)[0]);
+  int64_t axis = loom_test_fact_encoding_layout_stride_hi_axis(op);
   if (summary.address_layout.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED ||
       axis < 0 || axis >= summary.address_layout.rank ||
       !summary.address_layout.strides) {
@@ -175,6 +175,55 @@ iree_status_t loom_test_fact_encoding_layout_stride_hi_facts(
   }
   result_facts[0] =
       loom_value_facts_exact_i64(summary.address_layout.strides[axis].range_hi);
+  return iree_ok_status();
+}
+
+static bool loom_test_string_id_equal(const loom_module_t* module,
+                                      loom_string_id_t string_id,
+                                      iree_string_view_t expected) {
+  if (!module || string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return false;
+  }
+  return iree_string_view_equal(module->strings.entries[string_id], expected);
+}
+
+iree_status_t loom_test_fact_encoding_matrix_field_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  loom_value_fact_encoding_summary_t summary =
+      loom_test_encoding_summary_or_empty(context, operand_facts[0]);
+  loom_value_fact_storage_schema_t schema = summary.storage_schema;
+  loom_value_fact_matrix_storage_schema_t matrix = schema.matrix;
+  loom_string_id_t field = loom_test_fact_encoding_matrix_field_field(op);
+  int64_t value = INT64_MIN;
+  if (loom_test_string_id_equal(module, field, IREE_SV("format"))) {
+    value = (int64_t)matrix.format;
+  } else if (loom_test_string_id_equal(module, field, IREE_SV("scale_kind"))) {
+    value = (int64_t)matrix.scale_kind;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("scale_format"))) {
+    value = (int64_t)matrix.scale_format;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("scale_placement"))) {
+    value = (int64_t)matrix.scale_placement;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("scale_conversion"))) {
+    value = (int64_t)matrix.scale_conversion;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("packed_registers"))) {
+    value = (int64_t)matrix.packed_register_count;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("packed_elements"))) {
+    value = (int64_t)matrix.packed_element_count;
+  } else if (loom_test_string_id_equal(module, field,
+                                       IREE_SV("zero_scale_fallback"))) {
+    value = matrix.zero_scale_fallback ? 1 : 0;
+  } else if (loom_test_string_id_equal(module, field, IREE_SV("static_spec"))) {
+    value = (int64_t)schema.static_spec_encoding_id;
+  }
+  result_facts[0] = loom_value_facts_exact_i64(value);
   return iree_ok_status();
 }
 

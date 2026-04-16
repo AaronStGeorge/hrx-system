@@ -293,8 +293,11 @@ TEST_F(RemapTest, RemapsOverflowDimsAndEncodingBeforeInterning) {
   EXPECT_NE((const void*)(uintptr_t)target_type.dims[0],
             (const void*)source_dims);
 
-  ASSERT_EQ(target_->types.count, 1u);
-  EXPECT_TRUE(loom_type_equal(target_->types.entries[0], target_type));
+  ASSERT_EQ(target_->types.count, 3u);
+  EXPECT_TRUE(loom_type_equal(target_->types.entries[0], index_type));
+  EXPECT_TRUE(loom_type_equal(target_->types.entries[1],
+                              loom_type_scalar(LOOM_SCALAR_TYPE_F32)));
+  EXPECT_TRUE(loom_type_equal(target_->types.entries[2], target_type));
 }
 
 TEST_F(RemapTest, RejectsDeepStaticEncodingNesting) {

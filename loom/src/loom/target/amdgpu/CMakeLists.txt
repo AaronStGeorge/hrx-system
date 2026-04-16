@@ -22,6 +22,19 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    matrix_facts
+  HDRS
+    "matrix_facts.h"
+  SRCS
+    "matrix_facts.c"
+  DEPS
+    ::matrix_contract
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     matrix_contract_test
@@ -29,6 +42,18 @@ loom_cc_test(
     "matrix_contract_test.cc"
   DEPS
     ::matrix_contract
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    matrix_facts_test
+  SRCS
+    "matrix_facts_test.cc"
+  DEPS
+    ::matrix_contract
+    ::matrix_facts
     iree::testing::gtest
     iree::testing::gtest_main
 )

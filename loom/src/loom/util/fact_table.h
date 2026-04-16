@@ -109,6 +109,112 @@ typedef struct loom_value_fact_address_layout_t {
   const loom_value_facts_t* strides;
 } loom_value_fact_address_layout_t;
 
+// Logical low-bit matrix format carried by a packed matrix storage schema.
+typedef enum loom_value_fact_matrix_format_e {
+  // No usable matrix-format fact is known.
+  LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN = 0,
+  // AMD FP8 payload selected by hardware matrix-format immediates.
+  LOOM_VALUE_FACT_MATRIX_FORMAT_FP8 = 1,
+  // AMD BF8 payload selected by hardware matrix-format immediates.
+  LOOM_VALUE_FACT_MATRIX_FORMAT_BF8 = 2,
+  // AMD FP6 payload selected by hardware matrix-format immediates.
+  LOOM_VALUE_FACT_MATRIX_FORMAT_FP6 = 3,
+  // AMD BF6 payload selected by hardware matrix-format immediates.
+  LOOM_VALUE_FACT_MATRIX_FORMAT_BF6 = 4,
+  // AMD FP4 payload selected by hardware matrix-format immediates.
+  LOOM_VALUE_FACT_MATRIX_FORMAT_FP4 = 5,
+} loom_value_fact_matrix_format_t;
+
+// Explicit scale operand shape used by a packed matrix storage schema.
+typedef enum loom_value_fact_matrix_scale_kind_e {
+  // No usable scale-kind fact is known.
+  LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN = 0,
+  // Matrix payload has no explicit scale operands.
+  LOOM_VALUE_FACT_MATRIX_SCALE_NONE = 1,
+  // Matrix payload uses 32-bit scale exponent operands.
+  LOOM_VALUE_FACT_MATRIX_SCALE_32 = 2,
+  // Matrix payload uses 16-bit scale exponent operands.
+  LOOM_VALUE_FACT_MATRIX_SCALE_16 = 3,
+} loom_value_fact_matrix_scale_kind_t;
+
+// Hardware scale exponent format used by a packed matrix storage schema.
+typedef enum loom_value_fact_matrix_scale_format_e {
+  // No usable scale-format fact is known.
+  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_UNKNOWN = 0,
+  // No scale-format selector is used.
+  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_NONE = 1,
+  // AMD MATRIX_SCALE_FMT_E8 selector.
+  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_E8 = 2,
+  // AMD MATRIX_SCALE_FMT_E5M3 selector.
+  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_E5M3 = 3,
+  // AMD MATRIX_SCALE_FMT_E4M3 selector.
+  LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_E4M3 = 4,
+} loom_value_fact_matrix_scale_format_t;
+
+// Placement of scale exponent operands relative to a matrix fragment.
+typedef enum loom_value_fact_matrix_scale_placement_e {
+  // No usable scale-placement fact is known.
+  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_UNKNOWN = 0,
+  // No scale exponent placement is used.
+  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_NONE = 1,
+  // Scale exponents are supplied as explicit operands without row selection.
+  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_EXPLICIT = 2,
+  // Scale exponents use hardware row-zero placement.
+  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_ROW0 = 3,
+  // Scale exponents use hardware row-one placement.
+  LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_ROW1 = 4,
+} loom_value_fact_matrix_scale_placement_t;
+
+// Scale conversion dependency shape for reference expansion.
+typedef enum loom_value_fact_matrix_scale_conversion_e {
+  // No usable scale-conversion fact is known.
+  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_UNKNOWN = 0,
+  // No scale conversion is required.
+  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_NONE = 1,
+  // Scale conversion is lane-local and can be scalarized independently.
+  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_LANE_LOCAL = 2,
+  // Scale conversion is convergent and may observe values from other lanes.
+  LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_CONVERGENT = 3,
+} loom_value_fact_matrix_scale_conversion_t;
+
+// Packed matrix operand facts for storage schemas that can map to native
+// target matrix contracts or to an explicit reference expansion.
+typedef struct loom_value_fact_matrix_storage_schema_t {
+  // Logical matrix element format.
+  loom_value_fact_matrix_format_t format;
+
+  // Explicit scale operand shape.
+  loom_value_fact_matrix_scale_kind_t scale_kind;
+
+  // Hardware scale exponent format.
+  loom_value_fact_matrix_scale_format_t scale_format;
+
+  // Scale exponent operand placement.
+  loom_value_fact_matrix_scale_placement_t scale_placement;
+
+  // Whether reference scale conversion is lane-local or convergent.
+  loom_value_fact_matrix_scale_conversion_t scale_conversion;
+
+  // Number of 32-bit payload registers in the packed fragment.
+  uint16_t packed_register_count;
+
+  // Number of logical matrix elements represented by the packed fragment.
+  uint16_t packed_element_count;
+
+  // Whether a zero scale can refine to an unscaled target contract.
+  bool zero_scale_fallback;
+} loom_value_fact_matrix_storage_schema_t;
+
+// Summary of a storage-schema encoding.
+typedef struct loom_value_fact_storage_schema_t {
+  // One-based static schema encoding ID when known. Zero means no exact nested
+  // storage schema is known.
+  uint16_t static_spec_encoding_id;
+
+  // Packed matrix facts when the schema describes a native matrix fragment.
+  loom_value_fact_matrix_storage_schema_t matrix;
+} loom_value_fact_storage_schema_t;
+
 // Summary of an SSA encoding value.
 typedef struct loom_value_fact_encoding_summary_t {
   // Known semantic role from the value type or encoding family.
@@ -121,6 +227,10 @@ typedef struct loom_value_fact_encoding_summary_t {
   // Address-layout facts when this encoding directly is a layout or composes a
   // physical storage encoding with a known layout.
   loom_value_fact_address_layout_t address_layout;
+
+  // Storage-schema facts when this encoding directly is a schema or composes a
+  // physical storage encoding with a known schema.
+  loom_value_fact_storage_schema_t storage_schema;
 } loom_value_fact_encoding_summary_t;
 
 // Target-independent storage space for buffer/view reference facts.

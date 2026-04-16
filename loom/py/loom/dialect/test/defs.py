@@ -366,6 +366,35 @@ test_fact_encoding_layout_stride_hi = Op(
     ],
 )
 
+test_fact_encoding_matrix_field = Op(
+    "test.fact_encoding_matrix_field",
+    group=test_ops,
+    doc=(
+        "Exposes a packed matrix storage-schema summary field as an i64 "
+        "constant. Supported fields are format, scale_kind, scale_format, "
+        "scale_placement, scale_conversion, packed_registers, "
+        "packed_elements, zero_scale_fallback, and static_spec."
+    ),
+    operands=[Operand("value", ANY_ENCODING)],
+    attrs=[AttrDef("field", "string", doc="Matrix schema field to inspect.")],
+    results=[Result("result", INTEGER)],
+    traits=[PURE],
+    facts="loom_test_fact_encoding_matrix_field_facts",
+    format=[
+        Ref("value"),
+        LBRACKET,
+        Attr("field"),
+        RBRACKET,
+        COLON,
+        TypeOf("value"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        '%format = test.fact_encoding_matrix_field %schema["format"] : encoding<schema> -> i64',
+    ],
+)
+
 test_fact_is_buffer_reference = Op(
     "test.fact_is_buffer_reference",
     group=test_ops,
@@ -1379,6 +1408,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_is_vector_prefix_mask,
     test_fact_encoding_layout_kind,
     test_fact_encoding_layout_stride_hi,
+    test_fact_encoding_matrix_field,
     test_fact_is_buffer_reference,
     test_fact_is_view_reference,
     test_fact_buffer_memory_space,

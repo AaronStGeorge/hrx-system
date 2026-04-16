@@ -126,6 +126,54 @@ func.def @numeric_transform_jl_dense_rejects_orthonormal() {
 
 // ====
 
+func.def @amdgpu_matrix_rejects_unknown_format() {
+  // ERROR@+1: ENCODING/013 "amdgpu_matrix_operand" "format" "tf32"
+  %schema = encoding.define #amdgpu_matrix_operand<format="tf32", packed_elements=32, packed_registers=6, scale="none", scale_conversion="none", scale_format="none", scale_placement="none", zero_scale_fallback=false> : encoding<schema>
+  func.return
+}
+
+// ====
+
+func.def @amdgpu_matrix_rejects_dynamic_params(%format: index) {
+  // ERROR@+1: ENCODING/008 "amdgpu_matrix_operand" "format"
+  %schema = encoding.define #amdgpu_matrix_operand<packed_elements=32, packed_registers=6, scale="none", scale_conversion="none", scale_format="none", scale_placement="none", zero_scale_fallback=false> {format = %format : index} : encoding<schema>
+  func.return
+}
+
+// ====
+
+func.def @amdgpu_matrix_requires_explicit_zero_scale_fallback() {
+  // ERROR@+1: ENCODING/007 "amdgpu_matrix_operand" "zero_scale_fallback"
+  %schema = encoding.define #amdgpu_matrix_operand<format="fp6", packed_elements=32, packed_registers=6, scale="scale32", scale_conversion="convergent", scale_format="none", scale_placement="explicit"> : encoding<schema>
+  func.return
+}
+
+// ====
+
+func.def @amdgpu_matrix_rejects_scale_format_without_scale() {
+  // ERROR@+1: ENCODING/013 "amdgpu_matrix_operand" "scale_format" "e4m3"
+  %schema = encoding.define #amdgpu_matrix_operand<format="fp4", packed_elements=128, packed_registers=16, scale="none", scale_conversion="none", scale_format="e4m3", scale_placement="none", zero_scale_fallback=false> : encoding<schema>
+  func.return
+}
+
+// ====
+
+func.def @amdgpu_matrix_rejects_scaled_conversion_none() {
+  // ERROR@+1: ENCODING/013 "amdgpu_matrix_operand" "scale_conversion" "none"
+  %schema = encoding.define #amdgpu_matrix_operand<format="fp6", packed_elements=32, packed_registers=6, scale="scale32", scale_conversion="none", scale_format="none", scale_placement="explicit", zero_scale_fallback=true> : encoding<schema>
+  func.return
+}
+
+// ====
+
+func.def @amdgpu_matrix_rejects_zero_packed_registers() {
+  // ERROR@+1: STRUCTURE/014 "packed_registers" "0"
+  %schema = encoding.define #amdgpu_matrix_operand<format="fp6", packed_elements=32, packed_registers=0, scale="none", scale_conversion="none", scale_format="none", scale_placement="none", zero_scale_fallback=false> : encoding<schema>
+  func.return
+}
+
+// ====
+
 func.def @turboquant_missing_static_param(%params: buffer, %thresholds_offset: offset, %centroids_offset: offset) {
   %dense = encoding.layout.dense : encoding<layout>
   %thresholds = buffer.view %params[%thresholds_offset] : buffer -> view<3xf32, %dense>

@@ -6,6 +6,8 @@
 
 #include "loom/ops/encoding/families.h"
 
+#include <stdint.h>
+
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
@@ -17,6 +19,10 @@ iree_status_t loom_encoding_register_physical_storage_family(
 
 static iree_string_view_t loom_encoding_turboquant_kv_name(void) {
   return IREE_SV("turboquant_kv");
+}
+
+static iree_string_view_t loom_encoding_amdgpu_matrix_operand_name(void) {
+  return IREE_SV("amdgpu_matrix_operand");
 }
 
 static iree_string_view_t loom_encoding_numeric_transform_name(void) {
@@ -74,6 +80,63 @@ static bool loom_encoding_string_attr_value(const loom_module_t* module,
   }
   *out_value = module->strings.entries[attr.string_id];
   return true;
+}
+
+static bool loom_encoding_amdgpu_matrix_static_param_name_is_supported(
+    const loom_module_t* module, loom_string_id_t name_id) {
+  return loom_encoding_string_id_equal(module, name_id, IREE_SV("format")) ||
+         loom_encoding_string_id_equal(module, name_id,
+                                       IREE_SV("packed_elements")) ||
+         loom_encoding_string_id_equal(module, name_id,
+                                       IREE_SV("packed_registers")) ||
+         loom_encoding_string_id_equal(module, name_id, IREE_SV("scale")) ||
+         loom_encoding_string_id_equal(module, name_id,
+                                       IREE_SV("scale_conversion")) ||
+         loom_encoding_string_id_equal(module, name_id,
+                                       IREE_SV("scale_format")) ||
+         loom_encoding_string_id_equal(module, name_id,
+                                       IREE_SV("scale_placement")) ||
+         loom_encoding_string_id_equal(module, name_id,
+                                       IREE_SV("zero_scale_fallback"));
+}
+
+static bool loom_encoding_amdgpu_matrix_format_supported(
+    iree_string_view_t value) {
+  return iree_string_view_equal(value, IREE_SV("fp8")) ||
+         iree_string_view_equal(value, IREE_SV("bf8")) ||
+         iree_string_view_equal(value, IREE_SV("fp6")) ||
+         iree_string_view_equal(value, IREE_SV("bf6")) ||
+         iree_string_view_equal(value, IREE_SV("fp4"));
+}
+
+static bool loom_encoding_amdgpu_matrix_scale_supported(
+    iree_string_view_t value) {
+  return iree_string_view_equal(value, IREE_SV("none")) ||
+         iree_string_view_equal(value, IREE_SV("scale32")) ||
+         iree_string_view_equal(value, IREE_SV("scale16"));
+}
+
+static bool loom_encoding_amdgpu_matrix_scale_format_supported(
+    iree_string_view_t value) {
+  return iree_string_view_equal(value, IREE_SV("none")) ||
+         iree_string_view_equal(value, IREE_SV("e8")) ||
+         iree_string_view_equal(value, IREE_SV("e5m3")) ||
+         iree_string_view_equal(value, IREE_SV("e4m3"));
+}
+
+static bool loom_encoding_amdgpu_matrix_scale_placement_supported(
+    iree_string_view_t value) {
+  return iree_string_view_equal(value, IREE_SV("none")) ||
+         iree_string_view_equal(value, IREE_SV("explicit")) ||
+         iree_string_view_equal(value, IREE_SV("row0")) ||
+         iree_string_view_equal(value, IREE_SV("row1"));
+}
+
+static bool loom_encoding_amdgpu_matrix_scale_conversion_supported(
+    iree_string_view_t value) {
+  return iree_string_view_equal(value, IREE_SV("none")) ||
+         iree_string_view_equal(value, IREE_SV("lane_local")) ||
+         iree_string_view_equal(value, IREE_SV("convergent"));
 }
 
 static iree_status_t loom_encoding_emit(iree_diagnostic_emitter_t emitter,
@@ -182,6 +245,265 @@ static iree_status_t loom_encoding_emit_mutually_exclusive_param_error(
   };
   return loom_encoding_emit(emitter, op, &loom_err_encoding_014, params,
                             IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_encoding_amdgpu_matrix_require_static_param(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t param_name,
+    const loom_named_attr_t** out_param) {
+  *out_param = NULL;
+  const loom_named_attr_t* entry =
+      loom_encoding_find_param(module, params->static_attrs, param_name);
+  if (!entry) {
+    return loom_encoding_emit_param_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        &loom_err_encoding_007, param_name);
+  }
+  *out_param = entry;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_encoding_amdgpu_matrix_require_static_string(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t param_name,
+    iree_string_view_t* out_value, bool* out_ok) {
+  *out_value = iree_string_view_empty();
+  *out_ok = false;
+  const loom_named_attr_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_param(
+      module, op, params, emitter, param_name, &entry));
+  if (!entry) return iree_ok_status();
+  if (!loom_encoding_string_attr_value(module, entry->value, out_value)) {
+    return loom_encoding_emit_static_kind_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(), param_name,
+        (loom_attr_kind_t)entry->value.kind, IREE_SV("string"));
+  }
+  *out_ok = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_encoding_amdgpu_matrix_require_static_i64(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t param_name,
+    int64_t* out_value, bool* out_ok) {
+  *out_value = 0;
+  *out_ok = false;
+  const loom_named_attr_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_param(
+      module, op, params, emitter, param_name, &entry));
+  if (!entry) return iree_ok_status();
+  if (entry->value.kind != LOOM_ATTR_I64) {
+    return loom_encoding_emit_static_kind_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(), param_name,
+        (loom_attr_kind_t)entry->value.kind, IREE_SV("i64"));
+  }
+  *out_value = loom_attr_as_i64(entry->value);
+  *out_ok = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_encoding_amdgpu_matrix_require_static_bool(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, iree_string_view_t param_name,
+    bool* out_value, bool* out_ok) {
+  *out_value = false;
+  *out_ok = false;
+  const loom_named_attr_t* entry = NULL;
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_param(
+      module, op, params, emitter, param_name, &entry));
+  if (!entry) return iree_ok_status();
+  if (entry->value.kind != LOOM_ATTR_BOOL) {
+    return loom_encoding_emit_static_kind_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(), param_name,
+        (loom_attr_kind_t)entry->value.kind, IREE_SV("bool"));
+  }
+  *out_value = loom_attr_as_bool(entry->value);
+  *out_ok = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_encoding_amdgpu_matrix_verify_param_names(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, bool* out_ok) {
+  *out_ok = false;
+  for (iree_host_size_t i = 0; i < params->static_attrs.count; ++i) {
+    const loom_named_attr_t* entry = &params->static_attrs.entries[i];
+    if (!loom_encoding_amdgpu_matrix_static_param_name_is_supported(
+            module, entry->name_id)) {
+      iree_string_view_t param_name = module->strings.entries[entry->name_id];
+      return loom_encoding_emit_param_error(
+          emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+          &loom_err_encoding_008, param_name);
+    }
+  }
+  for (iree_host_size_t i = 0; i < params->dynamic_names.count; ++i) {
+    const loom_named_attr_t* entry = &params->dynamic_names.entries[i];
+    iree_string_view_t param_name = module->strings.entries[entry->name_id];
+    return loom_encoding_emit_param_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        &loom_err_encoding_008, param_name);
+  }
+  *out_ok = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_encoding_amdgpu_matrix_verify_static_strings(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter, bool* out_ok) {
+  *out_ok = false;
+
+  iree_string_view_t format = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_string(
+      module, op, params, emitter, IREE_SV("format"), &format, out_ok));
+  if (!*out_ok) return iree_ok_status();
+  if (!loom_encoding_amdgpu_matrix_format_supported(format)) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("format"), format,
+        IREE_SV("'fp8', 'bf8', 'fp6', 'bf6', or 'fp4'"));
+  }
+
+  iree_string_view_t scale = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_string(
+      module, op, params, emitter, IREE_SV("scale"), &scale, out_ok));
+  if (!*out_ok) return iree_ok_status();
+  if (!loom_encoding_amdgpu_matrix_scale_supported(scale)) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale"), scale, IREE_SV("'none', 'scale32', or 'scale16'"));
+  }
+
+  iree_string_view_t scale_format = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_string(
+      module, op, params, emitter, IREE_SV("scale_format"), &scale_format,
+      out_ok));
+  if (!*out_ok) return iree_ok_status();
+  if (!loom_encoding_amdgpu_matrix_scale_format_supported(scale_format)) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_format"), scale_format,
+        IREE_SV("'none', 'e8', 'e5m3', or 'e4m3'"));
+  }
+
+  iree_string_view_t scale_placement = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_string(
+      module, op, params, emitter, IREE_SV("scale_placement"), &scale_placement,
+      out_ok));
+  if (!*out_ok) return iree_ok_status();
+  if (!loom_encoding_amdgpu_matrix_scale_placement_supported(scale_placement)) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_placement"), scale_placement,
+        IREE_SV("'none', 'explicit', 'row0', or 'row1'"));
+  }
+
+  iree_string_view_t scale_conversion = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_string(
+      module, op, params, emitter, IREE_SV("scale_conversion"),
+      &scale_conversion, out_ok));
+  if (!*out_ok) return iree_ok_status();
+  if (!loom_encoding_amdgpu_matrix_scale_conversion_supported(
+          scale_conversion)) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_conversion"), scale_conversion,
+        IREE_SV("'none', 'lane_local', or 'convergent'"));
+  }
+
+  bool zero_scale_fallback = false;
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_bool(
+      module, op, params, emitter, IREE_SV("zero_scale_fallback"),
+      &zero_scale_fallback, out_ok));
+  if (!*out_ok) return iree_ok_status();
+
+  bool scale_is_none = iree_string_view_equal(scale, IREE_SV("none"));
+  if (scale_is_none && !iree_string_view_equal(scale_format, IREE_SV("none"))) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_format"), scale_format,
+        IREE_SV("'none' when scale is 'none'"));
+  }
+  if (scale_is_none &&
+      !iree_string_view_equal(scale_placement, IREE_SV("none"))) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_placement"), scale_placement,
+        IREE_SV("'none' when scale is 'none'"));
+  }
+  if (scale_is_none &&
+      !iree_string_view_equal(scale_conversion, IREE_SV("none"))) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_conversion"), scale_conversion,
+        IREE_SV("'none' when scale is 'none'"));
+  }
+  if (scale_is_none && zero_scale_fallback) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("zero_scale_fallback"), IREE_SV("true"),
+        IREE_SV("false when scale is 'none'"));
+  }
+  if (!scale_is_none &&
+      iree_string_view_equal(scale_placement, IREE_SV("none"))) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_placement"), scale_placement,
+        IREE_SV("'explicit', 'row0', or 'row1' when scaled"));
+  }
+  if (!scale_is_none &&
+      iree_string_view_equal(scale_conversion, IREE_SV("none"))) {
+    return loom_encoding_emit_static_value_error(
+        emitter, op, loom_encoding_amdgpu_matrix_operand_name(),
+        IREE_SV("scale_conversion"), scale_conversion,
+        IREE_SV("'lane_local' or 'convergent' when scaled"));
+  }
+
+  *out_ok = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_encoding_amdgpu_matrix_verify_define(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_encoding_define_param_view_t* params,
+    iree_diagnostic_emitter_t emitter) {
+  bool param_ok = false;
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_verify_param_names(
+      module, op, params, emitter, &param_ok));
+  if (!param_ok) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_verify_static_strings(
+      module, op, params, emitter, &param_ok));
+  if (!param_ok) return iree_ok_status();
+
+  int64_t packed_elements = 0;
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_i64(
+      module, op, params, emitter, IREE_SV("packed_elements"), &packed_elements,
+      &param_ok));
+  if (!param_ok) return iree_ok_status();
+  if (packed_elements <= 0 || packed_elements > UINT16_MAX) {
+    return loom_encoding_emit_attribute_constraint_error(
+        emitter, op, IREE_SV("packed_elements"), packed_elements,
+        IREE_SV("positive and <= 65535"));
+  }
+
+  int64_t packed_registers = 0;
+  IREE_RETURN_IF_ERROR(loom_encoding_amdgpu_matrix_require_static_i64(
+      module, op, params, emitter, IREE_SV("packed_registers"),
+      &packed_registers, &param_ok));
+  if (!param_ok) return iree_ok_status();
+  if (packed_registers <= 0 || packed_registers > UINT16_MAX) {
+    return loom_encoding_emit_attribute_constraint_error(
+        emitter, op, IREE_SV("packed_registers"), packed_registers,
+        IREE_SV("positive and <= 65535"));
+  }
+
+  return iree_ok_status();
 }
 
 static bool loom_encoding_turboquant_static_param_name_is_supported(
@@ -1160,6 +1482,13 @@ static const loom_encoding_vtable_t loom_encoding_ieee_fp8_e4m3_vtable = {
     .role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA,
 };
 
+static const loom_encoding_vtable_t loom_encoding_amdgpu_matrix_operand_vtable =
+    {
+        .name = IREE_SVL("amdgpu_matrix_operand"),
+        .role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA,
+        .verify_define = loom_encoding_amdgpu_matrix_verify_define,
+};
+
 static const loom_encoding_vtable_t loom_encoding_numeric_transform_vtable = {
     .name = IREE_SVL("numeric_transform"),
     .role = LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM,
@@ -1189,6 +1518,7 @@ static const loom_encoding_vtable_t* const loom_encoding_builtin_vtables[] = {
     &loom_encoding_ggml_iq_grid_vtable,
     &loom_encoding_loom_fp4_table_vtable,
     &loom_encoding_ieee_fp8_e4m3_vtable,
+    &loom_encoding_amdgpu_matrix_operand_vtable,
     &loom_encoding_numeric_transform_vtable,
     &loom_encoding_orthogonal_transform_vtable,
     &loom_encoding_turboquant_kv_vtable,

@@ -61,20 +61,21 @@ enum {
   LOOM_OP_TEST_FACT_IS_VECTOR_PREFIX_MASK = LOOM_OP_KIND(LOOM_DIALECT_TEST, 40),
   LOOM_OP_TEST_FACT_ENCODING_LAYOUT_KIND = LOOM_OP_KIND(LOOM_DIALECT_TEST, 41),
   LOOM_OP_TEST_FACT_ENCODING_LAYOUT_STRIDE_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 42),
-  LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 43),
-  LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 44),
-  LOOM_OP_TEST_FACT_BUFFER_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 45),
-  LOOM_OP_TEST_FACT_VIEW_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 46),
-  LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 47),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 48),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 49),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 50),
-  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 51),
-  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 52),
-  LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 53),
-  LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 54),
-  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 55),
-  LOOM_OP_TEST_COUNT_ = 56,
+  LOOM_OP_TEST_FACT_ENCODING_MATRIX_FIELD = LOOM_OP_KIND(LOOM_DIALECT_TEST, 43),
+  LOOM_OP_TEST_FACT_IS_BUFFER_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 44),
+  LOOM_OP_TEST_FACT_IS_VIEW_REFERENCE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 45),
+  LOOM_OP_TEST_FACT_BUFFER_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 46),
+  LOOM_OP_TEST_FACT_VIEW_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 47),
+  LOOM_OP_TEST_FACT_VIEW_ROOT_MATCHES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 48),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 49),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_OFFSET_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 50),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_LO = LOOM_OP_KIND(LOOM_DIALECT_TEST, 51),
+  LOOM_OP_TEST_FACT_VIEW_BYTE_LENGTH_HI = LOOM_OP_KIND(LOOM_DIALECT_TEST, 52),
+  LOOM_OP_TEST_FACT_VIEW_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 53),
+  LOOM_OP_TEST_FACT_BUFFER_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 54),
+  LOOM_OP_TEST_FACT_VIEW_ROOT_MIN_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_TEST, 55),
+  LOOM_OP_TEST_FACT_VIEW_ELEMENT_BYTES = LOOM_OP_KIND(LOOM_DIALECT_TEST, 56),
+  LOOM_OP_TEST_COUNT_ = 57,
 };
 
 // Function visibility. Absent (0) means private.
@@ -807,6 +808,25 @@ iree_status_t loom_test_fact_encoding_layout_stride_hi_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_test_fact_encoding_layout_stride_hi_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+
+// LOOM_OP_TEST_FACT_ENCODING_MATRIX_FIELD: Exposes a packed matrix storage-schema summary field as an i64 constant. Supported fields are format, scale_kind, scale_format, scale_placement, scale_conversion, packed_registers, packed_elements, zero_scale_fallback, and static_spec.
+// %format = test.fact_encoding_matrix_field %schema["format"] : encoding<schema> -> i64
+LOOM_DEFINE_ISA(loom_test_fact_encoding_matrix_field_isa, LOOM_OP_TEST_FACT_ENCODING_MATRIX_FIELD)
+LOOM_DEFINE_OPERAND(loom_test_fact_encoding_matrix_field_value, 0)
+LOOM_DEFINE_RESULT(loom_test_fact_encoding_matrix_field_result, 0)
+LOOM_DEFINE_ATTR_STRING(loom_test_fact_encoding_matrix_field_field, 0)
+iree_status_t loom_test_fact_encoding_matrix_field_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t value,
+    loom_string_id_t field,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_test_fact_encoding_matrix_field_facts(
     loom_fact_context_t* context,
     const loom_module_t* module, const loom_op_t* op,
     const loom_value_facts_t* operand_facts,

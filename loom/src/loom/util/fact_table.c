@@ -131,11 +131,30 @@ static uint32_t loom_value_fact_hash_address_layout(
   return hash;
 }
 
+static uint32_t loom_value_fact_hash_matrix_storage_schema(
+    loom_value_fact_matrix_storage_schema_t schema, uint32_t hash) {
+  hash = loom_value_fact_hash_u32((uint32_t)schema.format, hash);
+  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_kind, hash);
+  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_format, hash);
+  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_placement, hash);
+  hash = loom_value_fact_hash_u32((uint32_t)schema.scale_conversion, hash);
+  hash = loom_value_fact_hash_u32(schema.packed_register_count, hash);
+  hash = loom_value_fact_hash_u32(schema.packed_element_count, hash);
+  return loom_value_fact_hash_u32(schema.zero_scale_fallback ? 1u : 0u, hash);
+}
+
+static uint32_t loom_value_fact_hash_storage_schema(
+    loom_value_fact_storage_schema_t schema, uint32_t hash) {
+  hash = loom_value_fact_hash_u32(schema.static_spec_encoding_id, hash);
+  return loom_value_fact_hash_matrix_storage_schema(schema.matrix, hash);
+}
+
 static uint32_t loom_value_fact_hash_encoding_summary(
     loom_value_fact_encoding_summary_t summary, uint32_t hash) {
   hash = loom_value_fact_hash_u32((uint32_t)summary.role, hash);
   hash = loom_value_fact_hash_u32(summary.static_spec_encoding_id, hash);
-  return loom_value_fact_hash_address_layout(summary.address_layout, hash);
+  hash = loom_value_fact_hash_address_layout(summary.address_layout, hash);
+  return loom_value_fact_hash_storage_schema(summary.storage_schema, hash);
 }
 
 static uint32_t loom_value_fact_hash_buffer_reference(
@@ -195,13 +214,47 @@ static bool loom_value_fact_address_layout_equal(
                 lhs.rank * sizeof(loom_value_facts_t)) == 0;
 }
 
+static bool loom_value_fact_matrix_storage_schema_equal(
+    loom_value_fact_matrix_storage_schema_t lhs,
+    loom_value_fact_matrix_storage_schema_t rhs) {
+  return lhs.format == rhs.format && lhs.scale_kind == rhs.scale_kind &&
+         lhs.scale_format == rhs.scale_format &&
+         lhs.scale_placement == rhs.scale_placement &&
+         lhs.scale_conversion == rhs.scale_conversion &&
+         lhs.packed_register_count == rhs.packed_register_count &&
+         lhs.packed_element_count == rhs.packed_element_count &&
+         lhs.zero_scale_fallback == rhs.zero_scale_fallback;
+}
+
+static bool loom_value_fact_matrix_storage_schema_is_unknown(
+    loom_value_fact_matrix_storage_schema_t schema) {
+  return schema.format == LOOM_VALUE_FACT_MATRIX_FORMAT_UNKNOWN &&
+         schema.scale_kind == LOOM_VALUE_FACT_MATRIX_SCALE_UNKNOWN &&
+         schema.scale_format == LOOM_VALUE_FACT_MATRIX_SCALE_FORMAT_UNKNOWN &&
+         schema.scale_placement ==
+             LOOM_VALUE_FACT_MATRIX_SCALE_PLACEMENT_UNKNOWN &&
+         schema.scale_conversion ==
+             LOOM_VALUE_FACT_MATRIX_SCALE_CONVERSION_UNKNOWN &&
+         schema.packed_register_count == 0 &&
+         schema.packed_element_count == 0 && !schema.zero_scale_fallback;
+}
+
+static bool loom_value_fact_storage_schema_equal(
+    loom_value_fact_storage_schema_t lhs,
+    loom_value_fact_storage_schema_t rhs) {
+  return lhs.static_spec_encoding_id == rhs.static_spec_encoding_id &&
+         loom_value_fact_matrix_storage_schema_equal(lhs.matrix, rhs.matrix);
+}
+
 static bool loom_value_fact_encoding_summary_equal(
     loom_value_fact_encoding_summary_t lhs,
     loom_value_fact_encoding_summary_t rhs) {
   return lhs.role == rhs.role &&
          lhs.static_spec_encoding_id == rhs.static_spec_encoding_id &&
          loom_value_fact_address_layout_equal(lhs.address_layout,
-                                              rhs.address_layout);
+                                              rhs.address_layout) &&
+         loom_value_fact_storage_schema_equal(lhs.storage_schema,
+                                              rhs.storage_schema);
 }
 
 static uint32_t loom_value_fact_extension_hash(
@@ -533,7 +586,9 @@ static bool loom_value_fact_table_encoding_summary_equal(
   return lhs.role == rhs.role &&
          lhs.static_spec_encoding_id == rhs.static_spec_encoding_id &&
          loom_value_fact_table_address_layout_equal(
-             lhs_table, lhs.address_layout, rhs_table, rhs.address_layout);
+             lhs_table, lhs.address_layout, rhs_table, rhs.address_layout) &&
+         loom_value_fact_storage_schema_equal(lhs.storage_schema,
+                                              rhs.storage_schema);
 }
 
 static bool loom_value_fact_table_buffer_reference_equal(
@@ -792,7 +847,10 @@ iree_status_t loom_value_facts_make_encoding_summary(
   }
   if (summary.role == LOOM_ENCODING_ROLE_UNKNOWN &&
       summary.static_spec_encoding_id == 0 &&
-      summary.address_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN) {
+      summary.address_layout.kind == LOOM_VALUE_FACT_ADDRESS_LAYOUT_UNKNOWN &&
+      summary.storage_schema.static_spec_encoding_id == 0 &&
+      loom_value_fact_matrix_storage_schema_is_unknown(
+          summary.storage_schema.matrix)) {
     *out = loom_value_facts_unknown();
     return iree_ok_status();
   }

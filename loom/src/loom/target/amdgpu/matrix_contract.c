@@ -1729,7 +1729,20 @@ static bool loom_amdgpu_matrix_contract_payload_matches(
   if (request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_UNKNOWN) {
     return false;
   }
-  if (descriptor_payload.numeric_type != request_payload.numeric_type) {
+  bool numeric_type_matches =
+      descriptor_payload.numeric_type == request_payload.numeric_type;
+  if (descriptor_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_F8F6F4) {
+    // Selector-family descriptors accept exact low-bit requests when the
+    // request also proves that matrix-format selector operands are available.
+    numeric_type_matches =
+        request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_FP8 ||
+        request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_BF8 ||
+        request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_FP6 ||
+        request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_BF6 ||
+        request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_FP4 ||
+        request_payload.numeric_type == LOOM_AMDGPU_MATRIX_NUMERIC_F8F6F4;
+  }
+  if (!numeric_type_matches) {
     return false;
   }
   if (request_payload.register_count != 0 &&
