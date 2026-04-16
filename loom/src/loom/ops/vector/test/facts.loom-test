@@ -368,6 +368,102 @@ func.def @dotf_small_static_lanes() -> (f32) {
 
 // ====
 
+// Grouped f16 dot facts follow the same last-axis pairing as vector.dot2f
+// lowering: each result lane consumes two adjacent source lanes.
+func.def @dot2f_small_static_lanes() -> (f32, f32) {
+  %a0 = scalar.constant 1.0 : f16
+  %a1 = scalar.constant 2.0 : f16
+  %a2 = scalar.constant 3.0 : f16
+  %a3 = scalar.constant 4.0 : f16
+  %b0 = scalar.constant 5.0 : f16
+  %b1 = scalar.constant 6.0 : f16
+  %b2 = scalar.constant 7.0 : f16
+  %b3 = scalar.constant 8.0 : f16
+  %acc0 = scalar.constant 10.0 : f32
+  %acc1 = scalar.constant 20.0 : f32
+  %a = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xf16>
+  %b = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xf16>
+  %acc = vector.from_elements %acc0, %acc1 : vector<2xf32>
+  %r = vector.dot2f %a, %b, %acc : vector<4xf16>, vector<4xf16>, vector<2xf32>
+  %r0 = vector.extract %r[0] : vector<2xf32> -> f32
+  %r1 = vector.extract %r[1] : vector<2xf32> -> f32
+  func.return %r0, %r1 : f32, f32
+}
+// ----
+func.def @dot2f_small_static_lanes() -> (f32, f32) {
+  %r0 = scalar.constant 27.0 : f32
+  %r1 = scalar.constant 73.0 : f32
+  func.return %r0, %r1 : f32, f32
+}
+
+// ====
+
+// Grouped i8 dot facts preserve signedness choices from the template kind.
+func.def @dot4i_small_static_lanes() -> (i32) {
+  %a0 = scalar.constant -1 : i8
+  %a1 = scalar.constant 2 : i8
+  %a2 = scalar.constant -3 : i8
+  %a3 = scalar.constant 4 : i8
+  %b0 = scalar.constant -1 : i8
+  %b1 = scalar.constant 6 : i8
+  %b2 = scalar.constant 7 : i8
+  %b3 = scalar.constant 8 : i8
+  %acc0 = scalar.constant 100 : i32
+  %a = vector.from_elements %a0, %a1, %a2, %a3 : vector<4xi8>
+  %b = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xi8>
+  %acc = vector.from_elements %acc0 : vector<1xi32>
+  %r = vector.dot4i<s8u8> %a, %b, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  %r0 = vector.extract %r[0] : vector<1xi32> -> i32
+  func.return %r0 : i32
+}
+// ----
+func.def @dot4i_small_static_lanes() -> (i32) {
+  %r0 = scalar.constant -132 : i32
+  func.return %r0 : i32
+}
+
+// ====
+
+// Packed i4 dot facts unpack little-endian nibbles with per-side signedness.
+func.def @dot8i4_small_static_lanes() -> (i32) {
+  %lhs0 = scalar.constant 124076833 : i32
+  %rhs0 = scalar.constant 158027055 : i32
+  %acc0 = scalar.constant 100 : i32
+  %lhs = vector.from_elements %lhs0 : vector<1xi32>
+  %rhs = vector.from_elements %rhs0 : vector<1xi32>
+  %acc = vector.from_elements %acc0 : vector<1xi32>
+  %r = vector.dot8i4<u4s4> %lhs, %rhs, %acc : vector<1xi32>
+  %r0 = vector.extract %r[0] : vector<1xi32> -> i32
+  func.return %r0 : i32
+}
+// ----
+func.def @dot8i4_small_static_lanes() -> (i32) {
+  %r0 = scalar.constant 72 : i32
+  func.return %r0 : i32
+}
+
+// ====
+
+// Uniform packed-dot facts remain useful for dynamic vectors when a later
+// consumer can exploit a shape-independent identity.
+func.def @dot8i4_uniform_dynamic_identity(%n: index) -> (i32) {
+  %zero = scalar.constant 0 : i32
+  %lhs = vector.splat %zero : vector<[%n]xi32>
+  %rhs = vector.splat %zero : vector<[%n]xi32>
+  %acc = vector.splat %zero : vector<[%n]xi32>
+  %dot = vector.dot8i4<u4u4> %lhs, %rhs, %acc : vector<[%n]xi32>
+  %init = scalar.constant 7 : i32
+  %r = vector.reduce<addi> %dot, %init : vector<[%n]xi32>, i32
+  func.return %r : i32
+}
+// ----
+func.def @dot8i4_uniform_dynamic_identity(%n: index) -> (i32) {
+  %r = scalar.constant 7 : i32
+  func.return %r : i32
+}
+
+// ====
+
 // Oversized explicit vectors deliberately degrade to unknown facts instead of
 // allocating unbounded per-lane analysis payloads.
 func.def @oversized_from_elements_degrades_to_unknown() -> (i64) {

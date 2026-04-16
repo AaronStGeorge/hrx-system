@@ -2950,6 +2950,7 @@ vector_dot2f = Op(
         SameType("acc", "result"),
         LastAxisGroupedBy("lhs", "result", 2),
     ],
+    facts="loom_vector_dot2f_facts",
     traits=[PURE],
     format=[
         Ref("lhs"),
@@ -2994,6 +2995,7 @@ vector_dot4i = Op(
         SameType("acc", "result"),
         LastAxisGroupedBy("lhs", "result", 4),
     ],
+    facts="loom_vector_dot4i_facts",
     traits=[PURE],
     format=[
         TemplateParam("kind"),
@@ -3037,6 +3039,7 @@ vector_dot8i4 = Op(
         HasI32Element("lhs"),
         SameType("lhs", "rhs", "acc", "result"),
     ],
+    facts="loom_vector_dot8i4_facts",
     traits=[PURE],
     format=[
         TemplateParam("kind"),
