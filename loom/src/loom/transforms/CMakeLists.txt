@@ -12,6 +12,25 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    branch_fusion
+  HDRS
+    "branch_fusion.h"
+  SRCS
+    "branch_fusion.c"
+  DEPS
+    ::materialize
+    ::pass
+    ::remap
+    ::rewriter
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     branch_sink
   HDRS
     "branch_sink.h"

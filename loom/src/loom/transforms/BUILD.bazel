@@ -13,6 +13,22 @@ package(
 )
 
 loom_cc_library(
+    name = "branch_fusion",
+    srcs = ["branch_fusion.c"],
+    hdrs = ["branch_fusion.h"],
+    deps = [
+        ":materialize",
+        ":pass",
+        ":remap",
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/scf",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "branch_sink",
     srcs = ["branch_sink.c"],
     hdrs = ["branch_sink.h"],

@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_executable_test(
   NAME
+    "branch_fusion"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/branch_fusion.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "branch_sink"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/branch_sink.loom-test"
