@@ -131,6 +131,22 @@ loom_cc_test(
 )
 
 loom_cc_fuzz(
+    name = "reader_fuzz",
+    srcs = ["reader_fuzz.cc"],
+    deps = [
+        ":reader",
+        ":writer",
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/testing:context",
+        "//loom/src/loom/testing:gen",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_fuzz(
     name = "writer_fuzz",
     srcs = ["writer_fuzz.cc"],
     deps = [

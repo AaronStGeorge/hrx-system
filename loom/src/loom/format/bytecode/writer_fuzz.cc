@@ -6,10 +6,8 @@
 
 // Fuzz target for the Loom bytecode writer.
 //
-// The C bytecode reader is not in place yet, so this target focuses on the
-// available contract: any valid generated module must serialize without
-// crashing, and two writes of the same module with the same options must
-// produce identical bytes.
+// Any valid generated module must serialize without crashing, and two writes
+// of the same module with the same options must produce identical bytes.
 
 #include <cstddef>
 #include <cstdint>

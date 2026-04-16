@@ -148,6 +148,23 @@ loom_cc_test(
 
 loom_cc_fuzz(
   NAME
+    reader_fuzz
+  SRCS
+    "reader_fuzz.cc"
+  DEPS
+    ::reader
+    ::writer
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    loom::src::loom::testing::gen
+)
+
+loom_cc_fuzz(
+  NAME
     writer_fuzz
   SRCS
     "writer_fuzz.cc"

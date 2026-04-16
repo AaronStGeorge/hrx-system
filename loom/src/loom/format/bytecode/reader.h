@@ -4,12 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Bytecode metadata reader and validator.
+// Bytecode reader and validator.
 //
-// This is the front door for untrusted .loombc input before full IR body
-// materialization exists. It validates file/module/section structure and all
-// lightweight metadata tables that the linker and lazy function reader need:
-// strings, sources, encodings, types, ops, locations, and symbols.
+// This is the front door for untrusted .loombc input. The metadata entry point
+// validates file/module/section structure and lightweight tables without
+// materializing IR bodies. The module entry point additionally constructs the
+// IR and can run the verifier after bytecode-level validation succeeds.
 
 #ifndef LOOM_FORMAT_BYTECODE_READER_H_
 #define LOOM_FORMAT_BYTECODE_READER_H_

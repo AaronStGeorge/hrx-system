@@ -229,6 +229,137 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateAttributeFunctionModule() {
+    loom_module_t* module = CreateModule("reader_attrs");
+    loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+    IREE_CHECK_OK(loom_module_intern_type(module, f32_type, &f32_type));
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_type_t arg_types[1] = {f32_type};
+    loom_type_t result_types[1] = {f32_type};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+        nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+    module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 1) {
+      ADD_FAILURE() << "expected one function argument";
+      return module;
+    }
+
+    loom_string_id_t axis_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t meta_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t opt_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t phase_id = LOOM_STRING_ID_INVALID;
+    loom_string_id_t link_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("axis"), &axis_id));
+    IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("meta"), &meta_id));
+    IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("opt"), &opt_id));
+    IREE_CHECK_OK(
+        loom_module_intern_string(module, IREE_SV("phase"), &phase_id));
+    IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("link"), &link_id));
+
+    loom_named_attr_t meta_entries[2] = {
+        {
+            .name_id = opt_id,
+            .value = loom_attr_i64(3),
+        },
+        {
+            .name_id = phase_id,
+            .value = loom_attr_string(link_id),
+        },
+    };
+    loom_attribute_t meta_attr = {0};
+    IREE_CHECK_OK(loom_module_make_canonical_attr_dict(
+        module,
+        loom_make_named_attr_slice(meta_entries, IREE_ARRAYSIZE(meta_entries)),
+        &meta_attr));
+
+    loom_named_attr_t entries[2] = {
+        {
+            .name_id = axis_id,
+            .value = loom_attr_i64(0),
+        },
+        {
+            .name_id = meta_id,
+            .value = meta_attr,
+        },
+    };
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_builder_t body_builder;
+    loom_builder_initialize(module, &module->arena,
+                            loom_region_entry_block(body), &body_builder);
+    loom_op_t* attrs_op = nullptr;
+    IREE_CHECK_OK(loom_test_attrs_build(
+        &body_builder, arg_ids[0],
+        loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32_type,
+        LOOM_LOCATION_UNKNOWN, &attrs_op));
+    loom_value_id_t result_id = loom_op_results(attrs_op)[0];
+    loom_op_t* yield_op = nullptr;
+    IREE_CHECK_OK(loom_test_yield_build(&body_builder, &result_id, 1,
+                                        LOOM_LOCATION_UNKNOWN, &yield_op));
+    return module;
+  }
+
+  loom_module_t* CreatePredicateFunctionModule() {
+    loom_module_t* module = CreateModule("reader_predicates");
+    loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+    IREE_CHECK_OK(loom_module_intern_type(module, f32_type, &f32_type));
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_string_id_t dim_name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_module_intern_string(module, IREE_SV("M"), &dim_name_id));
+
+    loom_predicate_t* predicates = nullptr;
+    IREE_CHECK_OK(iree_arena_allocate_array(
+        &module->arena, 2, sizeof(loom_predicate_t), (void**)&predicates));
+    predicates[0] = loom_predicate_t{
+        .kind = LOOM_PREDICATE_MUL,
+        .arg_count = 2,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                     LOOM_PRED_ARG_NONE},
+        .args = {(int64_t)dim_name_id, 16, 0},
+    };
+    predicates[1] = loom_predicate_t{
+        .kind = LOOM_PREDICATE_RANGE,
+        .arg_count = 3,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
+                     LOOM_PRED_ARG_CONST},
+        .args = {(int64_t)dim_name_id, 32, 512},
+    };
+
+    loom_type_t arg_types[1] = {f32_type};
+    loom_type_t result_types[1] = {f32_type};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+        nullptr, 0, predicates, 2, LOOM_LOCATION_UNKNOWN, &func_op));
+    module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+    return module;
+  }
+
   loom_module_t* CreateTiedBodyOpModule() {
     loom_module_t* module = CreateModule("reader_tied_body_op");
     loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
@@ -736,6 +867,22 @@ class ReaderTest : public ::testing::Test {
     EXPECT_EQ(error_ids.front(), expected_error_id);
   }
 
+  void ExpectCanonicalBytecodeRoundTrip(loom_module_t* module) {
+    auto first = WriteModule(module);
+    loom_module_t* read_module = nullptr;
+    std::vector<std::string> error_ids;
+    loom_bytecode_read_result_t result =
+        ReadModule(first, &read_module, &error_ids);
+    EXPECT_EQ(result.error_count, 0u);
+    EXPECT_TRUE(error_ids.empty());
+    ASSERT_NE(read_module, nullptr);
+
+    auto second = WriteModule(read_module);
+    EXPECT_EQ(first, second);
+
+    loom_module_free(read_module);
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
 };
@@ -958,11 +1105,64 @@ TEST_F(ReaderTest, ReadsSsaEncodingBindings) {
   loom_module_free(encoding_module);
 }
 
+TEST_F(ReaderTest, CanonicalRoundTripPreservesBodyShapes) {
+  loom_module_t* simple_module = CreateFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(simple_module);
+  loom_module_free(simple_module);
+
+  loom_module_t* multi_block_module = CreateMultiBlockFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(multi_block_module);
+  loom_module_free(multi_block_module);
+
+  loom_module_t* nested_module = CreateTiedBodyOpModule();
+  ExpectCanonicalBytecodeRoundTrip(nested_module);
+  loom_module_free(nested_module);
+}
+
+TEST_F(ReaderTest, CanonicalRoundTripPreservesTypesAttrsAndPredicates) {
+  loom_module_t* dynamic_module = CreateDynamicDimFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(dynamic_module);
+  loom_module_free(dynamic_module);
+
+  loom_module_t* encoding_module = CreateSsaEncodingFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(encoding_module);
+  loom_module_free(encoding_module);
+
+  loom_module_t* attr_module = CreateAttributeFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(attr_module);
+  loom_module_free(attr_module);
+
+  loom_module_t* predicate_module = CreatePredicateFunctionModule();
+  ExpectCanonicalBytecodeRoundTrip(predicate_module);
+  loom_module_free(predicate_module);
+}
+
+TEST_F(ReaderTest, CanonicalRoundTripPreservesLocations) {
+  loom_module_t* module = CreateLocatedModule();
+  ExpectCanonicalBytecodeRoundTrip(module);
+  loom_module_free(module);
+}
+
 TEST_F(ReaderTest, RejectsInvalidBodyValueReference) {
   loom_module_t* module = CreateFunctionModule();
   auto bytes = WriteModule(module);
   size_t operand_offset = FirstBodyOperandRefOffset(bytes);
   bytes[operand_offset] = 0x7F;
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsBodySummaryCountExceedingBodyLength) {
+  loom_module_t* module = CreateFunctionModule();
+  auto bytes = WriteModule(module);
+  size_t value_count_offset =
+      SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_IR);
+  SectionEntry ir_section = FindSection(bytes, LOOM_BYTECODE_SECTION_IR);
+  ASSERT_GT(0x7Fu, ir_section.length);
+  ASSERT_LT(value_count_offset, bytes.size());
+  bytes[value_count_offset] = 0x7F;
 
   ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
 

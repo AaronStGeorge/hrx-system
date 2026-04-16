@@ -2599,11 +2599,19 @@ static iree_status_t loom_bytecode_reader_read_function_body(
       .body_offset = ir_section->absolute_offset + ir_offset,
       .value_capacity = value_count,
   };
+  iree_host_size_t body_length = cursor.cursor.length;
   if (iree_status_is_ok(status) && !loom_bytecode_reader_has_errors(reader) &&
       value_count > IREE_HOST_SIZE_MAX) {
     status = loom_bytecode_reader_emit_invalid_ir_body(
         &body_reader, body_reader.body_offset,
         IREE_SV("function body value count exceeds host size"));
+  }
+  if (iree_status_is_ok(status) && !loom_bytecode_reader_has_errors(reader) &&
+      (value_count > body_length || expected_region_count > body_length ||
+       expected_block_count > body_length || expected_op_count > body_length)) {
+    status = loom_bytecode_reader_emit_invalid_ir_body(
+        &body_reader, body_reader.body_offset,
+        IREE_SV("function body allocation summary exceeds body length"));
   }
   if (iree_status_is_ok(status) && !loom_bytecode_reader_has_errors(reader) &&
       value_count > 0) {
