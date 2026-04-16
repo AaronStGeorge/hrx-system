@@ -1077,6 +1077,205 @@ static iree_status_t loom_bytecode_op_attr_is_present(
                           attr_name.data);
 }
 
+static bool loom_bytecode_attr_descriptor_is_symbol(
+    const loom_attr_descriptor_t* descriptor) {
+  return descriptor && descriptor->attr_kind == LOOM_ATTR_SYMBOL;
+}
+
+typedef struct loom_bytecode_global_value_list_t {
+  // Temporary arena used for growing the value ID list.
+  iree_arena_allocator_t* arena;
+  // Module whose value table owns all IDs in the list.
+  const loom_module_t* module;
+  // Ordered declaration-local values used by one global symbol payload.
+  loom_value_id_t* values;
+  // Number of populated value IDs.
+  iree_host_size_t count;
+  // Allocated capacity of values.
+  iree_host_size_t capacity;
+} loom_bytecode_global_value_list_t;
+
+static iree_status_t loom_bytecode_global_value_list_reserve(
+    loom_bytecode_global_value_list_t* list,
+    iree_host_size_t minimum_capacity) {
+  if (minimum_capacity <= list->capacity) return iree_ok_status();
+  iree_host_size_t new_capacity = list->capacity ? list->capacity : 4;
+  while (new_capacity < minimum_capacity) {
+    if (new_capacity > IREE_HOST_SIZE_MAX / 2) {
+      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                              "global declaration-local value list overflow");
+    }
+    new_capacity *= 2;
+  }
+  loom_value_id_t* new_values = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      list->arena, new_capacity, sizeof(loom_value_id_t), (void**)&new_values));
+  if (list->count > 0) {
+    memcpy(new_values, list->values, list->count * sizeof(loom_value_id_t));
+  }
+  list->values = new_values;
+  list->capacity = new_capacity;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_global_value_list_push_unique(
+    loom_bytecode_global_value_list_t* list, loom_value_id_t value_id) {
+  if (value_id >= list->module->values.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "global declaration-local value id %u out of range (module has %" PRIhsz
+        " values)",
+        value_id, list->module->values.count);
+  }
+  for (iree_host_size_t i = 0; i < list->count; ++i) {
+    if (list->values[i] == value_id) return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_global_value_list_reserve(list, list->count + 1));
+  list->values[list->count++] = value_id;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_collect_global_type_value_ref(
+    loom_value_id_t value_id, void* user_data) {
+  return loom_bytecode_global_value_list_push_unique(
+      (loom_bytecode_global_value_list_t*)user_data, value_id);
+}
+
+static iree_status_t loom_bytecode_collect_global_value_type_refs(
+    loom_bytecode_global_value_list_t* list, iree_host_size_t* scan_index) {
+  while (*scan_index < list->count) {
+    loom_value_id_t value_id = list->values[(*scan_index)++];
+    loom_type_t type = list->module->values.entries[value_id].type;
+    IREE_RETURN_IF_ERROR(loom_type_walk_value_refs(
+        type, loom_bytecode_collect_global_type_value_ref, list));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_collect_global_attr_value_refs(
+    loom_bytecode_global_value_list_t* list, loom_attribute_t attr) {
+  switch (attr.kind) {
+    case LOOM_ATTR_PREDICATE_LIST:
+      for (uint16_t i = 0; i < attr.count; ++i) {
+        const loom_predicate_t* predicate = &attr.predicate_list[i];
+        if (predicate->arg_count > IREE_ARRAYSIZE(predicate->arg_tags)) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "predicate arg count %u exceeds capacity",
+                                  (unsigned)predicate->arg_count);
+        }
+        for (uint8_t arg_index = 0; arg_index < predicate->arg_count;
+             ++arg_index) {
+          if (predicate->arg_tags[arg_index] != LOOM_PRED_ARG_VALUE) {
+            continue;
+          }
+          IREE_RETURN_IF_ERROR(loom_bytecode_global_value_list_push_unique(
+              list, (loom_value_id_t)predicate->args[arg_index]));
+        }
+      }
+      break;
+    case LOOM_ATTR_DICT:
+      for (uint16_t i = 0; i < attr.count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_bytecode_collect_global_attr_value_refs(
+            list, attr.dict_entries[i].value));
+      }
+      break;
+    default:
+      break;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_collect_global_values(
+    iree_arena_allocator_t* arena, const loom_module_t* module,
+    const loom_op_t* op, loom_bytecode_global_value_list_t* out_values) {
+  *out_values = (loom_bytecode_global_value_list_t){
+      .arena = arena,
+      .module = module,
+  };
+
+  const loom_value_id_t* result_ids = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_global_value_list_push_unique(out_values, result_ids[i]));
+  }
+
+  iree_host_size_t scan_index = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_collect_global_value_type_refs(out_values, &scan_index));
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || (op->attribute_count > 0 && !vtable->attr_descriptors)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "global symbol op kind 0x%04x has missing attr descriptors",
+        (unsigned)op->kind);
+  }
+  const loom_attribute_t* attrs = loom_op_attrs(op);
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_collect_global_attr_value_refs(out_values, attrs[i]));
+  }
+
+  return loom_bytecode_collect_global_value_type_refs(out_values, &scan_index);
+}
+
+static iree_status_t loom_bytecode_number_global(
+    loom_bytecode_numbering_t* numbering, const loom_op_t* op,
+    const loom_bytecode_global_value_list_t* local_values) {
+  uint32_t unused_id = 0;
+
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_numbering_intern_op(numbering, op, &unused_id));
+
+  const loom_module_t* module = numbering->module;
+  for (iree_host_size_t i = 0; i < local_values->count; ++i) {
+    const loom_value_t* value =
+        &module->values.entries[local_values->values[i]];
+    if (value->name_id != LOOM_STRING_ID_INVALID) {
+      IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
+          numbering, value->name_id, &unused_id));
+    }
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_type(
+        numbering, value->type, &unused_id));
+  }
+
+  const loom_op_vtable_t* vtable =
+      loom_context_resolve_op(module->context, op->kind);
+  if (!vtable || (op->attribute_count > 0 && !vtable->attr_descriptors)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "global symbol op kind 0x%04x has missing attr descriptors",
+        (unsigned)op->kind);
+  }
+
+  const loom_attribute_t* attrs = loom_op_attrs(op);
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+      continue;
+    }
+
+    iree_string_view_t key_name = loom_attr_descriptor_name(descriptor);
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+        numbering, key_name, &unused_id));
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_number_attr_value(numbering, attrs[i], descriptor));
+  }
+
+  return iree_ok_status();
+}
+
 static iree_status_t loom_bytecode_number_function(
     loom_bytecode_numbering_t* numbering, loom_func_like_t func_like) {
   uint32_t unused_id = 0;
@@ -1390,9 +1589,10 @@ static void loom_bytecode_count_region_tree(
   }
 }
 
-static loom_bytecode_body_counts_t loom_bytecode_count_serialized_bodies(
-    const loom_module_t* module) {
-  loom_bytecode_body_counts_t counts = {
+static iree_status_t loom_bytecode_count_serialized_bodies(
+    loom_bytecode_numbering_t* numbering, loom_bytecode_body_counts_t* counts) {
+  const loom_module_t* module = numbering->module;
+  *counts = (loom_bytecode_body_counts_t){
       .value_count = 0,
       .region_count = 0,
       .block_count = 0,
@@ -1403,6 +1603,12 @@ static loom_bytecode_body_counts_t loom_bytecode_count_serialized_bodies(
     const loom_symbol_t* symbol = &module->symbols.entries[symbol_index];
     if (!loom_symbol_kind_is_function_like(symbol->kind) ||
         !symbol->defining_op) {
+      if (symbol->kind == LOOM_SYMBOL_GLOBAL && symbol->defining_op) {
+        loom_bytecode_global_value_list_t local_values = {0};
+        IREE_RETURN_IF_ERROR(loom_bytecode_collect_global_values(
+            numbering->arena, module, symbol->defining_op, &local_values));
+        counts->value_count += local_values.count;
+      }
       continue;
     }
     loom_func_like_t func_like =
@@ -1410,17 +1616,17 @@ static loom_bytecode_body_counts_t loom_bytecode_count_serialized_bodies(
     if (!loom_func_like_isa(func_like)) {
       continue;
     }
-    counts.value_count += func_like.op->result_count;
+    counts->value_count += func_like.op->result_count;
     loom_region_t* body = loom_func_like_body(func_like);
     if (body) {
-      loom_bytecode_count_region_tree(body, &counts);
+      loom_bytecode_count_region_tree(body, counts);
     } else {
       uint16_t arg_count = 0;
       loom_func_like_arg_ids(func_like, &arg_count);
-      counts.value_count += arg_count;
+      counts->value_count += arg_count;
     }
   }
-  return counts;
+  return iree_ok_status();
 }
 
 // Forward declarations for recursive IR writing.
@@ -1691,6 +1897,166 @@ static iree_status_t loom_bytecode_write_attr_value(
       IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_u8(writer, 10));
       IREE_RETURN_IF_ERROR(
           loom_bytecode_page_writer_write_uvarint(writer, attr.encoding_id));
+      break;
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported attribute kind %d", (int)attr.kind);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_emit_attr_value(
+    iree_string_builder_t* builder, loom_bytecode_numbering_t* numbering,
+    const loom_bytecode_value_numbering_t* value_numbering,
+    loom_attribute_t attr, const loom_attr_descriptor_t* descriptor) {
+  switch (attr.kind) {
+    case LOOM_ATTR_I64: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 0));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_svarint(builder, attr.i64));
+      break;
+    }
+    case LOOM_ATTR_F64: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 1));
+      uint64_t bits = 0;
+      memcpy(&bits, &attr.f64, sizeof(bits));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u64_le(builder, bits));
+      break;
+    }
+    case LOOM_ATTR_STRING: {
+      uint32_t string_writer_id = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
+          numbering, attr.string_id, &string_writer_id));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 2));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_emit_uvarint(builder, string_writer_id));
+      break;
+    }
+    case LOOM_ATTR_BOOL: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 3));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, attr.raw ? 1 : 0));
+      break;
+    }
+    case LOOM_ATTR_ENUM: {
+      uint8_t case_index = (uint8_t)attr.raw;
+      uint32_t string_writer_id = 0;
+      if (descriptor && descriptor->enum_case_names &&
+          descriptor->enum_case_names[case_index]) {
+        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+            numbering,
+            loom_bstring_view(descriptor->enum_case_names[case_index]),
+            &string_writer_id));
+      }
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 4));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_emit_uvarint(builder, string_writer_id));
+      break;
+    }
+    case LOOM_ATTR_I64_ARRAY: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 5));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, attr.count));
+      for (uint16_t i = 0; i < attr.count; ++i) {
+        IREE_RETURN_IF_ERROR(
+            loom_bytecode_emit_svarint(builder, attr.i64_array[i]));
+      }
+      break;
+    }
+    case LOOM_ATTR_SYMBOL: {
+      loom_symbol_ref_t ref = attr.symbol;
+      uint32_t string_writer_id = 0;
+      if (loom_symbol_ref_is_valid(ref) &&
+          ref.symbol_id < numbering->module->symbols.count) {
+        const loom_symbol_t* target =
+            &numbering->module->symbols.entries[ref.symbol_id];
+        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
+            numbering, target->name_id, &string_writer_id));
+      }
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 6));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_emit_uvarint(builder, string_writer_id));
+      break;
+    }
+    case LOOM_ATTR_TYPE: {
+      if (attr.type_id >= numbering->module->types.count) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "type attribute id %u out of range (module has %" PRIhsz " types)",
+            (unsigned)attr.type_id, numbering->module->types.count);
+      }
+      loom_type_t type = numbering->module->types.entries[attr.type_id];
+      uint32_t type_writer_id = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_type(
+          numbering, type, &type_writer_id));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 7));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, type_writer_id));
+      break;
+    }
+    case LOOM_ATTR_PREDICATE_LIST: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 8));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, attr.count));
+      for (uint16_t i = 0; i < attr.count; ++i) {
+        const loom_predicate_t* predicate = &attr.predicate_list[i];
+        IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, predicate->kind));
+        IREE_RETURN_IF_ERROR(
+            loom_bytecode_emit_u8(builder, predicate->arg_count));
+        for (uint8_t arg_index = 0; arg_index < predicate->arg_count;
+             ++arg_index) {
+          uint8_t tag = predicate->arg_tags[arg_index];
+          IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, tag));
+          switch (tag) {
+            case LOOM_PRED_ARG_VALUE: {
+              if (value_numbering) {
+                uint32_t value_number = 0;
+                IREE_RETURN_IF_ERROR(loom_bytecode_resolve_value_number(
+                    value_numbering,
+                    (loom_value_id_t)predicate->args[arg_index],
+                    &value_number));
+                IREE_RETURN_IF_ERROR(
+                    loom_bytecode_emit_uvarint(builder, value_number));
+              } else {
+                loom_string_id_t name_id =
+                    (loom_string_id_t)predicate->args[arg_index];
+                uint32_t string_writer_id = 0;
+                IREE_RETURN_IF_ERROR(
+                    loom_bytecode_numbering_intern_module_string(
+                        numbering, name_id, &string_writer_id));
+                IREE_RETURN_IF_ERROR(
+                    loom_bytecode_emit_uvarint(builder, string_writer_id));
+              }
+              break;
+            }
+            case LOOM_PRED_ARG_CONST: {
+              IREE_RETURN_IF_ERROR(loom_bytecode_emit_svarint(
+                  builder, predicate->args[arg_index]));
+              break;
+            }
+            default:
+              return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                      "unknown predicate arg tag %d", (int)tag);
+          }
+        }
+      }
+      break;
+    }
+    case LOOM_ATTR_DICT: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 9));
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, attr.count));
+      for (uint16_t i = 0; i < attr.count; ++i) {
+        const loom_named_attr_t* entry = &attr.dict_entries[i];
+        uint32_t key_writer_id = 0;
+        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
+            numbering, entry->name_id, &key_writer_id));
+        IREE_RETURN_IF_ERROR(
+            loom_bytecode_emit_uvarint(builder, key_writer_id));
+        IREE_RETURN_IF_ERROR(loom_bytecode_emit_attr_value(
+            builder, numbering, value_numbering, entry->value, NULL));
+      }
+      break;
+    }
+    case LOOM_ATTR_ENCODING: {
+      IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, 10));
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_emit_uvarint(builder, attr.encoding_id));
       break;
     }
     default:
@@ -2118,6 +2484,73 @@ static iree_status_t loom_bytecode_write_func_metadata(
   return iree_ok_status();
 }
 
+static iree_status_t loom_bytecode_write_global_metadata(
+    iree_string_builder_t* builder, loom_bytecode_numbering_t* numbering,
+    const loom_module_t* module, const loom_op_t* op,
+    loom_bytecode_value_numbering_t* value_numbering) {
+  loom_bytecode_global_value_list_t local_values = {0};
+  IREE_RETURN_IF_ERROR(loom_bytecode_collect_global_values(
+      numbering->arena, module, op, &local_values));
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_number_global(numbering, op, &local_values));
+
+  uint32_t writer_op_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_numbering_intern_op(numbering, op, &writer_op_id));
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_emit_uvarint(builder, (uint64_t)writer_op_id + 1));
+
+  iree_host_size_t comment_count = 0;
+  const iree_string_view_t* comments =
+      loom_module_op_comments(module, op, &comment_count);
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_emit_comment_list(builder, comments, comment_count));
+
+  IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, op->result_count));
+  IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, local_values.count));
+  for (iree_host_size_t i = 0; i < local_values.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_bytecode_value_numbering_assign_value(
+        value_numbering, local_values.values[i]));
+  }
+  for (iree_host_size_t i = 0; i < local_values.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_value_def(
+        builder, numbering, value_numbering,
+        &module->values.entries[local_values.values[i]]));
+  }
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  const loom_attribute_t* attrs = loom_op_attrs(op);
+  uint8_t present_attr_count = 0;
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (present && !loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+      ++present_attr_count;
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, present_attr_count));
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+      continue;
+    }
+
+    uint32_t key_writer_id = 0;
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+        numbering, loom_attr_descriptor_name(descriptor), &key_writer_id));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, key_writer_id));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_attr_value(
+        builder, numbering, value_numbering, attrs[i], descriptor));
+  }
+
+  return iree_ok_status();
+}
+
 static loom_attribute_t loom_bytecode_find_op_attr_by_name(
     const loom_op_vtable_t* vtable, const loom_op_t* op,
     iree_string_view_t name) {
@@ -2325,6 +2758,15 @@ static iree_status_t loom_bytecode_write_symbols_section(
             builder, numbering, module, func_like, &signature_numbering,
             ir_offsets[symbol_index]));
       }
+    } else if (symbol->kind == LOOM_SYMBOL_GLOBAL && symbol->defining_op) {
+      if (signature_numbering.map) {
+        memset(signature_numbering.map, 0xFF,
+               signature_numbering.capacity * sizeof(uint32_t));
+      }
+      signature_numbering.next_number = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_write_global_metadata(
+          builder, numbering, module, symbol->defining_op,
+          &signature_numbering));
     }
   }
 
@@ -2690,8 +3132,41 @@ static iree_status_t loom_bytecode_validate_module(
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     const loom_symbol_t* symbol = &module->symbols.entries[i];
     if (symbol->kind == LOOM_SYMBOL_GLOBAL) {
-      return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                              "GLOBAL symbols not yet supported");
+      if (!symbol->defining_op) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "GLOBAL symbol %" PRIhsz " has no defining op",
+                                i);
+      }
+      const loom_op_t* op = symbol->defining_op;
+      const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+      if (!vtable ||
+          !iree_all_bits_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE) ||
+          vtable->symbol_kind != LOOM_SYMBOL_GLOBAL) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "GLOBAL symbol %" PRIhsz
+                                " defining op is not a global symbol op",
+                                i);
+      }
+      if (op->operand_count != 0 || op->region_count != 0 ||
+          op->tied_result_count != 0) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "GLOBAL symbol %" PRIhsz
+            " defining op must not have operands, regions, or tied results",
+            i);
+      }
+      if (op->result_count == 0) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "GLOBAL symbol %" PRIhsz " defining op must have results", i);
+      }
+      if (op->attribute_count > 0 && !vtable->attr_descriptors) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "GLOBAL symbol %" PRIhsz
+            " defining op has attributes but no descriptors",
+            i);
+      }
     }
     if (symbol->kind == LOOM_SYMBOL_EXECUTABLE) {
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
@@ -2862,8 +3337,10 @@ iree_status_t loom_bytecode_write_module(
   if (location_mode == LOOM_BYTECODE_LOCATION_MODE_NO_LOCATIONS) {
     --section_count;
   }
-  loom_bytecode_body_counts_t module_counts =
-      loom_bytecode_count_serialized_bodies(module);
+  loom_bytecode_body_counts_t module_counts = {0};
+  if (iree_status_is_ok(status)) {
+    status = loom_bytecode_count_serialized_bodies(&numbering, &module_counts);
+  }
   if (iree_status_is_ok(status)) {
     status =
         loom_bytecode_page_writer_write_uvarint(&page_writer, section_count);

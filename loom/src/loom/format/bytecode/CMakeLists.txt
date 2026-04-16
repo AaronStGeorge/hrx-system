@@ -105,6 +105,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::ir
+    loom::src::loom::ops::global
     loom::src::loom::ops::test
     loom::src::loom::testing::context
     iree::testing::gtest
@@ -161,6 +162,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::ir
+    loom::src::loom::ops::global
     loom::src::loom::ops::test
     iree::testing::gtest
     iree::testing::gtest_main

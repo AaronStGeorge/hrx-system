@@ -119,7 +119,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 5
+FORMAT_VERSION = 6
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -254,7 +254,10 @@ class BytecodeWriter:
             if symbol.source_symbol:
                 self._ctx.intern_string(symbol.source_symbol)
             if symbol.op is not None:
-                self._number_func_op(symbol.op)
+                if symbol.kind == SymbolKind.GLOBAL:
+                    self._number_global_op(symbol.op)
+                else:
+                    self._number_func_op(symbol.op)
 
         # Encodings: recursively number child encoding params before parents so
         # the ENCODINGS section has no forward references.
@@ -295,6 +298,89 @@ class BytecodeWriter:
         # Body region.
         if op.regions:
             self._number_region(op.regions[0])
+
+    def _number_global_op(self, op: Operation) -> None:
+        """Number all entities in a global symbol-defining op."""
+        self._ctx.intern_op(op.name)
+        self._ctx.intern_string(op.name)
+
+        for result_id in self._collect_global_local_values(op):
+            value = self._module.values[result_id]
+            if value.name:
+                self._ctx.intern_string(value.name)
+            self._number_type(value.type)
+
+        for key, value in op.attributes.items():
+            if key == "symbol":
+                continue
+            self._ctx.intern_string(key)
+            self._number_attr_value(value)
+
+    def _collect_global_local_values(self, op: Operation) -> list[int]:
+        """Return declaration-local values required to materialize one global."""
+        module = self._module
+        local_values: list[int] = []
+        seen: set[int] = set()
+
+        def add_value(value_id: int) -> None:
+            if value_id < 0 or value_id >= len(module.values):
+                raise ValueError(
+                    f"global {op.name} references value {value_id} outside "
+                    f"the module value table"
+                )
+            if value_id in seen:
+                return
+            seen.add(value_id)
+            local_values.append(value_id)
+
+        def collect_value_bindings(scan_start: int) -> int:
+            scan_index = scan_start
+            while scan_index < len(local_values):
+                value = module.values[local_values[scan_index]]
+                scan_index += 1
+                for binding_id in value.dim_bindings.values():
+                    add_value(binding_id)
+                if value.encoding_binding >= 0:
+                    add_value(value.encoding_binding)
+            return scan_index
+
+        for result_id in op.results:
+            add_value(result_id)
+        scan_index = collect_value_bindings(0)
+
+        name_to_value_id = {
+            module.values[value_id].name: value_id
+            for value_id in local_values
+            if module.values[value_id].name
+        }
+
+        def collect_attr_value(value: Any) -> None:
+            if isinstance(value, list) and value and isinstance(value[0], Predicate):
+                for predicate in value:
+                    for arg in predicate.args:
+                        if arg.tag != "value":
+                            continue
+                        if isinstance(arg.value, int):
+                            add_value(arg.value)
+                            continue
+                        try:
+                            add_value(name_to_value_id[str(arg.value)])
+                        except KeyError as exc:
+                            raise ValueError(
+                                f"global {op.name} predicate references "
+                                f"unknown value {arg.value!r}"
+                            ) from exc
+                return
+            if isinstance(value, Mapping):
+                for nested_value in value.values():
+                    collect_attr_value(nested_value)
+
+        for key, value in op.attributes.items():
+            if key == "symbol":
+                continue
+            collect_attr_value(value)
+        collect_value_bindings(scan_index)
+        return local_values
 
     def _number_region(self, region: Region) -> None:
         """Number all entities in a region (recursive)."""
@@ -530,6 +616,8 @@ class BytecodeWriter:
                         buf.write_u8(1)  # dynamic
             case BufferType():
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.BUFFER])
+            case _:
+                raise ValueError(f"unsupported bytecode type: {ir_type!r}")
 
     def _write_ops(self) -> bytes:
         """Write the OPS section."""
@@ -648,7 +736,9 @@ class BytecodeWriter:
         op_count = 0
         for symbol in self._module.symbols:
             if symbol.op is None or not symbol.op.regions:
-                if symbol.op is not None:
+                if symbol.op is not None and symbol.kind == SymbolKind.GLOBAL:
+                    value_count += len(self._collect_global_local_values(symbol.op))
+                elif symbol.op is not None:
                     value_count += len(symbol.op.operands) + len(symbol.op.results)
                 continue
             value_count += len(symbol.op.results)
@@ -658,6 +748,16 @@ class BytecodeWriter:
             block_count += counts[2]
             op_count += counts[3]
         return value_count, region_count, block_count, op_count
+
+    def _value_number_or_error(
+        self, value_numbers: dict[int, int], value_id: int, context: str
+    ) -> int:
+        try:
+            return value_numbers[value_id]
+        except KeyError as exc:
+            raise ValueError(
+                f"{context} references value {value_id} with no local bytecode number"
+            ) from exc
 
     def _write_region(
         self, buf: ByteBuffer, region: Region, value_numbers: dict[int, int]
@@ -707,10 +807,16 @@ class BytecodeWriter:
             )
         buf.write_varint(dynamic_count)
         for _position, value_id in sorted(value.dim_bindings.items()):
-            buf.write_signed_varint(value_numbers.get(value_id, 0))
+            value_number = self._value_number_or_error(
+                value_numbers, value_id, "dynamic dimension binding"
+            )
+            buf.write_signed_varint(value_number)
         # Encoding binding: 0 = none, else 1 + value_number.
         if value.encoding_binding >= 0:
-            buf.write_varint(1 + value_numbers.get(value.encoding_binding, 0))
+            value_number = self._value_number_or_error(
+                value_numbers, value.encoding_binding, "dynamic encoding binding"
+            )
+            buf.write_varint(1 + value_number)
         else:
             buf.write_varint(0)
 
@@ -750,7 +856,10 @@ class BytecodeWriter:
         # Operands.
         buf.write_varint(len(op.operands))
         for operand_id in op.operands:
-            buf.write_varint(value_numbers.get(operand_id, 0))
+            value_number = self._value_number_or_error(
+                value_numbers, operand_id, "operation operand"
+            )
+            buf.write_varint(value_number)
 
         # Results.
         buf.write_varint(len(op.results))
@@ -1016,6 +1125,46 @@ class BytecodeWriter:
                     offset, length = ir_offsets[symbol_index]
                     buf.write_u64_le(offset)
                     buf.write_u32_le(length)
+            elif symbol.kind == SymbolKind.GLOBAL and symbol.op is not None:
+                op = symbol.op
+                module = self._module
+                if op.operands or op.regions or not op.results:
+                    raise ValueError(
+                        f"global symbol {symbol.name!r} must be defined by a "
+                        "result-only top-level op"
+                    )
+
+                buf.write_varint(self._ctx.ops[op.name] + 1)
+                self._write_comment_list(buf, op.comments)
+
+                result_ids = list(op.results)
+                local_value_ids = self._collect_global_local_values(op)
+                local_value_numbers = {
+                    value_id: value_number
+                    for value_number, value_id in enumerate(local_value_ids)
+                }
+                buf.write_varint(len(result_ids))
+                buf.write_varint(len(local_value_ids))
+                for value_id in local_value_ids:
+                    self._write_value_def(
+                        buf, module.values[value_id], local_value_numbers
+                    )
+
+                payload_attrs = [
+                    (key, value)
+                    for key, value in op.attributes.items()
+                    if key != "symbol"
+                ]
+                buf.write_varint(len(payload_attrs))
+                value_numbers_by_name = self._value_numbers_by_name(local_value_numbers)
+                for key, value in payload_attrs:
+                    buf.write_varint(self._ctx.strings[key])
+                    self._write_attr_value(buf, value, value_numbers_by_name)
+            else:
+                raise ValueError(
+                    f"symbol {symbol.name!r} of kind {symbol.kind.name} "
+                    "has no supported defining op"
+                )
 
         # Patch import/export offset tables.
         for table_idx, symbol_idx in enumerate(import_indices):

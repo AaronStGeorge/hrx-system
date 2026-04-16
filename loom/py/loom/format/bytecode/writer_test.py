@@ -21,6 +21,7 @@ from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.encoding import ALL_ENCODING_OPS
 from loom.dialect.func import ALL_FUNC_OPS
+from loom.dialect.globals import ALL_GLOBAL_OPS
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
 from loom.dialect.scalar import ALL_SCALAR_OPS
@@ -66,6 +67,7 @@ from loom.ir import (
     LocationTable,
     Module,
     Operation,
+    PlaceholderType,
     PoolType,
     Region,
     ScalarType,
@@ -121,6 +123,7 @@ def _section_kinds(data: bytes | bytearray) -> list[int]:
 def _text_parser(
     *,
     include_encoding: bool = False,
+    include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
 ) -> Parser:
@@ -128,6 +131,8 @@ def _text_parser(
     ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
         _append_unique(ops, ALL_ENCODING_OPS)
+    if include_global:
+        _append_unique(ops, ALL_GLOBAL_OPS)
     if include_vector:
         _append_unique(ops, ALL_VECTOR_OPS)
     if include_kernel:
@@ -151,6 +156,7 @@ def _text_parser(
 def _text_printer(
     *,
     include_encoding: bool = False,
+    include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
 ) -> Printer:
@@ -158,6 +164,8 @@ def _text_printer(
     ops = list(ALL_FUNC_OPS) + list(ALL_TEST_OPS)
     if include_encoding:
         _append_unique(ops, ALL_ENCODING_OPS)
+    if include_global:
+        _append_unique(ops, ALL_GLOBAL_OPS)
     if include_vector:
         _append_unique(ops, ALL_VECTOR_OPS)
     if include_kernel:
@@ -182,11 +190,13 @@ def _parse_write_read(
     text: str,
     *,
     include_encoding: bool = False,
+    include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
 ) -> Module:
     module = _text_parser(
         include_encoding=include_encoding,
+        include_global=include_global,
         include_vector=include_vector,
         include_kernel=include_kernel,
     ).parse(text)
@@ -197,17 +207,20 @@ def _roundtrip_text_through_bytecode(
     text: str,
     *,
     include_encoding: bool = False,
+    include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
 ) -> str:
     loaded = _parse_write_read(
         text,
         include_encoding=include_encoding,
+        include_global=include_global,
         include_vector=include_vector,
         include_kernel=include_kernel,
     )
     return _text_printer(
         include_encoding=include_encoding,
+        include_global=include_global,
         include_vector=include_vector,
         include_kernel=include_kernel,
     ).print_module(loaded)
@@ -596,6 +609,30 @@ class TestTypesSection:
         func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
         module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
         with pytest.raises(ValueError, match="1 dynamic dim.*0 dim binding"):
+            write_module(module)
+
+    def test_placeholder_type_fails_loudly(self) -> None:
+        """Placeholder types are parser-internal and must not reach bytecode."""
+        module = Module(name="test")
+        vid = module.add_value(Value(name="v", type=PlaceholderType()))
+        yield_op = Operation(name="test.yield", operands=[vid])
+        block = Block(arg_ids=[vid], ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        with pytest.raises(ValueError, match="unsupported bytecode type"):
+            write_module(module)
+
+    def test_unavailable_operand_fails_loudly(self) -> None:
+        """Function-local operands must reference values defined in scope."""
+        module = Module(name="test")
+        stray_id = module.add_value(Value(name="stray", type=F32))
+        yield_op = Operation(name="test.yield", operands=[stray_id])
+        block = Block(ops=[yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+        with pytest.raises(ValueError, match="operation operand references value"):
             write_module(module)
 
     def test_tensor_1d(self) -> None:
@@ -1230,6 +1267,31 @@ class TestCrossFormatRoundTrip:
         )
 
         assert _roundtrip_text_through_bytecode(text, include_encoding=True) == expected
+
+    def test_global_symbols_survive_bytecode(self) -> None:
+        text = (
+            "global.constant @answer : index = 42\n"
+            "\n"
+            "func.def @load_answer() -> (index) {\n"
+            "  %value = global.load @answer : index\n"
+            "  func.return %value : index\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_global=True) == text
+
+    def test_dynamic_global_symbol_values_survive_bytecode(self) -> None:
+        text = (
+            "global.constant @weights : tile<[%n]xf32> where [mul(%n, 16)]\n"
+            "\n"
+            "func.def @load_weights() -> (index) {\n"
+            "  %tile, %m = global.load @weights : tile<[%m]xf32>\n"
+            "  test.use %tile : tile<[%m]xf32>\n"
+            "  func.return %m : index\n"
+            "}\n"
+        )
+
+        assert _roundtrip_text_through_bytecode(text, include_global=True) == text
 
     def test_vector_iota_and_range_mask_survive_bytecode(self) -> None:
         text = (

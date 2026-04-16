@@ -1200,7 +1200,7 @@ class Region:
 
 @unique
 class SymbolKind(IntEnum):
-    """Symbol kind. Matches loom_symbol_kind_e."""
+    """Symbol kind encoded in bytecode SYMBOLS entries."""
 
     FUNC_DEF = 0
     FUNC_DECL = 1
@@ -1259,6 +1259,8 @@ _OP_NAME_TO_SYMBOL_KIND: dict[str, SymbolKind] = {
     "func.decl": SymbolKind.FUNC_DECL,
     "func.template": SymbolKind.FUNC_TEMPLATE,
     "func.ukernel": SymbolKind.FUNC_UKERNEL,
+    "global.constant": SymbolKind.GLOBAL,
+    "global.variable": SymbolKind.GLOBAL,
 }
 
 
@@ -1268,6 +1270,8 @@ def symbol_from_operation(operation: Operation) -> Symbol:
     Ops not listed in _OP_NAME_TO_SYMBOL_KIND default to FUNC_DEF. This keeps
     test dialect symbol ops working without a dialect-specific symbol-kind map.
     """
+    kind = _OP_NAME_TO_SYMBOL_KIND.get(operation.name, SymbolKind.FUNC_DEF)
+    name_attr = "symbol" if kind == SymbolKind.GLOBAL else "callee"
     symbol_flags = 0
     if operation.attributes.get("visibility") == "public":
         symbol_flags |= SYMBOL_FLAG_PUBLIC
@@ -1277,8 +1281,8 @@ def symbol_from_operation(operation: Operation) -> Symbol:
         symbol_flags |= SYMBOL_FLAG_IMPORT
 
     return Symbol(
-        name=operation.attributes.get("callee", ""),
-        kind=_OP_NAME_TO_SYMBOL_KIND.get(operation.name, SymbolKind.FUNC_DEF),
+        name=operation.attributes.get(name_attr, ""),
+        kind=kind,
         flags=symbol_flags,
         op=operation,
         source_module=source_module,

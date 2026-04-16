@@ -879,6 +879,68 @@ class BytecodeReader:
                     source_symbol=source_symbol,
                 )
                 module.add_symbol(symbol)
+            elif kind == SymbolKind.GLOBAL.value:
+                op_table_index_plus1, offset = decode_varint(sym_data, offset)
+                if op_table_index_plus1 == 0:
+                    raise BytecodeError(
+                        "global symbol op_table_index_plus1 must be nonzero"
+                    )
+                op_table_index = op_table_index_plus1 - 1
+                if op_table_index >= len(self._ops):
+                    raise BytecodeError(
+                        "global symbol op_table_index_plus1 references OPS "
+                        f"entry {op_table_index} but only {len(self._ops)} exist"
+                    )
+                op_name = self._ops[op_table_index]
+                op_comments, offset = self._read_comment_list(sym_data, offset)
+
+                result_count, offset = decode_varint(sym_data, offset)
+                if result_count == 0:
+                    raise BytecodeError("global symbol result_count must be nonzero")
+                local_value_count, offset = decode_varint(sym_data, offset)
+                if local_value_count < result_count:
+                    raise BytecodeError(
+                        "global symbol local_value_count must cover all results"
+                    )
+                local_value_map: list[int] = []
+                local_value_ids = self._reserve_value_defs(
+                    module, local_value_map, local_value_count
+                )
+                for i in range(local_value_count):
+                    value_id, offset = self._read_value_def(
+                        sym_data,
+                        offset,
+                        module,
+                        local_value_map,
+                        local_value_ids[i],
+                    )
+                    local_value_ids[i] = value_id
+                result_ids = local_value_ids[:result_count]
+
+                attr_count, offset = decode_varint(sym_data, offset)
+                op_attrs, offset = self._read_op_attr_entries(
+                    sym_data, offset, attr_count, module, local_value_map
+                )
+                op_attrs = {"symbol": name, **op_attrs}
+
+                op = Operation(
+                    name=op_name,
+                    operands=[],
+                    results=result_ids,
+                    attributes=op_attrs,
+                    comments=op_comments,
+                )
+                symbol = Symbol(
+                    name=name,
+                    kind=SymbolKind.GLOBAL,
+                    flags=flags,
+                    op=op,
+                    source_module=source_module,
+                    source_symbol=source_symbol,
+                )
+                module.add_symbol(symbol)
+            else:
+                raise BytecodeError(f"unsupported symbol kind: {kind}")
 
     def _read_function_body(
         self,
@@ -1031,7 +1093,7 @@ class BytecodeReader:
 
         # Attributes.
         attr_count, offset = decode_varint(data, offset)
-        attributes, offset = self._read_attr_dict_entries(
+        attributes, offset = self._read_op_attr_entries(
             data, offset, attr_count, module, value_map
         )
 
@@ -1148,6 +1210,30 @@ class BytecodeReader:
             entries.append((key, value))
             previous_key = key
         return CanonicalAttrDict.from_sorted_items(entries), offset
+
+    def _read_op_attr_entries(
+        self,
+        data: bytes,
+        offset: int,
+        count: int,
+        module: Module | None = None,
+        value_map: list[int] | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        """Read op attribute entries, preserving payload order."""
+        attributes: dict[str, Any] = {}
+        for _ in range(count):
+            key_id, offset = decode_varint(data, offset)
+            if key_id >= len(self._strings):
+                raise BytecodeError(
+                    f"op attr key string_id {key_id} out of range "
+                    f"(string table has {len(self._strings)} entries)"
+                )
+            key = self._strings[key_id]
+            if key in attributes:
+                raise BytecodeError(f"duplicate op attr key: {key!r}")
+            value, offset = self._read_attr_value(data, offset, module, value_map)
+            attributes[key] = value
+        return attributes, offset
 
     # Predicate kind byte → name mapping (inverse of writer).
     _PRED_KIND_NAMES: ClassVar[list[str]] = [

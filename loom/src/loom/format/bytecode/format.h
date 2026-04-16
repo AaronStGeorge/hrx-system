@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 5
+#define LOOM_BYTECODE_FORMAT_VERSION 6
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -546,10 +546,33 @@ typedef enum loom_bytecode_section_kind_e {
 //       [ir_length: u32])
 //
 //   For GLOBAL symbols:
-//     [type_index: varint]
-//     [is_mutable: byte]
-//     [initializer_offset: u64]  (into RESOURCES section)
-//     [initializer_length: u32]
+//     [def_op_table_index_plus1: varint]
+//                         0 is invalid. N > 0 means the defining global op
+//                         name is OPS[N - 1]. The op must define a GLOBAL
+//                         symbol and have no operands or regions.
+//     [comment_count: varint]
+//     For each leading comment attached to the symbol op:
+//       [comment_length: varint]
+//       [comment_data: comment_length bytes]  bytes after the leading // marker
+//     [result_count: varint]    Number of defining op results. The first
+//                               result_count local values are assigned to the
+//                               defining op.
+//     [local_value_count: varint]
+//                               Declaration-local values used by result types
+//                               and predicate attrs. Must be >= result_count.
+//     For each declaration-local value:
+//       [name_id: varint]       0 = no SSA name; otherwise STRINGS id.
+//       [type_index: varint]    (structural type from TYPES section)
+//       [dim_binding_count: varint]
+//       For each dynamic dim:
+//         [value_ref: signed_varint]  Global-symbol-local value number.
+//       [encoding_binding: varint]    0 = no binding, N > 0 = value number N-1.
+//     [attr_count: varint]      Present non-symbol attributes only. The symbol
+//                               attr is reconstructed from name_id.
+//     For each present non-symbol attribute:
+//       [key_id: varint]
+//       [value_kind: byte]
+//       [value_data: ...]
 //
 //   For EXECUTABLE symbols:
 //     // Compiled device code and target metadata are referenced through

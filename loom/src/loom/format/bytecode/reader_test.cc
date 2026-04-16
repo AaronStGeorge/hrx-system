@@ -19,6 +19,7 @@
 #include "loom/format/bytecode/varint.h"
 #include "loom/format/bytecode/writer.h"
 #include "loom/ir/module.h"
+#include "loom/ops/global/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/testing/context.h"
 
@@ -128,6 +129,70 @@ class ReaderTest : public ::testing::Test {
   loom_module_t* CreateFunctionModule() {
     loom_module_t* module = CreateModule("reader_func");
     AddSimpleFunction(module, "f");
+    return module;
+  }
+
+  loom_module_t* CreateGlobalModule() {
+    loom_module_t* module = CreateModule("reader_global");
+    loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+    IREE_CHECK_OK(loom_module_intern_type(module, index_type, &index_type));
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("answer"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* global_op = nullptr;
+    IREE_CHECK_OK(loom_global_constant_build(
+        &builder, symbol, index_type, /*predicates=*/nullptr,
+        /*predicates_count=*/0, loom_attr_i64(42), LOOM_LOCATION_UNKNOWN,
+        &global_op));
+    return module;
+  }
+
+  loom_module_t* CreateDynamicGlobalModule() {
+    loom_module_t* module = CreateModule("reader_dynamic_global");
+    loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+    IREE_CHECK_OK(loom_module_intern_type(module, index_type, &index_type));
+
+    loom_value_id_t dim_id = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_module_define_value(module, index_type, &dim_id));
+    loom_string_id_t dim_name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_module_intern_string(module, IREE_SV("n"), &dim_name_id));
+    IREE_CHECK_OK(loom_module_set_value_name(module, dim_id, dim_name_id));
+
+    loom_type_t tile_type =
+        loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                            loom_dim_pack_dynamic(dim_id), /*encoding_id=*/0);
+
+    loom_predicate_t* predicates = nullptr;
+    IREE_CHECK_OK(iree_arena_allocate_array(
+        &module->arena, 1, sizeof(loom_predicate_t), (void**)&predicates));
+    predicates[0] = loom_predicate_t{
+        .kind = LOOM_PREDICATE_MUL,
+        .arg_count = 2,
+        .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+        .args = {(int64_t)dim_id, 16},
+    };
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("weights"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* global_op = nullptr;
+    IREE_CHECK_OK(loom_global_constant_build(
+        &builder, symbol, tile_type, predicates, 1, loom_attr_absent(),
+        LOOM_LOCATION_UNKNOWN, &global_op));
     return module;
   }
 
@@ -957,6 +1022,39 @@ class ReaderTest : public ::testing::Test {
     return attr_offsets;
   }
 
+  struct GlobalPayloadOffsets {
+    // Byte offset of the defining op table index plus one.
+    size_t op_table_index_plus1 = 0;
+    // Byte offset of the serialized global result count.
+    size_t result_count = 0;
+    // Byte offset of the serialized global local value count.
+    size_t local_value_count = 0;
+  };
+
+  GlobalPayloadOffsets FirstGlobalPayloadOffsets(
+      const std::vector<uint8_t>& bytes) {
+    size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_SYMBOLS);
+    uint64_t symbol_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(symbol_count, 1u);
+    uint64_t import_count = ReadUVarint(bytes, &offset);
+    uint64_t export_count = ReadUVarint(bytes, &offset);
+    offset += (import_count + export_count) * sizeof(uint64_t);
+
+    ReadUVarint(bytes, &offset);  // name_id
+    EXPECT_EQ(bytes[offset++], LOOM_BYTECODE_SYMBOL_GLOBAL);
+    offset += 1;                 // visibility
+    offset += sizeof(uint16_t);  // flags
+
+    GlobalPayloadOffsets payload_offsets;
+    payload_offsets.op_table_index_plus1 = offset;
+    ReadUVarint(bytes, &offset);
+    SkipCommentList(bytes, &offset);
+    payload_offsets.result_count = offset;
+    ReadUVarint(bytes, &offset);
+    payload_offsets.local_value_count = offset;
+    return payload_offsets;
+  }
+
   size_t LastOpRegionCountOffsetInRegion(const std::vector<uint8_t>& bytes,
                                          size_t* offset) {
     size_t last_region_count_offset = 0;
@@ -1099,6 +1197,23 @@ TEST_F(ReaderTest, AcceptsFunctionMetadata) {
   loom_module_free(module);
 }
 
+TEST_F(ReaderTest, AcceptsGlobalMetadata) {
+  loom_module_t* module = CreateGlobalModule();
+  auto bytes = WriteModule(module);
+
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result = ReadMetadata(bytes, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  EXPECT_EQ(result.first_module.symbol_count, 1u);
+  EXPECT_EQ(result.first_module.value_count, 1u);
+  EXPECT_GT(result.first_module.type_count, 0u);
+  EXPECT_GT(result.first_module.op_name_count, 0u);
+
+  loom_module_free(module);
+}
+
 TEST_F(ReaderTest, ReadsFunctionBodyModule) {
   loom_module_t* module = CreateFunctionModule();
   auto bytes = WriteModule(module);
@@ -1129,6 +1244,83 @@ TEST_F(ReaderTest, ReadsFunctionBodyModule) {
   EXPECT_EQ(loom_test_addi_lhs(body_op), loom_test_addi_rhs(body_op));
   ASSERT_NE(entry->last_op, nullptr);
   EXPECT_TRUE(loom_test_yield_isa(entry->last_op));
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsGlobalSymbolModule) {
+  loom_module_t* module = CreateGlobalModule();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids,
+                 /*verify_module=*/true);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  const loom_symbol_t& symbol = read_module->symbols.entries[0];
+  EXPECT_EQ(symbol.kind, LOOM_SYMBOL_GLOBAL);
+  EXPECT_TRUE(iree_string_view_equal(
+      read_module->strings.entries[symbol.name_id], IREE_SV("answer")));
+  ASSERT_NE(symbol.defining_op, nullptr);
+  ASSERT_TRUE(loom_global_constant_isa(symbol.defining_op));
+  loom_attribute_t initializer =
+      loom_global_constant_initializer(symbol.defining_op);
+  ASSERT_EQ(initializer.kind, LOOM_ATTR_I64);
+  EXPECT_EQ(initializer.i64, 42);
+  loom_type_t type = loom_module_value_type(
+      read_module, loom_global_constant_type(symbol.defining_op));
+  EXPECT_TRUE(loom_type_equal(type, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX)));
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsDynamicGlobalSymbolModule) {
+  loom_module_t* module = CreateDynamicGlobalModule();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids,
+                 /*verify_module=*/true);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  const loom_symbol_t& symbol = read_module->symbols.entries[0];
+  ASSERT_NE(symbol.defining_op, nullptr);
+  ASSERT_TRUE(loom_global_constant_isa(symbol.defining_op));
+
+  loom_type_t type = loom_module_value_type(
+      read_module, loom_global_constant_type(symbol.defining_op));
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(type, 0));
+  loom_value_id_t dim_id = loom_type_dim_value_id_at(type, 0);
+  ASSERT_LT(dim_id, read_module->values.count);
+  const loom_value_t& dim_value = read_module->values.entries[dim_id];
+  EXPECT_TRUE(loom_type_equal(dim_value.type,
+                              loom_type_scalar(LOOM_SCALAR_TYPE_INDEX)));
+  ASSERT_NE(dim_value.name_id, LOOM_STRING_ID_INVALID);
+  EXPECT_TRUE(iree_string_view_equal(
+      read_module->strings.entries[dim_value.name_id], IREE_SV("n")));
+
+  const loom_attribute_t* attrs = loom_op_attrs(symbol.defining_op);
+  ASSERT_EQ(attrs[1].kind, LOOM_ATTR_PREDICATE_LIST);
+  ASSERT_EQ(attrs[1].count, 1u);
+  const loom_predicate_t& predicate = attrs[1].predicate_list[0];
+  EXPECT_EQ(predicate.kind, LOOM_PREDICATE_MUL);
+  EXPECT_EQ(predicate.arg_count, 2u);
+  EXPECT_EQ(predicate.arg_tags[0], LOOM_PRED_ARG_VALUE);
+  EXPECT_EQ(predicate.args[0], (int64_t)dim_id);
+  EXPECT_EQ(predicate.arg_tags[1], LOOM_PRED_ARG_CONST);
+  EXPECT_EQ(predicate.args[1], 16);
 
   loom_module_free(read_module);
   loom_module_free(module);
@@ -1335,6 +1527,14 @@ TEST_F(ReaderTest, CanonicalRoundTripPreservesBodyShapes) {
 }
 
 TEST_F(ReaderTest, CanonicalRoundTripPreservesTypesAttrsAndPredicates) {
+  loom_module_t* global_module = CreateGlobalModule();
+  ExpectCanonicalBytecodeRoundTrip(global_module);
+  loom_module_free(global_module);
+
+  loom_module_t* dynamic_global_module = CreateDynamicGlobalModule();
+  ExpectCanonicalBytecodeRoundTrip(dynamic_global_module);
+  loom_module_free(dynamic_global_module);
+
   loom_module_t* dynamic_module = CreateDynamicDimFunctionModule();
   ExpectCanonicalBytecodeRoundTrip(dynamic_module);
   loom_module_free(dynamic_module);
@@ -1365,6 +1565,44 @@ TEST_F(ReaderTest, RejectsInvalidBodyValueReference) {
   bytes[operand_offset] = 0x7F;
 
   ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsInvalidGlobalDefiningOpReference) {
+  loom_module_t* module = CreateGlobalModule();
+  auto bytes = WriteModule(module);
+  GlobalPayloadOffsets payload_offsets = FirstGlobalPayloadOffsets(bytes);
+  ASSERT_LT(payload_offsets.op_table_index_plus1, bytes.size());
+  bytes[payload_offsets.op_table_index_plus1] = 0;
+
+  ExpectReadError(bytes, "ERR_BYTECODE_012");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsZeroGlobalResultCount) {
+  loom_module_t* module = CreateGlobalModule();
+  auto bytes = WriteModule(module);
+  GlobalPayloadOffsets payload_offsets = FirstGlobalPayloadOffsets(bytes);
+  ASSERT_LT(payload_offsets.result_count, bytes.size());
+  ASSERT_EQ(bytes[payload_offsets.result_count], 1u);
+  bytes[payload_offsets.result_count] = 0;
+
+  ExpectReadError(bytes, "ERR_BYTECODE_006");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsGlobalLocalValueCountBelowResultCount) {
+  loom_module_t* module = CreateGlobalModule();
+  auto bytes = WriteModule(module);
+  GlobalPayloadOffsets payload_offsets = FirstGlobalPayloadOffsets(bytes);
+  ASSERT_LT(payload_offsets.local_value_count, bytes.size());
+  ASSERT_EQ(bytes[payload_offsets.local_value_count], 1u);
+  bytes[payload_offsets.local_value_count] = 0;
+
+  ExpectReadError(bytes, "ERR_BYTECODE_006");
 
   loom_module_free(module);
 }

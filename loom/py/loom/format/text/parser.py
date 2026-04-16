@@ -1254,6 +1254,16 @@ class Parser:
             elif binding_position >= 0:
                 value.type = INDEX
 
+    def _assign_symbolic_binding_types(self, bindings: Mapping[int, int]) -> None:
+        for binding_position, value_id in bindings.items():
+            value = self._module.values[value_id]
+            if not isinstance(value.type, PlaceholderType):
+                continue
+            if binding_position == -1:
+                value.type = ENCODING_TYPE
+            elif binding_position >= 0:
+                value.type = INDEX
+
     # --- Op parsing ---
 
     def parse_operation_from_text(
@@ -1817,6 +1827,9 @@ class Parser:
                     self._definition_scope_active = True
                     try:
                         self._walk_format(inner, op_decl, parsed)
+                        if allow_symbolic_type_values:
+                            for bindings in parsed.result_bindings:
+                                self._assign_symbolic_binding_types(bindings)
                         # Function-like signatures resolve placeholders through
                         # arguments. Global-like declaration scopes keep them
                         # as local symbolic type values referenced by metadata.

@@ -17,6 +17,7 @@
 #include "loom/format/bytecode/varint.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/global/ops.h"
 #include "loom/ops/test/ops.h"
 
 namespace loom {
@@ -33,7 +34,14 @@ class WriterTest : public ::testing::Test {
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
 
-    // Register the test dialect so the writer can resolve op names.
+    // Register dialects so the writer can resolve op names.
+    iree_host_size_t global_op_count = 0;
+    const loom_op_vtable_t* const* global_vtables =
+        loom_global_dialect_vtables(&global_op_count);
+    IREE_ASSERT_OK(loom_context_register_dialect(&context_, LOOM_DIALECT_GLOBAL,
+                                                 global_vtables,
+                                                 (uint16_t)global_op_count));
+
     iree_host_size_t op_count = 0;
     const loom_op_vtable_t* const* vtables =
         loom_test_dialect_vtables(&op_count);
@@ -260,6 +268,24 @@ class WriterTest : public ::testing::Test {
     return value;
   }
 
+  void SkipCommentList(const std::vector<uint8_t>& bytes, size_t* offset) {
+    uint64_t comment_count = ReadUVarint(bytes, offset);
+    for (uint64_t i = 0; i < comment_count; ++i) {
+      uint64_t comment_length = ReadUVarint(bytes, offset);
+      *offset += (size_t)comment_length;
+    }
+  }
+
+  void SkipValueDef(const std::vector<uint8_t>& bytes, size_t* offset) {
+    ReadUVarint(bytes, offset);  // name_id
+    ReadUVarint(bytes, offset);  // type_id
+    uint64_t dim_binding_count = ReadUVarint(bytes, offset);
+    for (uint64_t i = 0; i < dim_binding_count; ++i) {
+      ReadUVarint(bytes, offset);
+    }
+    ReadUVarint(bytes, offset);  // encoding_binding
+  }
+
   struct SectionEntry {
     // Section kind from loom_bytecode_section_kind_t.
     uint16_t kind;
@@ -303,6 +329,16 @@ class WriterTest : public ::testing::Test {
       }
     }
     return false;
+  }
+
+  size_t SectionPayloadOffset(const std::vector<uint8_t>& bytes,
+                              uint16_t section_kind) {
+    size_t dir_offset = 24;
+    uint64_t module_offset = ReadU64LE(bytes, dir_offset + 8);
+    auto entries = ReadSectionDirectory(bytes, module_offset);
+    SectionEntry section_entry = {};
+    if (!FindSection(entries, section_kind, &section_entry)) return 0;
+    return (size_t)module_offset + (size_t)section_entry.offset;
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -1023,7 +1059,7 @@ TEST_F(WriterTest, InvalidEncodingRoleFails) {
   loom_module_free(module);
 }
 
-TEST_F(WriterTest, GlobalSymbolFailsLoudly) {
+TEST_F(WriterTest, DanglingGlobalSymbolFailsLoudly) {
   loom_module_t* module = CreateModule("test");
 
   loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
@@ -1032,7 +1068,113 @@ TEST_F(WriterTest, GlobalSymbolFailsLoudly) {
   IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
   module->symbols.entries[symbol_id].kind = LOOM_SYMBOL_GLOBAL;
 
-  ExpectWriteModuleStatus(IREE_STATUS_UNIMPLEMENTED, module);
+  ExpectWriteModuleStatus(IREE_STATUS_INVALID_ARGUMENT, module);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, GlobalSymbolWritesDefiningOpPayload) {
+  loom_module_t* module = CreateModule("test");
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  IREE_ASSERT_OK(loom_module_intern_type(module, f32_type, &f32_type));
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_intern_string(&builder, IREE_SV("pi"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* global_op = nullptr;
+  IREE_ASSERT_OK(loom_global_constant_build(
+      &builder, symbol, f32_type, /*predicates=*/nullptr,
+      /*predicates_count=*/0, loom_attr_f64(3.25), LOOM_LOCATION_UNKNOWN,
+      &global_op));
+
+  std::vector<uint8_t> bytes = WriteModule(module);
+  size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_SYMBOLS);
+  ASSERT_GT(offset, 0u);
+  uint64_t symbol_count = ReadUVarint(bytes, &offset);
+  ASSERT_EQ(symbol_count, 1u);
+  uint64_t import_count = ReadUVarint(bytes, &offset);
+  uint64_t export_count = ReadUVarint(bytes, &offset);
+  offset += (import_count + export_count) * sizeof(uint64_t);
+  ReadUVarint(bytes, &offset);  // name_id
+  EXPECT_EQ(bytes[offset++], LOOM_BYTECODE_SYMBOL_GLOBAL);
+  offset += 1;                 // visibility
+  offset += sizeof(uint16_t);  // flags
+  EXPECT_NE(ReadUVarint(bytes, &offset), 0u);
+  SkipCommentList(bytes, &offset);
+  EXPECT_EQ(ReadUVarint(bytes, &offset), 1u);
+  EXPECT_EQ(ReadUVarint(bytes, &offset), 1u);
+  SkipValueDef(bytes, &offset);
+  EXPECT_EQ(ReadUVarint(bytes, &offset), 1u);
+  ReadUVarint(bytes, &offset);  // initializer key id
+  EXPECT_EQ(bytes[offset++], 1u);
+
+  loom_module_free(module);
+}
+
+TEST_F(WriterTest, GlobalSymbolWritesDeclarationLocalValues) {
+  loom_module_t* module = CreateModule("test");
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  IREE_ASSERT_OK(loom_module_intern_type(module, index_type, &index_type));
+
+  loom_value_id_t dim_id = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, index_type, &dim_id));
+  loom_string_id_t dim_name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("n"), &dim_name_id));
+  IREE_ASSERT_OK(loom_module_set_value_name(module, dim_id, dim_name_id));
+
+  loom_type_t tile_type =
+      loom_type_shaped_1d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(dim_id), /*encoding_id=*/0);
+  loom_predicate_t* predicates = nullptr;
+  IREE_ASSERT_OK(iree_arena_allocate_array(
+      &module->arena, 1, sizeof(loom_predicate_t), (void**)&predicates));
+  predicates[0] = loom_predicate_t{
+      .kind = LOOM_PREDICATE_MUL,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST},
+      .args = {(int64_t)dim_id, 16},
+  };
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder, IREE_SV("weights"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* global_op = nullptr;
+  IREE_ASSERT_OK(loom_global_constant_build(&builder, symbol, tile_type,
+                                            predicates, 1, loom_attr_absent(),
+                                            LOOM_LOCATION_UNKNOWN, &global_op));
+
+  std::vector<uint8_t> bytes = WriteModule(module);
+  size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_SYMBOLS);
+  ASSERT_GT(offset, 0u);
+  uint64_t symbol_count = ReadUVarint(bytes, &offset);
+  ASSERT_EQ(symbol_count, 1u);
+  uint64_t import_count = ReadUVarint(bytes, &offset);
+  uint64_t export_count = ReadUVarint(bytes, &offset);
+  offset += (import_count + export_count) * sizeof(uint64_t);
+  ReadUVarint(bytes, &offset);  // name_id
+  EXPECT_EQ(bytes[offset++], LOOM_BYTECODE_SYMBOL_GLOBAL);
+  offset += 1;                 // visibility
+  offset += sizeof(uint16_t);  // flags
+  EXPECT_NE(ReadUVarint(bytes, &offset), 0u);
+  SkipCommentList(bytes, &offset);
+  EXPECT_EQ(ReadUVarint(bytes, &offset), 1u);
+  EXPECT_EQ(ReadUVarint(bytes, &offset), 2u);
+  SkipValueDef(bytes, &offset);  // Global value.
+  SkipValueDef(bytes, &offset);  // Declaration-local dynamic dim.
+  EXPECT_EQ(ReadUVarint(bytes, &offset), 1u);
+  ReadUVarint(bytes, &offset);  // predicates key id
+  EXPECT_EQ(bytes[offset++], 8u);
 
   loom_module_free(module);
 }
