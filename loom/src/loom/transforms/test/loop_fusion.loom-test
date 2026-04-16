@@ -64,6 +64,26 @@ func.def @fuses_equal_constant_domains(%a: i32, %b: i32) -> (i32, i32) {
 
 // ====
 
+// loop-fusion is deliberately limited to counted scf.for loops. scf.while has
+// no counted domain, so adjacent while ops are left unchanged.
+func.def @does_not_fuse_while(%cond: i1, %a: i32, %b: i32) -> (i32, i32) {
+  %sum_a = scf.while(%before = %a : i32) -> (i32) {
+    scf.condition %cond, %before : i1, i32
+  } do(%body: i32) {
+    %next = test.addi %body, %b : i32
+    scf.yield %next : i32
+  }
+  %sum_b = scf.while(%before = %b : i32) -> (i32) {
+    scf.condition %cond, %before : i1, i32
+  } do(%body: i32) {
+    %next = test.addi %body, %a : i32
+    scf.yield %next : i32
+  }
+  func.return %sum_a, %sum_b : i32, i32
+}
+
+// ====
+
 func.def @fuses_dynamic_result_type_references(%n: index, %buffer: buffer, %offset: offset) {
   %zero = index.constant 0 : index
   %one = index.constant 1 : index

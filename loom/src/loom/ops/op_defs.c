@@ -164,6 +164,7 @@ static bool loom_value_has_type_uses_outside_op(const loom_module_t* module,
       module->type_uses.value_heads[value_id].first_incoming_use_id;
   while (use_id != LOOM_TYPE_USE_ID_INVALID) {
     const loom_type_use_t* type_use = &module->type_uses.records[use_id];
+    if (type_use->user_value_id >= module->values.count) return true;
     const loom_value_t* user_value =
         loom_module_value(module, type_use->user_value_id);
     if (loom_value_is_block_arg(user_value)) return true;
