@@ -82,6 +82,21 @@ TEST(MatrixContractTest, Gfx90aBf16OneKMfmaDescriptor) {
   EXPECT_EQ(descriptor->accumulator_payload.register_count, 4);
 }
 
+TEST(MatrixContractTest, Gfx908LegacyMfmaDescriptor) {
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      FindDescriptor("mfma.f32.32x32x8.f16");
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
+  EXPECT_EQ(descriptor->required_feature_bits,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908);
+  EXPECT_EQ(descriptor->tile_shape.result_row_count, 32);
+  EXPECT_EQ(descriptor->tile_shape.result_column_count, 32);
+  EXPECT_EQ(descriptor->tile_shape.reduction_count, 8);
+  EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F16);
+  EXPECT_EQ(descriptor->result_payload.register_count, 16);
+}
+
 TEST(MatrixContractTest, Gfx950ScaledMfmaDescriptor) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       FindDescriptor("mfma.scale.f32.32x32x64.f8f6f4");
