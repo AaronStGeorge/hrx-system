@@ -21,6 +21,7 @@ loom_check_test_suite(
         "kernel_resources.loom-test",
         "licm.loom-test",
         "loop_fusion.loom-test",
+        "refine_boundaries.loom-test",
         "scf_index.loom-test",
         "vector_to_scalar.loom-test",
     ],

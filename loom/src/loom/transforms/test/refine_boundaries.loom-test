@@ -1,0 +1,125 @@
+// RUN: pass refine-boundaries
+
+// A private callee sees exact facts from all internal callers. Its simplified
+// return facts then seed call results, letting callers fold ordinary local code.
+func.def @private_extent_identity(%n: index) -> (index) {
+  %tile = index.constant 16 : index
+  %zero = index.constant 0 : index
+  %remainder = index.rem %n, %tile : index
+  %is_aligned = index.cmp eq, %remainder, %zero : index
+  %result = scf.if %is_aligned -> (index) {
+    scf.yield %n : index
+  } else {
+    %rounded = index.add %n, %tile : index
+    scf.yield %rounded : index
+  }
+  func.return %result : index
+}
+
+func.def public @entry() -> (index) {
+  %n = index.constant 32 : index
+  %result = func.call @private_extent_identity(%n) : (index) -> (index)
+  %two = index.constant 2 : index
+  %scaled = index.mul %result, %two : index
+  func.return %scaled : index
+}
+
+// ----
+func.def @private_extent_identity(%n: index) -> (index) {
+  func.return %n : index
+}
+
+func.def public @entry() -> (index) {
+  %scaled = index.constant 64 : index
+  func.return %scaled : index
+}
+
+// ====
+
+// Public callees do not receive argument facts from internal callers because
+// external callers may pass different values.
+func.def public @public_extent_identity(%n: index) -> (index) {
+  %tile = index.constant 16 : index
+  %zero = index.constant 0 : index
+  %remainder = index.rem %n, %tile : index
+  %is_aligned = index.cmp eq, %remainder, %zero : index
+  %result = scf.if %is_aligned -> (index) {
+    scf.yield %n : index
+  } else {
+    %rounded = index.add %n, %tile : index
+    scf.yield %rounded : index
+  }
+  func.return %result : index
+}
+
+func.def public @calls_public() -> (index) {
+  %n = index.constant 32 : index
+  %result = func.call @public_extent_identity(%n) : (index) -> (index)
+  %two = index.constant 2 : index
+  %scaled = index.mul %result, %two : index
+  func.return %scaled : index
+}
+
+// ----
+func.def public @public_extent_identity(%n: index) -> (index) {
+  %tile = index.constant 16 : index
+  %zero = index.constant 0 : index
+  %remainder = index.rem %n, %tile : index
+  %is_aligned = index.cmp eq, %remainder, %zero : index
+  %result = scf.if %is_aligned -> (index) {
+    scf.yield %n : index
+  } else {
+    %rounded = index.add %n, %tile : index
+    scf.yield %rounded : index
+  }
+  func.return %result : index
+}
+
+func.def public @calls_public() -> (index) {
+  %n = index.constant 32 : index
+  %result = func.call pure @public_extent_identity(%n) : (index) -> (index)
+  %two = index.constant 2 : index
+  %scaled = index.mul %result, %two : index
+  func.return %scaled : index
+}
+
+// ====
+
+// When private callers disagree on the exact value, the boundary join keeps
+// useful weaker facts such as divisibility. That is enough to prune alignment
+// checks without pretending both calls returned the same constant.
+func.def @private_joined_extent(%n: index) -> (index) {
+  %tile = index.constant 16 : index
+  %zero = index.constant 0 : index
+  %remainder = index.rem %n, %tile : index
+  %is_aligned = index.cmp eq, %remainder, %zero : index
+  %result = scf.if %is_aligned -> (index) {
+    scf.yield %n : index
+  } else {
+    %rounded = index.add %n, %tile : index
+    scf.yield %rounded : index
+  }
+  func.return %result : index
+}
+
+func.def public @joined_call_result_divisibility() -> (index) {
+  %a = index.constant 32 : index
+  %b = index.constant 48 : index
+  %ra = func.call @private_joined_extent(%a) : (index) -> (index)
+  %rb = func.call @private_joined_extent(%b) : (index) -> (index)
+  %tile = index.constant 16 : index
+  %rem_a = index.rem %ra, %tile : index
+  %rem_b = index.rem %rb, %tile : index
+  %sum = index.add %rem_a, %rem_b : index
+  func.return %sum : index
+}
+
+// ----
+func.def @private_joined_extent(%n: index) -> (index) {
+  func.return %n : index
+}
+
+func.def public @joined_call_result_divisibility() -> (index) {
+  %sum = index.constant 0 : index
+  func.return %sum : index
+}

@@ -36,6 +36,7 @@
 #include "loom/transforms/licm.h"
 #include "loom/transforms/loop_fusion.h"
 #include "loom/transforms/pass.h"
+#include "loom/transforms/refine_boundaries.h"
 #include "loom/transforms/strip_hints.h"
 #include "loom/transforms/vector_memory_footprint.h"
 #include "loom/transforms/vector_to_scalar.h"
@@ -348,6 +349,11 @@ static iree_status_t loom_check_run_pipeline(
       status = loom_pass_manager_add_function_pass(
           &manager, loom_loop_fusion_pass_info(), loom_loop_fusion_run, NULL,
           NULL, iree_string_view_empty());
+    } else if (iree_string_view_equal(pass_name,
+                                      IREE_SV("refine-boundaries"))) {
+      status = loom_pass_manager_add_module_pass(
+          &manager, loom_refine_boundaries_pass_info(),
+          loom_refine_boundaries_run, NULL, NULL, iree_string_view_empty());
     } else if (iree_string_view_equal(pass_name, IREE_SV("strip-hints"))) {
       status = loom_pass_manager_add_function_pass(
           &manager, loom_strip_hints_pass_info(), loom_strip_hints_run, NULL,

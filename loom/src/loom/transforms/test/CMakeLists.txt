@@ -78,6 +78,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "refine_boundaries"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/refine_boundaries.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "scf_index"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/scf_index.loom-test"

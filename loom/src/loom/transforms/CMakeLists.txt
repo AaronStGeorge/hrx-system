@@ -378,6 +378,27 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    refine_boundaries
+  HDRS
+    "refine_boundaries.h"
+  SRCS
+    "refine_boundaries.c"
+  DEPS
+    ::canonicalize
+    ::pass
+    iree::base
+    loom::src::loom::analysis::scc
+    loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+    loom::src::loom::util::fact_table
+    loom::src::loom::util::walk
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     rewriter
   HDRS
     "rewriter.h"
