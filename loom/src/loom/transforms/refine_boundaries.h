@@ -30,6 +30,10 @@ typedef struct loom_refine_boundaries_options_t {
   uint32_t max_iterations;
 } loom_refine_boundaries_options_t;
 
+// Creates refine-boundaries pass state from a textual option dictionary.
+iree_status_t loom_refine_boundaries_create(loom_pass_t* pass,
+                                            iree_string_view_t options);
+
 // Propagates direct-call boundary facts and type refinements through the
 // module.
 iree_status_t loom_refine_boundaries_run(loom_pass_t* pass,

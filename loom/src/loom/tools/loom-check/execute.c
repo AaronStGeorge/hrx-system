@@ -303,75 +303,89 @@ static iree_status_t loom_check_run_pipeline(
 
   // Parse comma-separated pass names and add each to the pipeline.
   iree_string_view_t remaining = pipeline;
-  while (remaining.size > 0) {
-    iree_string_view_t pass_name = iree_string_view_empty();
-    iree_string_view_split(remaining, ',', &pass_name, &remaining);
-    pass_name = iree_string_view_trim(pass_name);
-    if (pass_name.size == 0) continue;
+  while (true) {
+    loom_pass_pipeline_entry_spec_t entry = {0};
+    bool has_entry = false;
+    iree_status_t status =
+        loom_pass_pipeline_consume_entry(&remaining, &entry, &has_entry);
+    if (!iree_status_is_ok(status)) {
+      loom_pass_manager_deinitialize(&manager);
+      return status;
+    }
+    if (!has_entry) break;
 
-    iree_status_t status = iree_ok_status();
-    if (iree_string_view_equal(pass_name, IREE_SV("canonicalize"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_canonicalize_pass_info(), loom_canonicalize_run, NULL,
-          NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("dce"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_dce_pass_info(), loom_dce_run, NULL, NULL,
-          iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name,
+    const loom_pass_info_t* info = NULL;
+    loom_module_pass_fn_t module_run = NULL;
+    loom_function_pass_fn_t function_run = NULL;
+    loom_pass_create_fn_t create = NULL;
+    loom_pass_destroy_fn_t destroy = NULL;
+    if (iree_string_view_equal(entry.name, IREE_SV("canonicalize"))) {
+      info = loom_canonicalize_pass_info();
+      function_run = loom_canonicalize_run;
+      create = loom_canonicalize_create;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("dce"))) {
+      info = loom_dce_pass_info();
+      function_run = loom_dce_run;
+    } else if (iree_string_view_equal(entry.name,
                                       IREE_SV("kernel-async-legality"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_kernel_async_legality_pass_info(),
-          loom_kernel_async_legality_run, NULL, NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name,
+      info = loom_kernel_async_legality_pass_info();
+      function_run = loom_kernel_async_legality_run;
+    } else if (iree_string_view_equal(entry.name,
                                       IREE_SV("normalize-kernel-resources"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_normalize_kernel_resources_pass_info(),
-          loom_normalize_kernel_resources_run, NULL, NULL,
-          iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("cse"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_cse_pass_info(), loom_cse_run, NULL, NULL,
-          iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("branch-sink"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_branch_sink_pass_info(), loom_branch_sink_run, NULL,
-          NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("branch-fusion"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_branch_fusion_pass_info(), loom_branch_fusion_run,
-          NULL, NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("licm"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_licm_pass_info(), loom_licm_run, NULL, NULL,
-          iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("loop-fusion"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_loop_fusion_pass_info(), loom_loop_fusion_run, NULL,
-          NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name,
+      info = loom_normalize_kernel_resources_pass_info();
+      function_run = loom_normalize_kernel_resources_run;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("cse"))) {
+      info = loom_cse_pass_info();
+      function_run = loom_cse_run;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("branch-sink"))) {
+      info = loom_branch_sink_pass_info();
+      function_run = loom_branch_sink_run;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("branch-fusion"))) {
+      info = loom_branch_fusion_pass_info();
+      function_run = loom_branch_fusion_run;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("licm"))) {
+      info = loom_licm_pass_info();
+      function_run = loom_licm_run;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("loop-fusion"))) {
+      info = loom_loop_fusion_pass_info();
+      function_run = loom_loop_fusion_run;
+    } else if (iree_string_view_equal(entry.name,
                                       IREE_SV("refine-boundaries"))) {
-      status = loom_pass_manager_add_module_pass(
-          &manager, loom_refine_boundaries_pass_info(),
-          loom_refine_boundaries_run, NULL, NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("strip-hints"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_strip_hints_pass_info(), loom_strip_hints_run, NULL,
-          NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name, IREE_SV("vector-to-scalar"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_vector_to_scalar_pass_info(),
-          loom_vector_to_scalar_run, NULL, NULL, iree_string_view_empty());
-    } else if (iree_string_view_equal(pass_name,
+      info = loom_refine_boundaries_pass_info();
+      module_run = loom_refine_boundaries_run;
+      create = loom_refine_boundaries_create;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("strip-hints"))) {
+      info = loom_strip_hints_pass_info();
+      function_run = loom_strip_hints_run;
+    } else if (iree_string_view_equal(entry.name,
+                                      IREE_SV("vector-to-scalar"))) {
+      info = loom_vector_to_scalar_pass_info();
+      function_run = loom_vector_to_scalar_run;
+    } else if (iree_string_view_equal(entry.name,
                                       IREE_SV("vector-memory-footprint"))) {
-      status = loom_pass_manager_add_function_pass(
-          &manager, loom_vector_memory_footprint_pass_info(),
-          loom_vector_memory_footprint_run, NULL, NULL,
-          iree_string_view_empty());
+      info = loom_vector_memory_footprint_pass_info();
+      function_run = loom_vector_memory_footprint_run;
     } else {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "unknown pass: '%.*s'",
-                           (int)pass_name.size, pass_name.data);
+                           (int)entry.name.size, entry.name.data);
+    }
+    if (iree_status_is_ok(status) && info && create == NULL &&
+        !iree_string_view_is_empty(entry.options)) {
+      status =
+          iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                           "pass '%.*s' does not accept options, got '{%.*s}'",
+                           (int)entry.name.size, entry.name.data,
+                           (int)entry.options.size, entry.options.data);
+    }
+    if (iree_status_is_ok(status) && info) {
+      if (info->kind == LOOM_PASS_MODULE) {
+        status = loom_pass_manager_add_module_pass(
+            &manager, info, module_run, create, destroy, entry.options);
+      } else {
+        status = loom_pass_manager_add_function_pass(
+            &manager, info, function_run, create, destroy, entry.options);
+      }
     }
     if (!iree_status_is_ok(status)) {
       loom_pass_manager_deinitialize(&manager);

@@ -107,6 +107,10 @@ const loom_value_fact_table_t* loom_canonicalizer_fact_table(
 // Returns immutable metadata for the canonicalize pass.
 const loom_pass_info_t* loom_canonicalize_pass_info(void);
 
+// Creates canonicalize pass state from a textual option dictionary.
+iree_status_t loom_canonicalize_create(loom_pass_t* pass,
+                                       iree_string_view_t options);
+
 // Canonicalize pass.
 //
 // Iterates all ops in a function, calling each op's vtable canonicalize

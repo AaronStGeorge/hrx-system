@@ -90,6 +90,43 @@ const loom_pass_info_t* loom_refine_boundaries_pass_info(void) {
   return &loom_refine_boundaries_pass_info_storage;
 }
 
+static iree_status_t loom_refine_boundaries_parse_option(
+    void* user_data, iree_string_view_t name, iree_string_view_t value) {
+  loom_refine_boundaries_options_t* options =
+      (loom_refine_boundaries_options_t*)user_data;
+  if (iree_string_view_equal(name, IREE_SV("max-iterations"))) {
+    if (options->max_iterations != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "duplicate option 'max-iterations' for pass 'refine-boundaries'");
+    }
+    IREE_RETURN_IF_ERROR(loom_pass_option_parse_uint32(
+        IREE_SV("refine-boundaries"), name, value, &options->max_iterations));
+    if (options->max_iterations == 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "pass 'refine-boundaries' option "
+                              "'max-iterations' must be greater than 0");
+    }
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown option '%.*s' for pass 'refine-boundaries'",
+                          (int)name.size, name.data);
+}
+
+iree_status_t loom_refine_boundaries_create(loom_pass_t* pass,
+                                            iree_string_view_t options_string) {
+  loom_refine_boundaries_options_t* options = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena,
+                                           sizeof(*options), (void**)&options));
+  memset(options, 0, sizeof(*options));
+  IREE_RETURN_IF_ERROR(
+      loom_pass_options_parse(pass->info->name, options_string,
+                              loom_refine_boundaries_parse_option, options));
+  pass->state = options;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_refine_boundaries_fail(
     loom_pass_t* pass, const loom_module_t* module, const loom_op_t* op,
     iree_string_view_t reason, iree_status_code_t status_code) {
@@ -3110,5 +3147,6 @@ iree_status_t loom_refine_boundaries_run_with_options(
 
 iree_status_t loom_refine_boundaries_run(loom_pass_t* pass,
                                          loom_module_t* module) {
-  return loom_refine_boundaries_run_with_options(pass, module, NULL);
+  return loom_refine_boundaries_run_with_options(
+      pass, module, (const loom_refine_boundaries_options_t*)pass->state);
 }

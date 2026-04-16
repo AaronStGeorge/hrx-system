@@ -765,6 +765,65 @@ TEST_F(ExecuteTest, PassModeCapturesPassDiagnostic) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, PassModePassesOptionsToPassCreate) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: pass refine-boundaries{max-iterations=1}\n"
+      "func.def @identity(%value: index) -> (index) {\n"
+      "  func.return %value : index\n"
+      "}\n"
+      "\n"
+      "func.def public @caller() -> (index) {\n"
+      "  %zero = index.constant 0 : index\n"
+      "  %result = func.call @identity(%zero) : (index) -> (index)\n"
+      "  func.return %result : index\n"
+      "}\n",
+      &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DiagnosticJsonString(result).find("\"emitter\":\"pass\""),
+            std::string::npos);
+  EXPECT_NE(
+      DiagnosticJsonString(result).find("\"error_id\":\"ERR_LOWERING_002\""),
+      std::string::npos);
+  EXPECT_NE(DetailString(result).find("did not converge"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, PassModeRejectsOptionsForUnsupportedPass) {
+  loom_check_result_t result;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        ExecuteFirst("// RUN: pass dce{max-iterations=1}\n"
+                                     "func.def @f() {\n"
+                                     "  func.return\n"
+                                     "}\n",
+                                     &result));
+}
+
+TEST_F(ExecuteTest, PassModeRejectsMalformedOptions) {
+  loom_check_result_t result;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        ExecuteFirst("// RUN: pass canonicalize{bogus=1}\n"
+                                     "func.def @f() {\n"
+                                     "  func.return\n"
+                                     "}\n",
+                                     &result));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      ExecuteFirst("// RUN: pass canonicalize{max-iterations=1\n"
+                   "func.def @f() {\n"
+                   "  func.return\n"
+                   "}\n",
+                   &result));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      ExecuteFirst(
+          "// RUN: pass canonicalize{max-iterations=1,max-iterations=2}\n"
+          "func.def @f() {\n"
+          "  func.return\n"
+          "}\n",
+          &result));
+}
+
 TEST_F(ExecuteTest, EmitModeLlvmIrText) {
   loom_check_result_t result;
   IREE_ASSERT_OK(ExecuteFirst(

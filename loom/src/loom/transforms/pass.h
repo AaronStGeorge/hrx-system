@@ -81,6 +81,44 @@ typedef struct loom_pass_info_t {
 } loom_pass_info_t;
 
 //===----------------------------------------------------------------------===//
+// Pass option parsing
+//===----------------------------------------------------------------------===//
+
+// A parsed entry from a textual pass pipeline.
+typedef struct loom_pass_pipeline_entry_spec_t {
+  // Pass name before any option dictionary.
+  iree_string_view_t name;
+
+  // Text inside the optional option dictionary, without surrounding braces.
+  iree_string_view_t options;
+} loom_pass_pipeline_entry_spec_t;
+
+// Callback invoked for each parsed pass option assignment.
+typedef iree_status_t (*loom_pass_option_parse_fn_t)(void* user_data,
+                                                     iree_string_view_t name,
+                                                     iree_string_view_t value);
+
+// Consumes the next entry from a comma-separated pass pipeline. Commas inside
+// one level of `{...}` are treated as option separators, not pipeline
+// separators.
+iree_status_t loom_pass_pipeline_consume_entry(
+    iree_string_view_t* pipeline, loom_pass_pipeline_entry_spec_t* out_entry,
+    bool* out_has_entry);
+
+// Parses comma-separated `name=value` options and invokes |parse| for each
+// assignment. Malformed or empty assignments are rejected.
+iree_status_t loom_pass_options_parse(iree_string_view_t pass_name,
+                                      iree_string_view_t options,
+                                      loom_pass_option_parse_fn_t parse,
+                                      void* user_data);
+
+// Parses a uint32 option value for pass create callbacks.
+iree_status_t loom_pass_option_parse_uint32(iree_string_view_t pass_name,
+                                            iree_string_view_t option_name,
+                                            iree_string_view_t option_value,
+                                            uint32_t* out_value);
+
+//===----------------------------------------------------------------------===//
 // Pass instance
 //===----------------------------------------------------------------------===//
 

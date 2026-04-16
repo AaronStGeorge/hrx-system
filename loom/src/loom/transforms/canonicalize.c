@@ -78,6 +78,44 @@ const loom_pass_info_t* loom_canonicalize_pass_info(void) {
   return &loom_canonicalize_pass_info_storage;
 }
 
+static iree_status_t loom_canonicalize_parse_option(void* user_data,
+                                                    iree_string_view_t name,
+                                                    iree_string_view_t value) {
+  loom_canonicalizer_options_t* options =
+      (loom_canonicalizer_options_t*)user_data;
+  if (iree_string_view_equal(name, IREE_SV("max-iterations"))) {
+    if (options->max_iterations != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "duplicate option 'max-iterations' for pass 'canonicalize'");
+    }
+    IREE_RETURN_IF_ERROR(loom_pass_option_parse_uint32(
+        IREE_SV("canonicalize"), name, value, &options->max_iterations));
+    if (options->max_iterations == 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass 'canonicalize' option 'max-iterations' must be greater than 0");
+    }
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown option '%.*s' for pass 'canonicalize'",
+                          (int)name.size, name.data);
+}
+
+iree_status_t loom_canonicalize_create(loom_pass_t* pass,
+                                       iree_string_view_t options_string) {
+  loom_canonicalizer_options_t* options = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena,
+                                           sizeof(*options), (void**)&options));
+  memset(options, 0, sizeof(*options));
+  IREE_RETURN_IF_ERROR(loom_pass_options_parse(pass->info->name, options_string,
+                                               loom_canonicalize_parse_option,
+                                               options));
+  pass->state = options;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Implementation
 //===----------------------------------------------------------------------===//
@@ -1389,7 +1427,8 @@ iree_status_t loom_canonicalize_run(loom_pass_t* pass, loom_module_t* module,
 
   loom_canonicalizer_result_t result;
   iree_status_t status = loom_canonicalizer_run_function(
-      &canonicalizer, function, /*options=*/NULL, &result);
+      &canonicalizer, function,
+      (const loom_canonicalizer_options_t*)pass->state, &result);
   if (iree_status_is_ok(status) && pass->statistics) {
     loom_pass_statistic_add(pass, LOOM_CANONICALIZE_STAT_OPS_MODIFIED,
                             result.ops_modified);
