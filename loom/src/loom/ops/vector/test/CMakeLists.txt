@@ -67,6 +67,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "vector_to_scalar_atomics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_atomics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "vector_to_scalar_cleanup"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar_cleanup.loom-test"
