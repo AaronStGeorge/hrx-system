@@ -540,13 +540,21 @@ typedef uint8_t loom_region_flags_t;
 
 // Per-operand metadata in the op vtable.
 typedef struct loom_operand_descriptor_t {
+  // Author-facing DSL operand field name used in diagnostics.
+  loom_bstring_t name;
+  // Required type category for each operand in this field.
   loom_type_constraint_t type_constraint;
+  // Operand representation, effect, and variadic flags.
   loom_operand_flags_t flags;
 } loom_operand_descriptor_t;
 
 // Per-result metadata in the op vtable.
 typedef struct loom_result_descriptor_t {
+  // Author-facing DSL result field name used in diagnostics.
+  loom_bstring_t name;
+  // Required type category for each result in this field.
   loom_type_constraint_t type_constraint;
+  // Result representation and variadic flags.
   loom_result_flags_t flags;
 } loom_result_descriptor_t;
 

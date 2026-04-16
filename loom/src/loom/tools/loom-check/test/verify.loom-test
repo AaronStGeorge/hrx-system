@@ -72,12 +72,12 @@ func.def @multiple_error_b() {
 // ====
 
 // Type error caught by verifier, not parser. test.addi requires INTEGER
-// operands and result but receives f32. Three diagnostics: TYPE/003 for
-// each operand and TYPE/004 for the result.
+// operands and result but receives f32. Three diagnostics: TYPE/003 for each
+// named operand field and TYPE/004 for the named result field.
 func.def @type_mismatch(%a: f32, %b: f32) -> (f32) {
-  // ERROR@+3: TYPE/003 "operand 0"
-  // ERROR@+2: TYPE/003 "operand 1"
-  // ERROR@+1: TYPE/004 "result 0"
+  // ERROR@+3: TYPE/003 "lhs"
+  // ERROR@+2: TYPE/003 "rhs"
+  // ERROR@+1: TYPE/004 "result"
   %r = test.addi %a, %b : f32
   func.return %r : f32
 }

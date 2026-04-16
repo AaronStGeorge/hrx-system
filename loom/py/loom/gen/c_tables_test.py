@@ -123,6 +123,28 @@ def test_generate_builders_preserve_named_operands_for_non_binary_shapes() -> No
     assert "loom_op_operands(*out_op)[1] = indices;" in builders_c
 
 
+def test_generate_tables_preserves_operand_and_result_descriptor_names() -> None:
+    op = Op(
+        "test.reduce",
+        group=Dialect("test"),
+        operands=[
+            Operand("input", INTEGER),
+            Operand("partials", INTEGER, variadic=True),
+        ],
+        results=[Result("results", INTEGER, variadic=True)],
+        format=[Ref("input"), Ref("partials"), ResultTypeList("results")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert 'static const uint8_t loom_test_reduce_input_operand_bname[] = "\\x05" "input";' in tables_c
+    assert 'static const uint8_t loom_test_reduce_partials_operand_bname[] = "\\x08" "partials";' in tables_c
+    assert 'static const uint8_t loom_test_reduce_results_result_bname[] = "\\x07" "results";' in tables_c
+    assert "{loom_test_reduce_input_operand_bname, LOOM_TYPE_CONSTRAINT_INTEGER, 0}" in tables_c
+    assert ("{loom_test_reduce_partials_operand_bname, LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_OPERAND_VARIADIC}") in tables_c
+    assert ("{loom_test_reduce_results_result_bname, LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_RESULT_VARIADIC}") in tables_c
+
+
 def test_types_of_result_field_generates_result_type_list_format() -> None:
     op = Op(
         "test.results",

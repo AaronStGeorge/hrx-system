@@ -624,7 +624,7 @@ TEST_F(VerifyTest, TypeConstraintViolationDetected) {
   const CapturedDiagnostic* entry =
       FindDiagnostic(structured, &loom_err_type_003);
   ASSERT_NE(entry, nullptr) << "Expected TYPE/003 operand constraint error";
-  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  EXPECT_EQ(GetStringParam(*entry, 0), "lhs");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, f32_type);
   ExpectNoFieldRefParam(*entry, 1);
@@ -676,10 +676,10 @@ TEST_F(VerifyTest, SameTypeConstraintViolation) {
   const CapturedDiagnostic* entry =
       FindDiagnostic(structured, &loom_err_type_001);
   ASSERT_NE(entry, nullptr) << "Expected TYPE/001 SameType diagnostic";
-  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  EXPECT_EQ(GetStringParam(*entry, 0), "lhs");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, i32_type);
-  EXPECT_EQ(GetStringParam(*entry, 2), "result 0");
+  EXPECT_EQ(GetStringParam(*entry, 2), "result");
   ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectTypeParam(*entry, 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
   ASSERT_EQ(entry->highlights.size(), 2u);
@@ -1120,16 +1120,16 @@ TEST_F(VerifyTest, GoldenCaretNoSource) {
   TerminateFunc();
   std::string output = VerifyAndFormatCaret();
   EXPECT_EQ(output,
-            "<verifier>:1:1: error [TYPE/004]: result 'result 0' has type f32,"
+            "<verifier>:1:1: error [TYPE/004]: result 'result' has type f32,"
             " expected integer\n"
             " 1 | %2 = test.addi %0, %1 : f32\n"
             "   | ^^                         \n"
-            "   = help: 'result 0' must satisfy type constraint 'integer'\n"
-            "<verifier>:1:1: error [TYPE/001]: 'operand 0' type i32 does not"
-            " match 'result 0' type f32\n"
+            "   = help: 'result' must satisfy type constraint 'integer'\n"
+            "<verifier>:1:1: error [TYPE/001]: 'lhs' type i32 does not"
+            " match 'result' type f32\n"
             " 1 | %2 = test.addi %0, %1 : f32\n"
             "   | ^^             ^^          \n"
-            "   = help: Ensure 'operand 0' and 'result 0' have the same"
+            "   = help: Ensure 'lhs' and 'result' have the same"
             " type\n");
 }
 
@@ -1149,68 +1149,67 @@ TEST_F(VerifyTest, GoldenJsonNoSource) {
 
   TerminateFunc();
   std::string output = VerifyAndFormatJson();
-  EXPECT_EQ(
-      output,
-      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_004\","
-      "\"domain\":\"TYPE\",\"code\":4,"
-      "\"summary\":\"Result type constraint violated.\","
-      "\"emitter\":\"verifier\","
-      "\"origin\":{\"provenance\":\"printed_ir_fallback\","
-      "\"filename\":\"<verifier>\",\"start_line\":1,"
-      "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
-      "\"start_byte\":0,\"end_byte\":28,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
-      "\"source_location\":{\"provenance\":\"printed_ir_fallback\","
-      "\"filename\":\"<verifier>\","
-      "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
-      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
-      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2,"
-      "\"field\":{\"kind\":\"result\",\"index\":0,\"occurrence\":0},"
-      "\"param\":\"result_name\"}],"
-      "\"message\":\"result 'result 0' has type f32, expected integer\","
-      "\"fix_hint\":\"'result 0' must satisfy type constraint 'integer'\","
-      "\"params\":{\"result_name\":\"result 0\","
-      "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"},"
-      "\"param_fields\":{\"result_name\":{\"kind\":\"result\","
-      "\"index\":0,\"occurrence\":0}}}\n"
-      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_001\","
-      "\"domain\":\"TYPE\",\"code\":1,"
-      "\"summary\":\"SameType constraint violated.\","
-      "\"emitter\":\"verifier\","
-      "\"origin\":{\"provenance\":\"printed_ir_fallback\","
-      "\"filename\":\"<verifier>\",\"start_line\":1,"
-      "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
-      "\"start_byte\":0,\"end_byte\":28,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
-      "\"source_location\":{\"provenance\":\"printed_ir_fallback\","
-      "\"filename\":\"<verifier>\","
-      "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
-      "\"end_column\":29,\"start_byte\":0,\"end_byte\":28,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
-      "\"highlights\":[{\"start_byte\":0,\"end_byte\":2,"
-      "\"field\":{\"kind\":\"result\",\"index\":0,\"occurrence\":0},"
-      "\"param\":\"field_b\"},"
-      "{\"start_byte\":15,\"end_byte\":17,"
-      "\"field\":{\"kind\":\"operand\",\"index\":0,\"occurrence\":0},"
-      "\"param\":\"field_a\"}],"
-      "\"message\":\"'operand 0' type i32 does not match"
-      " 'result 0' type f32\","
-      "\"fix_hint\":\"Ensure 'operand 0' and 'result 0'"
-      " have the same type\","
-      "\"params\":{\"field_a\":\"operand 0\",\"type_a\":\"i32\","
-      "\"field_b\":\"result 0\",\"type_b\":\"f32\"},"
-      "\"param_fields\":{\"field_a\":{\"kind\":\"operand\","
-      "\"index\":0,\"occurrence\":0},\"field_b\":{\"kind\":\"result\","
-      "\"index\":0,\"occurrence\":0}}}\n");
+  EXPECT_EQ(output,
+            "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_004\","
+            "\"domain\":\"TYPE\",\"code\":4,"
+            "\"summary\":\"Result type constraint violated.\","
+            "\"emitter\":\"verifier\","
+            "\"origin\":{\"provenance\":\"printed_ir_fallback\","
+            "\"filename\":\"<verifier>\",\"start_line\":1,"
+            "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
+            "\"start_byte\":0,\"end_byte\":28,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+            "\"source_location\":{\"provenance\":\"printed_ir_fallback\","
+            "\"filename\":\"<verifier>\","
+            "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
+            "\"end_column\":29,\"start_byte\":0,\"end_byte\":28,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+            "\"highlights\":[{\"start_byte\":0,\"end_byte\":2,"
+            "\"field\":{\"kind\":\"result\",\"index\":0,\"occurrence\":0},"
+            "\"param\":\"result_name\"}],"
+            "\"message\":\"result 'result' has type f32, expected integer\","
+            "\"fix_hint\":\"'result' must satisfy type constraint 'integer'\","
+            "\"params\":{\"result_name\":\"result\","
+            "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"},"
+            "\"param_fields\":{\"result_name\":{\"kind\":\"result\","
+            "\"index\":0,\"occurrence\":0}}}\n"
+            "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_001\","
+            "\"domain\":\"TYPE\",\"code\":1,"
+            "\"summary\":\"SameType constraint violated.\","
+            "\"emitter\":\"verifier\","
+            "\"origin\":{\"provenance\":\"printed_ir_fallback\","
+            "\"filename\":\"<verifier>\",\"start_line\":1,"
+            "\"start_column\":1,\"end_line\":1,\"end_column\":29,"
+            "\"start_byte\":0,\"end_byte\":28,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+            "\"source_location\":{\"provenance\":\"printed_ir_fallback\","
+            "\"filename\":\"<verifier>\","
+            "\"start_line\":1,\"start_column\":1,\"end_line\":1,"
+            "\"end_column\":29,\"start_byte\":0,\"end_byte\":28,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":27,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"%2 = test.addi %0, %1 : f32\"}},"
+            "\"highlights\":[{\"start_byte\":0,\"end_byte\":2,"
+            "\"field\":{\"kind\":\"result\",\"index\":0,\"occurrence\":0},"
+            "\"param\":\"field_b\"},"
+            "{\"start_byte\":15,\"end_byte\":17,"
+            "\"field\":{\"kind\":\"operand\",\"index\":0,\"occurrence\":0},"
+            "\"param\":\"field_a\"}],"
+            "\"message\":\"'lhs' type i32 does not match"
+            " 'result' type f32\","
+            "\"fix_hint\":\"Ensure 'lhs' and 'result'"
+            " have the same type\","
+            "\"params\":{\"field_a\":\"lhs\",\"type_a\":\"i32\","
+            "\"field_b\":\"result\",\"type_b\":\"f32\"},"
+            "\"param_fields\":{\"field_a\":{\"kind\":\"operand\","
+            "\"index\":0,\"occurrence\":0},\"field_b\":{\"kind\":\"result\","
+            "\"index\":0,\"occurrence\":0}}}\n");
 }
 
 // Scenario: source resolver provides original source text.
@@ -1275,16 +1274,16 @@ TEST_F(VerifyTest, GoldenCaretWithSource) {
 
   EXPECT_EQ(
       text,
-      "model.loom:42:3: error [TYPE/004]: result 'result 0' has type f32,"
+      "model.loom:42:3: error [TYPE/004]: result 'result' has type f32,"
       " expected integer\n"
       " 42 |   %result = test.addi %input_a, %input_b : i32\n"
       "    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"  // 44 carets
-      "    = help: 'result 0' must satisfy type constraint 'integer'\n"
-      "model.loom:42:3: error [TYPE/001]: 'operand 0' type i32 does not"
-      " match 'result 0' type f32\n"
+      "    = help: 'result' must satisfy type constraint 'integer'\n"
+      "model.loom:42:3: error [TYPE/001]: 'lhs' type i32 does not"
+      " match 'result' type f32\n"
       " 42 |   %result = test.addi %input_a, %input_b : i32\n"
       "    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n"  // 44 carets
-      "    = help: Ensure 'operand 0' and 'result 0' have the same type\n");
+      "    = help: Ensure 'lhs' and 'result' have the same type\n");
 }
 
 TEST_F(VerifyTest, GoldenJsonWithSource) {
@@ -1324,59 +1323,58 @@ TEST_F(VerifyTest, GoldenJsonWithSource) {
 
   // The JSON sink now serializes the resolved source range, so verifier
   // diagnostics preserve the original file location for IDE consumers.
-  EXPECT_EQ(
-      text,
-      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_004\","
-      "\"domain\":\"TYPE\",\"code\":4,"
-      "\"summary\":\"Result type constraint violated.\","
-      "\"emitter\":\"verifier\","
-      "\"origin\":{\"provenance\":\"exact_source\","
-      "\"filename\":\"model.loom\",\"start_line\":42,"
-      "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
-      "\"start_byte\":2,\"end_byte\":46,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
-      "\"source_location\":{\"provenance\":\"exact_source\","
-      "\"filename\":\"model.loom\","
-      "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
-      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
-      "\"message\":\"result 'result 0' has type f32, expected integer\","
-      "\"fix_hint\":\"'result 0' must satisfy type constraint 'integer'\","
-      "\"params\":{\"result_name\":\"result 0\","
-      "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"},"
-      "\"param_fields\":{\"result_name\":{\"kind\":\"result\","
-      "\"index\":0,\"occurrence\":0}}}\n"
-      "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_001\","
-      "\"domain\":\"TYPE\",\"code\":1,"
-      "\"summary\":\"SameType constraint violated.\","
-      "\"emitter\":\"verifier\","
-      "\"origin\":{\"provenance\":\"exact_source\","
-      "\"filename\":\"model.loom\",\"start_line\":42,"
-      "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
-      "\"start_byte\":2,\"end_byte\":46,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
-      "\"source_location\":{\"provenance\":\"exact_source\","
-      "\"filename\":\"model.loom\","
-      "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
-      "\"end_column\":47,\"start_byte\":2,\"end_byte\":46,"
-      "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
-      "\"truncated_prefix\":false,\"truncated_suffix\":false,"
-      "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
-      "\"message\":\"'operand 0' type i32 does not match"
-      " 'result 0' type f32\","
-      "\"fix_hint\":\"Ensure 'operand 0' and 'result 0'"
-      " have the same type\","
-      "\"params\":{\"field_a\":\"operand 0\",\"type_a\":\"i32\","
-      "\"field_b\":\"result 0\",\"type_b\":\"f32\"},"
-      "\"param_fields\":{\"field_a\":{\"kind\":\"operand\","
-      "\"index\":0,\"occurrence\":0},\"field_b\":{\"kind\":\"result\","
-      "\"index\":0,\"occurrence\":0}}}\n");
+  EXPECT_EQ(text,
+            "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_004\","
+            "\"domain\":\"TYPE\",\"code\":4,"
+            "\"summary\":\"Result type constraint violated.\","
+            "\"emitter\":\"verifier\","
+            "\"origin\":{\"provenance\":\"exact_source\","
+            "\"filename\":\"model.loom\",\"start_line\":42,"
+            "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
+            "\"start_byte\":2,\"end_byte\":46,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
+            "\"source_location\":{\"provenance\":\"exact_source\","
+            "\"filename\":\"model.loom\","
+            "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
+            "\"end_column\":47,\"start_byte\":2,\"end_byte\":46,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
+            "\"message\":\"result 'result' has type f32, expected integer\","
+            "\"fix_hint\":\"'result' must satisfy type constraint 'integer'\","
+            "\"params\":{\"result_name\":\"result\","
+            "\"actual_type\":\"f32\",\"expected_constraint\":\"integer\"},"
+            "\"param_fields\":{\"result_name\":{\"kind\":\"result\","
+            "\"index\":0,\"occurrence\":0}}}\n"
+            "{\"severity\":\"error\",\"error_id\":\"ERR_TYPE_001\","
+            "\"domain\":\"TYPE\",\"code\":1,"
+            "\"summary\":\"SameType constraint violated.\","
+            "\"emitter\":\"verifier\","
+            "\"origin\":{\"provenance\":\"exact_source\","
+            "\"filename\":\"model.loom\",\"start_line\":42,"
+            "\"start_column\":3,\"end_line\":42,\"end_column\":47,"
+            "\"start_byte\":2,\"end_byte\":46,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
+            "\"source_location\":{\"provenance\":\"exact_source\","
+            "\"filename\":\"model.loom\","
+            "\"start_line\":42,\"start_column\":3,\"end_line\":42,"
+            "\"end_column\":47,\"start_byte\":2,\"end_byte\":46,"
+            "\"excerpt\":{\"start_byte\":0,\"end_byte\":46,"
+            "\"truncated_prefix\":false,\"truncated_suffix\":false,"
+            "\"text\":\"  %result = test.addi %input_a, %input_b : i32\"}},"
+            "\"message\":\"'lhs' type i32 does not match"
+            " 'result' type f32\","
+            "\"fix_hint\":\"Ensure 'lhs' and 'result'"
+            " have the same type\","
+            "\"params\":{\"field_a\":\"lhs\",\"type_a\":\"i32\","
+            "\"field_b\":\"result\",\"type_b\":\"f32\"},"
+            "\"param_fields\":{\"field_a\":{\"kind\":\"operand\","
+            "\"index\":0,\"occurrence\":0},\"field_b\":{\"kind\":\"result\","
+            "\"index\":0,\"occurrence\":0}}}\n");
 }
 
 TEST_F(VerifyTest, StructuredDominanceError) {
@@ -1764,7 +1762,7 @@ TEST_F(VerifyTest, SsaEncodingOutOfRange) {
   const CapturedDiagnostic* entry =
       FindDiagnostic(structured, &loom_err_encoding_003);
   ASSERT_NE(entry, nullptr) << "Expected ENCODING/003 out-of-range error";
-  EXPECT_EQ(GetStringParam(*entry, 0), "result 0");
+  EXPECT_EQ(GetStringParam(*entry, 0), "result");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectU32Param(*entry, 1, 9999);
 }
@@ -1906,7 +1904,7 @@ TEST_F(VerifyTest, RejectsVectorEncodingAttachment) {
   const CapturedDiagnostic* entry =
       FindDiagnostic(structured, &loom_err_type_010);
   ASSERT_NE(entry, nullptr) << "Expected TYPE/010 vector encoding error";
-  EXPECT_EQ(GetStringParam(*entry, 0), "result 0");
+  EXPECT_EQ(GetStringParam(*entry, 0), "result");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectTypeParam(*entry, 1, vector_type);
   EXPECT_EQ(GetStringParam(*entry, 2),
@@ -1961,10 +1959,10 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchInVariadic) {
       FindDiagnostic(structured, &loom_err_type_001);
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch within variadic inputs";
-  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0[0]");
+  EXPECT_EQ(GetStringParam(*entry, 0), "inputs[0]");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, i32_type);
-  EXPECT_EQ(GetStringParam(*entry, 2), "operand 0[1]");
+  EXPECT_EQ(GetStringParam(*entry, 2), "inputs[1]");
   ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_OPERAND, 1);
   ExpectTypeParam(*entry, 3, f32_type);
 }
@@ -1996,9 +1994,9 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchHighlightsWideOperandIndex) {
       FindDiagnostic(structured, &loom_err_type_001);
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch for the 65th variadic operand";
-  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0[0]");
+  EXPECT_EQ(GetStringParam(*entry, 0), "inputs[0]");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
-  EXPECT_EQ(GetStringParam(*entry, 2), "operand 0[64]");
+  EXPECT_EQ(GetStringParam(*entry, 2), "inputs[64]");
   ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_OPERAND, 64);
   ASSERT_EQ(entry->highlights.size(), 2u);
   ExpectHighlightFieldRef(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0, 0);
@@ -2038,10 +2036,10 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchAgainstResult) {
       FindDiagnostic(structured, &loom_err_type_001);
   ASSERT_NE(entry, nullptr)
       << "Expected TYPE/001 mismatch between variadic input and result";
-  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  EXPECT_EQ(GetStringParam(*entry, 0), "inputs");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectTypeParam(*entry, 1, i32_type);
-  EXPECT_EQ(GetStringParam(*entry, 2), "result 0");
+  EXPECT_EQ(GetStringParam(*entry, 2), "result");
   ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_RESULT, 0);
   ExpectTypeParam(*entry, 3, loom_type_scalar(LOOM_SCALAR_TYPE_F32));
 }
@@ -2556,7 +2554,7 @@ TEST_F(VerifyTest, CountMatchesRankViolation) {
       FindDiagnostic(structured, &loom_err_subrange_001);
   ASSERT_NE(entry, nullptr)
       << "Expected SUBRANGE/001 count-matches-rank diagnostic";
-  EXPECT_EQ(GetStringParam(*entry, 0), "operand 0");
+  EXPECT_EQ(GetStringParam(*entry, 0), "source");
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
   ExpectU32Param(*entry, 1, 1);
   ExpectI64Param(*entry, 2, 2);

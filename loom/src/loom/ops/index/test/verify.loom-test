@@ -43,8 +43,8 @@ func.def @cast_rejects_integer_to_integer(%x: i32) -> (i64) {
 // ====
 
 func.def @add_rejects_integer_payload(%x: i64, %y: index) -> (index) {
-  // ERROR@+2: TYPE/003 "operand 0"
-  // ERROR@+1: TYPE/001 "operand 0" "operand 1"
+  // ERROR@+2: TYPE/003 "lhs"
+  // ERROR@+1: TYPE/001 "lhs" "rhs"
   %r = index.add %x, %y : index
   func.return %r : index
 }
@@ -52,9 +52,9 @@ func.def @add_rejects_integer_payload(%x: i64, %y: index) -> (index) {
 // ====
 
 func.def @mul_rejects_offset(%x: offset, %y: offset) -> (offset) {
-  // ERROR@+3: TYPE/003 "operand 0"
-  // ERROR@+2: TYPE/003 "operand 1"
-  // ERROR@+1: TYPE/004 "result 0"
+  // ERROR@+3: TYPE/003 "lhs"
+  // ERROR@+2: TYPE/003 "rhs"
+  // ERROR@+1: TYPE/004 "result"
   %r = index.mul %x, %y : offset
   func.return %r : offset
 }
@@ -62,9 +62,9 @@ func.def @mul_rejects_offset(%x: offset, %y: offset) -> (offset) {
 // ====
 
 func.def @div_rejects_offset(%x: offset, %y: offset) -> (offset) {
-  // ERROR@+3: TYPE/003 "operand 0"
-  // ERROR@+2: TYPE/003 "operand 1"
-  // ERROR@+1: TYPE/004 "result 0"
+  // ERROR@+3: TYPE/003 "lhs"
+  // ERROR@+2: TYPE/003 "rhs"
+  // ERROR@+1: TYPE/004 "result"
   %r = index.div %x, %y : offset
   func.return %r : offset
 }
@@ -72,9 +72,9 @@ func.def @div_rejects_offset(%x: offset, %y: offset) -> (offset) {
 // ====
 
 func.def @rem_rejects_offset(%x: offset, %y: offset) -> (offset) {
-  // ERROR@+3: TYPE/003 "operand 0"
-  // ERROR@+2: TYPE/003 "operand 1"
-  // ERROR@+1: TYPE/004 "result 0"
+  // ERROR@+3: TYPE/003 "lhs"
+  // ERROR@+2: TYPE/003 "rhs"
+  // ERROR@+1: TYPE/004 "result"
   %r = index.rem %x, %y : offset
   func.return %r : offset
 }
@@ -82,10 +82,10 @@ func.def @rem_rejects_offset(%x: offset, %y: offset) -> (offset) {
 // ====
 
 func.def @madd_rejects_offset(%x: offset, %y: offset, %z: offset) -> (offset) {
-  // ERROR@+4: TYPE/003 "operand 0"
-  // ERROR@+3: TYPE/003 "operand 1"
-  // ERROR@+2: TYPE/003 "operand 2"
-  // ERROR@+1: TYPE/004 "result 0"
+  // ERROR@+4: TYPE/003 "a"
+  // ERROR@+3: TYPE/003 "b"
+  // ERROR@+2: TYPE/003 "c"
+  // ERROR@+1: TYPE/004 "result"
   %r = index.madd %x, %y, %z : offset
   func.return %r : offset
 }
@@ -93,7 +93,7 @@ func.def @madd_rejects_offset(%x: offset, %y: offset, %z: offset) -> (offset) {
 // ====
 
 func.def @assume_rejects_integer_payload(%x: i64) -> (index) {
-  // ERROR@+1: TYPE/003 "operand 0" "i64" "address"
+  // ERROR@+1: TYPE/003 "values[0]" "i64" "address"
   %r = index.assume %x [] : index
   func.return %r : index
 }
@@ -101,7 +101,7 @@ func.def @assume_rejects_integer_payload(%x: i64) -> (index) {
 // ====
 
 func.def @assume_rejects_result_type_mismatch(%x: index) -> (offset) {
-  // ERROR@+1: TYPE/001 "value 0" "index" "result 0" "offset"
+  // ERROR@+1: TYPE/001 "values[0]" "index" "results[0]" "offset"
   %r = index.assume %x [] : offset
   func.return %r : offset
 }

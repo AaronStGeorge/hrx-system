@@ -3,7 +3,7 @@
 // ====
 
 func.def @buffer_alloca_rejects_index_size(%size: index) {
-  // ERROR@+1: TYPE/003 "operand 0" "index" "offset"
+  // ERROR@+1: TYPE/003 "byte_length" "index" "offset"
   %scratch = buffer.alloca %size {base_alignment = 64, memory_space = workgroup} : buffer
   func.return
 }
@@ -63,7 +63,7 @@ func.def @buffer_assume_rejects_contradictory_memory_space(%size: offset) {
 // coordinates only appear inside the view's index list consumers.
 func.def @buffer_view_rejects_index_offset(%buffer: buffer, %index: index) {
   %layout = encoding.layout.dense : encoding<layout>
-  // ERROR@+1: TYPE/003 "operand 1" "index" "offset"
+  // ERROR@+1: TYPE/003 "byte_offset" "index" "offset"
   %view = buffer.view %buffer[%index] : buffer -> view<4xf32, %layout>
   func.return
 }
@@ -72,7 +72,7 @@ func.def @buffer_view_rejects_index_offset(%buffer: buffer, %index: index) {
 
 func.def @buffer_view_rejects_integer_offset(%buffer: buffer, %byte_count: i64) {
   %layout = encoding.layout.dense : encoding<layout>
-  // ERROR@+1: TYPE/003 "operand 1" "i64" "offset"
+  // ERROR@+1: TYPE/003 "byte_offset" "i64" "offset"
   %view = buffer.view %buffer[%byte_count] : buffer -> view<4xf32, %layout>
   func.return
 }

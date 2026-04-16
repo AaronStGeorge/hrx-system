@@ -1307,6 +1307,97 @@ static void loom_verify_op_structure(loom_verify_state_t* state,
   }
 }
 
+// Resolves a field reference to its author-facing DSL field name when available
+// and otherwise falls back to a positional name such as "operand 0".
+static iree_string_view_t loom_verify_field_name(const loom_op_vtable_t* vtable,
+                                                 uint8_t field_ref,
+                                                 char* buffer,
+                                                 iree_host_size_t buffer_size) {
+  uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
+  uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
+  if (category == LOOM_FIELD_OPERAND && vtable->operand_descriptors) {
+    bool has_variadic =
+        (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS) != 0;
+    uint8_t descriptor_count =
+        (uint8_t)(vtable->fixed_operand_count + (has_variadic ? 1 : 0));
+    if (index < descriptor_count) {
+      return loom_bstring_view(vtable->operand_descriptors[index].name);
+    }
+  } else if (category == LOOM_FIELD_RESULT && vtable->result_descriptors) {
+    bool has_variadic =
+        (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS) != 0;
+    uint8_t descriptor_count =
+        (uint8_t)(vtable->fixed_result_count + (has_variadic ? 1 : 0));
+    if (index < descriptor_count) {
+      return loom_bstring_view(vtable->result_descriptors[index].name);
+    }
+  } else if (category == LOOM_FIELD_ATTR && vtable->attr_descriptors &&
+             index < vtable->attribute_count) {
+    return loom_bstring_view(vtable->attr_descriptors[index].name);
+  }
+  const char* prefix = "field";
+  if (category == LOOM_FIELD_OPERAND) {
+    prefix = "operand";
+  } else if (category == LOOM_FIELD_RESULT) {
+    prefix = "result";
+  } else if (category == LOOM_FIELD_ATTR) {
+    prefix = "attribute";
+  }
+  iree_snprintf(buffer, buffer_size, "%s %u", prefix, index);
+  return iree_make_cstring_view(buffer);
+}
+
+// Like loom_verify_field_name but for an indexed element of a variadic field.
+// Produces names like "inputs[2]" or "results[0]".
+static iree_string_view_t loom_verify_indexed_field_name(
+    const loom_op_vtable_t* vtable, uint8_t field_ref, uint16_t element_index,
+    char* buffer, iree_host_size_t buffer_size) {
+  char field_name_buffer[64];
+  iree_string_view_t field_name = loom_verify_field_name(
+      vtable, field_ref, field_name_buffer, sizeof(field_name_buffer));
+  iree_snprintf(buffer, buffer_size, "%.*s[%u]", (int)field_name.size,
+                field_name.data, element_index);
+  return iree_make_cstring_view(buffer);
+}
+
+// Resolves an ordinary operand/result value index to the declared field name.
+// Variadic values use their declaring field name plus an element index, such as
+// "inputs[2]".
+static iree_string_view_t loom_verify_value_field_name(
+    const loom_op_vtable_t* vtable, uint8_t category, uint16_t value_index,
+    char* buffer, iree_host_size_t buffer_size) {
+  if (category == LOOM_FIELD_OPERAND && vtable->operand_descriptors) {
+    if (value_index < vtable->fixed_operand_count) {
+      return loom_bstring_view(vtable->operand_descriptors[value_index].name);
+    }
+    if (iree_any_bit_set(vtable->vtable_flags,
+                         LOOM_OP_VTABLE_VARIADIC_OPERANDS)) {
+      uint16_t element_index = value_index - vtable->fixed_operand_count;
+      iree_string_view_t field_name = loom_bstring_view(
+          vtable->operand_descriptors[vtable->fixed_operand_count].name);
+      iree_snprintf(buffer, buffer_size, "%.*s[%u]", (int)field_name.size,
+                    field_name.data, element_index);
+      return iree_make_cstring_view(buffer);
+    }
+  } else if (category == LOOM_FIELD_RESULT && vtable->result_descriptors) {
+    if (value_index < vtable->fixed_result_count) {
+      return loom_bstring_view(vtable->result_descriptors[value_index].name);
+    }
+    if (iree_any_bit_set(vtable->vtable_flags,
+                         LOOM_OP_VTABLE_VARIADIC_RESULTS)) {
+      uint16_t element_index = value_index - vtable->fixed_result_count;
+      iree_string_view_t field_name = loom_bstring_view(
+          vtable->result_descriptors[vtable->fixed_result_count].name);
+      iree_snprintf(buffer, buffer_size, "%.*s[%u]", (int)field_name.size,
+                    field_name.data, element_index);
+      return iree_make_cstring_view(buffer);
+    }
+  }
+  const char* prefix = category == LOOM_FIELD_RESULT ? "result" : "operand";
+  iree_snprintf(buffer, buffer_size, "%s %u", prefix, value_index);
+  return iree_make_cstring_view(buffer);
+}
+
 //===----------------------------------------------------------------------===//
 // Type constraint checks
 //===----------------------------------------------------------------------===//
@@ -1413,14 +1504,27 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
         loom_value_id_t value_id = loom_op_const_operands(op)[j];
         loom_type_t type = loom_verify_value_type(state, value_id);
         if (!loom_type_satisfies_constraint(type, constraint)) {
-          // Build operand name like "operand 0".
-          char operand_name_buffer[32];
-          iree_snprintf(operand_name_buffer, sizeof(operand_name_buffer),
-                        "operand %u", j);
+          uint8_t operand_ref = LOOM_FIELD_REF(LOOM_FIELD_OPERAND, i);
+          uint16_t element_offset = (uint16_t)(j - i);
+          bool operand_is_variadic =
+              has_variadic && i == vtable->fixed_operand_count;
+          char operand_name_buffer[64];
+          iree_string_view_t operand_name =
+              operand_is_variadic
+                  ? loom_verify_indexed_field_name(
+                        vtable, operand_ref, element_offset,
+                        operand_name_buffer, sizeof(operand_name_buffer))
+                  : loom_verify_field_name(vtable, operand_ref,
+                                           operand_name_buffer,
+                                           sizeof(operand_name_buffer));
+          loom_diagnostic_param_t operand_param =
+              operand_is_variadic
+                  ? loom_verify_param_string_for_indexed_field(
+                        operand_name, operand_ref, element_offset)
+                  : loom_verify_param_string_for_field(operand_name,
+                                                       operand_ref);
           loom_diagnostic_param_t params[] = {
-              loom_verify_param_string_for_diagnostic_field(
-                  iree_make_cstring_view(operand_name_buffer),
-                  LOOM_DIAGNOSTIC_FIELD_OPERAND, j),
+              operand_param,
               loom_param_type(type),
               loom_param_string(iree_make_cstring_view(
                   loom_type_constraint_name(constraint))),
@@ -1451,13 +1555,26 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
         loom_value_id_t value_id = loom_op_const_results(op)[j];
         loom_type_t type = loom_verify_value_type(state, value_id);
         if (!loom_type_satisfies_constraint(type, constraint)) {
-          char result_name_buffer[32];
-          iree_snprintf(result_name_buffer, sizeof(result_name_buffer),
-                        "result %u", j);
+          uint8_t result_ref = LOOM_FIELD_REF(LOOM_FIELD_RESULT, i);
+          uint16_t element_offset = (uint16_t)(j - i);
+          bool result_is_variadic =
+              has_variadic && i == vtable->fixed_result_count;
+          char result_name_buffer[64];
+          iree_string_view_t result_name =
+              result_is_variadic
+                  ? loom_verify_indexed_field_name(
+                        vtable, result_ref, element_offset, result_name_buffer,
+                        sizeof(result_name_buffer))
+                  : loom_verify_field_name(vtable, result_ref,
+                                           result_name_buffer,
+                                           sizeof(result_name_buffer));
+          loom_diagnostic_param_t result_param =
+              result_is_variadic
+                  ? loom_verify_param_string_for_indexed_field(
+                        result_name, result_ref, element_offset)
+                  : loom_verify_param_string_for_field(result_name, result_ref);
           loom_diagnostic_param_t params[] = {
-              loom_verify_param_string_for_diagnostic_field(
-                  iree_make_cstring_view(result_name_buffer),
-                  LOOM_DIAGNOSTIC_FIELD_RESULT, j),
+              result_param,
               loom_param_type(type),
               loom_param_string(iree_make_cstring_view(
                   loom_type_constraint_name(constraint))),
@@ -1651,38 +1768,6 @@ static void loom_verify_operand_dicts(loom_verify_state_t* state,
 // Semantic constraint interpreter
 //===----------------------------------------------------------------------===//
 
-// Resolves a field reference to a positional name for diagnostic params, such
-// as "operand 0" or "result 1".
-static iree_string_view_t loom_verify_field_name(const loom_op_t* op,
-                                                 const loom_op_vtable_t* vtable,
-                                                 uint8_t field_ref,
-                                                 char* buffer,
-                                                 iree_host_size_t buffer_size) {
-  uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
-  uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
-  const char* prefix =
-      (category == LOOM_FIELD_OPERAND)
-          ? "operand"
-          : ((category == LOOM_FIELD_RESULT) ? "result" : "field");
-  iree_snprintf(buffer, buffer_size, "%s %u", prefix, index);
-  return iree_make_cstring_view(buffer);
-}
-
-// Like loom_verify_field_name but for an indexed element of a variadic
-// field. Produces names like "operand 0[2]" or "result 1[0]".
-static iree_string_view_t loom_verify_indexed_field_name(
-    const loom_op_t* op, const loom_op_vtable_t* vtable, uint8_t field_ref,
-    uint16_t element_index, char* buffer, iree_host_size_t buffer_size) {
-  uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
-  uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
-  const char* prefix =
-      (category == LOOM_FIELD_OPERAND)
-          ? "operand"
-          : ((category == LOOM_FIELD_RESULT) ? "result" : "field");
-  iree_snprintf(buffer, buffer_size, "%s %u[%u]", prefix, index, element_index);
-  return iree_make_cstring_view(buffer);
-}
-
 // Returns true if the specified property of two types is equal.
 static bool loom_constraint_property_equals(
     loom_type_t a, loom_type_t b, loom_constraint_property_t property) {
@@ -1739,9 +1824,9 @@ static void loom_verify_emit_pairwise_mismatch(
   char name_a_buffer[32];
   char name_b_buffer[32];
   iree_string_view_t name_a = loom_verify_field_name(
-      op, vtable, ref_a, name_a_buffer, sizeof(name_a_buffer));
+      vtable, ref_a, name_a_buffer, sizeof(name_a_buffer));
   iree_string_view_t name_b = loom_verify_field_name(
-      op, vtable, ref_b, name_b_buffer, sizeof(name_b_buffer));
+      vtable, ref_b, name_b_buffer, sizeof(name_b_buffer));
   const loom_error_def_t* error =
       constraint->error ? constraint->error
                         : loom_pairwise_eq_default_error(constraint->property);
@@ -1856,12 +1941,12 @@ static void loom_verify_emit_indexed_pairwise_mismatch(
   char name_b_buffer[32];
   iree_string_view_t name_a =
       a_is_indexed
-          ? loom_verify_indexed_field_name(op, vtable, ref_a, a_element_index,
+          ? loom_verify_indexed_field_name(vtable, ref_a, a_element_index,
                                            name_a_buffer, sizeof(name_a_buffer))
-          : loom_verify_field_name(op, vtable, ref_a, name_a_buffer,
+          : loom_verify_field_name(vtable, ref_a, name_a_buffer,
                                    sizeof(name_a_buffer));
   iree_string_view_t name_b = loom_verify_indexed_field_name(
-      op, vtable, ref_b, b_element_index, name_b_buffer, sizeof(name_b_buffer));
+      vtable, ref_b, b_element_index, name_b_buffer, sizeof(name_b_buffer));
   loom_diagnostic_param_t params[] = {
       a_is_indexed ? loom_verify_param_string_for_indexed_field(name_a, ref_a,
                                                                 a_element_index)
@@ -2024,7 +2109,7 @@ static void loom_verify_relation_field_satisfies(
 
       char name_buffer[32];
       iree_string_view_t field_name = loom_verify_field_name(
-          op, vtable, field_ref, name_buffer, sizeof(name_buffer));
+          vtable, field_ref, name_buffer, sizeof(name_buffer));
       const loom_error_def_t* error =
           LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
               ? &loom_err_type_004
@@ -2050,7 +2135,7 @@ static void loom_verify_relation_field_satisfies(
 
       char name_buffer[32];
       iree_string_view_t field_name = loom_verify_indexed_field_name(
-          op, vtable, field_ref, j, name_buffer, sizeof(name_buffer));
+          vtable, field_ref, j, name_buffer, sizeof(name_buffer));
       const loom_error_def_t* error =
           LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
               ? &loom_err_type_004
@@ -2127,9 +2212,9 @@ static void loom_verify_relation_last_axis_grouped_by(
   char source_name_buffer[32];
   char result_name_buffer[32];
   iree_string_view_t source_name = loom_verify_field_name(
-      op, vtable, source_ref, source_name_buffer, sizeof(source_name_buffer));
+      vtable, source_ref, source_name_buffer, sizeof(source_name_buffer));
   iree_string_view_t result_name = loom_verify_field_name(
-      op, vtable, result_ref, result_name_buffer, sizeof(result_name_buffer));
+      vtable, result_ref, result_name_buffer, sizeof(result_name_buffer));
 
   uint8_t source_rank = loom_type_rank(source_type);
   uint8_t result_rank = loom_type_rank(result_type);
@@ -2208,7 +2293,7 @@ static void loom_verify_relation_count_matches_rank(
   if (variadic_count == rank) return;
   char name_buffer[32];
   iree_string_view_t operand_name = loom_verify_field_name(
-      op, vtable, constraint->args[0], name_buffer, sizeof(name_buffer));
+      vtable, constraint->args[0], name_buffer, sizeof(name_buffer));
   const loom_error_def_t* error =
       constraint->error ? constraint->error : &loom_err_subrange_001;
   loom_diagnostic_param_t params[] = {
@@ -2240,7 +2325,7 @@ static void loom_verify_relation_count_matches_static_element_count(
   if (!loom_type_static_element_count(shaped_type, &expected_count)) {
     char shaped_name_buffer[32];
     iree_string_view_t shaped_name = loom_verify_field_name(
-        op, vtable, shaped_ref, shaped_name_buffer, sizeof(shaped_name_buffer));
+        vtable, shaped_ref, shaped_name_buffer, sizeof(shaped_name_buffer));
     const loom_error_def_t* error =
         LOOM_FIELD_REF_CATEGORY(shaped_ref) == LOOM_FIELD_RESULT
             ? &loom_err_type_004
@@ -2263,9 +2348,9 @@ static void loom_verify_relation_count_matches_static_element_count(
   char shaped_name_buffer[32];
   char expected_name_buffer[64];
   iree_string_view_t values_name = loom_verify_field_name(
-      op, vtable, values_ref, values_name_buffer, sizeof(values_name_buffer));
+      vtable, values_ref, values_name_buffer, sizeof(values_name_buffer));
   iree_string_view_t shaped_name = loom_verify_field_name(
-      op, vtable, shaped_ref, shaped_name_buffer, sizeof(shaped_name_buffer));
+      vtable, shaped_ref, shaped_name_buffer, sizeof(shaped_name_buffer));
   iree_snprintf(expected_name_buffer, sizeof(expected_name_buffer),
                 "%.*s static element count", (int)shaped_name.size,
                 shaped_name.data);
@@ -2490,9 +2575,9 @@ static void loom_verify_relation_variadic_match(
     char name_a_buffer[32];
     char name_b_buffer[32];
     iree_string_view_t name_a = loom_verify_field_name(
-        op, vtable, ref_a, name_a_buffer, sizeof(name_a_buffer));
+        vtable, ref_a, name_a_buffer, sizeof(name_a_buffer));
     iree_string_view_t name_b = loom_verify_field_name(
-        op, vtable, ref_b, name_b_buffer, sizeof(name_b_buffer));
+        vtable, ref_b, name_b_buffer, sizeof(name_b_buffer));
     const loom_error_def_t* error =
         constraint->error ? constraint->error : &loom_err_structure_013;
     loom_diagnostic_param_t params[] = {
@@ -2767,21 +2852,24 @@ static void loom_verify_value_type_well_formed(
                                field_name, field_ref);
 }
 
-static void loom_verify_op_type_well_formedness(loom_verify_state_t* state,
-                                                const loom_op_t* op) {
-  char name_buffer[32];
+static void loom_verify_op_type_well_formedness(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable) {
+  char name_buffer[64];
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
-    iree_snprintf(name_buffer, sizeof(name_buffer), "operand %u", i);
+    iree_string_view_t name = loom_verify_value_field_name(
+        vtable, LOOM_FIELD_OPERAND, i, name_buffer, sizeof(name_buffer));
     loom_verify_value_type_well_formed(
-        state, op, operands[i], iree_make_cstring_view(name_buffer),
+        state, op, operands[i], name,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i));
   }
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
-    iree_snprintf(name_buffer, sizeof(name_buffer), "result %u", i);
+    iree_string_view_t name = loom_verify_value_field_name(
+        vtable, LOOM_FIELD_RESULT, i, name_buffer, sizeof(name_buffer));
     loom_verify_value_type_well_formed(
-        state, op, results[i], iree_make_cstring_view(name_buffer),
+        state, op, results[i], name,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, i));
   }
 }
@@ -2831,19 +2919,16 @@ static bool loom_verify_op_allows_declaration_local_encoding_refs(
 // value_id that must be in range and have type LOOM_TYPE_ENCODING. It must
 // also be defined in scope unless the reference is to a sibling result in the
 // current op type annotation or to a declaration-local global placeholder.
-static void loom_verify_encoding_ref(loom_verify_state_t* state,
-                                     const loom_op_t* op,
-                                     const loom_op_vtable_t* vtable,
-                                     loom_type_t type, const char* field_name,
-                                     loom_diagnostic_field_ref_t field_ref,
-                                     bool allow_current_op_results,
-                                     bool allow_declaration_placeholders) {
+static void loom_verify_encoding_ref(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, loom_type_t type,
+    iree_string_view_t field_name, loom_diagnostic_field_ref_t field_ref,
+    bool allow_current_op_results, bool allow_declaration_placeholders) {
   if (!loom_type_has_ssa_encoding(type)) return;
   uint16_t encoding_value_id = loom_type_encoding_value_id(type);
   if (encoding_value_id >= state->module->values.count) {
     loom_diagnostic_param_t params[] = {
-        loom_param_with_field_ref(
-            loom_param_string(iree_make_cstring_view(field_name)), field_ref),
+        loom_param_with_field_ref(loom_param_string(field_name), field_ref),
         loom_param_u32(encoding_value_id),
         loom_param_u32((uint32_t)state->module->values.count),
     };
@@ -2863,8 +2948,7 @@ static void loom_verify_encoding_ref(loom_verify_state_t* state,
       iree_string_view_t value_name =
           loom_verify_value_name(state, encoding_value_id);
       loom_diagnostic_param_t params[] = {
-          loom_param_with_field_ref(
-              loom_param_string(iree_make_cstring_view(field_name)), field_ref),
+          loom_param_with_field_ref(loom_param_string(field_name), field_ref),
           loom_param_string(value_name),
       };
       loom_verify_emit_structured(state, op, &loom_err_encoding_004, params,
@@ -2878,8 +2962,7 @@ static void loom_verify_encoding_ref(loom_verify_state_t* state,
     iree_string_view_t value_name =
         loom_verify_value_name(state, encoding_value_id);
     loom_diagnostic_param_t params[] = {
-        loom_param_with_field_ref(
-            loom_param_string(iree_make_cstring_view(field_name)), field_ref),
+        loom_param_with_field_ref(loom_param_string(field_name), field_ref),
         loom_param_string(value_name),
         loom_param_type(encoding_type),
     };
@@ -2892,15 +2975,16 @@ static void loom_verify_encoding_ref(loom_verify_state_t* state,
 static void loom_verify_encoding_refs(loom_verify_state_t* state,
                                       const loom_op_t* op,
                                       const loom_op_vtable_t* vtable) {
-  char name_buffer[32];
+  char name_buffer[64];
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     if (operands[i] == LOOM_VALUE_ID_INVALID) continue;
     if (operands[i] >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, operands[i]);
-    iree_snprintf(name_buffer, sizeof(name_buffer), "operand %u", i);
+    iree_string_view_t name = loom_verify_value_field_name(
+        vtable, LOOM_FIELD_OPERAND, i, name_buffer, sizeof(name_buffer));
     loom_verify_encoding_ref(
-        state, op, vtable, type, name_buffer,
+        state, op, vtable, type, name,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i),
         /*allow_current_op_results=*/false,
         /*allow_declaration_placeholders=*/false);
@@ -2910,9 +2994,10 @@ static void loom_verify_encoding_refs(loom_verify_state_t* state,
     if (results[i] == LOOM_VALUE_ID_INVALID) continue;
     if (results[i] >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, results[i]);
-    iree_snprintf(name_buffer, sizeof(name_buffer), "result %u", i);
+    iree_string_view_t name = loom_verify_value_field_name(
+        vtable, LOOM_FIELD_RESULT, i, name_buffer, sizeof(name_buffer));
     loom_verify_encoding_ref(
-        state, op, vtable, type, name_buffer,
+        state, op, vtable, type, name,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, i),
         /*allow_current_op_results=*/true,
         /*allow_declaration_placeholders=*/true);
@@ -2932,7 +3017,8 @@ static void loom_verify_block_arg_encoding_refs(loom_verify_state_t* state,
     if (arg_id >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, arg_id);
     iree_snprintf(name_buffer, sizeof(name_buffer), "block arg %u", a);
-    loom_verify_encoding_ref(state, NULL, NULL, type, name_buffer,
+    loom_verify_encoding_ref(state, NULL, NULL, type,
+                             iree_make_cstring_view(name_buffer),
                              loom_diagnostic_field_ref_none(),
                              /*allow_current_op_results=*/false,
                              /*allow_declaration_placeholders=*/false);
@@ -3431,7 +3517,7 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
 
   // Operand and result type payloads must satisfy core representation
   // invariants before table-driven constraints interpret them.
-  loom_verify_op_type_well_formedness(state, op);
+  loom_verify_op_type_well_formedness(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Per-field type constraint checks (operand/result types satisfy

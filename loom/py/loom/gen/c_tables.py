@@ -358,6 +358,25 @@ def _func_args_are_operands(op: Op) -> bool:
     return bool(func_like_iface and func_like_iface.args_as_operands)
 
 
+def _func_args_field_name(op: Op) -> str:
+    """Returns the FuncArgs field name declared by a func-like op format."""
+
+    def _walk(elements: Sequence[FormatElement]) -> str | None:
+        for element in elements:
+            match element:
+                case FuncArgs(field=name):
+                    return name
+                case OptionalGroup(elements=inner) | Scope(elements=inner):
+                    nested = _walk(inner)
+                    if nested is not None:
+                        return nested
+                case _:
+                    continue
+        return None
+
+    return _walk(op.format) or "args"
+
+
 # Maps op name suffixes to symbol kind constants for SYMBOL_DEFINE ops.
 _SYMBOL_KIND_MAP: dict[str, str] = {
     "func.def": "LOOM_SYMBOL_FUNC_DEF",
@@ -2379,12 +2398,24 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         if not op.operands and not func_args_are_operands:
             continue
         prefix = _c_prefix(op)
+        for operand in op.operands:
+            name = operand.name
+            assert len(name) < 256, f"operand name too long: {name!r}"
+            bstr_name = f"{prefix}_{name}_operand_bname"
+            lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(name):02x}" "{name}";')
+        func_args_name = ""
+        if func_args_are_operands:
+            func_args_name = _func_args_field_name(op)
+            assert len(func_args_name) < 256, f"func args name too long: {func_args_name!r}"
+            bstr_name = f"{prefix}_{func_args_name}_operand_bname"
+            lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(func_args_name):02x}" "{func_args_name}";')
         # Build effect map from declared effects.
         effect_map: dict[str, EffectKind] = {}
         for effect in op.effects:
             effect_map[effect.operand] = effect.kind
         lines.append(f"static const loom_operand_descriptor_t {prefix}_operand_desc[] = {{")
         for operand in op.operands:
+            bstr_name = f"{prefix}_{operand.name}_operand_bname"
             type_constraint = TYPE_CONSTRAINT_MAP[operand.type_constraint]
             flags_parts = []
             if operand.variadic:
@@ -2397,9 +2428,10 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             if effect_kind in (EffectKind.WRITE, EffectKind.READWRITE):
                 flags_parts.append("LOOM_OPERAND_WRITES")
             flags = " | ".join(flags_parts) if flags_parts else "0"
-            lines.append(f"    {{{type_constraint}, {flags}}},")
+            lines.append(f"    {{{bstr_name}, {type_constraint}, {flags}}},")
         if func_args_are_operands:
-            lines.append("    {LOOM_TYPE_CONSTRAINT_ANY, LOOM_OPERAND_VARIADIC},")
+            bstr_name = f"{prefix}_{func_args_name}_operand_bname"
+            lines.append(f"    {{{bstr_name}, LOOM_TYPE_CONSTRAINT_ANY, LOOM_OPERAND_VARIADIC}},")
         lines.append("};")
     lines.append("")
 
@@ -2408,8 +2440,14 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         if not op.results:
             continue
         prefix = _c_prefix(op)
+        for result in op.results:
+            name = result.name
+            assert len(name) < 256, f"result name too long: {name!r}"
+            bstr_name = f"{prefix}_{name}_result_bname"
+            lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(name):02x}" "{name}";')
         lines.append(f"static const loom_result_descriptor_t {prefix}_result_desc[] = {{")
         for result in op.results:
+            bstr_name = f"{prefix}_{result.name}_result_bname"
             type_constraint = TYPE_CONSTRAINT_MAP[result.type_constraint]
             flags_parts = []
             if result.variadic:
@@ -2417,7 +2455,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             if result.allocates:
                 flags_parts.append("LOOM_RESULT_ALLOCATES")
             flags = " | ".join(flags_parts) if flags_parts else "0"
-            lines.append(f"    {{{type_constraint}, {flags}}},")
+            lines.append(f"    {{{bstr_name}, {type_constraint}, {flags}}},")
         lines.append("};")
     lines.append("")
 

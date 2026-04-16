@@ -70,7 +70,7 @@ func.def @offset_constant_requires_index_dialect() -> (offset) {
 // scalar.assume constrains integer payload values; address-domain facts use
 // index.assume.
 func.def @assume_rejects_index_payload(%x: index) -> (i64) {
-  // ERROR@+1: TYPE/003 "operand 0" "index" "integer"
+  // ERROR@+1: TYPE/003 "values[0]" "index" "integer"
   %r = scalar.assume %x [] : i64
   func.return %r : i64
 }
@@ -78,7 +78,7 @@ func.def @assume_rejects_index_payload(%x: index) -> (i64) {
 // ====
 
 func.def @assume_rejects_result_type_mismatch(%x: i32) -> (i64) {
-  // ERROR@+1: TYPE/001 "value 0" "i32" "result 0" "i64"
+  // ERROR@+1: TYPE/001 "values[0]" "i32" "results[0]" "i64"
   %r = scalar.assume %x [] : i64
   func.return %r : i64
 }

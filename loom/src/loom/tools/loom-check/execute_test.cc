@@ -551,17 +551,17 @@ TEST_F(ExecuteTest, VerifyLineMismatch) {
 TEST_F(ExecuteTest, VerifyTypeError) {
   // Verifier-emitted TYPE errors: test.addi requires INTEGER operands and
   // result but receives f32. The parser accepts this (it doesn't check type
-  // constraints), the verifier catches all three fields:
-  //   TYPE/003 for operand 0, TYPE/003 for operand 1, TYPE/004 for result 0.
+  // constraints), the verifier catches all three named fields:
+  //   TYPE/003 for lhs, TYPE/003 for rhs, TYPE/004 for result.
   // All three annotations target the same line (the op), so each needs a
   // different offset to reach it from its own position.
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: verify\n"
                    "func.def @f(%a: f32, %b: f32) -> (f32) {\n"
-                   "  // ERROR@+3: TYPE/003 \"operand 0\"\n"
-                   "  // ERROR@+2: TYPE/003 \"operand 1\"\n"
-                   "  // ERROR@+1: TYPE/004 \"result 0\"\n"
+                   "  // ERROR@+3: TYPE/003 \"lhs\"\n"
+                   "  // ERROR@+2: TYPE/003 \"rhs\"\n"
+                   "  // ERROR@+1: TYPE/004 \"result\"\n"
                    "  %r = test.addi %a, %b : f32\n"
                    "  func.return %r : f32\n"
                    "}\n",

@@ -140,7 +140,7 @@ func.def @broadcast_rank_mismatch(%v: vector<4x4xf32>) {
 
 // Vector construction from scalars must provide every static lane.
 func.def @from_elements_count_mismatch(%x: f32) {
-  // ERROR@+1: STRUCTURE/013 "operand 0"
+  // ERROR@+1: STRUCTURE/013 "elements"
   %r = vector.from_elements %x, %x, %x : vector<4xf32>
   func.return
 }
@@ -176,7 +176,7 @@ func.def @from_elements_dynamic_result(%x: f32, %n: index) {
 
 // vector.iota constructs coordinate vectors, not arbitrary floating-point lanes.
 func.def @iota_float_domain(%base: f32, %step: f32) {
-  // ERROR@+1: TYPE/003 "operand 0" "index or non-i1 integer scalar"
+  // ERROR@+1: TYPE/003 "base" "index or non-i1 integer scalar"
   %r = vector.iota %base step %step : vector<4xf32>
   func.return
 }
@@ -185,7 +185,7 @@ func.def @iota_float_domain(%base: f32, %step: f32) {
 
 // vector.iota does not use i1 lanes as coordinate payloads.
 func.def @iota_i1_domain(%base: i1, %step: i1) {
-  // ERROR@+1: TYPE/003 "operand 0" "index or non-i1 integer scalar"
+  // ERROR@+1: TYPE/003 "base" "index or non-i1 integer scalar"
   %r = vector.iota %base step %step : vector<4xi1>
   func.return
 }
@@ -194,7 +194,7 @@ func.def @iota_i1_domain(%base: i1, %step: i1) {
 
 // offset is a scalar byte-count domain, not a vector element-offset payload.
 func.def @iota_offset_domain(%base: offset, %step: offset) {
-  // ERROR@+1: TYPE/003 "operand 0" "index or non-i1 integer scalar"
+  // ERROR@+1: TYPE/003 "base" "index or non-i1 integer scalar"
   %r = vector.iota %base step %step : vector<4xoffset>
   func.return
 }
@@ -212,7 +212,7 @@ func.def @iota_element_mismatch(%base: index, %step: index) {
 
 // Range masks use coordinate domains and produce i1 vector masks.
 func.def @mask_range_float_domain(%lo: f32, %hi: f32, %step: f32) {
-  // ERROR@+1: TYPE/003 "operand 0" "index or non-i1 integer scalar"
+  // ERROR@+1: TYPE/003 "lower_bound" "index or non-i1 integer scalar"
   %r = vector.mask.range [%lo to %hi step %step] : f32 -> vector<4xi1>
   func.return
 }
@@ -221,7 +221,7 @@ func.def @mask_range_float_domain(%lo: f32, %hi: f32, %step: f32) {
 
 // Range masks do not treat scalar byte offsets as lane-coordinate payloads.
 func.def @mask_range_offset_domain(%lo: offset, %hi: offset, %step: offset) {
-  // ERROR@+1: TYPE/003 "operand 0" "index or non-i1 integer scalar"
+  // ERROR@+1: TYPE/003 "lower_bound" "index or non-i1 integer scalar"
   %r = vector.mask.range [%lo to %hi step %step] : offset -> vector<4xi1>
   func.return
 }
@@ -386,7 +386,7 @@ func.def @gather_index_count_mismatch(%buffer: buffer, %offset: offset, %offsets
 func.def @gather_offsets_i1(%buffer: buffer, %offset: offset, %offsets: vector<4xi1>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
-  // ERROR@+1: TYPE/003 "operand 1" "index or non-i1 integer element type"
+  // ERROR@+1: TYPE/003 "offsets" "index or non-i1 integer element type"
   %r = vector.gather %view[0][%offsets] : view<4xf32, %layout>, vector<4xi1> -> vector<4xf32>
   func.return
 }
@@ -692,7 +692,7 @@ func.def @deinterleave_axis_shape_mismatch(%source: vector<8xi8>) {
 
 // Register table lookup uses a rank-1 table vector.
 func.def @table_lookup_table_rank_mismatch(%table: vector<2x2xf32>, %indices: vector<4xi8>) {
-  // ERROR@+1: TYPE/003 "operand 0" "rank-1 vector"
+  // ERROR@+1: TYPE/003 "table" "rank-1 vector"
   %r = vector.table.lookup %table[%indices] : vector<2x2xf32>, vector<4xi8> -> vector<4xf32>
   func.return
 }
@@ -701,7 +701,7 @@ func.def @table_lookup_table_rank_mismatch(%table: vector<2x2xf32>, %indices: ve
 
 // Lookup index lanes are explicit index/non-i1 integer lanes, not masks.
 func.def @table_lookup_indices_i1(%table: vector<4xf32>, %indices: vector<4xi1>) {
-  // ERROR@+1: TYPE/003 "operand 1" "index or non-i1 integer element type"
+  // ERROR@+1: TYPE/003 "indices" "index or non-i1 integer element type"
   %r = vector.table.lookup %table[%indices] : vector<4xf32>, vector<4xi1> -> vector<4xf32>
   func.return
 }
@@ -750,7 +750,7 @@ func.def @table_lookup_static_negative_index() {
 
 // Table quantize threshold tables are rank-1 register vectors.
 func.def @table_quantize_threshold_rank_mismatch(%values: vector<4xf32>, %thresholds: vector<2x2xf32>) {
-  // ERROR@+1: TYPE/003 "operand 1" "rank-1 vector"
+  // ERROR@+1: TYPE/003 "thresholds" "rank-1 vector"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xf32>, vector<2x2xf32> -> vector<4xi8>
   func.return
 }
@@ -759,8 +759,8 @@ func.def @table_quantize_threshold_rank_mismatch(%values: vector<4xf32>, %thresh
 
 // Quantize input and threshold lanes must be floating-point lanes.
 func.def @table_quantize_integer_operands(%values: vector<4xi32>, %thresholds: vector<2xi32>) {
-  // ERROR@+2: TYPE/003 "operand 0" "vector<4xi32>" "float_element"
-  // ERROR@+1: TYPE/003 "operand 1" "vector<2xi32>" "float_element"
+  // ERROR@+2: TYPE/003 "input" "vector<4xi32>" "float_element"
+  // ERROR@+1: TYPE/003 "thresholds" "vector<2xi32>" "float_element"
   %codes = vector.table.quantize %values, %thresholds {nan = zero, tie = lower} : vector<4xi32>, vector<2xi32> -> vector<4xi8>
   func.return
 }
@@ -1180,8 +1180,8 @@ func.def @dotf_reject_arrow_result(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %ac
 // Dot2 source lanes are f16/bf16 lanes because the op spells a widened
 // two-lane hardware-shaped floating dot.
 func.def @dot2f_source_not_f16_or_bf16(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: vector<2xf32>) {
-  // ERROR@+2: TYPE/003 "operand 0" "f16 or bf16 element type"
-  // ERROR@+1: TYPE/003 "operand 1" "f16 or bf16 element type"
+  // ERROR@+2: TYPE/003 "lhs" "f16 or bf16 element type"
+  // ERROR@+1: TYPE/003 "rhs" "f16 or bf16 element type"
   %r = vector.dot2f %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, vector<2xf32>
   func.return
 }
@@ -1414,7 +1414,7 @@ func.def @atomic_reduce_rejects_exchange(%buffer: buffer, %base: offset, %row: i
 func.def @atomic_offsets_reject_i1(%buffer: buffer, %base: offset, %row: index, %col: index, %offsets: vector<4xi1>, %v: vector<4xi32>) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%base] : buffer -> view<8x8xi32, %layout>
-  // ERROR@+1: TYPE/003 "operand 2" "index or non-i1 integer element type"
+  // ERROR@+1: TYPE/003 "offsets" "index or non-i1 integer element type"
   %old = vector.atomic.rmw<addi> %v, %view[%row, %col][%offsets] {ordering = relaxed, scope = workgroup} : vector<4xi32>, view<8x8xi32, %layout>, vector<4xi1>
   func.return
 }

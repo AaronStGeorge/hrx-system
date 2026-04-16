@@ -7,7 +7,7 @@
 // type checks so no cascading TYPE/001s appear. The diagnostic must
 // mention both field names so the user can locate the mismatch.
 func.def @for_iter_args_too_few(%lo: index, %hi: index, %step: index, %init: f32) -> (f32, f32) {
-  // ERROR@+1: STRUCTURE/013 "operand 3" "result 0"
+  // ERROR@+1: STRUCTURE/013 "iter_args" "results"
   %a, %b = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32, f32) {
     scf.yield %acc, %acc : f32, f32
   }
@@ -19,7 +19,7 @@ func.def @for_iter_args_too_few(%lo: index, %hi: index, %step: index, %init: f32
 // scf.for with more iter_args than results: count check fires the
 // other direction.
 func.def @for_iter_args_too_many(%lo: index, %hi: index, %step: index, %a: f32, %b: f32) -> (f32) {
-  // ERROR@+1: STRUCTURE/013 "operand 3" "result 0"
+  // ERROR@+1: STRUCTURE/013 "iter_args" "results"
   %r = scf.for %iv = [%lo to %hi step %step](%fa = %a : f32, %fb = %b : f32) -> (f32) {
     scf.yield %fa : f32
   }
@@ -33,7 +33,7 @@ func.def @for_iter_args_too_many(%lo: index, %hi: index, %step: index, %a: f32, 
 // emits TYPE/001 referencing both indexed field positions.
 func.def @for_iter_args_type_mismatch(%lo: index, %hi: index, %step: index, %init: f32) -> (i32) {
   %c = scalar.constant 0 : i32
-  // ERROR@+1: TYPE/001 "operand 3[0]" "result 0[0]"
+  // ERROR@+1: TYPE/001 "iter_args[0]" "results[0]"
   %r = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (i32) {
     scf.yield %c : i32
   }
@@ -47,7 +47,7 @@ func.def @for_iter_args_type_mismatch(%lo: index, %hi: index, %step: index, %ini
 // on both sides — element index [1] within both variadic fields.
 func.def @for_iter_args_second_type_mismatch(%lo: index, %hi: index, %step: index, %a: f32, %b: f32) -> (f32, i32) {
   %c = scalar.constant 0 : i32
-  // ERROR@+1: TYPE/001 "operand 3[1]" "result 0[1]"
+  // ERROR@+1: TYPE/001 "iter_args[1]" "results[1]"
   %x, %y = scf.for %iv = [%lo to %hi step %step](%fa = %a : f32, %fb = %b : f32) -> (f32, i32) {
     scf.yield %fa, %c : f32, i32
   }

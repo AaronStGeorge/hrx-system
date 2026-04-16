@@ -38,7 +38,7 @@ static iree_status_t loom_scalar_emit_assume_count_mismatch(
 static void loom_scalar_format_assume_field_name(
     char* buffer, iree_host_size_t buffer_capacity, const char* prefix,
     uint16_t field_index) {
-  iree_snprintf(buffer, buffer_capacity, "%s %u", prefix, field_index);
+  iree_snprintf(buffer, buffer_capacity, "%s[%u]", prefix, field_index);
 }
 
 static iree_status_t loom_scalar_emit_assume_type_mismatch(
@@ -46,14 +46,19 @@ static iree_status_t loom_scalar_emit_assume_type_mismatch(
     uint16_t field_index, loom_type_t value_type, loom_type_t result_type) {
   char value_name[32];
   char result_name[32];
-  loom_scalar_format_assume_field_name(value_name, sizeof(value_name), "value",
+  loom_scalar_format_assume_field_name(value_name, sizeof(value_name), "values",
                                        field_index);
   loom_scalar_format_assume_field_name(result_name, sizeof(result_name),
-                                       "result", field_index);
+                                       "results", field_index);
   loom_diagnostic_param_t params[] = {
-      loom_param_string(iree_make_cstring_view(value_name)),
+      loom_param_with_field_ref(
+          loom_param_string(iree_make_cstring_view(value_name)),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND,
+                                    field_index)),
       loom_param_type(value_type),
-      loom_param_string(iree_make_cstring_view(result_name)),
+      loom_param_with_field_ref(
+          loom_param_string(iree_make_cstring_view(result_name)),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, field_index)),
       loom_param_type(result_type),
   };
   return loom_scalar_emit(emitter, op, &loom_err_type_001, params,
