@@ -581,19 +581,8 @@ static_assert(sizeof(loom_region_descriptor_t) == 6,
 // Returns the descriptor for an actual region slot. For ops with a trailing
 // variadic region field, fixed slots use their exact descriptor and every
 // variadic slot reuses the final descriptor entry.
-static inline const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
-    const loom_op_vtable_t* vtable, uint8_t region_index) {
-  if (!vtable || !vtable->region_descriptors || vtable->region_count == 0) {
-    return NULL;
-  }
-  if (region_index < vtable->region_count) {
-    return &vtable->region_descriptors[region_index];
-  }
-  if (iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_VARIADIC_REGIONS)) {
-    return &vtable->region_descriptors[vtable->region_count - 1];
-  }
-  return NULL;
-}
+const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
+    const loom_op_vtable_t* vtable, uint8_t region_index);
 
 // Binding kind for BindingList format elements.
 typedef enum loom_binding_kind_e {
@@ -710,108 +699,43 @@ loom_func_like_t loom_func_like_cast(const loom_module_t* module,
 
 // Returns the body region of a func-like op, or NULL for bodyless ops
 // (func.decl, func.ukernel) or if |func| is not valid.
-static inline loom_region_t* loom_func_like_body(loom_func_like_t func) {
-  if (!func.vtable) return NULL;
-  if (func.vtable->body_region_index == LOOM_REGION_INDEX_NONE) return NULL;
-  return loom_op_regions(func.op)[func.vtable->body_region_index];
-}
+loom_region_t* loom_func_like_body(loom_func_like_t func);
 
 // Returns the purity attr value (0 = unspecified, nonzero = pure).
-static inline uint8_t loom_func_like_purity(loom_func_like_t func) {
-  if (!func.vtable) return 0;
-  if (func.vtable->purity_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
-  return loom_attr_as_enum(
-      loom_op_attrs(func.op)[func.vtable->purity_attr_index]);
-}
+uint8_t loom_func_like_purity(loom_func_like_t func);
 
 // Returns the visibility attr value (0 = private, nonzero = public).
-static inline uint8_t loom_func_like_visibility(loom_func_like_t func) {
-  if (!func.vtable) return 0;
-  if (func.vtable->visibility_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
-  return loom_attr_as_enum(
-      loom_op_attrs(func.op)[func.vtable->visibility_attr_index]);
-}
+uint8_t loom_func_like_visibility(loom_func_like_t func);
 
 // Returns the calling convention attr value (0 = default/host).
-static inline uint8_t loom_func_like_cc(loom_func_like_t func) {
-  if (!func.vtable) return 0;
-  if (func.vtable->cc_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
-  return loom_attr_as_enum(loom_op_attrs(func.op)[func.vtable->cc_attr_index]);
-}
+uint8_t loom_func_like_cc(loom_func_like_t func);
 
 // Returns the callee symbol ref for a func-like op, or {0, 0} if
 // |func| is not valid.
-static inline loom_symbol_ref_t loom_func_like_callee(loom_func_like_t func) {
-  if (!func.vtable) return (loom_symbol_ref_t){0};
-  return loom_attr_as_symbol(
-      loom_op_attrs(func.op)[func.vtable->callee_attr_index]);
-}
+loom_symbol_ref_t loom_func_like_callee(loom_func_like_t func);
 
 // Returns the function argument value IDs and their count. For ops
 // with a body region, args are the entry block's block arguments.
 // For declaration-style ops, args are stored as the op's operands.
 // Returns NULL and sets |out_count| to 0 if |func| is not valid.
-static inline const loom_value_id_t* loom_func_like_arg_ids(
-    loom_func_like_t func, uint16_t* out_count) {
-  if (!func.vtable) {
-    *out_count = 0;
-    return NULL;
-  }
-  if (!func.vtable->args_as_operands) {
-    loom_region_t* body = loom_func_like_body(func);
-    if (body && body->block_count > 0) {
-      loom_block_t* entry = loom_region_entry_block(body);
-      *out_count = entry->arg_count;
-      return entry->arg_ids;
-    }
-    *out_count = 0;
-    return NULL;
-  }
-  *out_count = func.op->operand_count;
-  return loom_op_operands(func.op);
-}
+const loom_value_id_t* loom_func_like_arg_ids(loom_func_like_t func,
+                                              uint16_t* out_count);
 
 // Returns the predicate list and count for a func-like op. Sets |out_count|
 // to 0 and returns NULL for ops with no predicate list attr or if |func| is
 // not valid.
-static inline const loom_predicate_t* loom_func_like_predicates(
-    loom_func_like_t func, uint16_t* out_count) {
-  if (!func.vtable) {
-    *out_count = 0;
-    return NULL;
-  }
-  if (func.vtable->predicates_attr_index == LOOM_ATTR_INDEX_NONE) {
-    *out_count = 0;
-    return NULL;
-  }
-  loom_attribute_t attr =
-      loom_op_attrs(func.op)[func.vtable->predicates_attr_index];
-  *out_count = attr.count;
-  return attr.predicate_list;
-}
+const loom_predicate_t* loom_func_like_predicates(loom_func_like_t func,
+                                                  uint16_t* out_count);
 
 // Returns the implements string ID for template/ukernel ops — the name of the
 // op kind this function provides an implementation for. Returns
 // LOOM_STRING_ID_INVALID for def/decl ops, ops with no implements attr, or
 // if |func| is not valid.
-static inline loom_string_id_t loom_func_like_implements(
-    loom_func_like_t func) {
-  if (!func.vtable) return LOOM_STRING_ID_INVALID;
-  if (func.vtable->implements_attr_index == LOOM_ATTR_INDEX_NONE) {
-    return LOOM_STRING_ID_INVALID;
-  }
-  return loom_attr_as_string_id(
-      loom_op_attrs(func.op)[func.vtable->implements_attr_index]);
-}
+loom_string_id_t loom_func_like_implements(loom_func_like_t func);
 
 // Returns the dispatch priority for template/ukernel ops. Returns 0 for
 // def/decl ops, ops with no priority attr, or if |func| is not valid.
-static inline int64_t loom_func_like_priority(loom_func_like_t func) {
-  if (!func.vtable) return 0;
-  if (func.vtable->priority_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
-  return loom_attr_as_i64(
-      loom_op_attrs(func.op)[func.vtable->priority_attr_index]);
-}
+int64_t loom_func_like_priority(loom_func_like_t func);
 
 //===----------------------------------------------------------------------===//
 // LoopLike interface
@@ -831,94 +755,39 @@ loom_loop_like_t loom_loop_like_cast(const loom_module_t* module,
 
 // Returns the primary body region of a loop-like op, or NULL if |loop|
 // is not valid.
-static inline loom_region_t* loom_loop_like_body(loom_loop_like_t loop) {
-  if (!loop.vtable) return NULL;
-  return loom_op_regions(loop.op)[loop.vtable->body_region_index];
-}
+loom_region_t* loom_loop_like_body(loom_loop_like_t loop);
 
 // Returns the condition region of a loop-like op, or NULL for loops
 // without a separate condition region (scf.for) or if |loop| is not
 // valid. For scf.while this returns the "before" region.
-static inline loom_region_t* loom_loop_like_condition_region(
-    loom_loop_like_t loop) {
-  if (!loop.vtable) return NULL;
-  if (loop.vtable->condition_region_index == LOOM_REGION_INDEX_NONE) {
-    return NULL;
-  }
-  return loom_op_regions(loop.op)[loop.vtable->condition_region_index];
-}
+loom_region_t* loom_loop_like_condition_region(loom_loop_like_t loop);
 
 // Returns the induction variable value ID for a loop-like op, or
 // LOOM_VALUE_ID_INVALID for loops without an induction variable
 // (scf.while) or if |loop| is not valid. The IV is a block argument
 // on the body region's entry block.
-static inline loom_value_id_t loom_loop_like_iv(loom_loop_like_t loop) {
-  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
-  if (loop.vtable->iv_block_arg_index == LOOM_BLOCK_ARG_INDEX_NONE) {
-    return LOOM_VALUE_ID_INVALID;
-  }
-  loom_region_t* body = loom_loop_like_body(loop);
-  return loom_region_entry_arg_id(body, loop.vtable->iv_block_arg_index);
-}
+loom_value_id_t loom_loop_like_iv(loom_loop_like_t loop);
 
 // Returns the initial values for loop-carried state as a variadic
 // operand slice. The slice starts at iter_args_operand_offset and
 // extends to the end of the op's operand list. Returns an empty
 // slice for loops with no iter_args or if |loop| is not valid.
-static inline loom_value_slice_t loom_loop_like_iter_args(
-    loom_loop_like_t loop) {
-  if (!loop.vtable) return (loom_value_slice_t){.values = NULL, .count = 0};
-  uint8_t offset = loop.vtable->iter_args_operand_offset;
-  if (offset >= loop.op->operand_count) {
-    return (loom_value_slice_t){.values = NULL, .count = 0};
-  }
-  loom_value_slice_t slice;
-  slice.values = loom_op_operands(loop.op) + offset;
-  slice.count = (uint16_t)(loop.op->operand_count - offset);
-  return slice;
-}
+loom_value_slice_t loom_loop_like_iter_args(loom_loop_like_t loop);
 
 // Returns the lower-bound operand value ID for counted loops, or
 // LOOM_VALUE_ID_INVALID for non-counted loops or malformed op instances.
-static inline loom_value_id_t loom_loop_like_lower_bound(
-    loom_loop_like_t loop) {
-  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
-  uint8_t index = loop.vtable->lower_bound_operand_index;
-  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
-    return LOOM_VALUE_ID_INVALID;
-  }
-  return loom_op_operands(loop.op)[index];
-}
+loom_value_id_t loom_loop_like_lower_bound(loom_loop_like_t loop);
 
 // Returns the upper-bound operand value ID for counted loops, or
 // LOOM_VALUE_ID_INVALID for non-counted loops or malformed op instances.
-static inline loom_value_id_t loom_loop_like_upper_bound(
-    loom_loop_like_t loop) {
-  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
-  uint8_t index = loop.vtable->upper_bound_operand_index;
-  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
-    return LOOM_VALUE_ID_INVALID;
-  }
-  return loom_op_operands(loop.op)[index];
-}
+loom_value_id_t loom_loop_like_upper_bound(loom_loop_like_t loop);
 
 // Returns the step operand value ID for counted loops, or
 // LOOM_VALUE_ID_INVALID for non-counted loops or malformed op instances.
-static inline loom_value_id_t loom_loop_like_step(loom_loop_like_t loop) {
-  if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
-  uint8_t index = loop.vtable->step_operand_index;
-  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
-    return LOOM_VALUE_ID_INVALID;
-  }
-  return loom_op_operands(loop.op)[index];
-}
+loom_value_id_t loom_loop_like_step(loom_loop_like_t loop);
 
 // Returns true when all counted-loop range operands are present.
-static inline bool loom_loop_like_has_counted_range(loom_loop_like_t loop) {
-  return loom_loop_like_lower_bound(loop) != LOOM_VALUE_ID_INVALID &&
-         loom_loop_like_upper_bound(loop) != LOOM_VALUE_ID_INVALID &&
-         loom_loop_like_step(loop) != LOOM_VALUE_ID_INVALID;
-}
+bool loom_loop_like_has_counted_range(loom_loop_like_t loop);
 
 //===----------------------------------------------------------------------===//
 // RegionBranch interface
@@ -940,11 +809,7 @@ loom_region_branch_t loom_region_branch_cast(const loom_module_t* module,
 // Returns the selector operand value ID for a region-branch op, or
 // LOOM_VALUE_ID_INVALID if |branch| is not valid. For scf.if this is
 // the i1 condition; for scf.switch this is the index selector.
-static inline loom_value_id_t loom_region_branch_selector(
-    loom_region_branch_t branch) {
-  if (!branch.vtable) return LOOM_VALUE_ID_INVALID;
-  return loom_op_operands(branch.op)[branch.vtable->selector_operand_index];
-}
+loom_value_id_t loom_region_branch_selector(loom_region_branch_t branch);
 
 // Returns the branch region at |region_index|, or NULL for malformed inputs.
 // Region 0 is the first physical region on the op; dialect-specific accessors

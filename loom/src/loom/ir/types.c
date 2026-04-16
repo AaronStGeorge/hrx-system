@@ -8,6 +8,52 @@
 
 #include <string.h>
 
+const char* loom_group_scope_name(loom_group_scope_t scope) {
+  static const char* const names[] = {
+      [LOOM_GROUP_SCOPE_WORKGROUP] = "workgroup",
+      [LOOM_GROUP_SCOPE_SUBGROUP] = "subgroup",
+  };
+  static_assert(IREE_ARRAYSIZE(names) == LOOM_GROUP_SCOPE_COUNT_,
+                "group scope names out of sync with enum");
+  if (scope < LOOM_GROUP_SCOPE_COUNT_) return names[scope];
+  return NULL;
+}
+
+const char* loom_encoding_role_name(loom_encoding_role_t role) {
+  static const char* const names[] = {
+      [LOOM_ENCODING_ROLE_UNKNOWN] = "",
+      [LOOM_ENCODING_ROLE_ADDRESS_LAYOUT] = "layout",
+      [LOOM_ENCODING_ROLE_STORAGE_SCHEMA] = "schema",
+      [LOOM_ENCODING_ROLE_PHYSICAL_STORAGE] = "storage",
+      [LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM] = "transform",
+  };
+  static_assert(IREE_ARRAYSIZE(names) == LOOM_ENCODING_ROLE_COUNT_,
+                "encoding role names out of sync with enum");
+  if (loom_encoding_role_is_valid(role)) return names[role];
+  return NULL;
+}
+
+bool loom_encoding_role_parse(iree_string_view_t text,
+                              loom_encoding_role_t* out_role) {
+  if (iree_string_view_equal(text, IREE_SV("layout"))) {
+    *out_role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("schema"))) {
+    *out_role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("storage"))) {
+    *out_role = LOOM_ENCODING_ROLE_PHYSICAL_STORAGE;
+    return true;
+  }
+  if (iree_string_view_equal(text, IREE_SV("transform"))) {
+    *out_role = LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM;
+    return true;
+  }
+  return false;
+}
+
 iree_status_t loom_type_function_build(const loom_type_t* arg_types,
                                        uint16_t arg_count,
                                        const loom_type_t* result_types,
@@ -47,6 +93,15 @@ static bool loom_type_sequence_equal(const loom_type_t* a_types,
   if (!a_types || !b_types) return a_types == b_types;
   for (uint16_t i = 0; i < type_count; ++i) {
     if (!loom_type_equal(a_types[i], b_types[i])) return false;
+  }
+  return true;
+}
+
+bool loom_type_shape_equals(loom_type_t a, loom_type_t b) {
+  uint8_t rank_a = loom_type_rank(a);
+  if (rank_a != loom_type_rank(b)) return false;
+  for (uint8_t i = 0; i < rank_a; ++i) {
+    if (loom_type_dim(a, i) != loom_type_dim(b, i)) return false;
   }
   return true;
 }

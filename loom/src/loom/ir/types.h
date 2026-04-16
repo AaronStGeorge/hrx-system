@@ -249,14 +249,7 @@ typedef enum loom_group_scope_e {
 } loom_group_scope_t;
 
 // Returns the name string for a group scope kind, or NULL if invalid.
-static inline const char* loom_group_scope_name(loom_group_scope_t scope) {
-  static const char* const names[] = {
-      [LOOM_GROUP_SCOPE_WORKGROUP] = "workgroup",
-      [LOOM_GROUP_SCOPE_SUBGROUP] = "subgroup",
-  };
-  if (scope < LOOM_GROUP_SCOPE_COUNT_) return names[scope];
-  return NULL;
-}
+const char* loom_group_scope_name(loom_group_scope_t scope);
 
 // Semantic encoding role. Stored in the element_type byte of the type header
 // for LOOM_TYPE_ENCODING.
@@ -280,39 +273,11 @@ static inline bool loom_encoding_role_is_valid(loom_encoding_role_t role) {
 }
 
 // Returns the short text spelling for an encoding role, or NULL if invalid.
-static inline const char* loom_encoding_role_name(loom_encoding_role_t role) {
-  static const char* const names[] = {
-      [LOOM_ENCODING_ROLE_UNKNOWN] = "",
-      [LOOM_ENCODING_ROLE_ADDRESS_LAYOUT] = "layout",
-      [LOOM_ENCODING_ROLE_STORAGE_SCHEMA] = "schema",
-      [LOOM_ENCODING_ROLE_PHYSICAL_STORAGE] = "storage",
-      [LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM] = "transform",
-  };
-  if (loom_encoding_role_is_valid(role)) return names[role];
-  return NULL;
-}
+const char* loom_encoding_role_name(loom_encoding_role_t role);
 
 // Parses the short text spelling for an encoding role.
-static inline bool loom_encoding_role_parse(iree_string_view_t text,
-                                            loom_encoding_role_t* out_role) {
-  if (iree_string_view_equal(text, IREE_SV("layout"))) {
-    *out_role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT;
-    return true;
-  }
-  if (iree_string_view_equal(text, IREE_SV("schema"))) {
-    *out_role = LOOM_ENCODING_ROLE_STORAGE_SCHEMA;
-    return true;
-  }
-  if (iree_string_view_equal(text, IREE_SV("storage"))) {
-    *out_role = LOOM_ENCODING_ROLE_PHYSICAL_STORAGE;
-    return true;
-  }
-  if (iree_string_view_equal(text, IREE_SV("transform"))) {
-    *out_role = LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM;
-    return true;
-  }
-  return false;
-}
+bool loom_encoding_role_parse(iree_string_view_t text,
+                              loom_encoding_role_t* out_role);
 
 // Type flags (packed into header bits 20-23).
 enum loom_type_flags_e {
@@ -599,14 +564,7 @@ static inline bool loom_type_rank_equals(loom_type_t a, loom_type_t b) {
 
 // Returns true if two types have identical shapes (same rank and all
 // dims match — static sizes and dynamic value IDs).
-static inline bool loom_type_shape_equals(loom_type_t a, loom_type_t b) {
-  uint8_t rank_a = loom_type_rank(a);
-  if (rank_a != loom_type_rank(b)) return false;
-  for (uint8_t i = 0; i < rank_a; ++i) {
-    if (loom_type_dim(a, i) != loom_type_dim(b, i)) return false;
-  }
-  return true;
-}
+bool loom_type_shape_equals(loom_type_t a, loom_type_t b);
 
 // Returns true if |type| is shaped and one dimension is statically zero.
 // A static zero dimension makes the total element count zero even when other

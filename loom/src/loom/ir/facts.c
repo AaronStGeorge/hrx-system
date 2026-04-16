@@ -773,6 +773,15 @@ void loom_value_facts_element_count(loom_type_t type,
   *out_count = accumulator;
 }
 
+int64_t loom_value_facts_element_count_divisor(
+    loom_type_t type, const loom_value_facts_t* value_facts,
+    iree_host_size_t value_fact_count) {
+  loom_value_facts_t element_count = {0};
+  loom_value_facts_element_count(type, value_facts, value_fact_count,
+                                 &element_count);
+  return element_count.known_divisor;
+}
+
 static bool loom_value_facts_shaped_dims_equal(loom_type_t lhs_type,
                                                loom_type_t rhs_type) {
   if (!loom_type_is_shaped(lhs_type) || !loom_type_is_shaped(rhs_type)) {

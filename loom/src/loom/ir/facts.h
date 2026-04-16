@@ -336,14 +336,9 @@ void loom_value_facts_element_count(loom_type_t type,
                                     loom_value_facts_t* out_count);
 
 // Returns the largest known divisor of the shaped type element count.
-static inline int64_t loom_value_facts_element_count_divisor(
+int64_t loom_value_facts_element_count_divisor(
     loom_type_t type, const loom_value_facts_t* value_facts,
-    iree_host_size_t value_fact_count) {
-  loom_value_facts_t element_count = {0};
-  loom_value_facts_element_count(type, value_facts, value_fact_count,
-                                 &element_count);
-  return element_count.known_divisor;
-}
+    iree_host_size_t value_fact_count);
 
 // Returns true when two shaped types are proven to have equal element counts.
 //
