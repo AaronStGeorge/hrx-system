@@ -7,6 +7,7 @@
 """Kernel dialect type and op definitions."""
 
 from loom.assembly import ARROW, COLON, COMMA, AttrDict, OptionalGroup, Ref, Refs, ResultType, TypeOf, TypesOf, kw
+from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
@@ -109,83 +110,19 @@ KernelAsyncDirection = EnumDef(
     doc="Required async copy direction.",
 )
 
-KernelAsyncCacheTemporal = EnumDef(
-    "KernelAsyncCacheTemporal",
-    [
-        EnumCase("regular", 0, doc="Regular temporal caching behavior."),
-        EnumCase(
-            "non_temporal",
-            1,
-            doc="Data is expected to have little or no temporal reuse.",
-        ),
-        EnumCase(
-            "high_temporal",
-            2,
-            doc="Data is expected to be reused and should be retained when possible.",
-        ),
-        EnumCase(
-            "last_use",
-            3,
-            doc="Data is not expected to be used again after this transfer.",
-        ),
-        EnumCase(
-            "writeback",
-            4,
-            doc="Store-oriented high-temporal write-back policy.",
-        ),
-        EnumCase(
-            "non_temporal_regular",
-            5,
-            doc="Non-temporal near-cache behavior with regular outer-cache behavior.",
-        ),
-        EnumCase(
-            "regular_non_temporal",
-            6,
-            doc="Regular near-cache behavior with non-temporal outer-cache behavior.",
-        ),
-        EnumCase(
-            "non_temporal_high_temporal",
-            7,
-            doc="Non-temporal near-cache behavior with high-temporal outer-cache behavior.",
-        ),
-        EnumCase(
-            "non_temporal_writeback",
-            8,
-            doc="Store-oriented non-temporal near-cache behavior with write-back outer-cache behavior.",
-        ),
-        EnumCase(
-            "bypass",
-            9,
-            doc="Bypass caches at the requested cache scope when the target supports it.",
-        ),
-    ],
-    doc="Target-independent temporal cache hint for async memory traffic.",
-)
-
-KernelAsyncCacheScope = EnumDef(
-    "KernelAsyncCacheScope",
-    [
-        EnumCase("cu", 0, doc="Cache/coherency scope is the compute unit."),
-        EnumCase("se", 1, doc="Cache/coherency scope is the shader engine."),
-        EnumCase("device", 2, doc="Cache/coherency scope is the current device."),
-        EnumCase("system", 3, doc="Cache/coherency scope is the full system."),
-    ],
-    doc="Target-independent cache scope for async memory traffic.",
-)
-
 
 def _async_cache_attrs() -> list[AttrDef]:
     return [
         AttrDef(
             "cache_scope",
             ATTR_TYPE_ENUM,
-            enum_def=KernelAsyncCacheScope,
+            enum_def=CacheScope,
             doc="Required cache/coherency scope for the transfer.",
         ),
         AttrDef(
             "cache_temporal",
             ATTR_TYPE_ENUM,
-            enum_def=KernelAsyncCacheTemporal,
+            enum_def=CacheTemporal,
             doc="Required temporal cache hint for the transfer.",
         ),
     ]

@@ -9,8 +9,6 @@
 from loom.dialect.kernel.defs import (
     ALL_KERNEL_OPS,
     ALL_KERNEL_TYPES,
-    KernelAsyncCacheScope,
-    KernelAsyncCacheTemporal,
     KernelAsyncDirection,
     KernelMemorySpace,
     KernelOrdering,
@@ -31,8 +29,6 @@ __all__ = [
     "kernel_ops",
     "ALL_KERNEL_OPS",
     "ALL_KERNEL_TYPES",
-    "KernelAsyncCacheScope",
-    "KernelAsyncCacheTemporal",
     "KernelAsyncDirection",
     "KernelMemorySpace",
     "KernelOrdering",

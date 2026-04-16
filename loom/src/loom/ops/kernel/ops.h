@@ -28,7 +28,7 @@ enum {
   LOOM_OP_KERNEL_COUNT_ = 7,
 };
 
-// Target-independent cache scope for async memory traffic.
+// Target-independent cache scope for memory operations.
 typedef enum loom_kernel_cache_scope_e {
   LOOM_KERNEL_CACHE_SCOPE_CU = 0,
   LOOM_KERNEL_CACHE_SCOPE_SE = 1,
@@ -37,7 +37,7 @@ typedef enum loom_kernel_cache_scope_e {
   LOOM_KERNEL_CACHE_SCOPE_COUNT_ = 4,
 } loom_kernel_cache_scope_t;
 
-// Target-independent temporal cache hint for async memory traffic.
+// Target-independent temporal cache policy for memory operations.
 typedef enum loom_kernel_cache_temporal_e {
   LOOM_KERNEL_CACHE_TEMPORAL_REGULAR = 0,
   LOOM_KERNEL_CACHE_TEMPORAL_NON_TEMPORAL = 1,

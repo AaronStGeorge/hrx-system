@@ -6,11 +6,10 @@
 
 """Tests for the kernel dialect declarations."""
 
+from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.kernel import (
     ALL_KERNEL_OPS,
     ALL_KERNEL_TYPES,
-    KernelAsyncCacheScope,
-    KernelAsyncCacheTemporal,
     KernelAsyncDirection,
     KernelMemorySpace,
     KernelOrdering,
@@ -101,8 +100,8 @@ class TestKernelDialect:
             "direction",
         ]
         assert all(attr.attr_type == ATTR_TYPE_ENUM for attr in op.attrs)
-        assert op.attrs[0].enum_def is KernelAsyncCacheScope
-        assert op.attrs[1].enum_def is KernelAsyncCacheTemporal
+        assert op.attrs[0].enum_def is CacheScope
+        assert op.attrs[1].enum_def is CacheTemporal
         assert op.attrs[2].enum_def is KernelAsyncDirection
         assert op.constraints == ()
         assert [(effect.operand, effect.kind.value) for effect in op.effects] == [
@@ -138,8 +137,8 @@ class TestKernelDialect:
         assert op.results[0].type_constraint == ANY
         assert [attr.name for attr in op.attrs] == ["cache_scope", "cache_temporal"]
         assert all(attr.attr_type == ATTR_TYPE_ENUM for attr in op.attrs)
-        assert op.attrs[0].enum_def is KernelAsyncCacheScope
-        assert op.attrs[1].enum_def is KernelAsyncCacheTemporal
+        assert op.attrs[0].enum_def is CacheScope
+        assert op.attrs[1].enum_def is CacheTemporal
         assert op.constraints == ()
         assert op.verify == "loom_kernel_async_gather_verify"
 
@@ -155,8 +154,8 @@ class TestKernelDialect:
         assert op.results[0].type_constraint == ANY
         assert [attr.name for attr in op.attrs] == ["cache_scope", "cache_temporal"]
         assert all(attr.attr_type == ATTR_TYPE_ENUM for attr in op.attrs)
-        assert op.attrs[0].enum_def is KernelAsyncCacheScope
-        assert op.attrs[1].enum_def is KernelAsyncCacheTemporal
+        assert op.attrs[0].enum_def is CacheScope
+        assert op.attrs[1].enum_def is CacheTemporal
         assert op.constraints == ()
         assert op.verify == "loom_kernel_async_gather_mask_verify"
 
@@ -187,7 +186,7 @@ class TestKernelDialect:
         ]
 
     def test_async_cache_temporal_values(self) -> None:
-        assert [(case.keyword, case.value) for case in KernelAsyncCacheTemporal.cases] == [
+        assert [(case.keyword, case.value) for case in CacheTemporal.cases] == [
             ("regular", 0),
             ("non_temporal", 1),
             ("high_temporal", 2),
@@ -201,7 +200,7 @@ class TestKernelDialect:
         ]
 
     def test_async_cache_scope_values(self) -> None:
-        assert [(case.keyword, case.value) for case in KernelAsyncCacheScope.cases] == [
+        assert [(case.keyword, case.value) for case in CacheScope.cases] == [
             ("cu", 0),
             ("se", 1),
             ("device", 2),
