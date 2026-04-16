@@ -269,7 +269,8 @@ typedef struct loom_refine_boundaries_function_t {
   // True after return facts have been computed in the current round.
   bool has_return_facts;
 
-  // Joined return facts for each result slot in the current round.
+  // Joined return facts for each result slot in the current round. Extension
+  // IDs are owned by the next boundary fact table for that round.
   loom_value_facts_t* return_facts;
 
   // Per-result bit saying whether return_facts has an observed return value.
@@ -495,23 +496,10 @@ static iree_status_t loom_refine_boundaries_build_graph(
 // Fact summaries
 //===----------------------------------------------------------------------===//
 
-static loom_value_facts_t loom_refine_boundaries_stable_fact(
+static loom_value_facts_t loom_refine_boundaries_scalar_fact(
     loom_value_facts_t facts) {
   facts.extension_id = LOOM_VALUE_FACT_EXTENSION_ID_NONE;
   return facts;
-}
-
-static loom_value_facts_t loom_refine_boundaries_join_facts(
-    loom_value_facts_t lhs, loom_value_facts_t rhs) {
-  lhs = loom_refine_boundaries_stable_fact(lhs);
-  rhs = loom_refine_boundaries_stable_fact(rhs);
-  if (loom_value_facts_equal(lhs, rhs)) return lhs;
-  if (loom_value_facts_is_float(lhs) || loom_value_facts_is_float(rhs)) {
-    return loom_value_facts_unknown();
-  }
-  loom_value_facts_t joined = loom_value_facts_unknown();
-  loom_value_facts_meet(&lhs, &rhs, &joined);
-  return joined;
 }
 
 static bool loom_refine_boundaries_table_has_entry(
@@ -519,20 +507,64 @@ static bool loom_refine_boundaries_table_has_entry(
   return value_id < table->count && table->entries[value_id].known_divisor != 0;
 }
 
+static iree_status_t loom_refine_boundaries_join_facts(
+    loom_value_fact_table_t* target_table,
+    const loom_value_fact_table_t* existing_table,
+    loom_value_facts_t existing_facts,
+    const loom_value_fact_table_t* incoming_table,
+    loom_value_facts_t incoming_facts, loom_value_facts_t* out_joined_facts) {
+  if (loom_value_fact_table_facts_equal(existing_table, existing_facts,
+                                        incoming_table, incoming_facts)) {
+    if (existing_table == target_table) {
+      *out_joined_facts = existing_facts;
+      return iree_ok_status();
+    }
+    return loom_value_fact_table_clone_fact(target_table, existing_table,
+                                            existing_facts, out_joined_facts);
+  }
+
+  loom_value_facts_t existing_scalar =
+      loom_refine_boundaries_scalar_fact(existing_facts);
+  loom_value_facts_t incoming_scalar =
+      loom_refine_boundaries_scalar_fact(incoming_facts);
+  if (loom_value_facts_is_float(existing_scalar) ||
+      loom_value_facts_is_float(incoming_scalar)) {
+    *out_joined_facts = loom_value_facts_unknown();
+    return iree_ok_status();
+  }
+
+  loom_value_facts_meet(&existing_scalar, &incoming_scalar, out_joined_facts);
+  if (loom_value_fact_table_extensions_equal(existing_table, existing_facts,
+                                             incoming_table, incoming_facts)) {
+    if (existing_table == target_table) {
+      out_joined_facts->extension_id = existing_facts.extension_id;
+    } else {
+      loom_value_facts_t cloned_existing = loom_value_facts_unknown();
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact(
+          target_table, existing_table, existing_facts, &cloned_existing));
+      out_joined_facts->extension_id = cloned_existing.extension_id;
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_refine_boundaries_merge_fact(
     loom_value_fact_table_t* table, loom_value_id_t value_id,
-    loom_value_facts_t facts) {
-  facts = loom_refine_boundaries_stable_fact(facts);
+    const loom_value_fact_table_t* source_table, loom_value_facts_t facts) {
   if (loom_value_facts_is_unknown(facts) &&
       !loom_refine_boundaries_table_has_entry(table, value_id)) {
     return iree_ok_status();
   }
   if (!loom_refine_boundaries_table_has_entry(table, value_id)) {
-    return loom_value_fact_table_define(table, value_id, facts);
+    loom_value_facts_t cloned_facts = loom_value_facts_unknown();
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact(
+        table, source_table, facts, &cloned_facts));
+    return loom_value_fact_table_define(table, value_id, cloned_facts);
   }
   loom_value_facts_t existing = loom_value_fact_table_lookup(table, value_id);
-  loom_value_facts_t joined =
-      loom_refine_boundaries_join_facts(existing, facts);
+  loom_value_facts_t joined = loom_value_facts_unknown();
+  IREE_RETURN_IF_ERROR(loom_refine_boundaries_join_facts(
+      table, table, existing, source_table, facts, &joined));
   return loom_value_fact_table_define(table, value_id, joined);
 }
 
@@ -544,7 +576,9 @@ static bool loom_refine_boundaries_fact_tables_equal(
         loom_value_fact_table_lookup(lhs, (loom_value_id_t)i);
     loom_value_facts_t rhs_facts =
         loom_value_fact_table_lookup(rhs, (loom_value_id_t)i);
-    if (!loom_value_facts_equal(lhs_facts, rhs_facts)) return false;
+    if (!loom_value_fact_table_facts_equal(lhs, lhs_facts, rhs, rhs_facts)) {
+      return false;
+    }
   }
   return true;
 }
@@ -796,11 +830,17 @@ static iree_status_t loom_refine_boundaries_collect_return(
     loom_value_facts_t facts = loom_value_fact_table_lookup(
         collect->function_facts, operands.values[i]);
     if (!function->return_fact_defined[i]) {
-      function->return_facts[i] = loom_refine_boundaries_stable_fact(facts);
+      IREE_RETURN_IF_ERROR(loom_value_fact_table_clone_fact(
+          collect->next_boundary_facts, collect->function_facts, facts,
+          &function->return_facts[i]));
       function->return_fact_defined[i] = true;
     } else {
-      function->return_facts[i] =
-          loom_refine_boundaries_join_facts(function->return_facts[i], facts);
+      loom_value_facts_t joined_facts = loom_value_facts_unknown();
+      IREE_RETURN_IF_ERROR(loom_refine_boundaries_join_facts(
+          collect->next_boundary_facts, collect->next_boundary_facts,
+          function->return_facts[i], collect->function_facts, facts,
+          &joined_facts));
+      function->return_facts[i] = joined_facts;
     }
   }
   for (iree_host_size_t i = count; i < function->result_count; ++i) {
@@ -937,7 +977,8 @@ static iree_status_t loom_refine_boundaries_collect_call(
       loom_value_facts_t facts = loom_value_fact_table_lookup(
           collect->function_facts, operands.values[i]);
       IREE_RETURN_IF_ERROR(loom_refine_boundaries_merge_fact(
-          collect->next_boundary_facts, callee_info->argument_ids[i], facts));
+          collect->next_boundary_facts, callee_info->argument_ids[i],
+          collect->function_facts, facts));
     }
   }
 
@@ -949,7 +990,7 @@ static iree_status_t loom_refine_boundaries_collect_call(
     if (!callee_info->return_fact_defined[i]) continue;
     IREE_RETURN_IF_ERROR(loom_refine_boundaries_merge_fact(
         collect->next_boundary_facts, results.values[i],
-        callee_info->return_facts[i]));
+        collect->next_boundary_facts, callee_info->return_facts[i]));
   }
   return iree_ok_status();
 }

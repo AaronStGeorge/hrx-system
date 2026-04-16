@@ -419,5 +419,72 @@ TEST_F(FactTableTest, CloneDefinedFactsReinternsExtensions) {
   iree_arena_deinitialize(&target_arena);
 }
 
+TEST_F(FactTableTest, CrossTableFactsEqualComparesExtensionPayloads) {
+  loom_value_fact_table_t source = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&source, &arena_, 0));
+
+  loom_value_facts_t strides[] = {
+      loom_value_facts_exact_i64(8),
+      loom_value_facts_exact_i64(1),
+  };
+  loom_value_fact_encoding_summary_t summary = {
+      .role = LOOM_ENCODING_ROLE_ADDRESS_LAYOUT,
+      .static_spec_encoding_id = 0,
+      .address_layout =
+          {
+              .kind = LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED,
+              .rank = IREE_ARRAYSIZE(strides),
+              .strides = strides,
+          },
+  };
+  loom_value_facts_t source_facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_encoding_summary(
+      &source.context, summary, &source_facts));
+
+  iree_arena_allocator_t target_arena;
+  iree_arena_initialize(&block_pool_, &target_arena);
+  loom_value_fact_table_t target = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&target, &target_arena, 0));
+
+  loom_value_facts_t padding = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &target.context, loom_value_facts_exact_i64(99), &padding));
+  loom_value_facts_t target_facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_fact_table_clone_fact(&target, &source,
+                                                  source_facts, &target_facts));
+
+  EXPECT_FALSE(loom_value_facts_equal(source_facts, target_facts));
+  EXPECT_TRUE(loom_value_fact_table_facts_equal(&source, source_facts, &target,
+                                                target_facts));
+  EXPECT_TRUE(loom_value_fact_table_extensions_equal(&source, source_facts,
+                                                     &target, target_facts));
+
+  iree_arena_deinitialize(&target_arena);
+}
+
+TEST_F(FactTableTest, CrossTableFactsDifferentExtensionsDoNotCompareEqual) {
+  loom_value_fact_table_t lhs = {0};
+  loom_value_fact_table_t rhs = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&lhs, &arena_, 0));
+
+  iree_arena_allocator_t rhs_arena;
+  iree_arena_initialize(&block_pool_, &rhs_arena);
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&rhs, &rhs_arena, 0));
+
+  loom_value_facts_t lhs_facts = loom_value_facts_unknown();
+  loom_value_facts_t rhs_facts = loom_value_facts_unknown();
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &lhs.context, loom_value_facts_exact_i64(7), &lhs_facts));
+  IREE_ASSERT_OK(loom_value_facts_make_uniform_element(
+      &rhs.context, loom_value_facts_exact_i64(8), &rhs_facts));
+
+  EXPECT_FALSE(
+      loom_value_fact_table_facts_equal(&lhs, lhs_facts, &rhs, rhs_facts));
+  EXPECT_FALSE(
+      loom_value_fact_table_extensions_equal(&lhs, lhs_facts, &rhs, rhs_facts));
+
+  iree_arena_deinitialize(&rhs_arena);
+}
+
 }  // namespace
 }  // namespace loom

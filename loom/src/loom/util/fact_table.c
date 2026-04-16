@@ -489,6 +489,165 @@ loom_value_facts_lookup_extension(const loom_fact_context_t* context,
 }
 
 //===----------------------------------------------------------------------===//
+// Cross-table comparison
+//===----------------------------------------------------------------------===//
+
+static bool loom_value_fact_table_scalar_fields_equal(loom_value_facts_t lhs,
+                                                      loom_value_facts_t rhs) {
+  lhs.extension_id = LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+  rhs.extension_id = LOOM_VALUE_FACT_EXTENSION_ID_NONE;
+  return loom_value_facts_equal(lhs, rhs);
+}
+
+static bool loom_value_fact_table_fact_array_equal(
+    const loom_value_fact_table_t* lhs_table, const loom_value_facts_t* lhs,
+    const loom_value_fact_table_t* rhs_table, const loom_value_facts_t* rhs,
+    iree_host_size_t count) {
+  if (count == 0) return true;
+  if (!lhs || !rhs) return lhs == rhs;
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    if (!loom_value_fact_table_facts_equal(lhs_table, lhs[i], rhs_table,
+                                           rhs[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_value_fact_table_address_layout_equal(
+    const loom_value_fact_table_t* lhs_table,
+    loom_value_fact_address_layout_t lhs,
+    const loom_value_fact_table_t* rhs_table,
+    loom_value_fact_address_layout_t rhs) {
+  if (lhs.kind != rhs.kind || lhs.rank != rhs.rank) return false;
+  if (lhs.kind != LOOM_VALUE_FACT_ADDRESS_LAYOUT_STRIDED) return true;
+  return loom_value_fact_table_fact_array_equal(
+      lhs_table, lhs.strides, rhs_table, rhs.strides, lhs.rank);
+}
+
+static bool loom_value_fact_table_encoding_summary_equal(
+    const loom_value_fact_table_t* lhs_table,
+    loom_value_fact_encoding_summary_t lhs,
+    const loom_value_fact_table_t* rhs_table,
+    loom_value_fact_encoding_summary_t rhs) {
+  return lhs.role == rhs.role &&
+         lhs.static_spec_encoding_id == rhs.static_spec_encoding_id &&
+         loom_value_fact_table_address_layout_equal(
+             lhs_table, lhs.address_layout, rhs_table, rhs.address_layout);
+}
+
+static bool loom_value_fact_table_buffer_reference_equal(
+    const loom_value_fact_table_t* lhs_table,
+    loom_value_fact_buffer_reference_t lhs,
+    const loom_value_fact_table_t* rhs_table,
+    loom_value_fact_buffer_reference_t rhs) {
+  return loom_value_fact_table_facts_equal(lhs_table, lhs.maximum_byte_extent,
+                                           rhs_table,
+                                           rhs.maximum_byte_extent) &&
+         lhs.minimum_alignment == rhs.minimum_alignment &&
+         lhs.memory_space == rhs.memory_space &&
+         lhs.root_value_id == rhs.root_value_id &&
+         lhs.nullability == rhs.nullability;
+}
+
+static bool loom_value_fact_table_view_reference_equal(
+    const loom_value_fact_table_t* lhs_table,
+    loom_value_fact_view_reference_t lhs,
+    const loom_value_fact_table_t* rhs_table,
+    loom_value_fact_view_reference_t rhs) {
+  return loom_value_fact_table_facts_equal(lhs_table, lhs.base_byte_offset,
+                                           rhs_table, rhs.base_byte_offset) &&
+         loom_value_fact_table_facts_equal(lhs_table, lhs.footprint_byte_length,
+                                           rhs_table,
+                                           rhs.footprint_byte_length) &&
+         lhs.minimum_alignment == rhs.minimum_alignment &&
+         lhs.root_minimum_alignment == rhs.root_minimum_alignment &&
+         lhs.static_element_byte_count == rhs.static_element_byte_count &&
+         lhs.memory_space == rhs.memory_space &&
+         lhs.root_value_id == rhs.root_value_id &&
+         lhs.nullability == rhs.nullability;
+}
+
+static bool loom_value_fact_table_extension_entries_equal(
+    const loom_value_fact_table_t* lhs_table,
+    const loom_value_fact_extension_entry_t* lhs,
+    const loom_value_fact_table_t* rhs_table,
+    const loom_value_fact_extension_entry_t* rhs) {
+  if (!lhs || !rhs || lhs->kind != rhs->kind) return false;
+  switch (lhs->kind) {
+    case LOOM_VALUE_FACT_EXTENSION_UNIFORM_ELEMENT:
+      return loom_value_fact_table_facts_equal(
+          lhs_table, lhs->payload.uniform_element.element, rhs_table,
+          rhs->payload.uniform_element.element);
+    case LOOM_VALUE_FACT_EXTENSION_SMALL_STATIC_LANES:
+      if (lhs->payload.small_static_lanes.count !=
+          rhs->payload.small_static_lanes.count) {
+        return false;
+      }
+      return loom_value_fact_table_fact_array_equal(
+          lhs_table, lhs->payload.small_static_lanes.lanes, rhs_table,
+          rhs->payload.small_static_lanes.lanes,
+          lhs->payload.small_static_lanes.count);
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_IOTA:
+      return loom_value_fact_table_facts_equal(
+                 lhs_table, lhs->payload.vector_iota.base, rhs_table,
+                 rhs->payload.vector_iota.base) &&
+             loom_value_fact_table_facts_equal(
+                 lhs_table, lhs->payload.vector_iota.step, rhs_table,
+                 rhs->payload.vector_iota.step);
+    case LOOM_VALUE_FACT_EXTENSION_VECTOR_PREFIX_MASK:
+      return loom_value_fact_table_facts_equal(
+                 lhs_table, lhs->payload.vector_prefix_mask.lower_bound,
+                 rhs_table, rhs->payload.vector_prefix_mask.lower_bound) &&
+             loom_value_fact_table_facts_equal(
+                 lhs_table, lhs->payload.vector_prefix_mask.upper_bound,
+                 rhs_table, rhs->payload.vector_prefix_mask.upper_bound) &&
+             loom_value_fact_table_facts_equal(
+                 lhs_table, lhs->payload.vector_prefix_mask.step, rhs_table,
+                 rhs->payload.vector_prefix_mask.step);
+    case LOOM_VALUE_FACT_EXTENSION_ENCODING_SUMMARY:
+      return loom_value_fact_table_encoding_summary_equal(
+          lhs_table, lhs->payload.encoding_summary, rhs_table,
+          rhs->payload.encoding_summary);
+    case LOOM_VALUE_FACT_EXTENSION_BUFFER_REFERENCE:
+      return loom_value_fact_table_buffer_reference_equal(
+          lhs_table, lhs->payload.buffer_reference, rhs_table,
+          rhs->payload.buffer_reference);
+    case LOOM_VALUE_FACT_EXTENSION_VIEW_REFERENCE:
+      return loom_value_fact_table_view_reference_equal(
+          lhs_table, lhs->payload.view_reference, rhs_table,
+          rhs->payload.view_reference);
+    default:
+      return false;
+  }
+}
+
+bool loom_value_fact_table_extensions_equal(
+    const loom_value_fact_table_t* lhs_table, loom_value_facts_t lhs,
+    const loom_value_fact_table_t* rhs_table, loom_value_facts_t rhs) {
+  if (lhs.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE ||
+      rhs.extension_id == LOOM_VALUE_FACT_EXTENSION_ID_NONE) {
+    return lhs.extension_id == rhs.extension_id;
+  }
+  const loom_value_fact_extension_entry_t* lhs_entry =
+      loom_value_facts_lookup_extension(lhs_table ? &lhs_table->context : NULL,
+                                        lhs);
+  const loom_value_fact_extension_entry_t* rhs_entry =
+      loom_value_facts_lookup_extension(rhs_table ? &rhs_table->context : NULL,
+                                        rhs);
+  return loom_value_fact_table_extension_entries_equal(lhs_table, lhs_entry,
+                                                       rhs_table, rhs_entry);
+}
+
+bool loom_value_fact_table_facts_equal(const loom_value_fact_table_t* lhs_table,
+                                       loom_value_facts_t lhs,
+                                       const loom_value_fact_table_t* rhs_table,
+                                       loom_value_facts_t rhs) {
+  return loom_value_fact_table_scalar_fields_equal(lhs, rhs) &&
+         loom_value_fact_table_extensions_equal(lhs_table, lhs, rhs_table, rhs);
+}
+
+//===----------------------------------------------------------------------===//
 // Scratch buffers
 //===----------------------------------------------------------------------===//
 

@@ -285,6 +285,21 @@ iree_status_t loom_value_fact_table_clone_fact(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     loom_value_facts_t facts, loom_value_facts_t* out_facts);
 
+// Returns true when two fact values are semantically equal, including any
+// extension payloads, even when the extension IDs were interned in different
+// fact tables.
+bool loom_value_fact_table_facts_equal(const loom_value_fact_table_t* lhs_table,
+                                       loom_value_facts_t lhs,
+                                       const loom_value_fact_table_t* rhs_table,
+                                       loom_value_facts_t rhs);
+
+// Returns true when both facts carry semantically equal extension payloads.
+// Facts without extensions compare equal only when neither side has an
+// extension.
+bool loom_value_fact_table_extensions_equal(
+    const loom_value_fact_table_t* lhs_table, loom_value_facts_t lhs,
+    const loom_value_fact_table_t* rhs_table, loom_value_facts_t rhs);
+
 // Clones all defined source entries into |target|. Undefined entries remain
 // unset in |target| so normal block-argument and op fact seeding can fill them.
 iree_status_t loom_value_fact_table_clone_defined_facts(

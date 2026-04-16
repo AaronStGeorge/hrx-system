@@ -414,3 +414,117 @@ func.def public @call_effectful_return_duplicate_computed(%x: index) -> (index) 
   %total = index.add %lhs, %lhs : index
   func.return %total : index
 }
+
+// ====
+
+// Extension-backed encoding facts are cloned into boundary summaries instead of
+// being stripped. That lets private callees refine dynamic type attachments
+// supplied by every internal caller.
+func.def @private_dense_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
+  func.return %view : view<4xf32, %layout>
+}
+
+func.def public @call_private_dense_view(%buffer: buffer) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %layout, #dense : encoding<layout>
+  %view = func.call @private_dense_view(%buffer, %dense) : (buffer, encoding<layout>) -> (view<4xf32, %dense>)
+  test.use %view : view<4xf32, %dense>
+  func.return
+}
+
+// ----
+func.def @private_dense_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #dense>
+  func.return %view : view<4xf32, #dense>
+}
+
+func.def public @call_private_dense_view(%buffer: buffer) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %layout, #dense : encoding<layout>
+  %view = func.call pure @private_dense_view(%buffer, %dense) : (buffer, encoding<layout>) -> (view<4xf32, #dense>)
+  test.use %view : view<4xf32, #dense>
+  func.return
+}
+
+// ====
+
+// Static strided extension payloads survive boundary joins when multiple call
+// sites provide semantically identical facts with independently-interned
+// extension IDs.
+func.def @private_strided_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
+  func.return %view : view<4xf32, %layout>
+}
+
+func.def public @call_private_strided_view(%buffer: buffer) {
+  %base0 = encoding.layout.strided [8] : encoding<layout>
+  %layout0 = encoding.assume.spec %base0, #strided<stride=8> : encoding<layout>
+  %base1 = encoding.layout.strided [8] : encoding<layout>
+  %layout1 = encoding.assume.spec %base1, #strided<stride=8> : encoding<layout>
+  %view0 = func.call @private_strided_view(%buffer, %layout0) : (buffer, encoding<layout>) -> (view<4xf32, %layout0>)
+  %view1 = func.call @private_strided_view(%buffer, %layout1) : (buffer, encoding<layout>) -> (view<4xf32, %layout1>)
+  test.use %view0, %view1 : view<4xf32, %layout0>, view<4xf32, %layout1>
+  func.return
+}
+
+// ----
+func.def @private_strided_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #strided<stride=8>>
+  func.return %view : view<4xf32, #strided<stride=8>>
+}
+
+func.def public @call_private_strided_view(%buffer: buffer) {
+  %base0 = encoding.layout.strided [8] : encoding<layout>
+  %layout0 = encoding.assume.spec %base0, #strided<stride=8> : encoding<layout>
+  %base1 = encoding.layout.strided [8] : encoding<layout>
+  %layout1 = encoding.assume.spec %base1, #strided<stride=8> : encoding<layout>
+  %view0 = func.call pure @private_strided_view(%buffer, %layout0) : (buffer, encoding<layout>) -> (view<4xf32, #strided<stride=8>>)
+  %view1 = func.call pure @private_strided_view(%buffer, %layout1) : (buffer, encoding<layout>) -> (view<4xf32, #strided<stride=8>>)
+  test.use %view0, %view1 : view<4xf32, #strided<stride=8>>, view<4xf32, #strided<stride=8>>
+  func.return
+}
+
+// ====
+
+// Conflicting extension payloads drop back to the scalar fact join. The callee
+// must remain dynamic instead of accidentally specializing to one caller's
+// layout.
+func.def @private_conflicting_layout_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
+  func.return %view : view<4xf32, %layout>
+}
+
+func.def public @call_private_conflicting_layout_view(%buffer: buffer) {
+  %dense_base = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %dense_base, #dense : encoding<layout>
+  %strided_base = encoding.layout.strided [8] : encoding<layout>
+  %strided = encoding.assume.spec %strided_base, #strided<stride=8> : encoding<layout>
+  %view0 = func.call @private_conflicting_layout_view(%buffer, %dense) : (buffer, encoding<layout>) -> (view<4xf32, %dense>)
+  %view1 = func.call @private_conflicting_layout_view(%buffer, %strided) : (buffer, encoding<layout>) -> (view<4xf32, %strided>)
+  test.use %view0, %view1 : view<4xf32, %dense>, view<4xf32, %strided>
+  func.return
+}
+
+// ----
+func.def @private_conflicting_layout_view(%buffer: buffer, %layout: encoding<layout>) -> (view<4xf32, %layout>) {
+  %offset = index.constant 0 : offset
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %layout>
+  func.return %view : view<4xf32, %layout>
+}
+
+func.def public @call_private_conflicting_layout_view(%buffer: buffer) {
+  %dense_base = encoding.layout.dense : encoding<layout>
+  %dense = encoding.assume.spec %dense_base, #dense : encoding<layout>
+  %strided_base = encoding.layout.strided [8] : encoding<layout>
+  %strided = encoding.assume.spec %strided_base, #strided<stride=8> : encoding<layout>
+  %view0 = func.call pure @private_conflicting_layout_view(%buffer, %dense) : (buffer, encoding<layout>) -> (view<4xf32, #dense>)
+  %view1 = func.call pure @private_conflicting_layout_view(%buffer, %strided) : (buffer, encoding<layout>) -> (view<4xf32, #strided<stride=8>>)
+  test.use %view0, %view1 : view<4xf32, #dense>, view<4xf32, #strided<stride=8>>
+  func.return
+}
