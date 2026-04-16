@@ -274,6 +274,57 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateDeepNestedFunctionModule(uint32_t nested_region_count) {
+    loom_module_t* module = CreateModule("reader_deep_nested");
+    loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    IREE_CHECK_OK(loom_module_intern_type(module, i32_type, &i32_type));
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_type_t arg_types[1] = {i32_type};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), nullptr, 0, nullptr, 0, nullptr, 0,
+        LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 1) {
+      ADD_FAILURE() << "expected one function argument";
+      return module;
+    }
+
+    loom_builder_t body_builder;
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_block_t* current_block = loom_region_entry_block(body);
+    loom_builder_initialize(module, &module->arena, current_block,
+                            &body_builder);
+    loom_value_id_t current_value = arg_ids[0];
+    for (uint32_t i = 0; i < nested_region_count; ++i) {
+      loom_op_t* map_op = nullptr;
+      IREE_CHECK_OK(loom_test_map_build(&body_builder, &current_value, 1,
+                                        i32_type, nullptr, 0,
+                                        LOOM_LOCATION_UNKNOWN, &map_op));
+      loom_region_t* map_body = loom_test_map_body(map_op);
+      current_block = loom_region_entry_block(map_body);
+      current_value = loom_block_arg_id(current_block, 0);
+      loom_builder_initialize(module, &module->arena, current_block,
+                              &body_builder);
+    }
+    loom_op_t* use_op = nullptr;
+    IREE_CHECK_OK(loom_test_use_build(&body_builder, &current_value, 1,
+                                      LOOM_LOCATION_UNKNOWN, &use_op));
+    return module;
+  }
+
   loom_module_t* CreateLocatedModule() {
     loom_module_t* module = CreateModule("located");
     loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
@@ -601,6 +652,61 @@ class ReaderTest : public ::testing::Test {
     return offset;
   }
 
+  size_t LastOpRegionCountOffsetInRegion(const std::vector<uint8_t>& bytes,
+                                         size_t* offset) {
+    size_t last_region_count_offset = 0;
+    uint64_t block_count = ReadUVarint(bytes, offset);
+    for (uint64_t block_index = 0; block_index < block_count; ++block_index) {
+      uint8_t has_label = bytes[(*offset)++];
+      if (has_label) {
+        ReadUVarint(bytes, offset);
+      }
+      uint64_t arg_count = ReadUVarint(bytes, offset);
+      for (uint64_t arg_index = 0; arg_index < arg_count; ++arg_index) {
+        ReadValueDefOffsets(bytes, offset);
+      }
+      uint64_t op_count = ReadUVarint(bytes, offset);
+      for (uint64_t op_index = 0; op_index < op_count; ++op_index) {
+        ReadUVarint(bytes, offset);  // op_table_index_plus1
+        *offset += 1;                // flags
+        ReadUVarint(bytes, offset);  // location_id
+        uint64_t operand_count = ReadUVarint(bytes, offset);
+        for (uint64_t i = 0; i < operand_count; ++i) {
+          ReadUVarint(bytes, offset);
+        }
+        uint64_t result_count = ReadUVarint(bytes, offset);
+        for (uint64_t i = 0; i < result_count; ++i) {
+          ReadValueDefOffsets(bytes, offset);
+        }
+        uint64_t tied_result_count = ReadUVarint(bytes, offset);
+        for (uint64_t i = 0; i < tied_result_count; ++i) {
+          ReadUVarint(bytes, offset);
+          ReadUVarint(bytes, offset);
+        }
+        uint64_t attr_count = ReadUVarint(bytes, offset);
+        EXPECT_EQ(attr_count, 0u);
+        last_region_count_offset = *offset;
+        uint64_t region_count = ReadUVarint(bytes, offset);
+        for (uint64_t i = 0; i < region_count; ++i) {
+          size_t nested_last = LastOpRegionCountOffsetInRegion(bytes, offset);
+          if (nested_last != 0) {
+            last_region_count_offset = nested_last;
+          }
+        }
+      }
+    }
+    return last_region_count_offset;
+  }
+
+  size_t LastOpRegionCountOffset(const std::vector<uint8_t>& bytes) {
+    size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_IR);
+    ReadUVarint(bytes, &offset);  // value_count
+    ReadUVarint(bytes, &offset);  // region_count
+    ReadUVarint(bytes, &offset);  // block_count
+    ReadUVarint(bytes, &offset);  // op_count
+    return LastOpRegionCountOffsetInRegion(bytes, &offset);
+  }
+
   void ReplaceBytes(std::vector<uint8_t>* bytes, const char* from,
                     const char* to) {
     size_t length = std::strlen(from);
@@ -893,6 +999,21 @@ TEST_F(ReaderTest, RejectsOutOfRangeBodyTiedResult) {
   size_t tied_operand_offset = FirstBodyOpTiedOperandOffset(bytes);
   ASSERT_EQ(bytes[tied_operand_offset], 0u);
   bytes[tied_operand_offset] = 2;
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsRegionNestingLimit) {
+  static constexpr uint32_t kBytecodeMaxRegionDepth = 256;
+  loom_module_t* module =
+      CreateDeepNestedFunctionModule(kBytecodeMaxRegionDepth - 1);
+  auto bytes = WriteModule(module);
+  size_t region_count_offset = LastOpRegionCountOffset(bytes);
+  ASSERT_NE(region_count_offset, 0u);
+  ASSERT_EQ(bytes[region_count_offset], 0u);
+  bytes[region_count_offset] = 1;
 
   ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
 
