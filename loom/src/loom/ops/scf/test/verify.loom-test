@@ -75,6 +75,25 @@ func.def @if_yield_type_refs_forwarded_results(%cond: i1, %buffer: buffer, %offs
 
 // ====
 
+// Loop-carried iter_arg/result type matching uses the same result-to-yield
+// forwarding rule as scf.yield. The init view is tied to the init layout, while
+// the loop result view is tied to the sibling loop result layout.
+func.def @for_iter_arg_result_type_refs_forwarded_results(%n: index, %buffer: buffer, %offset: offset) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  %base_layout = encoding.layout.dense : encoding<layout>
+  %base_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %base_layout>
+  %layout, %view = scf.for %i = [%zero to %n step %one](%layout_acc = %base_layout : encoding<layout>, %view_acc = %base_view : view<4xf32, %base_layout>) -> (encoding<layout>, view<4xf32, %layout>) {
+    %next_layout = encoding.layout.dense : encoding<layout>
+    %next_view = buffer.view %buffer[%offset] : buffer -> view<4xf32, %next_layout>
+    scf.yield %next_layout, %next_view : encoding<layout>, view<4xf32, %next_layout>
+  }
+  test.use %view : view<4xf32, %layout>
+  func.return
+}
+
+// ====
+
 // scf.while after-region block args must match the loop-carried input types.
 func.def @while_after_arg_type_mismatch(%cond: i1, %init: index) -> (index) {
   // ERROR@+1: TYPE/013

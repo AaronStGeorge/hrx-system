@@ -37,6 +37,7 @@
 #include "loom/transforms/strip_hints.h"
 #include "loom/transforms/vector_memory_footprint.h"
 #include "loom/transforms/vector_to_scalar.h"
+#include "loom/transforms/verify.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
@@ -364,6 +365,34 @@ static iree_status_t loom_check_run_pipeline(
   return status;
 }
 
+static iree_status_t loom_check_verify_pass_output(
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    loom_check_diagnostic_capture_t* diagnostic_capture, loom_module_t* module,
+    bool* out_failed_verification) {
+  *out_failed_verification = false;
+  loom_source_entry_t source_entry = {
+      .source_id = 0,
+      .source = test_case->input,
+      .filename = filename,
+  };
+  loom_source_table_resolver_t resolver_data = {
+      .entries = &source_entry,
+      .count = 1,
+  };
+  loom_verify_options_t verify_options = {
+      .sink = {.fn = loom_check_diagnostic_capture_sink,
+               .user_data = diagnostic_capture},
+      .max_errors = 100,
+      .source_resolver = {.fn = loom_source_table_resolve,
+                          .user_data = &resolver_data},
+  };
+  loom_verify_result_t verify_result = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_verify_module(module, &verify_options, &verify_result));
+  *out_failed_verification = verify_result.error_count > 0;
+  return iree_ok_status();
+}
+
 iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
                                       iree_string_view_t filename,
                                       loom_context_t* context,
@@ -406,6 +435,19 @@ iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
       return iree_status_ignore(pipeline_status);
     }
     return pipeline_status;
+  }
+
+  bool failed_verification = false;
+  iree_status_t verify_status = loom_check_verify_pass_output(
+      test_case, filename, &diagnostic_capture, module, &failed_verification);
+  if (!iree_status_is_ok(verify_status)) {
+    loom_module_free(module);
+    return verify_status;
+  }
+  if (failed_verification) {
+    loom_module_free(module);
+    result->raw_outcome = LOOM_CHECK_FAIL;
+    return iree_ok_status();
   }
 
   // Print the result (stripping comments for comparison).

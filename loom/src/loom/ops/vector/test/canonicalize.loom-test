@@ -120,15 +120,15 @@ func.def @empty_dotf(%lhs: vector<0xf32>, %rhs: vector<0xf32>, %init: f32) -> (f
 
 // ====
 
-// Extracting a scalar from a statically empty axis observes an impossible lane.
-func.def @extract_from_empty_axis(%v: vector<0xf32>) -> (f32) {
+// Extracting a scalar from a statically empty axis observes an impossible lane,
+// but a dead observation folds away before it reaches a poison boundary.
+func.def @extract_from_empty_axis(%v: vector<0xf32>) {
   %r = vector.extract %v[0] : vector<0xf32> -> f32
-  func.return %r : f32
+  func.return
 }
 // ----
-func.def @extract_from_empty_axis(%v: vector<0xf32>) -> (f32) {
-  %r = scalar.poison : f32
-  func.return %r : f32
+func.def @extract_from_empty_axis(%v: vector<0xf32>) {
+  func.return
 }
 
 // ====

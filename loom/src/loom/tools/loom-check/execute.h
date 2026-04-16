@@ -176,8 +176,9 @@ iree_status_t loom_check_execute_verify(
     iree_allocator_t allocator, loom_check_result_t* result);
 
 // Strips comments from input, parses, runs the pass pipeline specified
-// in test_case->pipeline, prints the result, and compares against the
-// expected section. Same diff/update behavior as roundtrip.
+// in test_case->pipeline, verifies the transformed module, prints the result,
+// and compares against the expected section. Same diff/update behavior as
+// roundtrip.
 iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
                                       iree_string_view_t filename,
                                       loom_context_t* context,

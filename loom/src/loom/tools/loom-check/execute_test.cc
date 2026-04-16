@@ -720,6 +720,28 @@ TEST_F(ExecuteTest, PassModeDce) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, PassModeVerifiesTransformedModule) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: pass dce\n"
+                   "func.def @f(%a: f32, %b: f32) -> (f32) {\n"
+                   "  %r = test.addi %a, %b : f32\n"
+                   "  func.return %r : f32\n"
+                   "}\n"
+                   "// ----\n"
+                   "func.def @f(%a: f32, %b: f32) -> (f32) {\n"
+                   "  %r = test.addi %a, %b : f32\n"
+                   "  func.return %r : f32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_GT(result.diagnostic_count, 0u);
+  EXPECT_NE(DiagnosticJsonString(result).find("\"emitter\":\"verifier\""),
+            std::string::npos);
+  EXPECT_NE(DetailString(result).find("TYPE/"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, PassModeCapturesPassDiagnostic) {
   loom_check_result_t result;
   IREE_ASSERT_OK(ExecuteFirst(

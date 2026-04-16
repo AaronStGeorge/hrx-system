@@ -2255,10 +2255,20 @@ static void loom_verify_relation_variadic_match(
   // shape (STRING/U32/STRING/U32) for type-mismatch params.
   const loom_error_def_t* type_error =
       loom_pairwise_eq_default_error(constraint->property);
+  loom_type_value_remap_t value_remap = {
+      .source_values = values_b,
+      .target_values = values_a,
+      .count = count_a,
+  };
   for (uint16_t i = 0; i < count_a; ++i) {
     loom_type_t type_a = loom_verify_value_type(state, values_a[i]);
     loom_type_t type_b = loom_verify_value_type(state, values_b[i]);
-    if (loom_constraint_property_equals(type_a, type_b, constraint->property)) {
+    bool matched =
+        constraint->property == LOOM_PROPERTY_TYPE
+            ? loom_type_equal_after_value_remap(type_b, type_a, &value_remap)
+            : loom_constraint_property_equals(type_a, type_b,
+                                              constraint->property);
+    if (matched) {
       continue;
     }
     loom_verify_emit_indexed_pairwise_mismatch(state, op, vtable, type_error,
