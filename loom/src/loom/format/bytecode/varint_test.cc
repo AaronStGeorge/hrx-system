@@ -189,9 +189,8 @@ TEST(UvarintEncode, BufferTooSmall) {
   uint8_t raw_buffer[1];
   iree_byte_span_t buffer = {raw_buffer, sizeof(raw_buffer)};
   iree_host_size_t length = 0;
-  iree_status_t status = loom_uvarint_encode(128, buffer, &length);
-  EXPECT_TRUE(iree_status_is_resource_exhausted(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_uvarint_encode(128, buffer, &length));
 }
 
 TEST(UvarintEncode, BufferExactSize) {
@@ -207,9 +206,8 @@ TEST(UvarintEncode, ZeroLengthBuffer) {
   iree_byte_span_t buffer = {NULL, 0};
   iree_host_size_t length = 0;
   // Even value 0 needs 1 byte.
-  iree_status_t status = loom_uvarint_encode(0, buffer, &length);
-  EXPECT_TRUE(iree_status_is_resource_exhausted(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_RESOURCE_EXHAUSTED,
+                        loom_uvarint_encode(0, buffer, &length));
 }
 
 //===----------------------------------------------------------------------===//
@@ -220,9 +218,8 @@ TEST(UvarintDecode, EmptyData) {
   loom_bytecode_cursor_t cursor;
   loom_bytecode_cursor_initialize(NULL, 0, &cursor);
   uint64_t value = 0;
-  iree_status_t status = loom_uvarint_decode(&cursor, &value);
-  EXPECT_TRUE(iree_status_is_out_of_range(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_uvarint_decode(&cursor, &value));
   // Cursor unchanged on failure.
   EXPECT_EQ(cursor.position, 0u);
 }
@@ -233,9 +230,8 @@ TEST(UvarintDecode, TruncatedVarint) {
   loom_bytecode_cursor_t cursor;
   loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
   uint64_t value = 0;
-  iree_status_t status = loom_uvarint_decode(&cursor, &value);
-  EXPECT_TRUE(iree_status_is_out_of_range(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_uvarint_decode(&cursor, &value));
   EXPECT_EQ(cursor.position, 0u);
 }
 
@@ -245,9 +241,38 @@ TEST(UvarintDecode, TruncatedMultiByte) {
   loom_bytecode_cursor_t cursor;
   loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
   uint64_t value = 0;
-  iree_status_t status = loom_uvarint_decode(&cursor, &value);
-  EXPECT_TRUE(iree_status_is_out_of_range(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_uvarint_decode(&cursor, &value));
+  EXPECT_EQ(cursor.position, 0u);
+}
+
+TEST(UvarintDecode, NonCanonicalZero) {
+  uint8_t data[] = {0x80, 0x00};
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
+  uint64_t value = 0;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_uvarint_decode(&cursor, &value));
+  EXPECT_EQ(cursor.position, 0u);
+}
+
+TEST(UvarintDecode, NonCanonicalSmallValue) {
+  uint8_t data[] = {0x81, 0x00};
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
+  uint64_t value = 0;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_uvarint_decode(&cursor, &value));
+  EXPECT_EQ(cursor.position, 0u);
+}
+
+TEST(SvarintDecode, NonCanonicalFails) {
+  uint8_t data[] = {0x80, 0x00};
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
+  int64_t value = 0;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_svarint_decode(&cursor, &value));
   EXPECT_EQ(cursor.position, 0u);
 }
 
@@ -258,9 +283,8 @@ TEST(UvarintDecode, Overflow10thByteTooLarge) {
   loom_bytecode_cursor_t cursor;
   loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
   uint64_t value = 0;
-  iree_status_t status = loom_uvarint_decode(&cursor, &value);
-  EXPECT_TRUE(iree_status_is_invalid_argument(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_uvarint_decode(&cursor, &value));
   EXPECT_EQ(cursor.position, 0u);
 }
 
@@ -271,9 +295,8 @@ TEST(UvarintDecode, OverflowTooManyBytes) {
   loom_bytecode_cursor_t cursor;
   loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
   uint64_t value = 0;
-  iree_status_t status = loom_uvarint_decode(&cursor, &value);
-  EXPECT_TRUE(iree_status_is_invalid_argument(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_uvarint_decode(&cursor, &value));
   EXPECT_EQ(cursor.position, 0u);
 }
 
@@ -332,6 +355,17 @@ TEST(CursorReadU16, InsufficientData) {
   uint16_t value = 0;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
                         loom_bytecode_cursor_read_u16_le(&cursor, &value));
+}
+
+TEST(CursorReadU16, PositionOverflowFailsWithoutAdvancing) {
+  uint8_t data[] = {0x34};
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
+  cursor.position = IREE_HOST_SIZE_MAX - 1;
+  uint16_t value = 0;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_bytecode_cursor_read_u16_le(&cursor, &value));
+  EXPECT_EQ(cursor.position, IREE_HOST_SIZE_MAX - 1);
 }
 
 TEST(CursorReadU32, LittleEndian) {
@@ -416,6 +450,16 @@ TEST(CursorState, RemainingAndEmpty) {
   IREE_ASSERT_OK(loom_bytecode_cursor_read_u8(&cursor, &v));
   EXPECT_EQ(loom_bytecode_cursor_remaining(&cursor), 0u);
   EXPECT_TRUE(loom_bytecode_cursor_is_empty(&cursor));
+}
+
+TEST(CursorState, InvalidPositionHasNoRemainingBytes) {
+  uint8_t data[] = {0x01};
+  loom_bytecode_cursor_t cursor;
+  loom_bytecode_cursor_initialize(data, sizeof(data), &cursor);
+  cursor.position = 2;
+  EXPECT_EQ(loom_bytecode_cursor_remaining(&cursor), 0u);
+  EXPECT_TRUE(loom_bytecode_cursor_is_empty(&cursor));
+  EXPECT_FALSE(loom_bytecode_cursor_has_bytes(&cursor, 1));
 }
 
 //===----------------------------------------------------------------------===//

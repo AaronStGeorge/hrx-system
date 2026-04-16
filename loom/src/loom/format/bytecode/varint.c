@@ -18,7 +18,8 @@ iree_status_t loom_uvarint_decode(loom_bytecode_cursor_t* cursor,
 
     // Check for overflow before incorporating this byte's data bits.
     // The 10th byte (shift == 63) may only carry 1 data bit (bit 0).
-    if (shift == 63 && byte > 1) {
+    uint8_t payload = byte & 0x7F;
+    if (shift == 63 && payload > 1) {
       cursor->position = start_position;
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "uvarint overflow at offset %" PRIhsz
@@ -26,9 +27,16 @@ iree_status_t loom_uvarint_decode(loom_bytecode_cursor_t* cursor,
                               start_position, byte);
     }
 
-    value |= (uint64_t)(byte & 0x7F) << shift;
+    value |= (uint64_t)payload << shift;
 
     if ((byte & 0x80) == 0) {
+      if (shift > 0 && payload == 0) {
+        cursor->position = start_position;
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "non-canonical uvarint at offset %" PRIhsz
+                                ": final byte carries no payload bits",
+                                start_position);
+      }
       // Continuation bit clear: varint complete.
       *out_value = value;
       return iree_ok_status();

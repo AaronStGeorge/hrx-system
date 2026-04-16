@@ -28,6 +28,7 @@
 // the cursor tracks data, length, and position as a single unit. No read
 // can exceed the cursor's bounds. Malformed input produces clear errors:
 //   - Truncated varints (continuation bit set at end of data).
+//   - Non-canonical varints (extra zero payload groups).
 //   - Overflow (decoded value exceeds uint64 range).
 //
 // Encode operations write into bounded spans (iree_byte_span_t) and
@@ -80,7 +81,15 @@ static inline void loom_bytecode_cursor_initialize(
 // Returns the number of bytes remaining from the current position.
 static inline iree_host_size_t loom_bytecode_cursor_remaining(
     const loom_bytecode_cursor_t* cursor) {
+  if (IREE_UNLIKELY(cursor->position > cursor->length)) return 0;
   return cursor->length - cursor->position;
+}
+
+// Returns true if |byte_count| bytes can be read without exceeding bounds.
+static inline bool loom_bytecode_cursor_has_bytes(
+    const loom_bytecode_cursor_t* cursor, iree_host_size_t byte_count) {
+  return cursor->position <= cursor->length &&
+         byte_count <= cursor->length - cursor->position;
 }
 
 // Returns true if the cursor has been fully consumed.
@@ -92,7 +101,7 @@ static inline bool loom_bytecode_cursor_is_empty(
 // Reads a single byte from the cursor, advancing the position.
 static inline iree_status_t loom_bytecode_cursor_read_u8(
     loom_bytecode_cursor_t* cursor, uint8_t* out_value) {
-  if (IREE_UNLIKELY(cursor->position >= cursor->length)) {
+  if (IREE_UNLIKELY(!loom_bytecode_cursor_has_bytes(cursor, 1))) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
         "unexpected end of bytecode data at offset %" PRIhsz, cursor->position);
@@ -104,7 +113,7 @@ static inline iree_status_t loom_bytecode_cursor_read_u8(
 // Reads a little-endian uint16 from the cursor, advancing the position.
 static inline iree_status_t loom_bytecode_cursor_read_u16_le(
     loom_bytecode_cursor_t* cursor, uint16_t* out_value) {
-  if (IREE_UNLIKELY(cursor->position + 2 > cursor->length)) {
+  if (IREE_UNLIKELY(!loom_bytecode_cursor_has_bytes(cursor, 2))) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "need 2 bytes for u16 at offset %" PRIhsz
                             " but only %" PRIhsz " remain",
@@ -120,7 +129,7 @@ static inline iree_status_t loom_bytecode_cursor_read_u16_le(
 // Reads a little-endian uint32 from the cursor, advancing the position.
 static inline iree_status_t loom_bytecode_cursor_read_u32_le(
     loom_bytecode_cursor_t* cursor, uint32_t* out_value) {
-  if (IREE_UNLIKELY(cursor->position + 4 > cursor->length)) {
+  if (IREE_UNLIKELY(!loom_bytecode_cursor_has_bytes(cursor, 4))) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "need 4 bytes for u32 at offset %" PRIhsz
                             " but only %" PRIhsz " remain",
@@ -137,7 +146,7 @@ static inline iree_status_t loom_bytecode_cursor_read_u32_le(
 // Reads a little-endian uint64 from the cursor, advancing the position.
 static inline iree_status_t loom_bytecode_cursor_read_u64_le(
     loom_bytecode_cursor_t* cursor, uint64_t* out_value) {
-  if (IREE_UNLIKELY(cursor->position + 8 > cursor->length)) {
+  if (IREE_UNLIKELY(!loom_bytecode_cursor_has_bytes(cursor, 8))) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "need 8 bytes for u64 at offset %" PRIhsz
                             " but only %" PRIhsz " remain",
@@ -158,7 +167,7 @@ static inline iree_status_t loom_bytecode_cursor_read_u64_le(
 static inline iree_status_t loom_bytecode_cursor_read_bytes(
     loom_bytecode_cursor_t* cursor, iree_host_size_t byte_count,
     uint8_t* out_data) {
-  if (IREE_UNLIKELY(cursor->position + byte_count > cursor->length)) {
+  if (IREE_UNLIKELY(!loom_bytecode_cursor_has_bytes(cursor, byte_count))) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "need %" PRIhsz " bytes at offset %" PRIhsz
                             " but only %" PRIhsz " remain",
@@ -176,7 +185,7 @@ static inline iree_status_t loom_bytecode_cursor_read_bytes(
 static inline iree_status_t loom_bytecode_cursor_read_span(
     loom_bytecode_cursor_t* cursor, iree_host_size_t byte_count,
     iree_const_byte_span_t* out_span) {
-  if (IREE_UNLIKELY(cursor->position + byte_count > cursor->length)) {
+  if (IREE_UNLIKELY(!loom_bytecode_cursor_has_bytes(cursor, byte_count))) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "need %" PRIhsz " bytes at offset %" PRIhsz
                             " but only %" PRIhsz " remain",
@@ -192,7 +201,7 @@ static inline iree_status_t loom_bytecode_cursor_read_span(
 // Advances the cursor position by |byte_count| without reading.
 static inline iree_status_t loom_bytecode_cursor_skip(
     loom_bytecode_cursor_t* cursor, iree_host_size_t byte_count) {
-  if (IREE_UNLIKELY(cursor->position + byte_count > cursor->length)) {
+  if (IREE_UNLIKELY(!loom_bytecode_cursor_has_bytes(cursor, byte_count))) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "cannot skip %" PRIhsz " bytes at offset %" PRIhsz
                             " with only %" PRIhsz " remaining",
@@ -272,6 +281,7 @@ static inline iree_status_t loom_svarint_encode(int64_t value,
 // Returns IREE_STATUS_OUT_OF_RANGE if:
 //   - The cursor has insufficient data (truncated varint).
 // Returns IREE_STATUS_INVALID_ARGUMENT if:
+//   - The varint uses a non-canonical overlong representation.
 //   - The varint overflows uint64 (>10 bytes or 10th byte > 1).
 iree_status_t loom_uvarint_decode(loom_bytecode_cursor_t* cursor,
                                   uint64_t* out_value);
