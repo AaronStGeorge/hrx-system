@@ -2853,11 +2853,11 @@ vector_dotf = Op(
         TypeOf("lhs"),
         COMMA,
         TypeOf("rhs"),
-        ARROW,
-        ResultType("result"),
+        COMMA,
+        TypeOf("result"),
     ],
     examples=[
-        "%r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32> -> f32",
+        "%r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32",
     ],
 )
 
@@ -2941,10 +2941,10 @@ vector_reduce = Op(
         Ref("init"),
         COLON,
         TypeOf("input"),
-        ARROW,
-        ResultType("result"),
+        COMMA,
+        TypeOf("result"),
     ],
-    examples=["%sum = vector.reduce<addf> %v, %zero : vector<16xf32> -> f32"],
+    examples=["%sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32"],
 )
 
 

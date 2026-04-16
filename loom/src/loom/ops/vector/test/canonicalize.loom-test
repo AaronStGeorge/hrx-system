@@ -98,7 +98,7 @@ func.def @mask_range_negative_step_not_all_false() -> (vector<2xi1>) {
 
 // Reducing zero lanes observes no input lanes and returns the explicit init.
 func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
-  %r = vector.reduce<addf> %v, %init : vector<0xf32> -> f32
+  %r = vector.reduce<addf> %v, %init : vector<0xf32>, f32
   func.return %r : f32
 }
 // ----
@@ -110,7 +110,7 @@ func.def @empty_reduce(%v: vector<0xf32>, %init: f32) -> (f32) {
 
 // Dotting zero lanes observes no vector lanes and returns the explicit init.
 func.def @empty_dotf(%lhs: vector<0xf32>, %rhs: vector<0xf32>, %init: f32) -> (f32) {
-  %r = vector.dotf %lhs, %rhs, %init : vector<0xf32>, vector<0xf32> -> f32
+  %r = vector.dotf %lhs, %rhs, %init : vector<0xf32>, vector<0xf32>, f32
   func.return %r : f32
 }
 // ----
@@ -278,7 +278,7 @@ func.def @shuffle_identity(%v: vector<4xf32>) -> (vector<4xf32>) {
 func.def @reduce_dynamic_zero_to_init(%n: index, %init: i32) -> (i32) {
   %zero_scalar = scalar.constant 0 : i32
   %zero = vector.splat %zero_scalar : vector<[%n]xi32>
-  %r = vector.reduce<addi> %zero, %init : vector<[%n]xi32> -> i32
+  %r = vector.reduce<addi> %zero, %init : vector<[%n]xi32>, i32
   func.return %r : i32
 }
 // ----

@@ -526,7 +526,7 @@ func.def @dynamic_float_predicate(%n: index, %a: vector<[%n]xf32>) -> (vector<[%
 
 // Reductions expose scalar accumulator order directly.
 func.def @static_reduce(%v: vector<4xf32>, %zero: f32) -> (f32) {
-  %r = vector.reduce<addf> %v, %zero : vector<4xf32> -> f32
+  %r = vector.reduce<addf> %v, %zero : vector<4xf32>, f32
   func.return %r : f32
 }
 
@@ -549,7 +549,7 @@ func.def @static_reduce(%v: vector<4xf32>, %zero: f32) -> (f32) {
 // packing a temporary vector only to extract it again.
 func.def @producer_reduce(%a: vector<4xi32>, %b: vector<4xi32>, %zero: i32) -> (i32) {
   %sum = vector.addi %a, %b : vector<4xi32>
-  %r = vector.reduce<addi> %sum, %zero : vector<4xi32> -> i32
+  %r = vector.reduce<addi> %sum, %zero : vector<4xi32>, i32
   func.return %r : i32
 }
 
@@ -579,7 +579,7 @@ func.def @producer_reduce(%a: vector<4xi32>, %b: vector<4xi32>, %zero: i32) -> (
 // Replacing a named result with a pre-existing value must not rename that
 // replacement.
 func.def @empty_reduce_preserves_init_name(%v: vector<0xi32>, %zero: i32) -> (i32) {
-  %r = vector.reduce<addi> %v, %zero : vector<0xi32> -> i32
+  %r = vector.reduce<addi> %v, %zero : vector<0xi32>, i32
   func.return %r : i32
 }
 
@@ -592,7 +592,7 @@ func.def @empty_reduce_preserves_init_name(%v: vector<0xi32>, %zero: i32) -> (i3
 
 // Dynamic reductions use scf.for with a scalar carried accumulator.
 func.def @dynamic_reduce(%n: index, %v: vector<[%n]xi32>, %zero: i32) -> (i32) {
-  %r = vector.reduce<addi> %v, %zero : vector<[%n]xi32> -> i32
+  %r = vector.reduce<addi> %v, %zero : vector<[%n]xi32>, i32
   func.return %r : i32
 }
 
@@ -612,7 +612,7 @@ func.def @dynamic_reduce(%n: index, %v: vector<[%n]xi32>, %zero: i32) -> (i32) {
 
 // vector.dotf lowers through scalar.fmaf so the fused dot semantics survive.
 func.def @dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) -> (f32) {
-  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32> -> f32
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, f32
   func.return %r : f32
 }
 

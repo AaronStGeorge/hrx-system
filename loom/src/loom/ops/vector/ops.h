@@ -2538,7 +2538,7 @@ iree_status_t loom_vector_bitunpacks_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_DOTF: Compute a same-element floating-point dot product with an explicit scalar accumulator. Semantics are equivalent to accumulating scalar.fmaf(lhs_lane, rhs_lane, acc) over lanes in logical lane order; use vector.mulf followed by vector.reduce<addf> when separately rounded products and additions are required. The source vectors must have the same shape and element type, and the init/result scalar type matches that element type. Zero-lane inputs return init.
-// %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32> -> f32
+// %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32
 LOOM_DEFINE_ISA(loom_vector_dotf_isa, LOOM_OP_VECTOR_DOTF)
 LOOM_DEFINE_OPERAND(loom_vector_dotf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_dotf_rhs, 1)
@@ -2546,9 +2546,9 @@ LOOM_DEFINE_OPERAND(loom_vector_dotf_init, 2)
 LOOM_DEFINE_RESULT(loom_vector_dotf_result, 0)
 iree_status_t loom_vector_dotf_build(
     loom_builder_t* builder,
-    loom_may_consume loom_value_id_t lhs,
-    loom_may_consume loom_value_id_t rhs,
-    loom_may_consume loom_value_id_t init,
+    loom_value_id_t lhs,
+    loom_value_id_t rhs,
+    loom_value_id_t init,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -2580,7 +2580,7 @@ iree_status_t loom_vector_dot4i_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type.
-// %sum = vector.reduce<addf> %v, %zero : vector<16xf32> -> f32
+// %sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32
 LOOM_DEFINE_ISA(loom_vector_reduce_isa, LOOM_OP_VECTOR_REDUCE)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_input, 0)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_init, 1)
@@ -2589,8 +2589,8 @@ LOOM_DEFINE_ATTR_ENUM(loom_vector_reduce_kind, 0)
 iree_status_t loom_vector_reduce_build(
     loom_builder_t* builder,
     uint8_t kind,
-    loom_may_consume loom_value_id_t input,
-    loom_may_consume loom_value_id_t init,
+    loom_value_id_t input,
+    loom_value_id_t init,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

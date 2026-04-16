@@ -1603,11 +1603,11 @@ class VectorBuilders:
         _operands.append(source)
         return cast(ValueRef, self._b.build("vector.bitunpacks", _operands, results=results, attributes=_attributes, regions=_regions))
 
-    def dotf(self, *, lhs: ValueRef, rhs: ValueRef, init: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def dotf(self, *, lhs: ValueRef, rhs: ValueRef, init: ValueRef, result_types: list[Type]) -> ValueRef:
         """Compute a same-element floating-point dot product with an explicit scalar accumulator. Semantics are equivalent to accumulating scalar.fmaf(lhs_lane, rhs_lane, acc) over lanes in logical lane order; use vector.mulf followed by vector.reduce<addf> when separately rounded products and additions are required. The source vectors must have the same shape and element type, and the init/result scalar type matches that element type. Zero-lane inputs return init.
 
         Example::
-            %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32> -> f32
+            %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -1615,7 +1615,7 @@ class VectorBuilders:
         _operands.append(lhs)
         _operands.append(rhs)
         _operands.append(init)
-        return cast(ValueRef, self._b.build("vector.dotf", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(ValueRef, self._b.build("vector.dotf", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
     def dot4i(self, *, kind: str, lhs: ValueRef, rhs: ValueRef, acc: ValueRef, result_types: list[Type]) -> ValueRef:
         """Group adjacent four-lane i8 products along the last axis and add each four-product sum into an i32 accumulator lane. The signedness template chooses how lhs and rhs i8 lanes are interpreted, matching dp4a/VNNI-style hardware operations.
@@ -1632,11 +1632,11 @@ class VectorBuilders:
         _operands.append(acc)
         return cast(ValueRef, self._b.build("vector.dot4i", _operands, results=result_types, attributes=_attributes, regions=_regions))
 
-    def reduce(self, *, kind: str, input: ValueRef, init: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
+    def reduce(self, *, kind: str, input: ValueRef, init: ValueRef, result_types: list[Type]) -> ValueRef:
         """Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type.
 
         Example::
-            %sum = vector.reduce<addf> %v, %zero : vector<16xf32> -> f32
+            %sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32
         """
         _operands: list[ValueRef | int] = []
         _attributes: builtins.dict[str, Any] = {}
@@ -1644,4 +1644,4 @@ class VectorBuilders:
         _attributes["kind"] = kind
         _operands.append(input)
         _operands.append(init)
-        return cast(ValueRef, self._b.build("vector.reduce", _operands, results=results, attributes=_attributes, regions=_regions))
+        return cast(ValueRef, self._b.build("vector.reduce", _operands, results=result_types, attributes=_attributes, regions=_regions))

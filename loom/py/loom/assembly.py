@@ -624,7 +624,7 @@ class TemplateParam:
     diagnostics as attrs in positional syntax.
 
     Examples:
-        vector.reduce<addf> %v, %zero : vector<16xf32> -> f32
+        vector.reduce<addf> %v, %zero : vector<16xf32>, f32
     """
 
     field: str

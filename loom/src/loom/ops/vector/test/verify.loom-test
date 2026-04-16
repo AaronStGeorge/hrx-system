@@ -77,7 +77,17 @@ func.def @select_shape_mismatch(%mask: vector<8xi1>, %a: vector<4xf32>, %b: vect
 // Reductions keep the vector element type tied to the scalar accumulator/result.
 func.def @reduce_element_mismatch(%v: vector<4xf32>, %zero: i32) {
   // ERROR@+1: TYPE/002
-  %r = vector.reduce<addf> %v, %zero : vector<4xf32> -> i32
+  %r = vector.reduce<addf> %v, %zero : vector<4xf32>, i32
+  func.return
+}
+
+// ====
+
+// Reductions spell the accumulator/result type in the colon list, not as an
+// independent arrow result.
+func.def @reduce_reject_arrow_result(%v: vector<4xf32>, %zero: f32) {
+  // ERROR@+1: PARSE/003
+  %r = vector.reduce<addf> %v, %zero : vector<4xf32> -> f32
   func.return
 }
 
@@ -1068,7 +1078,7 @@ func.def @bitunpack_static_count_mismatch(%v: vector<1xi8>) {
 // Floating dot products consume floating source lanes.
 func.def @dotf_source_not_float(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: i32) {
   // ERROR@+1: TYPE/003 "float_element"
-  %r = vector.dotf %lhs, %rhs, %acc : vector<4xi32>, vector<4xi32> -> i32
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xi32>, vector<4xi32>, i32
   func.return
 }
 
@@ -1077,7 +1087,7 @@ func.def @dotf_source_not_float(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: 
 // Floating dot products require same-shaped source vectors.
 func.def @dotf_source_shape_mismatch(%lhs: vector<4xf32>, %rhs: vector<8xf32>, %acc: f32) {
   // ERROR@+1: SHAPE/002
-  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<8xf32> -> f32
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<8xf32>, f32
   func.return
 }
 
@@ -1087,7 +1097,7 @@ func.def @dotf_source_shape_mismatch(%lhs: vector<4xf32>, %rhs: vector<8xf32>, %
 // explicit conversion or dedicated target-specific grouped dot ops.
 func.def @dotf_acc_element_mismatch(%lhs: vector<4xf16>, %rhs: vector<4xf16>, %acc: f32) {
   // ERROR@+1: TYPE/002
-  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf16>, vector<4xf16> -> f32
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf16>, vector<4xf16>, f32
   func.return
 }
 
@@ -1096,7 +1106,17 @@ func.def @dotf_acc_element_mismatch(%lhs: vector<4xf16>, %rhs: vector<4xf16>, %a
 // The explicit init and scalar result are the same accumulator type.
 func.def @dotf_result_type_mismatch(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) {
   // ERROR@+1: TYPE/001
-  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32> -> f64
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, f64
+  func.return
+}
+
+// ====
+
+// Dot products spell the accumulator/result type in the colon list, not as an
+// independent arrow result.
+func.def @dotf_reject_arrow_result(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: f32) {
+  // ERROR@+1: PARSE/003
+  %r = vector.dotf %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32> -> f32
   func.return
 }
 
@@ -1151,7 +1171,7 @@ func.def @dot4i_leading_axis_mismatch(%lhs: vector<2x16xi8>, %rhs: vector<2x16xi
 // Reduce template parameters are tied to the vector element family.
 func.def @reduce_kind_mismatch(%v: vector<4xi32>, %zero: i32) {
   // ERROR@+1: TYPE/003 "floating-point element type for reduce kind"
-  %r = vector.reduce<minimumf> %v, %zero : vector<4xi32> -> i32
+  %r = vector.reduce<minimumf> %v, %zero : vector<4xi32>, i32
   func.return
 }
 

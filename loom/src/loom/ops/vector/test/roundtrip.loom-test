@@ -243,8 +243,8 @@ func.def @bitpack(%codes: vector<32xi8>, %signed_deltas: vector<32xi8>, %signs: 
 // Floating dot products keep the scalar accumulator explicit and use fused
 // multiply-add semantics over logical lane order.
 func.def @dotf(%lhs: vector<16xf32>, %rhs: vector<16xf32>, %acc: f32, %n: index, %dyn_lhs: vector<[%n]xf32>, %dyn_rhs: vector<[%n]xf32>) {
-  %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32> -> f32
-  %dyn = vector.dotf %dyn_lhs, %dyn_rhs, %acc : vector<[%n]xf32>, vector<[%n]xf32> -> f32
+  %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32
+  %dyn = vector.dotf %dyn_lhs, %dyn_rhs, %acc : vector<[%n]xf32>, vector<[%n]xf32>, f32
   test.use %r, %dyn : f32, f32
   func.return
 }
@@ -312,8 +312,8 @@ func.def @block_quant_register_encode(%q4_codes: vector<32xi8>, %q6_high: vector
 
 // Reductions consume a vector input and scalar accumulator/result of the same element type.
 func.def @reduce(%v: vector<16xf32>, %zero: f32, %i: vector<16xi32>, %izero: i32) -> (f32, i32) {
-  %sum = vector.reduce<addf> %v, %zero : vector<16xf32> -> f32
-  %max = vector.reduce<maxsi> %i, %izero : vector<16xi32> -> i32
+  %sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32
+  %max = vector.reduce<maxsi> %i, %izero : vector<16xi32>, i32
   func.return %sum, %max : f32, i32
 }
 
