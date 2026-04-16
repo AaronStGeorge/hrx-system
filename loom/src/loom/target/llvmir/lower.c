@@ -585,9 +585,18 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_vector_binop(state, target_block, op);
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I:
-    case LOOM_OP_VECTOR_DOT8I4:
       return loom_llvmir_lowering_lower_vector_cpu_packed_dot(state,
                                                               target_block, op);
+    case LOOM_OP_VECTOR_DOT8I4:
+      return loom_llvmir_lowering_unsupported_op(
+          state, op,
+          "packed i4 dot needs explicit unpack/reference expansion or "
+          "target-contract lowering");
+    case LOOM_OP_VECTOR_DOT4F8:
+      return loom_llvmir_lowering_unsupported_op(
+          state, op,
+          "packed fp8/bf8 dot needs explicit decode/reference expansion or "
+          "target-contract lowering");
     case LOOM_OP_SCALAR_NEGF:
       return loom_llvmir_lowering_lower_negf(state, target_block, op);
     case LOOM_OP_VECTOR_NEGF:

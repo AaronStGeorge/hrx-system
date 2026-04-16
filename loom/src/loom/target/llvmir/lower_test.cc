@@ -542,6 +542,68 @@ class LlvmIrLowerTest : public ::testing::Test {
     BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_S8S8, 64, 16);
   }
 
+  void BuildDot8I4Function(iree_string_view_t function_name) {
+    loom_type_t packed_type = loom_type_shaped_1d(
+        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
+    loom_symbol_ref_t symbol = MakeSymbol(function_name);
+    loom_type_t arg_types[3] = {packed_type, packed_type, packed_type};
+    loom_op_t* func_op = NULL;
+    IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
+                                       arg_types, IREE_ARRAYSIZE(arg_types),
+                                       &packed_type, 1, NULL, 0, NULL, 0,
+                                       LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func = loom_func_like_cast(module_, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+    ASSERT_EQ(arg_count, 3);
+    SetValueName(args[0], IREE_SV("lhs"));
+    SetValueName(args[1], IREE_SV("rhs"));
+    SetValueName(args[2], IREE_SV("acc"));
+
+    loom_builder_t body_builder = BodyBuilder(func_op);
+    loom_op_t* dot_op = NULL;
+    IREE_ASSERT_OK(loom_vector_dot8i4_build(
+        &body_builder, LOOM_VECTOR_DOT8I4_KIND_S4S4, args[0], args[1], args[2],
+        packed_type, LOOM_LOCATION_UNKNOWN, &dot_op));
+    loom_value_id_t dot = loom_vector_dot8i4_result(dot_op);
+    SetValueName(dot, IREE_SV("dot"));
+    loom_op_t* return_op = NULL;
+    IREE_ASSERT_OK(loom_func_return_build(&body_builder, &dot, 1,
+                                          LOOM_LOCATION_UNKNOWN, &return_op));
+  }
+
+  void BuildDot4F8Function(iree_string_view_t function_name) {
+    loom_type_t packed_type = loom_type_shaped_1d(
+        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
+    loom_type_t accumulator_type = loom_type_shaped_1d(
+        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(8), 0);
+    loom_symbol_ref_t symbol = MakeSymbol(function_name);
+    loom_type_t arg_types[3] = {packed_type, packed_type, accumulator_type};
+    loom_op_t* func_op = NULL;
+    IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
+                                       arg_types, IREE_ARRAYSIZE(arg_types),
+                                       &accumulator_type, 1, NULL, 0, NULL, 0,
+                                       LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func = loom_func_like_cast(module_, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+    ASSERT_EQ(arg_count, 3);
+    SetValueName(args[0], IREE_SV("lhs"));
+    SetValueName(args[1], IREE_SV("rhs"));
+    SetValueName(args[2], IREE_SV("acc"));
+
+    loom_builder_t body_builder = BodyBuilder(func_op);
+    loom_op_t* dot_op = NULL;
+    IREE_ASSERT_OK(loom_vector_dot4f8_build(
+        &body_builder, LOOM_VECTOR_DOT4F8_KIND_FP8BF8, args[0], args[1],
+        args[2], accumulator_type, LOOM_LOCATION_UNKNOWN, &dot_op));
+    loom_value_id_t dot = loom_vector_dot4f8_result(dot_op);
+    SetValueName(dot, IREE_SV("dot"));
+    loom_op_t* return_op = NULL;
+    IREE_ASSERT_OK(loom_func_return_build(&body_builder, &dot, 1,
+                                          LOOM_LOCATION_UNKNOWN, &return_op));
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   loom_module_t* module_ = NULL;
@@ -802,6 +864,40 @@ TEST_F(LlvmIrLowerTest, RejectsCpuPackedDotWithoutTargetFeatures) {
       IREE_STATUS_UNIMPLEMENTED,
       LowerModule(loom_llvmir_target_profile_x86_64_object(), &lowered));
   EXPECT_EQ(lowered, nullptr);
+}
+
+TEST_F(LlvmIrLowerTest, RejectsPackedI4DotWithoutExplicitReferenceLowering) {
+  BuildDot8I4Function(IREE_SV("dot8_i4"));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits = LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX10_2;
+  loom_llvmir_module_t* lowered = NULL;
+  iree_status_t status = LowerModule(&profile, &lowered);
+  std::string message = StatusToString(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  EXPECT_EQ(lowered, nullptr);
+  EXPECT_NE(message.find("packed i4 dot needs explicit unpack"),
+            std::string::npos)
+      << message;
+  iree_status_free(status);
+}
+
+TEST_F(LlvmIrLowerTest, RejectsPackedF8DotWithoutExplicitReferenceLowering) {
+  BuildDot4F8Function(IREE_SV("dot4_f8"));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits = LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX10_2;
+  loom_llvmir_module_t* lowered = NULL;
+  iree_status_t status = LowerModule(&profile, &lowered);
+  std::string message = StatusToString(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+  EXPECT_EQ(lowered, nullptr);
+  EXPECT_NE(message.find("packed fp8/bf8 dot needs explicit decode"),
+            std::string::npos)
+      << message;
+  iree_status_free(status);
 }
 
 TEST_F(LlvmIrLowerTest, CompilesCpuPackedBfloatDotToX86Assembly) {
