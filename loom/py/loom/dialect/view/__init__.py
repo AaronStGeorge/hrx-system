@@ -6,8 +6,11 @@
 
 """View dialect: logical view operations."""
 
+from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
 from loom.dialect.view.defs import (
     ALL_VIEW_OPS,
+    view_atomic_reduce,
+    view_atomic_rmw,
     view_load,
     view_ops,
     view_prefetch,
@@ -18,10 +21,15 @@ from loom.dialect.view.defs import (
 
 __all__ = [
     "view_ops",
+    "AtomicKind",
+    "AtomicOrdering",
+    "AtomicScope",
     "ALL_VIEW_OPS",
     "view_subview",
     "view_refine",
     "view_load",
     "view_store",
+    "view_atomic_reduce",
+    "view_atomic_rmw",
     "view_prefetch",
 ]

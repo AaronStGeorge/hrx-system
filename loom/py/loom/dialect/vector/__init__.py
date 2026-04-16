@@ -8,11 +8,9 @@
 
 from __future__ import annotations
 
+from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
 from loom.dialect.vector.defs import (
     ALL_VECTOR_OPS,
-    AtomicKind,
-    AtomicOrdering,
-    AtomicScope,
     CombiningKind,
     FloatAssumptionFlags,
     IntegerDot4Kind,

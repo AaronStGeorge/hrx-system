@@ -22,9 +22,52 @@ enum {
   LOOM_OP_VIEW_REFINE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 1),
   LOOM_OP_VIEW_LOAD = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 2),
   LOOM_OP_VIEW_STORE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 3),
-  LOOM_OP_VIEW_PREFETCH = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 4),
-  LOOM_OP_VIEW_COUNT_ = 5,
+  LOOM_OP_VIEW_ATOMIC_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 4),
+  LOOM_OP_VIEW_ATOMIC_RMW = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 5),
+  LOOM_OP_VIEW_PREFETCH = LOOM_OP_KIND(LOOM_DIALECT_VIEW, 6),
+  LOOM_OP_VIEW_COUNT_ = 7,
 };
+
+// Read-modify-write operation kind supported by view and vector atomics.
+typedef enum loom_view_kind_e {
+  LOOM_VIEW_KIND_XCHGI = 0,
+  LOOM_VIEW_KIND_XCHGF = 1,
+  LOOM_VIEW_KIND_ADDI = 2,
+  LOOM_VIEW_KIND_ADDF = 3,
+  LOOM_VIEW_KIND_SUBI = 4,
+  LOOM_VIEW_KIND_ANDI = 5,
+  LOOM_VIEW_KIND_ORI = 6,
+  LOOM_VIEW_KIND_XORI = 7,
+  LOOM_VIEW_KIND_MINSI = 8,
+  LOOM_VIEW_KIND_MAXSI = 9,
+  LOOM_VIEW_KIND_MINUI = 10,
+  LOOM_VIEW_KIND_MAXUI = 11,
+  LOOM_VIEW_KIND_MINIMUMF = 12,
+  LOOM_VIEW_KIND_MAXIMUMF = 13,
+  LOOM_VIEW_KIND_MINNUMF = 14,
+  LOOM_VIEW_KIND_MAXNUMF = 15,
+  LOOM_VIEW_KIND_COUNT_ = 16,
+} loom_view_kind_t;
+
+// Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.
+typedef enum loom_view_ordering_e {
+  LOOM_VIEW_ORDERING_RELAXED = 0,
+  LOOM_VIEW_ORDERING_ACQUIRE = 1,
+  LOOM_VIEW_ORDERING_RELEASE = 2,
+  LOOM_VIEW_ORDERING_ACQ_REL = 3,
+  LOOM_VIEW_ORDERING_SEQ_CST = 4,
+  LOOM_VIEW_ORDERING_COUNT_ = 5,
+} loom_view_ordering_t;
+
+// Synchronization scope for atomic memory effects.
+typedef enum loom_view_scope_e {
+  LOOM_VIEW_SCOPE_THREAD = 0,
+  LOOM_VIEW_SCOPE_SUBGROUP = 1,
+  LOOM_VIEW_SCOPE_WORKGROUP = 2,
+  LOOM_VIEW_SCOPE_DEVICE = 3,
+  LOOM_VIEW_SCOPE_SYSTEM = 4,
+  LOOM_VIEW_SCOPE_COUNT_ = 5,
+} loom_view_scope_t;
 
 // Intended future access kind for a prefetch hint.
 typedef enum loom_view_prefetch_intent_e {
@@ -127,6 +170,62 @@ iree_status_t loom_view_store_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_view_store_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VIEW_ATOMIC_REDUCE: Atomically combine one scalar value into a typed view element at a full-rank logical index. Atomic ordering and scope are required so the synchronization contract remains explicit after vector-to-scalar lowering.
+// view.atomic.reduce<addi> %value, %view[%row, %col] {ordering = relaxed, scope = workgroup} : i32, view<[%M]x[%N]xi32, %layout>
+LOOM_DEFINE_ISA(loom_view_atomic_reduce_isa, LOOM_OP_VIEW_ATOMIC_REDUCE)
+LOOM_DEFINE_OPERAND(loom_view_atomic_reduce_value, 0)
+LOOM_DEFINE_OPERAND(loom_view_atomic_reduce_view, 1)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_atomic_reduce_indices, 2)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_kind, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_ordering, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_reduce_scope, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_reduce_static_indices, 3)
+iree_status_t loom_view_atomic_reduce_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_value_id_t value,
+    loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    uint8_t ordering,
+    uint8_t scope,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_view_atomic_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_VIEW_ATOMIC_RMW: Atomically read one scalar view element, combine it with a scalar update value, write the combined value back, and return the old value observed by that atomic operation.
+// %old = view.atomic.rmw<addi> %value, %view[%row, %col] {ordering = relaxed, scope = workgroup} : i32, view<[%M]x[%N]xi32, %layout> -> i32
+LOOM_DEFINE_ISA(loom_view_atomic_rmw_isa, LOOM_OP_VIEW_ATOMIC_RMW)
+LOOM_DEFINE_OPERAND(loom_view_atomic_rmw_value, 0)
+LOOM_DEFINE_OPERAND(loom_view_atomic_rmw_view, 1)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_view_atomic_rmw_indices, 2)
+LOOM_DEFINE_RESULT(loom_view_atomic_rmw_result, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_kind, 0)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_ordering, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_view_atomic_rmw_scope, 2)
+LOOM_DEFINE_ATTR_I64_ARRAY(loom_view_atomic_rmw_static_indices, 3)
+iree_status_t loom_view_atomic_rmw_build(
+    loom_builder_t* builder,
+    uint8_t kind,
+    loom_may_consume loom_value_id_t value,
+    loom_may_consume loom_value_id_t view,
+    const loom_value_id_t* indices,
+    iree_host_size_t indices_count,
+    const int64_t* static_indices,
+    iree_host_size_t static_indices_count,
+    uint8_t ordering,
+    uint8_t scope,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_view_atomic_rmw_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

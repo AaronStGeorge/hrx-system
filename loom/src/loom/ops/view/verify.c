@@ -8,7 +8,34 @@
 #include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/atomic.h"
 #include "loom/ops/view/ops.h"
+
+#define LOOM_ASSERT_ATOMIC_KIND_VALUE(dialect_value, shared_value) \
+  static_assert((int)(dialect_value) == (int)(shared_value),       \
+                #dialect_value " must match " #shared_value)
+
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_COUNT_, LOOM_ATOMIC_KIND_COUNT_);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_XCHGI, LOOM_ATOMIC_KIND_XCHGI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_XCHGF, LOOM_ATOMIC_KIND_XCHGF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_ADDI, LOOM_ATOMIC_KIND_ADDI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_ADDF, LOOM_ATOMIC_KIND_ADDF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_SUBI, LOOM_ATOMIC_KIND_SUBI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_ANDI, LOOM_ATOMIC_KIND_ANDI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_ORI, LOOM_ATOMIC_KIND_ORI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_XORI, LOOM_ATOMIC_KIND_XORI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MINSI, LOOM_ATOMIC_KIND_MINSI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MAXSI, LOOM_ATOMIC_KIND_MAXSI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MINUI, LOOM_ATOMIC_KIND_MINUI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MAXUI, LOOM_ATOMIC_KIND_MAXUI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MINIMUMF,
+                              LOOM_ATOMIC_KIND_MINIMUMF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MAXIMUMF,
+                              LOOM_ATOMIC_KIND_MAXIMUMF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MINNUMF, LOOM_ATOMIC_KIND_MINNUMF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VIEW_KIND_MAXNUMF, LOOM_ATOMIC_KIND_MAXNUMF);
+
+#undef LOOM_ASSERT_ATOMIC_KIND_VALUE
 
 static iree_status_t loom_view_emit(iree_diagnostic_emitter_t emitter,
                                     const loom_op_t* op,
@@ -22,6 +49,32 @@ static iree_status_t loom_view_emit(iree_diagnostic_emitter_t emitter,
       .param_count = param_count,
   };
   return iree_diagnostic_emit(emitter, &emission);
+}
+
+static iree_status_t loom_view_emit_attribute_value_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t attr_name, int64_t actual_value,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(attr_name),
+      loom_param_i64(actual_value),
+      loom_param_string(expected_constraint),
+  };
+  return loom_view_emit(emitter, op, &loom_err_structure_014, params,
+                        IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_view_emit_operand_constraint(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t operand_name, loom_type_t actual_type,
+    iree_string_view_t expected_constraint) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(operand_name),
+      loom_param_type(actual_type),
+      loom_param_string(expected_constraint),
+  };
+  return loom_view_emit(emitter, op, &loom_err_type_003, params,
+                        IREE_ARRAYSIZE(params));
 }
 
 static uint16_t loom_view_dynamic_sentinel_count(loom_attribute_t values) {
@@ -145,6 +198,36 @@ static iree_status_t loom_view_verify_element_access(
   return iree_ok_status();
 }
 
+static iree_status_t loom_view_verify_atomic_kind(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t value_name, loom_type_t value_type, uint8_t kind,
+    bool allow_exchange) {
+  if (!allow_exchange && loom_atomic_kind_is_exchange(kind)) {
+    return loom_view_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("kind"), kind,
+        IREE_SV("non-exchange atomic reduce kind"));
+  }
+  if (!loom_atomic_kind_is_valid(kind)) return iree_ok_status();
+  if (!loom_type_is_scalar(value_type)) return iree_ok_status();
+
+  loom_scalar_type_t element_type = loom_type_element_type(value_type);
+  if (loom_scalar_type_is_integer(element_type) &&
+      loom_atomic_kind_accepts_integer(kind)) {
+    return iree_ok_status();
+  }
+  if (loom_scalar_type_is_float(element_type) &&
+      loom_atomic_kind_accepts_float(kind)) {
+    return iree_ok_status();
+  }
+
+  iree_string_view_t expected_constraint =
+      loom_atomic_kind_accepts_integer(kind)
+          ? IREE_SV("integer element type for atomic kind")
+          : IREE_SV("floating-point element type for atomic kind");
+  return loom_view_emit_operand_constraint(emitter, op, value_name, value_type,
+                                           expected_constraint);
+}
+
 static iree_status_t loom_view_refine_verify_static_dimensions(
     const loom_op_t* op, iree_diagnostic_emitter_t emitter,
     loom_type_t source_type, loom_type_t result_type) {
@@ -224,6 +307,38 @@ iree_status_t loom_view_store_verify(const loom_module_t* module,
   return loom_view_verify_element_access(
       module, op, emitter, IREE_SV("view"), view_type,
       loom_view_store_static_indices(op), loom_view_store_indices(op).count);
+}
+
+iree_status_t loom_view_atomic_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_view_atomic_reduce_view(op));
+  IREE_RETURN_IF_ERROR(loom_view_verify_element_access(
+      module, op, emitter, IREE_SV("view"), view_type,
+      loom_view_atomic_reduce_static_indices(op),
+      loom_view_atomic_reduce_indices(op).count));
+
+  loom_type_t value_type =
+      loom_module_value_type(module, loom_view_atomic_reduce_value(op));
+  return loom_view_verify_atomic_kind(emitter, op, IREE_SV("value"), value_type,
+                                      loom_view_atomic_reduce_kind(op), false);
+}
+
+iree_status_t loom_view_atomic_rmw_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  loom_type_t view_type =
+      loom_module_value_type(module, loom_view_atomic_rmw_view(op));
+  IREE_RETURN_IF_ERROR(loom_view_verify_element_access(
+      module, op, emitter, IREE_SV("view"), view_type,
+      loom_view_atomic_rmw_static_indices(op),
+      loom_view_atomic_rmw_indices(op).count));
+
+  loom_type_t value_type =
+      loom_module_value_type(module, loom_view_atomic_rmw_value(op));
+  return loom_view_verify_atomic_kind(emitter, op, IREE_SV("value"), value_type,
+                                      loom_view_atomic_rmw_kind(op), true);
 }
 
 iree_status_t loom_view_prefetch_verify(const loom_module_t* module,

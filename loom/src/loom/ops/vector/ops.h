@@ -162,7 +162,7 @@ enum {
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NSW ((uint8_t)1)
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NUW ((uint8_t)2)
 
-// Read-modify-write operations supported by vector atomics.
+// Read-modify-write operation kind supported by view and vector atomics.
 typedef enum loom_vector_kind_e {
   LOOM_VECTOR_KIND_XCHGI = 0,
   LOOM_VECTOR_KIND_XCHGF = 1,

@@ -95,6 +95,56 @@ class ViewBuilders:
         _attributes["static_indices"] = _static
         self._b.build("view.store", _operands, attributes=_attributes, regions=_regions)
 
+    def reduce(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], ordering: str, scope: str) -> None:
+        """Atomically combine one scalar value into a typed view element at a full-rank logical index. Atomic ordering and scope are required so the synchronization contract remains explicit after vector-to-scalar lowering.
+
+        Example::
+            view.atomic.reduce<addi> %value, %view[%row, %col] {ordering = relaxed, scope = workgroup} : i32, view<[%M]x[%N]xi32, %layout>
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _attributes["ordering"] = ordering
+        _attributes["scope"] = scope
+        _operands.append(value)
+        _operands.append(view)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        self._b.build("view.atomic.reduce", _operands, attributes=_attributes, regions=_regions)
+
+    def rmw(self, *, kind: str, value: ValueRef, view: ValueRef, indices: list[int | ValueRef], ordering: str, scope: str, results: list[Type | TiedResultSpec]) -> ValueRef:
+        """Atomically read one scalar view element, combine it with a scalar update value, write the combined value back, and return the old value observed by that atomic operation.
+
+        Example::
+            %old = view.atomic.rmw<addi> %value, %view[%row, %col] {ordering = relaxed, scope = workgroup} : i32, view<[%M]x[%N]xi32, %layout> -> i32
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["kind"] = kind
+        _attributes["ordering"] = ordering
+        _attributes["scope"] = scope
+        _operands.append(value)
+        _operands.append(view)
+        _sentinel = -(2**63)
+        _static = []
+        for _idx in indices:
+            if isinstance(_idx, ValueRef):
+                _static.append(_sentinel)
+                _operands.append(_idx)
+            else:
+                _static.append(_idx)
+        _attributes["static_indices"] = _static
+        return cast(ValueRef, self._b.build("view.atomic.rmw", _operands, results=results, attributes=_attributes, regions=_regions))
+
     def prefetch(self, *, view: ValueRef, indices: list[int | ValueRef], intent: str, locality: str) -> None:
         """Compiler hint for a future access to a logical view origin. Prefetch has no semantic memory effects and may not fault semantically, but it is intentionally preserved by ordinary canonicalization/DCE until an explicit hint-stripping pass removes it.
 

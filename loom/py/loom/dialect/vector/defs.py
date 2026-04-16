@@ -31,6 +31,7 @@ from loom.assembly import (
     TypesOf,
     kw,
 )
+from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
 from loom.dialect.scalar import IntOverflowFlags
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate
 from loom.dsl import (
@@ -123,53 +124,6 @@ IntegerDot4Kind = EnumDef(
         EnumCase("u8u8", 3, doc="Unsigned i8 lhs times unsigned i8 rhs."),
     ],
     doc="Signedness variants for four-lane i8 dot products accumulated into i32 lanes.",
-)
-
-AtomicKind = EnumDef(
-    "AtomicKind",
-    [
-        EnumCase("xchgi", 0, doc="Integer exchange."),
-        EnumCase("xchgf", 1, doc="Floating-point exchange."),
-        EnumCase("addi", 2, doc="Integer addition."),
-        EnumCase("addf", 3, doc="Floating-point addition."),
-        EnumCase("subi", 4, doc="Integer subtraction."),
-        EnumCase("andi", 5, doc="Bitwise AND."),
-        EnumCase("ori", 6, doc="Bitwise OR."),
-        EnumCase("xori", 7, doc="Bitwise XOR."),
-        EnumCase("minsi", 8, doc="Signed integer minimum."),
-        EnumCase("maxsi", 9, doc="Signed integer maximum."),
-        EnumCase("minui", 10, doc="Unsigned integer minimum."),
-        EnumCase("maxui", 11, doc="Unsigned integer maximum."),
-        EnumCase("minimumf", 12, doc="IEEE 754 floating-point minimum."),
-        EnumCase("maximumf", 13, doc="IEEE 754 floating-point maximum."),
-        EnumCase("minnumf", 14, doc="C99 fmin-style floating-point minimum."),
-        EnumCase("maxnumf", 15, doc="C99 fmax-style floating-point maximum."),
-    ],
-    doc="Read-modify-write operations supported by vector atomics.",
-)
-
-AtomicOrdering = EnumDef(
-    "AtomicOrdering",
-    [
-        EnumCase("relaxed", 0, doc="Atomicity without inter-address synchronization."),
-        EnumCase("acquire", 1, doc="Acquire ordering."),
-        EnumCase("release", 2, doc="Release ordering."),
-        EnumCase("acq_rel", 3, doc="Acquire and release ordering."),
-        EnumCase("seq_cst", 4, doc="Sequentially consistent ordering."),
-    ],
-    doc="Atomic memory ordering. The relaxed case lowers to LLVM monotonic RMW ordering.",
-)
-
-AtomicScope = EnumDef(
-    "AtomicScope",
-    [
-        EnumCase("thread", 0, doc="Current invocation or thread."),
-        EnumCase("subgroup", 1, doc="Current SIMD subgroup or wave."),
-        EnumCase("workgroup", 2, doc="Current workgroup or block."),
-        EnumCase("device", 3, doc="Current device."),
-        EnumCase("system", 4, doc="Whole system."),
-    ],
-    doc="Synchronization scope for atomic memory effects.",
 )
 
 FloatAssumptionFlags = EnumDef(

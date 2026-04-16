@@ -82,6 +82,22 @@ func.def @scalar_view_memory(%buffer: buffer, %offset: offset, %row: index, %col
 
 // ====
 
+// Scalar atomics are the element-level substrate for vector atomic reference
+// lowering. Ordering and scope remain explicit after scalarization.
+func.def @scalar_view_atomics(%buffer: buffer, %offset: offset, %row: index, %col: index, %ivalue: i32, %fvalue: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %iview = buffer.view %buffer[%offset] : buffer -> view<8x16xi32, %layout>
+  %fview = buffer.view %buffer[%offset] : buffer -> view<8x16xf32, %layout>
+  view.atomic.reduce<addi> %ivalue, %iview[%row, %col] {ordering = relaxed, scope = workgroup} : i32, view<8x16xi32, %layout>
+  view.atomic.reduce<addf> %fvalue, %fview[%row, 0] {ordering = release, scope = device} : f32, view<8x16xf32, %layout>
+  %oldi = view.atomic.rmw<xchgi> %ivalue, %iview[0, %col] {ordering = acq_rel, scope = system} : i32, view<8x16xi32, %layout> -> i32
+  %oldf = view.atomic.rmw<addf> %fvalue, %fview[%row, %col] {ordering = seq_cst, scope = device} : f32, view<8x16xf32, %layout> -> f32
+  test.use %oldi, %oldf : i32, f32
+  func.return
+}
+
+// ====
+
 // Encoded physical storage composes an address layout with a storage schema.
 // Loads from this view still produce physical i8 records; decode is explicit.
 func.def @encoded_physical_storage_view(%buffer: buffer, %offset: offset, %m: index, %kb: index) {

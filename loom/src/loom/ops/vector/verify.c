@@ -11,11 +11,40 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/ops/atomic.h"
 #include "loom/ops/encoding/params.h"
 #include "loom/ops/encoding/roles.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
+
+#define LOOM_ASSERT_ATOMIC_KIND_VALUE(dialect_value, shared_value) \
+  static_assert((int)(dialect_value) == (int)(shared_value),       \
+                #dialect_value " must match " #shared_value)
+
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_COUNT_, LOOM_ATOMIC_KIND_COUNT_);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_XCHGI, LOOM_ATOMIC_KIND_XCHGI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_XCHGF, LOOM_ATOMIC_KIND_XCHGF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_ADDI, LOOM_ATOMIC_KIND_ADDI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_ADDF, LOOM_ATOMIC_KIND_ADDF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_SUBI, LOOM_ATOMIC_KIND_SUBI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_ANDI, LOOM_ATOMIC_KIND_ANDI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_ORI, LOOM_ATOMIC_KIND_ORI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_XORI, LOOM_ATOMIC_KIND_XORI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MINSI, LOOM_ATOMIC_KIND_MINSI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MAXSI, LOOM_ATOMIC_KIND_MAXSI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MINUI, LOOM_ATOMIC_KIND_MINUI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MAXUI, LOOM_ATOMIC_KIND_MAXUI);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MINIMUMF,
+                              LOOM_ATOMIC_KIND_MINIMUMF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MAXIMUMF,
+                              LOOM_ATOMIC_KIND_MAXIMUMF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MINNUMF,
+                              LOOM_ATOMIC_KIND_MINNUMF);
+LOOM_ASSERT_ATOMIC_KIND_VALUE(LOOM_VECTOR_KIND_MAXNUMF,
+                              LOOM_ATOMIC_KIND_MAXNUMF);
+
+#undef LOOM_ASSERT_ATOMIC_KIND_VALUE
 
 static iree_status_t loom_vector_emit(iree_diagnostic_emitter_t emitter,
                                       const loom_op_t* op,
@@ -309,66 +338,30 @@ static bool loom_vector_reduce_kind_accepts_float(uint8_t kind) {
   }
 }
 
-static bool loom_vector_atomic_kind_accepts_integer(uint8_t kind) {
-  switch (kind) {
-    case LOOM_VECTOR_KIND_XCHGI:
-    case LOOM_VECTOR_KIND_ADDI:
-    case LOOM_VECTOR_KIND_SUBI:
-    case LOOM_VECTOR_KIND_ANDI:
-    case LOOM_VECTOR_KIND_ORI:
-    case LOOM_VECTOR_KIND_XORI:
-    case LOOM_VECTOR_KIND_MINSI:
-    case LOOM_VECTOR_KIND_MAXSI:
-    case LOOM_VECTOR_KIND_MINUI:
-    case LOOM_VECTOR_KIND_MAXUI:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool loom_vector_atomic_kind_accepts_float(uint8_t kind) {
-  switch (kind) {
-    case LOOM_VECTOR_KIND_XCHGF:
-    case LOOM_VECTOR_KIND_ADDF:
-    case LOOM_VECTOR_KIND_MINIMUMF:
-    case LOOM_VECTOR_KIND_MAXIMUMF:
-    case LOOM_VECTOR_KIND_MINNUMF:
-    case LOOM_VECTOR_KIND_MAXNUMF:
-      return true;
-    default:
-      return false;
-  }
-}
-
-static bool loom_vector_atomic_kind_is_exchange(uint8_t kind) {
-  return kind == LOOM_VECTOR_KIND_XCHGI || kind == LOOM_VECTOR_KIND_XCHGF;
-}
-
 static iree_status_t loom_vector_verify_atomic_kind(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
     iree_string_view_t value_name, loom_type_t value_type, uint8_t kind,
     bool allow_exchange) {
-  if (!allow_exchange && loom_vector_atomic_kind_is_exchange(kind)) {
+  if (!allow_exchange && loom_atomic_kind_is_exchange(kind)) {
     return loom_vector_emit_attribute_value_constraint(
         emitter, op, IREE_SV("kind"), kind,
         IREE_SV("non-exchange atomic reduce kind"));
   }
-  if (kind >= LOOM_VECTOR_KIND_COUNT_) return iree_ok_status();
+  if (!loom_atomic_kind_is_valid(kind)) return iree_ok_status();
   if (!loom_type_is_vector(value_type)) return iree_ok_status();
 
   loom_scalar_type_t element_type = loom_type_element_type(value_type);
   if (loom_scalar_type_is_integer(element_type) &&
-      loom_vector_atomic_kind_accepts_integer(kind)) {
+      loom_atomic_kind_accepts_integer(kind)) {
     return iree_ok_status();
   }
   if (loom_scalar_type_is_float(element_type) &&
-      loom_vector_atomic_kind_accepts_float(kind)) {
+      loom_atomic_kind_accepts_float(kind)) {
     return iree_ok_status();
   }
 
   iree_string_view_t expected_constraint =
-      loom_vector_atomic_kind_accepts_integer(kind)
+      loom_atomic_kind_accepts_integer(kind)
           ? IREE_SV("integer element type for atomic kind")
           : IREE_SV("floating-point element type for atomic kind");
   return loom_vector_emit_operand_constraint(emitter, op, value_name,

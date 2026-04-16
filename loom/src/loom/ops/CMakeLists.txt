@@ -31,6 +31,18 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    atomic
+  HDRS
+    "atomic.h"
+  SRCS
+    "atomic.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     op_registry
   HDRS
     "op_registry.h"
