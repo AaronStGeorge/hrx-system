@@ -921,7 +921,13 @@ vector_transform = Op(
         "lanes. The transform operand is an encoding<transform> value that "
         "names the numeric mapping, such as scale/zero-point decode, "
         "whitening, or projection; verifier rules keep supported transform "
-        "families and shape-changing parameters explicit."
+        "families and shape-changing parameters explicit. Hadamard-like "
+        "families act along the last axis. `hadamard_sign` applies either an "
+        "explicit per-lane sign table or deterministic seed-derived signs "
+        "from the low bit of SplitMix64(seed + input lane) before the "
+        "Hadamard. `sign_permute_hadamard` applies explicit signs to source "
+        "lanes, gathers lanes through the explicit permutation vector, then "
+        "applies the Hadamard."
     ),
     operands=[
         Operand("source", VECTOR, doc="Vector lanes to transform."),

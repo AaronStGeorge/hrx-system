@@ -877,6 +877,31 @@ func.def @transform_signs_shape_mismatch(%v: vector<128xf32>, %signs: vector<64x
 
 // ====
 
+// Static permutation maps must name in-bounds source lanes.
+func.def @transform_permutation_out_of_bounds(%v: vector<2xf32>, %signs: vector<2xi1>) {
+  %p0 = scalar.constant 0 : i64
+  %p2 = scalar.constant 2 : i64
+  %permutation = vector.from_elements %p0, %p2 : i64, i64 -> vector<2xi64>
+  %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xi64>, signs = %signs : vector<2xi1>} : encoding<transform>
+  // ERROR@+1: SUBRANGE/004
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return
+}
+
+// ====
+
+// Static permutation maps must name each source lane once.
+func.def @transform_permutation_duplicate(%v: vector<2xf32>, %signs: vector<2xi1>) {
+  %p0 = scalar.constant 0 : i64
+  %permutation = vector.from_elements %p0, %p0 : i64, i64 -> vector<2xi64>
+  %xf = encoding.define #numeric_transform<family="sign_permute_hadamard", input_elems=2, output_elems=2> {permutation = %permutation : vector<2xi64>, signs = %signs : vector<2xi1>} : encoding<transform>
+  // ERROR@+1: STRUCTURE/014 "permutation" "0" "unique lane indices"
+  %r = vector.transform %v, %xf : vector<2xf32>, encoding<transform> -> vector<2xf32>
+  func.return
+}
+
+// ====
+
 // Numeric transform families are intentionally enumerated.
 func.def @transform_unknown_family(%v: vector<128xf32>) {
   // ERROR@+1: ENCODING/013 "numeric_transform" "family" "mystery"

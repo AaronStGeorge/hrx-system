@@ -1488,6 +1488,20 @@ static bool loom_vector_try_get_scalar_f64_constant(const loom_module_t* module,
   return true;
 }
 
+static bool loom_vector_try_get_scalar_i64_constant(const loom_module_t* module,
+                                                    loom_value_id_t value_id,
+                                                    int64_t* out_value) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) return false;
+  const loom_op_t* def_op = loom_value_def_op(value);
+  if (!def_op) return false;
+  if (!loom_scalar_constant_isa(def_op)) return false;
+  loom_attribute_t attr = loom_scalar_constant_value(def_op);
+  if (attr.kind != LOOM_ATTR_I64) return false;
+  *out_value = loom_attr_as_i64(attr);
+  return true;
+}
+
 static bool loom_vector_unsigned_code_capacity_covers(int32_t bitwidth,
                                                       int64_t max_code) {
   if (bitwidth <= 0 || max_code < 0) return false;
@@ -1800,9 +1814,72 @@ static iree_status_t loom_vector_transform_verify_extent_param(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_transform_verify_permutation_lane(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op, uint8_t source_axis,
+    int64_t permutation_lane, int64_t source_lane_count) {
+  if (permutation_lane >= 0 && permutation_lane < source_lane_count) {
+    return iree_ok_status();
+  }
+  return loom_vector_emit_static_index_out_of_bounds(
+      emitter, op, source_axis, permutation_lane, source_lane_count);
+}
+
+static iree_status_t loom_vector_transform_verify_static_permutation_values(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, loom_type_t source_type,
+    loom_value_id_t permutation_value) {
+  uint8_t last_axis = (uint8_t)(loom_type_rank(source_type) - 1);
+  if (loom_type_dim_is_dynamic_at(source_type, last_axis)) {
+    return iree_ok_status();
+  }
+  int64_t source_lane_count =
+      loom_type_dim_static_size_at(source_type, last_axis);
+  const loom_value_t* value = loom_module_value(module, permutation_value);
+  if (loom_value_is_block_arg(value)) return iree_ok_status();
+  const loom_op_t* def_op = loom_value_def_op(value);
+  if (!def_op) return iree_ok_status();
+
+  if (loom_vector_constant_isa(def_op)) {
+    loom_attribute_t attr = loom_vector_constant_value(def_op);
+    if (attr.kind != LOOM_ATTR_I64) return iree_ok_status();
+    int64_t permutation_lane = loom_attr_as_i64(attr);
+    IREE_RETURN_IF_ERROR(loom_vector_transform_verify_permutation_lane(
+        emitter, op, last_axis, permutation_lane, source_lane_count));
+    if (source_lane_count <= 1) return iree_ok_status();
+    return loom_vector_emit_attribute_value_constraint(
+        emitter, op, IREE_SV("permutation"), permutation_lane,
+        IREE_SV("unique lane indices"));
+  }
+
+  if (!loom_vector_from_elements_isa(def_op)) return iree_ok_status();
+  loom_value_slice_t elements = loom_vector_from_elements_elements(def_op);
+  for (uint16_t i = 0; i < elements.count; ++i) {
+    int64_t permutation_lane = 0;
+    if (!loom_vector_try_get_scalar_i64_constant(module, elements.values[i],
+                                                 &permutation_lane)) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_vector_transform_verify_permutation_lane(
+        emitter, op, last_axis, permutation_lane, source_lane_count));
+    for (uint16_t j = 0; j < i; ++j) {
+      int64_t previous_lane = 0;
+      if (!loom_vector_try_get_scalar_i64_constant(module, elements.values[j],
+                                                   &previous_lane)) {
+        return iree_ok_status();
+      }
+      if (previous_lane != permutation_lane) continue;
+      return loom_vector_emit_attribute_value_constraint(
+          emitter, op, IREE_SV("permutation"), permutation_lane,
+          IREE_SV("unique lane indices"));
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_transform_verify_dynamic_param_shapes(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
-    const loom_op_t* define_op, const loom_encoding_define_param_view_t* params,
+    const loom_op_t* op, const loom_op_t* define_op,
+    const loom_encoding_define_param_view_t* params,
     iree_string_view_t encoding_name, loom_type_t source_type,
     loom_type_t result_type) {
   const loom_named_attr_t* signs_param = loom_vector_find_named_attr(
@@ -1848,6 +1925,8 @@ static iree_status_t loom_vector_transform_verify_dynamic_param_shapes(
           loom_vector_transform_permutation_param_name(), permutation_value,
           IREE_SV("index or non-i1 integer vector with source shape"));
     }
+    IREE_RETURN_IF_ERROR(loom_vector_transform_verify_static_permutation_values(
+        module, emitter, op, source_type, permutation_value));
   }
 
   const loom_named_attr_t* matrix_param = loom_vector_find_named_attr(
@@ -1996,7 +2075,7 @@ iree_status_t loom_vector_transform_verify(const loom_module_t* module,
       loom_vector_transform_output_elems_param_name(), IREE_SV("result"),
       result_type, last_axis, /*field_is_result=*/true));
   IREE_RETURN_IF_ERROR(loom_vector_transform_verify_dynamic_param_shapes(
-      module, emitter, define_op, &params, encoding_name, source_type,
+      module, emitter, op, define_op, &params, encoding_name, source_type,
       result_type));
 
   return loom_vector_transform_verify_family(module, op, &params, emitter,

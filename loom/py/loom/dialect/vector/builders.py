@@ -275,7 +275,7 @@ class VectorBuilders:
         return cast(ValueRef, self._b.build("vector.table.quantize", _operands, results=results, attributes=_attributes, regions=_regions))
 
     def transform(self, *, source: ValueRef, transform: ValueRef, results: list[Type | TiedResultSpec]) -> ValueRef:
-        """Apply an explicit numeric transform descriptor to vector register lanes. The transform operand is an encoding<transform> value that names the numeric mapping, such as scale/zero-point decode, whitening, or projection; verifier rules keep supported transform families and shape-changing parameters explicit.
+        """Apply an explicit numeric transform descriptor to vector register lanes. The transform operand is an encoding<transform> value that names the numeric mapping, such as scale/zero-point decode, whitening, or projection; verifier rules keep supported transform families and shape-changing parameters explicit. Hadamard-like families act along the last axis. `hadamard_sign` applies either an explicit per-lane sign table or deterministic seed-derived signs from the low bit of SplitMix64(seed + input lane) before the Hadamard. `sign_permute_hadamard` applies explicit signs to source lanes, gathers lanes through the explicit permutation vector, then applies the Hadamard.
 
         Example::
             %r = vector.transform %v, %xf : vector<128xf32>, encoding<transform> -> vector<128xf32>

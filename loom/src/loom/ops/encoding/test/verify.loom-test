@@ -83,17 +83,17 @@ func.def @numeric_transform_hadamard_rejects_signs() {
 
 // ====
 
-func.def @numeric_transform_hadamard_sign_requires_signs() {
-  // ERROR@+1: ENCODING/007 "numeric_transform" "signs"
+func.def @numeric_transform_hadamard_sign_requires_signs_or_seed() {
+  // ERROR@+1: ENCODING/007 "numeric_transform" "signs or seed"
   %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> : encoding<transform>
   func.return
 }
 
 // ====
 
-func.def @numeric_transform_hadamard_sign_rejects_seed(%seed: index) {
+func.def @numeric_transform_hadamard_sign_rejects_signs_and_seed(%seed: index) {
   %signs = vector.constant false : vector<128xi1>
-  // ERROR@+1: ENCODING/008 "numeric_transform" "seed"
+  // ERROR@+1: ENCODING/014 "numeric_transform" "signs" "seed"
   %xf = encoding.define #numeric_transform<family="hadamard_sign", input_elems=128, output_elems=128> {seed = %seed : index, signs = %signs : vector<128xi1>} : encoding<transform>
   func.return
 }

@@ -221,6 +221,24 @@ ERR_ENCODING_013 = ErrorDef(
     ),
 )
 
+# ERR_ENCODING_014: encoding.define dynamic parameters are mutually exclusive.
+ERR_ENCODING_014 = ErrorDef(
+    domain=ErrorDomain.ENCODING,
+    code=14,
+    severity=Severity.ERROR,
+    summary="Encoding parameters are mutually exclusive.",
+    message=(
+        "encoding '{encoding_name}' supports only one of parameters "
+        "'{param_a}' and '{param_b}'"
+    ),
+    params=(
+        ErrorParam("encoding_name", ParamKind.STRING),
+        ErrorParam("param_a", ParamKind.STRING),
+        ErrorParam("param_b", ParamKind.STRING),
+    ),
+    fix_hint="Keep the single parameter that defines the intended encoding behavior",
+)
+
 ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_001,
     ERR_ENCODING_002,
@@ -235,4 +253,5 @@ ALL_ENCODING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_ENCODING_011,
     ERR_ENCODING_012,
     ERR_ENCODING_013,
+    ERR_ENCODING_014,
 )

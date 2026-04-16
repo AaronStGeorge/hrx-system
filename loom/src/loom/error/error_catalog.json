@@ -1036,6 +1036,34 @@
     "fix_hint_template": "Use one of the static parameter values supported by the encoding family"
   },
   {
+    "error_id": "ERR_ENCODING_014",
+    "domain": 3,
+    "domain_name": "ENCODING",
+    "code": 14,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Encoding parameters are mutually exclusive.",
+    "message_template": "encoding '{encoding_name}' supports only one of parameters '{param_a}' and '{param_b}'",
+    "params": [
+      {
+        "name": "encoding_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_a",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "param_b",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Keep the single parameter that defines the intended encoding behavior"
+  },
+  {
     "error_id": "ERR_STRUCTURE_001",
     "domain": 4,
     "domain_name": "STRUCTURE",

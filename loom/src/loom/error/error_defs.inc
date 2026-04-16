@@ -39,6 +39,7 @@ extern const loom_error_def_t loom_err_encoding_010;
 extern const loom_error_def_t loom_err_encoding_011;
 extern const loom_error_def_t loom_err_encoding_012;
 extern const loom_error_def_t loom_err_encoding_013;
+extern const loom_error_def_t loom_err_encoding_014;
 extern const loom_error_def_t loom_err_structure_001;
 extern const loom_error_def_t loom_err_structure_002;
 extern const loom_error_def_t loom_err_structure_003;

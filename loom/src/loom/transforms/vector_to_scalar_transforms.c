@@ -11,6 +11,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/encoding/ops.h"
 #include "loom/ops/encoding/params.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/transforms/vector_to_scalar_internal.h"
@@ -367,6 +368,61 @@ static iree_status_t loom_vector_to_scalar_transform_source_indices(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_to_scalar_transform_source_indices_from_term(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t result_indices,
+    loom_vector_to_scalar_index_term_t last_index,
+    loom_vector_to_scalar_index_list_t* out_indices) {
+  uint8_t rank = result_indices.rank;
+  if (rank == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "vector.transform requires rank >= 1");
+  }
+  loom_vector_to_scalar_index_term_t* source_terms = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->rewriter->arena, rank, sizeof(loom_vector_to_scalar_index_term_t),
+      (void**)&source_terms));
+  for (uint8_t axis = 0; axis < rank - 1; ++axis) {
+    source_terms[axis] =
+        loom_vector_to_scalar_lane_term(state, result_indices, axis);
+  }
+  source_terms[rank - 1] = last_index;
+  return loom_vector_to_scalar_terms_to_index_list(state, source_terms, rank,
+                                                   out_indices);
+}
+
+static iree_status_t loom_vector_to_scalar_cast_value_to_index(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t value,
+    loom_value_id_t* out_index) {
+  loom_type_t value_type =
+      loom_module_value_type(state->rewriter->module, value);
+  if (loom_type_element_type(value_type) == LOOM_SCALAR_TYPE_INDEX) {
+    *out_index = value;
+    return iree_ok_status();
+  }
+  loom_op_t* cast_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_cast_build(
+      &state->rewriter->builder, value, value_type,
+      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), state->location, &cast_op));
+  *out_index = loom_index_cast_result(cast_op);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_permutation_lane_term(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_transform_descriptor_t* descriptor,
+    loom_vector_to_scalar_index_list_t indices,
+    loom_vector_to_scalar_index_term_t* out_term) {
+  loom_value_id_t permutation_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      state, descriptor->permutation, indices, &permutation_lane));
+  loom_value_id_t permutation_index = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_cast_value_to_index(
+      state, permutation_lane, &permutation_index));
+  *out_term = loom_vector_to_scalar_value_term(state, permutation_index);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_to_scalar_transform_accumulate(
     loom_vector_to_scalar_state_t* state, loom_value_id_t term,
     loom_value_id_t* accumulator) {
@@ -376,6 +432,88 @@ static iree_status_t loom_vector_to_scalar_transform_accumulate(
   }
   return loom_vector_to_scalar_build_addf_lane(state, *accumulator, term,
                                                accumulator);
+}
+
+static iree_status_t loom_vector_to_scalar_build_scalar_i64_constant(
+    loom_vector_to_scalar_state_t* state, int64_t value,
+    loom_value_id_t* out_value) {
+  return loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+      state->location, value, out_value);
+}
+
+static iree_status_t loom_vector_to_scalar_build_scalar_i64_binary(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t lhs, loom_value_id_t rhs, loom_value_id_t* out_result) {
+  return loom_vector_to_scalar_build_scalar_binary(
+      state, kind, lhs, rhs, loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+      out_result);
+}
+
+static iree_status_t loom_vector_to_scalar_build_scalar_i64_binary_constant(
+    loom_vector_to_scalar_state_t* state, loom_op_kind_t kind,
+    loom_value_id_t lhs, int64_t rhs, loom_value_id_t* out_result) {
+  loom_value_id_t rhs_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_build_scalar_i64_constant(state, rhs, &rhs_value));
+  return loom_vector_to_scalar_build_scalar_i64_binary(state, kind, lhs,
+                                                       rhs_value, out_result);
+}
+
+// Seeded signs use the low bit of the SplitMix64 finalizer for
+// seed + input lane. This keeps the reference path deterministic and
+// expressible entirely in scalar integer IR.
+static iree_status_t loom_vector_to_scalar_build_seed_sign_bit(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_transform_descriptor_t* descriptor,
+    int64_t input_index, loom_value_id_t* out_sign) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_type_t i64_type = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+  loom_op_t* seed_cast_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_index_cast_build(
+      &state->rewriter->builder, descriptor->seed, index_type, i64_type,
+      state->location, &seed_cast_op));
+  loom_value_id_t mixed = loom_index_cast_result(seed_cast_op);
+
+  if (input_index != 0) {
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+        state, LOOM_OP_SCALAR_ADDI, mixed, input_index, &mixed));
+  }
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+      state, LOOM_OP_SCALAR_ADDI, mixed, -7046029254386353131LL, &mixed));
+
+  loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+      state, LOOM_OP_SCALAR_SHRUI, mixed, 30, &shifted));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary(
+      state, LOOM_OP_SCALAR_XORI, mixed, shifted, &mixed));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+      state, LOOM_OP_SCALAR_MULI, mixed, -4658895280553007687LL, &mixed));
+
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+      state, LOOM_OP_SCALAR_SHRUI, mixed, 27, &shifted));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary(
+      state, LOOM_OP_SCALAR_XORI, mixed, shifted, &mixed));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+      state, LOOM_OP_SCALAR_MULI, mixed, -7723592293110705685LL, &mixed));
+
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+      state, LOOM_OP_SCALAR_SHRUI, mixed, 31, &shifted));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary(
+      state, LOOM_OP_SCALAR_XORI, mixed, shifted, &mixed));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_i64_binary_constant(
+      state, LOOM_OP_SCALAR_ANDI, mixed, 1, &mixed));
+
+  loom_value_id_t zero = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_build_scalar_i64_constant(state, 0, &zero));
+  loom_op_t* cmp_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_cmpi_build(
+      &state->rewriter->builder, LOOM_SCALAR_CMPI_PREDICATE_NE, mixed, zero,
+      i64_type, loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location,
+      &cmp_op));
+  *out_sign = loom_scalar_cmpi_result(cmp_op);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
@@ -408,19 +546,22 @@ static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
 
   if (descriptor->family ==
       LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD) {
-    return loom_vector_to_scalar_emit_transform_unimplemented(
-        state, IREE_SV("sign_permute_hadamard permutation semantics are not "
-                       "implemented"));
+    if (!loom_vector_to_scalar_transform_has_signs(descriptor) ||
+        !loom_vector_to_scalar_transform_has_permutation(descriptor) ||
+        loom_vector_to_scalar_transform_has_matrix(descriptor) ||
+        loom_vector_to_scalar_transform_has_seed(descriptor)) {
+      return loom_vector_to_scalar_emit_transform_unimplemented(
+          state, IREE_SV("sign_permute_hadamard requires explicit signs and "
+                         "permutation only"));
+    }
   }
 
   if (descriptor->family == LOOM_VECTOR_TO_SCALAR_TRANSFORM_HADAMARD_SIGN) {
-    if (loom_vector_to_scalar_transform_has_seed(descriptor)) {
+    bool has_signs = loom_vector_to_scalar_transform_has_signs(descriptor);
+    bool has_seed = loom_vector_to_scalar_transform_has_seed(descriptor);
+    if (has_signs == has_seed) {
       return loom_vector_to_scalar_emit_transform_unimplemented(
-          state, IREE_SV("seed-derived transform signs are not implemented"));
-    }
-    if (!loom_vector_to_scalar_transform_has_signs(descriptor)) {
-      return loom_vector_to_scalar_emit_transform_unimplemented(
-          state, IREE_SV("hadamard_sign requires an explicit signs vector"));
+          state, IREE_SV("hadamard_sign requires exactly one sign source"));
     }
     if (loom_vector_to_scalar_transform_has_permutation(descriptor) ||
         loom_vector_to_scalar_transform_has_matrix(descriptor)) {
@@ -434,9 +575,20 @@ static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
   int64_t output_index = indices.static_indices[last_axis];
   loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
   for (int64_t input_index = 0; input_index < input_extent; ++input_index) {
-    loom_vector_to_scalar_index_list_t source_indices = {0};
+    loom_vector_to_scalar_index_list_t transform_indices = {0};
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_transform_source_indices(
-        state, indices, input_index, &source_indices));
+        state, indices, input_index, &transform_indices));
+
+    loom_vector_to_scalar_index_list_t source_indices = transform_indices;
+    if (descriptor->family ==
+        LOOM_VECTOR_TO_SCALAR_TRANSFORM_SIGN_PERMUTE_HADAMARD) {
+      loom_vector_to_scalar_index_term_t source_last_index = {0};
+      IREE_RETURN_IF_ERROR(loom_vector_to_scalar_permutation_lane_term(
+          state, descriptor, transform_indices, &source_last_index));
+      IREE_RETURN_IF_ERROR(
+          loom_vector_to_scalar_transform_source_indices_from_term(
+              state, indices, source_last_index, &source_indices));
+    }
 
     loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
@@ -445,8 +597,13 @@ static iree_status_t loom_vector_to_scalar_transform_hadamard_lane(
 
     if (loom_vector_to_scalar_transform_uses_signs(descriptor->family)) {
       loom_value_id_t sign_lane = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
-          state, descriptor->signs, source_indices, &sign_lane));
+      if (loom_vector_to_scalar_transform_has_signs(descriptor)) {
+        IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+            state, descriptor->signs, source_indices, &sign_lane));
+      } else {
+        IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_seed_sign_bit(
+            state, descriptor, input_index, &sign_lane));
+      }
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_apply_sign_bit(
           state, sign_lane, source_lane, &source_lane));
     }
