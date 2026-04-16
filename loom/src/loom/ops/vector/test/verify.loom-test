@@ -1078,7 +1078,7 @@ func.def @bitfield_extract_range_overflow(%v: vector<4xi8>) {
 
 // Extract result lanes must be wide enough to hold the selected field.
 func.def @bitfield_extract_result_too_narrow(%v: vector<4xi8>) {
-  // ERROR@+1: TYPE/004 "integer element type at least bitfield width"
+  // ERROR@+1: TYPE/004 "result" "element bit width at least width"
   %r = vector.bitfield.extractu %v {offset = 0, width = 4} : vector<4xi8> -> vector<4xi1>
   func.return
 }
@@ -1087,7 +1087,7 @@ func.def @bitfield_extract_result_too_narrow(%v: vector<4xi8>) {
 
 // Insert source field lanes must be wide enough to provide the selected bits.
 func.def @bitfield_insert_field_too_narrow(%field: vector<4xi1>, %base: vector<4xi8>) {
-  // ERROR@+1: TYPE/003 "integer element type at least bitfield width"
+  // ERROR@+1: TYPE/003 "field" "element bit width at least width"
   %r = vector.bitfield.insert %field into %base {offset = 0, width = 4} : vector<4xi1>, vector<4xi8>
   func.return
 }
@@ -1114,7 +1114,7 @@ func.def @bitpack_zero_width(%v: vector<4xi8>) {
 
 // Bitpack consumes low bits already present in each source lane.
 func.def @bitpack_source_too_narrow(%v: vector<8xi1>) {
-  // ERROR@+1: TYPE/003 "integer element type at least bit width"
+  // ERROR@+1: TYPE/003 "source" "element bit width at least width"
   %r = vector.bitpack<2> %v : vector<8xi1> -> vector<2xi8>
   func.return
 }
@@ -1132,7 +1132,7 @@ func.def @bitpack_static_count_mismatch(%v: vector<4xi8>) {
 
 // Bitunpack result lanes must be wide enough to hold each recovered field.
 func.def @bitunpack_result_too_narrow(%v: vector<1xi8>) {
-  // ERROR@+1: TYPE/004 "integer element type at least bit width"
+  // ERROR@+1: TYPE/004 "result" "element bit width at least width"
   %r = vector.bitunpacku<2> %v : vector<1xi8> -> vector<4xi1>
   func.return
 }

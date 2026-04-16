@@ -24,12 +24,15 @@ from loom.dsl import (
     ATTR_TYPE_I64_ARRAY,
     INTEGER,
     AttrDef,
+    BitRangeWithinElementWidth,
     Dialect,
+    ElementWidthAtLeastAttr,
     ElementWidthGreaterThan,
     EnumCase,
     EnumDef,
     Op,
     Operand,
+    PositiveBitWidthAttr,
     Result,
     SameType,
     TypeConstraint,
@@ -78,6 +81,29 @@ def test_generate_tables_emits_element_width_constraint() -> None:
     assert "LOOM_RELATION_ELEMENT_WIDTH_ORDER" in tables_c
     assert "LOOM_PROPERTY_ELEMENT_WIDTH_GREATER_THAN" in tables_c
     assert "LOOM_FIELD_REF(1, 0), LOOM_FIELD_REF(0, 0)" in tables_c
+
+
+def test_generate_tables_emits_bit_width_attr_constraints() -> None:
+    op = Op(
+        "test.bitfield",
+        group=Dialect("test"),
+        operands=[Operand("input", INTEGER)],
+        results=[Result("result", INTEGER)],
+        attrs=[AttrDef("offset", "i64"), AttrDef("width", "i64")],
+        constraints=[
+            PositiveBitWidthAttr("width"),
+            ElementWidthAtLeastAttr("result", "width"),
+            BitRangeWithinElementWidth("input", "offset", "width"),
+        ],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_RELATION_ATTR_I64_PREDICATE" in tables_c
+    assert "LOOM_PROPERTY_BIT_WIDTH_POSITIVE" in tables_c
+    assert "LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR" in tables_c
+    assert "LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH" in tables_c
+    assert "LOOM_FIELD_REF(2, 0), LOOM_FIELD_REF(2, 1)" in tables_c
 
 
 def test_generate_builders_use_explicit_flags_for_optional_scalar_attrs() -> None:

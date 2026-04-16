@@ -2606,9 +2606,6 @@ iree_status_t loom_vector_bitfield_extractu_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_bitfield_extractu_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BITFIELD_EXTRACTS: Extract one fixed bitfield from each integer source lane and sign-extend it into the corresponding result lane. The bitfield is identified by least-significant-bit offset and width.
 // %signed = vector.bitfield.extracts %bytes {offset = 4, width = 4} : vector<16xi8> -> vector<16xi32>
@@ -2625,9 +2622,6 @@ iree_status_t loom_vector_bitfield_extracts_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_bitfield_extracts_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BITFIELD_INSERT: Insert the low bits of each integer field lane into a fixed bitfield of the corresponding integer base lane. Bits outside the target field are preserved from the base lane.
 // %packed = vector.bitfield.insert %lo into %zero {offset = 0, width = 4} : vector<16xi32>, vector<16xi8>
@@ -2646,9 +2640,6 @@ iree_status_t loom_vector_bitfield_insert_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_bitfield_insert_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_BITPACK: Pack the low bits of each integer source lane into a contiguous little-endian bitstream stored in integer result lanes. Source lanes are consumed in logical lane order and width gives the number of bits taken from each source lane.
 // %packed = vector.bitpack<4> %codes : vector<32xi8> -> vector<16xi8>

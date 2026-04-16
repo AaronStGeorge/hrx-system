@@ -409,11 +409,26 @@ enum loom_constraint_relation_e {
   // fields. Used by Has*Element and Has*Vector constraints.
   LOOM_RELATION_FIELD_SATISFIES,
 
+  // An i64 attribute satisfies a relation-specific predicate stored in the
+  // property slot. Args: (i64 attr field). Used by PositiveBitWidthAttr.
+  LOOM_RELATION_ATTR_I64_PREDICATE,
+
   // The scalar or shaped element bit width of the first value field is
   // strictly ordered against the second value field. The property slot stores
   // the order predicate. Args: (checked value field, reference value field).
   // Used by ElementWidthGreaterThan and ElementWidthLessThan.
   LOOM_RELATION_ELEMENT_WIDTH_ORDER,
+
+  // The scalar or shaped element bit width of the first value field is at least
+  // the i64 attribute value. Args: (checked value field, i64 attr field). Used
+  // by ElementWidthAtLeastAttr.
+  LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR,
+
+  // A static bit range described by offset and width i64 attributes fits within
+  // the scalar or shaped element bit width of a value field. Args: (checked
+  // value field, offset i64 attr field, width i64 attr field). Used by
+  // BitRangeWithinElementWidth.
+  LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH,
 
   // The element count of a variadic value field equals the rank of a
   // shaped value field. Args: (shaped value field, variadic value
@@ -495,6 +510,14 @@ enum loom_constraint_property_e {
   // Element bit width of the first relation field is strictly less than the
   // second relation field. Used by ElementWidthLessThan.
   LOOM_PROPERTY_ELEMENT_WIDTH_LESS_THAN = 7,
+  // Attribute value is a positive bit width. Used by PositiveBitWidthAttr.
+  LOOM_PROPERTY_BIT_WIDTH_POSITIVE = 8,
+  // Element bit width is at least an i64 attribute. Used by
+  // ElementWidthAtLeastAttr.
+  LOOM_PROPERTY_ELEMENT_WIDTH_AT_LEAST_ATTR = 9,
+  // Static bit range is contained within an element width. Used by
+  // BitRangeWithinElementWidth.
+  LOOM_PROPERTY_BIT_RANGE_WITHIN_ELEMENT_WIDTH = 10,
   LOOM_PROPERTY_COUNT_,
 };
 typedef uint8_t loom_constraint_property_t;

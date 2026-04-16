@@ -155,6 +155,9 @@ __all__ = [
     "HasAllStaticRankOneVector",
     "ElementWidthGreaterThan",
     "ElementWidthLessThan",
+    "ElementWidthAtLeastAttr",
+    "BitRangeWithinElementWidth",
+    "PositiveBitWidthAttr",
     "OffsetCountMatchesRank",
     "ValueCountMatchesStaticElementCount",
     "DimIndexInBounds",
@@ -1258,6 +1261,88 @@ def ElementWidthLessThan(field: str, reference: str) -> Constraint:
         field,
         reference,
         greater_than=False,
+    )
+
+
+def _field_i64_attr_value(item: Any) -> int | None:
+    """Returns an integer attribute-like value when statically known."""
+    if isinstance(item, bool):
+        return None
+    return item if isinstance(item, int) else None
+
+
+def ElementWidthAtLeastAttr(field: str, width_attr: str) -> Constraint:
+    """A field's scalar/shaped element bit width must be at least an i64 attr."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        width = _field_i64_attr_value(values.get(width_attr))
+        if width is None or width <= 0:
+            return (True, "")
+        element_width = _field_element_bitwidth(values.get(field))
+        if element_width is None:
+            return (True, "")
+        if element_width >= width:
+            return (True, "")
+        return (
+            False,
+            f"'{field}' element bit width {element_width} is less than "
+            f"'{width_attr}' value {width}",
+        )
+
+    return Constraint(
+        "ElementWidthAtLeastAttr",
+        (field, width_attr),
+        validate=_validate,
+    )
+
+
+def BitRangeWithinElementWidth(
+    field: str,
+    offset_attr: str,
+    width_attr: str,
+) -> Constraint:
+    """A bit offset/width attr pair must fit inside a field's element width."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        offset = _field_i64_attr_value(values.get(offset_attr))
+        width = _field_i64_attr_value(values.get(width_attr))
+        if offset is None or width is None:
+            return (True, "")
+        if offset < 0:
+            return (False, f"'{offset_attr}' value {offset} is negative")
+        if width <= 0:
+            return (False, f"'{width_attr}' value {width} is not positive")
+        element_width = _field_element_bitwidth(values.get(field))
+        if element_width is None:
+            return (True, "")
+        if offset <= element_width and width <= element_width - offset:
+            return (True, "")
+        return (
+            False,
+            f"bit range [{offset}, {offset + width}) exceeds "
+            f"'{field}' element bit width {element_width}",
+        )
+
+    return Constraint(
+        "BitRangeWithinElementWidth",
+        (field, offset_attr, width_attr),
+        validate=_validate,
+    )
+
+
+def PositiveBitWidthAttr(attr: str) -> Constraint:
+    """An i64 attribute spelling a bit width must be positive."""
+
+    def _validate(values: dict[str, Any]) -> tuple[bool, str]:
+        value = _field_i64_attr_value(values.get(attr))
+        if value is None or value > 0:
+            return (True, "")
+        return (False, f"'{attr}' value {value} is not a positive bit width")
+
+    return Constraint(
+        "PositiveBitWidthAttr",
+        (attr,),
+        validate=_validate,
     )
 
 

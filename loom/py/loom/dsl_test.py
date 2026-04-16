@@ -59,11 +59,13 @@ from loom.dsl import (
     AllShapesMatch,
     AllTypesMatch,
     AttrDef,
+    BitRangeWithinElementWidth,
     BlockArgCount,
     BlockArgsMatchElementTypes,
     BlockArgsMatchTypes,
     Dialect,
     DimIndexInBounds,
+    ElementWidthAtLeastAttr,
     ElementWidthGreaterThan,
     ElementWidthLessThan,
     EnumCase,
@@ -86,6 +88,7 @@ from loom.dsl import (
     OffsetCountMatchesRank,
     Op,
     Operand,
+    PositiveBitWidthAttr,
     RanksMatch,
     Reads,
     RegionDef,
@@ -558,6 +561,55 @@ class TestConstraints:
                 "result": FakeValue(vector_type(I8)),
             }
         )[0]
+
+    def test_element_width_at_least_attr(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        constraint = ElementWidthAtLeastAttr("result", "width")
+        assert constraint.name == "ElementWidthAtLeastAttr"
+        assert constraint.args == ("result", "width")
+        assert constraint.check(
+            {
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+                "width": 4,
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+                "width": 16,
+            }
+        )[0]
+        assert constraint.check(
+            {
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+                "width": 0,
+            }
+        )[0]
+
+    def test_bit_range_within_element_width(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        constraint = BitRangeWithinElementWidth("source", "offset", "width")
+        assert constraint.name == "BitRangeWithinElementWidth"
+        assert constraint.args == ("source", "offset", "width")
+        source = FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),)))
+        assert constraint.check({"source": source, "offset": 2, "width": 4})[0]
+        assert not constraint.check({"source": source, "offset": -1, "width": 4})[0]
+        assert not constraint.check({"source": source, "offset": 2, "width": 0})[0]
+        assert not constraint.check({"source": source, "offset": 6, "width": 4})[0]
+
+    def test_positive_bit_width_attr(self) -> None:
+        constraint = PositiveBitWidthAttr("width")
+        assert constraint.name == "PositiveBitWidthAttr"
+        assert constraint.args == ("width",)
+        assert constraint.check({"width": 1})[0]
+        assert not constraint.check({"width": 0})[0]
+        assert not constraint.check({"width": -1})[0]
 
     def test_offset_count_matches_rank(self) -> None:
         c = OffsetCountMatchesRank("src", "offsets")

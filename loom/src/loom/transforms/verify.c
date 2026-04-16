@@ -2163,6 +2163,55 @@ static bool loom_verify_query_element_bit_width(loom_type_t type,
   return true;
 }
 
+static bool loom_verify_resolve_i64_attr_field(const loom_op_t* op,
+                                               uint8_t attr_ref,
+                                               int64_t* out_value) {
+  if (LOOM_FIELD_REF_CATEGORY(attr_ref) != LOOM_FIELD_ATTR) return false;
+  uint8_t attr_index = LOOM_FIELD_REF_INDEX(attr_ref);
+  if (attr_index >= op->attribute_count) return false;
+  loom_attribute_t attr = loom_op_attrs(op)[attr_index];
+  if (attr.kind != LOOM_ATTR_I64) return false;
+  *out_value = loom_attr_as_i64(attr);
+  return true;
+}
+
+static void loom_verify_emit_i64_attr_constraint(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, uint8_t attr_ref, int64_t actual_value,
+    iree_string_view_t expected_constraint) {
+  char attr_name_buffer[32];
+  iree_string_view_t attr_name = loom_verify_field_name(
+      vtable, attr_ref, attr_name_buffer, sizeof(attr_name_buffer));
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(attr_name, attr_ref),
+      loom_param_i64(actual_value),
+      loom_param_string(expected_constraint),
+  };
+  loom_verify_emit_structured(state, op, &loom_err_structure_014, params,
+                              IREE_ARRAYSIZE(params));
+}
+
+// ATTR_I64_PREDICATE: an i64 attribute satisfies a predicate stored in the
+// property slot. Args: (i64 attr field).
+static void loom_verify_relation_attr_i64_predicate(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 1) return;
+  uint8_t attr_ref = constraint->args[0];
+  int64_t value = 0;
+  if (!loom_verify_resolve_i64_attr_field(op, attr_ref, &value)) return;
+
+  switch ((enum loom_constraint_property_e)constraint->property) {
+    case LOOM_PROPERTY_BIT_WIDTH_POSITIVE:
+      if (value > 0) return;
+      loom_verify_emit_i64_attr_constraint(state, op, vtable, attr_ref, value,
+                                           IREE_SV("positive bit width"));
+      return;
+    default:
+      return;
+  }
+}
+
 // ELEMENT_WIDTH_ORDER: the scalar or shaped element bit width of the first
 // value field is strictly greater or less than the second value field. Args:
 // (checked value field, reference value field).
@@ -2234,6 +2283,100 @@ static void loom_verify_relation_element_width_order(
   };
   loom_verify_emit_structured(state, op, error, params,
                               error->param_count < 3 ? error->param_count : 3);
+}
+
+// ELEMENT_WIDTH_AT_LEAST_ATTR: the scalar or shaped element bit width of the
+// first value field is at least the i64 attribute value. Args: (checked value
+// field, i64 attr field).
+static void loom_verify_relation_element_width_at_least_attr(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 2) return;
+  uint8_t field_ref = constraint->args[0];
+  uint8_t attr_ref = constraint->args[1];
+  if (loom_verify_is_variadic_field(vtable, field_ref)) return;
+
+  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  int64_t required_bit_width = 0;
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      !loom_verify_resolve_i64_attr_field(op, attr_ref, &required_bit_width) ||
+      required_bit_width <= 0) {
+    return;
+  }
+
+  loom_type_t value_type = loom_verify_value_type(state, value_id);
+  int32_t element_bit_width = 0;
+  if (!loom_verify_query_element_bit_width(value_type, &element_bit_width)) {
+    return;
+  }
+  if ((int64_t)element_bit_width >= required_bit_width) return;
+
+  char field_name_buffer[32];
+  char attr_name_buffer[32];
+  char expected_buffer[96];
+  iree_string_view_t field_name = loom_verify_field_name(
+      vtable, field_ref, field_name_buffer, sizeof(field_name_buffer));
+  iree_string_view_t attr_name = loom_verify_field_name(
+      vtable, attr_ref, attr_name_buffer, sizeof(attr_name_buffer));
+  iree_snprintf(expected_buffer, sizeof(expected_buffer),
+                "element bit width at least %.*s", (int)attr_name.size,
+                attr_name.data);
+  const loom_error_def_t* error =
+      LOOM_FIELD_REF_CATEGORY(field_ref) == LOOM_FIELD_RESULT
+          ? &loom_err_type_004
+          : &loom_err_type_003;
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_field(field_name, field_ref),
+      loom_param_type(value_type),
+      loom_param_string(iree_make_cstring_view(expected_buffer)),
+  };
+  loom_verify_emit_structured(state, op, error, params,
+                              error->param_count < 3 ? error->param_count : 3);
+}
+
+// BIT_RANGE_WITHIN_ELEMENT_WIDTH: a bit range described by offset and width
+// attributes fits within a scalar or shaped element width. Args: (checked value
+// field, offset i64 attr field, width i64 attr field).
+static void loom_verify_relation_bit_range_within_element_width(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 3) return;
+  uint8_t field_ref = constraint->args[0];
+  uint8_t offset_ref = constraint->args[1];
+  uint8_t width_ref = constraint->args[2];
+  if (loom_verify_is_variadic_field(vtable, field_ref)) return;
+
+  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  int64_t offset = 0;
+  int64_t width = 0;
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      !loom_verify_resolve_i64_attr_field(op, offset_ref, &offset) ||
+      !loom_verify_resolve_i64_attr_field(op, width_ref, &width)) {
+    return;
+  }
+
+  if (offset < 0) {
+    loom_verify_emit_i64_attr_constraint(state, op, vtable, offset_ref, offset,
+                                         IREE_SV("non-negative bit offset"));
+    return;
+  }
+  if (width <= 0) {
+    loom_verify_emit_i64_attr_constraint(state, op, vtable, width_ref, width,
+                                         IREE_SV("positive bitfield width"));
+    return;
+  }
+
+  loom_type_t value_type = loom_verify_value_type(state, value_id);
+  int32_t element_bit_width = 0;
+  if (!loom_verify_query_element_bit_width(value_type, &element_bit_width)) {
+    return;
+  }
+  if (offset <= element_bit_width && width <= element_bit_width - offset) {
+    return;
+  }
+  loom_verify_emit_i64_attr_constraint(
+      state, op, vtable, width_ref, width,
+      IREE_SV("bitfield range within storage element width"));
 }
 
 static iree_string_view_t loom_verify_grouped_last_axis_divisibility_constraint(
@@ -2716,8 +2859,14 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_PAIRWISE_EQ] = loom_verify_relation_pairwise_eq,
     [LOOM_RELATION_ALL_SAME] = loom_verify_relation_all_same,
     [LOOM_RELATION_FIELD_SATISFIES] = loom_verify_relation_field_satisfies,
+    [LOOM_RELATION_ATTR_I64_PREDICATE] =
+        loom_verify_relation_attr_i64_predicate,
     [LOOM_RELATION_ELEMENT_WIDTH_ORDER] =
         loom_verify_relation_element_width_order,
+    [LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR] =
+        loom_verify_relation_element_width_at_least_attr,
+    [LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH] =
+        loom_verify_relation_bit_range_within_element_width,
     [LOOM_RELATION_COUNT_MATCHES_RANK] =
         loom_verify_relation_count_matches_rank,
     [LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT] =

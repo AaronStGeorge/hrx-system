@@ -233,6 +233,18 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_ELEMENT_WIDTH_ORDER",
         "LOOM_PROPERTY_ELEMENT_WIDTH_LESS_THAN",
     ),
+    "ElementWidthAtLeastAttr": (
+        "LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR",
+        "LOOM_PROPERTY_ELEMENT_WIDTH_AT_LEAST_ATTR",
+    ),
+    "BitRangeWithinElementWidth": (
+        "LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH",
+        "LOOM_PROPERTY_BIT_RANGE_WITHIN_ELEMENT_WIDTH",
+    ),
+    "PositiveBitWidthAttr": (
+        "LOOM_RELATION_ATTR_I64_PREDICATE",
+        "LOOM_PROPERTY_BIT_WIDTH_POSITIVE",
+    ),
     "OffsetCountMatchesRank": (
         "LOOM_RELATION_COUNT_MATCHES_RANK",
         "LOOM_PROPERTY_RANK",

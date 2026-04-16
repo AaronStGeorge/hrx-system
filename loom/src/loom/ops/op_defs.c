@@ -179,7 +179,11 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_PAIRWISE_EQ] = "PairwiseEq",
       [LOOM_RELATION_ALL_SAME] = "AllSame",
       [LOOM_RELATION_FIELD_SATISFIES] = "FieldSatisfies",
+      [LOOM_RELATION_ATTR_I64_PREDICATE] = "AttrI64Predicate",
       [LOOM_RELATION_ELEMENT_WIDTH_ORDER] = "ElementWidthOrder",
+      [LOOM_RELATION_ELEMENT_WIDTH_AT_LEAST_ATTR] = "ElementWidthAtLeastAttr",
+      [LOOM_RELATION_BIT_RANGE_WITHIN_ELEMENT_WIDTH] =
+          "BitRangeWithinElementWidth",
       [LOOM_RELATION_COUNT_MATCHES_RANK] = "CountMatchesRank",
       [LOOM_RELATION_COUNT_MATCHES_STATIC_ELEMENT_COUNT] =
           "CountMatchesStaticElementCount",
@@ -207,6 +211,10 @@ const char* loom_constraint_property_name(loom_constraint_property_t property) {
       [LOOM_PROPERTY_RANK] = "Rank",
       [LOOM_PROPERTY_ELEMENT_WIDTH_GREATER_THAN] = "ElementWidthGreaterThan",
       [LOOM_PROPERTY_ELEMENT_WIDTH_LESS_THAN] = "ElementWidthLessThan",
+      [LOOM_PROPERTY_BIT_WIDTH_POSITIVE] = "BitWidthPositive",
+      [LOOM_PROPERTY_ELEMENT_WIDTH_AT_LEAST_ATTR] = "ElementWidthAtLeastAttr",
+      [LOOM_PROPERTY_BIT_RANGE_WITHIN_ELEMENT_WIDTH] =
+          "BitRangeWithinElementWidth",
   };
   static_assert(IREE_ARRAYSIZE(names) == LOOM_PROPERTY_COUNT_,
                 "property names out of sync with enum");
