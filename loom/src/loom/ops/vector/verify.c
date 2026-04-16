@@ -2678,36 +2678,9 @@ iree_status_t loom_vector_dot2f_verify(const loom_module_t* module,
                                        iree_diagnostic_emitter_t emitter) {
   loom_type_t lhs_type =
       loom_module_value_type(module, loom_vector_dot2f_lhs(op));
-  loom_type_t rhs_type =
-      loom_module_value_type(module, loom_vector_dot2f_rhs(op));
-  loom_type_t acc_type =
-      loom_module_value_type(module, loom_vector_dot2f_acc(op));
   loom_type_t result_type =
       loom_module_value_type(module, loom_vector_dot2f_result(op));
 
-  if (loom_type_is_vector(lhs_type)) {
-    loom_scalar_type_t element_type = loom_type_element_type(lhs_type);
-    if (element_type != LOOM_SCALAR_TYPE_F16 &&
-        element_type != LOOM_SCALAR_TYPE_BF16) {
-      return loom_vector_emit_operand_constraint(
-          emitter, op, IREE_SV("lhs"), lhs_type,
-          IREE_SV("f16 or bf16 element type"));
-    }
-  }
-  if (loom_type_is_vector(rhs_type)) {
-    loom_scalar_type_t element_type = loom_type_element_type(rhs_type);
-    if (element_type != LOOM_SCALAR_TYPE_F16 &&
-        element_type != LOOM_SCALAR_TYPE_BF16) {
-      return loom_vector_emit_operand_constraint(
-          emitter, op, IREE_SV("rhs"), rhs_type,
-          IREE_SV("f16 or bf16 element type"));
-    }
-  }
-  if (loom_type_is_vector(acc_type) &&
-      loom_type_element_type(acc_type) != LOOM_SCALAR_TYPE_F32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("acc"), acc_type, IREE_SV("f32 element type"));
-  }
   return loom_vector_verify_grouped_last_axis_shape(emitter, op, lhs_type,
                                                     result_type, 2);
 }
@@ -2717,92 +2690,11 @@ iree_status_t loom_vector_dot4i_verify(const loom_module_t* module,
                                        iree_diagnostic_emitter_t emitter) {
   loom_type_t lhs_type =
       loom_module_value_type(module, loom_vector_dot4i_lhs(op));
-  loom_type_t rhs_type =
-      loom_module_value_type(module, loom_vector_dot4i_rhs(op));
-  loom_type_t acc_type =
-      loom_module_value_type(module, loom_vector_dot4i_acc(op));
   loom_type_t result_type =
       loom_module_value_type(module, loom_vector_dot4i_result(op));
 
-  if (loom_type_is_vector(lhs_type) &&
-      loom_type_element_type(lhs_type) != LOOM_SCALAR_TYPE_I8) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("lhs"), lhs_type, IREE_SV("i8 element type"));
-  }
-  if (loom_type_is_vector(rhs_type) &&
-      loom_type_element_type(rhs_type) != LOOM_SCALAR_TYPE_I8) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("rhs"), rhs_type, IREE_SV("i8 element type"));
-  }
-  if (loom_type_is_vector(acc_type) &&
-      loom_type_element_type(acc_type) != LOOM_SCALAR_TYPE_I32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("acc"), acc_type, IREE_SV("i32 element type"));
-  }
   return loom_vector_verify_grouped_last_axis_shape(emitter, op, lhs_type,
                                                     result_type, 4);
-}
-
-iree_status_t loom_vector_dot8i4_verify(const loom_module_t* module,
-                                        const loom_op_t* op,
-                                        iree_diagnostic_emitter_t emitter) {
-  loom_type_t lhs_type =
-      loom_module_value_type(module, loom_vector_dot8i4_lhs(op));
-  loom_type_t rhs_type =
-      loom_module_value_type(module, loom_vector_dot8i4_rhs(op));
-  loom_type_t acc_type =
-      loom_module_value_type(module, loom_vector_dot8i4_acc(op));
-
-  if (loom_type_is_vector(lhs_type) &&
-      loom_type_element_type(lhs_type) != LOOM_SCALAR_TYPE_I32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("lhs"), lhs_type,
-        IREE_SV("i32 packed i4 storage lanes"));
-  }
-  if (loom_type_is_vector(rhs_type) &&
-      loom_type_element_type(rhs_type) != LOOM_SCALAR_TYPE_I32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("rhs"), rhs_type,
-        IREE_SV("i32 packed i4 storage lanes"));
-  }
-  if (loom_type_is_vector(acc_type) &&
-      loom_type_element_type(acc_type) != LOOM_SCALAR_TYPE_I32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("acc"), acc_type,
-        IREE_SV("i32 accumulator lanes"));
-  }
-  return iree_ok_status();
-}
-
-iree_status_t loom_vector_dot4f8_verify(const loom_module_t* module,
-                                        const loom_op_t* op,
-                                        iree_diagnostic_emitter_t emitter) {
-  loom_type_t lhs_type =
-      loom_module_value_type(module, loom_vector_dot4f8_lhs(op));
-  loom_type_t rhs_type =
-      loom_module_value_type(module, loom_vector_dot4f8_rhs(op));
-  loom_type_t acc_type =
-      loom_module_value_type(module, loom_vector_dot4f8_acc(op));
-
-  if (loom_type_is_vector(lhs_type) &&
-      loom_type_element_type(lhs_type) != LOOM_SCALAR_TYPE_I32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("lhs"), lhs_type,
-        IREE_SV("i32 packed fp8/bf8 storage lanes"));
-  }
-  if (loom_type_is_vector(rhs_type) &&
-      loom_type_element_type(rhs_type) != LOOM_SCALAR_TYPE_I32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("rhs"), rhs_type,
-        IREE_SV("i32 packed fp8/bf8 storage lanes"));
-  }
-  if (loom_type_is_vector(acc_type) &&
-      loom_type_element_type(acc_type) != LOOM_SCALAR_TYPE_F32) {
-    return loom_vector_emit_operand_constraint(
-        emitter, op, IREE_SV("acc"), acc_type,
-        IREE_SV("f32 accumulator lanes"));
-  }
-  return iree_ok_status();
 }
 
 iree_status_t loom_vector_reduce_verify(const loom_module_t* module,

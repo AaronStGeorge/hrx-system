@@ -636,9 +636,9 @@ def test_vector_dot4i_is_pure_grouped_i8_to_i32_dot() -> None:
         "s8u8",
         "u8u8",
     ]
-    assert ("HasIntegerElement", ("lhs",)) in constraints
-    assert ("HasIntegerElement", ("rhs",)) in constraints
-    assert ("HasIntegerElement", ("acc",)) in constraints
+    assert ("HasI8Element", ("lhs",)) in constraints
+    assert ("HasI8Element", ("rhs",)) in constraints
+    assert ("HasI32Element", ("acc",)) in constraints
     assert ("SameShape", ("lhs", "rhs")) in constraints
     assert ("SameType", ("acc", "result")) in constraints
     assert "Pure" in trait_names
@@ -657,7 +657,7 @@ def test_vector_dot8i4_is_pure_packed_i4_to_i32_dot() -> None:
         "s4u4",
         "u4u4",
     ]
-    assert ("HasIntegerElement", ("lhs",)) in constraints
+    assert ("HasI32Element", ("lhs",)) in constraints
     assert ("SameType", ("lhs", "rhs", "acc", "result")) in constraints
     assert "little-endian pack" in op.doc
     assert "sdot8/udot8/sudot8" in op.doc
@@ -677,8 +677,8 @@ def test_vector_dot4f8_is_pure_packed_f8_to_f32_dot() -> None:
         "fp8fp8",
         "bf8bf8",
     ]
-    assert ("HasIntegerElement", ("lhs",)) in constraints
-    assert ("HasFloatElement", ("acc",)) in constraints
+    assert ("HasI32Element", ("lhs",)) in constraints
+    assert ("HasF32Element", ("acc",)) in constraints
     assert ("SameType", ("lhs", "rhs")) in constraints
     assert ("SameType", ("acc", "result")) in constraints
     assert ("SameShape", ("lhs", "acc")) in constraints
@@ -694,9 +694,9 @@ def test_vector_dot2f_is_pure_grouped_f16_bf16_to_f32_dot() -> None:
     constraints = {(constraint.name, constraint.args) for constraint in op.constraints}
     trait_names = {trait.name for trait in op.traits}
 
-    assert ("HasFloatElement", ("lhs",)) in constraints
-    assert ("HasFloatElement", ("rhs",)) in constraints
-    assert ("HasFloatElement", ("acc",)) in constraints
+    assert ("HasF16OrBf16Element", ("lhs",)) in constraints
+    assert ("HasF16OrBf16Element", ("rhs",)) in constraints
+    assert ("HasF32Element", ("acc",)) in constraints
     assert ("SameShape", ("lhs", "rhs")) in constraints
     assert ("SameElementType", ("lhs", "rhs")) in constraints
     assert ("SameType", ("acc", "result")) in constraints

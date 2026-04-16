@@ -2803,9 +2803,6 @@ iree_status_t loom_vector_dot8i4_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_dot8i4_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_DOT4F8: Treat each i32 source lane as a little-endian pack of four 8-bit floating-point fields, decode fields according to the fp8/bf8 template, and add the four-product fused sum into the matching f32 accumulator lane. The fp8 spelling names the E4M3 primitive float format and bf8 names the E5M2 primitive float format. This is a packed-storage register dot matching AMDGPU dot4.f32.fp8/bf8 families without requiring unpacked f8 vector source lanes.
 // %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf32>
@@ -2824,9 +2821,6 @@ iree_status_t loom_vector_dot4f8_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
-iree_status_t loom_vector_dot4f8_verify(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type.
 // %sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32

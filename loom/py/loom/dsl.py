@@ -56,8 +56,12 @@ __all__ = [
     "BUFFER",
     "INTEGER",
     "INTEGER_ELEMENT",
+    "I8_ELEMENT",
+    "I32_ELEMENT",
     "FLOAT",
     "FLOAT_ELEMENT",
+    "F16_OR_BF16_ELEMENT",
+    "F32_ELEMENT",
     "I1_ELEMENT",
     "SCALAR",
     "INDEX",
@@ -135,6 +139,10 @@ __all__ = [
     "HasIntegerElement",
     "HasFloatElement",
     "HasI1Element",
+    "HasI8Element",
+    "HasI32Element",
+    "HasF16OrBf16Element",
+    "HasF32Element",
     "OffsetCountMatchesRank",
     "DimIndexInBounds",
     "AllShapesMatch",
@@ -191,6 +199,10 @@ class TypeConstraint(Enum):
       INTEGER_ELEMENT → ShapedType with integer element type
       FLOAT_ELEMENT   → ShapedType with float element type
       I1_ELEMENT      → ShapedType with element type i1
+      I8_ELEMENT      → ShapedType with element type i8
+      I32_ELEMENT     → ShapedType with element type i32
+      F16_OR_BF16_ELEMENT → ShapedType with element type f16 or bf16
+      F32_ELEMENT     → ShapedType with element type f32
       SCALAR   → any ScalarType (INTEGER | FLOAT | INDEX | OFFSET)
       INDEX    → ScalarType with kind=INDEX
       OFFSET   → ScalarType with kind=OFFSET
@@ -220,6 +232,10 @@ class TypeConstraint(Enum):
     INTEGER_ELEMENT = "integer_element"
     FLOAT_ELEMENT = "float_element"
     I1_ELEMENT = "i1_element"
+    I8_ELEMENT = "i8_element"
+    I32_ELEMENT = "i32_element"
+    F16_OR_BF16_ELEMENT = "f16_or_bf16_element"
+    F32_ELEMENT = "f32_element"
     SCALAR = "scalar"
     INDEX = "index"
     OFFSET = "offset"
@@ -246,6 +262,10 @@ FLOAT = TypeConstraint.FLOAT
 INTEGER_ELEMENT = TypeConstraint.INTEGER_ELEMENT
 FLOAT_ELEMENT = TypeConstraint.FLOAT_ELEMENT
 I1_ELEMENT = TypeConstraint.I1_ELEMENT
+I8_ELEMENT = TypeConstraint.I8_ELEMENT
+I32_ELEMENT = TypeConstraint.I32_ELEMENT
+F16_OR_BF16_ELEMENT = TypeConstraint.F16_OR_BF16_ELEMENT
+F32_ELEMENT = TypeConstraint.F32_ELEMENT
 SCALAR = TypeConstraint.SCALAR
 INDEX = TypeConstraint.INDEX
 OFFSET = TypeConstraint.OFFSET
@@ -984,6 +1004,17 @@ def _type_satisfies_element_constraint(
         }
     if constraint == I1_ELEMENT:
         return element_kind == ScalarTypeKind.I1
+    if constraint == I8_ELEMENT:
+        return element_kind == ScalarTypeKind.I8
+    if constraint == I32_ELEMENT:
+        return element_kind == ScalarTypeKind.I32
+    if constraint == F16_OR_BF16_ELEMENT:
+        return element_kind in {
+            ScalarTypeKind.F16,
+            ScalarTypeKind.BF16,
+        }
+    if constraint == F32_ELEMENT:
+        return element_kind == ScalarTypeKind.F32
     return False
 
 
@@ -1028,6 +1059,30 @@ def HasI1Element(field: str) -> Constraint:
     """A shaped field must have an i1 element type."""
 
     return _has_element_constraint(field, I1_ELEMENT)
+
+
+def HasI8Element(field: str) -> Constraint:
+    """A shaped field must have an i8 element type."""
+
+    return _has_element_constraint(field, I8_ELEMENT)
+
+
+def HasI32Element(field: str) -> Constraint:
+    """A shaped field must have an i32 element type."""
+
+    return _has_element_constraint(field, I32_ELEMENT)
+
+
+def HasF16OrBf16Element(field: str) -> Constraint:
+    """A shaped field must have an f16 or bf16 element type."""
+
+    return _has_element_constraint(field, F16_OR_BF16_ELEMENT)
+
+
+def HasF32Element(field: str) -> Constraint:
+    """A shaped field must have an f32 element type."""
+
+    return _has_element_constraint(field, F32_ELEMENT)
 
 
 def OffsetCountMatchesRank(shaped: str, offsets: str) -> Constraint:

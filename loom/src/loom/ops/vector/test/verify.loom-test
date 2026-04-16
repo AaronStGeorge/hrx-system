@@ -1180,7 +1180,8 @@ func.def @dotf_reject_arrow_result(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %ac
 // Dot2 source lanes are f16/bf16 lanes because the op spells a widened
 // two-lane hardware-shaped floating dot.
 func.def @dot2f_source_not_f16_or_bf16(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %acc: vector<2xf32>) {
-  // ERROR@+1: TYPE/003 "f16 or bf16 element type"
+  // ERROR@+2: TYPE/003 "operand 0" "f16 or bf16 element type"
+  // ERROR@+1: TYPE/003 "operand 1" "f16 or bf16 element type"
   %r = vector.dot2f %lhs, %rhs, %acc : vector<4xf32>, vector<4xf32>, vector<2xf32>
   func.return
 }
@@ -1272,7 +1273,7 @@ func.def @dot4i_leading_axis_mismatch(%lhs: vector<2x16xi8>, %rhs: vector<2x16xi
 // Dot8i4 consumes packed i32 storage lanes; unpacked byte lanes must be
 // packed explicitly with vector.bitpack<4> first.
 func.def @dot8i4_source_not_i32(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<4xi8>) {
-  // ERROR@+1: TYPE/003 "i32 packed i4 storage lanes"
+  // ERROR@+1: TYPE/003 "i32 element type"
   %r = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi8>
   func.return
 }
@@ -1291,7 +1292,7 @@ func.def @dot8i4_shape_mismatch(%lhs: vector<4xi32>, %rhs: vector<8xi32>, %acc: 
 // Dot4f8 consumes packed i32 storage lanes; use vector.bitpack/bitcast first
 // when starting from byte vectors.
 func.def @dot4f8_source_not_i32(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: vector<4xf32>) {
-  // ERROR@+1: TYPE/003 "i32 packed fp8/bf8 storage lanes"
+  // ERROR@+1: TYPE/003 "i32 element type"
   %r = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xf32>
   func.return
 }
@@ -1301,7 +1302,7 @@ func.def @dot4f8_source_not_i32(%lhs: vector<4xi8>, %rhs: vector<4xi8>, %acc: ve
 // Dot4f8 accumulates into f32 lanes even though the packed source fields are
 // only eight bits wide.
 func.def @dot4f8_acc_not_f32(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xf16>) {
-  // ERROR@+1: TYPE/003 "f32 accumulator lanes"
+  // ERROR@+1: TYPE/003 "f32 element type"
   %r = vector.dot4f8<bf8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf16>
   func.return
 }

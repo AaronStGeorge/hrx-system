@@ -321,14 +321,22 @@ typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT = 17,
   // Shaped type with element type i1.
   LOOM_TYPE_CONSTRAINT_I1_ELEMENT = 18,
+  // Shaped type with element type i8.
+  LOOM_TYPE_CONSTRAINT_I8_ELEMENT = 19,
+  // Shaped type with element type i32.
+  LOOM_TYPE_CONSTRAINT_I32_ELEMENT = 20,
+  // Shaped type with element type f16 or bf16.
+  LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT = 21,
+  // Shaped type with element type f32.
+  LOOM_TYPE_CONSTRAINT_F32_ELEMENT = 22,
   // Encoding type with address-layout role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT = 19,
+  LOOM_TYPE_CONSTRAINT_ENCODING_LAYOUT = 23,
   // Encoding type with storage-schema role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA = 20,
+  LOOM_TYPE_CONSTRAINT_ENCODING_SCHEMA = 24,
   // Encoding type with physical-storage role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE = 21,
+  LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE = 25,
   // Encoding type with numeric-transform role.
-  LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM = 22,
+  LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM = 26,
   LOOM_TYPE_CONSTRAINT_COUNT_,
 } loom_type_constraint_t;
 
@@ -403,6 +411,19 @@ static inline bool loom_type_satisfies_constraint(
     case LOOM_TYPE_CONSTRAINT_I1_ELEMENT:
       return loom_type_is_shaped(type) &&
              loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+    case LOOM_TYPE_CONSTRAINT_I8_ELEMENT:
+      return loom_type_is_shaped(type) &&
+             loom_type_element_type(type) == LOOM_SCALAR_TYPE_I8;
+    case LOOM_TYPE_CONSTRAINT_I32_ELEMENT:
+      return loom_type_is_shaped(type) &&
+             loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
+    case LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT:
+      return loom_type_is_shaped(type) &&
+             (loom_type_element_type(type) == LOOM_SCALAR_TYPE_F16 ||
+              loom_type_element_type(type) == LOOM_SCALAR_TYPE_BF16);
+    case LOOM_TYPE_CONSTRAINT_F32_ELEMENT:
+      return loom_type_is_shaped(type) &&
+             loom_type_element_type(type) == LOOM_SCALAR_TYPE_F32;
     default:
       return false;
   }

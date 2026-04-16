@@ -65,8 +65,12 @@ from loom.dsl import (
     DimIndexInBounds,
     EnumCase,
     EnumDef,
+    HasF16OrBf16Element,
+    HasF32Element,
     HasFloatElement,
     HasI1Element,
+    HasI8Element,
+    HasI32Element,
     HasIntegerElement,
     HasParent,
     ImplicitTerminator,
@@ -91,6 +95,18 @@ from loom.dsl import (
     comparison_op,
     type_constraint_name,
     unary_op,
+)
+from loom.ir import (
+    BF16,
+    F16,
+    F32,
+    I8,
+    I16,
+    I32,
+    ScalarType,
+    ShapedType,
+    StaticDim,
+    TypeKind,
 )
 
 # ============================================================================
@@ -407,6 +423,28 @@ class TestConstraints:
         assert HasIntegerElement("x").name == "HasIntegerElement"
         assert HasFloatElement("x").name == "HasFloatElement"
         assert HasI1Element("x").name == "HasI1Element"
+        assert HasI8Element("x").name == "HasI8Element"
+        assert HasI32Element("x").name == "HasI32Element"
+        assert HasF16OrBf16Element("x").name == "HasF16OrBf16Element"
+        assert HasF32Element("x").name == "HasF32Element"
+
+    def test_exact_element_constraints_validate_shaped_types(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        def vector_type(element_type: ScalarType) -> ShapedType:
+            return ShapedType(TypeKind.VECTOR, element_type, (StaticDim(4),))
+
+        assert HasI8Element("x").check({"x": FakeValue(vector_type(I8))})[0]
+        assert not HasI8Element("x").check({"x": FakeValue(vector_type(I16))})[0]
+        assert HasI32Element("x").check({"x": FakeValue(vector_type(I32))})[0]
+        assert not HasI32Element("x").check({"x": FakeValue(vector_type(I8))})[0]
+        assert HasF16OrBf16Element("x").check({"x": FakeValue(vector_type(F16))})[0]
+        assert HasF16OrBf16Element("x").check({"x": FakeValue(vector_type(BF16))})[0]
+        assert not HasF16OrBf16Element("x").check({"x": FakeValue(vector_type(F32))})[0]
+        assert HasF32Element("x").check({"x": FakeValue(vector_type(F32))})[0]
+        assert not HasF32Element("x").check({"x": FakeValue(I32)})[0]
 
     def test_offset_count_matches_rank(self) -> None:
         c = OffsetCountMatchesRank("src", "offsets")

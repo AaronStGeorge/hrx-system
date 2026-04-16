@@ -140,8 +140,16 @@ TEST(TypeConstraint, ScalarAddressFamiliesAreExplicit) {
 
 TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
   const uint64_t lanes = loom_dim_pack_static(4);
+  loom_type_t vector_i8 =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8, lanes, 0);
   loom_type_t vector_i32 =
       loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, lanes, 0);
+  loom_type_t vector_i16 =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I16, lanes, 0);
+  loom_type_t vector_f16 =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F16, lanes, 0);
+  loom_type_t vector_bf16 =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_BF16, lanes, 0);
   loom_type_t vector_f32 =
       loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, lanes, 0);
   loom_type_t vector_i1 =
@@ -162,6 +170,15 @@ TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
                loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_FLOAT_ELEMENT));
   EXPECT_STREQ("i1_element",
                loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_I1_ELEMENT));
+  EXPECT_STREQ("i8 element type",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_I8_ELEMENT));
+  EXPECT_STREQ("i32 element type",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_I32_ELEMENT));
+  EXPECT_STREQ(
+      "f16 or bf16 element type",
+      loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT));
+  EXPECT_STREQ("f32 element type",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_F32_ELEMENT));
 
   EXPECT_TRUE(loom_type_satisfies_constraint(
       vector_i32, LOOM_TYPE_CONSTRAINT_INTEGER_ELEMENT));
@@ -187,6 +204,24 @@ TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
                                              LOOM_TYPE_CONSTRAINT_I1_ELEMENT));
   EXPECT_FALSE(loom_type_satisfies_constraint(vector_i32,
                                               LOOM_TYPE_CONSTRAINT_I1_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(vector_i8,
+                                             LOOM_TYPE_CONSTRAINT_I8_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(vector_i16,
+                                              LOOM_TYPE_CONSTRAINT_I8_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(vector_i32,
+                                             LOOM_TYPE_CONSTRAINT_I32_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_i8, LOOM_TYPE_CONSTRAINT_I32_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_f16, LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(
+      vector_bf16, LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_f32, LOOM_TYPE_CONSTRAINT_F16_OR_BF16_ELEMENT));
+  EXPECT_TRUE(loom_type_satisfies_constraint(vector_f32,
+                                             LOOM_TYPE_CONSTRAINT_F32_ELEMENT));
+  EXPECT_FALSE(loom_type_satisfies_constraint(
+      vector_f16, LOOM_TYPE_CONSTRAINT_F32_ELEMENT));
 }
 
 TEST(TypeConstraint, EncodingRolesAreExplicit) {
