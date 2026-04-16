@@ -277,6 +277,10 @@ typedef struct loom_refine_boundaries_function_t {
 
   // Forwarded argument index for each result slot, or a negative sentinel.
   int32_t* return_forward_argument_indices;
+
+  // Forwarded earlier result index for each result slot, or a negative
+  // sentinel.
+  int32_t* return_forward_result_indices;
 } loom_refine_boundaries_function_t;
 
 typedef struct loom_refine_boundaries_graph_t {
@@ -462,10 +466,16 @@ static iree_status_t loom_refine_boundaries_build_graph(
           arena, info->result_count,
           sizeof(*info->return_forward_argument_indices),
           (void**)&info->return_forward_argument_indices));
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+          arena, info->result_count,
+          sizeof(*info->return_forward_result_indices),
+          (void**)&info->return_forward_result_indices));
       memset(info->return_fact_defined, 0,
              info->result_count * sizeof(*info->return_fact_defined));
       for (uint16_t i = 0; i < info->result_count; ++i) {
         info->return_forward_argument_indices[i] =
+            LOOM_REFINE_BOUNDARIES_FORWARD_UNSEEN;
+        info->return_forward_result_indices[i] =
             LOOM_REFINE_BOUNDARIES_FORWARD_UNSEEN;
       }
     }
@@ -723,17 +733,46 @@ static int32_t loom_refine_boundaries_find_argument_index(
   return LOOM_REFINE_BOUNDARIES_FORWARD_NONE;
 }
 
-static void loom_refine_boundaries_join_return_forward(
-    loom_refine_boundaries_function_t* function, iree_host_size_t result_index,
-    int32_t argument_index) {
-  int32_t* slot = &function->return_forward_argument_indices[result_index];
+static bool loom_refine_boundaries_values_have_equal_types(
+    const loom_module_t* module, loom_value_id_t lhs, loom_value_id_t rhs) {
+  if (lhs == LOOM_VALUE_ID_INVALID || rhs == LOOM_VALUE_ID_INVALID ||
+      lhs >= module->values.count || rhs >= module->values.count) {
+    return false;
+  }
+  return loom_type_equal(loom_module_value_type(module, lhs),
+                         loom_module_value_type(module, rhs));
+}
+
+static void loom_refine_boundaries_join_forward_index(
+    int32_t* forward_indices, iree_host_size_t result_index,
+    int32_t forward_index) {
+  int32_t* slot = &forward_indices[result_index];
   if (*slot == LOOM_REFINE_BOUNDARIES_FORWARD_UNSEEN) {
-    *slot = argument_index;
+    *slot = forward_index;
     return;
   }
-  if (*slot != argument_index) {
+  if (*slot != forward_index) {
     *slot = LOOM_REFINE_BOUNDARIES_FORWARD_NONE;
   }
+}
+
+static int32_t loom_refine_boundaries_find_prior_result_index(
+    const loom_module_t* module,
+    const loom_refine_boundaries_function_t* function,
+    loom_value_slice_t operands, iree_host_size_t result_index) {
+  if (result_index >= operands.count)
+    return LOOM_REFINE_BOUNDARIES_FORWARD_NONE;
+  const loom_value_id_t* function_results =
+      loom_op_const_results(function->function.op);
+  for (iree_host_size_t i = 0; i < result_index; ++i) {
+    if (operands.values[i] != operands.values[result_index]) continue;
+    if (!loom_refine_boundaries_values_have_equal_types(
+            module, function_results[i], function_results[result_index])) {
+      continue;
+    }
+    return (int32_t)i;
+  }
+  return LOOM_REFINE_BOUNDARIES_FORWARD_NONE;
 }
 
 static iree_status_t loom_refine_boundaries_collect_return(
@@ -746,7 +785,13 @@ static iree_status_t loom_refine_boundaries_collect_return(
   for (iree_host_size_t i = 0; i < count; ++i) {
     int32_t argument_index = loom_refine_boundaries_find_argument_index(
         function, operands.values[i]);
-    loom_refine_boundaries_join_return_forward(function, i, argument_index);
+    loom_refine_boundaries_join_forward_index(
+        function->return_forward_argument_indices, i, argument_index);
+
+    int32_t result_index = loom_refine_boundaries_find_prior_result_index(
+        collect->graph->module, function, operands, i);
+    loom_refine_boundaries_join_forward_index(
+        function->return_forward_result_indices, i, result_index);
 
     loom_value_facts_t facts = loom_value_fact_table_lookup(
         collect->function_facts, operands.values[i]);
@@ -759,21 +804,15 @@ static iree_status_t loom_refine_boundaries_collect_return(
     }
   }
   for (iree_host_size_t i = count; i < function->result_count; ++i) {
-    loom_refine_boundaries_join_return_forward(
-        function, i, LOOM_REFINE_BOUNDARIES_FORWARD_NONE);
+    loom_refine_boundaries_join_forward_index(
+        function->return_forward_argument_indices, i,
+        LOOM_REFINE_BOUNDARIES_FORWARD_NONE);
+    loom_refine_boundaries_join_forward_index(
+        function->return_forward_result_indices, i,
+        LOOM_REFINE_BOUNDARIES_FORWARD_NONE);
   }
   function->has_return_facts = true;
   return iree_ok_status();
-}
-
-static bool loom_refine_boundaries_values_have_equal_types(
-    const loom_module_t* module, loom_value_id_t lhs, loom_value_id_t rhs) {
-  if (lhs == LOOM_VALUE_ID_INVALID || rhs == LOOM_VALUE_ID_INVALID ||
-      lhs >= module->values.count || rhs >= module->values.count) {
-    return false;
-  }
-  return loom_type_equal(loom_module_value_type(module, lhs),
-                         loom_module_value_type(module, rhs));
 }
 
 static iree_status_t loom_refine_boundaries_collect_argument_equality(
@@ -813,6 +852,15 @@ static iree_status_t loom_refine_boundaries_collect_argument_equality(
   return iree_ok_status();
 }
 
+static bool loom_refine_boundaries_call_result_is_tied(const loom_op_t* call_op,
+                                                       iree_host_size_t index) {
+  const loom_tied_result_t* tied_results = loom_op_tied_results(call_op);
+  for (uint16_t i = 0; i < call_op->tied_result_count; ++i) {
+    if (tied_results[i].result_index == index) return true;
+  }
+  return false;
+}
+
 static iree_status_t loom_refine_boundaries_collect_return_forwarding(
     loom_refine_boundaries_collect_t* collect, const loom_op_t* call_op,
     const loom_refine_boundaries_function_t* callee_info,
@@ -821,16 +869,8 @@ static iree_status_t loom_refine_boundaries_collect_return_forwarding(
   iree_host_size_t count = results.count < callee_info->result_count
                                ? results.count
                                : callee_info->result_count;
-  const loom_tied_result_t* tied_results = loom_op_tied_results(call_op);
   for (iree_host_size_t i = 0; i < count; ++i) {
-    bool result_is_tied = false;
-    for (uint16_t j = 0; j < call_op->tied_result_count; ++j) {
-      if (tied_results[j].result_index == i) {
-        result_is_tied = true;
-        break;
-      }
-    }
-    if (result_is_tied) continue;
+    if (loom_refine_boundaries_call_result_is_tied(call_op, i)) continue;
 
     int32_t argument_index = callee_info->return_forward_argument_indices[i];
     if (argument_index < 0 ||
@@ -839,6 +879,24 @@ static iree_status_t loom_refine_boundaries_collect_return_forwarding(
     }
     loom_value_id_t result = results.values[i];
     loom_value_id_t replacement = operands.values[argument_index];
+    if (!loom_refine_boundaries_values_have_equal_types(collect->graph->module,
+                                                        result, replacement)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_refine_boundaries_replacement_table_define(
+        collect->next_boundary_replacements, result, replacement));
+  }
+  if (!callee_info->return_forward_result_indices) return iree_ok_status();
+  for (iree_host_size_t i = 0; i < count; ++i) {
+    if (callee_info->return_forward_argument_indices[i] >= 0) continue;
+    if (loom_refine_boundaries_call_result_is_tied(call_op, i)) continue;
+
+    int32_t result_index = callee_info->return_forward_result_indices[i];
+    if (result_index < 0 || (iree_host_size_t)result_index >= results.count) {
+      continue;
+    }
+    loom_value_id_t result = results.values[i];
+    loom_value_id_t replacement = results.values[result_index];
     if (!loom_refine_boundaries_values_have_equal_types(collect->graph->module,
                                                         result, replacement)) {
       continue;

@@ -381,3 +381,36 @@ func.def public @call_effectful_return_tied_after_dead(%dead: index, %buffer: bu
   %result = func.call @effectful_return_tied_after_dead(%buffer) : (buffer) -> (%buffer as buffer)
   func.return %result : buffer
 }
+
+// ====
+
+// When an internal callee always returns the same computed SSA value through
+// two result slots, callers can use one call result and the duplicate boundary
+// slot is pruned. This is weaker than argument forwarding: the value cannot be
+// named by the caller until the call executes.
+func.def @effectful_return_duplicate_computed(%x: index) -> (index, index) {
+  %one = index.constant 1 : index
+  %sum = index.add %x, %one : index
+  test.use %x : index
+  func.return %sum, %sum : index, index
+}
+
+func.def public @call_effectful_return_duplicate_computed(%x: index) -> (index) {
+  %lhs, %rhs = func.call @effectful_return_duplicate_computed(%x) : (index) -> (index, index)
+  %total = index.add %lhs, %rhs : index
+  func.return %total : index
+}
+
+// ----
+func.def @effectful_return_duplicate_computed(%x: index) -> (index) {
+  %one = index.constant 1 : index
+  %sum = index.add %x, %one : index
+  test.use %x : index
+  func.return %sum : index
+}
+
+func.def public @call_effectful_return_duplicate_computed(%x: index) -> (index) {
+  %lhs = func.call @effectful_return_duplicate_computed(%x) : (index) -> (index)
+  %total = index.add %lhs, %lhs : index
+  func.return %total : index
+}
