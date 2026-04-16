@@ -10,6 +10,7 @@
 #include "loom/error/json_sink.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
+#include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/encoding/families.h"
@@ -167,9 +168,34 @@ typedef struct loom_check_pass_diagnostic_capture_t {
   // Diagnostic sink shared with parser, verifier, and pass-mode reporting.
   loom_check_diagnostic_capture_t* diagnostic_capture;
 
+  // Module being transformed by the pass pipeline.
+  const loom_module_t* module;
+
+  // Source resolver for source-backed op locations in the current case.
+  loom_source_resolver_t source_resolver;
+
   // Number of diagnostics emitted by the pass pipeline in this execution.
   iree_host_size_t emission_count;
 } loom_check_pass_diagnostic_capture_t;
+
+static iree_status_t loom_check_source_resolver_for_case(
+    loom_context_t* context, iree_string_view_t filename,
+    iree_string_view_t source, loom_source_entry_t* out_source_entry,
+    loom_source_table_resolver_t* out_source_resolver) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_context_register_source(context, filename, &source_id));
+  *out_source_entry = (loom_source_entry_t){
+      .source_id = source_id,
+      .source = source,
+      .filename = filename,
+  };
+  *out_source_resolver = (loom_source_table_resolver_t){
+      .entries = out_source_entry,
+      .count = 1,
+  };
+  return iree_ok_status();
+}
 
 static iree_status_t loom_check_pass_diagnostic_emitter(
     void* user_data, const loom_diagnostic_emission_t* emission) {
@@ -185,6 +211,21 @@ static iree_status_t loom_check_pass_diagnostic_emitter(
       .source_location = {.provenance =
                               LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
   };
+  if (emission->op && capture->module) {
+    loom_source_range_t source_location = {
+        .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
+    };
+    if (loom_source_resolve(capture->source_resolver, capture->module,
+                            emission->op->location, &source_location)) {
+      if (source_location.provenance ==
+              LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE &&
+          source_location.source.size > 0) {
+        source_location.provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE;
+      }
+      diagnostic.origin = source_location;
+      diagnostic.source_location = source_location;
+    }
+  }
   IREE_RETURN_IF_ERROR(loom_check_diagnostic_capture_sink(
       capture->diagnostic_capture, &diagnostic));
   ++capture->emission_count;
@@ -403,15 +444,11 @@ static iree_status_t loom_check_verify_pass_output(
     loom_check_diagnostic_capture_t* diagnostic_capture, loom_module_t* module,
     bool* out_failed_verification) {
   *out_failed_verification = false;
-  loom_source_entry_t source_entry = {
-      .source_id = 0,
-      .source = test_case->input,
-      .filename = filename,
-  };
-  loom_source_table_resolver_t resolver_data = {
-      .entries = &source_entry,
-      .count = 1,
-  };
+  loom_source_entry_t source_entry = {0};
+  loom_source_table_resolver_t resolver_data = {0};
+  IREE_RETURN_IF_ERROR(loom_check_source_resolver_for_case(
+      module->context, filename, test_case->input, &source_entry,
+      &resolver_data));
   loom_verify_options_t verify_options = {
       .sink = {.fn = loom_check_diagnostic_capture_sink,
                .user_data = diagnostic_capture},
@@ -452,8 +489,19 @@ iree_status_t loom_check_execute_pass(const loom_check_case_t* test_case,
   }
 
   // Build and run the pass pipeline.
+  loom_source_entry_t source_entry = {0};
+  loom_source_table_resolver_t resolver_data = {0};
+  iree_status_t resolver_status = loom_check_source_resolver_for_case(
+      context, filename, test_case->input, &source_entry, &resolver_data);
+  if (!iree_status_is_ok(resolver_status)) {
+    loom_module_free(module);
+    return resolver_status;
+  }
   loom_check_pass_diagnostic_capture_t pass_diagnostic_capture = {
       .diagnostic_capture = &diagnostic_capture,
+      .module = module,
+      .source_resolver = {.fn = loom_source_table_resolve,
+                          .user_data = &resolver_data},
   };
   iree_diagnostic_emitter_t pass_diagnostic_emitter = {
       .fn = loom_check_pass_diagnostic_emitter,

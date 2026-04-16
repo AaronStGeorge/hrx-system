@@ -106,6 +106,7 @@ loom_cc_test(
         ":check",
         ":execute",
         ":report",
+        "//loom/src/loom/ir",
         "//loom/src/loom/target/llvmir",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

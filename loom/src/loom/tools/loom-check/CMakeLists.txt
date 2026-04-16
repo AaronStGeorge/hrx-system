@@ -122,6 +122,7 @@ loom_cc_test(
     ::report
     iree::base
     iree::base::internal::arena
+    loom::src::loom::ir
     loom::src::loom::target::llvmir
     iree::testing::gtest
     iree::testing::gtest_main
