@@ -650,6 +650,30 @@ static bool loom_vector_transform_query_permutation_lane(
          (uint64_t)*out_source_last_index < (uint64_t)input_extent;
 }
 
+static bool loom_vector_transform_query_seed_sign(
+    const loom_fact_context_t* context,
+    const loom_encoding_numeric_transform_descriptor_t* descriptor,
+    int64_t input_index, bool* out_negate) {
+  loom_value_facts_t seed_facts = {0};
+  int64_t seed = 0;
+  if (input_index < 0 ||
+      !loom_vector_transform_dynamic_value_facts(context, descriptor->seed,
+                                                 &seed_facts) ||
+      !loom_vector_facts_query_exact_i64(seed_facts, &seed)) {
+    return false;
+  }
+
+  uint64_t mixed = (uint64_t)seed + (uint64_t)input_index;
+  mixed += UINT64_C(0x9E3779B97F4A7C15);
+  mixed ^= mixed >> 30;
+  mixed *= UINT64_C(0xBF58476D1CE4E5B9);
+  mixed ^= mixed >> 27;
+  mixed *= UINT64_C(0x94D049BB133111EB);
+  mixed ^= mixed >> 31;
+  *out_negate = (mixed & 1) != 0;
+  return true;
+}
+
 static bool loom_vector_transform_hadamard_lane_value(
     const loom_fact_context_t* context,
     const loom_encoding_numeric_transform_descriptor_t* descriptor,
@@ -691,8 +715,13 @@ static bool loom_vector_transform_hadamard_lane_value(
     }
 
     bool sign_negates = false;
-    if (!loom_vector_transform_query_sign(context, descriptor, source_lane,
-                                          &sign_negates)) {
+    if (loom_encoding_numeric_transform_has_seed(descriptor)) {
+      if (!loom_vector_transform_query_seed_sign(
+              context, descriptor, (int64_t)input_index, &sign_negates)) {
+        return false;
+      }
+    } else if (!loom_vector_transform_query_sign(context, descriptor,
+                                                 source_lane, &sign_negates)) {
       return false;
     }
     if (sign_negates) term = -term;
