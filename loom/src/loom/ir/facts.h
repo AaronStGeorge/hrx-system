@@ -318,6 +318,45 @@ void loom_value_facts_fmai(const loom_value_facts_t* a,
                            const loom_value_facts_t* c,
                            loom_value_facts_t* out);
 
+//===----------------------------------------------------------------------===//
+// Shaped type helpers
+//===----------------------------------------------------------------------===//
+
+// Computes facts for the element count of a shaped type.
+//
+// Static dimensions contribute exact factors. Dynamic dimensions are looked up
+// in |value_facts| by their SSA value ID and intersected with the structural
+// extent domain [0, INT64_MAX] before multiplication. Missing or malformed
+// dynamic-dimension facts degrade to an unknown non-negative extent.
+void loom_value_facts_element_count(loom_type_t type,
+                                    const loom_value_facts_t* value_facts,
+                                    iree_host_size_t value_fact_count,
+                                    loom_value_facts_t* out_count);
+
+// Returns the largest known divisor of the shaped type element count.
+static inline int64_t loom_value_facts_element_count_divisor(
+    loom_type_t type, const loom_value_facts_t* value_facts,
+    iree_host_size_t value_fact_count) {
+  loom_value_facts_t element_count = {0};
+  loom_value_facts_element_count(type, value_facts, value_fact_count,
+                                 &element_count);
+  return element_count.known_divisor;
+}
+
+// Returns true when two shaped types are proven to have equal element counts.
+//
+// This is intentionally proof-oriented rather than similarity-oriented:
+// structurally identical dimension lists are equal, and independently computed
+// exact element counts with the same value are equal. Matching non-exact fact
+// ranges are not enough to prove equality. Structural equality assumes both
+// types use the same SSA value-id namespace; cross-module comparisons should
+// rely on exact-count proof or a remap-aware caller.
+bool loom_value_facts_element_counts_equal(
+    loom_type_t lhs_type, const loom_value_facts_t* lhs_value_facts,
+    iree_host_size_t lhs_value_fact_count, loom_type_t rhs_type,
+    const loom_value_facts_t* rhs_value_facts,
+    iree_host_size_t rhs_value_fact_count);
+
 #ifdef __cplusplus
 }
 #endif

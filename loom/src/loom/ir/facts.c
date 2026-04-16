@@ -677,3 +677,112 @@ void loom_value_facts_absi(const loom_value_facts_t* input,
   }
   *out = loom_value_facts_make(0, loom_max_i64(neg_lo, in_hi), in_divisor);
 }
+
+//===----------------------------------------------------------------------===//
+// Shaped type helpers
+//===----------------------------------------------------------------------===//
+
+static bool loom_value_facts_type_dim(loom_type_t type, uint8_t index,
+                                      uint64_t* out_dim) {
+  if (index >= loom_type_rank(type)) return false;
+  if (loom_type_has_inline_dims(type)) {
+    if (index >= IREE_ARRAYSIZE(type.dims)) return false;
+    *out_dim = type.dims[index];
+    return true;
+  }
+  const loom_overflow_dim_t* overflow_dims =
+      (const loom_overflow_dim_t*)(uintptr_t)type.dims[0];
+  if (!overflow_dims) return false;
+  *out_dim = overflow_dims[index];
+  return true;
+}
+
+static loom_value_facts_t loom_value_facts_non_negative_extent(
+    loom_value_facts_t facts) {
+  if (loom_value_facts_is_float(facts) || facts.range_hi < 0) {
+    return loom_value_facts_make(0, INT64_MAX, 1);
+  }
+  int64_t lo = loom_max_i64(facts.range_lo, 0);
+  return loom_value_facts_make(lo, facts.range_hi, facts.known_divisor);
+}
+
+static void loom_value_facts_clamp_non_negative(loom_value_facts_t* facts) {
+  *facts = loom_value_facts_non_negative_extent(*facts);
+}
+
+static loom_value_facts_t loom_value_facts_dynamic_extent(
+    loom_value_id_t value_id, const loom_value_facts_t* value_facts,
+    iree_host_size_t value_fact_count) {
+  if (!value_facts || value_id >= value_fact_count ||
+      value_facts[value_id].known_divisor == 0) {
+    return loom_value_facts_make(0, INT64_MAX, 1);
+  }
+  return loom_value_facts_non_negative_extent(value_facts[value_id]);
+}
+
+void loom_value_facts_element_count(loom_type_t type,
+                                    const loom_value_facts_t* value_facts,
+                                    iree_host_size_t value_fact_count,
+                                    loom_value_facts_t* out_count) {
+  *out_count = loom_value_facts_unknown();
+  if (!loom_type_is_shaped(type)) return;
+
+  loom_value_facts_t accumulator = loom_value_facts_exact_i64(1);
+  uint8_t rank = loom_type_rank(type);
+  for (uint8_t i = 0; i < rank; ++i) {
+    uint64_t packed_dim = 0;
+    if (!loom_value_facts_type_dim(type, i, &packed_dim)) {
+      *out_count = loom_value_facts_make(0, INT64_MAX, 1);
+      return;
+    }
+    loom_value_facts_t dim_facts =
+        loom_dim_is_dynamic(packed_dim)
+            ? loom_value_facts_dynamic_extent(loom_dim_value_id(packed_dim),
+                                              value_facts, value_fact_count)
+            : loom_value_facts_exact_i64(loom_dim_static_size(packed_dim));
+    loom_value_facts_muli(&accumulator, &dim_facts, &accumulator);
+    loom_value_facts_clamp_non_negative(&accumulator);
+  }
+  *out_count = accumulator;
+}
+
+static bool loom_value_facts_shaped_dims_equal(loom_type_t lhs_type,
+                                               loom_type_t rhs_type) {
+  if (!loom_type_is_shaped(lhs_type) || !loom_type_is_shaped(rhs_type)) {
+    return false;
+  }
+  uint8_t rank = loom_type_rank(lhs_type);
+  if (rank != loom_type_rank(rhs_type)) return false;
+  for (uint8_t i = 0; i < rank; ++i) {
+    uint64_t lhs_dim = 0;
+    uint64_t rhs_dim = 0;
+    if (!loom_value_facts_type_dim(lhs_type, i, &lhs_dim) ||
+        !loom_value_facts_type_dim(rhs_type, i, &rhs_dim)) {
+      return false;
+    }
+    if (lhs_dim != rhs_dim) return false;
+  }
+  return true;
+}
+
+bool loom_value_facts_element_counts_equal(
+    loom_type_t lhs_type, const loom_value_facts_t* lhs_value_facts,
+    iree_host_size_t lhs_value_fact_count, loom_type_t rhs_type,
+    const loom_value_facts_t* rhs_value_facts,
+    iree_host_size_t rhs_value_fact_count) {
+  if (loom_value_facts_shaped_dims_equal(lhs_type, rhs_type)) return true;
+
+  loom_value_facts_t lhs_count = {0};
+  loom_value_facts_element_count(lhs_type, lhs_value_facts,
+                                 lhs_value_fact_count, &lhs_count);
+  if (!loom_value_facts_is_exact(lhs_count) ||
+      loom_value_facts_is_float(lhs_count)) {
+    return false;
+  }
+  loom_value_facts_t rhs_count = {0};
+  loom_value_facts_element_count(rhs_type, rhs_value_facts,
+                                 rhs_value_fact_count, &rhs_count);
+  return loom_value_facts_is_exact(rhs_count) &&
+         !loom_value_facts_is_float(rhs_count) &&
+         lhs_count.range_lo == rhs_count.range_lo;
+}

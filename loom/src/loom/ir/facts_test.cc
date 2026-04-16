@@ -708,5 +708,192 @@ TEST(XoriTransfer, SelfCancel) {
   EXPECT_EQ(out.range_lo, 0);
 }
 
+//===----------------------------------------------------------------------===//
+// Shaped type helpers
+//===----------------------------------------------------------------------===//
+
+TEST(ElementCountFacts, StaticShapeIsExact) {
+  loom_type_t type =
+      loom_type_shaped_2d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(4), loom_dim_pack_static(8), 0);
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, nullptr, 0, &count);
+  EXPECT_TRUE(loom_value_facts_is_exact(count));
+  EXPECT_EQ(count.range_lo, 32);
+  EXPECT_EQ(count.known_divisor, 32);
+}
+
+TEST(ElementCountFacts, RankZeroShapedTypeIsOneElement) {
+  loom_type_t type =
+      loom_type_shaped_0d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32, 0);
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, nullptr, 0, &count);
+  EXPECT_TRUE(loom_value_facts_is_exact(count));
+  EXPECT_EQ(count.range_lo, 1);
+  EXPECT_EQ(count.known_divisor, 1);
+}
+
+TEST(ElementCountFacts, StaticZeroExtentIsExactZero) {
+  loom_type_t type = loom_type_shaped_2d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                                         loom_dim_pack_static(0),
+                                         loom_dim_pack_static(1024), 0);
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, nullptr, 0, &count);
+  EXPECT_TRUE(loom_value_facts_is_exact(count));
+  EXPECT_EQ(count.range_lo, 0);
+  EXPECT_TRUE(loom_value_facts_is_non_negative(count));
+}
+
+TEST(ElementCountFacts, DynamicShapeUsesDimensionFacts) {
+  loom_value_facts_t facts[2] = {loom_value_facts_unknown(),
+                                 loom_value_facts_make(8, 64, 8)};
+  loom_type_t type =
+      loom_type_shaped_2d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(1), loom_dim_pack_static(4), 0);
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, facts, IREE_ARRAYSIZE(facts), &count);
+  EXPECT_EQ(count.range_lo, 32);
+  EXPECT_EQ(count.range_hi, 256);
+  EXPECT_EQ(count.known_divisor, 32);
+}
+
+TEST(ElementCountFacts, OverflowDimensionsUseDimensionFacts) {
+  loom_overflow_dim_t dimensions[3] = {
+      loom_dim_pack_static(2),
+      loom_dim_pack_dynamic(1),
+      loom_dim_pack_static(8),
+  };
+  loom_type_t type = {};
+  type.header =
+      loom_type_make_header(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I8, 3, 0);
+  type.dims[0] = (uint64_t)(uintptr_t)dimensions;
+  loom_value_facts_t facts[2] = {loom_value_facts_unknown(),
+                                 loom_value_facts_make(4, 12, 4)};
+
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, facts, IREE_ARRAYSIZE(facts), &count);
+  EXPECT_EQ(count.range_lo, 64);
+  EXPECT_EQ(count.range_hi, 192);
+  EXPECT_EQ(count.known_divisor, 64);
+}
+
+TEST(ElementCountFacts, MalformedInlineRankDegradesSafely) {
+  loom_type_t type = {};
+  type.header = loom_type_make_header(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, 3,
+                                      LOOM_TYPE_FLAG_INLINE_DIMS);
+  type.dims[0] = loom_dim_pack_static(2);
+  type.dims[1] = loom_dim_pack_static(4);
+
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, nullptr, 0, &count);
+  EXPECT_EQ(count.range_lo, 0);
+  EXPECT_EQ(count.range_hi, INT64_MAX);
+  EXPECT_TRUE(loom_value_facts_is_non_negative(count));
+}
+
+TEST(ElementCountFacts, DynamicShapeUsesPredicateRefinedFacts) {
+  loom_value_facts_t facts[3] = {loom_value_facts_unknown(),
+                                 loom_value_facts_unknown(),
+                                 loom_value_facts_unknown()};
+  loom_predicate_t range_pred = make_predicate_range(16, 128);
+  loom_predicate_t multiple_pred = make_predicate_1(LOOM_PREDICATE_MUL, 16);
+  loom_value_facts_apply_predicate(&facts[2], &range_pred);
+  loom_value_facts_apply_predicate(&facts[2], &multiple_pred);
+  loom_type_t type =
+      loom_type_shaped_2d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I8,
+                          loom_dim_pack_static(3), loom_dim_pack_dynamic(2), 0);
+
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, facts, IREE_ARRAYSIZE(facts), &count);
+  EXPECT_EQ(count.range_lo, 48);
+  EXPECT_EQ(count.range_hi, 384);
+  EXPECT_EQ(count.known_divisor, 48);
+}
+
+TEST(ElementCountFacts, MissingDynamicFactsDegradeToNonNegativeExtent) {
+  loom_type_t type = loom_type_shaped_2d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+                                         loom_dim_pack_dynamic(99),
+                                         loom_dim_pack_static(4), 0);
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, nullptr, 0, &count);
+  EXPECT_EQ(count.range_lo, 0);
+  EXPECT_EQ(count.range_hi, INT64_MAX);
+  EXPECT_EQ(count.known_divisor, 4);
+  EXPECT_TRUE(loom_value_facts_is_non_negative(count));
+}
+
+TEST(ElementCountFacts, NegativeDynamicFactsDoNotEscapeExtentDomain) {
+  loom_value_facts_t facts[1] = {loom_value_facts_exact_i64(-4)};
+  loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+                                         loom_dim_pack_dynamic(0), 0);
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, facts, IREE_ARRAYSIZE(facts), &count);
+  EXPECT_EQ(count.range_lo, 0);
+  EXPECT_EQ(count.range_hi, INT64_MAX);
+  EXPECT_TRUE(loom_value_facts_is_non_negative(count));
+}
+
+TEST(ElementCountFacts, NonShapedTypeIsUnknown) {
+  loom_type_t type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_facts_t count = {};
+  loom_value_facts_element_count(type, nullptr, 0, &count);
+  EXPECT_TRUE(loom_value_facts_is_unknown(count));
+}
+
+TEST(ElementCountFacts, DivisorHelper) {
+  loom_value_facts_t facts[1] = {loom_value_facts_make(64, 1024, 64)};
+  loom_type_t type =
+      loom_type_shaped_2d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(0), loom_dim_pack_static(2), 0);
+  EXPECT_EQ(loom_value_facts_element_count_divisor(type, facts,
+                                                   IREE_ARRAYSIZE(facts)),
+            128);
+}
+
+TEST(ElementCountFacts, EqualStaticCounts) {
+  loom_type_t lhs =
+      loom_type_shaped_2d(LOOM_TYPE_TILE, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_static(4), loom_dim_pack_static(8), 0);
+  loom_type_t rhs = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                                        loom_dim_pack_static(32), 0);
+  EXPECT_TRUE(
+      loom_value_facts_element_counts_equal(lhs, nullptr, 0, rhs, nullptr, 0));
+}
+
+TEST(ElementCountFacts, EqualStructuralDynamicCounts) {
+  loom_type_t lhs =
+      loom_type_shaped_2d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(7), loom_dim_pack_static(4), 0);
+  loom_type_t rhs =
+      loom_type_shaped_2d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I8,
+                          loom_dim_pack_dynamic(7), loom_dim_pack_static(4), 0);
+  EXPECT_TRUE(
+      loom_value_facts_element_counts_equal(lhs, nullptr, 0, rhs, nullptr, 0));
+}
+
+TEST(ElementCountFacts, EqualDynamicCountsFromExactFacts) {
+  loom_value_facts_t lhs_facts[1] = {loom_value_facts_exact_i64(32)};
+  loom_value_facts_t rhs_facts[1] = {loom_value_facts_exact_i64(8)};
+  loom_type_t lhs = loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                                        loom_dim_pack_dynamic(0), 0);
+  loom_type_t rhs =
+      loom_type_shaped_2d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I8,
+                          loom_dim_pack_dynamic(0), loom_dim_pack_static(4), 0);
+  EXPECT_TRUE(loom_value_facts_element_counts_equal(
+      lhs, lhs_facts, IREE_ARRAYSIZE(lhs_facts), rhs, rhs_facts,
+      IREE_ARRAYSIZE(rhs_facts)));
+}
+
+TEST(ElementCountFacts, EqualRangesAreNotProof) {
+  loom_value_facts_t facts[2] = {loom_value_facts_make(1, 64, 1),
+                                 loom_value_facts_make(1, 64, 1)};
+  loom_type_t lhs = loom_type_shaped_1d(LOOM_TYPE_TENSOR, LOOM_SCALAR_TYPE_F32,
+                                        loom_dim_pack_dynamic(0), 0);
+  loom_type_t rhs = loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_I8,
+                                        loom_dim_pack_dynamic(1), 0);
+  EXPECT_FALSE(loom_value_facts_element_counts_equal(
+      lhs, facts, IREE_ARRAYSIZE(facts), rhs, facts, IREE_ARRAYSIZE(facts)));
+}
+
 }  // namespace
 }  // namespace loom
