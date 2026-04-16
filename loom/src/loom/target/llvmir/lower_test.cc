@@ -450,17 +450,21 @@ class LlvmIrLowerTest : public ::testing::Test {
                                           LOOM_LOCATION_UNKNOWN, &add_op));
   }
 
-  void BuildDot2Bf16Function(iree_string_view_t function_name) {
-    loom_type_t v16bf16 = loom_type_shaped_1d(
-        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_BF16, loom_dim_pack_static(16), 0);
-    loom_type_t v8f32 = loom_type_shaped_1d(
-        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(8), 0);
+  void BuildDot2FFunction(iree_string_view_t function_name,
+                          loom_scalar_type_t source_element_type,
+                          int64_t input_lane_count, int64_t result_lane_count) {
+    loom_type_t input_type =
+        loom_type_shaped_1d(LOOM_TYPE_VECTOR, source_element_type,
+                            loom_dim_pack_static(input_lane_count), 0);
+    loom_type_t result_type =
+        loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                            loom_dim_pack_static(result_lane_count), 0);
     loom_symbol_ref_t symbol = MakeSymbol(function_name);
-    loom_type_t arg_types[3] = {v16bf16, v16bf16, v8f32};
+    loom_type_t arg_types[3] = {input_type, input_type, result_type};
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
                                        arg_types, IREE_ARRAYSIZE(arg_types),
-                                       &v8f32, 1, NULL, 0, NULL, 0,
+                                       &result_type, 1, NULL, 0, NULL, 0,
                                        LOOM_LOCATION_UNKNOWN, &func_op));
     loom_func_like_t func = loom_func_like_cast(module_, func_op);
     uint16_t arg_count = 0;
@@ -473,7 +477,7 @@ class LlvmIrLowerTest : public ::testing::Test {
     loom_builder_t body_builder = BodyBuilder(func_op);
     loom_op_t* dot_op = NULL;
     IREE_ASSERT_OK(loom_vector_dot2f_build(&body_builder, args[0], args[1],
-                                           args[2], v8f32,
+                                           args[2], result_type,
                                            LOOM_LOCATION_UNKNOWN, &dot_op));
     loom_value_id_t dot = loom_vector_dot2f_result(dot_op);
     SetValueName(dot, IREE_SV("dot"));
@@ -482,18 +486,29 @@ class LlvmIrLowerTest : public ::testing::Test {
                                           LOOM_LOCATION_UNKNOWN, &return_op));
   }
 
+  void BuildDot2Bf16Function(iree_string_view_t function_name) {
+    BuildDot2FFunction(function_name, LOOM_SCALAR_TYPE_BF16, 16, 8);
+  }
+
+  void BuildDot2F16Avx10Function(iree_string_view_t function_name) {
+    BuildDot2FFunction(function_name, LOOM_SCALAR_TYPE_F16, 32, 16);
+  }
+
   void BuildDot4IFunction(iree_string_view_t function_name,
-                          loom_vector_dot4i_kind_t kind) {
-    loom_type_t v32i8 = loom_type_shaped_1d(
-        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8, loom_dim_pack_static(32), 0);
-    loom_type_t v8i32 = loom_type_shaped_1d(
-        LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
+                          loom_vector_dot4i_kind_t kind,
+                          int64_t input_lane_count, int64_t result_lane_count) {
+    loom_type_t input_type =
+        loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
+                            loom_dim_pack_static(input_lane_count), 0);
+    loom_type_t result_type =
+        loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+                            loom_dim_pack_static(result_lane_count), 0);
     loom_symbol_ref_t symbol = MakeSymbol(function_name);
-    loom_type_t arg_types[3] = {v32i8, v32i8, v8i32};
+    loom_type_t arg_types[3] = {input_type, input_type, result_type};
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
                                        arg_types, IREE_ARRAYSIZE(arg_types),
-                                       &v8i32, 1, NULL, 0, NULL, 0,
+                                       &result_type, 1, NULL, 0, NULL, 0,
                                        LOOM_LOCATION_UNKNOWN, &func_op));
     loom_func_like_t func = loom_func_like_cast(module_, func_op);
     uint16_t arg_count = 0;
@@ -506,7 +521,7 @@ class LlvmIrLowerTest : public ::testing::Test {
     loom_builder_t body_builder = BodyBuilder(func_op);
     loom_op_t* dot_op = NULL;
     IREE_ASSERT_OK(loom_vector_dot4i_build(&body_builder, kind, args[0],
-                                           args[1], args[2], v8i32,
+                                           args[1], args[2], result_type,
                                            LOOM_LOCATION_UNKNOWN, &dot_op));
     loom_value_id_t dot = loom_vector_dot4i_result(dot_op);
     SetValueName(dot, IREE_SV("dot"));
@@ -516,11 +531,15 @@ class LlvmIrLowerTest : public ::testing::Test {
   }
 
   void BuildDot4S8S8Function(iree_string_view_t function_name) {
-    BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_S8S8);
+    BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_S8S8, 32, 8);
   }
 
   void BuildDot4U8S8Function(iree_string_view_t function_name) {
-    BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_U8S8);
+    BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_U8S8, 32, 8);
+  }
+
+  void BuildDot4S8S8Avx10Function(iree_string_view_t function_name) {
+    BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_S8S8, 64, 16);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -836,6 +855,42 @@ TEST_F(LlvmIrLowerTest, CompilesCpuPackedS8Dot4ToX86Assembly) {
   iree_string_view_t extra_arguments[] = {
       IREE_SV("-mtriple=x86_64-unknown-linux-gnu"),
       IREE_SV("-mattr=+avxvnniint8"),
+  };
+  std::string assembly;
+  CompileX86TextToAssembly(text, extra_arguments,
+                           IREE_ARRAYSIZE(extra_arguments), &assembly);
+  EXPECT_NE(assembly.find("vpdpbssd"), std::string::npos) << assembly;
+}
+
+TEST_F(LlvmIrLowerTest, CompilesCpuPackedF16Dot2ToAvx10Assembly) {
+  BuildDot2F16Avx10Function(IREE_SV("dot2_f16_avx10"));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits = LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX10_2;
+  std::string text = LowerToText(&profile);
+
+  iree_string_view_t extra_arguments[] = {
+      IREE_SV("-mtriple=x86_64-unknown-linux-gnu"),
+      IREE_SV("-mattr=+avx10.2-512"),
+  };
+  std::string assembly;
+  CompileX86TextToAssembly(text, extra_arguments,
+                           IREE_ARRAYSIZE(extra_arguments), &assembly);
+  EXPECT_NE(assembly.find("vdpphps"), std::string::npos) << assembly;
+}
+
+TEST_F(LlvmIrLowerTest, CompilesCpuPackedS8Dot4ToAvx10Assembly) {
+  BuildDot4S8S8Avx10Function(IREE_SV("dot4_s8s8_avx10"));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits = LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX10_2;
+  std::string text = LowerToText(&profile);
+
+  iree_string_view_t extra_arguments[] = {
+      IREE_SV("-mtriple=x86_64-unknown-linux-gnu"),
+      IREE_SV("-mattr=+avx10.2-512"),
   };
   std::string assembly;
   CompileX86TextToAssembly(text, extra_arguments,
