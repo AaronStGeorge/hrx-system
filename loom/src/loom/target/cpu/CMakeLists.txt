@@ -22,6 +22,20 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    packed_dot_vector
+  HDRS
+    "packed_dot_vector.h"
+  SRCS
+    "packed_dot_vector.c"
+  DEPS
+    ::packed_dot_contract
+    loom::src::loom::ir
+    loom::src::loom::ops::vector
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     packed_dot_contract_test
@@ -40,6 +54,7 @@ loom_cc_test(
     "packed_dot_contract_fixture_test.cc"
   DEPS
     ::packed_dot_contract
+    ::packed_dot_vector
     iree::base::internal::arena
     loom::src::loom::format::text::parser
     loom::src::loom::ir

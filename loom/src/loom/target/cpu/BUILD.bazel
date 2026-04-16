@@ -19,6 +19,17 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
+loom_cc_library(
+    name = "packed_dot_vector",
+    srcs = ["packed_dot_vector.c"],
+    hdrs = ["packed_dot_vector.h"],
+    deps = [
+        ":packed_dot_contract",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/vector",
+    ],
+)
+
 loom_cc_test(
     name = "packed_dot_contract_test",
     srcs = ["packed_dot_contract_test.cc"],
@@ -34,6 +45,7 @@ loom_cc_test(
     srcs = ["packed_dot_contract_fixture_test.cc"],
     deps = [
         ":packed_dot_contract",
+        ":packed_dot_vector",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
