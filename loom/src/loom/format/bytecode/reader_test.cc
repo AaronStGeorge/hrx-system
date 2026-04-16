@@ -45,6 +45,13 @@ class ReaderTest : public ::testing::Test {
     uint64_t length = 0;
   };
 
+  struct ValueDefOffsets {
+    // Byte offset of the value definition's dynamic-dim binding count.
+    size_t dim_binding_count = 0;
+    // Byte offset of the value definition's SSA encoding binding.
+    size_t encoding_binding = 0;
+  };
+
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
@@ -65,8 +72,7 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
-  loom_module_t* CreateFunctionModule() {
-    loom_module_t* module = CreateModule("reader_func");
+  loom_op_t* AddSimpleFunction(loom_module_t* module, const char* name) {
     loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
     IREE_CHECK_OK(loom_module_intern_type(module, i32_type, &i32_type));
 
@@ -74,7 +80,8 @@ class ReaderTest : public ::testing::Test {
     loom_builder_initialize(module, &module->arena, loom_module_block(module),
                             &builder);
     loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    IREE_CHECK_OK(loom_builder_intern_string(
+        &builder, iree_make_cstring_view(name), &name_id));
     uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
     loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
@@ -92,7 +99,7 @@ class ReaderTest : public ::testing::Test {
         loom_func_like_arg_ids(func_like, &arg_count);
     if (arg_count != 1) {
       ADD_FAILURE() << "expected one function argument";
-      return module;
+      return func_op;
     }
     loom_region_t* body = loom_func_like_body(func_like);
     loom_builder_t body_builder;
@@ -106,6 +113,133 @@ class ReaderTest : public ::testing::Test {
     loom_op_t* yield_op = nullptr;
     IREE_CHECK_OK(loom_test_yield_build(&body_builder, &addi_result, 1,
                                         LOOM_LOCATION_UNKNOWN, &yield_op));
+    return func_op;
+  }
+
+  loom_module_t* CreateFunctionModule() {
+    loom_module_t* module = CreateModule("reader_func");
+    AddSimpleFunction(module, "f");
+    return module;
+  }
+
+  loom_module_t* CreateTwoFunctionModule() {
+    loom_module_t* module = CreateModule("reader_two_funcs");
+    AddSimpleFunction(module, "f0");
+    AddSimpleFunction(module, "f1");
+    return module;
+  }
+
+  loom_module_t* CreateDynamicDimFunctionModule() {
+    loom_module_t* module = CreateModule("reader_dynamic_dim");
+    loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+    loom_type_t vector_type =
+        loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+                            loom_dim_pack_static(4), /*encoding_id=*/0);
+    loom_type_t arg_types[2] = {index_type, vector_type};
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), nullptr, 0, nullptr, 0, nullptr, 0,
+        LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 2) {
+      ADD_FAILURE() << "expected two function arguments";
+      return module;
+    }
+    loom_type_t rebound_vector =
+        loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32,
+                            loom_dim_pack_dynamic(arg_ids[0]),
+                            /*encoding_id=*/0);
+    IREE_CHECK_OK(
+        loom_module_set_value_type(module, arg_ids[1], rebound_vector));
+    return module;
+  }
+
+  loom_module_t* CreateSsaEncodingFunctionModule() {
+    loom_module_t* module = CreateModule("reader_ssa_encoding");
+    loom_type_t encoding_type =
+        loom_type_encoding_with_role(LOOM_ENCODING_ROLE_ADDRESS_LAYOUT);
+    loom_type_t view_type =
+        loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                            loom_dim_pack_static(4), /*encoding_id=*/0);
+    loom_type_t arg_types[2] = {encoding_type, view_type};
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), nullptr, 0, nullptr, 0, nullptr, 0,
+        LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 2) {
+      ADD_FAILURE() << "expected two function arguments";
+      return module;
+    }
+    loom_type_t rebound_view =
+        loom_type_shaped_1d(LOOM_TYPE_VIEW, LOOM_SCALAR_TYPE_F32,
+                            loom_dim_pack_static(4), (uint16_t)arg_ids[0]);
+    rebound_view.encoding_flags = LOOM_ENCODING_FLAG_SSA;
+    IREE_CHECK_OK(loom_module_set_value_type(module, arg_ids[1], rebound_view));
+    return module;
+  }
+
+  loom_module_t* CreateTiedBodyOpModule() {
+    loom_module_t* module = CreateModule("reader_tied_body_op");
+    loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    loom_type_t arg_types[1] = {i32_type};
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("f"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), nullptr, 0, nullptr, 0, nullptr, 0,
+        LOOM_LOCATION_UNKNOWN, &func_op));
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 1) {
+      ADD_FAILURE() << "expected one function argument";
+      return module;
+    }
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_builder_t body_builder;
+    loom_builder_initialize(module, &module->arena,
+                            loom_region_entry_block(body), &body_builder);
+    loom_tied_result_t tied_result = {.result_index = 0, .operand_index = 0};
+    loom_op_t* map_op = nullptr;
+    IREE_CHECK_OK(loom_test_map_build(&body_builder, arg_ids, arg_count,
+                                      i32_type, &tied_result, 1,
+                                      LOOM_LOCATION_UNKNOWN, &map_op));
     return module;
   }
 
@@ -194,6 +328,14 @@ class ReaderTest : public ::testing::Test {
     return (uint16_t)bytes[offset] | ((uint16_t)bytes[offset + 1] << 8);
   }
 
+  uint32_t ReadU32LE(const std::vector<uint8_t>& bytes, size_t offset) {
+    uint32_t value = 0;
+    for (int i = 0; i < 4; ++i) {
+      value |= (uint32_t)bytes[offset + i] << (i * 8);
+    }
+    return value;
+  }
+
   uint64_t ReadU64LE(const std::vector<uint8_t>& bytes, size_t offset) {
     uint64_t value = 0;
     for (int i = 0; i < 8; ++i) {
@@ -205,6 +347,12 @@ class ReaderTest : public ::testing::Test {
   void WriteU16LE(std::vector<uint8_t>* bytes, size_t offset, uint16_t value) {
     (*bytes)[offset] = (uint8_t)value;
     (*bytes)[offset + 1] = (uint8_t)(value >> 8);
+  }
+
+  void WriteU32LE(std::vector<uint8_t>* bytes, size_t offset, uint32_t value) {
+    for (int i = 0; i < 4; ++i) {
+      (*bytes)[offset + i] = (uint8_t)(value >> (i * 8));
+    }
   }
 
   void WriteU64LE(std::vector<uint8_t>* bytes, size_t offset, uint64_t value) {
@@ -221,6 +369,82 @@ class ReaderTest : public ::testing::Test {
     IREE_CHECK_OK(loom_uvarint_decode(&cursor, &value));
     *offset += cursor.position;
     return value;
+  }
+
+  ValueDefOffsets ReadValueDefOffsets(const std::vector<uint8_t>& bytes,
+                                      size_t* offset) {
+    ValueDefOffsets value_def;
+    ReadUVarint(bytes, offset);  // name_id
+    ReadUVarint(bytes, offset);  // type_id
+    value_def.dim_binding_count = *offset;
+    uint64_t dim_binding_count = ReadUVarint(bytes, offset);
+    for (uint64_t i = 0; i < dim_binding_count; ++i) {
+      ReadUVarint(bytes, offset);
+    }
+    value_def.encoding_binding = *offset;
+    ReadUVarint(bytes, offset);
+    return value_def;
+  }
+
+  void SkipPredicateList(const std::vector<uint8_t>& bytes, size_t* offset) {
+    uint64_t predicate_count = ReadUVarint(bytes, offset);
+    for (uint64_t i = 0; i < predicate_count; ++i) {
+      ++*offset;  // predicate kind
+      uint8_t arg_count = bytes[(*offset)++];
+      for (uint8_t arg_index = 0; arg_index < arg_count; ++arg_index) {
+        uint8_t tag = bytes[(*offset)++];
+        ReadUVarint(bytes, offset);
+        (void)tag;
+      }
+    }
+  }
+
+  size_t FunctionBodyLengthOffset(const std::vector<uint8_t>& bytes,
+                                  uint64_t symbol_index) {
+    size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_SYMBOLS);
+    uint64_t symbol_count = ReadUVarint(bytes, &offset);
+    EXPECT_GT(symbol_count, symbol_index);
+    uint64_t import_count = ReadUVarint(bytes, &offset);
+    uint64_t export_count = ReadUVarint(bytes, &offset);
+    offset += (import_count + export_count) * sizeof(uint64_t);
+    for (uint64_t i = 0; i < symbol_count; ++i) {
+      ReadUVarint(bytes, &offset);  // name_id
+      uint8_t kind = bytes[offset++];
+      offset += 1;  // visibility
+      uint16_t flags = ReadU16LE(bytes, offset);
+      offset += 2;
+      if (flags & LOOM_BYTECODE_SYMBOL_FLAG_IMPORT) {
+        ReadUVarint(bytes, &offset);
+        ReadUVarint(bytes, &offset);
+      }
+      EXPECT_LE(kind, LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL);
+      ReadUVarint(bytes, &offset);  // def_op_table_index_plus1
+      offset += 1;                  // calling_convention
+      uint64_t arg_count = ReadUVarint(bytes, &offset);
+      uint64_t result_count = ReadUVarint(bytes, &offset);
+      for (uint64_t arg = 0; arg < arg_count; ++arg) {
+        ReadUVarint(bytes, &offset);
+      }
+      for (uint64_t result = 0; result < result_count; ++result) {
+        uint8_t is_tied = bytes[offset++];
+        ReadUVarint(bytes, &offset);
+        if (is_tied) ReadUVarint(bytes, &offset);
+      }
+      ReadUVarint(bytes, &offset);  // tied_result_count
+      SkipPredicateList(bytes, &offset);
+      if (kind == LOOM_BYTECODE_SYMBOL_FUNC_TEMPLATE ||
+          kind == LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL) {
+        ReadUVarint(bytes, &offset);  // implements_op_name
+        ReadUVarint(bytes, &offset);  // priority
+      }
+      uint8_t has_body = bytes[offset++];
+      if (!has_body) continue;
+      offset += sizeof(uint64_t);  // ir_offset
+      if (i == symbol_index) return offset;
+      offset += sizeof(uint32_t);  // ir_length
+    }
+    ADD_FAILURE() << "symbol has no body: " << symbol_index;
+    return 0;
   }
 
   size_t FileHeaderEnd(const std::vector<uint8_t>& bytes) {
@@ -277,7 +501,8 @@ class ReaderTest : public ::testing::Test {
     return (size_t)ModuleOffset(bytes) + (size_t)entry.offset;
   }
 
-  size_t FirstBodyOperandRefOffset(const std::vector<uint8_t>& bytes) {
+  size_t RootBlockValueListOffset(const std::vector<uint8_t>& bytes,
+                                  uint64_t* out_arg_count) {
     size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_IR);
     ReadUVarint(bytes, &offset);  // value_count
     ReadUVarint(bytes, &offset);  // region_count
@@ -289,15 +514,27 @@ class ReaderTest : public ::testing::Test {
     if (has_label) {
       ReadUVarint(bytes, &offset);
     }
-    uint64_t arg_count = ReadUVarint(bytes, &offset);
+    *out_arg_count = ReadUVarint(bytes, &offset);
+    return offset;
+  }
+
+  ValueDefOffsets RootBlockArgValueDefOffsets(const std::vector<uint8_t>& bytes,
+                                              uint64_t arg_index) {
+    uint64_t arg_count = 0;
+    size_t offset = RootBlockValueListOffset(bytes, &arg_count);
+    EXPECT_GT(arg_count, arg_index);
+    ValueDefOffsets value_def;
+    for (uint64_t i = 0; i <= arg_index; ++i) {
+      value_def = ReadValueDefOffsets(bytes, &offset);
+    }
+    return value_def;
+  }
+
+  size_t FirstBodyOperandRefOffset(const std::vector<uint8_t>& bytes) {
+    uint64_t arg_count = 0;
+    size_t offset = RootBlockValueListOffset(bytes, &arg_count);
     for (uint64_t i = 0; i < arg_count; ++i) {
-      ReadUVarint(bytes, &offset);  // name_id
-      ReadUVarint(bytes, &offset);  // type_id
-      uint64_t dim_binding_count = ReadUVarint(bytes, &offset);
-      for (uint64_t j = 0; j < dim_binding_count; ++j) {
-        ReadUVarint(bytes, &offset);
-      }
-      ReadUVarint(bytes, &offset);  // encoding_binding
+      ReadValueDefOffsets(bytes, &offset);
     }
     uint64_t op_count = ReadUVarint(bytes, &offset);
     EXPECT_GE(op_count, 1u);
@@ -306,6 +543,31 @@ class ReaderTest : public ::testing::Test {
     ReadUVarint(bytes, &offset);  // location_id
     uint64_t operand_count = ReadUVarint(bytes, &offset);
     EXPECT_GE(operand_count, 1u);
+    return offset;
+  }
+
+  size_t FirstBodyOpTiedOperandOffset(const std::vector<uint8_t>& bytes) {
+    uint64_t arg_count = 0;
+    size_t offset = RootBlockValueListOffset(bytes, &arg_count);
+    for (uint64_t i = 0; i < arg_count; ++i) {
+      ReadValueDefOffsets(bytes, &offset);
+    }
+    uint64_t op_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(op_count, 1u);
+    ReadUVarint(bytes, &offset);  // op_table_index_plus1
+    ++offset;                     // flags
+    ReadUVarint(bytes, &offset);  // location_id
+    uint64_t operand_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < operand_count; ++i) {
+      ReadUVarint(bytes, &offset);
+    }
+    uint64_t result_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < result_count; ++i) {
+      ReadValueDefOffsets(bytes, &offset);
+    }
+    uint64_t tied_result_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(tied_result_count, 1u);
+    ReadUVarint(bytes, &offset);  // result_index
     return offset;
   }
 
@@ -452,6 +714,54 @@ TEST_F(ReaderTest, RejectsInvalidBodyValueReference) {
   bytes[operand_offset] = 0x7F;
 
   ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsMissingDynamicDimBinding) {
+  loom_module_t* module = CreateDynamicDimFunctionModule();
+  auto bytes = WriteModule(module);
+  ValueDefOffsets vector_arg = RootBlockArgValueDefOffsets(bytes, 1);
+  ASSERT_EQ(bytes[vector_arg.dim_binding_count], 1u);
+  bytes[vector_arg.dim_binding_count] = 0;
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsMissingSsaEncodingBinding) {
+  loom_module_t* module = CreateSsaEncodingFunctionModule();
+  auto bytes = WriteModule(module);
+  ValueDefOffsets view_arg = RootBlockArgValueDefOffsets(bytes, 1);
+  ASSERT_EQ(bytes[view_arg.encoding_binding], 1u);
+  bytes[view_arg.encoding_binding] = 0;
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsOutOfRangeBodyTiedResult) {
+  loom_module_t* module = CreateTiedBodyOpModule();
+  auto bytes = WriteModule(module);
+  size_t tied_operand_offset = FirstBodyOpTiedOperandOffset(bytes);
+  ASSERT_EQ(bytes[tied_operand_offset], 0u);
+  bytes[tied_operand_offset] = 2;
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsFunctionBodyTrailingBytes) {
+  loom_module_t* module = CreateTwoFunctionModule();
+  auto bytes = WriteModule(module);
+  size_t first_length_offset = FunctionBodyLengthOffset(bytes, 0);
+  uint32_t first_length = ReadU32LE(bytes, first_length_offset);
+  WriteU32LE(&bytes, first_length_offset, first_length + 1);
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_006");
 
   loom_module_free(module);
 }
