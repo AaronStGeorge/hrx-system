@@ -79,6 +79,8 @@ loom_cc_library(
     integer_relation
   HDRS
     "integer_relation.h"
+  SRCS
+    "integer_relation.c"
   DEPS
 
   PUBLIC

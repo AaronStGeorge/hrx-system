@@ -848,6 +848,172 @@ iree_status_t loom_symbolic_expr_simplify_value_difference(
   return iree_ok_status();
 }
 
+static bool loom_symbolic_expr_predicate_relation(
+    const loom_predicate_t* predicate,
+    loom_symbolic_integer_relation_t* out_relation) {
+  switch ((loom_predicate_kind_t)predicate->kind) {
+    case LOOM_PREDICATE_EQ:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
+      return true;
+    case LOOM_PREDICATE_LT:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LT;
+      return true;
+    case LOOM_PREDICATE_LE:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_LE;
+      return true;
+    case LOOM_PREDICATE_GT:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GT;
+      return true;
+    case LOOM_PREDICATE_GE:
+      *out_relation = LOOM_SYMBOLIC_INTEGER_RELATION_GE;
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_symbolic_expr_assume_value_source(
+    const loom_symbolic_expr_context_t* context, loom_value_id_t value_id,
+    loom_value_id_t* out_source_value, const loom_predicate_t** out_predicates,
+    uint16_t* out_predicate_count) {
+  if (!context->module || value_id >= context->module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(context->module, value_id);
+  if (loom_value_is_block_arg(value)) return false;
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!defining_op) return false;
+
+  loom_value_slice_t values = {.values = NULL, .count = 0};
+  if (loom_index_assume_isa(defining_op)) {
+    values = loom_index_assume_values(defining_op);
+  } else if (loom_scalar_assume_isa(defining_op)) {
+    values = loom_scalar_assume_values(defining_op);
+  } else {
+    return false;
+  }
+
+  uint16_t result_index = loom_value_def_index(value);
+  if (result_index >= values.count) return false;
+  if (defining_op->attribute_count == 0) return false;
+  loom_attribute_t predicates_attr = loom_op_attrs(defining_op)[0];
+  if (predicates_attr.kind != LOOM_ATTR_PREDICATE_LIST) return false;
+  if (predicates_attr.count > 0 && !predicates_attr.predicate_list) {
+    return false;
+  }
+  *out_source_value = values.values[result_index];
+  *out_predicates = predicates_attr.predicate_list;
+  *out_predicate_count = predicates_attr.count;
+  return true;
+}
+
+static bool loom_symbolic_expr_value_is_integer_domain(
+    const loom_symbolic_expr_context_t* context, loom_value_id_t value_id) {
+  if (!context->module || value_id >= context->module->values.count) {
+    return false;
+  }
+  loom_type_t type = loom_module_value_type(context->module, value_id);
+  if (!loom_type_is_scalar(type)) return false;
+  loom_scalar_type_t scalar_type = loom_type_element_type(type);
+  return scalar_type == LOOM_SCALAR_TYPE_INDEX ||
+         scalar_type == LOOM_SCALAR_TYPE_OFFSET ||
+         loom_scalar_type_is_integer(scalar_type);
+}
+
+static bool loom_symbolic_expr_predicate_proves_relation(
+    const loom_predicate_t* predicate,
+    loom_symbolic_integer_relation_t queried_relation,
+    loom_value_id_t left_value, loom_value_id_t right_value, bool* out_result) {
+  if (predicate->arg_count != 2 ||
+      predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE ||
+      predicate->arg_tags[1] != LOOM_PRED_ARG_VALUE) {
+    return false;
+  }
+
+  loom_value_id_t predicate_left = (loom_value_id_t)predicate->args[0];
+  loom_value_id_t predicate_right = (loom_value_id_t)predicate->args[1];
+  loom_symbolic_integer_relation_t implied_relation =
+      LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
+  if (!loom_symbolic_expr_predicate_relation(predicate, &implied_relation)) {
+    return false;
+  }
+
+  if (predicate_left == left_value && predicate_right == right_value) {
+    return loom_symbolic_integer_relation_implies(implied_relation,
+                                                  queried_relation, out_result);
+  }
+  if (predicate_left == right_value && predicate_right == left_value) {
+    return loom_symbolic_integer_relation_implies(
+        loom_symbolic_integer_relation_swap(implied_relation), queried_relation,
+        out_result);
+  }
+  return false;
+}
+
+static bool loom_symbolic_expr_predicate_list_proves_relation(
+    const loom_predicate_t* predicates, uint16_t predicate_count,
+    loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
+    loom_value_id_t right_value, loom_symbolic_proof_result_t* out_result) {
+  for (uint16_t i = 0; i < predicate_count; ++i) {
+    bool relation_result = false;
+    if (!loom_symbolic_expr_predicate_proves_relation(&predicates[i], relation,
+                                                      left_value, right_value,
+                                                      &relation_result)) {
+      continue;
+    }
+    *out_result =
+        relation_result ? LOOM_SYMBOLIC_PROOF_TRUE : LOOM_SYMBOLIC_PROOF_FALSE;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_symbolic_expr_prove_assumed_value_relation(
+    loom_symbolic_expr_context_t* context,
+    loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
+    loom_value_id_t right_value, loom_symbolic_proof_result_t* out_result) {
+  loom_value_id_t left_source = LOOM_VALUE_ID_INVALID;
+  const loom_predicate_t* left_predicates = NULL;
+  uint16_t left_predicate_count = 0;
+  if (loom_symbolic_expr_assume_value_source(context, left_value, &left_source,
+                                             &left_predicates,
+                                             &left_predicate_count)) {
+    left_value = left_source;
+  }
+
+  loom_value_id_t right_source = LOOM_VALUE_ID_INVALID;
+  const loom_predicate_t* right_predicates = NULL;
+  uint16_t right_predicate_count = 0;
+  if (loom_symbolic_expr_assume_value_source(context, right_value,
+                                             &right_source, &right_predicates,
+                                             &right_predicate_count)) {
+    right_value = right_source;
+  }
+
+  bool has_left_predicates = left_predicates && left_predicate_count > 0;
+  bool has_right_predicates = right_predicates && right_predicate_count > 0;
+  if (!has_left_predicates && !has_right_predicates) return false;
+
+  if (!loom_symbolic_expr_value_is_integer_domain(context, left_value) ||
+      !loom_symbolic_expr_value_is_integer_domain(context, right_value)) {
+    return false;
+  }
+
+  if (has_left_predicates &&
+      loom_symbolic_expr_predicate_list_proves_relation(
+          left_predicates, left_predicate_count, relation, left_value,
+          right_value, out_result)) {
+    return true;
+  }
+  if (has_right_predicates &&
+      loom_symbolic_expr_predicate_list_proves_relation(
+          right_predicates, right_predicate_count, relation, left_value,
+          right_value, out_result)) {
+    return true;
+  }
+  return false;
+}
+
 static iree_status_t loom_symbolic_expr_prove_equal(
     loom_symbolic_expr_context_t* context,
     const loom_symbolic_expr_t* left_expression,
@@ -894,6 +1060,11 @@ iree_status_t loom_symbolic_expr_prove_value_relation(
     loom_symbolic_integer_relation_t relation, loom_value_id_t left_value,
     loom_value_id_t right_value, loom_symbolic_proof_result_t* out_result) {
   *out_result = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  if (loom_symbolic_expr_prove_assumed_value_relation(
+          context, relation, left_value, right_value, out_result)) {
+    return iree_ok_status();
+  }
+
   loom_symbolic_expr_t left_expression = {0};
   IREE_RETURN_IF_ERROR(
       loom_symbolic_expr_from_value(context, left_value, &left_expression));

@@ -45,44 +45,6 @@ static iree_status_t loom_condition_fact_set_append_integer_relation(
   return iree_ok_status();
 }
 
-static loom_symbolic_integer_relation_t loom_condition_invert_integer_relation(
-    loom_symbolic_integer_relation_t relation) {
-  switch (relation) {
-    case LOOM_SYMBOLIC_INTEGER_RELATION_EQ:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_NE;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_NE:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_EQ;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_LT:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_GE;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_LE:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_GT;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_GT:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_LE;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_GE:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_LT;
-    default:
-      return relation;
-  }
-}
-
-static loom_symbolic_integer_relation_t loom_condition_swap_integer_relation(
-    loom_symbolic_integer_relation_t relation) {
-  switch (relation) {
-    case LOOM_SYMBOLIC_INTEGER_RELATION_LT:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_GT;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_LE:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_GE;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_GT:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_LT;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_GE:
-      return LOOM_SYMBOLIC_INTEGER_RELATION_LE;
-    case LOOM_SYMBOLIC_INTEGER_RELATION_EQ:
-    case LOOM_SYMBOLIC_INTEGER_RELATION_NE:
-    default:
-      return relation;
-  }
-}
-
 static loom_value_facts_t loom_condition_lookup_facts(
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id) {
   if (!fact_table) return loom_value_facts_unknown();
@@ -234,7 +196,7 @@ static iree_status_t loom_condition_facts_query_integer_compare(
     return iree_ok_status();
   }
   if (!assumed_truth) {
-    relation = loom_condition_invert_integer_relation(relation);
+    relation = loom_symbolic_integer_relation_invert(relation);
   }
 
   loom_condition_integer_relation_t assertion = {
@@ -342,7 +304,7 @@ bool loom_condition_integer_relation_apply_to_value_facts(
       return false;
     }
     normalized_relation =
-        loom_condition_swap_integer_relation(normalized_relation);
+        loom_symbolic_integer_relation_swap(normalized_relation);
   } else {
     return false;
   }

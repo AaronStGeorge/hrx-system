@@ -74,6 +74,13 @@ class SymbolicExprTest : public ::testing::Test {
     return value_id;
   }
 
+  loom_value_id_t DefineI64Value() {
+    loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_define_value(
+        &builder_, loom_type_scalar(LOOM_SCALAR_TYPE_I64), &value_id));
+    return value_id;
+  }
+
   void DefineFacts(loom_value_id_t value_id, loom_value_facts_t facts) {
     IREE_CHECK_OK(loom_value_fact_table_define(&fact_table_, value_id, facts));
     loom_symbolic_expr_context_reset(&expression_context_);
@@ -224,6 +231,93 @@ TEST_F(SymbolicExprTest, ProvesRelationsThroughSymbolicCancellation) {
       &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_EQ,
       loom_index_add_result(value_plus_four_op),
       loom_index_add_result(value_plus_eight_op), &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+}
+
+TEST_F(SymbolicExprTest, AssumedValueRelationPredicatesProveRelations) {
+  loom_value_id_t induction = DefineIndexValue();
+  loom_value_id_t upper_bound = DefineIndexValue();
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_LT,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE},
+      .args = {induction, upper_bound},
+  };
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_index_assume_build(&builder_, &induction, 1, &predicate,
+                                         1, &index_type, 1,
+                                         LOOM_LOCATION_UNKNOWN, &assume_op));
+  loom_value_id_t assumed_induction =
+      loom_index_assume_results(assume_op).values[0];
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT,
+      assumed_induction, upper_bound, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_GE,
+      assumed_induction, upper_bound, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_EQ,
+      assumed_induction, upper_bound, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
+
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_NE,
+      assumed_induction, upper_bound, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
+TEST_F(SymbolicExprTest, AssumedRightValueRelationPredicatesAreSwapped) {
+  loom_value_id_t induction = DefineIndexValue();
+  loom_value_id_t upper_bound = DefineIndexValue();
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_GT,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE},
+      .args = {upper_bound, induction},
+  };
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_index_assume_build(&builder_, &upper_bound, 1, &predicate,
+                                         1, &index_type, 1,
+                                         LOOM_LOCATION_UNKNOWN, &assume_op));
+  loom_value_id_t assumed_upper_bound =
+      loom_index_assume_results(assume_op).values[0];
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_LT, induction,
+      assumed_upper_bound, &proof));
+  EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_TRUE);
+}
+
+TEST_F(SymbolicExprTest, ScalarAssumePredicatesProveRelations) {
+  loom_value_id_t element = DefineI64Value();
+  loom_value_id_t bound = DefineI64Value();
+  loom_predicate_t predicate = {
+      .kind = LOOM_PREDICATE_LE,
+      .arg_count = 2,
+      .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_VALUE},
+      .args = {element, bound},
+  };
+  loom_type_t i64_type = loom_type_scalar(LOOM_SCALAR_TYPE_I64);
+  loom_op_t* assume_op = nullptr;
+  IREE_ASSERT_OK(loom_scalar_assume_build(&builder_, &element, 1, &predicate, 1,
+                                          &i64_type, 1, LOOM_LOCATION_UNKNOWN,
+                                          &assume_op));
+  loom_value_id_t assumed_element =
+      loom_scalar_assume_results(assume_op).values[0];
+
+  loom_symbolic_proof_result_t proof = LOOM_SYMBOLIC_PROOF_UNKNOWN;
+  IREE_ASSERT_OK(loom_symbolic_expr_prove_value_relation(
+      &expression_context_, LOOM_SYMBOLIC_INTEGER_RELATION_GT, assumed_element,
+      bound, &proof));
   EXPECT_EQ(proof, LOOM_SYMBOLIC_PROOF_FALSE);
 }
 

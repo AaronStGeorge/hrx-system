@@ -9,6 +9,8 @@
 #ifndef LOOM_ANALYSIS_INTEGER_RELATION_H_
 #define LOOM_ANALYSIS_INTEGER_RELATION_H_
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +30,20 @@ typedef enum loom_symbolic_integer_relation_e {
   // left >= right.
   LOOM_SYMBOLIC_INTEGER_RELATION_GE = 5,
 } loom_symbolic_integer_relation_t;
+
+// Returns the logical negation of |relation|.
+loom_symbolic_integer_relation_t loom_symbolic_integer_relation_invert(
+    loom_symbolic_integer_relation_t relation);
+
+// Returns the equivalent relation after swapping left and right operands.
+loom_symbolic_integer_relation_t loom_symbolic_integer_relation_swap(
+    loom_symbolic_integer_relation_t relation);
+
+// Attempts to prove |queried_relation| from one known |implied_relation| over
+// the same ordered operands. Returns false when implication is unknown.
+bool loom_symbolic_integer_relation_implies(
+    loom_symbolic_integer_relation_t implied_relation,
+    loom_symbolic_integer_relation_t queried_relation, bool* out_result);
 
 #ifdef __cplusplus
 }  // extern "C"
