@@ -18,12 +18,14 @@ loom_cc_library(
         "builders.c",
         "canonicalize.c",
         "compare.c",
-        "compare.h",
         "facts.c",
         "tables.c",
         "verify.c",
     ],
-    hdrs = ["ops.h"],
+    hdrs = [
+        "compare.h",
+        "ops.h",
+    ],
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

@@ -14,12 +14,12 @@ loom_cc_library(
   NAME
     scalar
   HDRS
+    "compare.h"
     "ops.h"
   SRCS
     "builders.c"
     "canonicalize.c"
     "compare.c"
-    "compare.h"
     "facts.c"
     "tables.c"
     "verify.c"

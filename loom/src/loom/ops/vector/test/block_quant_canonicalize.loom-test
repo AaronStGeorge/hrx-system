@@ -32,3 +32,143 @@ func.def @q4_0_repack_to_dot8i4_micro_gemv() -> (i32, i32) {
   %r1 = scalar.constant 112 : i32
   func.return %r0, %r1 : i32, i32
 }
+
+// ====
+
+// The scalar reference spelling for Q4_0 should now fold too. This keeps the
+// readable decode path alive even when a target later rewrites the same format
+// into packed dot operations.
+func.def @q4_0_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %b0 = scalar.constant 0x10 : i8
+  %b1 = scalar.constant 0x32 : i8
+  %b2 = scalar.constant 0x54 : i8
+  %b3 = scalar.constant 0x76 : i8
+  %qs = vector.from_elements %b0, %b1, %b2, %b3 : vector<4xi8>
+
+  %lo = vector.bitfield.extractu %qs {offset = 0, width = 4} : vector<4xi8> -> vector<4xi8>
+  %hi = vector.bitfield.extractu %qs {offset = 4, width = 4} : vector<4xi8> -> vector<4xi8>
+  %codes = vector.concat<0> %lo, %hi : vector<4xi8>, vector<4xi8> -> vector<8xi8>
+  %bias = vector.constant -8 : vector<8xi8>
+  %signed = vector.addi %codes, %bias : vector<8xi8>
+
+  %e0 = scalar.constant -8 : i8
+  %e1 = scalar.constant -6 : i8
+  %e2 = scalar.constant -4 : i8
+  %e3 = scalar.constant -2 : i8
+  %e4 = scalar.constant -7 : i8
+  %e5 = scalar.constant -5 : i8
+  %e6 = scalar.constant -3 : i8
+  %e7 = scalar.constant -1 : i8
+  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : vector<8xi8>
+  %matches = vector.cmpi eq, %signed, %expected : vector<8xi8> -> vector<8xi1>
+  %true = scalar.constant true : i1
+  %ok = vector.reduce<andi> %matches, %true : vector<8xi1>, i1
+  func.return %ok : i1
+}
+// ----
+func.def @q4_0_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_q4_0<block_elems=32, storage_bytes=18> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %ok = scalar.constant true : i1
+  func.return %ok : i1
+}
+
+// ====
+
+// Q6_K-style decode crosses packed side-stream bits, slices the high-bit
+// stream, inserts those bits into low nibbles, and interleaves the logical
+// lane order. This folds only if the whole decode-adjacent fact chain lines up.
+func.def @q6_k_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_q6_k<block_elems=256, storage_bytes=210> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %l0 = scalar.constant 0x10 : i8
+  %l1 = scalar.constant 0x32 : i8
+  %l2 = scalar.constant 0x54 : i8
+  %l3 = scalar.constant 0x76 : i8
+  %low_packed = vector.from_elements %l0, %l1, %l2, %l3 : vector<4xi8>
+
+  %h0 = scalar.constant 0x24 : i8
+  %h1 = scalar.constant 0x1B : i8
+  %high_packed = vector.from_elements %h0, %h1 : vector<2xi8>
+
+  %lo4 = vector.bitfield.extractu %low_packed {offset = 0, width = 4} : vector<4xi8> -> vector<4xi8>
+  %hi4 = vector.bitfield.extractu %low_packed {offset = 4, width = 4} : vector<4xi8> -> vector<4xi8>
+  %high2 = vector.bitunpacku<2> %high_packed : vector<2xi8> -> vector<8xi8>
+  %lo2 = vector.slice %high2[0] : vector<8xi8> -> vector<4xi8>
+  %hi2 = vector.slice %high2[4] : vector<8xi8> -> vector<4xi8>
+  %lo6 = vector.bitfield.insert %lo2 into %lo4 {offset = 4, width = 2} : vector<4xi8>, vector<4xi8>
+  %hi6 = vector.bitfield.insert %hi2 into %hi4 {offset = 4, width = 2} : vector<4xi8>, vector<4xi8>
+  %codes = vector.interleave<0> %lo6, %hi6 : vector<4xi8>, vector<4xi8> -> vector<8xi8>
+  %bias = vector.constant -32 : vector<8xi8>
+  %signed = vector.addi %codes, %bias : vector<8xi8>
+
+  %e0 = scalar.constant -32 : i8
+  %e1 = scalar.constant 17 : i8
+  %e2 = scalar.constant -14 : i8
+  %e3 = scalar.constant 3 : i8
+  %e4 = scalar.constant 4 : i8
+  %e5 = scalar.constant -11 : i8
+  %e6 = scalar.constant -26 : i8
+  %e7 = scalar.constant -25 : i8
+  %expected = vector.from_elements %e0, %e1, %e2, %e3, %e4, %e5, %e6, %e7 : vector<8xi8>
+  %matches = vector.cmpi eq, %signed, %expected : vector<8xi8> -> vector<8xi1>
+  %true = scalar.constant true : i1
+  %ok = vector.reduce<andi> %matches, %true : vector<8xi1>, i1
+  func.return %ok : i1
+}
+// ----
+func.def @q6_k_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_q6_k<block_elems=256, storage_bytes=210> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %ok = scalar.constant true : i1
+  func.return %ok : i1
+}
+
+// ====
+
+// Grid/table-based formats keep the table explicit; facts can still fold exact
+// code streams through vector.table.lookup and vector.cmpf.
+func.def @iq_grid_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_iq_grid<code_bits=4, grid_elems=16> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %p0 = scalar.constant 0x10 : i8
+  %p1 = scalar.constant 0x32 : i8
+  %packed = vector.from_elements %p0, %p1 : vector<2xi8>
+  %codes = vector.bitunpacku<4> %packed : vector<2xi8> -> vector<4xi8>
+
+  %g0 = scalar.constant -1.0 : f16
+  %g1 = scalar.constant -0.5 : f16
+  %g2 = scalar.constant 0.5 : f16
+  %g3 = scalar.constant 1.0 : f16
+  %g4 = scalar.constant -1.5 : f16
+  %g5 = scalar.constant -0.75 : f16
+  %g6 = scalar.constant 0.75 : f16
+  %g7 = scalar.constant 1.5 : f16
+  %g8 = scalar.constant -2.0 : f16
+  %g9 = scalar.constant -0.25 : f16
+  %g10 = scalar.constant 0.25 : f16
+  %g11 = scalar.constant 2.0 : f16
+  %g12 = scalar.constant -3.0 : f16
+  %g13 = scalar.constant -0.125 : f16
+  %g14 = scalar.constant 0.125 : f16
+  %g15 = scalar.constant 3.0 : f16
+  %grid = vector.from_elements %g0, %g1, %g2, %g3, %g4, %g5, %g6, %g7, %g8, %g9, %g10, %g11, %g12, %g13, %g14, %g15 : vector<16xf16>
+  %decoded = vector.table.lookup %grid[%codes] : vector<16xf16>, vector<4xi8> -> vector<4xf16>
+  %expected = vector.from_elements %g0, %g1, %g2, %g3 : vector<4xf16>
+  %matches = vector.cmpf oeq, %decoded, %expected : vector<4xf16> -> vector<4xi1>
+  %true = scalar.constant true : i1
+  %ok = vector.reduce<andi> %matches, %true : vector<4xi1>, i1
+  func.return %ok : i1
+}
+// ----
+func.def @iq_grid_reference_chunk_folds() -> (i1) {
+  %schema = encoding.define #ggml_iq_grid<code_bits=4, grid_elems=16> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %ok = scalar.constant true : i1
+  func.return %ok : i1
+}

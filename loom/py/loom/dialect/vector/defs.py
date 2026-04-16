@@ -325,6 +325,8 @@ def _vector_cast(
     source_constraint: Callable[[str], Constraint],
     doc: str,
     constraints: Sequence[Constraint] = (),
+    facts: str = "",
+    canonicalize: str = "",
 ) -> Op:
     result_element_constraint = _element_constraint_for(result_constraint)
     return Op(
@@ -340,6 +342,8 @@ def _vector_cast(
             SameShape("input", "result"),
             *constraints,
         ],
+        facts=facts,
+        canonicalize=canonicalize,
         traits=[PURE, ELEMENTWISE],
         format=[
             Ref("input"),
@@ -677,6 +681,7 @@ vector_slice = Op(
     ],
     constraints=[SameElementType("source", "result")],
     verify="loom_vector_slice_verify",
+    facts="loom_vector_slice_facts",
     traits=[PURE],
     format=[
         Ref("source"),
@@ -714,6 +719,7 @@ vector_concat = Op(
         DimIndexInBounds("result", "axis"),
     ],
     verify="loom_vector_concat_verify",
+    facts="loom_vector_concat_facts",
     traits=[PURE],
     format=[
         TemplateParam("axis"),
@@ -831,6 +837,7 @@ vector_interleave = Op(
         DimIndexInBounds("even", "axis"),
     ],
     verify="loom_vector_interleave_verify",
+    facts="loom_vector_interleave_facts",
     traits=[PURE],
     format=[
         TemplateParam("axis"),
@@ -874,6 +881,7 @@ vector_deinterleave = Op(
         DimIndexInBounds("source", "axis"),
     ],
     verify="loom_vector_deinterleave_verify",
+    facts="loom_vector_deinterleave_facts",
     traits=[PURE],
     format=[
         TemplateParam("axis"),
@@ -912,6 +920,7 @@ vector_table_lookup = Op(
     ],
     verify="loom_vector_table_lookup_verify",
     traits=[PURE],
+    facts="loom_vector_table_lookup_facts",
     format=[
         Ref("table"),
         GLUE,
@@ -959,6 +968,7 @@ vector_table_quantize = Op(
     ],
     verify="loom_vector_table_quantize_verify",
     traits=[PURE],
+    facts="loom_vector_table_quantize_facts",
     format=[
         Ref("input"),
         COMMA,
@@ -1764,6 +1774,7 @@ vector_cmpi = Op(
         SameElementType("lhs", "rhs"),
     ],
     traits=[PURE, ELEMENTWISE],
+    facts="loom_vector_cmpi_facts",
     canonicalize="loom_vector_comparison_canonicalize",
     format=[
         Attr("predicate"),
@@ -1797,6 +1808,7 @@ vector_cmpf = Op(
         SameElementType("lhs", "rhs"),
     ],
     traits=[PURE, ELEMENTWISE],
+    facts="loom_vector_cmpf_facts",
     canonicalize="loom_vector_comparison_canonicalize",
     format=[
         Attr("predicate"),
@@ -2567,6 +2579,8 @@ vector_extf = _vector_cast(
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise floating-point precision extension. Source and result shapes match exactly; only the floating-point element type widens."),
     constraints=[ElementWidthGreaterThan("result", "input")],
+    facts="loom_vector_extf_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_fptrunc = _vector_cast(
@@ -2583,6 +2597,8 @@ vector_extsi = _vector_cast(
     result_constraint=INTEGER_ELEMENT,
     doc=("Lanewise signed integer extension. Source and result shapes match exactly, and each source lane is sign-extended to the result element width."),
     constraints=[ElementWidthGreaterThan("result", "input")],
+    facts="loom_vector_extsi_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_extui = _vector_cast(
@@ -2606,6 +2622,8 @@ vector_sitofp = _vector_cast(
     source_constraint=HasIntegerElement,
     result_constraint=FLOAT_ELEMENT,
     doc=("Lanewise signed integer to floating-point conversion with unchanged shape."),
+    facts="loom_vector_sitofp_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
 vector_uitofp = _vector_cast(
@@ -2686,6 +2704,8 @@ vector_bitfield_extractu = Op(
         BitRangeWithinElementWidth("source", "offset", "width"),
         ElementWidthAtLeastAttr("result", "width"),
     ],
+    facts="loom_vector_bitfield_extractu_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE, ELEMENTWISE],
     format=[
         Ref("source"),
@@ -2715,6 +2735,8 @@ vector_bitfield_extracts = Op(
         BitRangeWithinElementWidth("source", "offset", "width"),
         ElementWidthAtLeastAttr("result", "width"),
     ],
+    facts="loom_vector_bitfield_extracts_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE, ELEMENTWISE],
     format=[
         Ref("source"),
@@ -2748,6 +2770,8 @@ vector_bitfield_insert = Op(
         BitRangeWithinElementWidth("base", "offset", "width"),
         ElementWidthAtLeastAttr("field", "width"),
     ],
+    facts="loom_vector_bitfield_insert_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE, ELEMENTWISE],
     format=[
         Ref("field"),
@@ -2790,6 +2814,7 @@ vector_bitpack = Op(
         ElementWidthAtLeastAttr("source", "width"),
         PackedPayloadBitCountMatchesStorage("source", "width", "result", "result"),
     ],
+    facts="loom_vector_bitpack_facts",
     traits=[PURE],
     format=[
         TemplateParam("width"),
@@ -2825,6 +2850,7 @@ vector_bitunpacku = Op(
         ElementWidthAtLeastAttr("result", "width"),
         UnpackedPayloadBitCountMatchesStorage("result", "width", "source", "result"),
     ],
+    facts="loom_vector_bitunpacku_facts",
     traits=[PURE],
     format=[
         TemplateParam("width"),
@@ -2860,6 +2886,7 @@ vector_bitunpacks = Op(
         ElementWidthAtLeastAttr("result", "width"),
         UnpackedPayloadBitCountMatchesStorage("result", "width", "source", "result"),
     ],
+    facts="loom_vector_bitunpacks_facts",
     traits=[PURE],
     format=[
         TemplateParam("width"),
