@@ -203,6 +203,54 @@ func.def @if_edge_rewrites_vector_type_reference(%x: i32, %n: index, %limit: ind
 
 // ====
 
+// The refinable-result-type-refs trait keeps branch-edge type rewriting
+// table-driven for ops that own SSA references embedded in result types.
+func.def @if_edge_rewrites_refinable_result_type_refs(%buffer: buffer, %offset: offset, %x: i32, %n: index, %limit: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %source = buffer.view %buffer[%offset] : buffer -> view<[%n]xi32, %layout>
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %cond = index.cmp slt, %n, %limit : index
+  scf.if %cond {
+    %constant = vector.constant 7 : vector<[%n]xi32>
+    %iota = vector.iota %c0 step %c1 : vector<[%n]xindex>
+    %mask = vector.mask.range [%c0 to %n step %c1] : index -> vector<[%n]xi1>
+    %sub = view.subview %source[0] : view<[%n]xi32, %layout> -> view<[%n]xi32, %layout>
+    %refined = view.refine %sub : view<[%n]xi32, %layout> -> view<[%n]xi32, %layout>
+    %loaded = vector.load %refined[0] : view<[%n]xi32, %layout> -> vector<[%n]xi32>
+    test.use %constant, %iota, %mask, %loaded : vector<[%n]xi32>, vector<[%n]xindex>, vector<[%n]xi1>, vector<[%n]xi32>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @if_edge_rewrites_refinable_result_type_refs(%buffer: buffer, %offset: offset, %x: i32, %n: index, %limit: index) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %source = buffer.view %buffer[%offset] : buffer -> view<[%n]xi32, %layout>
+  %c0 = index.constant 0 : index
+  %c1 = index.constant 1 : index
+  %cond = index.cmp slt, %n, %limit : index
+  scf.if %cond {
+    %16 = index.assume %n [lt(%n, %limit)] : index
+    %constant = vector.constant 7 : vector<[%16]xi32>
+    %iota = vector.iota %c0 step %c1 : vector<[%16]xindex>
+    %mask = vector.mask.range [%c0 to %16 step %c1] : index -> vector<[%16]xi1>
+    %sub = view.subview %source[0] : view<[%n]xi32, %layout> -> view<[%16]xi32, %layout>
+    %refined = view.refine %sub : view<[%16]xi32, %layout> -> view<[%16]xi32, %layout>
+    %loaded = vector.load %refined[0] : view<[%16]xi32, %layout> -> vector<[%16]xi32>
+    test.use %constant, %iota, %mask, %loaded : vector<[%16]xi32>, vector<[%16]xindex>, vector<[%16]xi1>, vector<[%16]xi32>
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return
+}
+
+// ====
+
 // If a candidate value flows into an op with a type-reference-sensitive
 // constraint, the edge-local assume cannot safely retarget just that one value
 // type. Leave the type reference alone instead of creating a transient verifier
