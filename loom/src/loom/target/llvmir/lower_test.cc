@@ -482,7 +482,8 @@ class LlvmIrLowerTest : public ::testing::Test {
                                           LOOM_LOCATION_UNKNOWN, &return_op));
   }
 
-  void BuildDot4S8S8Function(iree_string_view_t function_name) {
+  void BuildDot4IFunction(iree_string_view_t function_name,
+                          loom_vector_dot4i_kind_t kind) {
     loom_type_t v32i8 = loom_type_shaped_1d(
         LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8, loom_dim_pack_static(32), 0);
     loom_type_t v8i32 = loom_type_shaped_1d(
@@ -504,14 +505,22 @@ class LlvmIrLowerTest : public ::testing::Test {
 
     loom_builder_t body_builder = BodyBuilder(func_op);
     loom_op_t* dot_op = NULL;
-    IREE_ASSERT_OK(loom_vector_dot4i_build(
-        &body_builder, LOOM_VECTOR_DOT4I_KIND_S8S8, args[0], args[1], args[2],
-        v8i32, LOOM_LOCATION_UNKNOWN, &dot_op));
+    IREE_ASSERT_OK(loom_vector_dot4i_build(&body_builder, kind, args[0],
+                                           args[1], args[2], v8i32,
+                                           LOOM_LOCATION_UNKNOWN, &dot_op));
     loom_value_id_t dot = loom_vector_dot4i_result(dot_op);
     SetValueName(dot, IREE_SV("dot"));
     loom_op_t* return_op = NULL;
     IREE_ASSERT_OK(loom_func_return_build(&body_builder, &dot, 1,
                                           LOOM_LOCATION_UNKNOWN, &return_op));
+  }
+
+  void BuildDot4S8S8Function(iree_string_view_t function_name) {
+    BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_S8S8);
+  }
+
+  void BuildDot4U8S8Function(iree_string_view_t function_name) {
+    BuildDot4IFunction(function_name, LOOM_VECTOR_DOT4I_KIND_U8S8);
   }
 
   iree_arena_block_pool_t block_pool_;
@@ -794,6 +803,25 @@ TEST_F(LlvmIrLowerTest, CompilesCpuPackedBfloatDotToX86Assembly) {
   CompileX86TextToAssembly(text, extra_arguments,
                            IREE_ARRAYSIZE(extra_arguments), &assembly);
   EXPECT_NE(assembly.find("vdpbf16ps"), std::string::npos) << assembly;
+}
+
+TEST_F(LlvmIrLowerTest, CompilesCpuPackedU8S8Dot4ToX86Assembly) {
+  BuildDot4U8S8Function(IREE_SV("dot4_u8s8"));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits =
+      LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX_VNNI;
+  std::string text = LowerToText(&profile);
+
+  iree_string_view_t extra_arguments[] = {
+      IREE_SV("-mtriple=x86_64-unknown-linux-gnu"),
+      IREE_SV("-mattr=+avxvnni"),
+  };
+  std::string assembly;
+  CompileX86TextToAssembly(text, extra_arguments,
+                           IREE_ARRAYSIZE(extra_arguments), &assembly);
+  EXPECT_NE(assembly.find("vpdpbusd"), std::string::npos) << assembly;
 }
 
 TEST_F(LlvmIrLowerTest, CompilesCpuPackedS8Dot4ToX86Assembly) {
