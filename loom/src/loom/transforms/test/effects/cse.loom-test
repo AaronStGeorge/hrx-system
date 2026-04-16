@@ -1,7 +1,71 @@
-// RUN: pass cse
+// CSE must use effective traits, not only static vtable traits. func.call is
+// statically unknown-effect, but canonicalize can stamp pure call sites when
+// the callee body has no observable effects.
+// RUN: pass canonicalize,cse
+func.def @pure_identity(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.def @pure_calls_cse_after_canonicalize(%value: i32) -> (i32, i32) {
+  %lhs = func.call @pure_identity(%value) : (i32) -> (i32)
+  %rhs = func.call @pure_identity(%value) : (i32) -> (i32)
+  func.return %lhs, %rhs : i32, i32
+}
+
+// ----
+func.def @pure_identity(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.def @pure_calls_cse_after_canonicalize(%value: i32) -> (i32, i32) {
+  %lhs = func.call pure @pure_identity(%value) : (i32) -> (i32)
+  func.return %lhs, %lhs : i32, i32
+}
+
+// ====
+
+// func.apply uses the same call-site purity propagation and effective-trait
+// path as func.call.
+// RUN: pass canonicalize,cse
+func.template<test.effect> @pure_template(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.def @pure_applies_cse_after_canonicalize(%value: i32) -> (i32, i32) {
+  %lhs = func.apply @pure_template(%value) : (i32) -> (i32)
+  %rhs = func.apply @pure_template(%value) : (i32) -> (i32)
+  func.return %lhs, %rhs : i32, i32
+}
+
+// ----
+func.template<test.effect> @pure_template(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.def @pure_applies_cse_after_canonicalize(%value: i32) -> (i32, i32) {
+  %lhs = func.apply pure @pure_template(%value) : (i32) -> (i32)
+  func.return %lhs, %lhs : i32, i32
+}
+
+// ====
+
+// Unresolved or effectful callees remain unknown-effect. Even identical calls
+// are not CSE candidates until a pass has explicit proof that the callee is
+// pure.
+// RUN: pass canonicalize,cse
+func.decl @unknown_effects(%value: i32) -> (i32)
+
+func.def @unknown_effect_calls_do_not_cse(%value: i32) -> (i32, i32) {
+  %lhs = func.call @unknown_effects(%value) : (i32) -> (i32)
+  %rhs = func.call @unknown_effects(%value) : (i32) -> (i32)
+  func.return %lhs, %rhs : i32, i32
+}
+
+// ====
 
 // A write nested inside a region op is a barrier for memory reads in the
 // enclosing scope. The second load must not be replaced with the first load.
+// RUN: pass cse
 func.def @nested_write_blocks_outer_load_cse(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) -> (f32) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
@@ -20,6 +84,7 @@ func.def @nested_write_blocks_outer_load_cse(%cond: i1, %buffer: buffer, %offset
 
 // scf.while contributes both before/after region effects to the parent op's
 // summary, so a nested write still blocks CSE of surrounding loads.
+// RUN: pass cse
 func.def @nested_while_write_blocks_outer_load_cse(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) -> (f32) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
