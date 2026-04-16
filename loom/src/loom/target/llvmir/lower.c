@@ -108,6 +108,9 @@ iree_status_t loom_llvmir_lowering_lower_scalar_type(
     case LOOM_SCALAR_TYPE_F16:
       return loom_llvmir_module_get_float_type(
           state->target_module, LOOM_LLVMIR_FLOAT_F16, out_type_id);
+    case LOOM_SCALAR_TYPE_BF16:
+      return loom_llvmir_module_get_float_type(
+          state->target_module, LOOM_LLVMIR_FLOAT_BF16, out_type_id);
     case LOOM_SCALAR_TYPE_F32:
       return loom_llvmir_module_get_float_type(
           state->target_module, LOOM_LLVMIR_FLOAT_F32, out_type_id);
@@ -116,7 +119,6 @@ iree_status_t loom_llvmir_lowering_lower_scalar_type(
           state->target_module, LOOM_LLVMIR_FLOAT_F64, out_type_id);
     case LOOM_SCALAR_TYPE_F8E4M3:
     case LOOM_SCALAR_TYPE_F8E5M2:
-    case LOOM_SCALAR_TYPE_BF16:
     case LOOM_SCALAR_TYPE_COUNT_:
       return loom_llvmir_lowering_unsupported_type(
           state, loom_type_scalar(scalar_type),
@@ -581,6 +583,11 @@ static iree_status_t loom_llvmir_lowering_lower_op(
     case LOOM_OP_VECTOR_SHRSI:
     case LOOM_OP_VECTOR_SHRUI:
       return loom_llvmir_lowering_lower_vector_binop(state, target_block, op);
+    case LOOM_OP_VECTOR_DOT2F:
+    case LOOM_OP_VECTOR_DOT4I:
+    case LOOM_OP_VECTOR_DOT8I4:
+      return loom_llvmir_lowering_lower_vector_cpu_packed_dot(state,
+                                                              target_block, op);
     case LOOM_OP_SCALAR_NEGF:
       return loom_llvmir_lowering_lower_negf(state, target_block, op);
     case LOOM_OP_VECTOR_NEGF:

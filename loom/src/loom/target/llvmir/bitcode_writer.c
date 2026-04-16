@@ -539,6 +539,12 @@ static iree_status_t loom_llvmir_bitcode_write_type_block(
                     writer, LOOM_LLVMIR_BITCODE_TYPE_CODE_HALF, NULL, 0));
             break;
           }
+          case LOOM_LLVMIR_FLOAT_BF16: {
+            IREE_RETURN_IF_ERROR(
+                loom_llvmir_bitcode_record_writer_write_unabbrev_record(
+                    writer, LOOM_LLVMIR_BITCODE_TYPE_CODE_BFLOAT, NULL, 0));
+            break;
+          }
           case LOOM_LLVMIR_FLOAT_F32: {
             IREE_RETURN_IF_ERROR(
                 loom_llvmir_bitcode_record_writer_write_unabbrev_record(

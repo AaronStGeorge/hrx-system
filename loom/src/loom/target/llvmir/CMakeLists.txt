@@ -80,6 +80,7 @@ loom_cc_library(
     "lower_scf.c"
     "lower_target.c"
     "lower_vector.c"
+    "lower_vector_cpu.c"
   DEPS
     ::llvmir
     iree::base
@@ -96,6 +97,7 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::target::cpu::packed_dot_vector
     loom::src::loom::util::fact_table
   PUBLIC
 )
@@ -197,6 +199,7 @@ loom_cc_test(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::target::cpu::packed_dot_contract
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main

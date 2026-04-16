@@ -70,6 +70,12 @@ typedef struct loom_llvmir_lowering_state_t {
   loom_llvmir_function_t* intrinsic_functions[32];
   // Number of cached source intrinsic declarations.
   iree_host_size_t intrinsic_function_count;
+  // Cached CPU packed-dot descriptor keys.
+  const void* cpu_packed_dot_intrinsic_keys[64];
+  // Cached CPU packed-dot LLVM intrinsic declarations.
+  loom_llvmir_function_t* cpu_packed_dot_intrinsic_functions[64];
+  // Number of cached CPU packed-dot LLVM intrinsic declarations.
+  iree_host_size_t cpu_packed_dot_intrinsic_function_count;
 } loom_llvmir_lowering_state_t;
 
 iree_string_view_t loom_llvmir_lowering_value_name(
@@ -262,6 +268,10 @@ iree_status_t loom_llvmir_lowering_lower_vector_select(
     const loom_op_t* op);
 
 iree_status_t loom_llvmir_lowering_lower_vector_cast(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op);
+
+iree_status_t loom_llvmir_lowering_lower_vector_cpu_packed_dot(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
 

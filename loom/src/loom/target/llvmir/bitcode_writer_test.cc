@@ -89,7 +89,9 @@ TEST(LlvmIrBitcodeWriterTest, WritesModuleHeaderAndTypeBlock) {
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t i32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t ptr_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t bf16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  loom_llvmir_type_id_t v8bf16_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   loom_llvmir_type_id_t v4f32_type = LOOM_LLVMIR_TYPE_ID_INVALID;
   IREE_ASSERT_OK(
       loom_llvmir_module_get_void_type(module_ptr.get(), &void_type));
@@ -98,7 +100,11 @@ TEST(LlvmIrBitcodeWriterTest, WritesModuleHeaderAndTypeBlock) {
   IREE_ASSERT_OK(loom_llvmir_module_get_pointer_type(
       module_ptr.get(), target_env->address_spaces.generic, &ptr_type));
   IREE_ASSERT_OK(loom_llvmir_module_get_float_type(
+      module_ptr.get(), LOOM_LLVMIR_FLOAT_BF16, &bf16_type));
+  IREE_ASSERT_OK(loom_llvmir_module_get_float_type(
       module_ptr.get(), LOOM_LLVMIR_FLOAT_F32, &f32_type));
+  IREE_ASSERT_OK(loom_llvmir_module_get_vector_type(module_ptr.get(), 8,
+                                                    bf16_type, &v8bf16_type));
   IREE_ASSERT_OK(loom_llvmir_module_get_vector_type(module_ptr.get(), 4,
                                                     f32_type, &v4f32_type));
   IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));

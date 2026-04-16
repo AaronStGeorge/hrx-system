@@ -101,6 +101,8 @@ static iree_status_t loom_llvmir_write_type(const loom_llvmir_module_t* module,
       switch (type->float_kind) {
         case LOOM_LLVMIR_FLOAT_F16:
           return loom_output_stream_write_cstring(stream, "half");
+        case LOOM_LLVMIR_FLOAT_BF16:
+          return loom_output_stream_write_cstring(stream, "bfloat");
         case LOOM_LLVMIR_FLOAT_F32:
           return loom_output_stream_write_cstring(stream, "float");
         case LOOM_LLVMIR_FLOAT_F64:

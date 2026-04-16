@@ -28,6 +28,7 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/target/cpu/packed_dot_contract.h"
 #include "loom/target/llvmir/text_writer.h"
 #include "loom/target/llvmir/tool.h"
 #include "loom/target/llvmir/verify.h"
@@ -555,6 +556,181 @@ TEST_F(LlvmIrLowerTest, LowersScfSelectAsWholeValueSelect) {
       << text;
   VerifyTextWithLlvmTools(text);
   CompileX86TextToObject(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersBfloatTypes) {
+  loom_type_t bf16 = loom_type_scalar(LOOM_SCALAR_TYPE_BF16);
+  loom_type_t v8bf16 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_BF16, loom_dim_pack_static(8), 0);
+
+  loom_symbol_ref_t scalar_symbol = MakeSymbol(IREE_SV("identity_bf16"));
+  loom_op_t* scalar_func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, 0, 0, 0, 0, scalar_symbol, &bf16, 1, &bf16, 1, NULL, 0,
+      NULL, 0, LOOM_LOCATION_UNKNOWN, &scalar_func_op));
+  loom_func_like_t scalar_func = loom_func_like_cast(module_, scalar_func_op);
+  uint16_t scalar_arg_count = 0;
+  const loom_value_id_t* scalar_args =
+      loom_func_like_arg_ids(scalar_func, &scalar_arg_count);
+  ASSERT_EQ(scalar_arg_count, 1);
+  SetValueName(scalar_args[0], IREE_SV("value"));
+  loom_builder_t scalar_body_builder = BodyBuilder(scalar_func_op);
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&scalar_body_builder, scalar_args, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  loom_symbol_ref_t vector_symbol = MakeSymbol(IREE_SV("identity_v8bf16"));
+  loom_type_t arg_types[2] = {bf16, v8bf16};
+  loom_op_t* vector_func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, 0, 0, 0, 0, vector_symbol, arg_types,
+      IREE_ARRAYSIZE(arg_types), &v8bf16, 1, NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &vector_func_op));
+  loom_func_like_t vector_func = loom_func_like_cast(module_, vector_func_op);
+  uint16_t vector_arg_count = 0;
+  const loom_value_id_t* vector_args =
+      loom_func_like_arg_ids(vector_func, &vector_arg_count);
+  ASSERT_EQ(vector_arg_count, 2);
+  SetValueName(vector_args[0], IREE_SV("scalar"));
+  SetValueName(vector_args[1], IREE_SV("vector"));
+  loom_builder_t vector_body_builder = BodyBuilder(vector_func_op);
+  IREE_ASSERT_OK(loom_func_return_build(&vector_body_builder, &vector_args[1],
+                                        1, LOOM_LOCATION_UNKNOWN, &return_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define internal bfloat @identity_bf16(bfloat %value) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  ret bfloat %value\n"), std::string::npos) << text;
+  EXPECT_NE(text.find("define internal <8 x bfloat> @identity_v8bf16(bfloat "
+                      "%scalar, <8 x bfloat> %vector) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  ret <8 x bfloat> %vector\n"), std::string::npos)
+      << text;
+  VerifyTextWithLlvmTools(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersCpuPackedDotIntrinsics) {
+  loom_type_t v16bf16 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_BF16, loom_dim_pack_static(16), 0);
+  loom_type_t v8f32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32, loom_dim_pack_static(8), 0);
+  loom_symbol_ref_t bf16_symbol = MakeSymbol(IREE_SV("dot2_bf16"));
+  loom_type_t bf16_arg_types[3] = {v16bf16, v16bf16, v8f32};
+  loom_op_t* bf16_func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, 0, 0, 0, 0, bf16_symbol, bf16_arg_types,
+      IREE_ARRAYSIZE(bf16_arg_types), &v8f32, 1, NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &bf16_func_op));
+  loom_func_like_t bf16_func = loom_func_like_cast(module_, bf16_func_op);
+  uint16_t bf16_arg_count = 0;
+  const loom_value_id_t* bf16_args =
+      loom_func_like_arg_ids(bf16_func, &bf16_arg_count);
+  ASSERT_EQ(bf16_arg_count, 3);
+  SetValueName(bf16_args[0], IREE_SV("lhs"));
+  SetValueName(bf16_args[1], IREE_SV("rhs"));
+  SetValueName(bf16_args[2], IREE_SV("acc"));
+  loom_builder_t bf16_body_builder = BodyBuilder(bf16_func_op);
+  loom_op_t* dot_op = NULL;
+  IREE_ASSERT_OK(loom_vector_dot2f_build(&bf16_body_builder, bf16_args[0],
+                                         bf16_args[1], bf16_args[2], v8f32,
+                                         LOOM_LOCATION_UNKNOWN, &dot_op));
+  loom_value_id_t bf16_dot = loom_vector_dot2f_result(dot_op);
+  SetValueName(bf16_dot, IREE_SV("dot"));
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&bf16_body_builder, &bf16_dot, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  loom_type_t v32i8 = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
+                                          loom_dim_pack_static(32), 0);
+  loom_type_t v8i32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
+  loom_symbol_ref_t int8_symbol = MakeSymbol(IREE_SV("dot4_s8s8"));
+  loom_type_t int8_arg_types[3] = {v32i8, v32i8, v8i32};
+  loom_op_t* int8_func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, 0, 0, 0, 0, int8_symbol, int8_arg_types,
+      IREE_ARRAYSIZE(int8_arg_types), &v8i32, 1, NULL, 0, NULL, 0,
+      LOOM_LOCATION_UNKNOWN, &int8_func_op));
+  loom_func_like_t int8_func = loom_func_like_cast(module_, int8_func_op);
+  uint16_t int8_arg_count = 0;
+  const loom_value_id_t* int8_args =
+      loom_func_like_arg_ids(int8_func, &int8_arg_count);
+  ASSERT_EQ(int8_arg_count, 3);
+  SetValueName(int8_args[0], IREE_SV("lhs"));
+  SetValueName(int8_args[1], IREE_SV("rhs"));
+  SetValueName(int8_args[2], IREE_SV("acc"));
+  loom_builder_t int8_body_builder = BodyBuilder(int8_func_op);
+  IREE_ASSERT_OK(loom_vector_dot4i_build(
+      &int8_body_builder, LOOM_VECTOR_DOT4I_KIND_S8S8, int8_args[0],
+      int8_args[1], int8_args[2], v8i32, LOOM_LOCATION_UNKNOWN, &dot_op));
+  loom_value_id_t int8_dot = loom_vector_dot4i_result(dot_op);
+  SetValueName(int8_dot, IREE_SV("dot"));
+  IREE_ASSERT_OK(loom_func_return_build(&int8_body_builder, &int8_dot, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  loom_llvmir_target_profile_t profile = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_x86_64_object(&profile));
+  profile.cpu_packed_dot_feature_bits =
+      LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_BF16 |
+      LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_VL |
+      LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX_VNNI_INT8;
+  std::string text = LowerToText(&profile);
+  EXPECT_NE(text.find("declare <8 x float> "
+                      "@llvm.x86.avx512bf16.dpbf16ps.256(<8 x float>, "
+                      "<16 x bfloat>, <16 x bfloat>)\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %dot = call <8 x float> "
+                      "@llvm.x86.avx512bf16.dpbf16ps.256(<8 x float> %acc, "
+                      "<16 x bfloat> %lhs, <16 x bfloat> %rhs)\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("declare <8 x i32> "
+                      "@llvm.x86.avx2.vpdpbssd.256(<8 x i32>, <32 x i8>, "
+                      "<32 x i8>)\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %dot = call <8 x i32> "
+                      "@llvm.x86.avx2.vpdpbssd.256(<8 x i32> %acc, "
+                      "<32 x i8> %lhs, <32 x i8> %rhs)\n"),
+            std::string::npos)
+      << text;
+}
+
+TEST_F(LlvmIrLowerTest, RejectsCpuPackedDotWithoutTargetFeatures) {
+  loom_type_t v32i8 = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I8,
+                                          loom_dim_pack_static(32), 0);
+  loom_type_t v8i32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(8), 0);
+  loom_symbol_ref_t symbol = MakeSymbol(IREE_SV("dot4_s8s8"));
+  loom_type_t arg_types[3] = {v32i8, v32i8, v8i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(&module_builder_, 0, 0, 0, 0, symbol,
+                                     arg_types, IREE_ARRAYSIZE(arg_types),
+                                     &v8i32, 1, NULL, 0, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3);
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  loom_op_t* dot_op = NULL;
+  IREE_ASSERT_OK(loom_vector_dot4i_build(
+      &body_builder, LOOM_VECTOR_DOT4I_KIND_S8S8, args[0], args[1], args[2],
+      v8i32, LOOM_LOCATION_UNKNOWN, &dot_op));
+  loom_value_id_t dot = loom_vector_dot4i_result(dot_op);
+  loom_op_t* return_op = NULL;
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &dot, 1,
+                                        LOOM_LOCATION_UNKNOWN, &return_op));
+
+  loom_llvmir_module_t* lowered = NULL;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_UNIMPLEMENTED,
+      LowerModule(loom_llvmir_target_profile_x86_64_object(), &lowered));
+  EXPECT_EQ(lowered, nullptr);
 }
 
 TEST_F(LlvmIrLowerTest, LowersVectorNumericOps) {

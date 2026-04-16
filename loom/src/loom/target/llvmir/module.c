@@ -246,6 +246,7 @@ iree_status_t loom_llvmir_module_get_float_type(
     loom_llvmir_module_t* module, loom_llvmir_float_kind_t float_kind,
     loom_llvmir_type_id_t* out_type_id) {
   if (float_kind != LOOM_LLVMIR_FLOAT_F16 &&
+      float_kind != LOOM_LLVMIR_FLOAT_BF16 &&
       float_kind != LOOM_LLVMIR_FLOAT_F32 &&
       float_kind != LOOM_LLVMIR_FLOAT_F64) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

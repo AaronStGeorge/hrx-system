@@ -43,8 +43,9 @@ typedef struct loom_llvmir_block_t loom_llvmir_block_t;
 
 typedef enum loom_llvmir_float_kind_e {
   LOOM_LLVMIR_FLOAT_F16 = 0,
-  LOOM_LLVMIR_FLOAT_F32 = 1,
-  LOOM_LLVMIR_FLOAT_F64 = 2,
+  LOOM_LLVMIR_FLOAT_BF16 = 1,
+  LOOM_LLVMIR_FLOAT_F32 = 2,
+  LOOM_LLVMIR_FLOAT_F64 = 3,
 } loom_llvmir_float_kind_t;
 
 typedef enum loom_llvmir_type_kind_e {

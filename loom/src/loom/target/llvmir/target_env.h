@@ -105,6 +105,8 @@ typedef struct loom_llvmir_target_profile_t {
   // Optimization default target feature string, or empty when supplied per
   // variant.
   iree_string_view_t target_features;
+  // CPU packed-dot feature bits interpreted by target-specific vector lowering.
+  uint64_t cpu_packed_dot_feature_bits;
   // ABI-required linkage for exported object functions or kernel entry points.
   loom_llvmir_linkage_t exported_linkage;
   // ABI-required calling convention for kernel entry points.

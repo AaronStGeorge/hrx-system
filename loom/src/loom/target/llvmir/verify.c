@@ -133,6 +133,7 @@ static uint32_t loom_llvmir_verify_type_scalar_bit_width(
     case LOOM_LLVMIR_TYPE_FLOAT:
       switch (scalar_type->float_kind) {
         case LOOM_LLVMIR_FLOAT_F16:
+        case LOOM_LLVMIR_FLOAT_BF16:
           return 16;
         case LOOM_LLVMIR_FLOAT_F32:
           return 32;
