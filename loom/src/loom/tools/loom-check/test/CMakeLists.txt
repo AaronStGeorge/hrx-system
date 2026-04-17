@@ -23,6 +23,50 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "llvmir_intrinsics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/intrinsics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "llvmir_memory"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/memory.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "llvmir_scalar_index"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/scalar_index.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "llvmir_vector_core"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/vector_core.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "pass"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/pass.loom-test"

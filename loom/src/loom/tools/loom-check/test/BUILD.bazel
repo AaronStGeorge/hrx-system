@@ -15,6 +15,10 @@ loom_check_test_suite(
     name = "test",
     srcs = [
         "emit.loom-test",
+        "llvmir/intrinsics.loom-test",
+        "llvmir/memory.loom-test",
+        "llvmir/scalar_index.loom-test",
+        "llvmir/vector_core.loom-test",
         "pass.loom-test",
         "roundtrip.loom-test",
         "verify.loom-test",

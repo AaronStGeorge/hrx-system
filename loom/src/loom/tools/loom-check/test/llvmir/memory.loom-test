@@ -1,0 +1,114 @@
+// RUN: emit llvmir
+
+// Dense view/vector memory lowering. Non-dense layouts, masked/gather/scatter
+// memory, and atomics require legalization or target-specific lowering first.
+
+func.def public @dense_memory(%buffer: buffer, %offset: offset, %row: index, %col: index, %value: f32) -> (f32) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<4x8xf32, #dense>
+  %loaded = view.load %view[%row, %col] : view<4x8xf32, #dense> -> f32
+  view.store %value, %view[0, %col] : f32, view<4x8xf32, #dense>
+  func.return %loaded : f32
+}
+
+func.def public @cache_policy(%buffer: buffer, %offset: offset, %i: index, %scalar_value: f32, %vector_value: vector<4xf32>) -> (f32) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, #dense>
+  %scalar_loaded = view.load %view[%i] {cache_scope = device, cache_temporal = non_temporal} : view<16xf32, #dense> -> f32
+  view.store %scalar_value, %view[%i] {cache_scope = device, cache_temporal = non_temporal} : f32, view<16xf32, #dense>
+  %vector_loaded = vector.load %view[%i] {cache_scope = device, cache_temporal = non_temporal} : view<16xf32, #dense> -> vector<4xf32>
+  vector.store %vector_value, %view[%i] {cache_scope = device, cache_temporal = non_temporal} : vector<4xf32>, view<16xf32, #dense>
+  func.return %scalar_loaded : f32
+}
+
+func.def public @stack_memory(%bytes: offset, %value: f32) -> (f32) {
+  %zero = index.constant 0 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = private} : buffer
+  %view = buffer.view %scratch[%zero] : buffer -> view<1xf32, #dense>
+  view.store %value, %view[0] : f32, view<1xf32, #dense>
+  %loaded = view.load %view[0] : view<1xf32, #dense> -> f32
+  func.return %loaded : f32
+}
+
+func.def public @stack_vector_memory(%bytes: offset, %value: vector<4xf32>) -> (vector<4xf32>) {
+  %zero = index.constant 0 : offset
+  %scratch = buffer.alloca %bytes {base_alignment = 16, memory_space = private} : buffer
+  %view = buffer.view %scratch[%zero] : buffer -> view<4xf32, #dense>
+  vector.store %value, %view[0] : vector<4xf32>, view<4xf32, #dense>
+  %loaded = vector.load %view[0] : view<4xf32, #dense> -> vector<4xf32>
+  func.return %loaded : vector<4xf32>
+}
+
+func.def public @prefetch_row(%buffer: buffer, %offset: offset, %index: index) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<16xf32, #dense>
+  view.prefetch %view[%index] {intent = read, locality = l2} : view<16xf32, #dense>
+  view.prefetch %view[%index] {intent = write, locality = l3} : view<16xf32, #dense>
+  func.return
+}
+
+// ----
+source_filename = "loom/src/loom/tools/loom-check/test/llvmir/memory.loom-test"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+define dso_local float @dense_memory(ptr %buffer, i64 %offset, i64 %row, i64 %col, float %value) {
+entry:
+  %view = getelementptr i8, ptr %buffer, i64 %offset
+  %v19 = mul i64 %row, 8
+  %v20 = add i64 %v19, %col
+  %v21 = getelementptr float, ptr %view, i64 %v20
+  %loaded = load float, ptr %v21
+  %v25 = mul i64 0, 8
+  %v26 = add i64 %v25, %col
+  %v27 = getelementptr float, ptr %view, i64 %v26
+  store float %value, ptr %v27
+  ret float %loaded
+}
+
+define dso_local float @cache_policy(ptr %buffer, i64 %offset, i64 %i, float %scalar_value, <4 x float> %vector_value) {
+entry:
+  %view = getelementptr i8, ptr %buffer, i64 %offset
+  %v29 = getelementptr float, ptr %view, i64 %i
+  %scalar_loaded = load float, ptr %v29, !nontemporal !0
+  %v32 = getelementptr float, ptr %view, i64 %i
+  store float %scalar_value, ptr %v32, !nontemporal !0
+  %v33 = getelementptr float, ptr %view, i64 %i
+  %vector_loaded = load <4 x float>, ptr %v33, !nontemporal !0
+  %v35 = getelementptr float, ptr %view, i64 %i
+  store <4 x float> %vector_value, ptr %v35, !nontemporal !0
+  ret float %scalar_loaded
+}
+
+define dso_local float @stack_memory(i64 %bytes, float %value) {
+entry:
+  %scratch = alloca i8, i64 %bytes, align 16
+  %view = getelementptr i8, ptr %scratch, i64 0
+  %v40 = getelementptr float, ptr %view, i64 0
+  store float %value, ptr %v40, align 4
+  %v42 = getelementptr float, ptr %view, i64 0
+  %loaded = load float, ptr %v42, align 4
+  ret float %loaded
+}
+
+define dso_local <4 x float> @stack_vector_memory(i64 %bytes, <4 x float> %value) {
+entry:
+  %scratch = alloca i8, i64 %bytes, align 16
+  %view = getelementptr i8, ptr %scratch, i64 0
+  %v48 = getelementptr float, ptr %view, i64 0
+  store <4 x float> %value, ptr %v48, align 16
+  %v50 = getelementptr float, ptr %view, i64 0
+  %loaded = load <4 x float>, ptr %v50, align 16
+  ret <4 x float> %loaded
+}
+
+define dso_local void @prefetch_row(ptr %buffer, i64 %offset, i64 %index) {
+entry:
+  %view = getelementptr i8, ptr %buffer, i64 %offset
+  %v53 = getelementptr float, ptr %view, i64 %index
+  call void @llvm.prefetch.p0(ptr %v53, i32 0, i32 2, i32 1)
+  %v61 = getelementptr float, ptr %view, i64 %index
+  call void @llvm.prefetch.p0(ptr %v61, i32 1, i32 3, i32 1)
+  ret void
+}
+
+declare void @llvm.prefetch.p0(ptr readonly nocapture, i32 immarg, i32 immarg, i32 immarg)
+
+!0 = !{i32 1}

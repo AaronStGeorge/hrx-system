@@ -1,0 +1,94 @@
+// RUN: emit llvmir
+
+// Core static 1-D vector lowering. Wider vector ranks and dynamic vector
+// lengths are legalized before LLVMIR export instead of being tested here.
+
+func.def @vector_numeric(%lhsf: vector<4xf32>, %rhsf: vector<4xf32>, %lhsi: vector<4xi32>, %rhsi: vector<4xi32>) -> (vector<4xf32>) {
+  %sumi = vector.addi<nsw> %lhsi, %rhsi : vector<4xi32>
+  %int_mask = vector.cmpi sgt, %sumi, %rhsi : vector<4xi32> -> vector<4xi1>
+  %selectedi = vector.select %int_mask, %sumi, %lhsi : vector<4xi32>
+  %sumf = vector.sitofp %selectedi : vector<4xi32> to vector<4xf32>
+  %product = vector.mulf<nnan> %lhsf, %rhsf : vector<4xf32>
+  %mask = vector.cmpf olt, %product, %sumf : vector<4xf32> -> vector<4xi1>
+  %selected = vector.select %mask, %product, %sumf : vector<4xf32>
+  func.return %selected : vector<4xf32>
+}
+
+func.def @vector_constant() -> (vector<4xi32>) {
+  %constant = vector.constant 7 : vector<4xi32>
+  func.return %constant : vector<4xi32>
+}
+
+func.def @vector_construct(%scalar: f32, %other: f32) -> (vector<4xf32>) {
+  %splat = vector.splat %scalar : vector<4xf32>
+  %built = vector.from_elements %scalar, %other, %scalar, %other : vector<4xf32>
+  %lane = vector.extract %built[1] : vector<4xf32> -> f32
+  %updated = vector.insert %lane into %splat[2] : f32, vector<4xf32>
+  %reversed = vector.shuffle<[3, 2, 1, 0]> %updated : vector<4xf32>
+  func.return %reversed : vector<4xf32>
+}
+
+func.def public @choose_vector(%cond: i1, %lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
+  %selected = scf.select %cond, %lhs, %rhs : vector<4xi32>
+  func.return %selected : vector<4xi32>
+}
+
+func.def @identity_bf16(%value: bf16) -> (bf16) {
+  func.return %value : bf16
+}
+
+func.def @identity_v8bf16(%scalar: bf16, %vector: vector<8xbf16>) -> (vector<8xbf16>) {
+  func.return %vector : vector<8xbf16>
+}
+
+// ----
+source_filename = "loom/src/loom/tools/loom-check/test/llvmir/vector_core.loom-test"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+define internal <4 x float> @vector_numeric(<4 x float> %lhsf, <4 x float> %rhsf, <4 x i32> %lhsi, <4 x i32> %rhsi) {
+entry:
+  %sumi = add nsw <4 x i32> %lhsi, %rhsi
+  %int_mask = icmp sgt <4 x i32> %sumi, %rhsi
+  %selectedi = select <4 x i1> %int_mask, <4 x i32> %sumi, <4 x i32> %lhsi
+  %sumf = sitofp <4 x i32> %selectedi to <4 x float>
+  %product = fmul nnan <4 x float> %lhsf, %rhsf
+  %mask = fcmp olt <4 x float> %product, %sumf
+  %selected = select <4 x i1> %mask, <4 x float> %product, <4 x float> %sumf
+  ret <4 x float> %selected
+}
+
+define internal <4 x i32> @vector_constant() {
+entry:
+  ret <4 x i32> <i32 7, i32 7, i32 7, i32 7>
+}
+
+define internal <4 x float> @vector_construct(float %scalar, float %other) {
+entry:
+  %v22 = insertelement <4 x float> poison, float %scalar, i32 0
+  %splat = shufflevector <4 x float> %v22, <4 x float> poison, <4 x i32> <i32 0, i32 0, i32 0, i32 0>
+  %v27 = insertelement <4 x float> poison, float %scalar, i32 0
+  %v29 = insertelement <4 x float> %v27, float %other, i32 1
+  %v31 = insertelement <4 x float> %v29, float %scalar, i32 2
+  %built = insertelement <4 x float> %v31, float %other, i32 3
+  %lane = extractelement <4 x float> %built, i32 1
+  %updated = insertelement <4 x float> %splat, float %lane, i32 2
+  %reversed = shufflevector <4 x float> %updated, <4 x float> poison, <4 x i32> <i32 3, i32 2, i32 1, i32 0>
+  ret <4 x float> %reversed
+}
+
+define dso_local <4 x i32> @choose_vector(i1 %cond, <4 x i32> %lhs, <4 x i32> %rhs) {
+entry:
+  %selected = select i1 %cond, <4 x i32> %lhs, <4 x i32> %rhs
+  ret <4 x i32> %selected
+}
+
+define internal bfloat @identity_bf16(bfloat %value) {
+entry:
+  ret bfloat %value
+}
+
+define internal <8 x bfloat> @identity_v8bf16(bfloat %scalar, <8 x bfloat> %vector) {
+entry:
+  ret <8 x bfloat> %vector
+}

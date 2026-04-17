@@ -1,0 +1,52 @@
+// RUN: emit llvmir
+
+// Scalar/index LLVMIR lowering tests intentionally use target-legal Loom IR:
+// no structured SCF region ops are expected at this export boundary.
+
+func.decl @callee_i32(%value: i32) -> (i32)
+
+func.def public @add_i32(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = scalar.addi<nsw> %lhs, %rhs : i32
+  func.return %sum : i32
+}
+
+func.def public @choose_cast(%lhs: i32, %rhs: i32, %narrow: i16) -> (i32) {
+  %wide = scalar.extsi %narrow : i16 to i32
+  %called = func.call @callee_i32(%wide) : (i32) -> (i32)
+  %predicate = scalar.cmpi sgt, %called, %rhs : i32
+  %selected = scf.select %predicate, %called, %lhs : i32
+  func.return %selected : i32
+}
+
+func.def public @extend_index(%n: i32) -> (index) {
+  %extended = index.cast %n : i32 to index
+  func.return %extended : index
+}
+
+// ----
+source_filename = "loom/src/loom/tools/loom-check/test/llvmir/scalar_index.loom-test"
+target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-unknown-linux-gnu"
+
+declare i32 @callee_i32(i32 %value)
+
+define dso_local i32 @add_i32(i32 %lhs, i32 %rhs) {
+entry:
+  %sum = add nsw i32 %lhs, %rhs
+  ret i32 %sum
+}
+
+define dso_local i32 @choose_cast(i32 %lhs, i32 %rhs, i16 %narrow) {
+entry:
+  %wide = sext i16 %narrow to i32
+  %called = call i32 @callee_i32(i32 %wide)
+  %predicate = icmp sgt i32 %called, %rhs
+  %selected = select i1 %predicate, i32 %called, i32 %lhs
+  ret i32 %selected
+}
+
+define dso_local i64 @extend_index(i32 %n) {
+entry:
+  %extended = sext i32 %n to i64
+  ret i64 %extended
+}
