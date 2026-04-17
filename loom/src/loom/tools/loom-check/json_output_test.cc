@@ -116,9 +116,13 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
   EXPECT_NE(json.find("\"default_pipeline\": null"), std::string::npos);
   EXPECT_NE(json.find("\"default_format_target\": null"), std::string::npos);
   EXPECT_NE(json.find("\"default_emit_target\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"default_requirements\": []"), std::string::npos);
   EXPECT_NE(json.find("\"index\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"mode\": \"roundtrip\""), std::string::npos);
   EXPECT_NE(json.find("\"has_run_directive\": true"), std::string::npos);
+  EXPECT_NE(json.find("\"has_requires_directive\": false"), std::string::npos);
+  EXPECT_NE(json.find("\"requires_directive_range\": null"), std::string::npos);
+  EXPECT_NE(json.find("\"requirements\": []"), std::string::npos);
   EXPECT_NE(json.find("\"pipeline\": null"), std::string::npos);
   EXPECT_NE(json.find("\"format_target\": null"), std::string::npos);
   EXPECT_NE(json.find("\"emit_target\": null"), std::string::npos);
@@ -146,6 +150,30 @@ TEST_F(JsonOutputTest, SinglePassingCase) {
   EXPECT_NE(json.find("\"passed\": 1"), std::string::npos);
   EXPECT_NE(json.find("\"failed\": 0"), std::string::npos);
   EXPECT_NE(json.find("\"skipped\": 0"), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
+TEST_F(JsonOutputTest, SkippedCase) {
+  auto file = Parse(
+      "// RUN: roundtrip\n"
+      "// REQUIRES: loom-check-test-unavailable\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_SKIP, LOOM_CHECK_SKIP, "skipped\n"),
+  };
+
+  std::string json = WriteJson(iree_make_cstring_view("skip.loom-test"), file,
+                               results, 0, 0, 1);
+
+  EXPECT_NE(json.find("\"has_requires_directive\": true"), std::string::npos);
+  EXPECT_NE(json.find("\"requirements\": [\"loom-check-test-unavailable\"]"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"raw_outcome\": \"skip\""), std::string::npos);
+  EXPECT_NE(json.find("\"final_outcome\": \"skip\""), std::string::npos);
+  EXPECT_NE(json.find("\"skipped\": 1"), std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
 }
@@ -397,6 +425,32 @@ TEST_F(JsonOutputTest, EmitsInheritedRunMetadata) {
   EXPECT_NE(json.find("\"has_run_directive\": false"), std::string::npos);
   EXPECT_NE(json.find("\"pipeline\": \"dce,cse\""), std::string::npos);
   EXPECT_NE(json.find("\"run_directive_range\": null"), std::string::npos);
+
+  loom_check_result_deinitialize(&results[0]);
+}
+
+TEST_F(JsonOutputTest, EmitsInheritedRequiresMetadata) {
+  auto file = Parse(
+      "// REQUIRES: llvm-dis\n"
+      "// ====\n"
+      "func.def @f() {\n"
+      "}\n");
+
+  ASSERT_EQ(file.case_count, 1u);
+  ASSERT_FALSE(file.cases[0].has_requires_directive);
+
+  loom_check_result_t results[1] = {
+      MakeResult(LOOM_CHECK_PASS, LOOM_CHECK_PASS),
+  };
+
+  std::string json = WriteJson(iree_make_cstring_view("requires.loom-test"),
+                               file, results, 1, 0, 0);
+
+  EXPECT_NE(json.find("\"default_requirements\": [\"llvm-dis\"]"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"has_requires_directive\": false"), std::string::npos);
+  EXPECT_NE(json.find("\"requirements\": [\"llvm-dis\"]"), std::string::npos);
+  EXPECT_NE(json.find("\"requires_directive_range\": null"), std::string::npos);
 
   loom_check_result_deinitialize(&results[0]);
 }

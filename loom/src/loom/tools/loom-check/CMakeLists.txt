@@ -30,10 +30,12 @@ loom_cc_library(
   HDRS
     "diagnostics.h"
     "execute.h"
+    "requirements.h"
   SRCS
     "diagnostics.c"
     "emit.c"
     "execute.c"
+    "requirements.c"
     "roundtrip.c"
     "verify.c"
   DEPS

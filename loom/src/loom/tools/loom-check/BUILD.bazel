@@ -23,12 +23,14 @@ loom_cc_library(
         "diagnostics.c",
         "emit.c",
         "execute.c",
+        "requirements.c",
         "roundtrip.c",
         "verify.c",
     ],
     hdrs = [
         "diagnostics.h",
         "execute.h",
+        "requirements.h",
     ],
     deps = [
         ":check",

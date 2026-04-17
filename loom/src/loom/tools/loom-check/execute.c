@@ -15,6 +15,7 @@
 #include "loom/ops/op_registry.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
+#include "loom/tools/loom-check/requirements.h"
 #include "loom/transforms/branch_fusion.h"
 #include "loom/transforms/branch_sink.h"
 #include "loom/transforms/canonicalize.h"
@@ -242,6 +243,13 @@ iree_status_t loom_check_execute_case(
   IREE_ASSERT_ARGUMENT(context);
   IREE_ASSERT_ARGUMENT(block_pool);
   IREE_ASSERT_ARGUMENT(result);
+
+  bool continue_execution = true;
+  IREE_RETURN_IF_ERROR(loom_check_preflight_requirements(
+      test_case, allocator, result, &continue_execution));
+  if (!continue_execution) {
+    return iree_ok_status();
+  }
 
   switch (test_case->mode) {
     case LOOM_CHECK_MODE_ROUNDTRIP: {

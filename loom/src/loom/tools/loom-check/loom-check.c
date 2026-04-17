@@ -8,7 +8,7 @@
 //
 // Parses check files containing directives, input/expected sections, and
 // diagnostic annotations. Executes each test case according to its mode
-// (roundtrip, verify, pass, format) and reports pass/fail results.
+// (roundtrip, verify, pass, format, emit) and reports pass/fail/skip results.
 //
 // Usage:
 //   loom-check test.loom-test         # Run all cases in file.
@@ -35,7 +35,7 @@ IREE_FLAG(bool, update, false,
           "section (after // ----). Inserts the separator if absent.\n"
           "Cannot be used with stdin or verify mode.");
 IREE_FLAG(bool, verbose, false,
-          "Print PASS/FAIL for every case, not just failures.");
+          "Print PASS/FAIL/SKIP for every case, not just failures.");
 
 typedef struct loom_check_json_flag_t {
   bool enabled;
@@ -122,6 +122,9 @@ static const char* loom_check_color_reset(void) {
 
 static const char* loom_check_outcome_label(loom_check_outcome_t outcome,
                                             bool xfail) {
+  if (outcome == LOOM_CHECK_SKIP) {
+    return "SKIP";
+  }
   if (outcome == LOOM_CHECK_PASS) {
     return xfail ? "XFAIL" : "PASS";
   }
@@ -133,9 +136,12 @@ static void loom_check_print_case_header(iree_string_view_t filename,
                                          iree_host_size_t case_index,
                                          const loom_check_case_t* test_case,
                                          const loom_check_result_t* result) {
-  const char* color = result->final_outcome == LOOM_CHECK_PASS
-                          ? loom_check_color_pass()
-                          : loom_check_color_fail();
+  const char* color = loom_check_color_fail();
+  if (result->final_outcome == LOOM_CHECK_PASS) {
+    color = loom_check_color_pass();
+  } else if (result->final_outcome == LOOM_CHECK_SKIP) {
+    color = loom_check_color_skip();
+  }
   const char* label =
       loom_check_outcome_label(result->final_outcome, test_case->xfail);
 
@@ -252,7 +258,8 @@ static iree_status_t loom_check_process_file(
     if (FLAG_verbose || results[i].final_outcome == LOOM_CHECK_FAIL) {
       loom_check_print_case_header(filename, i, test_case, &results[i]);
     }
-    if (results[i].final_outcome == LOOM_CHECK_FAIL &&
+    if ((results[i].final_outcome == LOOM_CHECK_FAIL ||
+         (FLAG_verbose && results[i].final_outcome == LOOM_CHECK_SKIP)) &&
         results[i].detail.size > 0) {
       fprintf(stderr, "%.*s", (int)results[i].detail.size,
               results[i].detail.buffer);
@@ -260,6 +267,8 @@ static iree_status_t loom_check_process_file(
 
     if (results[i].final_outcome == LOOM_CHECK_PASS) {
       ++(*pass_count);
+    } else if (results[i].final_outcome == LOOM_CHECK_SKIP) {
+      ++(*skip_count);
     } else {
       ++(*fail_count);
     }
@@ -384,7 +393,7 @@ int main(int argc, char** argv) {
       "\n"
       "Parses .loom-test files into cases, executes each case according to "
       "its\n"
-      "mode directive, and reports pass/fail results with diffs or\n"
+      "mode directive, and reports pass/fail/skip results with diffs or\n"
       "diagnostic details on failure. Use .loom for ordinary Loom IR files.\n"
       "\n"
       "Usage:\n"
@@ -396,6 +405,7 @@ int main(int argc, char** argv) {
       "  verify      Parse, verify, match diagnostics against annotations.\n"
       "  pass <p>    Parse, run pass pipeline <p>, print, compare.\n"
       "  format <f>  Parse, convert to format <f>, convert back, compare.\n"
+      "  emit <t>    Parse, lower to target output <t>, print, compare.\n"
       "\n"
       "File format:\n"
       "  A .loom-test file contains one or more cases separated by // ====.\n"
@@ -409,7 +419,10 @@ int main(int argc, char** argv) {
       "\n"
       "  Directives:\n"
       "    // RUN: <mode> [args]    Set the test mode (one per case).\n"
+      "    // REQUIRES: <name>[, ...] Skip when external tools are missing.\n"
       "    // XFAIL: <reason>       Mark as expected failure.\n"
+      "    Known REQUIRES names: llvm-as, llvm-dis, opt, llc, llc-x86,\n"
+      "    llc-amdgpu.\n"
       "\n"
       "  Annotations (verify mode):\n"
       "    // ERROR: DOMAIN/CODE \"substring\"\n"

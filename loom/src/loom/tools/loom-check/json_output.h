@@ -20,11 +20,15 @@
 //     "default_pipeline": null,
 //     "default_format_target": null,
 //     "default_emit_target": null,
+//     "default_requirements": [],
 //     "cases": [
 //       {
 //         "index": 1,
 //         "mode": "roundtrip",
 //         "has_run_directive": true,
+//         "has_requires_directive": false,
+//         "requires_directive_range": null,
+//         "requirements": [],
 //         "pipeline": null,
 //         "format_target": null,
 //         "emit_target": null,

@@ -53,6 +53,15 @@ class CheckParseTest : public ::testing::Test {
     ExpectRange(source_range, start_byte, start_byte + strlen(fragment));
   }
 
+  void ExpectRequirementName(const loom_check_case_t& test_case,
+                             iree_host_size_t requirement_index,
+                             const char* expected_name) {
+    ASSERT_LT(requirement_index, test_case.requirement_count);
+    EXPECT_TRUE(
+        iree_string_view_equal(test_case.requirements[requirement_index],
+                               iree_make_cstring_view(expected_name)));
+  }
+
   iree_allocator_t allocator_;
   iree_arena_block_pool_t block_pool_ = {};
   iree_arena_allocator_t arena_ = {};
@@ -147,6 +156,29 @@ TEST_F(CheckParseTest, RunAndXfail) {
   EXPECT_TRUE(file_.cases[0].xfail);
 }
 
+TEST_F(CheckParseTest, RequiresDirective) {
+  IREE_ASSERT_OK(
+      Parse("// RUN: emit llvmir-bitcode\n"
+            "// REQUIRES: llvm-dis, llc-x86\n"
+            "func.def @f() {}\n"));
+  ASSERT_EQ(file_.case_count, 1);
+  EXPECT_TRUE(file_.cases[0].has_requires_directive);
+  ASSERT_EQ(file_.cases[0].requirement_count, 2);
+  ExpectRequirementName(file_.cases[0], 0, "llvm-dis");
+  ExpectRequirementName(file_.cases[0], 1, "llc-x86");
+}
+
+TEST_F(CheckParseTest, RequiresDirectiveAllowsWhitespaceSeparatedNames) {
+  IREE_ASSERT_OK(
+      Parse("// REQUIRES: llvm-dis llc llc-x86\n"
+            "func.def @f() {}\n"));
+  ASSERT_EQ(file_.case_count, 1);
+  ASSERT_EQ(file_.cases[0].requirement_count, 3);
+  ExpectRequirementName(file_.cases[0], 0, "llvm-dis");
+  ExpectRequirementName(file_.cases[0], 1, "llc");
+  ExpectRequirementName(file_.cases[0], 2, "llc-x86");
+}
+
 TEST_F(CheckParseTest, UnknownModeErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("// RUN: foobar\nfunc.def @f() {}\n"));
@@ -195,6 +227,33 @@ TEST_F(CheckParseTest, XfailDirectiveWithoutSpaceAfterColonErrors) {
                         Parse("// XFAIL:reason\nfunc.def @f() {}\n"));
 }
 
+TEST_F(CheckParseTest, RequiresDirectiveWithoutSpaceAfterColonErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// REQUIRES:llvm-dis\nfunc.def @f() {}\n"));
+}
+
+TEST_F(CheckParseTest, RequiresDirectiveTrailingCommaErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// REQUIRES: llvm-dis,\nfunc.def @f() {}\n"));
+}
+
+TEST_F(CheckParseTest, RequiresDirectiveEmptyNameErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// REQUIRES: llvm-dis,,llc\n"
+                              "func.def @f() {}\n"));
+}
+
+TEST_F(CheckParseTest, RequiresDirectiveInvalidNameErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// REQUIRES: llvm/dis\nfunc.def @f() {}\n"));
+}
+
+TEST_F(CheckParseTest, RequiresDirectiveDuplicateNameErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("// REQUIRES: llvm-dis, llvm-dis\n"
+                              "func.def @f() {}\n"));
+}
+
 TEST_F(CheckParseTest, RunDirectiveWithoutSpaceAfterSlashesErrors) {
   // "//RUN: verify" is a natural typo. Without detection, this would
   // be silently consumed as a header comment and the test would default
@@ -206,6 +265,11 @@ TEST_F(CheckParseTest, RunDirectiveWithoutSpaceAfterSlashesErrors) {
 TEST_F(CheckParseTest, XfailDirectiveWithoutSpaceAfterSlashesErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("//XFAIL: reason\nfunc.def @f() {}\n"));
+}
+
+TEST_F(CheckParseTest, RequiresDirectiveWithoutSpaceAfterSlashesErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("//REQUIRES: llvm-dis\nfunc.def @f() {}\n"));
 }
 
 // ===----------------------------------------------------------------------===
@@ -224,6 +288,12 @@ TEST_F(CheckParseTest, StrayXfailAfterIRErrors) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         Parse("func.def @f() {}\n"
                               "// XFAIL: late reason\n"));
+}
+
+TEST_F(CheckParseTest, StrayRequiresAfterIRErrors) {
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        Parse("func.def @f() {}\n"
+                              "// REQUIRES: llvm-dis\n"));
 }
 
 TEST_F(CheckParseTest, StrayRunInSecondCaseErrors) {
@@ -1390,6 +1460,27 @@ TEST_F(CheckParseTest, PreambleEmitModeInherited) {
       file_.cases[1].emit_target, iree_make_cstring_view("llvmir amdgpu-hal")));
 }
 
+TEST_F(CheckParseTest, PreambleRequiresInheritedAndCombined) {
+  IREE_ASSERT_OK(
+      Parse("// REQUIRES: llvm-dis\n"
+            "// ====\n"
+            "func.def @a() {}\n"
+            "// ====\n"
+            "// REQUIRES: llc-x86, llvm-dis\n"
+            "func.def @b() {}\n"));
+  ASSERT_EQ(file_.case_count, 2);
+  ASSERT_EQ(file_.default_requirement_count, 1);
+  EXPECT_TRUE(iree_string_view_equal(file_.default_requirements[0],
+                                     iree_make_cstring_view("llvm-dis")));
+  EXPECT_FALSE(file_.cases[0].has_requires_directive);
+  ASSERT_EQ(file_.cases[0].requirement_count, 1);
+  ExpectRequirementName(file_.cases[0], 0, "llvm-dis");
+  EXPECT_TRUE(file_.cases[1].has_requires_directive);
+  ASSERT_EQ(file_.cases[1].requirement_count, 2);
+  ExpectRequirementName(file_.cases[1], 0, "llvm-dis");
+  ExpectRequirementName(file_.cases[1], 1, "llc-x86");
+}
+
 TEST_F(CheckParseTest, NoPreambleDefaultIsRoundtrip) {
   // No preamble (file does not start with // ====), no RUN in any
   // case. All cases default to roundtrip.
@@ -1418,6 +1509,21 @@ TEST_F(CheckParseTest, FirstCaseRunBecomesDefault) {
   EXPECT_TRUE(file_.cases[0].has_run_directive);
   EXPECT_EQ(file_.cases[1].mode, LOOM_CHECK_MODE_VERIFY);
   EXPECT_FALSE(file_.cases[1].has_run_directive);
+}
+
+TEST_F(CheckParseTest, FirstCaseRequiresBecomesDefault) {
+  IREE_ASSERT_OK(
+      Parse("// REQUIRES: llvm-dis\n"
+            "func.def @a() {}\n"
+            "// ====\n"
+            "func.def @b() {}\n"));
+  ASSERT_EQ(file_.case_count, 2);
+  ASSERT_EQ(file_.default_requirement_count, 1);
+  ASSERT_EQ(file_.cases[0].requirement_count, 1);
+  ASSERT_EQ(file_.cases[1].requirement_count, 1);
+  EXPECT_TRUE(file_.cases[0].has_requires_directive);
+  EXPECT_FALSE(file_.cases[1].has_requires_directive);
+  ExpectRequirementName(file_.cases[1], 0, "llvm-dis");
 }
 
 TEST_F(CheckParseTest, HasRunDirectiveFlag) {

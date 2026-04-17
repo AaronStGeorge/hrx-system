@@ -100,6 +100,19 @@ static bool loom_check_is_xfail_directive(iree_string_view_t line) {
                                       iree_make_cstring_view("// XFAIL: "));
 }
 
+// Returns true if |line| starts with "// REQUIRES:" (with or without
+// the trailing space).
+static bool loom_check_looks_like_requires(iree_string_view_t line) {
+  return iree_string_view_starts_with(line,
+                                      iree_make_cstring_view("// REQUIRES:"));
+}
+
+// Returns true if |line| is a well-formed REQUIRES directive.
+static bool loom_check_is_requires_directive(iree_string_view_t line) {
+  return iree_string_view_starts_with(line,
+                                      iree_make_cstring_view("// REQUIRES: "));
+}
+
 //===----------------------------------------------------------------------===//
 // Directive parsing
 //===----------------------------------------------------------------------===//
@@ -167,6 +180,162 @@ static iree_status_t loom_check_parse_run_directive(
                           keyword.data);
 }
 
+static bool loom_check_is_requirement_separator(char c) {
+  return c == ',' || c == ' ' || c == '\t';
+}
+
+static bool loom_check_is_requirement_name_char(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+}
+
+static bool loom_check_requirement_list_contains(
+    const iree_string_view_t* requirements, iree_host_size_t requirement_count,
+    iree_string_view_t requirement) {
+  for (iree_host_size_t i = 0; i < requirement_count; ++i) {
+    if (iree_string_view_equal(requirements[i], requirement)) return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_check_parse_requirement_list(
+    iree_string_view_t value, iree_arena_allocator_t* arena,
+    iree_string_view_t** out_requirements,
+    iree_host_size_t* out_requirement_count) {
+  *out_requirements = NULL;
+  *out_requirement_count = 0;
+  value = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "REQUIRES requires at least one requirement name");
+  }
+
+  iree_host_size_t requirement_count = 0;
+  iree_string_view_t scanner = value;
+  while (!iree_string_view_is_empty(scanner)) {
+    scanner = iree_string_view_trim(scanner);
+    if (iree_string_view_is_empty(scanner)) break;
+    if (scanner.data[0] == ',') {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "empty requirement name in REQUIRES directive");
+    }
+    iree_host_size_t token_length = 0;
+    while (token_length < scanner.size &&
+           !loom_check_is_requirement_separator(scanner.data[token_length])) {
+      if (!loom_check_is_requirement_name_char(scanner.data[token_length])) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "invalid character '%c' in REQUIRES requirement name",
+            scanner.data[token_length]);
+      }
+      ++token_length;
+    }
+    if (token_length == 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "empty requirement name in REQUIRES directive");
+    }
+    ++requirement_count;
+    scanner =
+        iree_string_view_substr(scanner, token_length, IREE_HOST_SIZE_MAX);
+    scanner = iree_string_view_trim(scanner);
+    if (iree_string_view_starts_with_char(scanner, ',')) {
+      scanner = iree_string_view_substr(scanner, 1, IREE_HOST_SIZE_MAX);
+      if (iree_string_view_is_empty(iree_string_view_trim(scanner))) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "empty requirement name in REQUIRES directive");
+      }
+    }
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, requirement_count,
+                                                 sizeof(iree_string_view_t),
+                                                 (void**)out_requirements));
+  *out_requirement_count = requirement_count;
+
+  scanner = value;
+  iree_host_size_t requirement_index = 0;
+  while (!iree_string_view_is_empty(scanner)) {
+    scanner = iree_string_view_trim(scanner);
+    iree_host_size_t token_length = 0;
+    while (token_length < scanner.size &&
+           !loom_check_is_requirement_separator(scanner.data[token_length])) {
+      ++token_length;
+    }
+    (*out_requirements)[requirement_index++] =
+        iree_string_view_substr(scanner, 0, token_length);
+    scanner =
+        iree_string_view_substr(scanner, token_length, IREE_HOST_SIZE_MAX);
+    scanner = iree_string_view_trim(scanner);
+    if (iree_string_view_starts_with_char(scanner, ',')) {
+      scanner = iree_string_view_substr(scanner, 1, IREE_HOST_SIZE_MAX);
+    }
+  }
+  for (iree_host_size_t i = 0; i < requirement_count; ++i) {
+    if (loom_check_requirement_list_contains(*out_requirements, i,
+                                             (*out_requirements)[i])) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "duplicate requirement name '%.*s' in REQUIRES directive",
+          (int)(*out_requirements)[i].size, (*out_requirements)[i].data);
+    }
+  }
+
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_combine_requirement_lists(
+    const iree_string_view_t* lhs_requirements,
+    iree_host_size_t lhs_requirement_count,
+    const iree_string_view_t* rhs_requirements,
+    iree_host_size_t rhs_requirement_count, iree_arena_allocator_t* arena,
+    iree_string_view_t** out_requirements,
+    iree_host_size_t* out_requirement_count) {
+  *out_requirements = NULL;
+  *out_requirement_count = 0;
+
+  iree_host_size_t unique_requirement_count = 0;
+  for (iree_host_size_t i = 0; i < lhs_requirement_count; ++i) {
+    if (!loom_check_requirement_list_contains(lhs_requirements, i,
+                                              lhs_requirements[i])) {
+      ++unique_requirement_count;
+    }
+  }
+  for (iree_host_size_t i = 0; i < rhs_requirement_count; ++i) {
+    if (!loom_check_requirement_list_contains(
+            lhs_requirements, lhs_requirement_count, rhs_requirements[i]) &&
+        !loom_check_requirement_list_contains(rhs_requirements, i,
+                                              rhs_requirements[i])) {
+      ++unique_requirement_count;
+    }
+  }
+  if (unique_requirement_count == 0) return iree_ok_status();
+
+  iree_string_view_t* requirements = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, unique_requirement_count, sizeof(iree_string_view_t),
+      (void**)&requirements));
+
+  iree_host_size_t requirement_index = 0;
+  for (iree_host_size_t i = 0; i < lhs_requirement_count; ++i) {
+    if (!loom_check_requirement_list_contains(lhs_requirements, i,
+                                              lhs_requirements[i])) {
+      requirements[requirement_index++] = lhs_requirements[i];
+    }
+  }
+  for (iree_host_size_t i = 0; i < rhs_requirement_count; ++i) {
+    if (!loom_check_requirement_list_contains(
+            lhs_requirements, lhs_requirement_count, rhs_requirements[i]) &&
+        !loom_check_requirement_list_contains(rhs_requirements, i,
+                                              rhs_requirements[i])) {
+      requirements[requirement_index++] = rhs_requirements[i];
+    }
+  }
+
+  *out_requirements = requirements;
+  *out_requirement_count = requirement_index;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Annotation parsing
 //===----------------------------------------------------------------------===//
@@ -205,12 +374,32 @@ static bool loom_check_looks_like_annotation(iree_string_view_t comment_text) {
          iree_string_view_starts_with_char(text, '@');
 }
 
+// Extracts comment text from a standalone comment line. Returns the
+// text after "// " if the trimmed line starts with "// ", otherwise
+// returns empty. Annotations must be on standalone comment lines;
+// trailing comments on IR lines are not recognized.
+static iree_string_view_t loom_check_extract_comment_text(
+    iree_string_view_t line) {
+  iree_string_view_t trimmed = iree_string_view_trim(line);
+  if (iree_string_view_starts_with(trimmed, iree_make_cstring_view("// "))) {
+    return iree_string_view_substr(trimmed, 3, IREE_HOST_SIZE_MAX);
+  }
+  if (iree_string_view_starts_with(trimmed, iree_make_cstring_view("//"))) {
+    return iree_string_view_trim(
+        iree_string_view_substr(trimmed, 2, IREE_HOST_SIZE_MAX));
+  }
+  return iree_string_view_empty();
+}
+
 // Returns true if |trimmed_line| is a standalone annotation line.
 // Uses extract_comment_text to handle both "// " and "//" prefixes
 // consistently — a line that would be extracted as a comment and
 // parsed as an annotation must be recognized here too.
-static bool loom_check_is_annotation_line(
-    iree_string_view_t trimmed_line);  // forward decl
+static bool loom_check_is_annotation_line(iree_string_view_t trimmed_line) {
+  iree_string_view_t comment = loom_check_extract_comment_text(trimmed_line);
+  if (iree_string_view_is_empty(comment)) return false;
+  return loom_check_looks_like_annotation(comment);
+}
 
 // Parses one quoted string from |text|, returning the unquoted contents
 // in |*out_substring| and the trimmed remainder (everything after the
@@ -430,31 +619,6 @@ static iree_status_t loom_check_try_parse_annotation(
 // Annotation extraction
 //===----------------------------------------------------------------------===//
 
-// Extracts comment text from a standalone comment line. Returns the
-// text after "// " if the trimmed line starts with "// ", otherwise
-// returns empty. Annotations must be on standalone comment lines;
-// trailing comments on IR lines are not recognized.
-static iree_string_view_t loom_check_extract_comment_text(
-    iree_string_view_t line) {
-  iree_string_view_t trimmed = iree_string_view_trim(line);
-  if (iree_string_view_starts_with(trimmed, iree_make_cstring_view("// "))) {
-    return iree_string_view_substr(trimmed, 3, IREE_HOST_SIZE_MAX);
-  }
-  if (iree_string_view_starts_with(trimmed, iree_make_cstring_view("//"))) {
-    return iree_string_view_trim(
-        iree_string_view_substr(trimmed, 2, IREE_HOST_SIZE_MAX));
-  }
-  return iree_string_view_empty();
-}
-
-// Definition of loom_check_is_annotation_line (forward-declared above).
-// Placed after loom_check_extract_comment_text so it can delegate.
-static bool loom_check_is_annotation_line(iree_string_view_t trimmed_line) {
-  iree_string_view_t comment = loom_check_extract_comment_text(trimmed_line);
-  if (iree_string_view_is_empty(comment)) return false;
-  return loom_check_looks_like_annotation(comment);
-}
-
 // Returns true if |text| contains any lines with diagnostic annotations.
 static bool loom_check_text_contains_annotations(iree_string_view_t text) {
   while (!iree_string_view_is_empty(text)) {
@@ -532,15 +696,15 @@ static iree_status_t loom_check_extract_annotations(
 // Splits the raw case text (everything between case separators) into
 // directives, input, and expected sections.
 //
-// Directives (// RUN:, // XFAIL:) are extracted from the top of the
-// case. The header region consists of directives, blank lines, and
-// non-annotation comment lines — all consumed. The first annotation
-// line (// ERROR/WARNING/REMARK) or non-comment line starts the body.
+// Directives (// RUN:, // REQUIRES:, // XFAIL:) are extracted from the top
+// of the case. The header region consists of directives, blank lines, and
+// non-annotation comment lines — all consumed. The first annotation line
+// (// ERROR/WARNING/REMARK) or non-comment line starts the body.
 //
-// Any line starting with "// RUN:" or "// XFAIL:" in the body is
-// always a mistake (misplaced or malformed directive) and produces an
-// error. This catches the silent misconfiguration where a comment
-// before a directive pushes it into the body.
+// Any line starting with "// RUN:", "// REQUIRES:", or "// XFAIL:" in the
+// body is always a mistake (misplaced or malformed directive) and produces an
+// error. This catches the silent misconfiguration where a comment before a
+// directive pushes it into the body.
 //
 // Within the body, a // ---- line splits input from expected output;
 // without it, expected equals input (round-trip identity).
@@ -565,6 +729,7 @@ static iree_status_t loom_check_parse_case_sections(
   // or IR line starts the body.
   iree_string_view_t scanner = case_text;
   bool found_run = false;
+  bool found_requires = false;
   bool body_started = false;
   const char* body_start = case_end;
 
@@ -605,6 +770,34 @@ static iree_status_t loom_check_parse_case_sections(
       continue;
     }
 
+    if (loom_check_is_requires_directive(trimmed)) {
+      if (body_started) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "stray directive '%.*s' in test case body; "
+            "directives must appear before all other content",
+            (int)trimmed.size, trimmed.data);
+      }
+      if (found_requires) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "multiple REQUIRES directives in one test case");
+      }
+      found_requires = true;
+      out_case->has_requires_directive = true;
+      out_case->requires_directive_range =
+          loom_check_source_range_from_pointers(source_start, line_start,
+                                                line.data + line.size);
+      iree_string_view_t requires_value = trimmed;
+      iree_string_view_consume_prefix(&requires_value,
+                                      iree_make_cstring_view("// REQUIRES: "));
+      IREE_RETURN_IF_ERROR(loom_check_parse_requirement_list(
+          requires_value, arena, &out_case->requirements,
+          &out_case->requirement_count));
+      body_start = loom_check_scanner_end(scanner, case_end);
+      continue;
+    }
+
     if (loom_check_is_xfail_directive(trimmed)) {
       if (body_started) {
         return iree_make_status(
@@ -632,18 +825,23 @@ static iree_status_t loom_check_parse_case_sections(
     // Detected patterns:
     //   "// RUN:verify"   — missing space after colon
     //   "//RUN: verify"   — missing space after //
+    //   "// REQUIRES:foo" — missing space after colon
+    //   "//REQUIRES: foo" — missing space after //
     //   "// XFAIL:reason" — missing space after colon
     //   "//XFAIL: reason" — missing space after //
     if (loom_check_looks_like_run(trimmed) ||
+        loom_check_looks_like_requires(trimmed) ||
         loom_check_looks_like_xfail(trimmed) ||
         iree_string_view_starts_with(trimmed,
                                      iree_make_cstring_view("//RUN:")) ||
         iree_string_view_starts_with(trimmed,
+                                     iree_make_cstring_view("//REQUIRES:")) ||
+        iree_string_view_starts_with(trimmed,
                                      iree_make_cstring_view("//XFAIL:"))) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "malformed directive '%.*s'; expected '// RUN: <mode>' or "
-          "'// XFAIL: <reason>'",
+          "malformed directive '%.*s'; expected '// RUN: <mode>', "
+          "'// REQUIRES: <name>', or '// XFAIL: <reason>'",
           (int)trimmed.size, trimmed.data);
     }
 
@@ -812,6 +1010,8 @@ iree_status_t loom_check_parse(iree_string_view_t source,
   out_file->default_pipeline = iree_string_view_empty();
   out_file->default_format_target = iree_string_view_empty();
   out_file->default_emit_target = iree_string_view_empty();
+  out_file->default_requirements = NULL;
+  out_file->default_requirement_count = 0;
 
   iree_host_size_t first_case = 0;
   if (case_count > 1) {
@@ -836,6 +1036,10 @@ iree_status_t loom_check_parse(iree_string_view_t source,
         out_file->default_pipeline = preamble_case.pipeline;
         out_file->default_format_target = preamble_case.format_target;
         out_file->default_emit_target = preamble_case.emit_target;
+      }
+      if (preamble_case.has_requires_directive) {
+        out_file->default_requirements = preamble_case.requirements;
+        out_file->default_requirement_count = preamble_case.requirement_count;
       }
     }
   }
@@ -866,15 +1070,41 @@ iree_status_t loom_check_parse(iree_string_view_t source,
     out_file->default_format_target = out_file->cases[0].format_target;
     out_file->default_emit_target = out_file->cases[0].emit_target;
   }
+  if (first_case == 0 && case_count > 0 &&
+      out_file->cases[0].has_requires_directive) {
+    out_file->default_requirements = out_file->cases[0].requirements;
+    out_file->default_requirement_count = out_file->cases[0].requirement_count;
+  }
 
-  // Apply RUN inheritance: cases without their own RUN directive
-  // inherit the file-level default.
+  // Apply RUN inheritance: cases without their own RUN directive inherit the
+  // file-level default.
   for (iree_host_size_t i = 0; i < case_count; ++i) {
     if (!out_file->cases[i].has_run_directive) {
       out_file->cases[i].mode = out_file->default_mode;
       out_file->cases[i].pipeline = out_file->default_pipeline;
       out_file->cases[i].format_target = out_file->default_format_target;
       out_file->cases[i].emit_target = out_file->default_emit_target;
+    }
+  }
+
+  // Apply REQUIRES inheritance: every case receives the file-level default
+  // requirements, plus any case-local requirements it declared.
+  if (out_file->default_requirement_count > 0) {
+    for (iree_host_size_t i = 0; i < case_count; ++i) {
+      loom_check_case_t* test_case = &out_file->cases[i];
+      if (!test_case->has_requires_directive) {
+        test_case->requirements = out_file->default_requirements;
+        test_case->requirement_count = out_file->default_requirement_count;
+        continue;
+      }
+      iree_string_view_t* combined_requirements = NULL;
+      iree_host_size_t combined_requirement_count = 0;
+      IREE_RETURN_IF_ERROR(loom_check_combine_requirement_lists(
+          out_file->default_requirements, out_file->default_requirement_count,
+          test_case->requirements, test_case->requirement_count, arena,
+          &combined_requirements, &combined_requirement_count));
+      test_case->requirements = combined_requirements;
+      test_case->requirement_count = combined_requirement_count;
     }
   }
 

@@ -29,6 +29,9 @@
 //   // RUN: emit <target>   Parse -> lower to target output -> compare.
 //                           Targets include llvmir, llvmir-body,
 //                           llvmir-bitcode, and llvmir-object.
+//   // REQUIRES: <name>[, <name>...]
+//                           Skip the case when external tools or target
+//                           backends are unavailable.
 //   // XFAIL: <reason>      Mark case as expected failure.
 //
 // Separators:
@@ -40,6 +43,11 @@
 //   sets the file-level default mode. Cases without their own // RUN:
 //   inherit from the file default. Cases with their own // RUN: override
 //   it. When no preamble // RUN: exists, the default is roundtrip.
+//
+// REQUIRES inheritance:
+//   A // REQUIRES: directive in the preamble sets file-level default
+//   environment requirements. Every case receives the file defaults,
+//   plus any case-local requirements it declares.
 //
 // Annotations (for verify mode — uppercase to distinguish from comments):
 //   // ERROR: DOMAIN/CODE "substring"
@@ -200,6 +208,16 @@ typedef struct loom_check_case_t {
   loom_check_source_range_t xfail_directive_range;
   // Reason for expected failure.
   iree_string_view_t xfail_reason;
+  // Whether this case contained its own // REQUIRES: directive. File-level
+  // defaults are present in requirements either way after parsing completes.
+  bool has_requires_directive;
+  // Source range of the // REQUIRES: directive line. Empty when absent.
+  loom_check_source_range_t requires_directive_range;
+  // Arena-allocated requirement name array, including inherited file-level
+  // requirements after parsing completes.
+  iree_string_view_t* requirements;
+  // Number of requirement names in requirements.
+  iree_host_size_t requirement_count;
   // IR text with directives stripped. Points into source.
   iree_string_view_t input;
   // Source range of input.
@@ -240,6 +258,10 @@ typedef struct loom_check_file_t {
   iree_string_view_t default_pipeline;
   iree_string_view_t default_format_target;
   iree_string_view_t default_emit_target;
+  // Arena-allocated file-level default requirement name array.
+  iree_string_view_t* default_requirements;
+  // Number of requirement names in default_requirements.
+  iree_host_size_t default_requirement_count;
 } loom_check_file_t;
 
 //===----------------------------------------------------------------------===//

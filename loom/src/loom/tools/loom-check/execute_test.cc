@@ -52,6 +52,29 @@ void SkipIfLlvmToolUnavailable(loom_llvmir_tool_kind_t tool_kind) {
   loom_llvmir_tool_output_deinitialize(&version_text, iree_allocator_system());
 }
 
+void SkipIfLlcTargetUnavailable(const char* target_name,
+                                const char* fallback_target_name) {
+  loom_llvmir_toolchain_t toolchain;
+  loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+  loom_llvmir_tool_output_t version_text = {};
+  iree_status_t status = loom_llvmir_tool_query_version(
+      &toolchain, LOOM_LLVMIR_TOOL_LLC, iree_allocator_system(), &version_text);
+  if (IsToolUnavailable(status)) {
+    std::string message = StatusToString(status);
+    iree_status_ignore(status);
+    GTEST_SKIP() << message;
+  }
+  IREE_ASSERT_OK(status);
+  std::string version =
+      version_text.data ? std::string(version_text.data, version_text.length)
+                        : std::string();
+  loom_llvmir_tool_output_deinitialize(&version_text, iree_allocator_system());
+  if (version.find(target_name) == std::string::npos &&
+      version.find(fallback_target_name) == std::string::npos) {
+    GTEST_SKIP() << "installed llc does not advertise target " << target_name;
+  }
+}
+
 class ExecuteTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -893,6 +916,7 @@ TEST_F(ExecuteTest, EmitModeLlvmIrBitcodeDisassembly) {
   loom_check_result_t result;
   IREE_ASSERT_OK(ExecuteFirst(
       "// RUN: emit llvmir-bitcode\n"
+      "// REQUIRES: llvm-dis\n"
       "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
       "  %sum = scalar.addi %lhs, %rhs : i32\n"
       "  func.return %sum : i32\n"
@@ -917,11 +941,12 @@ TEST_F(ExecuteTest, EmitModeLlvmIrBitcodeDisassembly) {
 }
 
 TEST_F(ExecuteTest, EmitModeLlvmIrObject) {
-  SkipIfLlvmToolUnavailable(LOOM_LLVMIR_TOOL_LLC);
+  SkipIfLlcTargetUnavailable("x86", "X86");
 
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit llvmir-object\n"
+                   "// REQUIRES: llc, llc-x86\n"
                    "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
                    "  %sum = scalar.addi %lhs, %rhs : i32\n"
                    "  func.return %sum : i32\n"
@@ -932,6 +957,80 @@ TEST_F(ExecuteTest, EmitModeLlvmIrObject) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
       << "detail: " << DetailString(result)
       << "\nactual: " << ActualOutputString(result);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, RequiresUnavailableSkipsCaseBeforeParsingIr) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: roundtrip\n"
+                   "// REQUIRES: loom-check-test-unavailable\n"
+                   "this.is.not.valid.ir\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_SKIP);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_SKIP);
+  EXPECT_NE(DetailString(result).find("loom-check-test-unavailable"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, UnknownRequiresRequirementFailsLoudly) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: roundtrip\n"
+                   "// REQUIRES: definitely-not-real\n"
+                   "func.def @f() {}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("unknown REQUIRES requirement"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, XfailDoesNotHideRequiresHarnessFailure) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: roundtrip\n"
+                   "// XFAIL: this is a harness error, not an IR failure\n"
+                   "// REQUIRES: definitely-not-real\n"
+                   "func.def @f() {}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitBitcodeRequiresLlvmDisDeclaration) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit llvmir-bitcode\n"
+                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("llvm-dis"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitObjectRequiresLlcBackendDeclaration) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit llvmir-object amdgpu-hal\n"
+                   "// REQUIRES: llc\n"
+                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("llc-amdgpu"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

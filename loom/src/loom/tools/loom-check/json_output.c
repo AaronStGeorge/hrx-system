@@ -9,7 +9,15 @@
 #include "loom/util/json.h"
 
 static const char* loom_check_outcome_string(loom_check_outcome_t outcome) {
-  return outcome == LOOM_CHECK_PASS ? "pass" : "fail";
+  switch (outcome) {
+    case LOOM_CHECK_PASS:
+      return "pass";
+    case LOOM_CHECK_FAIL:
+      return "fail";
+    case LOOM_CHECK_SKIP:
+      return "skip";
+  }
+  return "unknown";
 }
 
 static bool loom_check_json_output_mode_is_valid(
@@ -62,6 +70,21 @@ static iree_status_t loom_check_json_write_optional_string(
     return loom_output_stream_write_cstring(stream, "null");
   }
   return loom_json_write_escaped_string(stream, string);
+}
+
+static iree_status_t loom_check_json_write_string_array(
+    const iree_string_view_t* strings, iree_host_size_t string_count,
+    loom_output_stream_t* stream) {
+  IREE_ASSERT_ARGUMENT(stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+  for (iree_host_size_t i = 0; i < string_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+    }
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, strings[i]));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  return iree_ok_status();
 }
 
 static iree_status_t loom_check_json_write_update_edit(
@@ -203,6 +226,22 @@ static iree_status_t loom_check_json_write_case(
       stream, "      \"has_run_directive\": %s,\n",
       test_case->has_run_directive ? "true" : "false"));
 
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "      \"has_requires_directive\": %s,\n",
+      test_case->has_requires_directive ? "true" : "false"));
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      stream, "      \"requires_directive_range\": "));
+  IREE_RETURN_IF_ERROR(loom_check_json_write_optional_source_range(
+      test_case->requires_directive_range, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
+
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "      \"requirements\": "));
+  IREE_RETURN_IF_ERROR(loom_check_json_write_string_array(
+      test_case->requirements, test_case->requirement_count, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
+
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, "      \"pipeline\": "));
   IREE_RETURN_IF_ERROR(
@@ -255,12 +294,12 @@ static iree_status_t loom_check_json_write_case(
       loom_check_json_write_optional_string(test_case->xfail_reason, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
 
-  // "raw_outcome": "pass"/"fail"
+  // "raw_outcome": "pass"/"fail"/"skip"
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, "      \"raw_outcome\": \"%s\",\n",
       loom_check_outcome_string(result->raw_outcome)));
 
-  // "final_outcome": "pass"/"fail"
+  // "final_outcome": "pass"/"fail"/"skip"
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, "      \"final_outcome\": \"%s\",\n",
       loom_check_outcome_string(result->final_outcome)));
@@ -396,6 +435,12 @@ iree_status_t loom_check_json_write_file_result(
       loom_output_stream_write_cstring(stream, "  \"default_emit_target\": "));
   IREE_RETURN_IF_ERROR(
       loom_check_json_write_optional_string(file->default_emit_target, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
+
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "  \"default_requirements\": "));
+  IREE_RETURN_IF_ERROR(loom_check_json_write_string_array(
+      file->default_requirements, file->default_requirement_count, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\n"));
 
   // "cases": [...]

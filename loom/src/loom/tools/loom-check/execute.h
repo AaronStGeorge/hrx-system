@@ -41,10 +41,12 @@ extern "C" {
 // Types
 //===----------------------------------------------------------------------===//
 
-// Whether a single test case passed or failed.
+// Whether a single test case passed, failed, or was skipped by an unavailable
+// declared requirement.
 typedef enum loom_check_outcome_e {
   LOOM_CHECK_PASS = 0,
   LOOM_CHECK_FAIL = 1,
+  LOOM_CHECK_SKIP = 2,
 } loom_check_outcome_t;
 
 // Result of executing a single test case.
@@ -142,8 +144,10 @@ iree_status_t loom_check_result_record_diff(iree_string_view_t expected,
 // calling this.
 iree_status_t loom_check_context_initialize(loom_context_t* context);
 
-// Executes a single test case: dispatches to the mode-specific function,
-// then applies XFAIL inversion to produce the final outcome.
+// Executes a single test case: checks declared environment requirements,
+// dispatches to the mode-specific function, then applies XFAIL inversion to
+// IR/test-subject outcomes. Requirement harness failures and skips are final
+// outcomes and are not hidden by XFAIL.
 //
 // |filename| is passed through to the parser for diagnostic source
 // locations. Infrastructure errors (OOM, missing vtables) propagate as
