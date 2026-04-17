@@ -572,6 +572,102 @@ TEST(LowDescriptorsTest, RejectsUnknownScheduleModelData) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowDescriptorsTest, RejectsDescriptorWithoutScheduleClass) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptors[1].schedule_class_id = LOOM_LOW_SCHEDULE_CLASS_NONE;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnknownLatencyKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].latency_kind = LOOM_LOW_LATENCY_KIND_UNKNOWN;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidLatencyKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].latency_kind =
+      static_cast<loom_low_latency_kind_t>(99);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsNegativeLatencyKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].latency_kind =
+      static_cast<loom_low_latency_kind_t>(-1);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidScheduleModelQuality) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].model_quality =
+      static_cast<loom_low_model_quality_t>(99);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsNegativeScheduleModelQuality) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].model_quality =
+      static_cast<loom_low_model_quality_t>(-1);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsExactModelQualityWithoutExactLatency) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE;
+  tables.schedule_classes[1].model_quality = LOOM_LOW_MODEL_QUALITY_EXACT;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsFallbackModelWithoutVariableLatency) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].latency_kind = LOOM_LOW_LATENCY_KIND_ESTIMATE;
+  tables.schedule_classes[1].model_quality = LOOM_LOW_MODEL_QUALITY_FALLBACK;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsZeroIssueUseCycles) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.issue_uses[0].cycles = 0;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsZeroIssueUseUnits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.issue_uses[0].units = 0;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorsTest, FormatsManifestJson) {
   TestTables tables;
   InitializeTestTables(&tables);

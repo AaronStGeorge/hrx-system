@@ -246,7 +246,7 @@ class Descriptor:
     mnemonic: str | None
     semantic_tag: str | None
     operands: tuple[Operand, ...]
-    schedule_class: str | None = None
+    schedule_class: str
     immediates: tuple[Immediate, ...] = ()
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()

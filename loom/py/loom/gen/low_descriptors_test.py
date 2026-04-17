@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -101,6 +102,23 @@ def test_generator_rejects_missing_schedule_resource() -> None:
         )
 
 
+def test_generator_rejects_missing_schedule_class() -> None:
+    bad_descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        schedule_class=cast(str, None),
+    )
+    bad_set = replace(
+        IREEVM_CORE_DESCRIPTOR_SET,
+        descriptors=(bad_descriptor,),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="descriptor 'iree.vm.add.i32' has no schedule class",
+    ):
+        generate_descriptor_set(bad_set)
+
+
 def test_generator_rejects_result_after_operand() -> None:
     bad_descriptor = replace(
         IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
@@ -121,18 +139,22 @@ def test_generator_rejects_result_after_operand() -> None:
         generate_descriptor_set(bad_set)
 
 
-def test_operand_result_role_counts_as_result_prefix() -> None:
+def test_generator_rejects_operand_result_role() -> None:
     destructive_result = replace(
         IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[0],
         role=OperandRole.OPERAND_RESULT,
     )
     descriptor = replace(
         IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
-        operands=(destructive_result, *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[1:]),
+        operands=(
+            destructive_result,
+            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[1:],
+        ),
     )
     descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
 
-    generated = generate_descriptor_set(descriptor_set)
-    manifest = json.loads(generated.manifest_json)
-
-    assert manifest["descriptors"][0]["results"] == 1
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' operand 'dst' uses OPERAND_RESULT; use separate result and operand rows plus an explicit constraint"),
+    ):
+        generate_descriptor_set(descriptor_set)

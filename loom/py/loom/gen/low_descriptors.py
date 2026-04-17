@@ -226,7 +226,9 @@ def _validate_descriptor_operands(descriptor: Descriptor) -> int:
     result_count = 0
     seen_non_result = False
     for operand in descriptor.operands:
-        is_result = operand.role in (OperandRole.RESULT, OperandRole.OPERAND_RESULT)
+        if operand.role is OperandRole.OPERAND_RESULT:
+            raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' uses OPERAND_RESULT; use separate result and operand rows plus an explicit constraint")
+        is_result = operand.role is OperandRole.RESULT
         if is_result and seen_non_result:
             raise ValueError(f"descriptor '{descriptor.key}' has result operand '{operand.field_name}' after non-result operands")
         if is_result:
@@ -259,10 +261,11 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
 
     for descriptor in selected_descriptors:
         _validate_descriptor_operands(descriptor)
-        if descriptor.schedule_class is not None:
-            if descriptor.schedule_class not in schedule_inputs:
-                raise ValueError(f"descriptor '{descriptor.key}' references unknown schedule class '{descriptor.schedule_class}'")
-            used_schedule_names.add(descriptor.schedule_class)
+        if descriptor.schedule_class is None:
+            raise ValueError(f"descriptor '{descriptor.key}' has no schedule class")
+        if descriptor.schedule_class not in schedule_inputs:
+            raise ValueError(f"descriptor '{descriptor.key}' references unknown schedule class '{descriptor.schedule_class}'")
+        used_schedule_names.add(descriptor.schedule_class)
         for operand in descriptor.operands:
             for reg_alt in operand.reg_alts:
                 if reg_alt.reg_class is None:
@@ -759,7 +762,7 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
                 f".effect_count = {compiled.descriptor_rows[i]['effect_count']},",
                 f".constraint_start = {compiled.descriptor_rows[i]['constraint_start']},",
                 f".constraint_count = {compiled.descriptor_rows[i]['constraint_count']},",
-                ".schedule_class_id = " + ("LOOM_LOW_SCHEDULE_CLASS_NONE" if descriptor.schedule_class is None else str(compiled.schedule_class_ids[descriptor.schedule_class])) + ",",
+                f".schedule_class_id = {compiled.schedule_class_ids[descriptor.schedule_class]},",
                 f".flags = {_flag_expr(descriptor.flags)},",
             ]
             for i, descriptor in enumerate(compiled.descriptors)
@@ -851,7 +854,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
                 "key": descriptor.key,
                 "mnemonic": descriptor.mnemonic or "",
                 "semantic_tag": descriptor.semantic_tag or "",
-                "schedule_class": (None if descriptor.schedule_class is None else compiled.schedule_class_ids[descriptor.schedule_class]),
+                "schedule_class": compiled.schedule_class_ids[descriptor.schedule_class],
                 "operands": compiled.descriptor_rows[i]["operand_count"],
                 "results": compiled.descriptor_rows[i]["result_count"],
                 "immediates": compiled.descriptor_rows[i]["immediate_count"],

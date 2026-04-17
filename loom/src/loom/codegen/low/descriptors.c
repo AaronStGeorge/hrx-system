@@ -314,6 +314,29 @@ static bool loom_low_memory_space_is_valid(loom_low_memory_space_t space) {
   }
 }
 
+static bool loom_low_latency_kind_is_valid(loom_low_latency_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_LATENCY_KIND_EXACT:
+    case LOOM_LOW_LATENCY_KIND_ESTIMATE:
+    case LOOM_LOW_LATENCY_KIND_VARIABLE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_model_quality_is_valid(loom_low_model_quality_t quality) {
+  switch (quality) {
+    case LOOM_LOW_MODEL_QUALITY_EXACT:
+    case LOOM_LOW_MODEL_QUALITY_CALIBRATED:
+    case LOOM_LOW_MODEL_QUALITY_ESTIMATED:
+    case LOOM_LOW_MODEL_QUALITY_FALLBACK:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static loom_low_schedule_class_flags_t
 loom_low_schedule_flags_required_for_effect(loom_low_effect_kind_t kind) {
   switch (kind) {
@@ -520,6 +543,13 @@ static iree_status_t loom_low_verify_descriptor(
                             descriptor_index, descriptor->schedule_class_id,
                             descriptor_set->schedule_class_count);
   }
+  if (descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " has no schedule class; use an explicit fallback "
+                            "schedule class for unknown scheduling",
+                            descriptor_index);
+  }
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_roles(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_effect_contract(
@@ -626,10 +656,36 @@ static iree_status_t loom_low_verify_schedule_class(
                             " has unknown latency kind",
                             schedule_class_index);
   }
+  if (!loom_low_latency_kind_is_valid(schedule_class->latency_kind)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low schedule class %" PRIu32 " has invalid latency kind %u",
+        schedule_class_index, (unsigned)schedule_class->latency_kind);
+  }
   if (schedule_class->model_quality == LOOM_LOW_MODEL_QUALITY_UNKNOWN) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low schedule class %" PRIu32
                             " has unknown model quality",
+                            schedule_class_index);
+  }
+  if (!loom_low_model_quality_is_valid(schedule_class->model_quality)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low schedule class %" PRIu32 " has invalid model quality %u",
+        schedule_class_index, (unsigned)schedule_class->model_quality);
+  }
+  if (schedule_class->model_quality == LOOM_LOW_MODEL_QUALITY_EXACT &&
+      schedule_class->latency_kind != LOOM_LOW_LATENCY_KIND_EXACT) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low schedule class %" PRIu32
+                            " has exact model quality without exact latency",
+                            schedule_class_index);
+  }
+  if (schedule_class->model_quality == LOOM_LOW_MODEL_QUALITY_FALLBACK &&
+      schedule_class->latency_kind != LOOM_LOW_LATENCY_KIND_VARIABLE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low schedule class %" PRIu32
+                            " is a fallback model without variable latency",
                             schedule_class_index);
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
@@ -656,6 +712,17 @@ static iree_status_t loom_low_verify_issue_use(
                             " resources exist",
                             issue_use_index, issue_use->resource_id,
                             descriptor_set->resource_count);
+  }
+  if (issue_use->cycles == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low issue-use %" PRIu32 " has zero occupied cycles", issue_use_index);
+  }
+  if (issue_use->units == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low issue-use %" PRIu32
+                            " consumes zero resource units",
+                            issue_use_index);
   }
   return iree_ok_status();
 }

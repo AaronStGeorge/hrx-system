@@ -35,7 +35,7 @@ extern "C" {
 // Sentinel for absent descriptor ordinals.
 #define LOOM_LOW_DESCRIPTOR_ORDINAL_NONE UINT32_MAX
 
-// Sentinel for absent schedule classes.
+// Sentinel used before verification; verified descriptors must name a class.
 #define LOOM_LOW_SCHEDULE_CLASS_NONE UINT16_MAX
 
 // Sentinel for absent register classes.
@@ -51,7 +51,7 @@ typedef enum loom_low_operand_role_e {
   LOOM_LOW_OPERAND_ROLE_RESULT = 1,
   // SSA operand consumed by the descriptor.
   LOOM_LOW_OPERAND_ROLE_OPERAND = 2,
-  // Descriptor operand that is both read and written.
+  // Non-SSA read/write role; verified low packets use separate rows.
   LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT = 3,
   // Predicate or mask operand controlling execution.
   LOOM_LOW_OPERAND_ROLE_PREDICATE = 4,
@@ -450,7 +450,7 @@ typedef struct loom_low_descriptor_t {
   uint32_t constraint_start;
   // Number of constraint rows for this descriptor.
   uint16_t constraint_count;
-  // Schedule-class identifier, or LOOM_LOW_SCHEDULE_CLASS_NONE.
+  // Required schedule-class identifier for this descriptor.
   uint16_t schedule_class_id;
   // Descriptor flags used by verifier, scheduler, and optimizer.
   loom_low_descriptor_flags_t flags;
