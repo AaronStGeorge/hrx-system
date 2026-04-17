@@ -245,6 +245,55 @@ TEST(LowDescriptorsTest, RejectsMalformedSpans) {
   iree_status_ignore(status);
 }
 
+TEST(LowDescriptorsTest, RejectsNonResultRoleInResultPrefix) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[1].role = LOOM_LOW_OPERAND_ROLE_OPERAND;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+}
+
+TEST(LowDescriptorsTest, RejectsResultRoleAfterResultPrefix) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_RESULT;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+}
+
+TEST(LowDescriptorsTest, RejectsOperandResultRows) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+}
+
+TEST(LowDescriptorsTest, RejectsImplicitRowsWithoutImplicitFlag) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+}
+
+TEST(LowDescriptorsTest, AcceptsImplicitRowsWithImplicitFlag) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
+  tables.operands[2].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
 TEST(LowDescriptorsTest, RejectsDuplicateKeys) {
   TestTables tables;
   InitializeTestTables(&tables);

@@ -212,6 +212,49 @@ static iree_status_t loom_low_verify_descriptor_constraints(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_descriptor_operand_roles(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    const uint32_t operand_index = descriptor->operand_start + i;
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[operand_index];
+    if (operand->role == LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor %" PRIu32 " operand row %" PRIu16
+          " uses OPERAND_RESULT, but SSA low packets require separate result "
+          "and operand rows plus an explicit constraint",
+          descriptor_index, i);
+    }
+    if (i < descriptor->result_count) {
+      if (operand->role != LOOM_LOW_OPERAND_ROLE_RESULT) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low descriptor %" PRIu32 " result row %" PRIu16
+                                " has non-result role %u",
+                                descriptor_index, i, (unsigned)operand->role);
+      }
+      continue;
+    }
+    if (operand->role == LOOM_LOW_OPERAND_ROLE_RESULT) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32 " operand row %" PRIu16
+                              " appears after the result prefix but has "
+                              "result role",
+                              descriptor_index, i);
+    }
+    if (operand->role == LOOM_LOW_OPERAND_ROLE_IMPLICIT &&
+        !iree_all_bits_set(operand->flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32
+                              " implicit operand row %" PRIu16
+                              " must set LOOM_LOW_OPERAND_FLAG_IMPLICIT",
+                              descriptor_index, i);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_index) {
@@ -256,6 +299,8 @@ static iree_status_t loom_low_verify_descriptor(
                             descriptor_index, descriptor->schedule_class_id,
                             descriptor_set->schedule_class_count);
   }
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_roles(
+      descriptor_set, descriptor, descriptor_index));
   return loom_low_verify_descriptor_constraints(descriptor_set, descriptor);
 }
 

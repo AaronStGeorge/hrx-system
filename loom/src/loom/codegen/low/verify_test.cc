@@ -520,6 +520,7 @@ static const uint8_t kFeatureTestStrings[] =
     LOOM_BSTRING_LITERAL("\x03", "dst")
     LOOM_BSTRING_LITERAL("\x03", "lhs")
     LOOM_BSTRING_LITERAL("\x03", "rhs")
+    LOOM_BSTRING_LITERAL("\x04", "exec")
     LOOM_BSTRING_LITERAL("\x08", "test.alu")
     LOOM_BSTRING_LITERAL("\x0c", "test.add.i32")
     LOOM_BSTRING_LITERAL("\x07", "add.i32")
@@ -536,7 +537,8 @@ enum {
   FEATURE_STRING_field_dst = FEATURE_STRING_reg_gpr + sizeof("test.gpr"),
   FEATURE_STRING_field_lhs = FEATURE_STRING_field_dst + sizeof("dst"),
   FEATURE_STRING_field_rhs = FEATURE_STRING_field_lhs + sizeof("lhs"),
-  FEATURE_STRING_schedule_alu = FEATURE_STRING_field_rhs + sizeof("rhs"),
+  FEATURE_STRING_field_exec = FEATURE_STRING_field_rhs + sizeof("rhs"),
+  FEATURE_STRING_schedule_alu = FEATURE_STRING_field_exec + sizeof("exec"),
   FEATURE_STRING_descriptor_add =
       FEATURE_STRING_schedule_alu + sizeof("test.alu"),
   FEATURE_STRING_mnemonic_add =
@@ -554,7 +556,7 @@ static_assert(FEATURE_STRING_END == sizeof(kFeatureTestStrings) - 1,
 struct FeatureTestTables {
   loom_low_descriptor_t descriptors[1];
   loom_low_descriptor_ref_t descriptor_refs[1];
-  loom_low_operand_t operands[3];
+  loom_low_operand_t operands[4];
   loom_low_reg_class_t reg_classes[1];
   loom_low_reg_class_alt_t reg_class_alts[1];
   loom_low_schedule_class_t schedule_classes[1];
@@ -587,6 +589,12 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->operands[2].role = LOOM_LOW_OPERAND_ROLE_OPERAND;
   tables->operands[2].reg_class_alt_count = 1;
   tables->operands[2].unit_count = 1;
+  tables->operands[3].field_name_string_offset =
+      FEATURE_STRING_OFFSET(field_exec);
+  tables->operands[3].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
+  tables->operands[3].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
+  tables->operands[3].reg_class_alt_count = 1;
+  tables->operands[3].unit_count = 1;
 
   tables->schedule_classes[0].name_string_offset =
       FEATURE_STRING_OFFSET(schedule_alu);
@@ -602,7 +610,7 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->descriptors[0].semantic_tag_string_offset =
       FEATURE_STRING_OFFSET(semantic_add);
   tables->descriptors[0].feature_mask_word_count = 1;
-  tables->descriptors[0].operand_count = 3;
+  tables->descriptors[0].operand_count = 4;
   tables->descriptors[0].result_count = 1;
   tables->descriptors[0].schedule_class_id = 0;
   tables->descriptors[0].flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE;
@@ -676,6 +684,41 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
   EXPECT_EQ(collector.emissions[0].u32_params[0], 0u);
   ASSERT_GE(collector.emissions[0].u64_params.size(), 1u);
   EXPECT_EQ(collector.emissions[0].u64_params[0], UINT64_C(0x4));
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, IgnoresImplicitDescriptorOperandRows) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  std::string source =
+      "test.record @snapshot {}\n"
+      "test.record @export {}\n"
+      "target.config @test_config {contract_set_key = \"test.core\", "
+      "contract_feature_bits = 5}\n"
+      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
+      "@export, config = @test_config}\n"
+      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+      "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
+      "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
+      "  low.return %sum : reg<test.gpr x1>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
 
   loom_module_free(module);
 }
