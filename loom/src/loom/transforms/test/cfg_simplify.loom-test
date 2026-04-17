@@ -132,6 +132,50 @@ func.def @preserves_loop_carried_args(%n: index, %seed: i32, %x: i32) -> (i32) {
 
 // ====
 
+func.def @removes_self_forwarded_loop_arg(%cond: i1, %seed: i32) -> (i32) {
+  cfg.br ^loop(%seed : i32)
+^loop(%carry : i32):
+  cfg.cond_br %cond, ^body, ^exit : i1
+^body:
+  cfg.br ^loop(%carry : i32)
+^exit:
+  func.return %carry : i32
+}
+
+// ----
+func.def @removes_self_forwarded_loop_arg(%cond: i1, %seed: i32) -> (i32) {
+  cfg.br ^loop
+^loop:
+  cfg.cond_br %cond, ^loop, ^exit : i1
+^exit:
+  func.return %seed : i32
+}
+
+// ====
+
+func.def @removes_self_forwarded_dependent_loop_args(%cond: i1, %layout: encoding<layout>, %view: view<4xf32, %layout>) {
+  cfg.br ^loop(%layout, %view : encoding<layout>, view<4xf32, %layout>)
+^loop(%arg_layout : encoding<layout>, %arg_view : view<4xf32, %arg_layout>):
+  cfg.cond_br %cond, ^body, ^exit : i1
+^body:
+  cfg.br ^loop(%arg_layout, %arg_view : encoding<layout>, view<4xf32, %arg_layout>)
+^exit:
+  test.use %arg_view : view<4xf32, %arg_layout>
+  func.return
+}
+
+// ----
+func.def @removes_self_forwarded_dependent_loop_args(%cond: i1, %layout: encoding<layout>, %view: view<4xf32, %layout>) {
+  cfg.br ^loop
+^loop:
+  cfg.cond_br %cond, ^loop, ^exit : i1
+^exit:
+  test.use %view : view<4xf32, %layout>
+  func.return
+}
+
+// ====
+
 func.def @preserves_effectful_forward_block(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>

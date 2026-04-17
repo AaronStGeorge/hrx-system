@@ -645,20 +645,26 @@ static bool loom_cfg_simplify_find_duplicate_arg_replacement(
   return false;
 }
 
-static bool loom_cfg_simplify_find_identical_incoming_replacement(
+static bool loom_cfg_simplify_find_forwarded_arg_replacement(
     const loom_cfg_simplify_state_t* state, const loom_block_t* block,
     loom_op_t* const* pred_branches, iree_host_size_t predecessor_count,
     uint16_t arg_index, loom_value_id_t* out_replacement) {
   if (predecessor_count == 0) return false;
   loom_value_id_t old_arg = loom_block_arg_id(block, arg_index);
-  loom_value_id_t replacement =
-      loom_cfg_br_args(pred_branches[0]).values[arg_index];
-  if (replacement == old_arg) return false;
-  for (iree_host_size_t i = 1; i < predecessor_count; ++i) {
-    if (loom_cfg_br_args(pred_branches[i]).values[arg_index] != replacement) {
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  for (iree_host_size_t i = 0; i < predecessor_count; ++i) {
+    loom_value_id_t incoming =
+        loom_cfg_br_args(pred_branches[i]).values[arg_index];
+    if (incoming == old_arg) continue;
+    if (replacement == LOOM_VALUE_ID_INVALID) {
+      replacement = incoming;
+      continue;
+    }
+    if (incoming != replacement) {
       return false;
     }
   }
+  if (replacement == LOOM_VALUE_ID_INVALID) return false;
   if (!loom_cfg_simplify_type_allows_replacement(state->module, old_arg,
                                                  replacement)) {
     return false;
@@ -747,7 +753,7 @@ static iree_status_t loom_cfg_simplify_remove_redundant_block_args(
           loom_cfg_simplify_find_duplicate_arg_replacement(
               state, block, pred_branches, predecessors.count, arg_index,
               &replacement) ||
-          loom_cfg_simplify_find_identical_incoming_replacement(
+          loom_cfg_simplify_find_forwarded_arg_replacement(
               state, block, pred_branches, predecessors.count, arg_index,
               &replacement);
       if (!found_replacement) continue;
