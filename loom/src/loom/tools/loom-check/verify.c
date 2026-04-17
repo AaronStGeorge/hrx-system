@@ -6,10 +6,12 @@
 
 #include "loom/transforms/verify.h"
 
+#include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
+#include "loom/tools/loom-check/low_targets.h"
 
 //===----------------------------------------------------------------------===//
 // Verify execution
@@ -63,15 +65,10 @@ iree_status_t loom_check_execute_verify(
   // additional diagnostics. The source resolver uses the stripped input
   // so verifier diagnostics get the same line numbers as parse diagnostics.
   if (iree_status_is_ok(status) && module) {
-    loom_source_entry_t source_entry = {
-        .source_id = 0,
-        .source = stripped_view,
-        .filename = filename,
-    };
-    loom_source_table_resolver_t resolver_data = {
-        .entries = &source_entry,
-        .count = 1,
-    };
+    loom_source_entry_t source_entry = {0};
+    loom_source_table_resolver_t resolver_data = {0};
+    status = loom_check_source_resolver_for_case(
+        context, filename, stripped_view, &source_entry, &resolver_data);
     loom_verify_options_t verify_options = {
         .sink = {.fn = loom_check_diagnostic_collector_sink,
                  .user_data = &collector},
@@ -80,8 +77,33 @@ iree_status_t loom_check_execute_verify(
                             .user_data = &resolver_data},
     };
 
-    loom_verify_result_t verify_result;
-    status = loom_verify_module(module, &verify_options, &verify_result);
+    loom_verify_result_t verify_result = {0};
+    if (iree_status_is_ok(status)) {
+      status = loom_verify_module(module, &verify_options, &verify_result);
+    }
+    if (iree_status_is_ok(status) && verify_result.error_count == 0) {
+      loom_check_low_descriptor_registry_t low_registry;
+      loom_check_low_descriptor_registry_initialize(&low_registry);
+      loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
+          .diagnostic_collector = &collector,
+          .module = module,
+          .source_resolver = {.fn = loom_source_table_resolve,
+                              .user_data = &resolver_data},
+          .emitter = LOOM_EMITTER_VERIFIER,
+      };
+      loom_low_verify_options_t low_verify_options = {
+          .descriptor_registry = &low_registry.registry,
+          .emitter =
+              {
+                  .fn = loom_check_diagnostic_emitter_capture_emit,
+                  .user_data = &low_diagnostic_capture,
+              },
+          .max_errors = 100,
+      };
+      loom_low_verify_result_t low_verify_result = {0};
+      status = loom_low_verify_module(module, &low_verify_options,
+                                      &low_verify_result);
+    }
   }
 
   // The stripped input builder is no longer needed (diagnostics already

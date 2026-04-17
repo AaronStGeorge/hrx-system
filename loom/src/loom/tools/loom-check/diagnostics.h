@@ -12,10 +12,13 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
+#include "loom/error/emitter.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/report.h"
+#include "loom/transforms/verify.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -70,9 +73,38 @@ typedef struct loom_check_diagnostic_collector_t {
   loom_check_result_t* result;
 } loom_check_diagnostic_collector_t;
 
+// Materializes structured emission requests into collected diagnostics.
+typedef struct loom_check_diagnostic_emitter_capture_t {
+  // Diagnostic collector shared by the executing check case.
+  loom_check_diagnostic_collector_t* diagnostic_collector;
+
+  // Module containing any operation referenced by emitted diagnostics.
+  const loom_module_t* module;
+
+  // Source resolver for source-backed operation locations in this case.
+  loom_source_resolver_t source_resolver;
+
+  // Subsystem identity to store in materialized diagnostics.
+  loom_emitter_t emitter;
+
+  // Number of diagnostics materialized through this capture.
+  iree_host_size_t emission_count;
+} loom_check_diagnostic_emitter_capture_t;
+
 // Diagnostic sink callback. Renders, stores, and JSON-captures one diagnostic.
 iree_status_t loom_check_diagnostic_collector_sink(
     void* user_data, const loom_diagnostic_t* diagnostic);
+
+// Initializes a single-source resolver for a parsed loom-check case.
+iree_status_t loom_check_source_resolver_for_case(
+    loom_context_t* context, iree_string_view_t filename,
+    iree_string_view_t source, loom_source_entry_t* out_source_entry,
+    loom_source_table_resolver_t* out_source_resolver);
+
+// Diagnostic emitter callback. Pass a
+// loom_check_diagnostic_emitter_capture_t* as user_data.
+iree_status_t loom_check_diagnostic_emitter_capture_emit(
+    void* user_data, const loom_diagnostic_emission_t* emission);
 
 // Matches collected diagnostics against annotations, sets result->raw_outcome,
 // and builds failure detail/update edits when annotations do not match.

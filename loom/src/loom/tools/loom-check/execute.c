@@ -6,6 +6,7 @@
 
 #include "loom/tools/loom-check/execute.h"
 
+#include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
 #include "loom/error/json_sink.h"
 #include "loom/format/text/parser.h"
@@ -15,6 +16,7 @@
 #include "loom/ops/op_registry.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
+#include "loom/tools/loom-check/low_targets.h"
 #include "loom/tools/loom-check/requirements.h"
 #include "loom/transforms/branch_fusion.h"
 #include "loom/transforms/branch_sink.h"
@@ -152,75 +154,6 @@ iree_status_t loom_check_diagnostic_capture_sink(
     IREE_RETURN_IF_ERROR(
         loom_check_append_diagnostic_json(capture->result, diagnostic));
   }
-  return iree_ok_status();
-}
-
-typedef struct loom_check_pass_diagnostic_capture_t {
-  // Diagnostic collector shared with parser, verifier, and pass-mode
-  // reporting.
-  loom_check_diagnostic_collector_t* diagnostic_collector;
-
-  // Module being transformed by the pass pipeline.
-  const loom_module_t* module;
-
-  // Source resolver for source-backed op locations in the current case.
-  loom_source_resolver_t source_resolver;
-
-  // Number of diagnostics emitted by the pass pipeline in this execution.
-  iree_host_size_t emission_count;
-} loom_check_pass_diagnostic_capture_t;
-
-static iree_status_t loom_check_source_resolver_for_case(
-    loom_context_t* context, iree_string_view_t filename,
-    iree_string_view_t source, loom_source_entry_t* out_source_entry,
-    loom_source_table_resolver_t* out_source_resolver) {
-  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_context_register_source(context, filename, &source_id));
-  *out_source_entry = (loom_source_entry_t){
-      .source_id = source_id,
-      .source = source,
-      .filename = filename,
-  };
-  *out_source_resolver = (loom_source_table_resolver_t){
-      .entries = out_source_entry,
-      .count = 1,
-  };
-  return iree_ok_status();
-}
-
-static iree_status_t loom_check_pass_diagnostic_emitter(
-    void* user_data, const loom_diagnostic_emission_t* emission) {
-  loom_check_pass_diagnostic_capture_t* capture =
-      (loom_check_pass_diagnostic_capture_t*)user_data;
-  loom_diagnostic_t diagnostic = {
-      .severity = emission->error->severity,
-      .error = emission->error,
-      .params = emission->params,
-      .param_count = emission->param_count,
-      .emitter = LOOM_EMITTER_PASS,
-      .origin = {.provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
-      .source_location = {.provenance =
-                              LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
-  };
-  if (emission->op && capture->module) {
-    loom_source_range_t source_location = {
-        .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
-    };
-    if (loom_source_resolve(capture->source_resolver, capture->module,
-                            emission->op->location, &source_location)) {
-      if (source_location.provenance ==
-              LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE &&
-          source_location.source.size > 0) {
-        source_location.provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE;
-      }
-      diagnostic.origin = source_location;
-      diagnostic.source_location = source_location;
-    }
-  }
-  IREE_RETURN_IF_ERROR(loom_check_diagnostic_collector_sink(
-      capture->diagnostic_collector, &diagnostic));
-  ++capture->emission_count;
   return iree_ok_status();
 }
 
@@ -431,6 +364,30 @@ static iree_status_t loom_check_verify_pass_output(
   IREE_RETURN_IF_ERROR(
       loom_verify_module(module, &verify_options, &verify_result));
   *out_failed_verification = verify_result.error_count > 0;
+  if (*out_failed_verification) return iree_ok_status();
+
+  loom_check_low_descriptor_registry_t low_registry;
+  loom_check_low_descriptor_registry_initialize(&low_registry);
+  loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
+      .diagnostic_collector = diagnostic_collector,
+      .module = module,
+      .source_resolver = {.fn = loom_source_table_resolve,
+                          .user_data = &resolver_data},
+      .emitter = LOOM_EMITTER_VERIFIER,
+  };
+  loom_low_verify_options_t low_verify_options = {
+      .descriptor_registry = &low_registry.registry,
+      .emitter =
+          {
+              .fn = loom_check_diagnostic_emitter_capture_emit,
+              .user_data = &low_diagnostic_capture,
+          },
+      .max_errors = 100,
+  };
+  loom_low_verify_result_t low_verify_result = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_module(module, &low_verify_options, &low_verify_result));
+  *out_failed_verification = low_verify_result.error_count > 0;
   return iree_ok_status();
 }
 
@@ -501,14 +458,15 @@ iree_status_t loom_check_execute_pass(
   loom_source_table_resolver_t resolver_data = {0};
   status = loom_check_source_resolver_for_case(
       context, filename, test_case->input, &source_entry, &resolver_data);
-  loom_check_pass_diagnostic_capture_t pass_diagnostic_capture = {
+  loom_check_diagnostic_emitter_capture_t pass_diagnostic_capture = {
       .diagnostic_collector = &diagnostic_collector,
       .module = module,
       .source_resolver = {.fn = loom_source_table_resolve,
                           .user_data = &resolver_data},
+      .emitter = LOOM_EMITTER_PASS,
   };
   iree_diagnostic_emitter_t pass_diagnostic_emitter = {
-      .fn = loom_check_pass_diagnostic_emitter,
+      .fn = loom_check_diagnostic_emitter_capture_emit,
       .user_data = &pass_diagnostic_capture,
   };
   if (iree_status_is_ok(status)) {

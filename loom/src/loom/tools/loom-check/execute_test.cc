@@ -258,6 +258,51 @@ TEST_F(ExecuteTest, VerifyCleanIR) {
   loom_check_result_deinitialize(&result);
 }
 
+static const char kVerifyVmTargetRecords[] =
+    "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
+    "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
+    "target_cpu = \"\", target_features = \"\", default_pointer_bitwidth = "
+    "64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, "
+    "memory_space_global = 0, memory_space_workgroup = 0, "
+    "memory_space_constant = 0, memory_space_private = 0, "
+    "memory_space_host = 0, memory_space_descriptor = 0}\n"
+    "target.export @vm_export {export_symbol = \"constant\", abi = "
+    "vm_module_function, linkage = default, hal_binding_alignment = 0, "
+    "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
+    "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
+    "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
+    "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
+    "contract_feature_bits = 0}\n"
+    "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
+    "@vm_export, config = @vm_config}\n";
+
+TEST_F(ExecuteTest, VerifyRunsLowDescriptorVerifier) {
+  loom_check_result_t result;
+  std::string source =
+      std::string("// RUN: verify\n") + kVerifyVmTargetRecords +
+      "low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {\n"
+      "  %c0 = low.const<iree.vm.const.i32> : reg<vm.i32>\n"
+      "  low.return %c0 : reg<vm.i32>\n"
+      "}\n";
+  IREE_ASSERT_OK(ExecuteFirst(source.c_str(), &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
+      << "detail: " << DetailString(result);
+  EXPECT_EQ(result.diagnostic_count, 1u);
+  const std::string diagnostic_json = DiagnosticJsonString(result);
+  EXPECT_NE(diagnostic_json.find("\"domain\":\"LOWERING\""), std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"error_id\":\"ERR_LOWERING_007\""),
+            std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"emitter\":\"verifier\""),
+            std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"opcode\":\"iree.vm.const.i32\""),
+            std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"immediate_name\":\"i32_value\""),
+            std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"param_fields\""), std::string::npos);
+  EXPECT_NE(diagnostic_json.find("\"kind\":\"attribute\""), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, VerifyMatchedParseError) {
   // Parse error (unknown op) matched by an annotation. The annotation
   // is on input line 1, @+1 targets input line 2. After comment
@@ -941,6 +986,23 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsSetShape) {
   EXPECT_NE(actual_output.find("\"table_counts\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptors\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"iree.vm.add.i32\""), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitLowDescriptorManifestUsesLowRegistry) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit low-descriptor-manifest wasm.core.simd128\n"
+                   "func.def @unused() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"key\":\"wasm.core.simd128\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"target\":\"wasm\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"wasm.i32x4.add\""), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

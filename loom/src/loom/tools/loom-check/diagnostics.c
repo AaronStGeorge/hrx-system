@@ -118,6 +118,114 @@ iree_status_t loom_check_diagnostic_collector_sink(
 }
 
 //===----------------------------------------------------------------------===//
+// Diagnostic emission materialization
+//===----------------------------------------------------------------------===//
+
+iree_status_t loom_check_source_resolver_for_case(
+    loom_context_t* context, iree_string_view_t filename,
+    iree_string_view_t source, loom_source_entry_t* out_source_entry,
+    loom_source_table_resolver_t* out_source_resolver) {
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_context_register_source(context, filename, &source_id));
+  *out_source_entry = (loom_source_entry_t){
+      .source_id = source_id,
+      .source = source,
+      .filename = filename,
+  };
+  *out_source_resolver = (loom_source_table_resolver_t){
+      .entries = out_source_entry,
+      .count = 1,
+  };
+  return iree_ok_status();
+}
+
+static bool loom_check_diagnostic_resolve_location(
+    const loom_check_diagnostic_emitter_capture_t* capture, const loom_op_t* op,
+    loom_source_range_t* out_source_location) {
+  if (!capture || !capture->module || !op) return false;
+  if (!loom_source_resolve(capture->source_resolver, capture->module,
+                           op->location, out_source_location)) {
+    return false;
+  }
+  if (out_source_location->provenance ==
+          LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE &&
+      out_source_location->source.size > 0) {
+    out_source_location->provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE;
+  }
+  return true;
+}
+
+static iree_host_size_t loom_check_diagnostic_collect_related_locations(
+    const loom_check_diagnostic_emitter_capture_t* capture,
+    const loom_diagnostic_related_op_t* related_ops,
+    iree_host_size_t related_op_count,
+    loom_diagnostic_related_location_t* out_related_locations) {
+  if (!related_ops || related_op_count == 0) return 0;
+  iree_host_size_t related_location_count = 0;
+  for (iree_host_size_t i = 0;
+       i < related_op_count &&
+       related_location_count < LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS;
+       ++i) {
+    loom_source_range_t source_location = {
+        .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
+    };
+    if (!loom_check_diagnostic_resolve_location(capture, related_ops[i].op,
+                                                &source_location)) {
+      continue;
+    }
+    out_related_locations[related_location_count++] =
+        (loom_diagnostic_related_location_t){
+            .label = related_ops[i].label,
+            .source_location = source_location,
+        };
+  }
+  return related_location_count;
+}
+
+iree_status_t loom_check_diagnostic_emitter_capture_emit(
+    void* user_data, const loom_diagnostic_emission_t* emission) {
+  loom_check_diagnostic_emitter_capture_t* capture =
+      (loom_check_diagnostic_emitter_capture_t*)user_data;
+  if (!capture || !capture->diagnostic_collector || !emission ||
+      !emission->error) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "diagnostic emitter capture requires an emission");
+  }
+
+  loom_diagnostic_t diagnostic = {
+      .severity = emission->error->severity,
+      .error = emission->error,
+      .params = emission->params,
+      .param_count = emission->param_count,
+      .emitter = capture->emitter,
+      .origin = {.provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
+      .source_location = {.provenance =
+                              LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE},
+  };
+
+  loom_diagnostic_related_location_t
+      related_locations[LOOM_DIAGNOSTIC_MAX_RELATED_LOCATIONS];
+  diagnostic.related_location_count =
+      loom_check_diagnostic_collect_related_locations(
+          capture, emission->related_ops, emission->related_op_count,
+          related_locations);
+  if (diagnostic.related_location_count > 0) {
+    diagnostic.related_locations = related_locations;
+  }
+
+  if (loom_check_diagnostic_resolve_location(capture, emission->op,
+                                             &diagnostic.source_location)) {
+    diagnostic.origin = diagnostic.source_location;
+  }
+
+  IREE_RETURN_IF_ERROR(loom_check_diagnostic_collector_sink(
+      capture->diagnostic_collector, &diagnostic));
+  ++capture->emission_count;
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
 // Annotation matching
 //===----------------------------------------------------------------------===//
 

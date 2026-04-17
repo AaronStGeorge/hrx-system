@@ -7,7 +7,6 @@
 #include "iree/io/vec_stream.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
-#include "loom/target/emit/ireevm/descriptors.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/legality.h"
 #include "loom/target/emit/llvmir/lower.h"
@@ -17,6 +16,7 @@
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/llvmir_targets.h"
+#include "loom/tools/loom-check/low_targets.h"
 #include "loom/util/stream.h"
 
 typedef enum loom_check_emit_format_e {
@@ -77,15 +77,17 @@ static iree_status_t loom_check_emit_parse_request(
                                     IREE_SV("low-descriptor-manifest")) ||
              iree_string_view_equal(target_name,
                                     IREE_SV("low-descriptor-json"))) {
-    if (iree_string_view_equal(profile_name, IREE_SV("iree.vm.core"))) {
+    const loom_low_descriptor_set_t* descriptor_set = NULL;
+    IREE_RETURN_IF_ERROR(
+        loom_check_low_descriptor_set_lookup(profile_name, &descriptor_set));
+    if (descriptor_set != NULL) {
       out_request->format = LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST;
-      out_request->low_descriptor_set = loom_ireevm_core_descriptor_set();
+      out_request->low_descriptor_set = descriptor_set;
       return iree_ok_status();
     }
-    return iree_make_status(
-        IREE_STATUS_NOT_FOUND,
-        "unknown low descriptor set '%.*s'; expected 'iree.vm.core'",
-        (int)profile_name.size, profile_name.data);
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "unknown low descriptor set '%.*s'",
+                            (int)profile_name.size, profile_name.data);
   } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown emit target '%.*s'", (int)target_name.size,

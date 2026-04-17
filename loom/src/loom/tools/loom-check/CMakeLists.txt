@@ -31,12 +31,14 @@ loom_cc_library(
     "diagnostics.h"
     "execute.h"
     "llvmir_targets.h"
+    "low_targets.h"
     "requirements.h"
   SRCS
     "diagnostics.c"
     "emit.c"
     "execute.c"
     "llvmir_targets.c"
+    "low_targets.c"
     "requirements.c"
     "roundtrip.c"
     "verify.c"
@@ -47,7 +49,10 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::io::stream
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
+    loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::error::json_sink
     loom::src::loom::error::renderer
@@ -55,6 +60,7 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::emit::ireevm::descriptors
     loom::src::loom::target::emit::llvmir::amdgpu::legality
     loom::src::loom::target::emit::llvmir::amdgpu::lower

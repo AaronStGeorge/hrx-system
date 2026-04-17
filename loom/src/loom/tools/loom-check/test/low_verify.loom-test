@@ -1,0 +1,84 @@
+// RUN: verify
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "add", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : reg<vm.i32>) -> (reg<vm.i32>) {
+  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  low.return %sum : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "missing.low", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+// ERROR@+1: LOWERING/003 "missing.low"
+low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {
+  %c0 = low.const<iree.vm.const.i32> {i32_value = 7} : reg<vm.i32>
+  low.return %c0 : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "add", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : reg<vm.i32>) -> (reg<vm.i32>) {
+  // ERROR@+1: LOWERING/004 "iree.vm.missing.i32"
+  %sum = low.op<iree.vm.missing.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  low.return %sum : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {
+  // ERROR@+1: LOWERING/007 "i32_value"
+  %c0 = low.const<iree.vm.const.i32> : reg<vm.i32>
+  low.return %c0 : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "add", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : reg<vm.i32>) -> (reg<vm.i32>) {
+  // ERROR@+1: LOWERING/008 "junk"
+  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) {junk = 1} : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
+  low.return %sum : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {
+  // ERROR@+1: LOWERING/009 "i64 signed integer"
+  %c0 = low.const<iree.vm.const.i32> {i32_value = "wrong"} : reg<vm.i32>
+  low.return %c0 : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "constant", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {
+  // ERROR@+1: LOWERING/010 "2147483648"
+  %c0 = low.const<iree.vm.const.i32> {i32_value = 2147483648} : reg<vm.i32>
+  low.return %c0 : reg<vm.i32>
+}
