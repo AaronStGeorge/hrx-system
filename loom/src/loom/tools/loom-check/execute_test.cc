@@ -866,6 +866,27 @@ TEST_F(ExecuteTest, EmitModeLlvmIrText) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitModeLlvmIrBodyText) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit llvmir-body\n"
+                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
+                   "  func.return %sum : i32\n"
+                   "}\n"
+                   "// ----\n"
+                   "define internal i32 @add(i32 %lhs, i32 %rhs) {\n"
+                   "entry:\n"
+                   "  %sum = add i32 %lhs, %rhs\n"
+                   "  ret i32 %sum\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
+      << "detail: " << DetailString(result)
+      << "\nactual: " << ActualOutputString(result);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, EmitModeLlvmIrBitcodeDisassembly) {
   SkipIfLlvmToolUnavailable(LOOM_LLVMIR_TOOL_LLVM_DIS);
 

@@ -1,9 +1,6 @@
-// RUN: emit llvmir
+// RUN: emit llvmir-body
 
-// Target escape hatches stay explicit in Loom IR. These tests cover text
-// lowering; object/assembly toolchain behavior stays in focused C++ fixtures
-// because it depends on external LLVM tools.
-
+// Memory intrinsics preserve volatile operands and declaration signatures.
 func.def public @source_memory_intrinsics(%target: buffer, %source: buffer, %length: offset) {
   %fill_value = scalar.constant 0 : i8
   %is_volatile = scalar.constant false : i1
@@ -16,23 +13,7 @@ func.def public @source_memory_intrinsics(%target: buffer, %source: buffer, %len
   func.return
 }
 
-func.def public @inline_asm_add(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = llvmir.inline_asm<sideeffect> "addl $2, $0", "=r,0,r"(%lhs, %rhs) : (i32, i32) -> i32
-  func.return %sum : i32
-}
-
-func.def public @read_tsc() -> (i64) {
-  llvmir.intrinsic<llvm.x86.sse2.pause> () : ()
-  %ignored = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
-  %ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
-  func.return %ticks : i64
-}
-
 // ----
-source_filename = "loom/src/loom/tools/loom-check/test/llvmir/intrinsics.loom-test"
-target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
-target triple = "x86_64-unknown-linux-gnu"
-
 define dso_local void @source_memory_intrinsics(ptr %target, ptr %source, i64 %length) {
 entry:
   call void @llvm.lifetime.start.p0(i64 16, ptr %target)
@@ -43,20 +24,6 @@ entry:
   ret void
 }
 
-define dso_local i32 @inline_asm_add(i32 %lhs, i32 %rhs) {
-entry:
-  %sum = call i32 asm sideeffect "addl $2, $0", "=r,0,r"(i32 %lhs, i32 %rhs)
-  ret i32 %sum
-}
-
-define dso_local i64 @read_tsc() {
-entry:
-  call void @llvm.x86.sse2.pause()
-  %ignored = call i64 @llvm.x86.rdtsc()
-  %ticks = call i64 @llvm.x86.rdtsc()
-  ret i64 %ticks
-}
-
 declare void @llvm.lifetime.start.p0(i64 immarg, ptr nocapture)
 
 declare void @llvm.memset.p0.i64(ptr nocapture writeonly, i8, i64, i1 immarg)
@@ -65,13 +32,48 @@ declare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, ptr noalias
 
 declare void @llvm.lifetime.end.p0(i64 immarg, ptr nocapture)
 
+// ====
+
+// Inline assembly keeps flags, template, constraints, and operand order intact.
+func.def public @inline_asm_add(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = llvmir.inline_asm<sideeffect> "addl $2, $0", "=r,0,r"(%lhs, %rhs) : (i32, i32) -> i32
+  func.return %sum : i32
+}
+
+// ----
+define dso_local i32 @inline_asm_add(i32 %lhs, i32 %rhs) {
+entry:
+  %sum = call i32 asm sideeffect "addl $2, $0", "=r,0,r"(i32 %lhs, i32 %rhs)
+  ret i32 %sum
+}
+
+// ====
+
+// X86 intrinsics lower to declarations and calls without synthetic wrappers.
+func.def public @read_tsc() -> (i64) {
+  llvmir.intrinsic<llvm.x86.sse2.pause> () : ()
+  %ignored = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
+  %ticks = llvmir.intrinsic<llvm.x86.rdtsc> () : () -> i64
+  func.return %ticks : i64
+}
+
+// ----
+define dso_local i64 @read_tsc() {
+entry:
+  call void @llvm.x86.sse2.pause()
+  %ignored = call i64 @llvm.x86.rdtsc()
+  %ticks = call i64 @llvm.x86.rdtsc()
+  ret i64 %ticks
+}
+
 declare void @llvm.x86.sse2.pause()
 
 declare i64 @llvm.x86.rdtsc()
 
 // ====
-// RUN: emit llvmir amdgpu-hal
+// RUN: emit llvmir-body amdgpu-hal
 
+// AMDGPU workitem intrinsics use the target profile's kernel ABI.
 func.def public device @dispatch() {
   %tid_x = llvmir.intrinsic<llvm.amdgcn.workitem.id.x> () : () -> i32
   %tid_y = llvmir.intrinsic<llvm.amdgcn.workitem.id.y> () : () -> i32
@@ -80,10 +82,6 @@ func.def public device @dispatch() {
 }
 
 // ----
-source_filename = "loom/src/loom/tools/loom-check/test/llvmir/intrinsics.loom-test"
-target datalayout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"
-target triple = "amdgcn-amd-amdhsa"
-
 define amdgpu_kernel void @dispatch() #0 !reqd_work_group_size !0 {
 entry:
   %tid_x = call i32 @llvm.amdgcn.workitem.id.x()
@@ -103,8 +101,9 @@ attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-wo
 !0 = !{i32 64, i32 1, i32 1}
 
 // ====
-// RUN: emit llvmir amdgpu-hal
+// RUN: emit llvmir-body amdgpu-hal
 
+// AMDGPU HAL buffer arguments lower to global address-space pointers.
 func.def public device @vector_hal_kernel(%input: buffer, %output: buffer, %base: index) {
   %zero = index.constant 0 : offset
   %tid_x = llvmir.intrinsic<llvm.amdgcn.workitem.id.x> () : () -> i32
@@ -119,10 +118,6 @@ func.def public device @vector_hal_kernel(%input: buffer, %output: buffer, %base
 }
 
 // ----
-source_filename = "loom/src/loom/tools/loom-check/test/llvmir/intrinsics.loom-test"
-target datalayout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"
-target triple = "amdgcn-amd-amdhsa"
-
 define amdgpu_kernel void @vector_hal_kernel(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 !reqd_work_group_size !0 {
 entry:
   %tid_x = call i32 @llvm.amdgcn.workitem.id.x()

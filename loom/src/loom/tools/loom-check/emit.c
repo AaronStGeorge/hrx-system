@@ -17,8 +17,9 @@
 
 typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LLVMIR_TEXT = 0,
-  LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY = 1,
-  LOOM_CHECK_EMIT_LLVMIR_OBJECT = 2,
+  LOOM_CHECK_EMIT_LLVMIR_BODY_TEXT = 1,
+  LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY = 2,
+  LOOM_CHECK_EMIT_LLVMIR_OBJECT = 3,
 } loom_check_emit_format_t;
 
 typedef struct loom_check_emit_request_t {
@@ -61,6 +62,9 @@ static iree_status_t loom_check_emit_parse_request(
   if (iree_string_view_equal(target_name, IREE_SV("llvmir")) ||
       iree_string_view_equal(target_name, IREE_SV("llvmir-text"))) {
     out_request->format = LOOM_CHECK_EMIT_LLVMIR_TEXT;
+  } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-body")) ||
+             iree_string_view_equal(target_name, IREE_SV("llvmir-text-body"))) {
+    out_request->format = LOOM_CHECK_EMIT_LLVMIR_BODY_TEXT;
   } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-bitcode"))) {
     out_request->format = LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY;
   } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-object"))) {
@@ -129,11 +133,59 @@ static iree_status_t loom_check_emit_strip_llvmir_comments(
   return iree_ok_status();
 }
 
+static bool loom_check_emit_is_llvmir_module_header_line(
+    iree_string_view_t line) {
+  line = iree_string_view_trim(line);
+  return iree_string_view_starts_with(line, IREE_SV("source_filename =")) ||
+         iree_string_view_starts_with(line, IREE_SV("target datalayout =")) ||
+         iree_string_view_starts_with(line, IREE_SV("target triple ="));
+}
+
+static iree_status_t loom_check_emit_strip_llvmir_module_header(
+    iree_string_view_t input, iree_string_builder_t* output) {
+  bool stripped_header = false;
+  bool emitted_body_line = false;
+  iree_string_view_t remaining = input;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t line = loom_check_emit_consume_line(&remaining);
+    if (loom_check_emit_is_llvmir_module_header_line(line)) {
+      stripped_header = true;
+      continue;
+    }
+    if (stripped_header && !emitted_body_line &&
+        iree_string_view_is_empty(iree_string_view_trim(line))) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, line));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
+    emitted_body_line = true;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_emit_write_llvmir_text(
     const loom_llvmir_module_t* lowered_module, loom_check_result_t* result) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(&result->actual_output, &stream);
   return loom_llvmir_text_write_module(lowered_module, &stream);
+}
+
+static iree_status_t loom_check_emit_write_llvmir_body_text(
+    const loom_llvmir_module_t* lowered_module, iree_allocator_t allocator,
+    loom_check_result_t* result) {
+  iree_string_builder_t module_text;
+  iree_string_builder_initialize(allocator, &module_text);
+
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&module_text, &stream);
+  iree_status_t status = loom_llvmir_text_write_module(lowered_module, &stream);
+  if (iree_status_is_ok(status)) {
+    status = loom_check_emit_strip_llvmir_module_header(
+        iree_string_builder_view(&module_text), &result->actual_output);
+  }
+
+  iree_string_builder_deinitialize(&module_text);
+  return status;
 }
 
 static void loom_check_emit_byte_buffer_deinitialize(
@@ -305,6 +357,10 @@ iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
     switch (request.format) {
       case LOOM_CHECK_EMIT_LLVMIR_TEXT:
         status = loom_check_emit_write_llvmir_text(lowered_module, result);
+        break;
+      case LOOM_CHECK_EMIT_LLVMIR_BODY_TEXT:
+        status = loom_check_emit_write_llvmir_body_text(lowered_module,
+                                                        allocator, result);
         break;
       case LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY:
         status = loom_check_emit_write_llvmir_bitcode_disassembly(
