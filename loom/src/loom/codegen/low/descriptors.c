@@ -187,6 +187,29 @@ static iree_status_t loom_low_verify_descriptor_refs(
   return iree_ok_status();
 }
 
+static bool loom_low_operand_role_is_packet_operand(
+    loom_low_operand_role_t role) {
+  return role == LOOM_LOW_OPERAND_ROLE_OPERAND ||
+         role == LOOM_LOW_OPERAND_ROLE_PREDICATE ||
+         role == LOOM_LOW_OPERAND_ROLE_RESOURCE;
+}
+
+static iree_status_t loom_low_verify_binary_constraint(
+    const loom_low_constraint_t* constraint, const char* constraint_name) {
+  if (constraint->rhs_operand_index == LOOM_LOW_ID_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low %s constraint requires an rhs operand",
+                            constraint_name);
+  }
+  if (constraint->lhs_operand_index == constraint->rhs_operand_index) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low %s constraint cannot reference the same operand twice",
+        constraint_name);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_constraints(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
@@ -207,6 +230,70 @@ static iree_status_t loom_low_verify_descriptor_constraints(
                               " exceeds descriptor operand count %" PRIu16,
                               constraint->rhs_operand_index,
                               descriptor->operand_count);
+    }
+    const loom_low_operand_t* lhs =
+        &descriptor_set->operands[descriptor->operand_start +
+                                  constraint->lhs_operand_index];
+    const loom_low_operand_t* rhs = NULL;
+    if (constraint->rhs_operand_index != LOOM_LOW_ID_NONE) {
+      rhs = &descriptor_set->operands[descriptor->operand_start +
+                                      constraint->rhs_operand_index];
+    }
+    switch (constraint->kind) {
+      case LOOM_LOW_CONSTRAINT_KIND_TIED: {
+        IREE_RETURN_IF_ERROR(
+            loom_low_verify_binary_constraint(constraint, "tied"));
+        if (lhs->role != LOOM_LOW_OPERAND_ROLE_RESULT ||
+            !loom_low_operand_role_is_packet_operand(rhs->role)) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low tied constraint requires a result lhs and packet operand "
+              "rhs");
+        }
+        break;
+      }
+      case LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE: {
+        IREE_RETURN_IF_ERROR(
+            loom_low_verify_binary_constraint(constraint, "commutable"));
+        if (lhs->role != LOOM_LOW_OPERAND_ROLE_OPERAND ||
+            rhs->role != LOOM_LOW_OPERAND_ROLE_OPERAND) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low commutable constraint requires two packet operand rows");
+        }
+        break;
+      }
+      case LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE: {
+        IREE_RETURN_IF_ERROR(
+            loom_low_verify_binary_constraint(constraint, "destructive"));
+        if (lhs->role != LOOM_LOW_OPERAND_ROLE_RESULT ||
+            !loom_low_operand_role_is_packet_operand(rhs->role)) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low destructive constraint requires a result lhs and packet "
+              "operand rhs");
+        }
+        break;
+      }
+      case LOOM_LOW_CONSTRAINT_KIND_EARLY_CLOBBER:
+        if (constraint->rhs_operand_index != LOOM_LOW_ID_NONE ||
+            lhs->role != LOOM_LOW_OPERAND_ROLE_RESULT) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low early-clobber constraint requires one result operand");
+        }
+        break;
+      case LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE:
+      case LOOM_LOW_CONSTRAINT_KIND_FOLDABLE:
+        if (constraint->rhs_operand_index != LOOM_LOW_ID_NONE ||
+            lhs->role != LOOM_LOW_OPERAND_ROLE_RESULT) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low unary descriptor constraint requires one result operand");
+        }
+        break;
+      default:
+        break;
     }
   }
   return iree_ok_status();
