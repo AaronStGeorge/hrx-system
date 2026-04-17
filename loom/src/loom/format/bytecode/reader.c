@@ -2978,6 +2978,12 @@ static uint8_t loom_bytecode_find_symbol_attr_index(
   return LOOM_ATTR_INDEX_NONE;
 }
 
+static bool loom_bytecode_attr_is_symbol_identity(
+    const loom_op_vtable_t* vtable, uint8_t attr_index) {
+  return vtable && vtable->symbol_def &&
+         attr_index == vtable->symbol_def->name_attr_index;
+}
+
 static iree_status_t loom_bytecode_reader_validate_global_vtable(
     loom_bytecode_reader_state_t* reader, uint64_t symbol_index,
     const loom_op_vtable_t* vtable, uint64_t op_ref_offset) {
@@ -3153,13 +3159,12 @@ static iree_status_t loom_bytecode_reader_skip_global_payload(
           IREE_SV("attribute_key"), key_offset,
           IREE_SV("global attribute key is not declared by the op"));
     }
-    const loom_attr_descriptor_t* descriptor =
-        &vtable->attr_descriptors[attr_index];
-    if (descriptor->attr_kind == LOOM_ATTR_SYMBOL) {
+    if (loom_bytecode_attr_is_symbol_identity(vtable, attr_index)) {
       return loom_bytecode_reader_emit_invalid_field(
           reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
           IREE_SV("attribute_key"), key_offset,
-          IREE_SV("global symbol attribute is reconstructed from name_id"));
+          IREE_SV("global identity symbol attribute is reconstructed from "
+                  "name_id"));
     }
     uint64_t attr_bit = (uint64_t)1 << (attr_index % 64);
     uint64_t* attr_word = &seen_attr_bits[attr_index / 64];
@@ -3236,13 +3241,12 @@ static iree_status_t loom_bytecode_reader_skip_record_payload(
           IREE_SV("attribute_key"), key_offset,
           IREE_SV("record attribute key is not declared by the op"));
     }
-    const loom_attr_descriptor_t* descriptor =
-        &vtable->attr_descriptors[attr_index];
-    if (descriptor->attr_kind == LOOM_ATTR_SYMBOL) {
+    if (loom_bytecode_attr_is_symbol_identity(vtable, attr_index)) {
       return loom_bytecode_reader_emit_invalid_field(
           reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
           IREE_SV("attribute_key"), key_offset,
-          IREE_SV("record symbol attribute is reconstructed from name_id"));
+          IREE_SV("record identity symbol attribute is reconstructed from "
+                  "name_id"));
     }
     uint64_t attr_bit = (uint64_t)1 << (attr_index % 64);
     uint64_t* attr_word = &seen_attr_bits[attr_index / 64];
@@ -3790,11 +3794,12 @@ static iree_status_t loom_bytecode_reader_materialize_global_symbol(
     }
     const loom_attr_descriptor_t* descriptor =
         &vtable->attr_descriptors[attr_index];
-    if (descriptor->attr_kind == LOOM_ATTR_SYMBOL) {
+    if (loom_bytecode_attr_is_symbol_identity(vtable, attr_index)) {
       return loom_bytecode_reader_emit_invalid_field(
           reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
           IREE_SV("attribute_key"), key_offset,
-          IREE_SV("global symbol attribute is reconstructed from name_id"));
+          IREE_SV("global identity symbol attribute is reconstructed from "
+                  "name_id"));
     }
     if (!loom_attr_is_absent(attrs[attr_index])) {
       return loom_bytecode_reader_emit_invalid_field(
@@ -3910,11 +3915,12 @@ static iree_status_t loom_bytecode_reader_materialize_record_symbol(
     }
     const loom_attr_descriptor_t* descriptor =
         &vtable->attr_descriptors[attr_index];
-    if (descriptor->attr_kind == LOOM_ATTR_SYMBOL) {
+    if (loom_bytecode_attr_is_symbol_identity(vtable, attr_index)) {
       return loom_bytecode_reader_emit_invalid_field(
           reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
           IREE_SV("attribute_key"), key_offset,
-          IREE_SV("record symbol attribute is reconstructed from name_id"));
+          IREE_SV("record identity symbol attribute is reconstructed from "
+                  "name_id"));
     }
     if (!loom_attr_is_absent(attrs[attr_index])) {
       return loom_bytecode_reader_emit_invalid_field(

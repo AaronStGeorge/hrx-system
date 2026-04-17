@@ -25,6 +25,7 @@ def default_op_decls() -> tuple[Any, ...]:
     from loom.dialect.pool import ALL_POOL_OPS
     from loom.dialect.scalar import ALL_SCALAR_OPS
     from loom.dialect.scf import ALL_SCF_OPS
+    from loom.dialect.target import ALL_TARGET_OPS
     from loom.dialect.test import ALL_TEST_OPS
     from loom.dialect.vector import ALL_VECTOR_OPS
     from loom.dialect.view import ALL_VIEW_OPS
@@ -44,6 +45,7 @@ def default_op_decls() -> tuple[Any, ...]:
         *ALL_INDEX_OPS,
         *ALL_KERNEL_OPS,
         *ALL_LLVMIR_OPS,
+        *ALL_TARGET_OPS,
     )
 
 
@@ -64,3 +66,16 @@ def symbol_def_for_op(op_decls_by_name: Mapping[str, Any], op_name: str) -> Any:
             f"symbol defining op {op_name!r} has no registered generated symbol_def"
         )
     return symbol_def
+
+
+def attr_def_for_op(
+    op_decls_by_name: Mapping[str, Any], op_name: str, attr_name: str
+) -> Any | None:
+    """Return the generated attribute descriptor for ``op_name.attr_name``."""
+    op_decl = op_decls_by_name.get(op_name)
+    if op_decl is None:
+        return None
+    for attr_def in getattr(op_decl, "attrs", ()):
+        if attr_def.name == attr_name:
+            return attr_def
+    return None

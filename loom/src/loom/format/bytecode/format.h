@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 7)
+//   4       1     format_version (currently 8)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 7
+#define LOOM_BYTECODE_FORMAT_VERSION 8
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -567,9 +567,9 @@ typedef enum loom_bytecode_section_kind_e {
 //       For each dynamic dim:
 //         [value_ref: signed_varint]  Global-symbol-local value number.
 //       [encoding_binding: varint]    0 = no binding, N > 0 = value number N-1.
-//     [attr_count: varint]      Present non-symbol attributes only. The symbol
-//                               attr is reconstructed from name_id.
-//     For each present non-symbol attribute:
+//     [attr_count: varint]      Present attributes except the identity symbol
+//                               attr, which is reconstructed from name_id.
+//     For each present non-identity attribute:
 //       [key_id: varint]
 //       [value_kind: byte]
 //       [value_data: ...]
@@ -589,9 +589,9 @@ typedef enum loom_bytecode_section_kind_e {
 //     For each leading comment attached to the symbol op:
 //       [comment_length: varint]
 //       [comment_data: comment_length bytes]  bytes after the leading // marker
-//     [attr_count: varint]      Present non-symbol attributes only. The symbol
-//                               attr is reconstructed from name_id.
-//     For each present non-symbol attribute:
+//     [attr_count: varint]      Present attributes except the identity symbol
+//                               attr, which is reconstructed from name_id.
+//     For each present non-identity attribute:
 //       [key_id: varint]
 //       [value_kind: byte]
 //       [value_data: ...]

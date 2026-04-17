@@ -23,7 +23,11 @@ from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar, cast
 
 from loom.format.bytecode.encoding import ByteBuffer
-from loom.format.bytecode.op_decls import build_op_decl_map, symbol_def_for_op
+from loom.format.bytecode.op_decls import (
+    attr_def_for_op,
+    build_op_decl_map,
+    symbol_def_for_op,
+)
 from loom.ir import (
     Block,
     BufferType,
@@ -129,7 +133,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 7
+FORMAT_VERSION = 8
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -417,6 +421,10 @@ class BytecodeWriter:
             collect_attr_value(value)
         collect_value_bindings(scan_index)
         return local_values
+
+    def _attr_def_for_op_attr(self, op_name: str, attr_name: str) -> Any | None:
+        """Return generated attr metadata when the writer knows the op."""
+        return attr_def_for_op(self._op_decls_by_name, op_name, attr_name)
 
     def _number_region(self, region: Region) -> None:
         """Number all entities in a region (recursive)."""
@@ -938,7 +946,12 @@ class BytecodeWriter:
         value_numbers_by_name = self._value_numbers_by_name(value_numbers)
         for key, value in op.attributes.items():
             buf.write_varint(self._ctx.strings[key])
-            self._write_attr_value(buf, value, value_numbers_by_name)
+            self._write_attr_value(
+                buf,
+                value,
+                value_numbers_by_name,
+                self._attr_def_for_op_attr(op.name, key),
+            )
 
         # Regions.
         buf.write_varint(len(op.regions))
@@ -950,12 +963,28 @@ class BytecodeWriter:
         buf: ByteBuffer,
         value: Any,
         value_numbers_by_name: dict[str, int] | None = None,
+        attr_def: Any | None = None,
     ) -> None:
         """Write an attribute value with its kind byte."""
         # Check for predicate list attribute (list of Predicate objects).
         if isinstance(value, list) and value and isinstance(value[0], Predicate):
             buf.write_u8(ATTR_KIND_PREDICATE_LIST)
             self._write_predicate_list(buf, value, value_numbers_by_name)
+            return
+        attr_type = getattr(attr_def, "attr_type", None)
+        if attr_type == "symbol":
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"symbol attribute value must be a string, got {value!r}"
+                )
+            buf.write_u8(ATTR_KIND_SYMBOL)
+            buf.write_varint(self._ctx.strings[value])
+            return
+        if attr_type == "enum":
+            if not isinstance(value, str):
+                raise TypeError(f"enum attribute value must be a string, got {value!r}")
+            buf.write_u8(ATTR_KIND_ENUM)
+            buf.write_varint(self._ctx.strings[value])
             return
         if isinstance(value, bool):
             buf.write_u8(ATTR_KIND_BOOL)
@@ -1213,7 +1242,12 @@ class BytecodeWriter:
                 value_numbers_by_name = self._value_numbers_by_name(local_value_numbers)
                 for key, value in payload_attrs:
                     buf.write_varint(self._ctx.strings[key])
-                    self._write_attr_value(buf, value, value_numbers_by_name)
+                    self._write_attr_value(
+                        buf,
+                        value,
+                        value_numbers_by_name,
+                        self._attr_def_for_op_attr(op.name, key),
+                    )
             elif symbol.kind == SymbolKind.RECORD and symbol.op is not None:
                 op = symbol.op
                 symbol_field = self._symbol_field_for_op(op)
@@ -1234,7 +1268,11 @@ class BytecodeWriter:
                 buf.write_varint(len(payload_attrs))
                 for key, value in payload_attrs:
                     buf.write_varint(self._ctx.strings[key])
-                    self._write_attr_value(buf, value)
+                    self._write_attr_value(
+                        buf,
+                        value,
+                        attr_def=self._attr_def_for_op_attr(op.name, key),
+                    )
             else:
                 raise ValueError(
                     f"symbol {symbol.name!r} of kind {symbol.kind.name} "

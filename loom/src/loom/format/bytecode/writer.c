@@ -1082,6 +1082,12 @@ static bool loom_bytecode_attr_descriptor_is_symbol(
   return descriptor && descriptor->attr_kind == LOOM_ATTR_SYMBOL;
 }
 
+static bool loom_bytecode_attr_is_symbol_identity(
+    const loom_op_vtable_t* vtable, uint8_t attr_index) {
+  return vtable && vtable->symbol_def &&
+         attr_index == vtable->symbol_def->name_attr_index;
+}
+
 static uint8_t loom_bytecode_find_symbol_attr_index(
     const loom_op_vtable_t* vtable) {
   if (!vtable || !vtable->attr_descriptors) return LOOM_ATTR_INDEX_NONE;
@@ -1237,7 +1243,7 @@ static iree_status_t loom_bytecode_collect_global_values(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i)) {
       continue;
     }
     IREE_RETURN_IF_ERROR(
@@ -1282,7 +1288,7 @@ static iree_status_t loom_bytecode_number_global(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i)) {
       continue;
     }
 
@@ -1339,7 +1345,7 @@ static iree_status_t loom_bytecode_number_record(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i)) {
       continue;
     }
 
@@ -2656,7 +2662,7 @@ static iree_status_t loom_bytecode_write_global_metadata(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (present && !loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+    if (present && !loom_bytecode_attr_is_symbol_identity(vtable, i)) {
       ++present_attr_count;
     }
   }
@@ -2666,7 +2672,7 @@ static iree_status_t loom_bytecode_write_global_metadata(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i)) {
       continue;
     }
 
@@ -2707,7 +2713,7 @@ static iree_status_t loom_bytecode_write_record_metadata(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (present && !loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+    if (present && !loom_bytecode_attr_is_symbol_identity(vtable, i)) {
       ++present_attr_count;
     }
   }
@@ -2717,7 +2723,7 @@ static iree_status_t loom_bytecode_write_record_metadata(
     bool present = false;
     IREE_RETURN_IF_ERROR(
         loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
-    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+    if (!present || loom_bytecode_attr_is_symbol_identity(vtable, i)) {
       continue;
     }
 

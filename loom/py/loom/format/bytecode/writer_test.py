@@ -28,7 +28,7 @@ from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
-from loom.dsl import SYMBOL_DEFINE, AttrDef, Op, SymbolDefinition
+from loom.dsl import SYMBOL_DEFINE, AttrDef, Op, SymbolDefinition, SymbolReference
 from loom.format.bytecode.encoding import decode_varint
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import (
@@ -1277,25 +1277,40 @@ class TestCrossFormatRoundTrip:
             ),
             attrs=[
                 AttrDef("name", "symbol"),
+                AttrDef(
+                    "parent",
+                    "symbol",
+                    optional=True,
+                    symbol_ref=SymbolReference("record", ["record"]),
+                ),
                 AttrDef("payload", "dict", optional=True),
             ],
         )
         module = Module()
-        op = Operation(
+        parent_op = Operation(
             name="bytecode.record",
             attributes={
                 "name": "target",
                 "payload": {"arch": "gfx1100", "lanes": 64},
             },
         )
-        module.add_symbol(Symbol(name="target", kind=SymbolKind.RECORD, op=op))
+        child_op = Operation(
+            name="bytecode.record",
+            attributes={
+                "name": "child",
+                "parent": "target",
+                "payload": {"arch": "gfx1200", "lanes": 32},
+            },
+        )
+        module.add_symbol(Symbol(name="target", kind=SymbolKind.RECORD, op=parent_op))
+        module.add_symbol(Symbol(name="child", kind=SymbolKind.RECORD, op=child_op))
 
         loaded = read_module(
             write_module(module, op_decls=[custom_record]),
             op_decls=[custom_record],
         )
 
-        assert len(loaded.symbols) == 1
+        assert len(loaded.symbols) == 2
         symbol = loaded.symbols[0]
         assert symbol.op is not None
         assert symbol.op.attributes["name"] == "target"
@@ -1303,6 +1318,14 @@ class TestCrossFormatRoundTrip:
         assert dict(symbol.op.attributes["payload"]) == {
             "arch": "gfx1100",
             "lanes": 64,
+        }
+        child = loaded.symbols[1]
+        assert child.op is not None
+        assert child.op.attributes["name"] == "child"
+        assert child.op.attributes["parent"] == "target"
+        assert dict(child.op.attributes["payload"]) == {
+            "arch": "gfx1200",
+            "lanes": 32,
         }
 
     def test_symbol_without_bytecode_payload_kind_fails_loud(self) -> None:

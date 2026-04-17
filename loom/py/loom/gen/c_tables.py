@@ -3376,6 +3376,7 @@ def main() -> None:
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
+    from loom.dialect.target import ALL_TARGET_OPS, target_ops
     from loom.dialect.test import ALL_TEST_OPS, test_ops
     from loom.dialect.vector import ALL_VECTOR_OPS, vector_ops
     from loom.dialect.view import ALL_VIEW_OPS, view_ops
@@ -3395,6 +3396,7 @@ def main() -> None:
         (index_ops, list(ALL_INDEX_OPS)),
         (kernel_ops, list(ALL_KERNEL_OPS)),
         (llvmir_ops, list(ALL_LLVMIR_OPS)),
+        (target_ops, list(ALL_TARGET_OPS)),
     ]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"

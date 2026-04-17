@@ -830,7 +830,9 @@ static iree_status_t loom_parse_format_template_param(
   const loom_attr_descriptor_t* descriptor =
       &vtable->attr_descriptors[element->field_index];
   loom_attribute_t attr = {0};
+  uint32_t attr_errors_before = parser->error_count;
   IREE_RETURN_IF_ERROR(loom_parse_attr_value(parser, descriptor, &attr));
+  if (parser->error_count > attr_errors_before) return iree_ok_status();
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
     loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
     return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'>'"));
@@ -1509,7 +1511,9 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
         const loom_attr_descriptor_t* descriptor =
             &vtable->attr_descriptors[element->field_index];
         loom_attribute_t attr = {0};
+        uint32_t attr_errors_before = parser->error_count;
         IREE_RETURN_IF_ERROR(loom_parse_attr_value(parser, descriptor, &attr));
+        if (parser->error_count > attr_errors_before) return iree_ok_status();
         IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
             parsed, &parser->parser_arena, element->field_index, attr));
         IREE_RETURN_IF_ERROR(loom_parse_format_add_field_span(
@@ -1519,23 +1523,11 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
       }
 
       case LOOM_FORMAT_KIND_SYMBOL_REF: {
-        loom_token_t token = loom_token_none();
-        LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SYMBOL, &token);
-        loom_string_id_t name_id = 0;
-        IREE_RETURN_IF_ERROR(
-            loom_module_intern_string(parser->module, token.text, &name_id));
-        loom_symbol_ref_t ref;
-        ref.module_id = 0;
-        uint16_t next_id = (uint16_t)parser->module->symbols.count;
-        IREE_RETURN_IF_ERROR(loom_symbol_map_find_or_insert(
-            &parser->symbol_lookup, &parser->parser_arena, name_id, next_id,
-            &ref.symbol_id));
-        if (ref.symbol_id == next_id) {
-          uint16_t added_id = LOOM_SYMBOL_ID_INVALID;
-          IREE_RETURN_IF_ERROR(
-              loom_module_add_symbol(parser->module, name_id, &added_id));
-        }
-        loom_attribute_t attr = loom_attr_symbol(ref);
+        loom_token_t token = loom_tokenizer_peek(&parser->tokenizer);
+        loom_attribute_t attr = {0};
+        uint32_t attr_errors_before = parser->error_count;
+        IREE_RETURN_IF_ERROR(loom_parse_symbol_ref_attr(parser, &attr));
+        if (parser->error_count > attr_errors_before) return iree_ok_status();
         IREE_RETURN_IF_ERROR(loom_parsed_op_set_attribute(
             parsed, &parser->parser_arena, element->field_index, attr));
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(

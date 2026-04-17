@@ -676,6 +676,12 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
                                     const loom_attr_descriptor_t* descriptor,
                                     loom_attribute_t* out_attr);
 
+// Parses a module-local symbol reference token such as `@name` and returns a
+// symbol attribute. Forward references create a placeholder symbol table entry
+// that verification resolves after parsing completes.
+iree_status_t loom_parse_symbol_ref_attr(loom_parser_t* parser,
+                                         loom_attribute_t* out_attr);
+
 // Parses a generic attribute value with the same grammar used by AttrDict and
 // encoding parameter lists.
 iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
