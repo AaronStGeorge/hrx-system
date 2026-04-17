@@ -103,6 +103,7 @@ loom_cc_library(
     ::pass
     ::rewriter
     iree::base
+    loom::src::loom::analysis::condition_facts
     loom::src::loom::ir
     loom::src::loom::ops::cfg
     loom::src::loom::ops::op_defs

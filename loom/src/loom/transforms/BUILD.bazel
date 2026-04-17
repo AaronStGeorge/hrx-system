@@ -91,6 +91,7 @@ loom_cc_library(
     deps = [
         ":pass",
         ":rewriter",
+        "//loom/src/loom/analysis:condition_facts",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/cfg",

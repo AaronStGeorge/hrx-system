@@ -194,6 +194,146 @@ func.def @preserves_reconverged_branch_condition(%cond: i1, %a: i32, %b: i32) ->
 
 // ====
 
+func.def @folds_dominated_compare_from_true_edge(%i: index, %n: index, %a: i32, %b: i32) -> (i32) {
+  %cond = index.cmp slt, %i, %n : index
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  %again = index.cmp slt, %i, %n : index
+  cfg.cond_br %again, ^taken, ^dead : i1
+^taken:
+  cfg.br ^join(%a : i32)
+^dead:
+  cfg.br ^join(%b : i32)
+^else:
+  cfg.br ^join(%b : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @folds_dominated_compare_from_true_edge(%i: index, %n: index, %a: i32, %b: i32) -> (i32) {
+  %cond = index.cmp slt, %i, %n : index
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  %again = index.cmp slt, %i, %n : index
+  cfg.br ^join(%a : i32)
+^else:
+  cfg.br ^join(%b : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
+func.def @folds_dominated_compare_from_false_edge(%i: index, %n: index, %a: i32, %b: i32) -> (i32) {
+  %cond = index.cmp slt, %i, %n : index
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  cfg.br ^join(%a : i32)
+^else:
+  %again = index.cmp sge, %i, %n : index
+  cfg.cond_br %again, ^taken, ^dead : i1
+^taken:
+  cfg.br ^join(%b : i32)
+^dead:
+  cfg.br ^join(%a : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @folds_dominated_compare_from_false_edge(%i: index, %n: index, %a: i32, %b: i32) -> (i32) {
+  %cond = index.cmp slt, %i, %n : index
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  cfg.br ^join(%a : i32)
+^else:
+  %again = index.cmp sge, %i, %n : index
+  cfg.br ^join(%b : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
+func.def @folds_compare_after_equivalent_incoming_edges(%guard: i1, %i: index, %n: index, %a: i32, %b: i32) -> (i32) {
+  %cond = index.cmp slt, %i, %n : index
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  cfg.cond_br %cond, ^join, ^exit : i1
+^right:
+  cfg.cond_br %cond, ^join, ^exit : i1
+^join:
+  %again = index.cmp slt, %i, %n : index
+  cfg.cond_br %again, ^taken, ^dead : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^dead:
+  cfg.br ^ret(%b : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @folds_compare_after_equivalent_incoming_edges(%guard: i1, %i: index, %n: index, %a: i32, %b: i32) -> (i32) {
+  %cond = index.cmp slt, %i, %n : index
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  cfg.cond_br %cond, ^join, ^exit : i1
+^right:
+  cfg.cond_br %cond, ^join, ^exit : i1
+^join:
+  %again = index.cmp slt, %i, %n : index
+  cfg.br ^ret(%a : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
+func.def @folds_dominated_boolean_and_relations(%i: index, %n: index, %j: index, %z: index, %a: i32, %b: i32) -> (i32) {
+  %i_in_range = index.cmp slt, %i, %n : index
+  %j_nonzero = index.cmp ne, %j, %z : index
+  %cond = scalar.andi %i_in_range, %j_nonzero : i1
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  %i_again = index.cmp slt, %i, %n : index
+  %j_again = index.cmp ne, %j, %z : index
+  %both = scalar.andi %i_again, %j_again : i1
+  cfg.cond_br %both, ^taken, ^dead : i1
+^taken:
+  cfg.br ^join(%a : i32)
+^dead:
+  cfg.br ^join(%b : i32)
+^else:
+  cfg.br ^join(%b : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @folds_dominated_boolean_and_relations(%i: index, %n: index, %j: index, %z: index, %a: i32, %b: i32) -> (i32) {
+  %i_in_range = index.cmp slt, %i, %n : index
+  %j_nonzero = index.cmp ne, %j, %z : index
+  %cond = scalar.andi %i_in_range, %j_nonzero : i1
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  %i_again = index.cmp slt, %i, %n : index
+  %j_again = index.cmp ne, %j, %z : index
+  %both = scalar.andi %i_again, %j_again : i1
+  cfg.br ^join(%a : i32)
+^else:
+  cfg.br ^join(%b : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
 func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
   cfg.br ^join(%layout, %view : encoding<layout>, view<4xf32, %layout>)
 ^join(%arg_layout : encoding<layout>, %arg_view : view<4xf32, %arg_layout>):
