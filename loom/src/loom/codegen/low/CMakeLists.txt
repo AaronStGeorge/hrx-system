@@ -23,6 +23,24 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    target_binding
+  HDRS
+    "target_binding.h"
+  SRCS
+    "target_binding.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::target
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test
@@ -30,6 +48,25 @@ loom_cc_test(
     "descriptors_test.cc"
   DEPS
     ::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_binding_test
+  SRCS
+    "target_binding_test.cc"
+  DEPS
+    ::target_binding
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::target
+    loom::src::loom::target::emit::ireevm::descriptors
     iree::testing::gtest
     iree::testing::gtest_main
 )

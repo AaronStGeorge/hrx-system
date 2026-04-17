@@ -40,7 +40,28 @@ ERR_LOWERING_002 = ErrorDef(
     "or split the recursive/SCC structure before running {pass_name}",
 )
 
+# ERR_LOWERING_003: Low descriptor set is not available.
+ERR_LOWERING_003 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=3,
+    severity=Severity.ERROR,
+    summary="Low descriptor set is not available.",
+    message=(
+        "low function '@{function_name}' target '@{target_name}' requires "
+        "descriptor set '{descriptor_set_key}', but the descriptor registry "
+        "does not provide it"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint="Link the descriptor package named by '{descriptor_set_key}' or "
+    "choose a target config whose descriptor set is available",
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
+    ERR_LOWERING_003,
 )

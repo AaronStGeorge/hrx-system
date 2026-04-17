@@ -2568,6 +2568,28 @@ static const loom_error_def_t loom_err_lowering_002 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_lowering_003_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"target_name", LOOM_PARAM_STRING},
+    {"descriptor_set_key", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_003 = {
+    .error_id = "ERR_LOWERING_003",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 3,
+    .summary = "Low descriptor set is not available.",
+    .message_template =
+        "low function '@{function_name}' target '@{target_name}' requires "
+        "descriptor set '{descriptor_set_key}', but the descriptor registry "
+        "does not provide it",
+    .fix_hint_template =
+        "Link the descriptor package named by '{descriptor_set_key}' or choose "
+        "a target config whose descriptor set is available",
+    .param_defs = loom_err_lowering_003_params,
+    .param_count = 3,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2615,6 +2637,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_bytecode_016,  &loom_err_bytecode_017,  &loom_err_fold_001,
     &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
     &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
+    &loom_err_lowering_003,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

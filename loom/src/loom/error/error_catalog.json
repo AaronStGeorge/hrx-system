@@ -3423,5 +3423,33 @@
       }
     ],
     "fix_hint_template": "Refine boundary facts/types, specialize incompatible call paths, or split the recursive/SCC structure before running {pass_name}"
+  },
+  {
+    "error_id": "ERR_LOWERING_003",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 3,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor set is not available.",
+    "message_template": "low function '@{function_name}' target '@{target_name}' requires descriptor set '{descriptor_set_key}', but the descriptor registry does not provide it",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "target_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "descriptor_set_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Link the descriptor package named by '{descriptor_set_key}' or choose a target config whose descriptor set is available"
   }
 ]
