@@ -34,6 +34,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::target::arch::x86::packed_dot_contract
     loom::src::loom::target::emit::llvmir::target_presets
+    loom::src::loom::target::types
   PUBLIC
 )
 

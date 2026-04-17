@@ -20,4 +20,28 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    records
+  HDRS
+    "records.h"
+  SRCS
+    "records.c"
+  DEPS
+    ::types
+    iree::base
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    records_test
+  SRCS
+    "records_test.cc"
+  DEPS
+    ::records
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

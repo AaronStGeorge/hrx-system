@@ -10,6 +10,7 @@
 #define LOOM_TARGET_LLVMIR_X86_TARGET_ENV_H_
 
 #include "loom/target/emit/llvmir/target_presets.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,6 +24,14 @@ const loom_llvmir_target_profile_t* loom_llvmir_target_profile_x86_64_object(
 
 const loom_llvmir_target_profile_t*
 loom_llvmir_target_profile_x86_64_packed_dot_object(void);
+
+// Returns the generic target bundle represented by the x86_64 object fixture.
+const loom_target_bundle_t* loom_llvmir_target_bundle_x86_64_object(void);
+
+// Returns the generic target bundle represented by the x86_64 packed-dot object
+// fixture.
+const loom_target_bundle_t* loom_llvmir_target_bundle_x86_64_packed_dot_object(
+    void);
 
 // Initializes |out_profile| with a shallow copy of the built-in x86_64 object
 // profile. String views and |target_env| point at immutable static storage;

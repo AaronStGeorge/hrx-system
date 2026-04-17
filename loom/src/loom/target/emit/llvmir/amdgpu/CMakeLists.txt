@@ -48,6 +48,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::target::emit::llvmir::target_presets
+    loom::src::loom::target::types
   PUBLIC
 )
 

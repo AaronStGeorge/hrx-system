@@ -291,6 +291,7 @@ loom_cc_test(
         ":core",
         ":target_env",
         ":target_presets",
+        "//loom/src/loom/target:records",
         "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
         "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//loom/src/loom/util:stream",

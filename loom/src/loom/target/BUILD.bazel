@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_assert_no_dependency",
     "loom_cc_library",
+    "loom_cc_test",
 )
 
 package(
@@ -38,6 +39,24 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target:types",
 )
 
+iree_assert_no_dependency(
+    name = "records_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:records",
+)
+
+iree_assert_no_dependency(
+    name = "records_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target:records",
+)
+
+iree_assert_no_dependency(
+    name = "records_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target:records",
+)
+
 #===------------------------------------------------------------------------===#
 # Target-neutral data shapes
 #===------------------------------------------------------------------------===#
@@ -46,4 +65,24 @@ loom_cc_library(
     name = "types",
     hdrs = ["types.h"],
     deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
+    name = "records",
+    srcs = ["records.c"],
+    hdrs = ["records.h"],
+    deps = [
+        ":types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "records_test",
+    srcs = ["records_test.cc"],
+    deps = [
+        ":records",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
 )

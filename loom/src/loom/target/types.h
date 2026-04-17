@@ -132,6 +132,9 @@ typedef struct loom_target_export_plan_t {
 typedef struct loom_target_config_t {
   // Stable config name for diagnostics and tests.
   iree_string_view_t name;
+  // Provider-defined target-contract selection key, or empty for default
+  // policy.
+  iree_string_view_t contract_set_key;
 } loom_target_config_t;
 
 typedef struct loom_target_bundle_t {

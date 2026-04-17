@@ -17,6 +17,7 @@
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/emit/llvmir/x86/target_env.h"
+#include "loom/target/records.h"
 #include "loom/util/stream.h"
 
 namespace loom {
@@ -56,6 +57,38 @@ iree_status_t LookupRegisteredProfile(
                                                     out_profile);
 }
 
+void ExpectSnapshotMatchesLlvmEnv(const loom_target_snapshot_t* snapshot,
+                                  const loom_llvmir_target_env_t* target_env) {
+  ASSERT_NE(snapshot, nullptr);
+  ASSERT_NE(target_env, nullptr);
+  EXPECT_EQ(snapshot->codegen_format, LOOM_TARGET_CODEGEN_FORMAT_LLVMIR);
+  EXPECT_EQ(snapshot->artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(ToString(snapshot->target_triple),
+            ToString(target_env->target_triple));
+  EXPECT_EQ(ToString(snapshot->data_layout), ToString(target_env->data_layout));
+  EXPECT_EQ(snapshot->default_pointer_bitwidth,
+            target_env->default_pointer_bitwidth);
+  EXPECT_EQ(snapshot->index_bitwidth, target_env->index_bitwidth);
+  EXPECT_EQ(snapshot->offset_bitwidth, target_env->offset_bitwidth);
+  EXPECT_EQ(snapshot->memory_spaces.generic,
+            target_env->address_spaces.generic);
+  EXPECT_EQ(snapshot->memory_spaces.global, target_env->address_spaces.global);
+  EXPECT_EQ(snapshot->memory_spaces.workgroup,
+            target_env->address_spaces.local);
+  EXPECT_EQ(snapshot->memory_spaces.constant,
+            target_env->address_spaces.constant);
+  EXPECT_EQ(snapshot->memory_spaces.private_memory,
+            target_env->address_spaces.private_memory);
+  EXPECT_EQ(snapshot->memory_spaces.descriptor,
+            target_env->address_spaces.buffer_resource);
+}
+
+void ExpectBundleFingerprint(const loom_target_bundle_t* bundle) {
+  uint64_t fingerprint = 0;
+  IREE_ASSERT_OK(loom_target_bundle_fingerprint(bundle, &fingerprint));
+  EXPECT_NE(fingerprint, 0u);
+}
+
 TEST(LlvmIrTargetEnvTest, X86ObjectProfileNamesObjectAbi) {
   const loom_llvmir_target_profile_t* profile =
       loom_llvmir_target_profile_x86_64_object();
@@ -91,6 +124,51 @@ TEST(LlvmIrTargetEnvTest, X86ObjectProfileNamesObjectAbi) {
       loom_llvmir_target_profile_initialize_x86_64_object(&profile_copy));
   EXPECT_EQ(ToString(profile_copy.name), ToString(profile->name));
   EXPECT_EQ(profile_copy.target_env, profile->target_env);
+}
+
+TEST(LlvmIrTargetEnvTest, X86ObjectProfileHasGenericTargetBundle) {
+  const loom_llvmir_target_profile_t* profile =
+      loom_llvmir_target_profile_x86_64_object();
+  const loom_target_bundle_t* bundle =
+      loom_llvmir_target_bundle_x86_64_object();
+  ASSERT_NE(bundle, nullptr);
+  EXPECT_EQ(ToString(bundle->name), ToString(profile->name));
+  ExpectSnapshotMatchesLlvmEnv(bundle->snapshot, profile->target_env);
+  EXPECT_TRUE(iree_string_view_is_empty(bundle->snapshot->target_features));
+  EXPECT_EQ(bundle->snapshot->memory_spaces.host, 0u);
+  ASSERT_NE(bundle->export_plan, nullptr);
+  EXPECT_EQ(ToString(bundle->export_plan->name), ToString(profile->name));
+  EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
+  EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
+  ASSERT_NE(bundle->config, nullptr);
+  EXPECT_TRUE(iree_string_view_is_empty(bundle->config->contract_set_key));
+  ExpectBundleFingerprint(bundle);
+}
+
+TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
+  const loom_llvmir_target_profile_t* profile =
+      loom_llvmir_target_profile_x86_64_packed_dot_object();
+  const loom_target_bundle_t* bundle =
+      loom_llvmir_target_bundle_x86_64_packed_dot_object();
+  ASSERT_NE(bundle, nullptr);
+  EXPECT_EQ(ToString(bundle->name), ToString(profile->name));
+  ExpectSnapshotMatchesLlvmEnv(bundle->snapshot, profile->target_env);
+  EXPECT_EQ(ToString(bundle->snapshot->target_features),
+            ToString(profile->target_features));
+  ASSERT_NE(bundle->export_plan, nullptr);
+  EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
+  EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
+  ASSERT_NE(bundle->config, nullptr);
+  EXPECT_EQ(ToString(bundle->config->contract_set_key),
+            "x86.packed_dot.avx512bf16-avx512vl-avxvnni-avxvnniint8");
+
+  uint64_t object_fingerprint = 0;
+  IREE_ASSERT_OK(loom_target_bundle_fingerprint(
+      loom_llvmir_target_bundle_x86_64_object(), &object_fingerprint));
+  uint64_t packed_dot_fingerprint = 0;
+  IREE_ASSERT_OK(
+      loom_target_bundle_fingerprint(bundle, &packed_dot_fingerprint));
+  EXPECT_NE(object_fingerprint, packed_dot_fingerprint);
 }
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
@@ -133,6 +211,37 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   EXPECT_EQ(binding_attr_count, 5u);
   EXPECT_EQ(binding_attrs[4].kind, LOOM_LLVMIR_ATTR_ALIGN);
   EXPECT_EQ(binding_attrs[4].value, 16u);
+}
+
+TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
+  const loom_llvmir_target_profile_t* profile =
+      loom_llvmir_target_profile_amdgpu_hal();
+  const loom_target_bundle_t* bundle = loom_llvmir_target_bundle_amdgpu_hal();
+  ASSERT_NE(bundle, nullptr);
+  EXPECT_EQ(ToString(bundle->name), ToString(profile->name));
+  ExpectSnapshotMatchesLlvmEnv(bundle->snapshot, profile->target_env);
+  EXPECT_EQ(bundle->snapshot->memory_spaces.host, UINT32_MAX);
+  ASSERT_NE(bundle->export_plan, nullptr);
+  EXPECT_EQ(ToString(bundle->export_plan->name), ToString(profile->name));
+  EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
+  EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DEFAULT);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.binding_alignment,
+            profile->amdgpu_hal.binding_alignment);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.x,
+            profile->amdgpu_hal.required_workgroup_size.x);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.y,
+            profile->amdgpu_hal.required_workgroup_size.y);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.z,
+            profile->amdgpu_hal.required_workgroup_size.z);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.flat_workgroup_size_min,
+            profile->amdgpu_hal.flat_workgroup_size_min);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.flat_workgroup_size_max,
+            profile->amdgpu_hal.flat_workgroup_size_max);
+  EXPECT_EQ(bundle->export_plan->hal_kernel.buffer_resource_flags,
+            profile->amdgpu_hal.buffer_resource_flags);
+  ASSERT_NE(bundle->config, nullptr);
+  EXPECT_TRUE(iree_string_view_is_empty(bundle->config->contract_set_key));
+  ExpectBundleFingerprint(bundle);
 }
 
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
