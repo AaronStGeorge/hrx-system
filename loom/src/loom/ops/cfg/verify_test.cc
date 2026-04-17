@@ -135,6 +135,22 @@ TEST_F(CfgVerifyTest, BranchArgumentTypesMustMatchDestinationBlock) {
   ExpectTypeParam(*diagnostic, 4, loom_type_scalar(LOOM_SCALAR_TYPE_I32));
 }
 
+TEST_F(CfgVerifyTest, BranchArgumentTypesMayRemapDestinationBlockArguments) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "func.def @dependent_branch(%source_layout : encoding<layout>, "
+      "%source_view : view<4xf32, %source_layout>) {\n"
+      "  cfg.br ^exit(%source_layout, %source_view : encoding<layout>, "
+      "view<4xf32, %source_layout>)\n"
+      "^exit(%target_layout : encoding<layout>, "
+      "%target_view : view<4xf32, %target_layout>):\n"
+      "  func.return\n"
+      "}\n",
+      &capture);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+}
+
 TEST_F(CfgVerifyTest, ConditionalBranchRequiresArgumentFreeDestinations) {
   DiagnosticCapture capture;
   VerifySource(

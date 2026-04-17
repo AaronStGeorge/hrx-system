@@ -440,6 +440,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    scf_to_cfg
+  HDRS
+    "scf_to_cfg.h"
+  SRCS
+    "scf_to_cfg.c"
+  DEPS
+    ::materialize
+    ::pass
+    ::remap
+    ::rewriter
+    iree::base
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::index
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     strip_hints
   HDRS
     "strip_hints.h"

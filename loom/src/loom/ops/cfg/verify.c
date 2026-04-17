@@ -82,6 +82,11 @@ static iree_status_t loom_cfg_verify_successor_args(
     return loom_cfg_emit_successor_arg_count_mismatch(
         emitter, op, op_name, successor_index, arg_count, target->arg_count);
   }
+  loom_type_value_remap_t type_remap = {
+      .source_values = target->arg_ids,
+      .target_values = args,
+      .count = target->arg_count,
+  };
   for (uint16_t i = 0; i < target->arg_count; ++i) {
     loom_value_id_t actual_id = args[i];
     loom_value_id_t expected_id = loom_block_arg_id(target, i);
@@ -91,7 +96,8 @@ static iree_status_t loom_cfg_verify_successor_args(
     }
     loom_type_t actual_type = loom_module_value_type(module, actual_id);
     loom_type_t expected_type = loom_module_value_type(module, expected_id);
-    if (!loom_type_equal(actual_type, expected_type)) {
+    if (!loom_type_equal_after_value_remap(expected_type, actual_type,
+                                           &type_remap)) {
       return loom_cfg_emit_successor_arg_type_mismatch(
           emitter, op, op_name, successor_index, i, actual_type, expected_type);
     }

@@ -65,6 +65,7 @@ loom_cc_library(
     loom::src::loom::transforms::loop_fusion
     loom::src::loom::transforms::pass
     loom::src::loom::transforms::refine_boundaries
+    loom::src::loom::transforms::scf_to_cfg
     loom::src::loom::transforms::strip_hints
     loom::src::loom::transforms::vector_memory_footprint
     loom::src::loom::transforms::vector_to_scalar
