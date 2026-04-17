@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 9
+#define LOOM_BYTECODE_FORMAT_VERSION 10
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -539,6 +539,15 @@ typedef enum loom_bytecode_section_kind_e {
 //     (if template or ukernel:
 //       [implements_op_name: varint]  (string index of op name)
 //       [priority: varint])
+//
+//     [attr_count: varint]      Present attributes except the identity symbol
+//                               attr and shared function metadata attrs:
+//                               visibility, cc, purity, predicates, import
+//                               attrs, implements, and priority.
+//     For each present function-specific attribute:
+//       [key_id: varint]
+//       [value_kind: byte]
+//       [value_data: ...]
 //
 //     // IR body reference. A has_body byte precedes the offset/length
 //     // pair so that declarations-only modules and stripped modules

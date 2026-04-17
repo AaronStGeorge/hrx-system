@@ -26,6 +26,7 @@ from loom.format.bytecode.encoding import ByteBuffer
 from loom.format.bytecode.op_decls import (
     attr_def_for_op,
     build_op_decl_map,
+    func_like_interface_for_op,
     symbol_def_for_op,
 )
 from loom.ir import (
@@ -135,7 +136,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 9
+FORMAT_VERSION = 10
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -292,6 +293,7 @@ class BytecodeWriter:
     def _number_func_op(self, op: Operation) -> None:
         """Number all entities in a func-like op (func.def, func.decl, etc.)."""
         module = self._module
+        shared_attr_keys = self._shared_func_metadata_attr_keys(op)
 
         # Defining func-like op name.
         self._ctx.intern_op(op.name)
@@ -320,9 +322,43 @@ class BytecodeWriter:
                 if arg.tag == "value" and isinstance(arg.value, str):
                     self._ctx.intern_string(arg.value)
 
+        implements = op.attributes.get("implements")
+        if isinstance(implements, str):
+            self._ctx.intern_string(implements)
+
+        for key, value in op.attributes.items():
+            if key in shared_attr_keys:
+                continue
+            self._ctx.intern_string(key)
+            self._number_attr_value(value)
+
         # Body region.
         if op.regions:
             self._number_region(op.regions[0])
+
+    def _shared_func_metadata_attr_keys(self, op: Operation) -> frozenset[str]:
+        """Return func-like attrs encoded by fixed symbol metadata fields."""
+        symbol_def = symbol_def_for_op(self._op_decls_by_name, op.name)
+        keys = {
+            cast(str, symbol_def.field),
+            "import_module",
+            "import_symbol",
+        }
+        func_like = func_like_interface_for_op(self._op_decls_by_name, op.name)
+        if func_like is not None:
+            for field_name in ("visibility", "cc", "purity", "predicates"):
+                attr_name = getattr(func_like, field_name, None)
+                if attr_name is not None:
+                    keys.add(attr_name)
+            if symbol_def.bytecode_kind in (
+                "LOOM_SYMBOL_FUNC_TEMPLATE",
+                "LOOM_SYMBOL_FUNC_UKERNEL",
+            ):
+                for field_name in ("implements", "priority"):
+                    attr_name = getattr(func_like, field_name, None)
+                    if attr_name is not None:
+                        keys.add(attr_name)
+        return frozenset(keys)
 
     def _number_global_op(self, op: Operation) -> None:
         """Number all entities in a global symbol-defining op."""
@@ -1207,6 +1243,44 @@ class BytecodeWriter:
                     predicates,
                     self._value_numbers_by_name(signature_value_numbers),
                 )
+
+                if symbol.kind in (
+                    SymbolKind.FUNC_TEMPLATE,
+                    SymbolKind.FUNC_UKERNEL,
+                ):
+                    implements = op.attributes.get("implements")
+                    if not isinstance(implements, str):
+                        raise ValueError(
+                            f"{op.name} symbol {symbol.name!r} must have "
+                            "a string implements attr"
+                        )
+                    priority = op.attributes.get("priority", 0)
+                    if not isinstance(priority, int) or priority < 0:
+                        raise ValueError(
+                            f"{op.name} symbol {symbol.name!r} priority "
+                            "must be a non-negative integer"
+                        )
+                    buf.write_varint(self._ctx.strings[implements])
+                    buf.write_varint(priority)
+
+                shared_attr_keys = self._shared_func_metadata_attr_keys(op)
+                payload_attrs = [
+                    (key, value)
+                    for key, value in op.attributes.items()
+                    if key not in shared_attr_keys
+                ]
+                buf.write_varint(len(payload_attrs))
+                value_numbers_by_name = self._value_numbers_by_name(
+                    signature_value_numbers
+                )
+                for key, value in payload_attrs:
+                    buf.write_varint(self._ctx.strings[key])
+                    self._write_attr_value(
+                        buf,
+                        value,
+                        value_numbers_by_name,
+                        self._attr_def_for_op_attr(op.name, key),
+                    )
 
                 # Body reference.
                 has_body = symbol_index in ir_offsets

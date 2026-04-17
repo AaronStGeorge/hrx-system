@@ -151,6 +151,22 @@ ERR_TYPE_013 = ErrorDef(
     fix_hint="Block argument should have type {expected_type}",
 )
 
+# ERR_TYPE_014: Block argument type constraint violated.
+ERR_TYPE_014 = ErrorDef(
+    domain=ErrorDomain.TYPE,
+    code=14,
+    severity=Severity.ERROR,
+    summary="Block argument type constraint violated.",
+    message="block argument '{argument_name}' has type {actual_type}, "
+    "expected {expected_constraint}",
+    params=(
+        ErrorParam("argument_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("expected_constraint", ParamKind.STRING),
+    ),
+    fix_hint=("'{argument_name}' must satisfy type constraint '{expected_constraint}'"),
+)
+
 # ERR_TYPE_009: Yield type does not match result type.
 ERR_TYPE_009 = ErrorDef(
     domain=ErrorDomain.TYPE,
@@ -228,4 +244,5 @@ ALL_TYPE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_TYPE_011,
     ERR_TYPE_012,
     ERR_TYPE_013,
+    ERR_TYPE_014,
 )

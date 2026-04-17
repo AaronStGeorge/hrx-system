@@ -20,7 +20,11 @@ from collections.abc import Iterable
 from typing import Any, ClassVar, cast
 
 from loom.format.bytecode.encoding import decode_signed_varint, decode_varint
-from loom.format.bytecode.op_decls import build_op_decl_map, symbol_def_for_op
+from loom.format.bytecode.op_decls import (
+    build_op_decl_map,
+    func_like_interface_for_op,
+    symbol_def_for_op,
+)
 from loom.format.bytecode.writer import (
     BYTECODE_IR_KIND_BY_TYPE_KIND,
     FORMAT_VERSION,
@@ -829,6 +833,31 @@ class BytecodeReader:
                     sym_data, offset, module, signature_value_map
                 )
 
+                implements: str | None = None
+                priority = 0
+                if kind in (
+                    SymbolKind.FUNC_TEMPLATE.value,
+                    SymbolKind.FUNC_UKERNEL.value,
+                ):
+                    implements_id, offset = decode_varint(sym_data, offset)
+                    if implements_id >= len(self._strings):
+                        raise BytecodeError(
+                            "function implements string_id "
+                            f"{implements_id} out of range "
+                            f"(string table has {len(self._strings)} entries)"
+                        )
+                    priority, offset = decode_varint(sym_data, offset)
+                    implements = self._strings[implements_id]
+
+                payload_attr_count, offset = decode_varint(sym_data, offset)
+                payload_attrs, offset = self._read_op_attr_entries(
+                    sym_data,
+                    offset,
+                    payload_attr_count,
+                    module,
+                    signature_value_map,
+                )
+
                 has_body = sym_data[offset]
                 offset += 1
                 body = None
@@ -866,6 +895,17 @@ class BytecodeReader:
                     op_attrs["import_module"] = source_module
                     if flags & _SYMBOL_FLAG_IMPORT_SYMBOL:
                         op_attrs["import_symbol"] = source_symbol
+                if implements is not None:
+                    op_attrs["implements"] = implements
+                    if priority != 0:
+                        op_attrs["priority"] = priority
+                shared_attr_keys = self._shared_func_metadata_attr_keys(op_name)
+                for key, value in payload_attrs.items():
+                    if key in shared_attr_keys:
+                        raise BytecodeError(
+                            f"function payload attr duplicates shared metadata: {key!r}"
+                        )
+                    op_attrs[key] = value
 
                 # For declaration-style ops (no body), args are operands.
                 # For definition-style ops (with body), args are entry block args.
@@ -992,6 +1032,30 @@ class BytecodeReader:
                 module.add_symbol(symbol)
             else:
                 raise BytecodeError(f"unsupported symbol kind: {kind}")
+
+    def _shared_func_metadata_attr_keys(self, op_name: str) -> frozenset[str]:
+        """Return func-like attrs encoded by fixed symbol metadata fields."""
+        symbol_def = symbol_def_for_op(self._op_decls_by_name, op_name)
+        keys = {
+            cast(str, symbol_def.field),
+            "import_module",
+            "import_symbol",
+        }
+        func_like = func_like_interface_for_op(self._op_decls_by_name, op_name)
+        if func_like is not None:
+            for field_name in ("visibility", "cc", "purity", "predicates"):
+                attr_name = getattr(func_like, field_name, None)
+                if attr_name is not None:
+                    keys.add(attr_name)
+            if symbol_def.bytecode_kind in (
+                "LOOM_SYMBOL_FUNC_TEMPLATE",
+                "LOOM_SYMBOL_FUNC_UKERNEL",
+            ):
+                for field_name in ("implements", "priority"):
+                    attr_name = getattr(func_like, field_name, None)
+                    if attr_name is not None:
+                        keys.add(attr_name)
+        return frozenset(keys)
 
     def _read_function_body(
         self,

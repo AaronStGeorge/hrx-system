@@ -364,6 +364,34 @@
     "fix_hint_template": "Block argument should have type {expected_type}"
   },
   {
+    "error_id": "ERR_TYPE_014",
+    "domain": 0,
+    "domain_name": "TYPE",
+    "code": 14,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Block argument type constraint violated.",
+    "message_template": "block argument '{argument_name}' has type {actual_type}, expected {expected_constraint}",
+    "params": [
+      {
+        "name": "argument_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_constraint",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "'{argument_name}' must satisfy type constraint '{expected_constraint}'"
+  },
+  {
     "error_id": "ERR_SHAPE_001",
     "domain": 1,
     "domain_name": "SHAPE",

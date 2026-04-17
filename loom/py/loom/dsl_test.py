@@ -51,6 +51,7 @@ from loom.dsl import (
     POOL,
     PURE,
     REFINABLE_RESULT_TYPE_REFS,
+    REGISTER,
     SAFE_TO_SPECULATE,
     TENSOR,
     TERMINATOR,
@@ -65,6 +66,7 @@ from loom.dsl import (
     BlockArgCount,
     BlockArgsMatchElementTypes,
     BlockArgsMatchTypes,
+    BlockArgsSatisfy,
     Dialect,
     DimIndexInBounds,
     ElementWidthAtLeastAttr,
@@ -85,6 +87,7 @@ from loom.dsl import (
     HasIntegerElement,
     HasParent,
     HasRankOneVector,
+    HasRegister,
     ImplicitTerminator,
     LastAxisGroupedBy,
     OffsetCountMatchesRank,
@@ -123,6 +126,7 @@ from loom.ir import (
     I16,
     I32,
     DynamicDim,
+    RegisterType,
     ScalarType,
     ShapedType,
     StaticDim,
@@ -451,9 +455,18 @@ class TestConstraints:
         assert HasI32Element("x").name == "HasI32Element"
         assert HasF16OrBf16Element("x").name == "HasF16OrBf16Element"
         assert HasF32Element("x").name == "HasF32Element"
+        assert HasRegister("x").name == "HasRegister"
         assert HasRankOneVector("x").name == "HasRankOneVector"
         assert HasAllStaticVector("x").name == "HasAllStaticVector"
         assert HasAllStaticRankOneVector("x").name == "HasAllStaticRankOneVector"
+
+    def test_register_constraint_validates_register_types(self) -> None:
+        class FakeValue:
+            def __init__(self, value_type: object):
+                self.type = value_type
+
+        assert HasRegister("x").check({"x": FakeValue(RegisterType("amdgpu.vgpr"))})[0]
+        assert not HasRegister("x").check({"x": FakeValue(I32)})[0]
 
     def test_exact_element_constraints_validate_shaped_types(self) -> None:
         class FakeValue:
@@ -867,6 +880,11 @@ class TestConstraints:
         block_arg_count = BlockArgCount("body", "inputs")
         assert block_arg_count.error is not None
         assert block_arg_count.error.error_id == "ERR_STRUCTURE_007"
+
+        block_args_satisfy = BlockArgsSatisfy("body", REGISTER)
+        assert block_args_satisfy.error is not None
+        assert block_args_satisfy.error.error_id == "ERR_TYPE_014"
+        assert block_args_satisfy.data == REGISTER
 
         block_args_match = BlockArgsMatchElementTypes("body", "inputs")
         assert block_args_match.error is not None

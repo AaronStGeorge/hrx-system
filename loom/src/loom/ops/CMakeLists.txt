@@ -72,6 +72,7 @@ loom_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::kernel
     loom::src::loom::ops::llvmir
+    loom::src::loom::ops::low
     loom::src::loom::ops::pool
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf

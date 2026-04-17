@@ -80,6 +80,7 @@ __all__ = [
     "ENCODING_STORAGE",
     "ENCODING_TRANSFORM",
     "POOL",
+    "REGISTER",
     "I1",
     # Type constraint helpers.
     "type_constraint_name",
@@ -154,6 +155,7 @@ __all__ = [
     "HasI32Element",
     "HasF16OrBf16Element",
     "HasF32Element",
+    "HasRegister",
     "HasRankOneVector",
     "HasAllStaticVector",
     "HasAllStaticRankOneVector",
@@ -171,6 +173,7 @@ __all__ = [
     "AllShapesMatch",
     "LastAxisGroupedBy",
     "BlockArgCount",
+    "BlockArgsSatisfy",
     "BlockArgsMatchTypes",
     "BlockArgsMatchElementTypes",
     "YieldCountMatchesResults",
@@ -245,6 +248,7 @@ class TypeConstraint(Enum):
       ENCODING_STORAGE → EncodingType with role=storage
       ENCODING_TRANSFORM → EncodingType with role=transform
       POOL     → PoolType
+      REGISTER → RegisterType
 
     Element-qualified constraints are shaped-only: tile, tensor, vector,
     and view types can satisfy them, while scalar values continue to use
@@ -285,6 +289,7 @@ class TypeConstraint(Enum):
     ENCODING_STORAGE = "encoding<storage>"
     ENCODING_TRANSFORM = "encoding<transform>"
     POOL = "pool"
+    REGISTER = "register"
     I1 = "i1"
 
 
@@ -320,6 +325,7 @@ ENCODING_SCHEMA = TypeConstraint.ENCODING_SCHEMA
 ENCODING_STORAGE = TypeConstraint.ENCODING_STORAGE
 ENCODING_TRANSFORM = TypeConstraint.ENCODING_TRANSFORM
 POOL = TypeConstraint.POOL
+REGISTER = TypeConstraint.REGISTER
 I1 = TypeConstraint.I1
 
 
@@ -837,7 +843,7 @@ class Constraint:
       args: Field names this constraint references.
       error: Structured error definition emitted on failure.
       validate: Optional Python predicate for the oracle/validator.
-      data: Optional small integer payload interpreted by the named constraint.
+      data: Optional small payload interpreted by the named constraint.
 
     Constraints are defined as module-level constructor functions
     (SameType, RanksMatch, etc.) that return Constraint instances
@@ -848,7 +854,7 @@ class Constraint:
     args: tuple[str, ...]
     error: ErrorDef | None = None
     validate: ValidateFn | None = None
-    data: int | None = None
+    data: int | TypeConstraint | None = None
 
     def __init__(
         self,
@@ -856,7 +862,7 @@ class Constraint:
         args: tuple[str, ...],
         error: ErrorDef | None = None,
         validate: ValidateFn | None = None,
-        data: int | None = None,
+        data: int | TypeConstraint | None = None,
     ) -> None:
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "args", args)
@@ -1137,7 +1143,10 @@ def RanksMatch(a: str, b: str) -> Constraint:
 def _type_satisfies_field_constraint(
     value_type: Any, constraint: TypeConstraint
 ) -> bool:
-    from loom.ir import ScalarType, ScalarTypeKind, ShapedType, TypeKind
+    from loom.ir import RegisterType, ScalarType, ScalarTypeKind, ShapedType, TypeKind
+
+    if constraint == REGISTER:
+        return isinstance(value_type, RegisterType)
 
     if constraint == RANK_ONE_VECTOR:
         return (
@@ -1296,6 +1305,12 @@ def HasF32Element(field: str) -> Constraint:
     """A shaped field must have an f32 element type."""
 
     return _has_element_constraint(field, F32_ELEMENT)
+
+
+def HasRegister(field: str) -> Constraint:
+    """A field must have a target-low register type."""
+
+    return _has_field_constraint(field, REGISTER)
 
 
 def HasRankOneVector(field: str) -> Constraint:
@@ -1843,6 +1858,18 @@ def BlockArgCount(region: str, inputs: str) -> Constraint:
         "BlockArgCount",
         (region, inputs),
         error=ERR_STRUCTURE_007,
+    )
+
+
+def BlockArgsSatisfy(region: str, constraint: TypeConstraint) -> Constraint:
+    """Each region entry block argument must satisfy a type constraint."""
+    from loom.error.type import ERR_TYPE_014
+
+    return Constraint(
+        "BlockArgsSatisfy",
+        (region,),
+        error=ERR_TYPE_014,
+        data=constraint,
     )
 
 

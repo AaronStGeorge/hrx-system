@@ -319,6 +319,7 @@ typedef enum loom_type_constraint_e {
   LOOM_TYPE_CONSTRAINT_GROUP,
   LOOM_TYPE_CONSTRAINT_ANY_ENCODING,
   LOOM_TYPE_CONSTRAINT_POOL,
+  LOOM_TYPE_CONSTRAINT_REGISTER,
   // Exactly i1. Used for comparison results and boolean predicates.
   // Unlike INTEGER (which accepts any integer width), this requires
   // the type to be specifically i1.
@@ -419,6 +420,11 @@ enum loom_constraint_relation_e {
   // The property slot stores a loom_type_constraint_t. Args: 1+ value
   // fields. Used by Has*Element and Has*Vector constraints.
   LOOM_RELATION_FIELD_SATISFIES,
+
+  // Every entry block argument of a region satisfies a type constraint.
+  // The property slot stores a loom_type_constraint_t. Args: (region field).
+  // Used by BlockArgsSatisfy.
+  LOOM_RELATION_REGION_ARGS_SATISFY,
 
   // An i64 attribute satisfies a relation-specific predicate stored in the
   // property slot. Args: (i64 attr field). Used by PositiveBitWidthAttr.

@@ -35,3 +35,4 @@
     [LOOM_KW_DO] = (const uint8_t*)"\x02" "do",
     [LOOM_KW_USING] = (const uint8_t*)"\x05" "using",
     [LOOM_KW_DGROUPS] = (const uint8_t*)"\x07" "dgroups",
+    [LOOM_KW_TARGET] = (const uint8_t*)"\x06" "target",

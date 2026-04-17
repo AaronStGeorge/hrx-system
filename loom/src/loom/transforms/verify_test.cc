@@ -20,6 +20,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/low/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/testing/diagnostic_matchers.h"
 #include "loom/util/stream.h"
@@ -89,6 +90,13 @@ static void RegisterTestDialect(loom_context_t* context) {
                                                vtables, (uint16_t)count));
 }
 
+static void RegisterLowDialect(loom_context_t* context) {
+  iree_host_size_t count = 0;
+  const loom_op_vtable_t* const* vtables = loom_low_dialect_vtables(&count);
+  IREE_ASSERT_OK(loom_context_register_dialect(context, LOOM_DIALECT_LOW,
+                                               vtables, (uint16_t)count));
+}
+
 static const loom_op_vtable_t* TestVtable(loom_op_kind_t kind) {
   iree_host_size_t count = 0;
   const loom_op_vtable_t* const* vtables = loom_test_dialect_vtables(&count);
@@ -106,6 +114,7 @@ class VerifyTest : public ::testing::Test {
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterTestDialect(&context_);
+    RegisterLowDialect(&context_);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("verify_test"),
                                         &block_pool_, NULL,
@@ -788,6 +797,42 @@ TEST_F(VerifyTest, MapHasRegionConstraints) {
   EXPECT_EQ(vtable->constraints[0].relation, LOOM_RELATION_ALL_SAME);
   EXPECT_EQ(vtable->constraints[0].property, LOOM_PROPERTY_SHAPE);
   EXPECT_EQ(vtable->constraints[1].relation, LOOM_RELATION_REGION_ARG_COUNT);
+}
+
+TEST_F(VerifyTest, LowFuncHasRegisterBlockArgConstraint) {
+  iree_host_size_t low_count = 0;
+  const loom_op_vtable_t* const* low_vtables =
+      loom_low_dialect_vtables(&low_count);
+  ASSERT_GT(low_count, loom_op_dialect_index(LOOM_OP_LOW_FUNC_DEF));
+  const loom_op_vtable_t* vtable =
+      low_vtables[loom_op_dialect_index(LOOM_OP_LOW_FUNC_DEF)];
+  EXPECT_EQ(vtable->constraints[0].relation, LOOM_RELATION_REGION_ARGS_SATISFY);
+  EXPECT_EQ(vtable->constraints[0].property, LOOM_TYPE_CONSTRAINT_REGISTER);
+}
+
+TEST_F(VerifyTest, LowFuncRejectsNonRegisterBlockArg) {
+  const char kSource[] =
+      "test.record @gfx1100 {}\n"
+      "low.func.def target(@gfx1100) @bad(%input: i32) {\n"
+      "  low.return\n"
+      "}\n";
+  loom_module_t* parsed_module =
+      ParseSourceModule(kSource, "parsed_low_non_register_arg.loom");
+  ASSERT_NE(parsed_module, nullptr);
+
+  DiagnosticCapture structured;
+  loom_verify_result_t result = VerifyParsedSourceModuleStructured(
+      parsed_module, kSource, "parsed_low_non_register_arg.loom", &structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 14));
+  ASSERT_NE(entry, nullptr)
+      << "Expected TYPE/014 block argument constraint diagnostic";
+  EXPECT_EQ(GetStringParam(*entry, 0), "region 0.args[0]");
+  ExpectTypeParam(*entry, 1, loom_type_scalar(LOOM_SCALAR_TYPE_I32));
+  EXPECT_EQ(GetStringParam(*entry, 2), "register");
+
+  loom_module_free(parsed_module);
 }
 
 TEST_F(VerifyTest, ConstantHasNoConstraints) {

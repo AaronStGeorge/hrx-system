@@ -138,6 +138,22 @@ TEST(TypeConstraint, ScalarAddressFamiliesAreExplicit) {
       loom_type_satisfies_constraint(scalar_i32, LOOM_TYPE_CONSTRAINT_OFFSET));
 }
 
+TEST(TypeConstraint, RegisterFamilyIsExplicit) {
+  loom_type_t reg = loom_type_register((loom_string_id_t)42, 4);
+  loom_type_t scalar_i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t vector_i32 = loom_type_shaped_1d(
+      LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_I32, loom_dim_pack_static(4), 0);
+
+  EXPECT_STREQ("register",
+               loom_type_constraint_name(LOOM_TYPE_CONSTRAINT_REGISTER));
+  EXPECT_TRUE(
+      loom_type_satisfies_constraint(reg, LOOM_TYPE_CONSTRAINT_REGISTER));
+  EXPECT_FALSE(loom_type_satisfies_constraint(scalar_i32,
+                                              LOOM_TYPE_CONSTRAINT_REGISTER));
+  EXPECT_FALSE(loom_type_satisfies_constraint(vector_i32,
+                                              LOOM_TYPE_CONSTRAINT_REGISTER));
+}
+
 TEST(TypeConstraint, ElementFamiliesRequireShapedTypes) {
   const uint64_t lanes = loom_dim_pack_static(4);
   loom_type_t vector_i8 =

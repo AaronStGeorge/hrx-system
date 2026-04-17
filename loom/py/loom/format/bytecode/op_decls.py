@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from loom.dsl import FuncLikeInterface
+
 
 def default_op_decls() -> tuple[Any, ...]:
     """Return the built-in generated operation declarations."""
@@ -22,6 +24,7 @@ def default_op_decls() -> tuple[Any, ...]:
     from loom.dialect.index import ALL_INDEX_OPS
     from loom.dialect.kernel import ALL_KERNEL_OPS
     from loom.dialect.llvmir import ALL_LLVMIR_OPS
+    from loom.dialect.low import ALL_LOW_OPS
     from loom.dialect.pool import ALL_POOL_OPS
     from loom.dialect.scalar import ALL_SCALAR_OPS
     from loom.dialect.scf import ALL_SCF_OPS
@@ -46,6 +49,7 @@ def default_op_decls() -> tuple[Any, ...]:
         *ALL_KERNEL_OPS,
         *ALL_LLVMIR_OPS,
         *ALL_TARGET_OPS,
+        *ALL_LOW_OPS,
     )
 
 
@@ -66,6 +70,19 @@ def symbol_def_for_op(op_decls_by_name: Mapping[str, Any], op_name: str) -> Any:
             f"symbol defining op {op_name!r} has no registered generated symbol_def"
         )
     return symbol_def
+
+
+def func_like_interface_for_op(
+    op_decls_by_name: Mapping[str, Any], op_name: str
+) -> Any | None:
+    """Return the generated FuncLike interface descriptor for ``op_name``."""
+    op_decl = op_decls_by_name.get(op_name)
+    if op_decl is None:
+        return None
+    for interface in getattr(op_decl, "interfaces", ()):
+        if isinstance(interface, FuncLikeInterface):
+            return interface
+    return None
 
 
 def attr_def_for_op(

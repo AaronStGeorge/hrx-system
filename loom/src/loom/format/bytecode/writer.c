@@ -1416,23 +1416,8 @@ static iree_status_t loom_bytecode_number_function(
         numbering, result_type, &unused_id));
   }
 
-  // Predicate value name strings.
-  uint16_t predicate_count = 0;
-  const loom_predicate_t* predicates =
-      loom_func_like_predicates(func_like, &predicate_count);
-  for (uint16_t i = 0; i < predicate_count; ++i) {
-    const loom_predicate_t* predicate = &predicates[i];
-    for (uint8_t arg_index = 0; arg_index < predicate->arg_count; ++arg_index) {
-      if (predicate->arg_tags[arg_index] == LOOM_PRED_ARG_VALUE) {
-        // The value is a string_id referencing a dim name.
-        loom_string_id_t name_id = (loom_string_id_t)predicate->args[arg_index];
-        if (name_id != LOOM_STRING_ID_INVALID) {
-          IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
-              numbering, name_id, &unused_id));
-        }
-      }
-    }
-  }
+  // Function metadata predicates reference signature SSA values. Their value
+  // numbers are resolved while the metadata section is emitted.
 
   // Body (recursive).
   loom_region_t* body = loom_func_like_body(func_like);
@@ -2512,6 +2497,66 @@ static iree_status_t loom_bytecode_write_ir_section(
 // Writes the function-like metadata fields for a single symbol entry.
 // Called from loom_bytecode_write_symbols_section for each function-like
 // symbol that has a defining op.
+static bool loom_bytecode_func_metadata_attr_is_shared(
+    const loom_op_vtable_t* vtable, const loom_func_like_vtable_t* func_like,
+    uint8_t attr_index) {
+  if (loom_bytecode_attr_is_symbol_identity(vtable, attr_index)) return true;
+  iree_string_view_t name =
+      loom_attr_descriptor_name(&vtable->attr_descriptors[attr_index]);
+  if (iree_string_view_equal(name, IREE_SV("import_module")) ||
+      iree_string_view_equal(name, IREE_SV("import_symbol")) ||
+      attr_index == func_like->visibility_attr_index ||
+      attr_index == func_like->cc_attr_index ||
+      attr_index == func_like->purity_attr_index ||
+      attr_index == func_like->predicates_attr_index) {
+    return true;
+  }
+  if ((vtable->symbol_kind == LOOM_SYMBOL_FUNC_TEMPLATE ||
+       vtable->symbol_kind == LOOM_SYMBOL_FUNC_UKERNEL) &&
+      (attr_index == func_like->implements_attr_index ||
+       attr_index == func_like->priority_attr_index)) {
+    return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_bytecode_write_func_payload_attrs(
+    iree_string_builder_t* builder, loom_bytecode_numbering_t* numbering,
+    const loom_module_t* module, loom_func_like_t func_like,
+    loom_bytecode_value_numbering_t* signature_numbering) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, func_like.op);
+  const loom_attribute_t* attrs = loom_op_attrs(func_like.op);
+  uint8_t present_attr_count = 0;
+  for (uint8_t i = 0; i < func_like.op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(loom_bytecode_op_attr_is_present(
+        func_like.op, descriptor, attrs[i], &present));
+    if (present && !loom_bytecode_func_metadata_attr_is_shared(
+                       vtable, func_like.vtable, i)) {
+      ++present_attr_count;
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, present_attr_count));
+  for (uint8_t i = 0; i < func_like.op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(loom_bytecode_op_attr_is_present(
+        func_like.op, descriptor, attrs[i], &present));
+    if (!present || loom_bytecode_func_metadata_attr_is_shared(
+                        vtable, func_like.vtable, i)) {
+      continue;
+    }
+    uint32_t key_writer_id = 0;
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+        numbering, loom_attr_descriptor_name(descriptor), &key_writer_id));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, key_writer_id));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_attr_value(
+        builder, numbering, signature_numbering, attrs[i], descriptor));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_bytecode_write_func_metadata(
     iree_string_builder_t* builder, loom_bytecode_numbering_t* numbering,
     const loom_module_t* module, loom_func_like_t func_like,
@@ -2620,8 +2665,15 @@ static iree_status_t loom_bytecode_write_func_metadata(
   // Template/ukernel dispatch metadata: the name of the op kind this function
   // provides an implementation for, and its matching priority. Written only
   // for templates and ukernels; absent for def/decl.
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, func_like.op);
   loom_string_id_t implements_id = loom_func_like_implements(func_like);
-  if (implements_id != LOOM_STRING_ID_INVALID) {
+  if (vtable->symbol_kind == LOOM_SYMBOL_FUNC_TEMPLATE ||
+      vtable->symbol_kind == LOOM_SYMBOL_FUNC_UKERNEL) {
+    if (implements_id == LOOM_STRING_ID_INVALID) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "template/ukernel function symbol must have implements metadata");
+    }
     uint32_t implements_string_id = 0;
     IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_module_string(
         numbering, implements_id, &implements_string_id));
@@ -2630,6 +2682,9 @@ static iree_status_t loom_bytecode_write_func_metadata(
     IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(
         builder, (uint64_t)loom_func_like_priority(func_like)));
   }
+
+  IREE_RETURN_IF_ERROR(loom_bytecode_write_func_payload_attrs(
+      builder, numbering, module, func_like, signature_numbering));
 
   bool has_body = ir_offset.length > 0;
   IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, has_body ? 1 : 0));

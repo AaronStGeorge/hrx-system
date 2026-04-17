@@ -30,6 +30,7 @@ const char* loom_type_constraint_name(loom_type_constraint_t constraint) {
       [LOOM_TYPE_CONSTRAINT_GROUP] = "group",
       [LOOM_TYPE_CONSTRAINT_ANY_ENCODING] = "encoding",
       [LOOM_TYPE_CONSTRAINT_POOL] = "pool",
+      [LOOM_TYPE_CONSTRAINT_REGISTER] = "register",
       [LOOM_TYPE_CONSTRAINT_I1] = "i1",
       [LOOM_TYPE_CONSTRAINT_VECTOR] = "vector",
       [LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR] = "rank-1 vector",
@@ -133,6 +134,8 @@ bool loom_type_satisfies_constraint(loom_type_t type,
                  LOOM_ENCODING_ROLE_NUMERIC_TRANSFORM;
     case LOOM_TYPE_CONSTRAINT_POOL:
       return loom_type_is_pool(type);
+    case LOOM_TYPE_CONSTRAINT_REGISTER:
+      return loom_type_is_register(type);
     case LOOM_TYPE_CONSTRAINT_I1:
       return loom_type_is_scalar(type) &&
              loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
@@ -179,6 +182,7 @@ const char* loom_constraint_relation_name(loom_constraint_relation_t relation) {
       [LOOM_RELATION_PAIRWISE_EQ] = "PairwiseEq",
       [LOOM_RELATION_ALL_SAME] = "AllSame",
       [LOOM_RELATION_FIELD_SATISFIES] = "FieldSatisfies",
+      [LOOM_RELATION_REGION_ARGS_SATISFY] = "RegionArgsSatisfy",
       [LOOM_RELATION_ATTR_I64_PREDICATE] = "AttrI64Predicate",
       [LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE] = "AttrMatchesElementType",
       [LOOM_RELATION_ELEMENT_WIDTH_ORDER] = "ElementWidthOrder",

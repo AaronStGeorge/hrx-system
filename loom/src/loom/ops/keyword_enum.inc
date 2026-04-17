@@ -35,3 +35,4 @@
   LOOM_KW_DO = 26,  // "do"
   LOOM_KW_USING = 27,  // "using"
   LOOM_KW_DGROUPS = 28,  // "dgroups"
+  LOOM_KW_TARGET = 29,  // "target"

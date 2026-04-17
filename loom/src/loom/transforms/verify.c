@@ -1457,6 +1457,8 @@ static iree_string_view_t loom_verify_field_name(const loom_op_vtable_t* vtable,
     prefix = "result";
   } else if (category == LOOM_FIELD_ATTR) {
     prefix = "attribute";
+  } else if (category == LOOM_FIELD_REGION) {
+    prefix = "region";
   }
   iree_snprintf(buffer, buffer_size, "%s %u", prefix, index);
   return iree_make_cstring_view(buffer);
@@ -2283,6 +2285,50 @@ static void loom_verify_relation_field_satisfies(
           error->param_count < 3 ? error->param_count : 3);
       return;
     }
+  }
+}
+
+// REGION_ARGS_SATISFY: every entry block argument of a region satisfies the
+// type constraint stored in the constraint property slot. Args: (region field).
+static void loom_verify_relation_region_args_satisfy(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
+  if (constraint->arg_count < 1) return;
+  loom_type_constraint_t expected =
+      (loom_type_constraint_t)constraint->property;
+  if (expected >= LOOM_TYPE_CONSTRAINT_COUNT_) return;
+  uint8_t region_ref = constraint->args[0];
+  if (LOOM_FIELD_REF_CATEGORY(region_ref) != LOOM_FIELD_REGION) return;
+  uint8_t region_index = LOOM_FIELD_REF_INDEX(region_ref);
+  if (region_index >= op->region_count) return;
+  loom_region_t* region = loom_op_regions(op)[region_index];
+  if (!region || region->block_count == 0) return;
+  loom_block_t* entry = loom_region_entry_block(region);
+
+  char region_name_buffer[32];
+  iree_string_view_t region_name = loom_verify_field_name(
+      vtable, region_ref, region_name_buffer, sizeof(region_name_buffer));
+  for (uint16_t i = 0; i < entry->arg_count; ++i) {
+    loom_type_t argument_type =
+        loom_verify_value_type(state, loom_block_arg_id(entry, i));
+    if (loom_type_satisfies_constraint(argument_type, expected)) continue;
+
+    char argument_name_buffer[64];
+    iree_snprintf(argument_name_buffer, sizeof(argument_name_buffer),
+                  "%.*s.args[%u]", (int)region_name.size, region_name.data, i);
+    const loom_error_def_t* error = loom_verify_constraint_error_or(
+        constraint, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 14));
+    loom_diagnostic_param_t params[] = {
+        loom_verify_param_string_for_field(
+            iree_make_cstring_view(argument_name_buffer), region_ref),
+        loom_param_type(argument_type),
+        loom_param_string(
+            iree_make_cstring_view(loom_type_constraint_name(expected))),
+    };
+    loom_verify_emit_structured(
+        state, op, error, params,
+        error->param_count < 3 ? error->param_count : 3);
+    return;
   }
 }
 
@@ -3323,6 +3369,8 @@ static const loom_verify_relation_fn_t kVerifyRelationFns[] = {
     [LOOM_RELATION_PAIRWISE_EQ] = loom_verify_relation_pairwise_eq,
     [LOOM_RELATION_ALL_SAME] = loom_verify_relation_all_same,
     [LOOM_RELATION_FIELD_SATISFIES] = loom_verify_relation_field_satisfies,
+    [LOOM_RELATION_REGION_ARGS_SATISFY] =
+        loom_verify_relation_region_args_satisfy,
     [LOOM_RELATION_ATTR_I64_PREDICATE] =
         loom_verify_relation_attr_i64_predicate,
     [LOOM_RELATION_ATTR_MATCHES_ELEMENT_TYPE] =

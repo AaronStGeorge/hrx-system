@@ -65,6 +65,7 @@ from loom.dsl import (
     FuncLikeInterface,
     LoopLikeInterface,
     Op,
+    Operand,
     RegionBranchInterface,
     RegionDef,
     TiedResult,
@@ -112,6 +113,7 @@ KEYWORD_MAP: dict[str, str] = {
     "do": "LOOM_KW_DO",
     "using": "LOOM_KW_USING",
     "dgroups": "LOOM_KW_DGROUPS",
+    "target": "LOOM_KW_TARGET",
 }
 
 # Maps Python TypeConstraint enum to C constraint enum name.
@@ -147,6 +149,7 @@ TYPE_CONSTRAINT_MAP: dict[TypeConstraint, str] = {
     TypeConstraint.ENCODING_STORAGE: "LOOM_TYPE_CONSTRAINT_ENCODING_STORAGE",
     TypeConstraint.ENCODING_TRANSFORM: "LOOM_TYPE_CONSTRAINT_ENCODING_TRANSFORM",
     TypeConstraint.POOL: "LOOM_TYPE_CONSTRAINT_POOL",
+    TypeConstraint.REGISTER: "LOOM_TYPE_CONSTRAINT_REGISTER",
     TypeConstraint.I1: "LOOM_TYPE_CONSTRAINT_I1",
 }
 
@@ -227,6 +230,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
         "LOOM_RELATION_FIELD_SATISFIES",
         "LOOM_TYPE_CONSTRAINT_F32_ELEMENT",
     ),
+    "HasRegister": (
+        "LOOM_RELATION_FIELD_SATISFIES",
+        "LOOM_TYPE_CONSTRAINT_REGISTER",
+    ),
     "HasRankOneVector": (
         "LOOM_RELATION_FIELD_SATISFIES",
         "LOOM_TYPE_CONSTRAINT_RANK_ONE_VECTOR",
@@ -287,6 +294,10 @@ CONSTRAINT_MAP: dict[str, tuple[str, str]] = {
     "AllShapesMatch": ("LOOM_RELATION_ALL_SAME", "LOOM_PROPERTY_SHAPE"),
     "LastAxisGroupedBy": ("LOOM_RELATION_LAST_AXIS_GROUPED_BY", "$data"),
     "BlockArgCount": ("LOOM_RELATION_REGION_ARG_COUNT", "LOOM_PROPERTY_TYPE"),
+    "BlockArgsSatisfy": (
+        "LOOM_RELATION_REGION_ARGS_SATISFY",
+        "$type_constraint_data",
+    ),
     "BlockArgsMatchTypes": (
         "LOOM_RELATION_REGION_ARG_MATCH",
         "LOOM_PROPERTY_TYPE",
@@ -425,6 +436,20 @@ def _func_args_field_name(op: Op) -> str:
         return None
 
     return _walk(op.format) or "args"
+
+
+def _explicit_func_args_operand(op: Op) -> Operand | None:
+    """Returns the operand descriptor that backs FuncArgs, if declared."""
+    if not _func_args_are_operands(op):
+        return None
+    field_name = _func_args_field_name(op)
+    for operand in op.operands:
+        if operand.name != field_name:
+            continue
+        if not operand.variadic:
+            raise ValueError(f"Op '{op.name}': FuncArgs field '{field_name}' must be a variadic operand when declared explicitly")
+        return operand
+    return None
 
 
 # Maps Python symbol interface names to C interface flag constants.
@@ -2482,7 +2507,9 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
     # Operand descriptors.
     for op in ops:
         func_args_are_operands = _func_args_are_operands(op)
-        if not op.operands and not func_args_are_operands:
+        explicit_func_args_operand = _explicit_func_args_operand(op)
+        synthesize_func_args_operand = func_args_are_operands and explicit_func_args_operand is None
+        if not op.operands and not synthesize_func_args_operand:
             continue
         prefix = _c_prefix(op)
         for operand in op.operands:
@@ -2491,7 +2518,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             bstr_name = f"{prefix}_{name}_operand_bname"
             lines.append(f'static const uint8_t {bstr_name}[] = "\\x{len(name):02x}" "{name}";')
         func_args_name = ""
-        if func_args_are_operands:
+        if synthesize_func_args_operand:
             func_args_name = _func_args_field_name(op)
             assert len(func_args_name) < 256, f"func args name too long: {func_args_name!r}"
             bstr_name = f"{prefix}_{func_args_name}_operand_bname"
@@ -2516,7 +2543,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
                 flags_parts.append("LOOM_OPERAND_WRITES")
             flags = " | ".join(flags_parts) if flags_parts else "0"
             lines.append(f"    {{{bstr_name}, {type_constraint}, {flags}}},")
-        if func_args_are_operands:
+        if synthesize_func_args_operand:
             bstr_name = f"{prefix}_{func_args_name}_operand_bname"
             lines.append(f"    {{{bstr_name}, LOOM_TYPE_CONSTRAINT_ANY, LOOM_OPERAND_VARIADIC}},")
         lines.append("};")
@@ -2682,9 +2709,15 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             if property_name == "$data":
                 if constraint.data is None:
                     raise ValueError(f"Op '{op.name}' constraint {constraint.name}: missing data payload")
+                if not isinstance(constraint.data, int):
+                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload must be an integer")
                 if constraint.data < 0 or constraint.data > 255:
                     raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload out of uint8_t range")
                 property_name = str(constraint.data)
+            elif property_name == "$type_constraint_data":
+                if not isinstance(constraint.data, TypeConstraint):
+                    raise ValueError(f"Op '{op.name}' constraint {constraint.name}: data payload must be a TypeConstraint")
+                property_name = TYPE_CONSTRAINT_MAP[constraint.data]
             # Resolve field name args to packed field references.
             arg_refs: list[str] = []
             for arg_name in constraint.args:
@@ -3373,6 +3406,7 @@ def main() -> None:
     from loom.dialect.index import ALL_INDEX_OPS, index_ops
     from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES, kernel_ops
     from loom.dialect.llvmir import ALL_LLVMIR_OPS, llvmir_ops
+    from loom.dialect.low import ALL_LOW_OPS, low_ops
     from loom.dialect.pool import ALL_POOL_OPS, pool_ops
     from loom.dialect.scalar import ALL_SCALAR_OPS, scalar_ops
     from loom.dialect.scf import ALL_SCF_OPS, scf_ops
@@ -3397,6 +3431,7 @@ def main() -> None:
         (kernel_ops, list(ALL_KERNEL_OPS)),
         (llvmir_ops, list(ALL_LLVMIR_OPS)),
         (target_ops, list(ALL_TARGET_OPS)),
+        (low_ops, list(ALL_LOW_OPS)),
     ]
 
     output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom" / "ops"

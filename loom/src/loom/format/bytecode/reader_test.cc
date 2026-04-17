@@ -517,9 +517,23 @@ class ReaderTest : public ::testing::Test {
     uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
     loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
-    loom_string_id_t dim_name_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(
-        loom_module_intern_string(module, IREE_SV("M"), &dim_name_id));
+    loom_type_t arg_types[1] = {f32_type};
+    loom_type_t result_types[1] = {f32_type};
+    loom_op_t* func_op = nullptr;
+    IREE_CHECK_OK(loom_test_func_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+        nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+    module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* arg_ids =
+        loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != 1) {
+      ADD_FAILURE() << "expected one function argument";
+      return module;
+    }
 
     loom_predicate_t* predicates = nullptr;
     IREE_CHECK_OK(iree_arena_allocate_array(
@@ -529,24 +543,17 @@ class ReaderTest : public ::testing::Test {
         .arg_count = 2,
         .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
                      LOOM_PRED_ARG_NONE},
-        .args = {(int64_t)dim_name_id, 16, 0},
+        .args = {(int64_t)arg_ids[0], 16, 0},
     };
     predicates[1] = loom_predicate_t{
         .kind = LOOM_PREDICATE_RANGE,
         .arg_count = 3,
         .arg_tags = {LOOM_PRED_ARG_VALUE, LOOM_PRED_ARG_CONST,
                      LOOM_PRED_ARG_CONST},
-        .args = {(int64_t)dim_name_id, 32, 512},
+        .args = {(int64_t)arg_ids[0], 32, 512},
     };
-
-    loom_type_t arg_types[1] = {f32_type};
-    loom_type_t result_types[1] = {f32_type};
-    loom_op_t* func_op = nullptr;
-    IREE_CHECK_OK(loom_test_func_build(
-        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
-        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
-        nullptr, 0, predicates, 2, LOOM_LOCATION_UNKNOWN, &func_op));
-    module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+    loom_op_attrs(func_op)[func_like.vtable->predicates_attr_index] =
+        loom_attr_predicate_list(predicates, 2);
     return module;
   }
 
@@ -854,6 +861,15 @@ class ReaderTest : public ::testing::Test {
     }
   }
 
+  void SkipAttributeEntries(const std::vector<uint8_t>& bytes, size_t* offset) {
+    uint64_t attr_count = ReadUVarint(bytes, offset);
+    for (uint64_t i = 0; i < attr_count; ++i) {
+      ReadUVarint(bytes, offset);  // key_id
+      uint8_t value_kind = bytes[(*offset)++];
+      SkipAttributeValue(bytes, offset, value_kind);
+    }
+  }
+
   size_t FunctionBodyLengthOffset(const std::vector<uint8_t>& bytes,
                                   uint64_t symbol_index) {
     size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_SYMBOLS);
@@ -894,6 +910,7 @@ class ReaderTest : public ::testing::Test {
         ReadUVarint(bytes, &offset);  // implements_op_name
         ReadUVarint(bytes, &offset);  // priority
       }
+      SkipAttributeEntries(bytes, &offset);
       uint8_t has_body = bytes[offset++];
       if (!has_body) continue;
       offset += sizeof(uint64_t);  // ir_offset

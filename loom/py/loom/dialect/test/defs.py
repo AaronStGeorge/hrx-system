@@ -905,7 +905,15 @@ test_func = Op(
     group=test_ops,
     doc="Test function definition with body always present.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
-    interfaces=[FuncLikeInterface(callee="callee", visibility="visibility", cc="cc", body="body")],
+    interfaces=[
+        FuncLikeInterface(
+            callee="callee",
+            visibility="visibility",
+            cc="cc",
+            predicates="predicates",
+            body="body",
+        )
+    ],
     symbol_def=SymbolDefinition(
         field="callee",
         name="function",

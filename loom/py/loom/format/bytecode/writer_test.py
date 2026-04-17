@@ -25,10 +25,20 @@ from loom.dialect.func import ALL_FUNC_OPS
 from loom.dialect.globals import ALL_GLOBAL_OPS
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
+from loom.dialect.low import ALL_LOW_OPS
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
-from loom.dsl import SYMBOL_DEFINE, AttrDef, Op, SymbolDefinition, SymbolReference
+from loom.dsl import (
+    ANY,
+    SYMBOL_DEFINE,
+    AttrDef,
+    FuncLikeInterface,
+    Op,
+    Result,
+    SymbolDefinition,
+    SymbolReference,
+)
 from loom.format.bytecode.encoding import decode_varint
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import (
@@ -129,6 +139,7 @@ def _text_parser(
     include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
+    include_low: bool = False,
 ) -> Parser:
     parser = Parser()
     ops = list(ALL_FUNC_OPS) + list(ALL_CFG_OPS) + list(ALL_TEST_OPS)
@@ -148,6 +159,8 @@ def _text_parser(
             + ALL_VECTOR_OPS
             + ALL_KERNEL_OPS,
         )
+    if include_low:
+        _append_unique(ops, ALL_LOW_OPS)
     parser.register_ops(ops)
     types = list(ALL_BUILTIN_TYPES)
     if include_kernel:
@@ -162,6 +175,7 @@ def _text_printer(
     include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
+    include_low: bool = False,
 ) -> Printer:
     printer = Printer()
     ops = list(ALL_FUNC_OPS) + list(ALL_CFG_OPS) + list(ALL_TEST_OPS)
@@ -181,6 +195,8 @@ def _text_printer(
             + ALL_VECTOR_OPS
             + ALL_KERNEL_OPS,
         )
+    if include_low:
+        _append_unique(ops, ALL_LOW_OPS)
     printer.register_ops(ops)
     types = list(ALL_BUILTIN_TYPES)
     if include_kernel:
@@ -196,12 +212,14 @@ def _parse_write_read(
     include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
+    include_low: bool = False,
 ) -> Module:
     module = _text_parser(
         include_encoding=include_encoding,
         include_global=include_global,
         include_vector=include_vector,
         include_kernel=include_kernel,
+        include_low=include_low,
     ).parse(text)
     return read_module(write_module(module))
 
@@ -213,6 +231,7 @@ def _roundtrip_text_through_bytecode(
     include_global: bool = False,
     include_vector: bool = False,
     include_kernel: bool = False,
+    include_low: bool = False,
 ) -> str:
     loaded = _parse_write_read(
         text,
@@ -220,12 +239,14 @@ def _roundtrip_text_through_bytecode(
         include_global=include_global,
         include_vector=include_vector,
         include_kernel=include_kernel,
+        include_low=include_low,
     )
     return _text_printer(
         include_encoding=include_encoding,
         include_global=include_global,
         include_vector=include_vector,
         include_kernel=include_kernel,
+        include_low=include_low,
     ).print_module(loaded)
 
 
@@ -1331,6 +1352,100 @@ class TestCrossFormatRoundTrip:
             "arch": "gfx1200",
             "lanes": 32,
         }
+
+    def test_func_like_payload_attrs_survive_bytecode(self) -> None:
+        custom_func = Op(
+            "bytecode.func",
+            traits=[SYMBOL_DEFINE],
+            symbol_def=SymbolDefinition(
+                field="callee",
+                name="function",
+                interfaces=["func_like"],
+                bytecode_kind="LOOM_SYMBOL_FUNC_DECL",
+            ),
+            interfaces=[FuncLikeInterface(callee="callee", args_as_operands=True)],
+            attrs=[
+                AttrDef("callee", "symbol"),
+                AttrDef(
+                    "target",
+                    "symbol",
+                    optional=True,
+                    symbol_ref=SymbolReference("record", ["record"]),
+                ),
+                AttrDef("tag", "string", optional=True),
+                AttrDef("priority", "i64", optional=True),
+            ],
+            results=[Result("results", ANY, variadic=True)],
+        )
+        module = Module()
+        input_id = module.add_value(Value(name="input", type=F32))
+        result_id = module.add_value(Value(name="result", type=F32))
+        func_op = Operation(
+            name="bytecode.func",
+            operands=[input_id],
+            results=[result_id],
+            attributes={
+                "callee": "entry",
+                "target": "gfx1100",
+                "tag": "amdgpu",
+                "priority": 3,
+            },
+        )
+        module.add_symbol(Symbol(name="entry", kind=SymbolKind.FUNC_DECL, op=func_op))
+
+        loaded = read_module(
+            write_module(module, op_decls=[custom_func]),
+            op_decls=[custom_func],
+        )
+
+        assert len(loaded.symbols) == 1
+        symbol = loaded.symbols[0]
+        assert symbol.op is not None
+        assert symbol.op.attributes == {
+            "callee": "entry",
+            "target": "gfx1100",
+            "tag": "amdgpu",
+            "priority": 3,
+        }
+
+    def test_func_template_metadata_survives_bytecode(self) -> None:
+        text = (
+            "func.template<tile.contract> device priority(7) "
+            "@kernel(%input: f32) -> (f32) {\n"
+            "  func.return %input : f32\n"
+            "}\n"
+        )
+
+        loaded = _parse_write_read(text)
+        assert len(loaded.symbols) == 1
+        symbol = loaded.symbols[0]
+        assert symbol.kind == SymbolKind.FUNC_TEMPLATE
+        assert symbol.op is not None
+        assert symbol.op.attributes["implements"] == "tile.contract"
+        assert symbol.op.attributes["priority"] == 7
+        assert symbol.op.attributes["cc"] == "device"
+        assert _roundtrip_text_through_bytecode(text) == text
+
+    def test_low_func_target_and_register_body_survive_bytecode(self) -> None:
+        text = (
+            'test.record @gfx1100 {arch = "gfx1100"}\n\n'
+            "low.func.def target(@gfx1100) "
+            "@add(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) "
+            "-> (reg<amdgpu.vgpr>) {\n"
+            "  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : "
+            "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
+            "  low.return %sum : reg<amdgpu.vgpr>\n"
+            "}\n"
+        )
+
+        loaded = _parse_write_read(text, include_low=True)
+        assert len(loaded.symbols) == 2
+        symbol = loaded.symbols[1]
+        assert symbol.kind == SymbolKind.FUNC_DEF
+        assert symbol.op is not None
+        assert symbol.op.attributes["callee"] == "add"
+        assert symbol.op.attributes["target"] == "gfx1100"
+        assert _roundtrip_text_through_bytecode(text, include_low=True) == text
 
     def test_symbol_without_bytecode_payload_kind_fails_loud(self) -> None:
         module = Module()
