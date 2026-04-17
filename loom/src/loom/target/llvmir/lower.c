@@ -540,10 +540,8 @@ static iree_status_t loom_llvmir_lowering_lower_return(
 }
 
 static iree_status_t loom_llvmir_lowering_lower_op(
-    loom_llvmir_lowering_state_t* state,
-    loom_llvmir_function_t* target_function,
-    loom_llvmir_block_t** current_block, const loom_op_t* op) {
-  loom_llvmir_block_t* target_block = *current_block;
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
   switch (op->kind) {
     case LOOM_OP_SCALAR_ADDI:
     case LOOM_OP_SCALAR_SUBI:
@@ -696,8 +694,19 @@ static iree_status_t loom_llvmir_lowering_lower_op(
     case LOOM_OP_LLVMIR_INTRINSIC:
       return loom_llvmir_lowering_lower_intrinsic(state, target_block, op);
     case LOOM_OP_SCF_IF:
-      return loom_llvmir_lowering_lower_scf_if(state, target_function,
-                                               current_block, op);
+    case LOOM_OP_SCF_FOR:
+    case LOOM_OP_SCF_WHILE:
+    case LOOM_OP_SCF_SWITCH:
+      return loom_llvmir_lowering_unsupported_op(
+          state, op,
+          "structured SCF control flow must be lowered to CFG before LLVMIR "
+          "lowering");
+    case LOOM_OP_SCF_CONDITION:
+    case LOOM_OP_SCF_YIELD:
+      return loom_llvmir_lowering_unsupported_op(
+          state, op,
+          "SCF terminators must be lowered with their parent structured "
+          "control-flow op before LLVMIR lowering");
     case LOOM_OP_FUNC_CALL:
       return loom_llvmir_lowering_lower_call(state, target_block, op);
     case LOOM_OP_FUNC_RETURN:
@@ -708,27 +717,13 @@ static iree_status_t loom_llvmir_lowering_lower_op(
   }
 }
 
-iree_status_t loom_llvmir_lowering_lower_source_block(
-    loom_llvmir_lowering_state_t* state,
-    loom_llvmir_function_t* target_function, loom_block_t* source_block,
-    loom_llvmir_block_t** current_block, const loom_op_t** out_yield_op) {
-  if (out_yield_op) *out_yield_op = NULL;
+static iree_status_t loom_llvmir_lowering_lower_source_block(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    loom_block_t* source_block) {
   loom_op_t* source_op = NULL;
   loom_block_for_each_op(source_block, source_op) {
-    if (source_op->kind == LOOM_OP_SCF_YIELD) {
-      if (!out_yield_op) {
-        return loom_llvmir_lowering_unsupported_op(
-            state, source_op, "scf.yield cannot appear outside an SCF region");
-      }
-      *out_yield_op = source_op;
-      return iree_ok_status();
-    }
-    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_op(
-        state, target_function, current_block, source_op));
-  }
-  if (out_yield_op) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SCF region is missing scf.yield terminator");
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_lower_op(state, target_block, source_op));
   }
   return iree_ok_status();
 }
@@ -1068,8 +1063,8 @@ static iree_status_t loom_llvmir_lowering_lower_cfg_block(
           state, cfg, current_block, source_op));
       saw_terminator = true;
     } else {
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_op(
-          state, target_function, &current_block, source_op));
+      IREE_RETURN_IF_ERROR(
+          loom_llvmir_lowering_lower_op(state, current_block, source_op));
       saw_terminator = loom_llvmir_lowering_op_ends_cfg_block(source_op);
     }
   }
@@ -1150,8 +1145,8 @@ static iree_status_t loom_llvmir_lowering_lower_body(
                                           /*is_entry_block=*/true),
           &target_block);
       if (iree_status_is_ok(status)) {
-        status = loom_llvmir_lowering_lower_source_block(
-            state, target_function, source_block, &target_block, NULL);
+        status = loom_llvmir_lowering_lower_source_block(state, target_block,
+                                                         source_block);
       }
     }
     state->fact_table = previous_fact_table;

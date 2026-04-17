@@ -73,6 +73,32 @@ func.def public @bad() -> (i32) {
 }
 
 // ====
+
+// Structured SCF control flow must pass through scf-to-cfg before LLVMIR emission.
+// ERROR@+1: LOWERING/001 "scf.if" "lowered to CFG"
+func.def @scf_if_before_cfg(%cond: i1) {
+  scf.if %cond {
+    scf.yield
+  } else {
+    scf.yield
+  }
+  func.return
+}
+
+// ====
+
+// Loop-shaped SCF control flow must pass through scf-to-cfg before LLVMIR emission.
+// ERROR@+1: LOWERING/001 "scf.for" "lowered to CFG"
+func.def @scf_for_before_cfg(%n: index) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  scf.for %i = [%zero to %n step %one] {
+    scf.yield
+  }
+  func.return
+}
+
+// ====
 // RUN: emit llvmir spirv-vulkan
 
 // Unknown LLVMIR target profiles are reported before parsing/lowering.

@@ -78,7 +78,6 @@ loom_cc_library(
     "lower.c"
     "lower_memory.c"
     "lower_scalar.c"
-    "lower_scf.c"
     "lower_target.c"
     "lower_vector.c"
     "lower_vector_cpu.c"
