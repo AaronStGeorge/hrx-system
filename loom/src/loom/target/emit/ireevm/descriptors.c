@@ -6,116 +6,66 @@
 
 #include "loom/target/emit/ireevm/descriptors.h"
 
+#define VM_BSTRING(length_byte, data) LOOM_BSTRING_LITERAL(length_byte, data)
+
+// clang-format off
 static const uint8_t kStringData[] =
-    "\x00"
-    "\x0c"
-    "iree.vm.core"
-    "\x07"
-    "iree.vm"
-    "\x0a"
-    "iree.vm.v1"
-    "\x06"
-    "vm.i32"
-    "\x06"
-    "vm.i64"
-    "\x06"
-    "vm.f32"
-    "\x06"
-    "vm.f64"
-    "\x06"
-    "vm.ref"
-    "\x07"
-    "vm.list"
-    "\x03"
-    "dst"
-    "\x03"
-    "lhs"
-    "\x03"
-    "rhs"
-    "\x05"
-    "value"
-    "\x04"
-    "cond"
-    "\x04"
-    "arg0"
-    "\x09"
-    "i32_value"
-    "\x0c"
-    "target_block"
-    "\x0a"
-    "true_block"
-    "\x0b"
-    "false_block"
-    "\x0e"
-    "callee_ordinal"
-    "\x06"
-    "vm.alu"
-    "\x0a"
-    "vm.control"
-    "\x07"
-    "vm.call"
-    "\x08"
-    "vm.const"
-    "\x0a"
-    "vm.alu.i32"
-    "\x0a"
-    "vm.control"
-    "\x07"
-    "vm.call"
-    "\x11"
-    "iree.vm.const.i32"
-    "\x0f"
-    "iree.vm.add.i32"
-    "\x0f"
-    "iree.vm.sub.i32"
-    "\x12"
-    "iree.vm.cmp.eq.i32"
-    "\x0a"
-    "iree.vm.br"
-    "\x13"
-    "iree.vm.cond_br.i32"
-    "\x17"
-    "iree.vm.call.import.i32"
-    "\x12"
-    "iree.vm.return.i32"
-    "\x13"
-    "iree.vm.return.void"
-    "\x0c"
-    "vm.const.i32"
-    "\x0a"
-    "vm.add.i32"
-    "\x0a"
-    "vm.sub.i32"
-    "\x0d"
-    "vm.cmp.eq.i32"
-    "\x05"
-    "vm.br"
-    "\x0e"
-    "vm.cond_br.i32"
-    "\x12"
-    "vm.call.import.i32"
-    "\x0d"
-    "vm.return.i32"
-    "\x0e"
-    "vm.return.void"
-    "\x11"
-    "integer.const.i32"
-    "\x0f"
-    "integer.add.i32"
-    "\x0f"
-    "integer.sub.i32"
-    "\x12"
-    "integer.cmp.eq.i32"
-    "\x0e"
-    "control.branch"
-    "\x17"
-    "control.cond_branch.i32"
-    "\x0f"
-    "call.import.i32"
-    "\x12"
-    "control.return.i32"
-    "\x13"
-    "control.return.void";
+    VM_BSTRING("\x00", "")
+    VM_BSTRING("\x0c", "iree.vm.core")
+    VM_BSTRING("\x07", "iree.vm")
+    VM_BSTRING("\x0a", "iree.vm.v1")
+    VM_BSTRING("\x06", "vm.i32")
+    VM_BSTRING("\x06", "vm.i64")
+    VM_BSTRING("\x06", "vm.f32")
+    VM_BSTRING("\x06", "vm.f64")
+    VM_BSTRING("\x06", "vm.ref")
+    VM_BSTRING("\x07", "vm.list")
+    VM_BSTRING("\x03", "dst")
+    VM_BSTRING("\x03", "lhs")
+    VM_BSTRING("\x03", "rhs")
+    VM_BSTRING("\x05", "value")
+    VM_BSTRING("\x04", "cond")
+    VM_BSTRING("\x04", "arg0")
+    VM_BSTRING("\x09", "i32_value")
+    VM_BSTRING("\x0c", "target_block")
+    VM_BSTRING("\x0a", "true_block")
+    VM_BSTRING("\x0b", "false_block")
+    VM_BSTRING("\x0e", "callee_ordinal")
+    VM_BSTRING("\x06", "vm.alu")
+    VM_BSTRING("\x0a", "vm.control")
+    VM_BSTRING("\x07", "vm.call")
+    VM_BSTRING("\x08", "vm.const")
+    VM_BSTRING("\x0a", "vm.alu.i32")
+    VM_BSTRING("\x0a", "vm.control")
+    VM_BSTRING("\x07", "vm.call")
+    VM_BSTRING("\x11", "iree.vm.const.i32")
+    VM_BSTRING("\x0f", "iree.vm.add.i32")
+    VM_BSTRING("\x0f", "iree.vm.sub.i32")
+    VM_BSTRING("\x12", "iree.vm.cmp.eq.i32")
+    VM_BSTRING("\x0a", "iree.vm.br")
+    VM_BSTRING("\x13", "iree.vm.cond_br.i32")
+    VM_BSTRING("\x17", "iree.vm.call.import.i32")
+    VM_BSTRING("\x12", "iree.vm.return.i32")
+    VM_BSTRING("\x13", "iree.vm.return.void")
+    VM_BSTRING("\x0c", "vm.const.i32")
+    VM_BSTRING("\x0a", "vm.add.i32")
+    VM_BSTRING("\x0a", "vm.sub.i32")
+    VM_BSTRING("\x0d", "vm.cmp.eq.i32")
+    VM_BSTRING("\x05", "vm.br")
+    VM_BSTRING("\x0e", "vm.cond_br.i32")
+    VM_BSTRING("\x12", "vm.call.import.i32")
+    VM_BSTRING("\x0d", "vm.return.i32")
+    VM_BSTRING("\x0e", "vm.return.void")
+    VM_BSTRING("\x11", "integer.const.i32")
+    VM_BSTRING("\x0f", "integer.add.i32")
+    VM_BSTRING("\x0f", "integer.sub.i32")
+    VM_BSTRING("\x12", "integer.cmp.eq.i32")
+    VM_BSTRING("\x0e", "control.branch")
+    VM_BSTRING("\x17", "control.cond_branch.i32")
+    VM_BSTRING("\x0f", "call.import.i32")
+    VM_BSTRING("\x12", "control.return.i32")
+    VM_BSTRING("\x13", "control.return.void");
+// clang-format on
 
 enum {
   VM_STRING_empty = 0,

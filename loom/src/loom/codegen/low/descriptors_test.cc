@@ -14,42 +14,27 @@
 namespace loom {
 namespace {
 
+// clang-format off
 static const uint8_t kTestStrings[] =
-    "\x00"
-    "\x09"
-    "test.core"
-    "\x0b"
-    "test.target"
-    "\x0d"
-    "test.features"
-    "\x08"
-    "test.gpr"
-    "\x03"
-    "dst"
-    "\x03"
-    "lhs"
-    "\x03"
-    "rhs"
-    "\x05"
-    "value"
-    "\x08"
-    "test.alu"
-    "\x0a"
-    "test.const"
-    "\x0c"
-    "test.alu.i32"
-    "\x0e"
-    "test.const.i32"
-    "\x0c"
-    "test.add.i32"
-    "\x09"
-    "const.i32"
-    "\x07"
-    "add.i32"
-    "\x11"
-    "integer.const.i32"
-    "\x0f"
-    "integer.add.i32";
+    LOOM_BSTRING_LITERAL("\x00", "")
+    LOOM_BSTRING_LITERAL("\x09", "test.core")
+    LOOM_BSTRING_LITERAL("\x0b", "test.target")
+    LOOM_BSTRING_LITERAL("\x0d", "test.features")
+    LOOM_BSTRING_LITERAL("\x08", "test.gpr")
+    LOOM_BSTRING_LITERAL("\x03", "dst")
+    LOOM_BSTRING_LITERAL("\x03", "lhs")
+    LOOM_BSTRING_LITERAL("\x03", "rhs")
+    LOOM_BSTRING_LITERAL("\x05", "value")
+    LOOM_BSTRING_LITERAL("\x08", "test.alu")
+    LOOM_BSTRING_LITERAL("\x0a", "test.const")
+    LOOM_BSTRING_LITERAL("\x0c", "test.alu.i32")
+    LOOM_BSTRING_LITERAL("\x0e", "test.const.i32")
+    LOOM_BSTRING_LITERAL("\x0c", "test.add.i32")
+    LOOM_BSTRING_LITERAL("\x09", "const.i32")
+    LOOM_BSTRING_LITERAL("\x07", "add.i32")
+    LOOM_BSTRING_LITERAL("\x11", "integer.const.i32")
+    LOOM_BSTRING_LITERAL("\x0f", "integer.add.i32");
+// clang-format on
 
 enum {
   TEST_STRING_empty = 0,

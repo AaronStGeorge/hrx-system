@@ -138,12 +138,12 @@ TEST(BString, ArrayTableLookup) {
   EXPECT_EQ(found, -1);
 }
 
+// clang-format off
 static const uint8_t kPackedStrings[] =
-    "\x00"
-    "\x05"
-    "hello"
-    "\x04"
-    "step";
+    LOOM_BSTRING_LITERAL("\x00", "")
+    LOOM_BSTRING_LITERAL("\x05", "hello")
+    LOOM_BSTRING_LITERAL("\x04", "step");
+// clang-format on
 
 enum {
   kPackedStringEmpty = 0,

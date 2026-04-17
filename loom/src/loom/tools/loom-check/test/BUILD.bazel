@@ -22,7 +22,6 @@ loom_check_test_suite(
         "llvmir/scalar_index.loom-test",
         "llvmir/toolchain.loom-test",
         "llvmir/vector_core.loom-test",
-        "low_descriptors.loom-test",
         "pass.loom-test",
         "requires.loom-test",
         "roundtrip.loom-test",

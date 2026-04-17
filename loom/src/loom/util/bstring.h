@@ -43,6 +43,11 @@ extern "C" {
 // A pointer to a length-prefixed byte string: [length][data...].
 typedef const uint8_t* loom_bstring_t;
 
+// Emits one B-string literal fragment for packed compile-time tables.
+// |length_byte| must be a one-byte string literal such as "\x05", and |data|
+// must be a string literal whose length matches that byte.
+#define LOOM_BSTRING_LITERAL(length_byte, data) length_byte data
+
 // Offset into a packed B-string table.
 typedef uint32_t loom_bstring_table_offset_t;
 
