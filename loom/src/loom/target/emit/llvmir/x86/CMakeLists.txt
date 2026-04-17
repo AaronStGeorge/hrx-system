@@ -33,7 +33,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::target::arch::x86::packed_dot_contract
-    loom::src::loom::target::emit::llvmir::target_env
+    loom::src::loom::target::emit::llvmir::target_presets
   PUBLIC
 )
 

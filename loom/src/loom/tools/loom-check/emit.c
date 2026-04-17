@@ -7,12 +7,14 @@
 #include "iree/io/vec_stream.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
+#include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/lower.h"
 #include "loom/target/emit/llvmir/target_presets.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
+#include "loom/target/emit/llvmir/x86/target_env.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/util/stream.h"
@@ -38,6 +40,22 @@ typedef struct loom_check_emit_byte_buffer_t {
   // Number of valid bytes in |data|.
   iree_host_size_t length;
 } loom_check_emit_byte_buffer_t;
+
+static iree_status_t loom_check_emit_lookup_profile(
+    iree_string_view_t profile_name,
+    const loom_llvmir_target_profile_t** out_profile) {
+  const loom_llvmir_target_profile_provider_t* providers[] = {
+      loom_llvmir_x86_target_profile_provider(),
+      loom_llvmir_amdgpu_target_profile_provider(),
+  };
+  const loom_llvmir_target_profile_registry_t registry = {
+      .default_profile = loom_llvmir_target_profile_x86_64_object(),
+      .providers = providers,
+      .provider_count = IREE_ARRAYSIZE(providers),
+  };
+  return loom_llvmir_target_profile_registry_lookup(&registry, profile_name,
+                                                    out_profile);
+}
 
 static iree_status_t loom_check_emit_parse_request(
     iree_string_view_t emit_target, loom_check_emit_request_t* out_request) {
@@ -72,7 +90,7 @@ static iree_status_t loom_check_emit_parse_request(
                             "unknown emit target '%.*s'", (int)target_name.size,
                             target_name.data);
   }
-  return loom_llvmir_target_profile_lookup(profile_name, &out_request->profile);
+  return loom_check_emit_lookup_profile(profile_name, &out_request->profile);
 }
 
 static iree_string_view_t loom_check_emit_consume_line(

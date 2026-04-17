@@ -69,8 +69,6 @@ loom_cc_library(
   DEPS
     ::target_env
     iree::base
-    loom::src::loom::target::emit::llvmir::amdgpu::target_env
-    loom::src::loom::target::emit::llvmir::x86::target_env
   PUBLIC
 )
 

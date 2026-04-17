@@ -4,12 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Opt-in registry for built-in LLVM target profiles.
+// Explicit LLVM target profile preset registries.
 //
-// The target implementing this header intentionally pulls in the built-in
-// target providers selected for Loom developer tools. JIT and AOT embeddings
-// that want a smaller target surface should depend on specific provider
-// packages instead.
+// Target providers own their preset rows. Developer tools and embedders
+// assemble a registry from the providers they intentionally link, keeping the
+// generic LLVMIR infrastructure free of a process-wide target catalog.
 
 #ifndef LOOM_TARGET_LLVMIR_TARGET_PRESETS_H_
 #define LOOM_TARGET_LLVMIR_TARGET_PRESETS_H_
@@ -20,9 +19,28 @@
 extern "C" {
 #endif
 
-// Looks up a built-in target profile by name. Empty names resolve to the
-// default host object profile supplied by the x86 provider.
-iree_status_t loom_llvmir_target_profile_lookup(
+typedef struct loom_llvmir_target_profile_provider_t {
+  // Stable provider name used for diagnostics.
+  iree_string_view_t name;
+  // Static profile rows owned by the provider.
+  const loom_llvmir_target_profile_t* const* profiles;
+  // Number of profile pointers in |profiles|.
+  iree_host_size_t profile_count;
+} loom_llvmir_target_profile_provider_t;
+
+typedef struct loom_llvmir_target_profile_registry_t {
+  // Default profile used when a caller supplies an empty profile name.
+  const loom_llvmir_target_profile_t* default_profile;
+  // Provider tables explicitly linked into this registry.
+  const loom_llvmir_target_profile_provider_t* const* providers;
+  // Number of provider pointers in |providers|.
+  iree_host_size_t provider_count;
+} loom_llvmir_target_profile_registry_t;
+
+// Looks up a target profile by name in |registry|. Empty names resolve to the
+// registry default profile.
+iree_status_t loom_llvmir_target_profile_registry_lookup(
+    const loom_llvmir_target_profile_registry_t* registry,
     iree_string_view_t profile_name,
     const loom_llvmir_target_profile_t** out_profile);
 

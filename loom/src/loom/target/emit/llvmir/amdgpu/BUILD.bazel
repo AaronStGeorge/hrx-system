@@ -27,7 +27,7 @@ loom_cc_library(
     srcs = ["target_env.c"],
     hdrs = ["target_env.h"],
     deps = [
-        "//loom/src/loom/target/emit/llvmir:target_env",
+        "//loom/src/loom/target/emit/llvmir:target_presets",
         "//runtime/src/iree/base",
     ],
 )

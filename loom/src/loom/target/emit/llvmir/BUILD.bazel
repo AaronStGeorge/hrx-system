@@ -102,8 +102,6 @@ loom_cc_library(
     hdrs = ["target_presets.h"],
     deps = [
         ":target_env",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
-        "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//runtime/src/iree/base",
     ],
 )

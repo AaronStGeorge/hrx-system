@@ -28,7 +28,7 @@ loom_cc_library(
     hdrs = ["target_env.h"],
     deps = [
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/emit/llvmir:target_env",
+        "//loom/src/loom/target/emit/llvmir:target_presets",
         "//runtime/src/iree/base",
     ],
 )

@@ -32,7 +32,7 @@ loom_cc_library(
     "target_env.c"
   DEPS
     iree::base
-    loom::src::loom::target::emit::llvmir::target_env
+    loom::src::loom::target::emit::llvmir::target_presets
   PUBLIC
 )
 

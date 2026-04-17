@@ -50,6 +50,17 @@ static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
         },
 };
 
+static const loom_llvmir_target_profile_t* const kAmdgpuTargetProfiles[] = {
+    &kAmdgpuHalProfile,
+};
+
+static const loom_llvmir_target_profile_provider_t
+    kAmdgpuTargetProfileProvider = {
+        .name = IREE_SVL("amdgpu"),
+        .profiles = kAmdgpuTargetProfiles,
+        .profile_count = IREE_ARRAYSIZE(kAmdgpuTargetProfiles),
+};
+
 const loom_llvmir_target_env_t* loom_llvmir_target_env_amdgcn_amd_amdhsa(void) {
   return &kAmdgcnAmdAmdhsaTargetEnv;
 }
@@ -57,6 +68,11 @@ const loom_llvmir_target_env_t* loom_llvmir_target_env_amdgcn_amd_amdhsa(void) {
 const loom_llvmir_target_profile_t* loom_llvmir_target_profile_amdgpu_hal(
     void) {
   return &kAmdgpuHalProfile;
+}
+
+const loom_llvmir_target_profile_provider_t*
+loom_llvmir_amdgpu_target_profile_provider(void) {
+  return &kAmdgpuTargetProfileProvider;
 }
 
 iree_status_t loom_llvmir_target_profile_initialize_amdgpu_hal(

@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_LLVMIR_X86_TARGET_ENV_H_
 #define LOOM_TARGET_LLVMIR_X86_TARGET_ENV_H_
 
-#include "loom/target/emit/llvmir/target_env.h"
+#include "loom/target/emit/llvmir/target_presets.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +29,10 @@ loom_llvmir_target_profile_x86_64_packed_dot_object(void);
 // callers may overwrite profile fields for one lowering invocation.
 iree_status_t loom_llvmir_target_profile_initialize_x86_64_object(
     loom_llvmir_target_profile_t* out_profile);
+
+// Returns the static profile provider for x86 LLVMIR target presets.
+const loom_llvmir_target_profile_provider_t*
+loom_llvmir_x86_target_profile_provider(void);
 
 #ifdef __cplusplus
 }

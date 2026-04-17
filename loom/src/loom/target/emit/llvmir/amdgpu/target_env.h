@@ -9,7 +9,7 @@
 #ifndef LOOM_TARGET_LLVMIR_AMDGPU_TARGET_ENV_H_
 #define LOOM_TARGET_LLVMIR_AMDGPU_TARGET_ENV_H_
 
-#include "loom/target/emit/llvmir/target_env.h"
+#include "loom/target/emit/llvmir/target_presets.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,6 +44,10 @@ iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
 iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
     loom_llvmir_function_t* function,
     const loom_llvmir_target_profile_t* profile);
+
+// Returns the static profile provider for AMDGPU LLVMIR target presets.
+const loom_llvmir_target_profile_provider_t*
+loom_llvmir_amdgpu_target_profile_provider(void);
 
 #ifdef __cplusplus
 }

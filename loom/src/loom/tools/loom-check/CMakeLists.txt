@@ -53,10 +53,12 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
     loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::lower
     loom::src::loom::target::emit::llvmir::target_env
     loom::src::loom::target::emit::llvmir::target_presets
+    loom::src::loom::target::emit::llvmir::x86::target_env
     loom::src::loom::testing::diff
     loom::src::loom::transforms::branch_fusion
     loom::src::loom::transforms::branch_sink

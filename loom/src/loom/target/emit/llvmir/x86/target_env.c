@@ -49,6 +49,17 @@ static const loom_llvmir_target_profile_t kX86_64PackedDotObjectProfile = {
                                    LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8,
 };
 
+static const loom_llvmir_target_profile_t* const kX86TargetProfiles[] = {
+    &kX86_64ObjectProfile,
+    &kX86_64PackedDotObjectProfile,
+};
+
+static const loom_llvmir_target_profile_provider_t kX86TargetProfileProvider = {
+    .name = IREE_SVL("x86"),
+    .profiles = kX86TargetProfiles,
+    .profile_count = IREE_ARRAYSIZE(kX86TargetProfiles),
+};
+
 const loom_llvmir_target_env_t* loom_llvmir_target_env_x86_64_unknown_linux_gnu(
     void) {
   return &kX86_64UnknownLinuxGnuTargetEnv;
@@ -62,6 +73,11 @@ const loom_llvmir_target_profile_t* loom_llvmir_target_profile_x86_64_object(
 const loom_llvmir_target_profile_t*
 loom_llvmir_target_profile_x86_64_packed_dot_object(void) {
   return &kX86_64PackedDotObjectProfile;
+}
+
+const loom_llvmir_target_profile_provider_t*
+loom_llvmir_x86_target_profile_provider(void) {
+  return &kX86TargetProfileProvider;
 }
 
 iree_status_t loom_llvmir_target_profile_initialize_x86_64_object(
