@@ -380,7 +380,7 @@ static iree_host_size_t loom_cse_total_block_count(const loom_op_t* op) {
 // For single-block regions (the common case), pushes one frame with
 // a child scope whose parent is |parent_scope|.
 //
-// For multi-block regions, uses entry block dominance: block 0
+// For structured multi-block regions, uses entry block dominance: block 0
 // dominates all other blocks in structured control flow. The entry
 // block's scope serves as the parent for all sibling blocks:
 //   - bb0 gets entry_scope (parent = parent_scope).
@@ -388,6 +388,11 @@ static iree_host_size_t loom_cse_total_block_count(const loom_op_t* op) {
 //   - Frames are pushed in reverse order so bb0 is on top (processed
 //     first). When bb0 finishes, entry_scope has its CSE entries.
 //     Subsequent blocks can see them through their parent pointer.
+//
+// CFG regions are intentionally more conservative: each block gets a fresh
+// scope parented by |parent_scope|. CSE within CFG regions can become
+// dominance-aware later, but shared CSE must not infer cross-block visibility
+// from block table order.
 static iree_status_t loom_cse_push_region_frames(
     loom_cse_stack_t* stack, iree_arena_allocator_t* pass_arena,
     iree_arena_allocator_t* scope_arena, const loom_op_t* op,
@@ -405,6 +410,14 @@ static iree_status_t loom_cse_push_region_frames(
       IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
                                                    entry_block, &child_scope));
       loom_cse_stack_push(stack, entry_block, child_scope);
+    } else if (iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
+      for (int32_t b = (int32_t)region->block_count - 1; b >= 0; --b) {
+        loom_block_t* block = loom_region_block(region, (uint16_t)b);
+        loom_cse_scope_t* block_scope = NULL;
+        IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
+                                                     block, &block_scope));
+        loom_cse_stack_push(stack, block, block_scope);
+      }
     } else {
       // Multi-block region: entry block dominates all siblings.
       loom_block_t* entry_block = loom_region_entry_block(region);

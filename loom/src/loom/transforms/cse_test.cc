@@ -648,6 +648,46 @@ TEST_F(CSETest, CrossScopeCSEIntoNestedRegion) {
   EXPECT_EQ(count_all_live_ops(body_), 2);
 }
 
+TEST_F(CSETest, NestedCFGRegionDoesNotAssumeEntryScopeDominatesBlocks) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), i32, &arg));
+
+  loom_op_t* map_op = NULL;
+  IREE_ASSERT_OK(loom_test_map_build(&builder_, &arg, 1, i32, NULL, 0,
+                                     LOOM_LOCATION_UNKNOWN, &map_op));
+
+  loom_region_t* body = loom_test_map_body(map_op);
+  body->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_block_t* exit_block = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module_, body, &exit_block));
+
+  loom_builder_ip_t saved = loom_builder_enter_region(&builder_, map_op, body);
+  loom_op_t* entry_const = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(42), i32,
+                                          LOOM_LOCATION_UNKNOWN, &entry_const));
+  loom_op_t* branch = NULL;
+  IREE_ASSERT_OK(loom_test_br_build(&builder_, exit_block,
+                                    LOOM_LOCATION_UNKNOWN, &branch));
+
+  loom_builder_set_block(&builder_, exit_block);
+  loom_op_t* exit_const = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(42), i32,
+                                          LOOM_LOCATION_UNKNOWN, &exit_const));
+  loom_value_id_t exit_value = loom_test_constant_result(exit_const);
+  loom_op_t* use = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, &exit_value, 1,
+                                     LOOM_LOCATION_UNKNOWN, &use));
+  loom_builder_restore(&builder_, saved);
+
+  int before = count_all_live_ops(body_);
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_EQ(count_all_live_ops(body_), before);
+  EXPECT_EQ(loom_test_use_values(use).values[0], exit_value);
+}
+
 TEST_F(CSETest, IsolatedRegionBlocksCrossScope) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 

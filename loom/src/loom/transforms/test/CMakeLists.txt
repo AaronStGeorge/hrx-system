@@ -34,6 +34,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "cfg_compatibility"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/cfg_compatibility.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "cfg_simplify"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/cfg_simplify.loom-test"
