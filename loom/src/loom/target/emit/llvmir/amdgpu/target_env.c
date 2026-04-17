@@ -80,6 +80,8 @@ static const loom_target_bundle_t kAmdgpuHalBundle = {
     .config = &kAmdgpuHalConfig,
 };
 
+// This built-in profile is a fixture/default provider convenience. Production
+// lowering should prefer derived profiles from the generic target bundle above.
 static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
     .name = IREE_SVL("amdgpu-hal"),
     .target_env = &kAmdgcnAmdAmdhsaTargetEnv,

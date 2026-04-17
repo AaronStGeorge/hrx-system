@@ -48,6 +48,7 @@ loom_target_config_t TestConfig() {
   loom_target_config_t config = {};
   config.name = IREE_SVL("packed-dot");
   config.contract_set_key = IREE_SVL("x86.packed_dot.avx2");
+  config.contract_feature_bits = UINT64_C(0x12);
   return config;
 }
 
@@ -78,12 +79,12 @@ TEST(TargetRecordsTest, FingerprintsAreStable) {
   loom_target_config_t config = TestConfig();
   uint64_t config_fingerprint = 0;
   IREE_ASSERT_OK(loom_target_config_fingerprint(&config, &config_fingerprint));
-  EXPECT_EQ(config_fingerprint, UINT64_C(11122253220825331316));
+  EXPECT_EQ(config_fingerprint, UINT64_C(10381506004323876646));
 
   loom_target_bundle_t bundle = TestBundle(&snapshot, &export_plan, &config);
   uint64_t bundle_fingerprint = 0;
   IREE_ASSERT_OK(loom_target_bundle_fingerprint(&bundle, &bundle_fingerprint));
-  EXPECT_EQ(bundle_fingerprint, UINT64_C(4044221851011246781));
+  EXPECT_EQ(bundle_fingerprint, UINT64_C(9942974468548367790));
 }
 
 TEST(TargetRecordsTest, FingerprintsIncludeConfigPolicy) {
@@ -92,6 +93,7 @@ TEST(TargetRecordsTest, FingerprintsIncludeConfigPolicy) {
   loom_target_config_t config = TestConfig();
   loom_target_config_t other_config = config;
   other_config.contract_set_key = IREE_SVL("x86.packed_dot.avx512");
+  other_config.contract_feature_bits = UINT64_C(0x34);
 
   uint64_t config_fingerprint = 0;
   IREE_ASSERT_OK(loom_target_config_fingerprint(&config, &config_fingerprint));

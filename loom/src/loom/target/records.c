@@ -135,6 +135,7 @@ iree_status_t loom_target_config_fingerprint(const loom_target_config_t* config,
   hash = loom_target_fingerprint_string(hash, IREE_SV("loom.target.config.v0"));
   hash = loom_target_fingerprint_string(hash, config->name);
   hash = loom_target_fingerprint_string(hash, config->contract_set_key);
+  hash = loom_target_fingerprint_u64(hash, config->contract_feature_bits);
   *out_fingerprint = hash;
   return iree_ok_status();
 }

@@ -89,6 +89,67 @@ void ExpectBundleFingerprint(const loom_target_bundle_t* bundle) {
   EXPECT_NE(fingerprint, 0u);
 }
 
+void ExpectDerivedProfileMatchesStatic(
+    const loom_llvmir_target_profile_t* derived_profile,
+    const loom_llvmir_target_profile_t* static_profile) {
+  ASSERT_NE(derived_profile, nullptr);
+  ASSERT_NE(static_profile, nullptr);
+  ASSERT_NE(derived_profile->target_env, nullptr);
+  ASSERT_NE(static_profile->target_env, nullptr);
+  EXPECT_EQ(ToString(derived_profile->name), ToString(static_profile->name));
+  EXPECT_EQ(derived_profile->kind, static_profile->kind);
+  EXPECT_EQ(ToString(derived_profile->target_env->target_triple),
+            ToString(static_profile->target_env->target_triple));
+  EXPECT_EQ(ToString(derived_profile->target_env->data_layout),
+            ToString(static_profile->target_env->data_layout));
+  EXPECT_EQ(derived_profile->target_env->object_format,
+            static_profile->target_env->object_format);
+  EXPECT_EQ(derived_profile->target_env->default_pointer_bitwidth,
+            static_profile->target_env->default_pointer_bitwidth);
+  EXPECT_EQ(derived_profile->target_env->index_bitwidth,
+            static_profile->target_env->index_bitwidth);
+  EXPECT_EQ(derived_profile->target_env->offset_bitwidth,
+            static_profile->target_env->offset_bitwidth);
+  EXPECT_EQ(derived_profile->target_env->address_spaces.generic,
+            static_profile->target_env->address_spaces.generic);
+  EXPECT_EQ(derived_profile->target_env->address_spaces.global,
+            static_profile->target_env->address_spaces.global);
+  EXPECT_EQ(derived_profile->target_env->address_spaces.local,
+            static_profile->target_env->address_spaces.local);
+  EXPECT_EQ(derived_profile->target_env->address_spaces.constant,
+            static_profile->target_env->address_spaces.constant);
+  EXPECT_EQ(derived_profile->target_env->address_spaces.private_memory,
+            static_profile->target_env->address_spaces.private_memory);
+  EXPECT_EQ(derived_profile->target_env->address_spaces.buffer_resource,
+            static_profile->target_env->address_spaces.buffer_resource);
+  EXPECT_EQ(ToString(derived_profile->target_cpu),
+            ToString(static_profile->target_cpu));
+  EXPECT_EQ(ToString(derived_profile->target_features),
+            ToString(static_profile->target_features));
+  EXPECT_EQ(derived_profile->x86_packed_dot_feature_bits,
+            static_profile->x86_packed_dot_feature_bits);
+  EXPECT_EQ(derived_profile->exported_linkage,
+            static_profile->exported_linkage);
+  EXPECT_EQ(derived_profile->kernel_calling_convention,
+            static_profile->kernel_calling_convention);
+  EXPECT_EQ(ToString(derived_profile->required_workgroup_size_metadata_name),
+            ToString(static_profile->required_workgroup_size_metadata_name));
+  EXPECT_EQ(derived_profile->amdgpu_hal.binding_alignment,
+            static_profile->amdgpu_hal.binding_alignment);
+  EXPECT_EQ(derived_profile->amdgpu_hal.required_workgroup_size.x,
+            static_profile->amdgpu_hal.required_workgroup_size.x);
+  EXPECT_EQ(derived_profile->amdgpu_hal.required_workgroup_size.y,
+            static_profile->amdgpu_hal.required_workgroup_size.y);
+  EXPECT_EQ(derived_profile->amdgpu_hal.required_workgroup_size.z,
+            static_profile->amdgpu_hal.required_workgroup_size.z);
+  EXPECT_EQ(derived_profile->amdgpu_hal.flat_workgroup_size_min,
+            static_profile->amdgpu_hal.flat_workgroup_size_min);
+  EXPECT_EQ(derived_profile->amdgpu_hal.flat_workgroup_size_max,
+            static_profile->amdgpu_hal.flat_workgroup_size_max);
+  EXPECT_EQ(derived_profile->amdgpu_hal.buffer_resource_flags,
+            static_profile->amdgpu_hal.buffer_resource_flags);
+}
+
 TEST(LlvmIrTargetEnvTest, X86ObjectProfileNamesObjectAbi) {
   const loom_llvmir_target_profile_t* profile =
       loom_llvmir_target_profile_x86_64_object();
@@ -171,6 +232,28 @@ TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
   EXPECT_NE(object_fingerprint, packed_dot_fingerprint);
 }
 
+TEST(LlvmIrTargetEnvTest, DerivesX86ObjectProfileFromGenericBundle) {
+  loom_llvmir_target_profile_storage_t storage = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+      loom_llvmir_target_bundle_x86_64_object(), &storage));
+  ExpectDerivedProfileMatchesStatic(&storage.profile,
+                                    loom_llvmir_target_profile_x86_64_object());
+
+  loom_llvmir_target_config_t config = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
+      &storage.profile, IREE_SV("derived-x86-source"), &config));
+  EXPECT_EQ(ToString(config.source_name), "derived-x86-source");
+  EXPECT_EQ(ToString(config.target_triple), "x86_64-unknown-linux-gnu");
+}
+
+TEST(LlvmIrTargetEnvTest, DerivesX86PackedDotProfileFromGenericBundle) {
+  loom_llvmir_target_profile_storage_t storage = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+      loom_llvmir_target_bundle_x86_64_packed_dot_object(), &storage));
+  ExpectDerivedProfileMatchesStatic(
+      &storage.profile, loom_llvmir_target_profile_x86_64_packed_dot_object());
+}
+
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   const loom_llvmir_target_profile_t* profile =
       loom_llvmir_target_profile_amdgpu_hal();
@@ -244,6 +327,36 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
   ExpectBundleFingerprint(bundle);
 }
 
+TEST(LlvmIrTargetEnvTest, DerivesAmdgpuHalProfileFromGenericBundle) {
+  loom_llvmir_target_profile_storage_t storage = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+      loom_llvmir_target_bundle_amdgpu_hal(), &storage));
+  ExpectDerivedProfileMatchesStatic(&storage.profile,
+                                    loom_llvmir_target_profile_amdgpu_hal());
+}
+
+TEST(LlvmIrTargetEnvTest, RejectsMalformedDerivedAmdgpuHalProfile) {
+  const loom_target_bundle_t* fixture_bundle =
+      loom_llvmir_target_bundle_amdgpu_hal();
+  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
+  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
+  loom_target_config_t config = *fixture_bundle->config;
+  export_plan.hal_kernel.required_workgroup_size.x = 0;
+
+  loom_target_bundle_t broken_bundle = {};
+  broken_bundle.name = fixture_bundle->name;
+  broken_bundle.snapshot = &snapshot;
+  broken_bundle.export_plan = &export_plan;
+  broken_bundle.config = &config;
+
+  loom_llvmir_target_profile_storage_t storage = {};
+  iree_status_t status =
+      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
+                                                                &storage);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+}
+
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
   const loom_llvmir_target_profile_t* profile = nullptr;
   IREE_ASSERT_OK(LookupRegisteredProfile(IREE_SV(""), &profile));
@@ -290,8 +403,10 @@ TEST(LlvmIrTargetEnvTest, RegistryOnlySeesExplicitProviders) {
 }
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
-  const loom_llvmir_target_profile_t* profile =
-      loom_llvmir_target_profile_amdgpu_hal();
+  loom_llvmir_target_profile_storage_t storage = {};
+  IREE_ASSERT_OK(loom_llvmir_target_profile_storage_initialize_from_bundle(
+      loom_llvmir_target_bundle_amdgpu_hal(), &storage));
+  const loom_llvmir_target_profile_t* profile = &storage.profile;
   loom_llvmir_target_config_t config = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_module_config(
       profile, IREE_SV("kernel-source"), &config));

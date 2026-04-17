@@ -135,6 +135,9 @@ typedef struct loom_target_config_t {
   // Provider-defined target-contract selection key, or empty for default
   // policy.
   iree_string_view_t contract_set_key;
+  // Provider-defined target-contract feature bitset, or zero for default
+  // policy.
+  uint64_t contract_feature_bits;
 } loom_target_config_t;
 
 typedef struct loom_target_bundle_t {

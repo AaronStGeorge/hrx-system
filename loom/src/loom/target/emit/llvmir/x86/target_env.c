@@ -93,6 +93,10 @@ static const loom_target_config_t kX86_64ObjectConfig = {
 static const loom_target_config_t kX86_64PackedDotObjectConfig = {
     .name = IREE_SVL("packed-dot"),
     .contract_set_key = LOOM_LLVMIR_X86_64_PACKED_DOT_CONTRACT_SET,
+    .contract_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 |
+                             LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL |
+                             LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI |
+                             LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8,
 };
 
 static const loom_target_bundle_t kX86_64ObjectBundle = {
@@ -109,6 +113,9 @@ static const loom_target_bundle_t kX86_64PackedDotObjectBundle = {
     .config = &kX86_64PackedDotObjectConfig,
 };
 
+// These built-in profiles are fixture/default provider conveniences. Production
+// lowering should prefer derived profiles from the generic target bundles
+// above.
 static const loom_llvmir_target_profile_t kX86_64ObjectProfile = {
     .name = IREE_SVL("x86_64-object"),
     .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
