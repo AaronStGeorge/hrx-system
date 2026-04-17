@@ -295,6 +295,174 @@ static iree_status_t loom_cfg_simplify_remove_unreachable_blocks(
 }
 
 //===----------------------------------------------------------------------===//
+// Path-sensitive branch facts
+//===----------------------------------------------------------------------===//
+
+typedef struct loom_cfg_simplify_block_entry_bool_fact_t {
+  // SSA condition proven by every reachable predecessor edge into the block.
+  loom_value_id_t condition;
+  // Boolean value proven for condition at block entry.
+  bool value;
+  // True when condition and value contain a usable block-entry fact.
+  bool known;
+} loom_cfg_simplify_block_entry_bool_fact_t;
+
+static bool loom_cfg_simplify_edge_implies_bool(const loom_block_t* target,
+                                                loom_op_t* terminator,
+                                                loom_value_id_t* out_condition,
+                                                bool* out_value) {
+  if (!terminator || !loom_cfg_cond_br_isa(terminator)) {
+    return false;
+  }
+
+  bool is_true_edge = loom_cfg_cond_br_true_dest(terminator) == target;
+  bool is_false_edge = loom_cfg_cond_br_false_dest(terminator) == target;
+  if (is_true_edge == is_false_edge) return false;
+  *out_condition = loom_cfg_cond_br_condition(terminator);
+  *out_value = is_true_edge;
+  return true;
+}
+
+static bool loom_cfg_simplify_compute_block_entry_bool_fact(
+    const loom_cfg_graph_t* graph, uint16_t block_index,
+    loom_cfg_simplify_block_entry_bool_fact_t* fact) {
+  *fact = (loom_cfg_simplify_block_entry_bool_fact_t){
+      .condition = LOOM_VALUE_ID_INVALID,
+  };
+  // The region entry also has an implicit caller edge with no CFG fact.
+  if (block_index == 0 ||
+      !loom_cfg_graph_block_is_reachable(graph, block_index)) {
+    return false;
+  }
+
+  loom_block_t* block = (loom_block_t*)graph->blocks[block_index].block;
+  if (!block) return false;
+
+  loom_cfg_block_index_span_t predecessors =
+      loom_cfg_graph_predecessors(graph, block_index);
+  for (iree_host_size_t i = 0; i < predecessors.count; ++i) {
+    uint16_t predecessor_index = predecessors.values[i];
+    if (!loom_cfg_graph_block_is_reachable(graph, predecessor_index)) continue;
+    loom_block_t* predecessor =
+        (loom_block_t*)graph->blocks[predecessor_index].block;
+    if (!predecessor) return false;
+
+    loom_value_id_t edge_condition = LOOM_VALUE_ID_INVALID;
+    bool edge_value = false;
+    if (!loom_cfg_simplify_edge_implies_bool(block, predecessor->last_op,
+                                             &edge_condition, &edge_value)) {
+      return false;
+    }
+    if (!fact->known) {
+      fact->known = true;
+      fact->condition = edge_condition;
+      fact->value = edge_value;
+      continue;
+    }
+    if (fact->condition != edge_condition || fact->value != edge_value) {
+      *fact = (loom_cfg_simplify_block_entry_bool_fact_t){
+          .condition = LOOM_VALUE_ID_INVALID,
+      };
+      return false;
+    }
+  }
+
+  return fact->known;
+}
+
+static iree_status_t loom_cfg_simplify_compute_block_entry_bool_facts(
+    loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    loom_cfg_simplify_block_entry_bool_fact_t** out_facts) {
+  *out_facts = NULL;
+  if (graph->malformed || graph->block_count == 0) return iree_ok_status();
+
+  loom_cfg_simplify_block_entry_bool_fact_t* facts = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(state->analysis_arena, graph->block_count,
+                                sizeof(*facts), (void**)&facts));
+  for (uint16_t block_index = 0; block_index < graph->block_count;
+       ++block_index) {
+    (void)loom_cfg_simplify_compute_block_entry_bool_fact(graph, block_index,
+                                                          &facts[block_index]);
+  }
+  *out_facts = facts;
+  return iree_ok_status();
+}
+
+static bool loom_cfg_simplify_dominating_exact_bool(
+    const loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    const loom_cfg_simplify_block_entry_bool_fact_t* facts, loom_op_t* op,
+    loom_value_id_t condition, bool* out_value) {
+  if (!facts) return false;
+  bool found_fact = false;
+  bool dominating_value = false;
+  for (uint16_t block_index = 1; block_index < graph->block_count;
+       ++block_index) {
+    const loom_cfg_simplify_block_entry_bool_fact_t* fact = &facts[block_index];
+    if (!fact->known || fact->condition != condition) continue;
+    if (!loom_cfg_graph_block_is_reachable(graph, block_index)) continue;
+    loom_block_t* block = (loom_block_t*)graph->blocks[block_index].block;
+    if (!block || !block->first_op) continue;
+    if (!loom_dominates_op(state->dominance, block->first_op, op)) continue;
+
+    if (!found_fact) {
+      found_fact = true;
+      dominating_value = fact->value;
+      continue;
+    }
+    if (dominating_value != fact->value) return false;
+  }
+
+  if (!found_fact) return false;
+  *out_value = dominating_value;
+  return true;
+}
+
+static iree_status_t loom_cfg_simplify_fold_path_sensitive_cond_br(
+    loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    const loom_cfg_simplify_block_entry_bool_fact_t* facts, loom_op_t* op,
+    bool* out_changed) {
+  if (!loom_cfg_cond_br_isa(op)) return iree_ok_status();
+
+  bool condition = false;
+  if (!loom_cfg_simplify_dominating_exact_bool(state, graph, facts, op,
+                                               loom_cfg_cond_br_condition(op),
+                                               &condition)) {
+    return iree_ok_status();
+  }
+
+  loom_block_t* chosen_dest = condition ? loom_cfg_cond_br_true_dest(op)
+                                        : loom_cfg_cond_br_false_dest(op);
+  if (!chosen_dest || chosen_dest->arg_count != 0) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(
+      loom_cfg_simplify_replace_cond_br_with_br(state, op, chosen_dest));
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_cfg_simplify_fold_path_sensitive_branches(
+    loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    const loom_cfg_simplify_block_entry_bool_fact_t* facts, bool* out_changed) {
+  if (graph->malformed) return iree_ok_status();
+  for (uint16_t block_index = 1; block_index < graph->block_count;
+       ++block_index) {
+    if (!loom_cfg_graph_block_is_reachable(graph, block_index)) continue;
+    loom_block_t* block = (loom_block_t*)graph->blocks[block_index].block;
+    if (!block) continue;
+
+    loom_op_t* op = block->first_op;
+    while (op) {
+      loom_op_t* next_op = op->next_op;
+      IREE_RETURN_IF_ERROR(loom_cfg_simplify_fold_path_sensitive_cond_br(
+          state, graph, facts, op, out_changed));
+      if (*out_changed) return iree_ok_status();
+      op = next_op;
+    }
+  }
+  return iree_ok_status();
+}
+
+//===----------------------------------------------------------------------===//
 // Trivial block forwarding
 //===----------------------------------------------------------------------===//
 
@@ -1062,6 +1230,12 @@ static iree_status_t loom_cfg_simplify_process_cfg_region(
       loom_cfg_graph_build(region, state->analysis_arena, &graph));
   IREE_RETURN_IF_ERROR(
       loom_cfg_simplify_remove_unreachable_blocks(state, &graph, out_changed));
+  if (*out_changed) return iree_ok_status();
+  loom_cfg_simplify_block_entry_bool_fact_t* path_facts = NULL;
+  IREE_RETURN_IF_ERROR(loom_cfg_simplify_compute_block_entry_bool_facts(
+      state, &graph, &path_facts));
+  IREE_RETURN_IF_ERROR(loom_cfg_simplify_fold_path_sensitive_branches(
+      state, &graph, path_facts, out_changed));
   if (*out_changed) return iree_ok_status();
   IREE_RETURN_IF_ERROR(
       loom_cfg_simplify_forward_trivial_blocks(state, &graph, out_changed));
