@@ -259,6 +259,23 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileCopyControlsKernelDecorations) {
       << text;
 }
 
+TEST(LlvmIrTargetEnvTest, BuildsLlcArgumentsFromTargetProfile) {
+  loom_llvmir_target_profile_llc_arguments_t arguments = {};
+  const loom_llvmir_target_profile_t* profile =
+      loom_llvmir_target_profile_x86_64_object();
+  IREE_ASSERT_OK(loom_llvmir_target_profile_llc_arguments(profile, &arguments));
+  ASSERT_EQ(arguments.count, 1u);
+  EXPECT_EQ(ToString(arguments.values[0]), "-mtriple=x86_64-unknown-linux-gnu");
+
+  IREE_ASSERT_OK(loom_llvmir_target_profile_lookup(
+      IREE_SV("x86_64-packed-dot-object"), &profile));
+  IREE_ASSERT_OK(loom_llvmir_target_profile_llc_arguments(profile, &arguments));
+  ASSERT_EQ(arguments.count, 2u);
+  EXPECT_EQ(ToString(arguments.values[0]), "-mtriple=x86_64-unknown-linux-gnu");
+  EXPECT_EQ(ToString(arguments.values[1]),
+            "-mattr=+avx512bf16,+avx512vl,+avxvnni,+avxvnniint8");
+}
+
 TEST(LlvmIrTargetEnvTest, RejectsInvalidAmdgpuHalProfileValues) {
   loom_llvmir_target_profile_t profile = {};
   IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));

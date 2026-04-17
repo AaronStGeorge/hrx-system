@@ -55,3 +55,61 @@ entry:
 declare <8 x float> @llvm.x86.avx512bf16.dpbf16ps.256(<8 x float>, <16 x bfloat>, <16 x bfloat>) #0
 
 attributes #0 = { nocallback nofree nosync nounwind willreturn memory(none) }
+
+// ====
+// RUN: emit llvmir-object x86_64-packed-dot-object
+// REQUIRES: llc, llc-x86
+
+// Packed-dot object emission proves llc receives the profile's feature flags.
+func.def @object_dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  func.return %dot : vector<8xi32>
+}
+
+// ----
+object emitted: x86_64-packed-dot-object
+
+// ====
+// RUN: emit llvmir-assembly-mnemonics x86_64-packed-dot-object
+// REQUIRES: llc, llc-x86
+
+// BF16 packed-dot lowering selects the AVX512 BF16 dot instruction.
+func.def @asm_dot2_bf16(%lhs: vector<16xbf16>, %rhs: vector<16xbf16>, %acc: vector<8xf32>) -> (vector<8xf32>) {
+  %dot = vector.dot2f %lhs, %rhs, %acc : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  func.return %dot : vector<8xf32>
+}
+
+// ----
+vdpbf16ps
+vmovaps
+retq
+
+// ====
+// RUN: emit llvmir-assembly-mnemonics x86_64-packed-dot-object
+// REQUIRES: llc, llc-x86
+
+// Unsigned-by-signed i8 packed-dot lowering selects the AVX VNNI instruction.
+func.def @asm_dot4_u8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  %dot = vector.dot4i<u8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  func.return %dot : vector<8xi32>
+}
+
+// ----
+vpdpbusd
+vmovdqa
+retq
+
+// ====
+// RUN: emit llvmir-assembly-mnemonics x86_64-packed-dot-object
+// REQUIRES: llc, llc-x86
+
+// Assembly mnemonic emission gives exact instruction-selection evidence.
+func.def @asm_dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  func.return %dot : vector<8xi32>
+}
+
+// ----
+vpdpbssd
+vmovaps
+retq

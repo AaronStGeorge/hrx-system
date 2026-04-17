@@ -35,6 +35,8 @@ typedef enum loom_llvmir_target_profile_kind_e {
 
 enum {
   LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT = 5,
+  LOOM_LLVMIR_TARGET_PROFILE_MAX_LLC_ARGUMENT_COUNT = 3,
+  LOOM_LLVMIR_TARGET_PROFILE_LLC_ARGUMENT_STORAGE_LENGTH = 512,
 };
 
 typedef struct loom_llvmir_target_address_spaces_t {
@@ -117,6 +119,16 @@ typedef struct loom_llvmir_target_profile_t {
   loom_llvmir_amdgpu_hal_abi_t amdgpu_hal;
 } loom_llvmir_target_profile_t;
 
+typedef struct loom_llvmir_target_profile_llc_arguments_t {
+  // Backing storage for argv-style llc argument strings.
+  char storage[LOOM_LLVMIR_TARGET_PROFILE_MAX_LLC_ARGUMENT_COUNT]
+              [LOOM_LLVMIR_TARGET_PROFILE_LLC_ARGUMENT_STORAGE_LENGTH];
+  // Argument views pointing into storage.
+  iree_string_view_t values[LOOM_LLVMIR_TARGET_PROFILE_MAX_LLC_ARGUMENT_COUNT];
+  // Number of valid entries in values.
+  iree_host_size_t count;
+} loom_llvmir_target_profile_llc_arguments_t;
+
 const loom_llvmir_target_env_t* loom_llvmir_target_env_x86_64_unknown_linux_gnu(
     void);
 
@@ -152,6 +164,12 @@ iree_status_t loom_llvmir_target_env_module_config(
 iree_status_t loom_llvmir_target_profile_module_config(
     const loom_llvmir_target_profile_t* profile, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config);
+
+// Builds argv-style llc target arguments for |profile|. The returned views
+// point into |out_arguments| and remain valid until it is overwritten.
+iree_status_t loom_llvmir_target_profile_llc_arguments(
+    const loom_llvmir_target_profile_t* profile,
+    loom_llvmir_target_profile_llc_arguments_t* out_arguments);
 
 // Writes the ABI-required parameter attrs for a HAL kernel binding pointer.
 // The caller provides temporary storage; loom_llvmir_function_add_parameter()

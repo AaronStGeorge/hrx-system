@@ -21,6 +21,7 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LLVMIR_BODY_TEXT = 1,
   LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY = 2,
   LOOM_CHECK_EMIT_LLVMIR_OBJECT = 3,
+  LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS = 4,
 } loom_check_emit_format_t;
 
 typedef struct loom_check_emit_request_t {
@@ -60,6 +61,11 @@ static iree_status_t loom_check_emit_parse_request(
     out_request->format = LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY;
   } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-object"))) {
     out_request->format = LOOM_CHECK_EMIT_LLVMIR_OBJECT;
+  } else if (iree_string_view_equal(target_name,
+                                    IREE_SV("llvmir-assembly-mnemonics")) ||
+             iree_string_view_equal(target_name,
+                                    IREE_SV("llvmir-asm-mnemonics"))) {
+    out_request->format = LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS;
   } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown emit target '%.*s'", (int)target_name.size,
@@ -378,9 +384,13 @@ static iree_status_t loom_check_emit_write_llvmir_object(
   if (iree_status_is_ok(status)) {
     loom_llvmir_toolchain_t toolchain;
     loom_llvmir_toolchain_initialize_from_environment(&toolchain);
-    status = loom_llvmir_tool_compile_object(
-        &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
-        NULL, 0, allocator, &object);
+    loom_llvmir_target_profile_llc_arguments_t llc_arguments = {0};
+    status = loom_llvmir_target_profile_llc_arguments(profile, &llc_arguments);
+    if (iree_status_is_ok(status)) {
+      status = loom_llvmir_tool_compile_object(
+          &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
+          llc_arguments.values, llc_arguments.count, allocator, &object);
+    }
   }
   if (iree_status_is_ok(status) && object.length == 0) {
     status =
@@ -393,6 +403,99 @@ static iree_status_t loom_check_emit_write_llvmir_object(
   }
 
   loom_llvmir_tool_output_deinitialize(&object, allocator);
+  loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
+  return status;
+}
+
+static bool loom_check_emit_assembly_line_is_label(iree_string_view_t line) {
+  return line.size > 0 && line.data[line.size - 1] == ':';
+}
+
+static iree_string_view_t loom_check_emit_strip_assembly_comment(
+    iree_string_view_t line) {
+  iree_host_size_t hash_position = iree_string_view_find(line, IREE_SV("#"), 0);
+  iree_host_size_t semicolon_position =
+      iree_string_view_find(line, IREE_SV(";"), 0);
+  iree_host_size_t comment_position = IREE_STRING_VIEW_NPOS;
+  if (hash_position != IREE_STRING_VIEW_NPOS) {
+    comment_position = hash_position;
+  }
+  if (semicolon_position != IREE_STRING_VIEW_NPOS &&
+      (comment_position == IREE_STRING_VIEW_NPOS ||
+       semicolon_position < comment_position)) {
+    comment_position = semicolon_position;
+  }
+  if (comment_position == IREE_STRING_VIEW_NPOS) {
+    return line;
+  }
+  return iree_string_view_substr(line, 0, comment_position);
+}
+
+static iree_status_t loom_check_emit_write_assembly_mnemonics(
+    iree_string_view_t assembly, iree_string_builder_t* output) {
+  iree_string_view_t remaining = assembly;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t line = loom_check_emit_strip_assembly_comment(
+        loom_check_emit_consume_line(&remaining));
+    line = iree_string_view_trim(line);
+    if (iree_string_view_is_empty(line) ||
+        iree_string_view_starts_with_char(line, '.') ||
+        iree_string_view_starts_with_char(line, '#') ||
+        iree_string_view_starts_with_char(line, ';') ||
+        loom_check_emit_assembly_line_is_label(line)) {
+      continue;
+    }
+    while (iree_string_view_starts_with_char(line, '{')) {
+      iree_host_size_t closing_brace =
+          iree_string_view_find(line, IREE_SV("}"), 0);
+      if (closing_brace == IREE_STRING_VIEW_NPOS) {
+        break;
+      }
+      line = iree_string_view_trim(
+          iree_string_view_substr(line, closing_brace + 1, IREE_HOST_SIZE_MAX));
+    }
+    if (iree_string_view_is_empty(line)) {
+      continue;
+    }
+    iree_host_size_t mnemonic_length = 0;
+    while (mnemonic_length < line.size && line.data[mnemonic_length] != ' ' &&
+           line.data[mnemonic_length] != '\t') {
+      ++mnemonic_length;
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+        output, iree_string_view_substr(line, 0, mnemonic_length)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "\n"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_write_llvmir_assembly_mnemonics(
+    const loom_llvmir_module_t* lowered_module,
+    const loom_llvmir_target_profile_t* profile, iree_allocator_t allocator,
+    loom_check_result_t* result) {
+  loom_check_emit_byte_buffer_t bitcode = {0};
+  iree_status_t status = loom_check_emit_write_llvmir_bitcode_bytes(
+      lowered_module, allocator, &bitcode);
+
+  loom_llvmir_tool_output_t assembly = {0};
+  if (iree_status_is_ok(status)) {
+    loom_llvmir_toolchain_t toolchain;
+    loom_llvmir_toolchain_initialize_from_environment(&toolchain);
+    loom_llvmir_target_profile_llc_arguments_t llc_arguments = {0};
+    status = loom_llvmir_target_profile_llc_arguments(profile, &llc_arguments);
+    if (iree_status_is_ok(status)) {
+      status = loom_llvmir_tool_compile_assembly(
+          &toolchain, iree_make_const_byte_span(bitcode.data, bitcode.length),
+          llc_arguments.values, llc_arguments.count, allocator, &assembly);
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_check_emit_write_assembly_mnemonics(
+        iree_make_string_view(assembly.data, assembly.length),
+        &result->actual_output);
+  }
+
+  loom_llvmir_tool_output_deinitialize(&assembly, allocator);
   loom_check_emit_byte_buffer_deinitialize(&bitcode, allocator);
   return status;
 }
@@ -488,6 +591,10 @@ iree_status_t loom_check_execute_emit(
         break;
       case LOOM_CHECK_EMIT_LLVMIR_OBJECT:
         status = loom_check_emit_write_llvmir_object(
+            lowered_module, request.profile, allocator, result);
+        break;
+      case LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS:
+        status = loom_check_emit_write_llvmir_assembly_mnemonics(
             lowered_module, request.profile, allocator, result);
         break;
     }

@@ -926,6 +926,25 @@ TEST_F(ExecuteTest, EmitObjectRequiresLlcBackendDeclaration) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitAssemblyMnemonicsRequiresLlcBackendDeclaration) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: emit llvmir-assembly-mnemonics x86_64-packed-dot-object\n"
+      "// REQUIRES: llc\n"
+      "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n"
+      "// ----\n"
+      "retq\n",
+      &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("llc-x86"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("REQUIRES"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, EmitModeReportsLoweringFailure) {
   loom_check_result_t result;
   IREE_ASSERT_OK(

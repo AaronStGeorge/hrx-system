@@ -194,7 +194,11 @@ static iree_status_t loom_check_require_emit_tool_declarations(
   if (iree_string_view_equal(target_name, IREE_SV("llvmir-bitcode"))) {
     IREE_RETURN_IF_ERROR(loom_check_require_declared_requirement(
         test_case, IREE_SV("llvm-dis"), result, out_continue_execution));
-  } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-object"))) {
+  } else if (iree_string_view_equal(target_name, IREE_SV("llvmir-object")) ||
+             iree_string_view_equal(target_name,
+                                    IREE_SV("llvmir-assembly-mnemonics")) ||
+             iree_string_view_equal(target_name,
+                                    IREE_SV("llvmir-asm-mnemonics"))) {
     IREE_RETURN_IF_ERROR(loom_check_require_declared_requirement(
         test_case, IREE_SV("llc"), result, out_continue_execution));
     if (!*out_continue_execution) {

@@ -67,6 +67,7 @@ static const loom_llvmir_target_profile_t kX86_64PackedDotObjectProfile = {
     .name = IREE_SVL("x86_64-packed-dot-object"),
     .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
     .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
+    .target_features = IREE_SVL("+avx512bf16,+avx512vl,+avxvnni,+avxvnniint8"),
     .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
     .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
     .cpu_packed_dot_feature_bits =
@@ -196,6 +197,56 @@ iree_status_t loom_llvmir_target_profile_module_config(
   }
   return loom_llvmir_target_env_module_config(profile->target_env, source_name,
                                               out_config);
+}
+
+static iree_status_t loom_llvmir_target_profile_append_llc_argument(
+    iree_string_view_t prefix, iree_string_view_t value,
+    loom_llvmir_target_profile_llc_arguments_t* arguments) {
+  if (iree_string_view_is_empty(value)) {
+    return iree_ok_status();
+  }
+  if (arguments->count >= IREE_ARRAYSIZE(arguments->values)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "LLVM llc argument storage is too small");
+  }
+  char* storage = arguments->storage[arguments->count];
+  iree_host_size_t storage_length =
+      IREE_ARRAYSIZE(arguments->storage[arguments->count]);
+  int length = snprintf(storage, storage_length, "%.*s%.*s", (int)prefix.size,
+                        prefix.data, (int)value.size, value.data);
+  if (length <= 0 || (iree_host_size_t)length >= storage_length) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "LLVM llc argument exceeds storage");
+  }
+  arguments->values[arguments->count] =
+      iree_make_string_view(storage, (iree_host_size_t)length);
+  ++arguments->count;
+  return iree_ok_status();
+}
+
+iree_status_t loom_llvmir_target_profile_llc_arguments(
+    const loom_llvmir_target_profile_t* profile,
+    loom_llvmir_target_profile_llc_arguments_t* out_arguments) {
+  if (out_arguments == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM llc argument output is required");
+  }
+  *out_arguments = (loom_llvmir_target_profile_llc_arguments_t){0};
+  if (profile == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM target profile is required");
+  }
+  if (profile->target_env == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM target environment is required");
+  }
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_append_llc_argument(
+      IREE_SV("-mtriple="), profile->target_env->target_triple, out_arguments));
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_append_llc_argument(
+      IREE_SV("-mcpu="), profile->target_cpu, out_arguments));
+  IREE_RETURN_IF_ERROR(loom_llvmir_target_profile_append_llc_argument(
+      IREE_SV("-mattr="), profile->target_features, out_arguments));
+  return iree_ok_status();
 }
 
 iree_status_t loom_llvmir_target_profile_kernel_binding_attrs(
