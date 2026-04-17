@@ -62,6 +62,31 @@ func.def @deduplicates_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
 
 // ====
 
+func.def @merges_duplicate_return_blocks(%cond: i1, %value: i32) -> (i32) {
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  func.return %value : i32
+^else:
+  func.return %value : i32
+}
+
+// ----
+func.def @merges_duplicate_return_blocks(%cond: i1, %value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+// ====
+
+func.def @preserves_distinct_return_blocks(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  func.return %a : i32
+^else:
+  func.return %b : i32
+}
+
+// ====
+
 func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
   cfg.br ^join(%layout, %view : encoding<layout>, view<4xf32, %layout>)
 ^join(%arg_layout : encoding<layout>, %arg_view : view<4xf32, %arg_layout>):
