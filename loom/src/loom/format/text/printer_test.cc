@@ -628,9 +628,9 @@ TEST_F(PrintOpTest, SuccessorReferenceSynthesizesBlockLabels) {
       PrintOpWithFields(func_op, LOOM_TEXT_PRINT_DEFAULT, &fields);
   EXPECT_EQ(output,
             "test.func @cfg() {\n"
-            "  ^_bb0:\n"
+            "^_bb0:\n"
             "  test.br ^_bb1\n"
-            "  ^_bb1:\n"
+            "^_bb1:\n"
             "}\n");
 
   const CapturedPrintField* successor_field =
@@ -1707,7 +1707,7 @@ TEST_F(PrintOpTest, BlockLabel) {
   std::string output = print_op(op, LOOM_TEXT_PRINT_DEFAULT);
   EXPECT_EQ(output,
             "test.branch %0 {\n"
-            "  ^next(%1 : f32):\n"
+            "^next(%1 : f32):\n"
             "} else {\n"
             "}\n");
 }

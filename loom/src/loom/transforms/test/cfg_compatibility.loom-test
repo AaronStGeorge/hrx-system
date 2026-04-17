@@ -38,12 +38,12 @@ func.def @structured_region_stays_structured(%cond: i1, %input: i32) -> (i32) {
 
 func.def @cfg_region_stays_cfg(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %cond, ^then, ^else : i1
-  ^then:
+^then:
   %sum = test.addi %a, %b : i32
   cfg.br ^join(%sum : i32)
-  ^else:
+^else:
   cfg.br ^join(%a : i32)
-  ^join(%result : i32):
+^join(%result : i32):
   func.return %result : i32
 }
 
@@ -53,10 +53,10 @@ func.def @cfg_region_stays_cfg(%cond: i1, %a: i32, %b: i32) -> (i32) {
 
 func.def @scf_shape_passes_ignore_cfg_blocks(%cond: i1) {
   cfg.cond_br %cond, ^left, ^right : i1
-  ^left:
+^left:
   cfg.br ^exit
-  ^right:
+^right:
   cfg.br ^exit
-  ^exit:
+^exit:
   func.return
 }

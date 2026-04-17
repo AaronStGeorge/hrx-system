@@ -104,11 +104,12 @@ static void loom_print_report_field(loom_print_context_t* ctx,
 
 // Writes indentation spaces directly to the stream.
 static const char SPACES[] = "                                ";
-static iree_status_t loom_print_indent(loom_print_context_t* ctx) {
+static iree_status_t loom_print_indent_levels(loom_print_context_t* ctx,
+                                              uint16_t indent) {
   if (!iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_INDENT)) {
     return iree_ok_status();
   }
-  iree_host_size_t count = (iree_host_size_t)ctx->indent * 2;
+  iree_host_size_t count = (iree_host_size_t)indent * 2;
   while (count > 0) {
     iree_host_size_t chunk =
         count < sizeof(SPACES) - 1 ? count : sizeof(SPACES) - 1;
@@ -119,11 +120,15 @@ static iree_status_t loom_print_indent(loom_print_context_t* ctx) {
   return iree_ok_status();
 }
 
+static iree_status_t loom_print_indent(loom_print_context_t* ctx) {
+  return loom_print_indent_levels(ctx, ctx->indent);
+}
+
 static iree_status_t loom_print_leading_comments(
-    loom_print_context_t* ctx, const iree_string_view_t* comments,
-    iree_host_size_t comment_count) {
+    loom_print_context_t* ctx, uint16_t indent,
+    const iree_string_view_t* comments, iree_host_size_t comment_count) {
   for (iree_host_size_t i = 0; i < comment_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+    IREE_RETURN_IF_ERROR(loom_print_indent_levels(ctx, indent));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "//"));
     IREE_RETURN_IF_ERROR(loom_output_stream_write(ctx->stream, comments[i]));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '\n'));
@@ -136,15 +141,16 @@ static iree_status_t loom_print_op_comments(loom_print_context_t* ctx,
   iree_host_size_t comment_count = 0;
   const iree_string_view_t* comments =
       loom_module_op_comments(ctx->module, op, &comment_count);
-  return loom_print_leading_comments(ctx, comments, comment_count);
+  return loom_print_leading_comments(ctx, ctx->indent, comments, comment_count);
 }
 
 static iree_status_t loom_print_block_comments(loom_print_context_t* ctx,
-                                               const loom_block_t* block) {
+                                               const loom_block_t* block,
+                                               uint16_t indent) {
   iree_host_size_t comment_count = 0;
   const iree_string_view_t* comments =
       loom_module_block_comments(ctx->module, block, &comment_count);
-  return loom_print_leading_comments(ctx, comments, comment_count);
+  return loom_print_leading_comments(ctx, indent, comments, comment_count);
 }
 
 // Forward declaration — defined after the type printing section.
@@ -2253,12 +2259,13 @@ static bool loom_print_should_elide_implicit_terminator(
 static iree_status_t loom_print_block_label_line(loom_print_context_t* ctx,
                                                  const loom_region_t* region,
                                                  const loom_block_t* block) {
+  uint16_t label_indent = ctx->indent > 0 ? (uint16_t)(ctx->indent - 1) : 0;
   char label_buffer[64];
   iree_string_view_t label = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_print_block_label_view(
       ctx, region, block, label_buffer, sizeof(label_buffer), &label));
-  IREE_RETURN_IF_ERROR(loom_print_block_comments(ctx, block));
-  IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
+  IREE_RETURN_IF_ERROR(loom_print_block_comments(ctx, block, label_indent));
+  IREE_RETURN_IF_ERROR(loom_print_indent_levels(ctx, label_indent));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '^'));
   IREE_RETURN_IF_ERROR(loom_output_stream_write(ctx->stream, label));
   if (block->arg_count > 0) {

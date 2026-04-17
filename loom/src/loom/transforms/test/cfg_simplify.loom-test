@@ -17,10 +17,10 @@ func.def @folds_constant_branch_and_removes_dead(%a: i32, %b: i32) -> (i32) {
 func.def @folds_constant_branch_and_removes_dead(%a: i32, %b: i32) -> (i32) {
   %cond = scalar.constant 1 : i1
   cfg.br ^then
-  ^then:
+^then:
   %sum = test.addi %a, %b : i32
   cfg.br ^join
-  ^join:
+^join:
   func.return %sum : i32
 }
 
@@ -37,7 +37,7 @@ func.def @forwards_empty_block(%cond: i1) {
 // ----
 func.def @forwards_empty_block(%cond: i1) {
   cfg.br ^exit
-  ^exit:
+^exit:
   func.return
 }
 
@@ -57,11 +57,11 @@ func.def @deduplicates_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
 // ----
 func.def @deduplicates_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %cond, ^then, ^else : i1
-  ^then:
+^then:
   cfg.br ^join(%a : i32)
-  ^else:
+^else:
   cfg.br ^join(%b : i32)
-  ^join(%x : i32):
+^join(%x : i32):
   %sum = test.addi %x, %x : i32
   func.return %sum : i32
 }
@@ -78,7 +78,7 @@ func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4x
 // ----
 func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
   cfg.br ^join
-  ^join:
+^join:
   test.use %view : view<4xf32, %layout>
   func.return
 }
@@ -96,7 +96,7 @@ func.def @fuses_single_predecessor_block_args(%a: i32) -> (i32) {
 // ----
 func.def @fuses_single_predecessor_block_args(%a: i32) -> (i32) {
   cfg.br ^exit
-  ^exit:
+^exit:
   func.return %a : i32
 }
 
@@ -106,14 +106,14 @@ func.def @preserves_loop_carried_args(%n: index, %seed: i32, %x: i32) -> (i32) {
   %zero = index.constant 0 : index
   %one = index.constant 1 : index
   cfg.br ^loop(%zero, %seed : index, i32)
-  ^loop(%i : index, %acc : i32):
+^loop(%i : index, %acc : i32):
   %keep_going = index.cmp slt, %i, %n : index
   cfg.cond_br %keep_going, ^body, ^exit : i1
-  ^body:
+^body:
   %next = test.addi %acc, %x : i32
   %next_i = index.add %i, %one : index
   cfg.br ^loop(%next_i, %next : index, i32)
-  ^exit:
+^exit:
   func.return %acc : i32
 }
 
@@ -123,9 +123,9 @@ func.def @preserves_effectful_forward_block(%cond: i1, %buffer: buffer, %offset:
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
   cfg.cond_br %cond, ^effect, ^exit : i1
-  ^effect:
+^effect:
   view.store %value, %view[0] : f32, view<1xf32, %layout>
   cfg.br ^exit
-  ^exit:
+^exit:
   func.return
 }

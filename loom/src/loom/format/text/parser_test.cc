@@ -555,8 +555,8 @@ TEST_F(ParserTest, OperationAndBlockCommentsRoundTrip) {
   EXPECT_EQ(text,
             "// top-level function\n"
             "func.def @comments() {\n"
-            "  // explicit entry block\n"
-            "  ^entry:\n"
+            "// explicit entry block\n"
+            "^entry:\n"
             "  // body terminator\n"
             "  test.yield\n"
             "}\n");
