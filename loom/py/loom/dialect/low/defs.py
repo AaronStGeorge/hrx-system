@@ -224,6 +224,7 @@ low_op = Op(
     ],
     results=[Result("results", REGISTER, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_op_verify",
     format=[
         OpRef("opcode"),
         GLUE,
@@ -260,6 +261,7 @@ low_const = Op(
     ],
     results=[Result("result", REGISTER)],
     traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_const_verify",
     format=[
         OpRef("opcode"),
         AttrDict("attrs"),

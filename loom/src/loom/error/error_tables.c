@@ -1331,6 +1331,26 @@ static const loom_error_def_t loom_err_structure_026 = {
     .param_count = 5,
 };
 
+static const loom_error_param_def_t loom_err_structure_027_params[] = {
+    {"attr_name", LOOM_PARAM_STRING},
+    {"actual_value", LOOM_PARAM_STRING},
+    {"expected_constraint", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_structure_027 = {
+    .error_id = "ERR_STRUCTURE_027",
+    .domain = LOOM_ERROR_DOMAIN_STRUCTURE,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 27,
+    .summary = "String attribute value violates a structural constraint.",
+    .message_template =
+        "attribute '{attr_name}' value \"{actual_value}\" must satisfy "
+        "{expected_constraint}",
+    .fix_hint_template =
+        "Choose a string value satisfying '{expected_constraint}'",
+    .param_defs = loom_err_structure_027_params,
+    .param_count = 3,
+};
+
 static const loom_error_param_def_t loom_err_dominance_001_params[] = {
     {"value_name", LOOM_PARAM_STRING},
 };
@@ -2570,31 +2590,31 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_structure_016, &loom_err_structure_017, &loom_err_structure_018,
     &loom_err_structure_019, &loom_err_structure_020, &loom_err_structure_021,
     &loom_err_structure_022, &loom_err_structure_023, &loom_err_structure_024,
-    &loom_err_structure_025, &loom_err_structure_026, &loom_err_dominance_001,
-    &loom_err_dominance_002, &loom_err_dominance_003, &loom_err_dominance_004,
-    &loom_err_dominance_005, &loom_err_dominance_006, &loom_err_dominance_007,
-    &loom_err_dominance_008, &loom_err_dominance_009, &loom_err_dominance_010,
-    &loom_err_symbol_001,    &loom_err_symbol_002,    &loom_err_symbol_003,
-    &loom_err_symbol_004,    &loom_err_symbol_005,    &loom_err_parse_001,
-    &loom_err_parse_002,     &loom_err_parse_003,     &loom_err_parse_004,
-    &loom_err_parse_005,     &loom_err_parse_006,     &loom_err_parse_007,
-    &loom_err_parse_008,     &loom_err_parse_009,     &loom_err_parse_010,
-    &loom_err_parse_011,     &loom_err_parse_012,     &loom_err_parse_013,
-    &loom_err_parse_014,     &loom_err_parse_015,     &loom_err_parse_016,
-    &loom_err_parse_017,     &loom_err_parse_018,     &loom_err_parse_019,
-    &loom_err_parse_020,     &loom_err_parse_021,     &loom_err_parse_022,
-    &loom_err_parse_023,     &loom_err_parse_024,     &loom_err_parse_025,
-    &loom_err_parse_026,     &loom_err_parse_027,     &loom_err_parse_028,
-    &loom_err_parse_029,     &loom_err_parse_030,     &loom_err_parse_031,
-    &loom_err_parse_032,     &loom_err_parse_033,     &loom_err_bytecode_001,
-    &loom_err_bytecode_002,  &loom_err_bytecode_003,  &loom_err_bytecode_004,
-    &loom_err_bytecode_005,  &loom_err_bytecode_006,  &loom_err_bytecode_007,
-    &loom_err_bytecode_008,  &loom_err_bytecode_009,  &loom_err_bytecode_010,
-    &loom_err_bytecode_011,  &loom_err_bytecode_012,  &loom_err_bytecode_013,
-    &loom_err_bytecode_014,  &loom_err_bytecode_015,  &loom_err_bytecode_016,
-    &loom_err_bytecode_017,  &loom_err_fold_001,      &loom_err_fold_002,
-    &loom_err_fold_003,      &loom_err_fold_004,      &loom_err_fold_005,
-    &loom_err_lowering_001,  &loom_err_lowering_002,
+    &loom_err_structure_025, &loom_err_structure_026, &loom_err_structure_027,
+    &loom_err_dominance_001, &loom_err_dominance_002, &loom_err_dominance_003,
+    &loom_err_dominance_004, &loom_err_dominance_005, &loom_err_dominance_006,
+    &loom_err_dominance_007, &loom_err_dominance_008, &loom_err_dominance_009,
+    &loom_err_dominance_010, &loom_err_symbol_001,    &loom_err_symbol_002,
+    &loom_err_symbol_003,    &loom_err_symbol_004,    &loom_err_symbol_005,
+    &loom_err_parse_001,     &loom_err_parse_002,     &loom_err_parse_003,
+    &loom_err_parse_004,     &loom_err_parse_005,     &loom_err_parse_006,
+    &loom_err_parse_007,     &loom_err_parse_008,     &loom_err_parse_009,
+    &loom_err_parse_010,     &loom_err_parse_011,     &loom_err_parse_012,
+    &loom_err_parse_013,     &loom_err_parse_014,     &loom_err_parse_015,
+    &loom_err_parse_016,     &loom_err_parse_017,     &loom_err_parse_018,
+    &loom_err_parse_019,     &loom_err_parse_020,     &loom_err_parse_021,
+    &loom_err_parse_022,     &loom_err_parse_023,     &loom_err_parse_024,
+    &loom_err_parse_025,     &loom_err_parse_026,     &loom_err_parse_027,
+    &loom_err_parse_028,     &loom_err_parse_029,     &loom_err_parse_030,
+    &loom_err_parse_031,     &loom_err_parse_032,     &loom_err_parse_033,
+    &loom_err_bytecode_001,  &loom_err_bytecode_002,  &loom_err_bytecode_003,
+    &loom_err_bytecode_004,  &loom_err_bytecode_005,  &loom_err_bytecode_006,
+    &loom_err_bytecode_007,  &loom_err_bytecode_008,  &loom_err_bytecode_009,
+    &loom_err_bytecode_010,  &loom_err_bytecode_011,  &loom_err_bytecode_012,
+    &loom_err_bytecode_013,  &loom_err_bytecode_014,  &loom_err_bytecode_015,
+    &loom_err_bytecode_016,  &loom_err_bytecode_017,  &loom_err_fold_001,
+    &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
+    &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

@@ -18,11 +18,31 @@ loom_cc_library(
   SRCS
     "builders.c"
     "tables.c"
+    "verify.c"
   DEPS
+    loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    verify_test
+  SRCS
+    "verify_test.cc"
+  DEPS
+    ::low
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::transforms::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

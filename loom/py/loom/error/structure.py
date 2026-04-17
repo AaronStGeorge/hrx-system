@@ -423,6 +423,24 @@ ERR_STRUCTURE_026 = ErrorDef(
     fix_hint="Pass a value whose type matches the destination block argument",
 )
 
+# ERR_STRUCTURE_027: String attribute value violates a structural constraint.
+ERR_STRUCTURE_027 = ErrorDef(
+    domain=ErrorDomain.STRUCTURE,
+    code=27,
+    severity=Severity.ERROR,
+    summary="String attribute value violates a structural constraint.",
+    message=(
+        "attribute '{attr_name}' value \"{actual_value}\" must satisfy "
+        "{expected_constraint}"
+    ),
+    params=(
+        ErrorParam("attr_name", ParamKind.STRING),
+        ErrorParam("actual_value", ParamKind.STRING),
+        ErrorParam("expected_constraint", ParamKind.STRING),
+    ),
+    fix_hint="Choose a string value satisfying '{expected_constraint}'",
+)
+
 ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_001,
     ERR_STRUCTURE_002,
@@ -450,4 +468,5 @@ ALL_STRUCTURE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_STRUCTURE_024,
     ERR_STRUCTURE_025,
     ERR_STRUCTURE_026,
+    ERR_STRUCTURE_027,
 )

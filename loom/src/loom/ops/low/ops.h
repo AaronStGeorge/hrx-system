@@ -152,6 +152,9 @@ iree_status_t loom_low_op_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_low_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_CONST: Descriptor-backed constant or immediate materialization into a register.
 // %c0 = low.const<amdgpu.s_mov_b32> {imm = 0} : reg<amdgpu.sgpr x1>
@@ -166,6 +169,9 @@ iree_status_t loom_low_const_build(
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_low_const_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_LOW_COPY: Explicit virtual-register copy used by lowering and allocation.
 // %copy = low.copy %value : reg<amdgpu.vgpr x1> -> reg<amdgpu.vgpr x1>

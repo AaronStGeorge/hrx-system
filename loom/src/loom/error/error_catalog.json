@@ -1808,6 +1808,34 @@
     "fix_hint_template": "Pass a value whose type matches the destination block argument"
   },
   {
+    "error_id": "ERR_STRUCTURE_027",
+    "domain": 4,
+    "domain_name": "STRUCTURE",
+    "code": 27,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "String attribute value violates a structural constraint.",
+    "message_template": "attribute '{attr_name}' value \"{actual_value}\" must satisfy {expected_constraint}",
+    "params": [
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_value",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_constraint",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Choose a string value satisfying '{expected_constraint}'"
+  },
+  {
     "error_id": "ERR_DOMINANCE_001",
     "domain": 5,
     "domain_name": "DOMINANCE",
