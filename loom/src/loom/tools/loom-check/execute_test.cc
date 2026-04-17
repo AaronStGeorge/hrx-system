@@ -877,6 +877,8 @@ TEST_F(ExecuteTest, UnknownRequiresRequirementFailsLoudly) {
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   EXPECT_NE(DetailString(result).find("unknown REQUIRES requirement"),
             std::string::npos);
+  EXPECT_NE(DetailString(result).find("llc-x86"), std::string::npos);
+  EXPECT_NE(DetailString(result).find("llc-amdgpu"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

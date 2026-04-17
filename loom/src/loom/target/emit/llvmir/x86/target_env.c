@@ -58,6 +58,7 @@ static const loom_llvmir_target_profile_provider_t kX86TargetProfileProvider = {
     .name = IREE_SVL("x86"),
     .profiles = kX86TargetProfiles,
     .profile_count = IREE_ARRAYSIZE(kX86TargetProfiles),
+    .llc_target_name = IREE_SVL("x86"),
 };
 
 const loom_llvmir_target_env_t* loom_llvmir_target_env_x86_64_unknown_linux_gnu(

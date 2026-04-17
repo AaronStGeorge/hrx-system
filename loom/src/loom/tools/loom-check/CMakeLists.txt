@@ -30,11 +30,13 @@ loom_cc_library(
   HDRS
     "diagnostics.h"
     "execute.h"
+    "llvmir_targets.h"
     "requirements.h"
   SRCS
     "diagnostics.c"
     "emit.c"
     "execute.c"
+    "llvmir_targets.c"
     "requirements.c"
     "roundtrip.c"
     "verify.c"

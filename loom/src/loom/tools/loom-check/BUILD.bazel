@@ -23,6 +23,7 @@ loom_cc_library(
         "diagnostics.c",
         "emit.c",
         "execute.c",
+        "llvmir_targets.c",
         "requirements.c",
         "roundtrip.c",
         "verify.c",
@@ -30,6 +31,7 @@ loom_cc_library(
     hdrs = [
         "diagnostics.h",
         "execute.h",
+        "llvmir_targets.h",
         "requirements.h",
     ],
     deps = [

@@ -26,6 +26,8 @@ typedef struct loom_llvmir_target_profile_provider_t {
   const loom_llvmir_target_profile_t* const* profiles;
   // Number of profile pointers in |profiles|.
   iree_host_size_t profile_count;
+  // Target name reported by `llc --version`, or empty when not applicable.
+  iree_string_view_t llc_target_name;
 } loom_llvmir_target_profile_provider_t;
 
 typedef struct loom_llvmir_target_profile_registry_t {

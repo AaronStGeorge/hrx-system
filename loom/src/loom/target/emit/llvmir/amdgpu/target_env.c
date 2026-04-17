@@ -59,6 +59,7 @@ static const loom_llvmir_target_profile_provider_t
         .name = IREE_SVL("amdgpu"),
         .profiles = kAmdgpuTargetProfiles,
         .profile_count = IREE_ARRAYSIZE(kAmdgpuTargetProfiles),
+        .llc_target_name = IREE_SVL("amdgcn"),
 };
 
 const loom_llvmir_target_env_t* loom_llvmir_target_env_amdgcn_amd_amdhsa(void) {
