@@ -8,6 +8,7 @@
 
 #include "loom/target/emit/llvmir/amdgpu/lower.h"
 #include "loom/target/emit/llvmir/amdgpu/target_env.h"
+#include "loom/target/emit/llvmir/test_target.h"
 #include "loom/target/emit/llvmir/x86/lower.h"
 #include "loom/target/emit/llvmir/x86/target_env.h"
 
@@ -17,17 +18,35 @@ void loom_check_llvmir_target_profile_registry_initialize(
   out_registry->providers[0] = loom_llvmir_x86_target_profile_provider();
   out_registry->providers[1] = loom_llvmir_amdgpu_target_profile_provider();
   out_registry->registry = (loom_llvmir_target_profile_registry_t){
-      .default_profile = loom_llvmir_target_profile_x86_64_object(),
+      .default_profile = loom_llvmir_target_profile_test_object(),
       .providers = out_registry->providers,
       .provider_count = IREE_ARRAYSIZE(out_registry->providers),
   };
 }
 
+static bool loom_check_llvmir_profile_has_triple(
+    const loom_llvmir_target_profile_t* profile,
+    iree_string_view_t target_triple) {
+  return profile != NULL && profile->target_env != NULL &&
+         iree_string_view_equal(profile->target_env->target_triple,
+                                target_triple);
+}
+
 void loom_check_llvmir_lowering_providers_initialize(
+    const loom_llvmir_target_profile_t* profile,
     loom_check_llvmir_lowering_providers_t* out_providers) {
   IREE_ASSERT_ARGUMENT(out_providers);
-  out_providers->providers[0] = loom_llvmir_x86_lowering_provider();
-  out_providers->providers[1] = loom_llvmir_amdgpu_lowering_provider();
+  *out_providers = (loom_check_llvmir_lowering_providers_t){0};
+  if (loom_check_llvmir_profile_has_triple(
+          profile, IREE_SV("x86_64-unknown-linux-gnu"))) {
+    out_providers->providers[out_providers->provider_count++] =
+        loom_llvmir_x86_lowering_provider();
+  }
+  if (loom_check_llvmir_profile_has_triple(profile,
+                                           IREE_SV("amdgcn-amd-amdhsa"))) {
+    out_providers->providers[out_providers->provider_count++] =
+        loom_llvmir_amdgpu_lowering_provider();
+  }
 }
 
 iree_status_t loom_check_llvmir_target_profile_lookup(

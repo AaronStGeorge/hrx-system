@@ -1,4 +1,4 @@
-// RUN: emit llvmir-body
+// RUN: emit llvmir-body x86_64-object
 
 // Missing x86 packed-dot features fail loudly instead of selecting a fallback.
 // ERROR@+1: LOWERING/001 "vector.dot4i" "matching x86 packed-dot feature"
@@ -8,6 +8,7 @@ func.def @dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32
 }
 
 // ====
+// RUN: emit llvmir-body
 
 // Packed i4 dot has no implicit LLVMIR reference expansion.
 // ERROR@+1: LOWERING/001 "vector.dot8i4" "packed i4 dot needs explicit unpack"
@@ -45,9 +46,10 @@ func.def public @dynamic_memcpy_volatile(%target: buffer, %source: buffer, %leng
 }
 
 // ====
+// RUN: emit llvmir-body x86_64-object
 
-// AMDGPU intrinsics are rejected when the selected target profile is x86.
-// ERROR@+1: LOWERING/001 "llvmir.intrinsic" "requires an AMDGPU target"
+// AMDGPU intrinsics stay unknown when the selected target profile is x86.
+// ERROR@+1: LOWERING/001 "llvmir.intrinsic" "unknown llvmir.intrinsic kind"
 func.def public @amdgpu_intrinsic_on_x86() -> (i32) {
   %tid = llvmir.intrinsic<llvm.amdgcn.workitem.id.y> () : () -> i32
   func.return %tid : i32

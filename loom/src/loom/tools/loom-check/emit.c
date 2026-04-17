@@ -560,12 +560,13 @@ iree_status_t loom_check_execute_emit(
   }
 
   loom_check_llvmir_lowering_providers_t lowering_providers;
-  loom_check_llvmir_lowering_providers_initialize(&lowering_providers);
+  loom_check_llvmir_lowering_providers_initialize(request.profile,
+                                                  &lowering_providers);
   loom_llvmir_lowering_options_t options = {
       .target_profile = request.profile,
       .source_name = filename,
       .providers = lowering_providers.providers,
-      .provider_count = IREE_ARRAYSIZE(lowering_providers.providers),
+      .provider_count = lowering_providers.provider_count,
   };
   loom_llvmir_module_t* lowered_module = NULL;
   status =

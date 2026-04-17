@@ -75,6 +75,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    test_target
+  HDRS
+    "test_target.h"
+  SRCS
+    "test_target.c"
+  DEPS
+    ::target_env
+    iree::base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     llvmir
   HDRS
     "intrinsics.h"
@@ -157,6 +171,30 @@ loom_cc_library(
     loom::src::loom::ops::view
     loom::src::loom::util::cfg_graph
     loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    legality
+  HDRS
+    "legality.h"
+  SRCS
+    "legality.c"
+  DEPS
+    ::target_env
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
+    loom::src::loom::ops::index
+    loom::src::loom::ops::llvmir
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::vector
+    loom::src::loom::ops::view
+    loom::src::loom::target::types
   PUBLIC
 )
 
@@ -282,28 +320,35 @@ loom_cc_test(
   DEPS
     ::core
     ::lower
+    ::test_target
     iree::base::internal::arena
-    iree::io::file_handle
     loom::src::loom::ir
-    loom::src::loom::ops::buffer
-    loom::src::loom::ops::cfg
     loom::src::loom::ops::func
-    loom::src::loom::ops::index
-    loom::src::loom::ops::llvmir
     loom::src::loom::ops::scalar
-    loom::src::loom::ops::scf
     loom::src::loom::ops::vector
-    loom::src::loom::ops::view
-    loom::src::loom::target::arch::x86::packed_dot_contract
-    loom::src::loom::target::emit::llvmir::amdgpu::lower
-    loom::src::loom::target::emit::llvmir::amdgpu::target_env
-    loom::src::loom::target::emit::llvmir::x86::lower
-    loom::src::loom::target::emit::llvmir::x86::target_env
-    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
     "requires-filesystem"
+)
+
+loom_cc_test(
+  NAME
+    legality_test
+  SRCS
+    "legality_test.cc"
+  DEPS
+    ::legality
+    ::test_target
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::llvmir
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::vector
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

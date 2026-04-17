@@ -48,6 +48,7 @@ entry:
 }
 
 // ====
+// RUN: emit llvmir-body x86_64-object
 
 // X86 intrinsics lower to declarations and calls without synthetic wrappers.
 func.def public @read_tsc() -> (i64) {

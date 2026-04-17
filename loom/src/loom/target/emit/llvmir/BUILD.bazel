@@ -40,15 +40,33 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "legality_no_x86_packed_dot_vector_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_vector",
+    target = "//loom/src/loom/target/emit/llvmir:legality",
+)
+
+iree_assert_no_dependency(
     name = "lower_no_x86_llvmir_intrinsics_dep",
     dependency = "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
     target = "//loom/src/loom/target/emit/llvmir:lower",
 )
 
 iree_assert_no_dependency(
+    name = "legality_no_x86_provider_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir/x86:legality",
+    target = "//loom/src/loom/target/emit/llvmir:legality",
+)
+
+iree_assert_no_dependency(
     name = "lower_no_amdgpu_llvmir_intrinsics_dep",
     dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
     target = "//loom/src/loom/target/emit/llvmir:lower",
+)
+
+iree_assert_no_dependency(
+    name = "legality_no_amdgpu_provider_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:legality",
+    target = "//loom/src/loom/target/emit/llvmir:legality",
 )
 
 iree_assert_no_dependency(
@@ -127,6 +145,17 @@ loom_cc_library(
     hdrs = ["target_presets.h"],
     deps = [
         ":target_env",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "test_target",
+    srcs = ["test_target.c"],
+    hdrs = ["test_target.h"],
+    deps = [
+        ":target_env",
+        "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
 )
@@ -210,6 +239,27 @@ loom_cc_library(
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "legality",
+    srcs = ["legality.c"],
+    hdrs = ["legality.h"],
+    deps = [
+        ":target_env",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/llvmir",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/scf",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/ops/view",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
     ],
 )
 
@@ -323,24 +373,30 @@ loom_cc_test(
     deps = [
         ":core",
         ":lower",
+        ":test_target",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops/buffer",
-        "//loom/src/loom/ops/cfg",
         "//loom/src/loom/ops/func",
-        "//loom/src/loom/ops/index",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/ops/vector",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "legality_test",
+    srcs = ["legality_test.cc"],
+    deps = [
+        ":legality",
+        ":test_target",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/llvmir",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
-        "//loom/src/loom/ops/view",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:lower",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
-        "//loom/src/loom/target/emit/llvmir/x86:lower",
-        "//loom/src/loom/target/emit/llvmir/x86:target_env",
-        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

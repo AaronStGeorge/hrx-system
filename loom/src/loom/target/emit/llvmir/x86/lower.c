@@ -308,6 +308,12 @@ static iree_status_t loom_llvmir_x86_try_lower_op(
               state->source_module, op, &request)) {
         return iree_ok_status();
       }
+      if (!loom_llvmir_x86_target_profile_is_x86(state)) {
+        return loom_llvmir_lowering_unsupported_op(
+            state, op,
+            "x86 packed-dot vector lowering requires an x86 target "
+            "environment");
+      }
       *out_handled = true;
       return loom_llvmir_lowering_lower_vector_x86_packed_dot(
           state, target_block, op, request);

@@ -40,6 +40,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    legality
+  HDRS
+    "legality.h"
+  SRCS
+    "legality.c"
+  DEPS
+    iree::base
+    loom::src::loom::ops::llvmir
+    loom::src::loom::target::emit::llvmir::legality
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_env
   HDRS
     "target_env.h"
@@ -50,6 +64,23 @@ loom_cc_library(
     loom::src::loom::target::emit::llvmir::target_presets
     loom::src::loom::target::types
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    legality_test
+  SRCS
+    "legality_test.cc"
+  DEPS
+    ::legality
+    ::target_env
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::llvmir
+    loom::src::loom::target::emit::llvmir::legality
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

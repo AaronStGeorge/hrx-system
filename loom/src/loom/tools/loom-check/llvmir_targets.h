@@ -32,6 +32,8 @@ typedef struct loom_check_llvmir_lowering_providers_t {
   // Target-specific lowering providers exposed to loom-check emit tests.
   const loom_llvmir_lowering_provider_t*
       providers[LOOM_CHECK_LLVMIR_LOWERING_PROVIDER_COUNT];
+  // Number of providers selected for one target profile.
+  iree_host_size_t provider_count;
 } loom_check_llvmir_lowering_providers_t;
 
 // Initializes |out_registry| with the LLVMIR target providers that loom-check
@@ -39,9 +41,11 @@ typedef struct loom_check_llvmir_lowering_providers_t {
 void loom_check_llvmir_target_profile_registry_initialize(
     loom_check_llvmir_target_profile_registry_t* out_registry);
 
-// Initializes |out_providers| with the LLVMIR lowering providers that
-// loom-check intentionally exposes to developer tests.
+// Initializes |out_providers| with the LLVMIR lowering providers required by
+// |profile|. Profiles without target-specific lowering contracts select no
+// providers.
 void loom_check_llvmir_lowering_providers_initialize(
+    const loom_llvmir_target_profile_t* profile,
     loom_check_llvmir_lowering_providers_t* out_providers);
 
 // Looks up a profile in the loom-check LLVMIR target provider registry.
