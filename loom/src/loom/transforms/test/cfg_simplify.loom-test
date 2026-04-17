@@ -336,6 +336,45 @@ func.def @transports_compare_facts_through_block_args(%guard: i1, %li: index, %l
 
 // ====
 
+func.def @folds_transported_compare_result_and_drops_args(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index) -> (i1) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  %left_cond = index.cmp slt, %li, %ln : index
+  cfg.cond_br %left_cond, ^left_pass, ^exit : i1
+^left_pass:
+  cfg.br ^join(%li, %ln : index, index)
+^right:
+  %right_cond = index.cmp slt, %ri, %rn : index
+  cfg.cond_br %right_cond, ^right_pass, ^exit : i1
+^right_pass:
+  cfg.br ^join(%ri, %rn : index, index)
+^join(%x : index, %y : index):
+  %again = index.cmp slt, %x, %y : index
+  func.return %again : i1
+^exit:
+  %false = scalar.constant 0 : i1
+  func.return %false : i1
+}
+
+// ----
+func.def @folds_transported_compare_result_and_drops_args(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index) -> (i1) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  %left_cond = index.cmp slt, %li, %ln : index
+  cfg.cond_br %left_cond, ^join, ^exit : i1
+^right:
+  %right_cond = index.cmp slt, %ri, %rn : index
+  cfg.cond_br %right_cond, ^join, ^exit : i1
+^join:
+  %again = scalar.constant true : i1
+  func.return %again : i1
+^exit:
+  %false = scalar.constant 0 : i1
+  func.return %false : i1
+}
+
+// ====
+
 func.def @threads_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %guard, ^left, ^right : i1
 ^left:
@@ -394,6 +433,25 @@ func.def @preserves_compare_with_unproven_block_arg_facts(%guard: i1, %li: index
   cfg.br ^ret(%b : i32)
 ^ret(%result : i32):
   func.return %result : i32
+}
+
+// ====
+
+func.def @preserves_reconverged_compare_result_with_mixed_facts(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index) -> (i1) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  %left_cond = index.cmp slt, %li, %ln : index
+  cfg.cond_br %left_cond, ^left_pass, ^exit : i1
+^left_pass:
+  cfg.br ^join(%li, %ln : index, index)
+^right:
+  cfg.br ^join(%ri, %rn : index, index)
+^join(%x : index, %y : index):
+  %again = index.cmp slt, %x, %y : index
+  func.return %again : i1
+^exit:
+  %false = scalar.constant 0 : i1
+  func.return %false : i1
 }
 
 // ====
@@ -500,6 +558,19 @@ func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4x
 // ----
 func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
   test.use %view : view<4xf32, %layout>
+  func.return
+}
+
+// ====
+
+func.def @preserves_unused_block_arg_with_type_use(%guard: i1, %layout_a: encoding<layout>, %layout_b: encoding<layout>, %buffer: buffer, %offset: offset) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  cfg.br ^join(%layout_a : encoding<layout>)
+^right:
+  cfg.br ^join(%layout_b : encoding<layout>)
+^join(%arg_layout : encoding<layout>):
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %arg_layout>
   func.return
 }
 

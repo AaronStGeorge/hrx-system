@@ -10,9 +10,11 @@
 
 #include "loom/analysis/condition_facts.h"
 #include "loom/ir/context.h"
+#include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/cfg/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/special_values.h"
 #include "loom/transforms/rewriter.h"
 #include "loom/util/cfg_graph.h"
 #include "loom/util/dominance.h"
@@ -1250,6 +1252,88 @@ static iree_status_t loom_cfg_simplify_fold_path_sensitive_branches(
   return iree_ok_status();
 }
 
+static bool loom_cfg_simplify_is_i1_value(const loom_module_t* module,
+                                          loom_value_id_t value_id) {
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return false;
+  }
+  loom_type_t type = loom_module_value_type(module, value_id);
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+}
+
+static bool loom_cfg_simplify_can_replace_with_constant(
+    const loom_cfg_simplify_state_t* state, const loom_op_t* op,
+    loom_value_id_t result) {
+  if (op->result_count != 1 ||
+      !loom_cfg_simplify_is_i1_value(state->module, result)) {
+    return false;
+  }
+  loom_trait_flags_t traits = loom_op_effective_traits(state->module, op);
+  return iree_all_bits_set(traits, LOOM_TRAIT_PURE) &&
+         op->successor_count == 0 && op->region_count == 0;
+}
+
+static iree_status_t loom_cfg_simplify_replace_with_bool_constant(
+    loom_cfg_simplify_state_t* state, loom_op_t* op, bool value) {
+  loom_value_id_t result = loom_op_const_results(op)[0];
+  loom_type_t result_type = loom_module_value_type(state->module, result);
+
+  loom_builder_ip_t saved_ip = loom_builder_save(&state->rewriter->builder);
+  loom_builder_set_before(&state->rewriter->builder, op);
+  loom_value_id_t value_checkpoint =
+      loom_rewriter_value_checkpoint(state->rewriter);
+
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  iree_status_t status = loom_constant_build(
+      &state->rewriter->builder, loom_value_facts_exact_i64(value ? 1 : 0),
+      result_type, op->location, &replacement);
+  if (iree_status_is_ok(status)) {
+    status = loom_rewriter_preserve_result_names_on_new_values(
+        state->rewriter, op, &replacement, 1, value_checkpoint);
+  }
+  loom_builder_restore(&state->rewriter->builder, saved_ip);
+  if (!iree_status_is_ok(status)) return status;
+
+  return loom_rewriter_replace_all_uses_and_erase(state->rewriter, op,
+                                                  &replacement, 1);
+}
+
+static iree_status_t loom_cfg_simplify_fold_path_sensitive_i1_ops(
+    loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    const loom_cfg_simplify_block_entry_path_facts_t* facts,
+    bool* out_changed) {
+  if (graph->malformed) return iree_ok_status();
+  for (uint16_t block_index = 1; block_index < graph->block_count;
+       ++block_index) {
+    if (!loom_cfg_graph_block_is_reachable(graph, block_index)) continue;
+    loom_block_t* block = (loom_block_t*)graph->blocks[block_index].block;
+    if (!block) continue;
+
+    loom_op_t* op = block->first_op;
+    while (op) {
+      loom_op_t* next_op = op->next_op;
+      if (op->result_count == 1) {
+        loom_value_id_t result = loom_op_const_results(op)[0];
+        if (loom_cfg_simplify_can_replace_with_constant(state, op, result)) {
+          bool value = false;
+          bool proven = false;
+          IREE_RETURN_IF_ERROR(loom_cfg_simplify_path_facts_prove_bool(
+              state, graph, facts, op, result, &value, &proven));
+          if (proven) {
+            IREE_RETURN_IF_ERROR(
+                loom_cfg_simplify_replace_with_bool_constant(state, op, value));
+            *out_changed = true;
+            return iree_ok_status();
+          }
+        }
+      }
+      op = next_op;
+    }
+  }
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Trivial block forwarding
 //===----------------------------------------------------------------------===//
@@ -1964,6 +2048,35 @@ static iree_status_t loom_cfg_simplify_remove_block_arg(
   return iree_ok_status();
 }
 
+static bool loom_cfg_simplify_block_arg_unused(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* block,
+    uint16_t arg_index) {
+  loom_value_id_t arg = loom_block_arg_id(block, arg_index);
+  if (arg == LOOM_VALUE_ID_INVALID || arg >= state->module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(state->module, arg);
+  return value->use_count == 0 &&
+         !loom_module_value_has_type_uses(state->module, arg);
+}
+
+static iree_status_t loom_cfg_simplify_remove_unused_block_arg(
+    loom_cfg_simplify_state_t* state, loom_block_t* block,
+    loom_op_t** pred_branches, iree_host_size_t predecessor_count,
+    uint16_t arg_index) {
+  for (iree_host_size_t i = 0; i < predecessor_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_cfg_simplify_rebuild_br_without_arg(
+        state, pred_branches[i], arg_index));
+  }
+  IREE_RETURN_IF_ERROR(loom_block_remove_arg(state->module, block, arg_index));
+  if (state->pass->statistics) {
+    loom_pass_statistic_add(state->pass,
+                            LOOM_CFG_SIMPLIFY_STAT_BLOCK_ARGS_REMOVED, 1);
+  }
+  state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_cfg_simplify_remove_redundant_block_args(
     loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
     bool* out_changed) {
@@ -1987,6 +2100,13 @@ static iree_status_t loom_cfg_simplify_remove_redundant_block_args(
     }
 
     for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
+      if (loom_cfg_simplify_block_arg_unused(state, block, arg_index)) {
+        IREE_RETURN_IF_ERROR(loom_cfg_simplify_remove_unused_block_arg(
+            state, block, pred_branches, predecessors.count, arg_index));
+        *out_changed = true;
+        return iree_ok_status();
+      }
+
       loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
       bool found_replacement =
           loom_cfg_simplify_find_duplicate_arg_replacement(
@@ -2026,6 +2146,9 @@ static iree_status_t loom_cfg_simplify_process_cfg_region(
       state, &graph, path_facts, out_changed));
   if (*out_changed) return iree_ok_status();
   IREE_RETURN_IF_ERROR(loom_cfg_simplify_fold_path_sensitive_branches(
+      state, &graph, path_facts, out_changed));
+  if (*out_changed) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_cfg_simplify_fold_path_sensitive_i1_ops(
       state, &graph, path_facts, out_changed));
   if (*out_changed) return iree_ok_status();
   IREE_RETURN_IF_ERROR(

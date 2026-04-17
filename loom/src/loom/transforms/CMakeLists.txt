@@ -105,8 +105,10 @@ loom_cc_library(
     iree::base
     loom::src::loom::analysis::condition_facts
     loom::src::loom::ir
+    loom::src::loom::ir::facts
     loom::src::loom::ops::cfg
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::special_values
     loom::src::loom::util::cfg_graph
     loom::src::loom::util::dominance
     loom::src::loom::util::fact_table
