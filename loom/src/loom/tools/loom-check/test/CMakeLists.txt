@@ -100,6 +100,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "low_descriptors"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/low_descriptors.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "pass"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/pass.loom-test"

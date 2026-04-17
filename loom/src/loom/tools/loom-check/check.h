@@ -29,7 +29,8 @@
 //   // RUN: emit <target>   Parse -> lower to target output -> compare.
 //                           Targets include llvmir, llvmir-body,
 //                           llvmir-bitcode, llvmir-object, and
-//                           llvmir-assembly-mnemonics.
+//                           llvmir-assembly-mnemonics. Non-IR descriptor
+//                           targets include low-descriptor-manifest.
 //   // REQUIRES: <name>[, <name>...]
 //                           Skip the case when external tools or target
 //                           backends are unavailable.

@@ -47,6 +47,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
         "//loom/src/loom/target/emit/llvmir:core",
         "//loom/src/loom/target/emit/llvmir:legality",
         "//loom/src/loom/target/emit/llvmir:lower",

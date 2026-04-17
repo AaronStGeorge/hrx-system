@@ -7,6 +7,7 @@
 #include "iree/io/vec_stream.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
+#include "loom/target/emit/ireevm/descriptors.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/legality.h"
 #include "loom/target/emit/llvmir/lower.h"
@@ -24,6 +25,7 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LLVMIR_BITCODE_DISASSEMBLY = 2,
   LOOM_CHECK_EMIT_LLVMIR_OBJECT = 3,
   LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS = 4,
+  LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST = 5,
 } loom_check_emit_format_t;
 
 typedef struct loom_check_emit_request_t {
@@ -31,6 +33,8 @@ typedef struct loom_check_emit_request_t {
   loom_check_emit_format_t format;
   // Generic target bundle used by legality and LLVMIR profile derivation.
   const loom_target_bundle_t* target_bundle;
+  // Low descriptor set used by descriptor-manifest dumps.
+  const loom_low_descriptor_set_t* low_descriptor_set;
 } loom_check_emit_request_t;
 
 typedef struct loom_check_emit_byte_buffer_t {
@@ -45,6 +49,7 @@ static iree_status_t loom_check_emit_parse_request(
   *out_request = (loom_check_emit_request_t){
       .format = LOOM_CHECK_EMIT_LLVMIR_TEXT,
       .target_bundle = NULL,
+      .low_descriptor_set = NULL,
   };
   emit_target = iree_string_view_trim(emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
@@ -68,6 +73,19 @@ static iree_status_t loom_check_emit_parse_request(
              iree_string_view_equal(target_name,
                                     IREE_SV("llvmir-asm-mnemonics"))) {
     out_request->format = LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS;
+  } else if (iree_string_view_equal(target_name,
+                                    IREE_SV("low-descriptor-manifest")) ||
+             iree_string_view_equal(target_name,
+                                    IREE_SV("low-descriptor-json"))) {
+    if (iree_string_view_equal(profile_name, IREE_SV("iree.vm.core"))) {
+      out_request->format = LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST;
+      out_request->low_descriptor_set = loom_ireevm_core_descriptor_set();
+      return iree_ok_status();
+    }
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND,
+        "unknown low descriptor set '%.*s'; expected 'iree.vm.core'",
+        (int)profile_name.size, profile_name.data);
   } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown emit target '%.*s'", (int)target_name.size,
@@ -526,6 +544,27 @@ iree_status_t loom_check_execute_emit(
     iree_arena_deinitialize(&diagnostic_arena);
     return status;
   }
+  if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST) {
+    status = loom_low_descriptor_set_format_manifest_json(
+        request.low_descriptor_set, &result->actual_output);
+    if (!iree_status_is_ok(status)) {
+      status = loom_check_emit_finish_status_failure(
+          status, &diagnostic_collector, test_case, case_index, report,
+          filename, allocator, result);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    if (test_case->annotation_count > 0) {
+      status = loom_check_diagnostic_collector_finish(
+          &diagnostic_collector, test_case, case_index, report, allocator,
+          result);
+      iree_arena_deinitialize(&diagnostic_arena);
+      return status;
+    }
+    status = loom_check_emit_compare_output(test_case, allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
 
   iree_string_builder_t stripped_input;
   iree_string_builder_initialize(allocator, &stripped_input);
@@ -635,6 +674,11 @@ iree_status_t loom_check_execute_emit(
       case LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS:
         status = loom_check_emit_write_llvmir_assembly_mnemonics(
             lowered_module, profile, allocator, result);
+        break;
+      case LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST:
+        status = iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "low descriptor manifest emit should bypass LLVMIR lowering");
         break;
     }
   }
