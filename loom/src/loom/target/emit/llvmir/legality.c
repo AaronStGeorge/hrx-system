@@ -901,7 +901,9 @@ static iree_status_t loom_llvmir_target_legality_verify_functions(
     loom_llvmir_target_legality_context_t* context) {
   for (iree_host_size_t i = 0; i < context->module->symbols.count; ++i) {
     const loom_symbol_t* symbol = &context->module->symbols.entries[i];
-    if (!loom_symbol_kind_is_function_like(symbol->kind)) continue;
+    if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE)) {
+      continue;
+    }
     iree_string_view_t symbol_name = iree_string_view_empty();
     if (symbol->name_id != LOOM_STRING_ID_INVALID &&
         symbol->name_id < context->module->strings.count) {
@@ -912,8 +914,9 @@ static iree_status_t loom_llvmir_target_legality_verify_functions(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_FUNCTION, NULL,
           IREE_SV("function-like symbol has no defining op"), symbol_name);
     }
-    if (symbol->kind != LOOM_SYMBOL_FUNC_DEF &&
-        symbol->kind != LOOM_SYMBOL_FUNC_DECL) {
+    loom_symbol_kind_t bytecode_kind = loom_symbol_bytecode_kind(symbol);
+    if (bytecode_kind != LOOM_SYMBOL_FUNC_DEF &&
+        bytecode_kind != LOOM_SYMBOL_FUNC_DECL) {
       return loom_llvmir_target_legality_fail(
           context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_FUNCTION,
           symbol->defining_op,

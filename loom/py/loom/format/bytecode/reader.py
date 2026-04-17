@@ -16,9 +16,11 @@ malformed .loombc file produces a clear error, never a crash.
 from __future__ import annotations
 
 import struct
-from typing import Any, ClassVar
+from collections.abc import Iterable
+from typing import Any, ClassVar, cast
 
 from loom.format.bytecode.encoding import decode_signed_varint, decode_varint
+from loom.format.bytecode.op_decls import build_op_decl_map, symbol_def_for_op
 from loom.format.bytecode.writer import (
     BYTECODE_IR_KIND_BY_TYPE_KIND,
     FORMAT_VERSION,
@@ -103,9 +105,10 @@ class BytecodeError(Exception):
 class BytecodeReader:
     """Reads .loombc bytes and constructs an ir.py Module."""
 
-    def __init__(self, data: bytes) -> None:
+    def __init__(self, data: bytes, *, op_decls: Iterable[Any] | None = None) -> None:
         self._data = data
         self._offset = 0
+        self._op_decls_by_name = build_op_decl_map(op_decls)
         self._strings: list[str] = []
         self._sources: list[str] = []
         self._types: list[Type] = []
@@ -833,7 +836,8 @@ class BytecodeReader:
                     )
 
                 # Build the attributes dict for this func-like op.
-                op_attrs: dict[str, Any] = {"callee": name}
+                symbol_field = self._symbol_field_for_op(op_name)
+                op_attrs: dict[str, Any] = {symbol_field: name}
                 if flags & SYMBOL_FLAG_PUBLIC:
                     op_attrs["visibility"] = "public"
                 cc_str = (
@@ -921,7 +925,8 @@ class BytecodeReader:
                 op_attrs, offset = self._read_op_attr_entries(
                     sym_data, offset, attr_count, module, local_value_map
                 )
-                op_attrs = {"symbol": name, **op_attrs}
+                symbol_field = self._symbol_field_for_op(op_name)
+                op_attrs = {symbol_field: name, **op_attrs}
 
                 op = Operation(
                     name=op_name,
@@ -933,6 +938,44 @@ class BytecodeReader:
                 symbol = Symbol(
                     name=name,
                     kind=SymbolKind.GLOBAL,
+                    flags=flags,
+                    op=op,
+                    source_module=source_module,
+                    source_symbol=source_symbol,
+                )
+                module.add_symbol(symbol)
+            elif kind == SymbolKind.RECORD.value:
+                op_table_index_plus1, offset = decode_varint(sym_data, offset)
+                if op_table_index_plus1 == 0:
+                    raise BytecodeError(
+                        "record symbol op_table_index_plus1 must be nonzero"
+                    )
+                op_table_index = op_table_index_plus1 - 1
+                if op_table_index >= len(self._ops):
+                    raise BytecodeError(
+                        "record symbol op_table_index_plus1 references OPS "
+                        f"entry {op_table_index} but only {len(self._ops)} exist"
+                    )
+                op_name = self._ops[op_table_index]
+                op_comments, offset = self._read_comment_list(sym_data, offset)
+
+                attr_count, offset = decode_varint(sym_data, offset)
+                op_attrs, offset = self._read_op_attr_entries(
+                    sym_data, offset, attr_count, module, None
+                )
+                symbol_field = self._symbol_field_for_op(op_name)
+                op_attrs = {symbol_field: name, **op_attrs}
+
+                op = Operation(
+                    name=op_name,
+                    operands=[],
+                    results=[],
+                    attributes=op_attrs,
+                    comments=op_comments,
+                )
+                symbol = Symbol(
+                    name=name,
+                    kind=SymbolKind.RECORD,
                     flags=flags,
                     op=op,
                     source_module=source_module,
@@ -1336,10 +1379,17 @@ class BytecodeReader:
             case _:
                 raise BytecodeError(f"unknown predicate arg tag: {tag_byte}")
 
+    def _symbol_field_for_op(self, op_name: str) -> str:
+        """Return the generated symbol identity attr field for ``op_name``."""
+        try:
+            return cast(str, symbol_def_for_op(self._op_decls_by_name, op_name).field)
+        except ValueError as err:
+            raise BytecodeError(str(err)) from err
 
-def read_module(data: bytes) -> Module:
+
+def read_module(data: bytes, *, op_decls: Iterable[Any] | None = None) -> Module:
     """Read a module from .loombc bytes."""
     try:
-        return BytecodeReader(data).read()
+        return BytecodeReader(data, op_decls=op_decls).read()
     except ValueError as err:
         raise BytecodeError(str(err)) from err

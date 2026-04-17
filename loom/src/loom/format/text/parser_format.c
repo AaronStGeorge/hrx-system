@@ -1740,7 +1740,9 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
 
       case LOOM_FORMAT_KIND_SCOPE: {
         loom_parser_definition_scope_flags_t definition_scope_flags = 0;
-        if (vtable->symbol_kind == LOOM_SYMBOL_GLOBAL) {
+        if (vtable->symbol_def &&
+            loom_symbol_definition_implements(vtable->symbol_def,
+                                              LOOM_SYMBOL_INTERFACE_GLOBAL)) {
           definition_scope_flags |=
               LOOM_PARSER_DEFINITION_SCOPE_FLAG_RESOLVE_PLACEHOLDERS_FROM_USE;
         }

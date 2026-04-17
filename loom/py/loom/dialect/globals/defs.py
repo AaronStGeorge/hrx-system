@@ -45,6 +45,8 @@ from loom.dsl import (
     Op,
     Operand,
     Result,
+    SymbolDefinition,
+    SymbolReference,
 )
 
 # ============================================================================
@@ -74,6 +76,12 @@ global_constant = Op(
         "global-defining op instead of overloading inline attrs."
     ),
     traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="global",
+        interfaces=["global"],
+        bytecode_kind="LOOM_SYMBOL_GLOBAL",
+    ),
     attrs=[
         AttrDef("symbol", "symbol"),
         AttrDef("predicates", "predicate_list", optional=True),
@@ -121,6 +129,12 @@ global_variable = Op(
         "global.constant."
     ),
     traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="global",
+        interfaces=["global"],
+        bytecode_kind="LOOM_SYMBOL_GLOBAL",
+    ),
     attrs=[
         AttrDef("symbol", "symbol"),
         AttrDef("predicates", "predicate_list", optional=True),
@@ -160,7 +174,11 @@ global_load = Op(
     group=global_ops,
     doc=("Load a value from a global. Dynamic dims and encodings in the type annotation reference co-results by name. Predicates on the global definition are propagated as value facts."),
     attrs=[
-        AttrDef("global", "symbol"),
+        AttrDef(
+            "global",
+            "symbol",
+            symbol_ref=SymbolReference("global", ["global"]),
+        ),
     ],
     # Variadic results: the loaded value + any dim/encoding co-results.
     # The result count is determined by the LHS result names.
@@ -197,7 +215,11 @@ global_store = Op(
         Operand("value", ANY, doc="The value to store."),
     ],
     attrs=[
-        AttrDef("global", "symbol"),
+        AttrDef(
+            "global",
+            "symbol",
+            symbol_ref=SymbolReference("global", ["global"]),
+        ),
     ],
     traits=[UNKNOWN_EFFECTS],
     verify="loom_global_store_verify",

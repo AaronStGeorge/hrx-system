@@ -1191,21 +1191,22 @@ static void loom_block_drop_arg_type_uses(loom_module_t* module,
 static void loom_module_unlink_symbol_defining_op(
     loom_module_t* module, loom_op_t* op, const loom_op_vtable_t* vtable) {
   if (!vtable || !iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE) ||
-      !vtable->attr_descriptors) {
+      !vtable->symbol_def || !vtable->attr_descriptors) {
+    return;
+  }
+  uint8_t symbol_attr_index = vtable->symbol_def->name_attr_index;
+  if (symbol_attr_index >= vtable->attribute_count ||
+      symbol_attr_index >= op->attribute_count) {
     return;
   }
   const loom_attribute_t* attrs = loom_op_const_attrs(op);
-  for (uint8_t i = 0; i < vtable->attribute_count && i < op->attribute_count;
-       ++i) {
-    if (vtable->attr_descriptors[i].attr_kind != LOOM_ATTR_SYMBOL) continue;
-    loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[i]);
-    if (loom_symbol_ref_is_valid(ref) && ref.module_id == 0 &&
-        ref.symbol_id < module->symbols.count &&
-        module->symbols.entries[ref.symbol_id].defining_op == op) {
-      module->symbols.entries[ref.symbol_id].defining_op = NULL;
-      module->symbols.entries[ref.symbol_id].kind = LOOM_SYMBOL_NONE;
-    }
-    return;
+  loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[symbol_attr_index]);
+  if (loom_symbol_ref_is_valid(ref) && ref.module_id == 0 &&
+      ref.symbol_id < module->symbols.count &&
+      module->symbols.entries[ref.symbol_id].defining_op == op) {
+    module->symbols.entries[ref.symbol_id].defining_op = NULL;
+    module->symbols.entries[ref.symbol_id].definition = NULL;
+    module->symbols.entries[ref.symbol_id].kind = LOOM_SYMBOL_NONE;
   }
 }
 
@@ -1669,16 +1670,20 @@ iree_status_t loom_value_remove_use(loom_module_t* module,
 
 void loom_module_link_symbol_defining_op(loom_module_t* module, loom_op_t* op,
                                          const loom_op_vtable_t* vtable) {
-  loom_attribute_t* attrs = loom_op_attrs(op);
-  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
-    if (vtable->attr_descriptors[i].attr_kind != LOOM_ATTR_SYMBOL) continue;
-    loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[i]);
-    if (loom_symbol_ref_is_valid(ref) &&
-        ref.symbol_id < module->symbols.count) {
-      module->symbols.entries[ref.symbol_id].defining_op = op;
-      module->symbols.entries[ref.symbol_id].kind = vtable->symbol_kind;
-    }
+  if (!vtable || !vtable->symbol_def || !vtable->attr_descriptors) return;
+  uint8_t symbol_attr_index = vtable->symbol_def->name_attr_index;
+  if (symbol_attr_index >= vtable->attribute_count ||
+      symbol_attr_index >= op->attribute_count) {
     return;
+  }
+  loom_attribute_t* attrs = loom_op_attrs(op);
+  loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[symbol_attr_index]);
+  if (loom_symbol_ref_is_valid(ref) && ref.module_id == 0 &&
+      ref.symbol_id < module->symbols.count) {
+    module->symbols.entries[ref.symbol_id].defining_op = op;
+    module->symbols.entries[ref.symbol_id].definition = vtable->symbol_def;
+    module->symbols.entries[ref.symbol_id].kind =
+        vtable->symbol_def->bytecode_kind;
   }
 }
 

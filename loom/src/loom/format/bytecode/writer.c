@@ -1082,6 +1082,26 @@ static bool loom_bytecode_attr_descriptor_is_symbol(
   return descriptor && descriptor->attr_kind == LOOM_ATTR_SYMBOL;
 }
 
+static uint8_t loom_bytecode_find_symbol_attr_index(
+    const loom_op_vtable_t* vtable) {
+  if (!vtable || !vtable->attr_descriptors) return LOOM_ATTR_INDEX_NONE;
+  if (vtable->symbol_def) {
+    uint8_t attr_index = vtable->symbol_def->name_attr_index;
+    if (attr_index < vtable->attribute_count &&
+        loom_bytecode_attr_descriptor_is_symbol(
+            &vtable->attr_descriptors[attr_index])) {
+      return attr_index;
+    }
+    return LOOM_ATTR_INDEX_NONE;
+  }
+  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
+    if (loom_bytecode_attr_descriptor_is_symbol(&vtable->attr_descriptors[i])) {
+      return i;
+    }
+  }
+  return LOOM_ATTR_INDEX_NONE;
+}
+
 typedef struct loom_bytecode_global_value_list_t {
   // Temporary arena used for growing the value ID list.
   iree_arena_allocator_t* arena;
@@ -1256,6 +1276,63 @@ static iree_status_t loom_bytecode_number_global(
         (unsigned)op->kind);
   }
 
+  const loom_attribute_t* attrs = loom_op_attrs(op);
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+      continue;
+    }
+
+    iree_string_view_t key_name = loom_attr_descriptor_name(descriptor);
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+        numbering, key_name, &unused_id));
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_number_attr_value(numbering, attrs[i], descriptor));
+  }
+
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_validate_record_symbol_op(
+    const loom_module_t* module, const loom_op_t* op) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !iree_all_bits_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE) ||
+      !vtable->symbol_def ||
+      !loom_symbol_definition_implements(vtable->symbol_def,
+                                         LOOM_SYMBOL_INTERFACE_RECORD)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "record symbol op kind 0x%04x must define a RECORD symbol",
+        (unsigned)op->kind);
+  }
+  if (op->operand_count != 0 || op->result_count != 0 ||
+      op->region_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "record symbol op kind 0x%04x must be attr-only",
+                            (unsigned)op->kind);
+  }
+  if (loom_bytecode_find_symbol_attr_index(vtable) == LOOM_ATTR_INDEX_NONE) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "record symbol op kind 0x%04x must declare a symbol attribute",
+        (unsigned)op->kind);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_bytecode_number_record(
+    loom_bytecode_numbering_t* numbering, const loom_op_t* op) {
+  uint32_t unused_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_validate_record_symbol_op(numbering->module, op));
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_numbering_intern_op(numbering, op, &unused_id));
+
+  const loom_op_vtable_t* vtable =
+      loom_context_resolve_op(numbering->module->context, op->kind);
   const loom_attribute_t* attrs = loom_op_attrs(op);
   for (uint8_t i = 0; i < op->attribute_count; ++i) {
     const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
@@ -1535,6 +1612,9 @@ static iree_status_t loom_bytecode_symbol_kind_byte(loom_symbol_kind_t kind,
     case LOOM_SYMBOL_EXECUTABLE:
       *out_byte = LOOM_BYTECODE_SYMBOL_EXECUTABLE;
       return iree_ok_status();
+    case LOOM_SYMBOL_RECORD:
+      *out_byte = LOOM_BYTECODE_SYMBOL_RECORD;
+      return iree_ok_status();
     default:
       break;
   }
@@ -1601,9 +1681,15 @@ static iree_status_t loom_bytecode_count_serialized_bodies(
   for (iree_host_size_t symbol_index = 0; symbol_index < module->symbols.count;
        ++symbol_index) {
     const loom_symbol_t* symbol = &module->symbols.entries[symbol_index];
-    if (!loom_symbol_kind_is_function_like(symbol->kind) ||
-        !symbol->defining_op) {
-      if (symbol->kind == LOOM_SYMBOL_GLOBAL && symbol->defining_op) {
+    loom_symbol_kind_t bytecode_kind = loom_symbol_bytecode_kind(symbol);
+    bool is_function_like =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) ||
+        loom_symbol_kind_is_function_like(bytecode_kind);
+    bool is_global =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_GLOBAL) ||
+        bytecode_kind == LOOM_SYMBOL_GLOBAL;
+    if (!is_function_like || !symbol->defining_op) {
+      if (is_global && symbol->defining_op) {
         loom_bytecode_global_value_list_t local_values = {0};
         IREE_RETURN_IF_ERROR(loom_bytecode_collect_global_values(
             numbering->arena, module, symbol->defining_op, &local_values));
@@ -2335,8 +2421,11 @@ static iree_status_t loom_bytecode_write_ir_section(
   for (iree_host_size_t symbol_index = 0; symbol_index < module->symbols.count;
        ++symbol_index) {
     const loom_symbol_t* symbol = &module->symbols.entries[symbol_index];
-    if (!loom_symbol_kind_is_function_like(symbol->kind) ||
-        !symbol->defining_op) {
+    loom_symbol_kind_t bytecode_kind = loom_symbol_bytecode_kind(symbol);
+    bool is_function_like =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) ||
+        loom_symbol_kind_is_function_like(bytecode_kind);
+    if (!is_function_like || !symbol->defining_op) {
       ir_offsets[symbol_index].offset = 0;
       ir_offsets[symbol_index].length = 0;
       continue;
@@ -2592,6 +2681,57 @@ static iree_status_t loom_bytecode_write_global_metadata(
   return iree_ok_status();
 }
 
+static iree_status_t loom_bytecode_write_record_metadata(
+    iree_string_builder_t* builder, loom_bytecode_numbering_t* numbering,
+    const loom_module_t* module, const loom_op_t* op) {
+  IREE_RETURN_IF_ERROR(loom_bytecode_validate_record_symbol_op(module, op));
+  IREE_RETURN_IF_ERROR(loom_bytecode_number_record(numbering, op));
+
+  uint32_t writer_op_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_numbering_intern_op(numbering, op, &writer_op_id));
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_emit_uvarint(builder, (uint64_t)writer_op_id + 1));
+
+  iree_host_size_t comment_count = 0;
+  const iree_string_view_t* comments =
+      loom_module_op_comments(module, op, &comment_count);
+  IREE_RETURN_IF_ERROR(
+      loom_bytecode_emit_comment_list(builder, comments, comment_count));
+
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  const loom_attribute_t* attrs = loom_op_attrs(op);
+  uint8_t present_attr_count = 0;
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (present && !loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+      ++present_attr_count;
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, present_attr_count));
+  for (uint8_t i = 0; i < op->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    bool present = false;
+    IREE_RETURN_IF_ERROR(
+        loom_bytecode_op_attr_is_present(op, descriptor, attrs[i], &present));
+    if (!present || loom_bytecode_attr_descriptor_is_symbol(descriptor)) {
+      continue;
+    }
+
+    uint32_t key_writer_id = 0;
+    IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+        numbering, loom_attr_descriptor_name(descriptor), &key_writer_id));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_uvarint(builder, key_writer_id));
+    IREE_RETURN_IF_ERROR(loom_bytecode_emit_attr_value(builder, numbering, NULL,
+                                                       attrs[i], descriptor));
+  }
+
+  return iree_ok_status();
+}
+
 static loom_attribute_t loom_bytecode_find_op_attr_by_name(
     const loom_op_vtable_t* vtable, const loom_op_t* op,
     iree_string_view_t name) {
@@ -2752,8 +2892,8 @@ static iree_status_t loom_bytecode_write_symbols_section(
 
     // Kind.
     uint8_t kind_byte = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_bytecode_symbol_kind_byte(symbol->kind, &kind_byte));
+    IREE_RETURN_IF_ERROR(loom_bytecode_symbol_kind_byte(
+        loom_symbol_bytecode_kind(symbol), &kind_byte));
     IREE_RETURN_IF_ERROR(loom_bytecode_emit_u8(builder, kind_byte));
 
     // Visibility.
@@ -2785,8 +2925,17 @@ static iree_status_t loom_bytecode_write_symbols_section(
     }
 
     // Function metadata.
-    if (loom_symbol_kind_is_function_like(symbol->kind) &&
-        symbol->defining_op) {
+    loom_symbol_kind_t metadata_kind = loom_symbol_bytecode_kind(symbol);
+    bool has_function_metadata =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) ||
+        loom_symbol_kind_is_function_like(metadata_kind);
+    bool has_global_metadata =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_GLOBAL) ||
+        metadata_kind == LOOM_SYMBOL_GLOBAL;
+    bool has_record_metadata =
+        loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_RECORD) ||
+        metadata_kind == LOOM_SYMBOL_RECORD;
+    if (has_function_metadata && symbol->defining_op) {
       loom_func_like_t func_like =
           loom_func_like_cast(module, symbol->defining_op);
       if (loom_func_like_isa(func_like)) {
@@ -2799,7 +2948,7 @@ static iree_status_t loom_bytecode_write_symbols_section(
             builder, numbering, module, func_like, &signature_numbering,
             ir_offsets[symbol_index]));
       }
-    } else if (symbol->kind == LOOM_SYMBOL_GLOBAL && symbol->defining_op) {
+    } else if (has_global_metadata && symbol->defining_op) {
       if (signature_numbering.map) {
         memset(signature_numbering.map, 0xFF,
                signature_numbering.capacity * sizeof(uint32_t));
@@ -2808,6 +2957,9 @@ static iree_status_t loom_bytecode_write_symbols_section(
       IREE_RETURN_IF_ERROR(loom_bytecode_write_global_metadata(
           builder, numbering, module, symbol->defining_op,
           &signature_numbering));
+    } else if (has_record_metadata && symbol->defining_op) {
+      IREE_RETURN_IF_ERROR(loom_bytecode_write_record_metadata(
+          builder, numbering, module, symbol->defining_op));
     }
   }
 
@@ -3172,7 +3324,9 @@ static iree_status_t loom_bytecode_validate_module(
   }
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     const loom_symbol_t* symbol = &module->symbols.entries[i];
-    if (symbol->kind == LOOM_SYMBOL_GLOBAL) {
+    loom_symbol_kind_t bytecode_kind = loom_symbol_bytecode_kind(symbol);
+    if (loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_GLOBAL) ||
+        bytecode_kind == LOOM_SYMBOL_GLOBAL) {
       if (!symbol->defining_op) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "GLOBAL symbol %" PRIhsz " has no defining op",
@@ -3182,7 +3336,9 @@ static iree_status_t loom_bytecode_validate_module(
       const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
       if (!vtable ||
           !iree_all_bits_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE) ||
-          vtable->symbol_kind != LOOM_SYMBOL_GLOBAL) {
+          !vtable->symbol_def ||
+          !loom_symbol_definition_implements(vtable->symbol_def,
+                                             LOOM_SYMBOL_INTERFACE_GLOBAL)) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "GLOBAL symbol %" PRIhsz
                                 " defining op is not a global symbol op",
@@ -3209,9 +3365,20 @@ static iree_status_t loom_bytecode_validate_module(
             i);
       }
     }
-    if (symbol->kind == LOOM_SYMBOL_EXECUTABLE) {
+    if (loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_EXECUTABLE) ||
+        bytecode_kind == LOOM_SYMBOL_EXECUTABLE) {
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "EXECUTABLE symbols not yet supported");
+    }
+    if (loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_RECORD) ||
+        bytecode_kind == LOOM_SYMBOL_RECORD) {
+      if (!symbol->defining_op) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "RECORD symbol %" PRIhsz " has no defining op",
+                                i);
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_bytecode_validate_record_symbol_op(module, symbol->defining_op));
     }
   }
   return iree_ok_status();

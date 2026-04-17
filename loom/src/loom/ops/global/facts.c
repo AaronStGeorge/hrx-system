@@ -21,7 +21,9 @@ static const loom_op_t* loom_global_load_definition(const loom_module_t* module,
     return NULL;
   }
   const loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
-  if (symbol->kind != LOOM_SYMBOL_GLOBAL) return NULL;
+  if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_GLOBAL)) {
+    return NULL;
+  }
   return symbol->defining_op;
 }
 

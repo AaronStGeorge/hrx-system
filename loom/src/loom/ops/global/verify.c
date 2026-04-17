@@ -10,43 +10,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/global/ops.h"
 
-static iree_string_view_t loom_global_symbol_name(const loom_module_t* module,
-                                                  loom_symbol_ref_t ref) {
-  if (!loom_symbol_ref_is_valid(ref) ||
-      ref.symbol_id >= module->symbols.count) {
-    return IREE_SV("<unnamed>");
-  }
-  const loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
-  if (symbol->name_id != LOOM_STRING_ID_INVALID &&
-      symbol->name_id < module->strings.count) {
-    return module->strings.entries[symbol->name_id];
-  }
-  return IREE_SV("<unnamed>");
-}
-
-static iree_string_view_t loom_global_symbol_kind_name(
-    loom_symbol_kind_t kind) {
-  switch (kind) {
-    case LOOM_SYMBOL_NONE:
-      return IREE_SV("unresolved");
-    case LOOM_SYMBOL_FUNC_DEF:
-      return IREE_SV("func.def");
-    case LOOM_SYMBOL_FUNC_DECL:
-      return IREE_SV("func.decl");
-    case LOOM_SYMBOL_FUNC_TEMPLATE:
-      return IREE_SV("func.template");
-    case LOOM_SYMBOL_FUNC_UKERNEL:
-      return IREE_SV("func.ukernel");
-    case LOOM_SYMBOL_GLOBAL:
-      return IREE_SV("global");
-    case LOOM_SYMBOL_EXECUTABLE:
-      return IREE_SV("executable");
-    case LOOM_SYMBOL_COUNT_:
-      break;
-  }
-  return IREE_SV("unknown");
-}
-
 static loom_type_t loom_global_symbol_type(const loom_module_t* module,
                                            const loom_symbol_t* symbol) {
   loom_type_t none = {0};
@@ -233,30 +196,6 @@ static iree_status_t loom_global_verify_load_results(
   return iree_ok_status();
 }
 
-static iree_status_t loom_global_emit_kind_mismatch(
-    const loom_module_t* module, const loom_op_t* op,
-    iree_diagnostic_emitter_t emitter, loom_symbol_ref_t ref,
-    const loom_symbol_t* symbol) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_global_symbol_name(module, ref)),
-      loom_param_string(loom_global_symbol_kind_name(symbol->kind)),
-      loom_param_string(IREE_SV("global")),
-  };
-  loom_diagnostic_related_op_t related_ops[] = {{
-      .label = IREE_SV("defined here"),
-      .op = symbol->defining_op,
-  }};
-  loom_diagnostic_emission_t emission = {
-      .op = op,
-      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3),
-      .params = params,
-      .param_count = IREE_ARRAYSIZE(params),
-      .related_ops = related_ops,
-      .related_op_count = IREE_ARRAYSIZE(related_ops),
-  };
-  return iree_diagnostic_emit(emitter, &emission);
-}
-
 static iree_status_t loom_global_emit_type_mismatch(
     const loom_op_t* op, const loom_op_t* definition_op,
     iree_diagnostic_emitter_t emitter, iree_string_view_t field_name,
@@ -356,11 +295,11 @@ iree_status_t loom_global_load_verify(const loom_module_t* module,
   }
 
   const loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
-  if (symbol->kind == LOOM_SYMBOL_NONE || symbol->defining_op == NULL) {
+  if (symbol->definition == NULL || symbol->defining_op == NULL) {
     return iree_ok_status();
   }
-  if (symbol->kind != LOOM_SYMBOL_GLOBAL) {
-    return loom_global_emit_kind_mismatch(module, op, emitter, ref, symbol);
+  if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_GLOBAL)) {
+    return iree_ok_status();
   }
 
   IREE_RETURN_IF_ERROR(loom_global_verify_load_results(module, op, emitter));
@@ -387,11 +326,11 @@ iree_status_t loom_global_store_verify(const loom_module_t* module,
   }
 
   const loom_symbol_t* symbol = &module->symbols.entries[ref.symbol_id];
-  if (symbol->kind == LOOM_SYMBOL_NONE || symbol->defining_op == NULL) {
+  if (symbol->definition == NULL || symbol->defining_op == NULL) {
     return iree_ok_status();
   }
-  if (symbol->kind != LOOM_SYMBOL_GLOBAL) {
-    return loom_global_emit_kind_mismatch(module, op, emitter, ref, symbol);
+  if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_GLOBAL)) {
+    return iree_ok_status();
   }
 
   loom_type_t global_type = loom_global_symbol_type(module, symbol);

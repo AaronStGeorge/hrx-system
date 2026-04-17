@@ -633,13 +633,83 @@ typedef struct loom_result_descriptor_t {
   loom_result_flags_t flags;
 } loom_result_descriptor_t;
 
+typedef uint32_t loom_symbol_interface_flags_t;
+
+enum loom_symbol_interface_bits_e {
+  // Symbol implements the generated function-like interface.
+  LOOM_SYMBOL_INTERFACE_FUNC_LIKE = 1u << 0,
+  // Symbol implements the generated global-like contract.
+  LOOM_SYMBOL_INTERFACE_GLOBAL = 1u << 1,
+  // Symbol names a target executable/package-like entity.
+  LOOM_SYMBOL_INTERFACE_EXECUTABLE = 1u << 2,
+  // Symbol names a generic module-level record.
+  LOOM_SYMBOL_INTERFACE_RECORD = 1u << 3,
+};
+
+// Generated metadata for an op that defines a module symbol.
+typedef struct loom_symbol_definition_descriptor_t {
+  // Human-readable symbol class used in diagnostics.
+  loom_bstring_t name;
+  // Attribute index of the symbol identity field on the defining op.
+  uint8_t name_attr_index;
+  // Structural symbol interfaces implemented by this definition.
+  loom_symbol_interface_flags_t interfaces;
+  // Existing bytecode payload kind, or LOOM_SYMBOL_NONE if not serializable
+  // through the current SYMBOLS section.
+  loom_symbol_kind_t bytecode_kind;
+} loom_symbol_definition_descriptor_t;
+
+// Generated metadata for a symbol-reference attribute.
+typedef struct loom_symbol_reference_descriptor_t {
+  // Human-readable expected symbol class used in diagnostics.
+  loom_bstring_t name;
+  // Structural symbol interfaces accepted by this reference.
+  loom_symbol_interface_flags_t interfaces;
+} loom_symbol_reference_descriptor_t;
+
+static inline iree_string_view_t loom_symbol_definition_descriptor_name(
+    const loom_symbol_definition_descriptor_t* descriptor) {
+  return descriptor ? loom_bstring_view(descriptor->name) : IREE_SV("unknown");
+}
+
+static inline iree_string_view_t loom_symbol_reference_descriptor_name(
+    const loom_symbol_reference_descriptor_t* descriptor) {
+  return descriptor ? loom_bstring_view(descriptor->name) : IREE_SV("symbol");
+}
+
+static inline bool loom_symbol_definition_implements(
+    const loom_symbol_definition_descriptor_t* descriptor,
+    loom_symbol_interface_flags_t interfaces) {
+  return descriptor && interfaces &&
+         iree_any_bit_set(descriptor->interfaces, interfaces);
+}
+
+static inline bool loom_symbol_implements(
+    const loom_symbol_t* symbol, loom_symbol_interface_flags_t interfaces) {
+  return symbol &&
+         loom_symbol_definition_implements(symbol->definition, interfaces);
+}
+
+static inline loom_symbol_kind_t loom_symbol_bytecode_kind(
+    const loom_symbol_t* symbol) {
+  if (!symbol) return LOOM_SYMBOL_NONE;
+  return symbol->definition ? symbol->definition->bytecode_kind : symbol->kind;
+}
+
 // Per-attribute metadata in the op vtable.
 typedef struct loom_attr_descriptor_t {
+  // Author-facing DSL attribute field name used in diagnostics.
   loom_bstring_t name;
+  // Runtime attribute payload kind.
   loom_attr_kind_t attr_kind;
+  // Attribute structural flags such as optional.
   loom_attr_flags_t flags;
+  // Number of enum keyword slots in |enum_case_names|.
   uint8_t enum_case_count;
+  // Dense enum value to keyword table, or NULL for non-enum attrs.
   const loom_bstring_t* enum_case_names;
+  // Expected symbol target contract, or NULL for non-symbol-reference attrs.
+  const loom_symbol_reference_descriptor_t* symbol_ref;
 } loom_attr_descriptor_t;
 
 // Returns the attribute name as a string view.
@@ -1342,10 +1412,9 @@ iree_status_t loom_value_remove_use(loom_module_t* module,
 // builder: `return loom_builder_finalize_op(builder, *out_op);`
 iree_status_t loom_builder_finalize_op(loom_builder_t* builder, loom_op_t* op);
 
-// Links a symbol-defining op to its symbol table entry. Scans the
-// op's attributes (via the vtable's attr descriptors) for the first
-// LOOM_ATTR_SYMBOL, then sets defining_op and kind on the
-// corresponding symbol entry. Idempotent.
+// Links a symbol-defining op to its symbol table entry using the op's generated
+// symbol definition descriptor. Sets the symbol's defining op, definition
+// descriptor, and legacy bytecode kind. Idempotent.
 void loom_module_link_symbol_defining_op(loom_module_t* module, loom_op_t* op,
                                          const loom_op_vtable_t* vtable);
 

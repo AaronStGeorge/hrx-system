@@ -500,7 +500,7 @@ static iree_status_t loom_refine_boundaries_build_graph(
   iree_host_size_t function_count = 0;
   loom_symbol_t* symbol = NULL;
   loom_module_for_each_symbol(module, symbol) {
-    if (!loom_symbol_kind_is_function_like(symbol->kind) ||
+    if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) ||
         !symbol->defining_op) {
       continue;
     }
@@ -523,7 +523,7 @@ static iree_status_t loom_refine_boundaries_build_graph(
 
   iree_host_size_t node = 0;
   loom_module_for_each_symbol(module, symbol) {
-    if (!loom_symbol_kind_is_function_like(symbol->kind) ||
+    if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) ||
         !symbol->defining_op) {
       continue;
     }

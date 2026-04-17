@@ -432,6 +432,12 @@ static iree_string_view_t loom_verify_symbol_name(
   return iree_make_cstring_view("<unnamed>");
 }
 
+static iree_string_view_t loom_verify_symbol_definition_name(
+    const loom_symbol_t* symbol) {
+  if (!symbol || !symbol->definition) return IREE_SV("unresolved");
+  return loom_symbol_definition_descriptor_name(symbol->definition);
+}
+
 //===----------------------------------------------------------------------===//
 // Diagnostic emission
 //===----------------------------------------------------------------------===//
@@ -3559,7 +3565,9 @@ static bool loom_verify_value_is_named_placeholder(
 
 static bool loom_verify_op_allows_declaration_local_encoding_refs(
     const loom_op_vtable_t* vtable) {
-  return vtable && vtable->symbol_kind == LOOM_SYMBOL_GLOBAL &&
+  return vtable && vtable->symbol_def &&
+         loom_symbol_definition_implements(vtable->symbol_def,
+                                           LOOM_SYMBOL_INTERFACE_GLOBAL) &&
          iree_any_bit_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE);
 }
 
@@ -3874,8 +3882,9 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
   const loom_attribute_t* attrs = loom_op_attrs(op);
   for (uint8_t i = 0; i < vtable->attribute_count && i < op->attribute_count;
        ++i) {
-    if (vtable->attr_descriptors[i].attr_kind != LOOM_ATTR_SYMBOL) continue;
-    if ((vtable->attr_descriptors[i].flags & LOOM_ATTR_OPTIONAL) &&
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    if (descriptor->attr_kind != LOOM_ATTR_SYMBOL) continue;
+    if ((descriptor->flags & LOOM_ATTR_OPTIONAL) &&
         loom_attr_is_absent(attrs[i])) {
       continue;
     }
@@ -3909,7 +3918,7 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
 
     const loom_symbol_t* symbol =
         &state->module->symbols.entries[ref.symbol_id];
-    if (symbol->kind == LOOM_SYMBOL_NONE || symbol->defining_op == NULL) {
+    if (symbol->definition == NULL || symbol->defining_op == NULL) {
       loom_diagnostic_param_t params[] = {
           loom_verify_param_string_for_diagnostic_field(
               loom_verify_symbol_name(state, ref),
@@ -3918,6 +3927,32 @@ static void loom_verify_symbol_references(loom_verify_state_t* state,
       loom_verify_emit_structured(
           state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 2), params,
           IREE_ARRAYSIZE(params));
+      continue;
+    }
+
+    if (descriptor->symbol_ref &&
+        !loom_symbol_implements(symbol, descriptor->symbol_ref->interfaces)) {
+      loom_diagnostic_param_t params[] = {
+          loom_verify_param_string_for_diagnostic_field(
+              loom_verify_symbol_name(state, ref),
+              LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, i),
+          loom_param_string(loom_verify_symbol_definition_name(symbol)),
+          loom_param_string(
+              loom_symbol_reference_descriptor_name(descriptor->symbol_ref)),
+      };
+      loom_diagnostic_related_op_t related_ops[] = {{
+          .label = IREE_SV("defined here"),
+          .op = symbol->defining_op,
+      }};
+      loom_diagnostic_emission_t emission = {
+          .op = op,
+          .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3),
+          .params = params,
+          .param_count = IREE_ARRAYSIZE(params),
+          .related_ops = related_ops,
+          .related_op_count = IREE_ARRAYSIZE(related_ops),
+      };
+      loom_verify_emit_diagnostic(state, &emission);
     }
   }
 }

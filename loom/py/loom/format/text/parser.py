@@ -1145,7 +1145,20 @@ class Parser:
 
         Called after _parse_operation() for any op appearing at module level.
         """
-        self._module.add_symbol(symbol_from_operation(op))
+        op_decl = self._op_registry.get(op.name)
+        if op_decl is None or not op_decl.has_trait("SymbolDefine"):
+            location = SourceLocation(1, 1, 0)
+            op_location = self._module.locations.get(op.location_id)
+            if isinstance(op_location, FileLocation):
+                location = SourceLocation(
+                    op_location.start_line, op_location.start_col, 0
+                )
+            raise ParseError(
+                f"top-level op '{op.name}' does not declare a generated symbol",
+                location,
+                self._tokenizer._filename,
+            )
+        self._module.add_symbol(symbol_from_operation(op, op_decl))
 
     def _parse_func_arg(self) -> tuple[str, Type, int]:
         """Parse one function argument: %name: type.

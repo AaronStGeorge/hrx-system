@@ -28,6 +28,7 @@ from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
+from loom.dsl import SYMBOL_DEFINE, AttrDef, Op, SymbolDefinition
 from loom.format.bytecode.encoding import decode_varint
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import (
@@ -1249,6 +1250,67 @@ class TestCrossFormatRoundTrip:
         assert func_op.attributes.get("callee") == "negate"
         assert func_op.regions
         assert len(func_op.regions[0].blocks[0].ops) == 2
+
+    def test_record_symbol_survives_bytecode(self) -> None:
+        text = 'test.record @target {arch = "gfx1100", lanes = 64}\n'
+        loaded = _parse_write_read(text)
+        assert len(loaded.symbols) == 1
+        symbol = loaded.symbols[0]
+        assert symbol.kind == SymbolKind.RECORD
+        assert symbol.op is not None
+        assert symbol.op.attributes["symbol"] == "target"
+        assert dict(symbol.op.attributes["dict"]) == {
+            "arch": "gfx1100",
+            "lanes": 64,
+        }
+        assert _roundtrip_text_through_bytecode(text) == text
+
+    def test_record_symbol_uses_generated_symbol_field(self) -> None:
+        custom_record = Op(
+            "bytecode.record",
+            traits=[SYMBOL_DEFINE],
+            symbol_def=SymbolDefinition(
+                field="name",
+                name="record",
+                interfaces=["record"],
+                bytecode_kind="LOOM_SYMBOL_RECORD",
+            ),
+            attrs=[
+                AttrDef("name", "symbol"),
+                AttrDef("payload", "dict", optional=True),
+            ],
+        )
+        module = Module()
+        op = Operation(
+            name="bytecode.record",
+            attributes={
+                "name": "target",
+                "payload": {"arch": "gfx1100", "lanes": 64},
+            },
+        )
+        module.add_symbol(Symbol(name="target", kind=SymbolKind.RECORD, op=op))
+
+        loaded = read_module(
+            write_module(module, op_decls=[custom_record]),
+            op_decls=[custom_record],
+        )
+
+        assert len(loaded.symbols) == 1
+        symbol = loaded.symbols[0]
+        assert symbol.op is not None
+        assert symbol.op.attributes["name"] == "target"
+        assert "symbol" not in symbol.op.attributes
+        assert dict(symbol.op.attributes["payload"]) == {
+            "arch": "gfx1100",
+            "lanes": 64,
+        }
+
+    def test_symbol_without_bytecode_payload_kind_fails_loud(self) -> None:
+        module = Module()
+        module.add_symbol(Symbol(name="opaque", kind=SymbolKind.NONE))
+
+        with pytest.raises(ValueError, match="no bytecode symbol payload kind"):
+            write_module(module)
 
     def test_operand_dict_survives_bytecode(self) -> None:
         text = (

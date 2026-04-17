@@ -439,9 +439,9 @@ typedef enum loom_bytecode_section_kind_e {
 // ==========================================================================
 //
 // The symbol table is the linker's primary data structure. Every
-// module-level named entity (function, global, executable) has an
-// entry here with full metadata — enough for linking without
-// touching the IR section.
+// module-level named entity (function, global, executable, record) has an
+// entry here with full metadata — enough for linking without touching the IR
+// section.
 //
 // The section header contains import and export offset tables that
 // let the linker iterate just the imports or exports without
@@ -477,7 +477,7 @@ typedef enum loom_bytecode_section_kind_e {
 //   [name_id: varint]
 //   [kind: byte]            (FUNC_DEF=0, FUNC_DECL=1,
 //                            FUNC_TEMPLATE=2, FUNC_UKERNEL=3,
-//                            GLOBAL=4, EXECUTABLE=5)
+//                            GLOBAL=4, EXECUTABLE=5, RECORD=6)
 //   [visibility: byte]      (PUBLIC=0, PRIVATE=1)
 //   [flags: u16]            (see loom_bytecode_symbol_flag_bits_e)
 //
@@ -578,6 +578,23 @@ typedef enum loom_bytecode_section_kind_e {
 //     // Compiled device code and target metadata are referenced through
 //     // op attributes and RESOURCES payloads. The symbol table itself carries
 //     // only the common symbol header fields for EXECUTABLE entries today.
+//
+//   For RECORD symbols:
+//     [def_op_table_index_plus1: varint]
+//                         0 is invalid. N > 0 means the defining attr-only
+//                         record op name is OPS[N - 1]. The op must define a
+//                         RECORD symbol and have no operands, results, or
+//                         regions.
+//     [comment_count: varint]
+//     For each leading comment attached to the symbol op:
+//       [comment_length: varint]
+//       [comment_data: comment_length bytes]  bytes after the leading // marker
+//     [attr_count: varint]      Present non-symbol attributes only. The symbol
+//                               attr is reconstructed from name_id.
+//     For each present non-symbol attribute:
+//       [key_id: varint]
+//       [value_kind: byte]
+//       [value_data: ...]
 
 // ==========================================================================
 // IR section
@@ -889,6 +906,7 @@ typedef enum loom_bytecode_symbol_kind_e {
   LOOM_BYTECODE_SYMBOL_FUNC_UKERNEL = 3,
   LOOM_BYTECODE_SYMBOL_GLOBAL = 4,
   LOOM_BYTECODE_SYMBOL_EXECUTABLE = 5,
+  LOOM_BYTECODE_SYMBOL_RECORD = 6,
   LOOM_BYTECODE_SYMBOL_COUNT_,
 } loom_bytecode_symbol_kind_t;
 

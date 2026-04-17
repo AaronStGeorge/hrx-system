@@ -427,34 +427,23 @@ def _func_args_field_name(op: Op) -> str:
     return _walk(op.format) or "args"
 
 
-# Maps op name suffixes to symbol kind constants for SYMBOL_DEFINE ops.
-_SYMBOL_KIND_MAP: dict[str, str] = {
-    "func.def": "LOOM_SYMBOL_FUNC_DEF",
-    "func.decl": "LOOM_SYMBOL_FUNC_DECL",
-    "func.template": "LOOM_SYMBOL_FUNC_TEMPLATE",
-    "func.ukernel": "LOOM_SYMBOL_FUNC_UKERNEL",
-    "global.constant": "LOOM_SYMBOL_GLOBAL",
-    "global.variable": "LOOM_SYMBOL_GLOBAL",
+# Maps Python symbol interface names to C interface flag constants.
+SYMBOL_INTERFACE_MAP: dict[str, str] = {
+    "func_like": "LOOM_SYMBOL_INTERFACE_FUNC_LIKE",
+    "global": "LOOM_SYMBOL_INTERFACE_GLOBAL",
+    "executable": "LOOM_SYMBOL_INTERFACE_EXECUTABLE",
+    "record": "LOOM_SYMBOL_INTERFACE_RECORD",
 }
 
 
-def _symbol_kind(op: Op) -> str:
-    """Returns the C symbol kind constant for an op.
+def _symbol_interface_flags(interfaces: Sequence[str]) -> str:
+    flags = [SYMBOL_INTERFACE_MAP[interface] for interface in interfaces]
+    return " | ".join(flags) if flags else "0"
 
-    For ops with the SymbolDefine trait, looks up the kind from the op
-    name. For test dialect ops with FuncLikeInterface, defaults to
-    LOOM_SYMBOL_FUNC_DEF. All other ops return LOOM_SYMBOL_NONE.
-    """
-    has_symbol_define = any(t.name == "SymbolDefine" for t in op.traits)
-    if not has_symbol_define:
-        return "LOOM_SYMBOL_NONE"
-    kind = _SYMBOL_KIND_MAP.get(op.name)
-    if kind is not None:
-        return kind
-    # Test dialect and other func-like symbol-defining ops default to DEF.
-    if _find_interface(op, FuncLikeInterface) is not None:
-        return "LOOM_SYMBOL_FUNC_DEF"
-    raise ValueError(f"op '{op.name}' has SymbolDefine trait but no symbol_kind mapping — add it to _SYMBOL_KIND_MAP in c_tables.py")
+
+def _symbol_kind(op: Op) -> str:
+    """Returns the legacy C bytecode symbol kind constant for an op."""
+    return op.symbol_def.bytecode_kind if op.symbol_def is not None else "LOOM_SYMBOL_NONE"
 
 
 def _constraint_arg_ref(
@@ -2610,6 +2599,24 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         lines.append("};")
     lines.append("")
 
+    # Attribute symbol-reference descriptors.
+    for op in ops:
+        non_flags = _non_flags_attrs(op)
+        if not any(attr.symbol_ref is not None for attr in non_flags):
+            continue
+        prefix = _c_prefix(op)
+        for attr_def in non_flags:
+            if attr_def.symbol_ref is None:
+                continue
+            name = attr_def.symbol_ref.name
+            assert len(name) < 256, f"symbol reference name too long: {name!r}"
+            name_bstr = f"{prefix}_{attr_def.name}_symbol_ref_bname"
+            lines.append(f'static const uint8_t {name_bstr}[] = "\\x{len(name):02x}" "{name}";')
+            flags = _symbol_interface_flags(attr_def.symbol_ref.interfaces)
+            descriptor_name = f"{prefix}_{attr_def.name}_symbol_ref"
+            lines.append(f"static const loom_symbol_reference_descriptor_t {descriptor_name} = {{{name_bstr}, {flags}}};")
+    lines.append("")
+
     # Attribute name B-strings and descriptors.
     # Each attr name is a B-string: [length]"name". The descriptor
     # references the B-string pointer for efficient comparison/hashing.
@@ -2640,8 +2647,9 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             else:
                 enum_names = "NULL"
                 enum_case_count = 0
+            symbol_ref = f"&{prefix}_{attr_def.name}_symbol_ref" if attr_def.symbol_ref is not None else "NULL"
             bstr_name = f"{prefix}_{attr_def.name}_bname"
-            lines.append(f"    {{{bstr_name}, {attr_kind}, {flags}, {enum_case_count}, {enum_names}}},")
+            lines.append(f"    {{{bstr_name}, {attr_kind}, {flags}, {enum_case_count}, {enum_names}, {symbol_ref}}},")
         lines.append("};")
     lines.append("")
 
@@ -2714,6 +2722,20 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         for op in ops:
             _emit_interface_vtable(op, spec, lines)
 
+    # Symbol definition descriptors. These keep symbol-definition shape in the
+    # generated op metadata instead of a central op-name map.
+    for op in ops:
+        if op.symbol_def is None:
+            continue
+        prefix = _c_prefix(op)
+        name = op.symbol_def.name
+        assert len(name) < 256, f"symbol definition name too long: {name!r}"
+        name_bstr = f"{prefix}_symbol_def_bname"
+        attr_index = _resolve_attr_index(op, op.symbol_def.field, "symbol_def")
+        flags = _symbol_interface_flags(op.symbol_def.interfaces)
+        lines.append(f'static const uint8_t {name_bstr}[] = "\\x{len(name):02x}" "{name}";')
+        lines.append(f"static const loom_symbol_definition_descriptor_t {prefix}_symbol_def = {{{name_bstr}, {attr_index}, {flags}, {op.symbol_def.bytecode_kind}}};")
+
     # Vtables.
     for op in ops:
         prefix = _c_prefix(op)
@@ -2749,6 +2771,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
         verify_fn = op.verify or "NULL"
         eff_traits = op.effective_traits or "NULL"
         interface_ptrs = {spec.vtable_field: _interface_vtable_ptr(op, spec) for spec in _INTERFACES}
+        symbol_def_ptr = f"&{prefix}_symbol_def" if op.symbol_def is not None else "NULL"
         attr_desc_ptr = f"{prefix}_attr_desc" if non_flags else "NULL"
         operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or _func_args_are_operands(op) else "NULL"
         result_desc_ptr = f"{prefix}_result_desc" if op.results else "NULL"
@@ -2796,6 +2819,7 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
 
         # Cache line 3: interface pointers.
         lines.extend(f"    .{spec.vtable_field} = {interface_ptrs[spec.vtable_field]}," for spec in _INTERFACES)
+        lines.append(f"    .symbol_def = {symbol_def_ptr},")
 
         lines.append("};")
         lines.append("")

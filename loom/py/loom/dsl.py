@@ -104,6 +104,9 @@ __all__ = [
     "ATTR_TYPE_PREDICATE_LIST",
     "ATTR_TYPE_DICT",
     "RegionDef",
+    # Symbol support.
+    "SymbolDefinition",
+    "SymbolReference",
     # Enum support.
     "EnumCase",
     "EnumDef",
@@ -445,6 +448,95 @@ _VALID_ATTR_TYPES = frozenset(
 )
 
 
+_VALID_SYMBOL_INTERFACES = frozenset(
+    {
+        "func_like",
+        "global",
+        "executable",
+        "record",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class SymbolReference:
+    """Declares the expected target contract of a symbol attr.
+
+    name: Human-readable expected symbol class used in diagnostics.
+    interfaces: Generated symbol-definition interfaces accepted by the attr.
+        These are structural contracts, not op names or bytecode wire kinds.
+    """
+
+    name: str
+    interfaces: tuple[str, ...]
+
+    def __init__(
+        self,
+        name: str,
+        interfaces: list[str] | tuple[str, ...],
+    ) -> None:
+        frozen_interfaces = tuple(interfaces)
+        if not name:
+            raise ValueError("SymbolReference: name must be non-empty")
+        if not frozen_interfaces:
+            raise ValueError("SymbolReference: interfaces must be non-empty")
+        for interface in frozen_interfaces:
+            if interface not in _VALID_SYMBOL_INTERFACES:
+                raise ValueError(
+                    f"SymbolReference '{name}': invalid interface "
+                    f"'{interface}', must be one of "
+                    f"{sorted(_VALID_SYMBOL_INTERFACES)}"
+                )
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "interfaces", frozen_interfaces)
+
+
+@dataclass(frozen=True, slots=True)
+class SymbolDefinition:
+    """Declares how an op defines a module symbol.
+
+    field: Symbol attr on the op that carries the symbol's identity.
+    name: Human-readable symbol class used in diagnostics.
+    interfaces: Structural interfaces implemented by the symbol.
+    bytecode_kind: Existing bytecode payload kind for symbols that still
+        serialize through the current symbol section. New symbol families can
+        leave this as LOOM_SYMBOL_NONE while still participating in IR symbol
+        lookup and verification.
+    """
+
+    field: str
+    name: str
+    interfaces: tuple[str, ...]
+    bytecode_kind: str = "LOOM_SYMBOL_NONE"
+
+    def __init__(
+        self,
+        *,
+        field: str,
+        name: str,
+        interfaces: list[str] | tuple[str, ...],
+        bytecode_kind: str = "LOOM_SYMBOL_NONE",
+    ) -> None:
+        frozen_interfaces = tuple(interfaces)
+        if not field:
+            raise ValueError("SymbolDefinition: field must be non-empty")
+        if not name:
+            raise ValueError("SymbolDefinition: name must be non-empty")
+        if not frozen_interfaces:
+            raise ValueError("SymbolDefinition: interfaces must be non-empty")
+        for interface in frozen_interfaces:
+            if interface not in _VALID_SYMBOL_INTERFACES:
+                raise ValueError(
+                    f"SymbolDefinition '{name}': invalid interface "
+                    f"'{interface}', must be one of "
+                    f"{sorted(_VALID_SYMBOL_INTERFACES)}"
+                )
+        object.__setattr__(self, "field", field)
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "interfaces", frozen_interfaces)
+        object.__setattr__(self, "bytecode_kind", bytecode_kind)
+
+
 @dataclass(frozen=True, slots=True)
 class AttrDef:
     """A compile-time constant attribute on an op.
@@ -467,6 +559,7 @@ class AttrDef:
     default: Any = None
     enum_def: EnumDef | None = None
     optional: bool = False
+    symbol_ref: SymbolReference | None = None
 
     def __post_init__(self) -> None:
         if self.attr_type not in _VALID_ATTR_TYPES:
@@ -481,6 +574,10 @@ class AttrDef:
         if self.attr_type == ATTR_TYPE_FLAGS and self.enum_def is None:
             raise ValueError(
                 f"AttrDef '{self.name}': attr_type='flags' requires enum_def"
+            )
+        if self.symbol_ref is not None and self.attr_type != ATTR_TYPE_SYMBOL:
+            raise ValueError(
+                f"AttrDef '{self.name}': symbol_ref requires attr_type='symbol'"
             )
 
 
@@ -2419,6 +2516,7 @@ class Op:
     regions: List of RegionDef descriptors.
     constraints: List of Constraint instances.
     traits: List of Trait instances.
+    symbol_def: Symbol definition descriptor for SYMBOL_DEFINE ops.
     format: Format element list describing textual assembly.
     examples: List of example IR strings for documentation.
 
@@ -2447,6 +2545,7 @@ class Op:
     facts: str = ""  # C function name for fact inference, or "".
     type_transfer: str = ""  # C function name for semantic type transfer, or "".
     verify: str = ""  # C function name for op-specific verification, or "".
+    symbol_def: SymbolDefinition | None = None
     interfaces: tuple[
         Any, ...
     ] = ()  # Interface implementations (FuncLikeInterface, etc.).
@@ -2472,6 +2571,7 @@ class Op:
         facts: str = "",
         type_transfer: str = "",
         verify: str = "",
+        symbol_def: SymbolDefinition | None = None,
         interfaces: list[Any] | tuple[Any, ...] = (),
         format: list[FormatElement] | tuple[FormatElement, ...] = (),
         examples: list[str] | tuple[str, ...] = (),
@@ -2500,9 +2600,30 @@ class Op:
         object.__setattr__(self, "facts", facts)
         object.__setattr__(self, "type_transfer", type_transfer)
         object.__setattr__(self, "verify", verify)
+        object.__setattr__(self, "symbol_def", symbol_def)
         object.__setattr__(self, "interfaces", tuple(interfaces))
         object.__setattr__(self, "format", frozen_format)
         object.__setattr__(self, "examples", tuple(examples))
+        has_symbol_define = any(trait.name == "SymbolDefine" for trait in traits)
+        if has_symbol_define and symbol_def is None:
+            raise ValueError(f"Op '{name}': SYMBOL_DEFINE requires symbol_def")
+        if symbol_def is not None and not has_symbol_define:
+            raise ValueError(f"Op '{name}': symbol_def requires SYMBOL_DEFINE trait")
+        if symbol_def is not None:
+            defining_attr = next(
+                (attr for attr in frozen_attrs if attr.name == symbol_def.field),
+                None,
+            )
+            if defining_attr is None:
+                raise ValueError(
+                    f"Op '{name}': symbol_def field '{symbol_def.field}' "
+                    "does not name an attr"
+                )
+            if defining_attr.attr_type != ATTR_TYPE_SYMBOL:
+                raise ValueError(
+                    f"Op '{name}': symbol_def field '{symbol_def.field}' "
+                    "must be a symbol attr"
+                )
         # Validate memory effect declarations.
         if frozen_effects:
             _validate_effects(name, frozen_effects, frozen_operands, tuple(traits))

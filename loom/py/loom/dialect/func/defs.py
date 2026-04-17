@@ -59,6 +59,8 @@ from loom.dsl import (
     Operand,
     RegionDef,
     Result,
+    SymbolDefinition,
+    SymbolReference,
 )
 
 # ============================================================================
@@ -192,6 +194,12 @@ func_def = Op(
     doc="Function definition. Callable by name via func.call.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
     attrs=list(_MODIFIER_ATTRS),
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+    ),
     results=[Result("results", ANY, variadic=True)],
     regions=[RegionDef("body", doc="Function body.", terminator="func.return")],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, body="body")],
@@ -217,6 +225,12 @@ func_decl = Op(
     doc="External function declaration. Callable by name via func.call.",
     traits=[SYMBOL_DEFINE],
     attrs=list(_DECL_ATTRS),
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_DECL",
+    ),
     results=[Result("results", ANY, variadic=True)],
     interfaces=[FuncLikeInterface(**_FUNC_LIKE_COMMON, args_as_operands=True)],
     format=[
@@ -248,6 +262,12 @@ func_template = Op(
         *_MODIFIER_ATTRS,
         AttrDef("priority", "i64", optional=True),
     ],
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_TEMPLATE",
+    ),
     results=[Result("results", ANY, variadic=True)],
     regions=[RegionDef("body", doc="Template body.", terminator="func.return")],
     interfaces=[
@@ -288,6 +308,12 @@ func_ukernel = Op(
         *_MODIFIER_ATTRS,
         AttrDef("priority", "i64", optional=True),
     ],
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_UKERNEL",
+    ),
     results=[Result("results", ANY, variadic=True)],
     interfaces=[
         FuncLikeInterface(
@@ -323,7 +349,11 @@ func_call = Op(
         Operand("operands", ANY, variadic=True),
     ],
     attrs=[
-        AttrDef("callee", "symbol"),
+        AttrDef(
+            "callee",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
@@ -365,7 +395,11 @@ func_apply = Op(
         Operand("operands", ANY, variadic=True),
     ],
     attrs=[
-        AttrDef("callee", "symbol"),
+        AttrDef(
+            "callee",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],

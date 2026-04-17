@@ -19,10 +19,11 @@ identical bytes. This is required for caching and CAS storage.
 from __future__ import annotations
 
 import struct
-from collections.abc import Mapping
-from typing import Any, ClassVar
+from collections.abc import Iterable, Mapping
+from typing import Any, ClassVar, cast
 
 from loom.format.bytecode.encoding import ByteBuffer
+from loom.format.bytecode.op_decls import build_op_decl_map, symbol_def_for_op
 from loom.ir import (
     Block,
     BufferType,
@@ -77,6 +78,15 @@ SECTION_WRITE_ORDER = (
     SECTION_ENCODINGS,
     SECTION_OPS,
     SECTION_LOCATIONS,
+)
+
+FUNCTION_SYMBOL_KINDS = frozenset(
+    {
+        SymbolKind.FUNC_DEF,
+        SymbolKind.FUNC_DECL,
+        SymbolKind.FUNC_TEMPLATE,
+        SymbolKind.FUNC_UKERNEL,
+    }
 )
 
 LOCATION_MODE_SOURCE_LOCATIONS = 0
@@ -217,6 +227,7 @@ class BytecodeWriter:
         module: Module,
         *,
         location_mode: int = LOCATION_MODE_SOURCE_LOCATIONS,
+        op_decls: Iterable[Any] | None = None,
     ) -> None:
         if location_mode not in (
             LOCATION_MODE_SOURCE_LOCATIONS,
@@ -230,6 +241,7 @@ class BytecodeWriter:
             )
         self._module = module
         self._location_mode = location_mode
+        self._op_decls_by_name = build_op_decl_map(op_decls)
         self._ctx = NumberingContext()
         self._number_module()
 
@@ -256,8 +268,15 @@ class BytecodeWriter:
             if symbol.op is not None:
                 if symbol.kind == SymbolKind.GLOBAL:
                     self._number_global_op(symbol.op)
-                else:
+                elif symbol.kind == SymbolKind.RECORD:
+                    self._number_record_op(symbol.op)
+                elif symbol.kind in FUNCTION_SYMBOL_KINDS:
                     self._number_func_op(symbol.op)
+                else:
+                    raise ValueError(
+                        f"symbol {symbol.name!r} of kind {symbol.kind.name} "
+                        "has no supported defining op"
+                    )
 
         # Encodings: recursively number child encoding params before parents so
         # the ENCODINGS section has no forward references.
@@ -301,6 +320,7 @@ class BytecodeWriter:
 
     def _number_global_op(self, op: Operation) -> None:
         """Number all entities in a global symbol-defining op."""
+        symbol_field = self._symbol_field_for_op(op)
         self._ctx.intern_op(op.name)
         self._ctx.intern_string(op.name)
 
@@ -311,10 +331,26 @@ class BytecodeWriter:
             self._number_type(value.type)
 
         for key, value in op.attributes.items():
-            if key == "symbol":
+            if key == symbol_field:
                 continue
             self._ctx.intern_string(key)
             self._number_attr_value(value)
+
+    def _number_record_op(self, op: Operation) -> None:
+        """Number all entities in an attr-only record symbol-defining op."""
+        symbol_field = self._symbol_field_for_op(op)
+        self._ctx.intern_op(op.name)
+        self._ctx.intern_string(op.name)
+
+        for key, value in op.attributes.items():
+            if key == symbol_field:
+                continue
+            self._ctx.intern_string(key)
+            self._number_attr_value(value)
+
+    def _symbol_field_for_op(self, op: Operation) -> str:
+        """Return the generated symbol identity attr field for ``op``."""
+        return cast(str, symbol_def_for_op(self._op_decls_by_name, op.name).field)
 
     def _collect_global_local_values(self, op: Operation) -> list[int]:
         """Return declaration-local values required to materialize one global."""
@@ -1059,6 +1095,10 @@ class BytecodeWriter:
         for symbol_index, symbol in enumerate(symbols):
             entry_offsets[symbol_index] = buf.position - entries_start
             buf.write_varint(self._ctx.strings[symbol.name])
+            if symbol.kind == SymbolKind.NONE:
+                raise ValueError(
+                    f"symbol {symbol.name!r} has no bytecode symbol payload kind"
+                )
             buf.write_u8(symbol.kind.value)
             buf.write_u8(0 if (symbol.flags & SYMBOL_FLAG_PUBLIC) else 1)
             bytecode_flags = symbol.flags
@@ -1073,16 +1113,7 @@ class BytecodeWriter:
                 source_sym = symbol.source_symbol or symbol.name
                 buf.write_varint(self._ctx.strings[source_sym])
 
-            if (
-                symbol.kind
-                in (
-                    SymbolKind.FUNC_DEF,
-                    SymbolKind.FUNC_DECL,
-                    SymbolKind.FUNC_TEMPLATE,
-                    SymbolKind.FUNC_UKERNEL,
-                )
-                and symbol.op is not None
-            ):
+            if symbol.kind in FUNCTION_SYMBOL_KINDS and symbol.op is not None:
                 op = symbol.op
                 module = self._module
 
@@ -1150,6 +1181,7 @@ class BytecodeWriter:
             elif symbol.kind == SymbolKind.GLOBAL and symbol.op is not None:
                 op = symbol.op
                 module = self._module
+                symbol_field = self._symbol_field_for_op(op)
                 if op.operands or op.regions or not op.results:
                     raise ValueError(
                         f"global symbol {symbol.name!r} must be defined by a "
@@ -1175,13 +1207,34 @@ class BytecodeWriter:
                 payload_attrs = [
                     (key, value)
                     for key, value in op.attributes.items()
-                    if key != "symbol"
+                    if key != symbol_field
                 ]
                 buf.write_varint(len(payload_attrs))
                 value_numbers_by_name = self._value_numbers_by_name(local_value_numbers)
                 for key, value in payload_attrs:
                     buf.write_varint(self._ctx.strings[key])
                     self._write_attr_value(buf, value, value_numbers_by_name)
+            elif symbol.kind == SymbolKind.RECORD and symbol.op is not None:
+                op = symbol.op
+                symbol_field = self._symbol_field_for_op(op)
+                if op.operands or op.results or op.regions:
+                    raise ValueError(
+                        f"record symbol {symbol.name!r} must be defined by an "
+                        "attr-only top-level op"
+                    )
+
+                buf.write_varint(self._ctx.ops[op.name] + 1)
+                self._write_comment_list(buf, op.comments)
+
+                payload_attrs = [
+                    (key, value)
+                    for key, value in op.attributes.items()
+                    if key != symbol_field
+                ]
+                buf.write_varint(len(payload_attrs))
+                for key, value in payload_attrs:
+                    buf.write_varint(self._ctx.strings[key])
+                    self._write_attr_value(buf, value)
             else:
                 raise ValueError(
                     f"symbol {symbol.name!r} of kind {symbol.kind.name} "
@@ -1283,7 +1336,12 @@ class BytecodeWriter:
 
 
 def write_module(
-    module: Module, *, location_mode: int = LOCATION_MODE_SOURCE_LOCATIONS
+    module: Module,
+    *,
+    location_mode: int = LOCATION_MODE_SOURCE_LOCATIONS,
+    op_decls: Iterable[Any] | None = None,
 ) -> bytes:
     """Write a module to .loombc bytes."""
-    return BytecodeWriter(module, location_mode=location_mode).write()
+    return BytecodeWriter(
+        module, location_mode=location_mode, op_decls=op_decls
+    ).write()

@@ -493,14 +493,17 @@ static iree_status_t loom_llvmir_lowering_lower_function_signatures(
     loom_llvmir_lowering_state_t* state) {
   for (iree_host_size_t i = 0; i < state->source_module->symbols.count; ++i) {
     loom_symbol_t* symbol = &state->source_module->symbols.entries[i];
-    if (!loom_symbol_kind_is_function_like(symbol->kind)) continue;
+    if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE)) {
+      continue;
+    }
     if (!symbol->defining_op) {
       return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                               "function-like symbol id %u has no defining op",
                               (unsigned)i);
     }
-    if (symbol->kind != LOOM_SYMBOL_FUNC_DEF &&
-        symbol->kind != LOOM_SYMBOL_FUNC_DECL) {
+    loom_symbol_kind_t bytecode_kind = loom_symbol_bytecode_kind(symbol);
+    if (bytecode_kind != LOOM_SYMBOL_FUNC_DEF &&
+        bytecode_kind != LOOM_SYMBOL_FUNC_DECL) {
       return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                               "LLVMIR lowering only supports func.def and "
                               "func.decl symbols today");
@@ -1235,7 +1238,7 @@ static iree_status_t loom_llvmir_lowering_lower_function_bodies(
     loom_llvmir_lowering_state_t* state) {
   for (iree_host_size_t i = 0; i < state->source_module->symbols.count; ++i) {
     loom_symbol_t* symbol = &state->source_module->symbols.entries[i];
-    if (symbol->kind != LOOM_SYMBOL_FUNC_DEF) continue;
+    if (loom_symbol_bytecode_kind(symbol) != LOOM_SYMBOL_FUNC_DEF) continue;
     loom_func_like_t func =
         loom_func_like_cast(state->source_module, symbol->defining_op);
     IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_body(

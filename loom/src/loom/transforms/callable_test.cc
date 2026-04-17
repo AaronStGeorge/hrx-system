@@ -899,7 +899,7 @@ TEST_F(CallableImportTest, ImportsDefinitionWithDistinctTargetStorage) {
   const loom_symbol_t* target_symbol = &target_->symbols.entries[0];
   EXPECT_TRUE(iree_string_view_equal(
       target_->strings.entries[target_symbol->name_id], IREE_SV("negate")));
-  EXPECT_EQ(target_symbol->kind, LOOM_SYMBOL_FUNC_DEF);
+  EXPECT_EQ(loom_symbol_bytecode_kind(target_symbol), LOOM_SYMBOL_FUNC_DEF);
   EXPECT_EQ(target_symbol->defining_op, imported.op);
   loom_symbol_ref_t imported_ref = loom_func_like_callee(imported);
   EXPECT_EQ(imported_ref.module_id, 0u);

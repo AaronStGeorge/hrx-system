@@ -110,6 +110,8 @@ typedef struct loom_region_t loom_region_t;
 typedef struct loom_value_t loom_value_t;
 typedef struct loom_op_vtable_t loom_op_vtable_t;
 typedef uint8_t loom_symbol_kind_t;
+typedef struct loom_symbol_definition_descriptor_t
+    loom_symbol_definition_descriptor_t;
 typedef struct loom_operand_descriptor_t loom_operand_descriptor_t;
 typedef struct loom_result_descriptor_t loom_result_descriptor_t;
 typedef struct loom_attr_descriptor_t loom_attr_descriptor_t;
@@ -951,9 +953,8 @@ struct loom_op_vtable_t {
   uint8_t attribute_count;
   uint8_t region_count;
   loom_op_vtable_flags_t vtable_flags;
-  // Symbol kind for ops with LOOM_TRAIT_SYMBOL_DEFINE. Set by the
-  // Python generator from each op's declared symbol kind. Zero
-  // (LOOM_SYMBOL_NONE) for ops that do not define symbols.
+  // Legacy bytecode symbol payload kind for symbol-defining ops. Symbol
+  // legality and interfaces come from |symbol_def|, not this wire tag.
   loom_symbol_kind_t symbol_kind;
   uint8_t constraint_count;
   // 5 bytes padding to align pointers at offset 16.
@@ -989,8 +990,10 @@ struct loom_op_vtable_t {
   const loom_func_like_vtable_t* func_like;
   const loom_loop_like_vtable_t* loop_like;
   const loom_region_branch_vtable_t* region_branch;
-  // 40 bytes padding to fill cache line 3.
-  const void* _padding_iface[5];
+  // Generated symbol-definition contract for SYMBOL_DEFINE ops.
+  const loom_symbol_definition_descriptor_t* symbol_def;
+  // 32 bytes padding to fill cache line 3.
+  const void* _padding_iface[4];
 };
 
 // Returns the full dotted name as a string view (e.g., "test.addi").
@@ -1373,6 +1376,7 @@ typedef enum loom_symbol_kind_e {
   LOOM_SYMBOL_FUNC_COUNT_ = 5,
   LOOM_SYMBOL_GLOBAL = 5,
   LOOM_SYMBOL_EXECUTABLE = 6,
+  LOOM_SYMBOL_RECORD = 7,
   LOOM_SYMBOL_COUNT_,
 } loom_symbol_kind_e;
 
@@ -1404,29 +1408,30 @@ typedef struct loom_symbol_use_t {
 
 // A module-level named symbol with use tracking.
 //
-// Symbols are the top-level entities in a module: functions, globals,
-// and executables. Each has a name (interned string), a kind tag, and a
-// pointer to the defining op. Symbols maintain incremental use lists so
-// "find all references to @foo" is O(uses), not O(module size).
-//
-// For function-like symbols (def, decl, template, ukernel), the defining op
-// is a func.* op. All function properties — signature, purity, calling
-// convention, body region — are read through the loom_func_like_t interface
-// on the defining op, which eliminates redundant copies and desync risk.
-//
-// Thread safety: symbols are owned by their module. Same rules as other IR
-// nodes.
+// The symbol table stores identity and link state only. The shape of the symbol
+// is described by the defining op's generated symbol-definition descriptor,
+// which lets dialects add new symbol families without extending a central IR
+// enum. The |kind| field is retained as the existing bytecode wire payload tag
+// for serialized function/global symbols; it is not the verifier's source of
+// symbol-reference legality.
 typedef struct loom_symbol_t {
+  // Interned symbol name in module->strings.
   loom_string_id_t name_id;
+  // Legacy bytecode symbol payload kind derived from |definition|.
   loom_symbol_kind_t kind;
+  // Visibility/use-list flags.
   loom_symbol_flags_t flags;
+  // Number of symbol-use entries in the inline or overflow list.
   uint16_t use_count;
-  // The op that defines this symbol. Set by loom_builder_finalize_op() when
-  // an op with LOOM_TRAIT_SYMBOL_DEFINE is finalized. NULL until then (e.g.,
-  // during parsing before the op is fully built).
+  // Generated symbol contract implemented by |defining_op|.
+  const loom_symbol_definition_descriptor_t* definition;
+  // The op that defines this symbol, or NULL until a forward reference is
+  // linked to its definition.
   loom_op_t* defining_op;
   union {
+    // Inline storage for the common case of at most two symbol uses.
     loom_symbol_use_t inline_uses[2];
+    // Arena-owned overflow storage when use_count exceeds the inline capacity.
     loom_symbol_use_t* overflow_uses;
   };
 } loom_symbol_t;

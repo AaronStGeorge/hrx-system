@@ -1,0 +1,2 @@
+// Generic attr-only module record symbol used by bytecode symbol payload tests.
+test.record @target_snapshot {arch = "gfx1100", lanes = 64}

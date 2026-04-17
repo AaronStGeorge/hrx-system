@@ -165,7 +165,9 @@ class VectorMemoryFootprintTest : public ::testing::Test {
     loom_func_like_t function = {};
     for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
       loom_symbol_t* symbol = &module->symbols.entries[i];
-      if (!loom_symbol_kind_is_function_like(symbol->kind)) continue;
+      if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE)) {
+        continue;
+      }
       function = loom_func_like_cast(module, symbol->defining_op);
       if (loom_func_like_body(function)) break;
     }

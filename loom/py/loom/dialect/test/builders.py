@@ -314,6 +314,20 @@ class TestBuilders:
             _func_args.extend(args)
         return cast(list[ValueRef], self._b.build("test.decl", _operands, func_args=_func_args, results=results, attributes=_attributes, regions=_regions))
 
+    def record(self, *, symbol: str, dict: Mapping[str, Any] | None = None) -> None:
+        """Test named module record with generic symbol payload metadata.
+
+        Example::
+            test.record @target {arch = "gfx1100", lanes = 64}
+        """
+        _operands: list[ValueRef | int] = []
+        _attributes: builtins.dict[str, Any] = {}
+        _regions: list[Region] = []
+        _attributes["symbol"] = symbol
+        if dict is not None:
+            _attributes["dict"] = dict
+        self._b.build("test.record", _operands, attributes=_attributes, regions=_regions)
+
     def attrs(self, *, input: ValueRef, dict: Mapping[str, Any] | None = None, result_types: list[Type]) -> ValueRef:
         """Test op with attribute dictionary.
 

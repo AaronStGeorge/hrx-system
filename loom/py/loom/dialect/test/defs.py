@@ -90,6 +90,8 @@ from loom.dsl import (
     SameElementType,
     SameType,
     Successor,
+    SymbolDefinition,
+    SymbolReference,
     TiedResult,
     Writes,
     YieldCountMatchesResults,
@@ -665,7 +667,11 @@ test_invoke = Op(
         Operand("operands", ANY, variadic=True),
     ],
     attrs=[
-        AttrDef("callee", "symbol"),
+        AttrDef(
+            "callee",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
@@ -900,6 +906,12 @@ test_func = Op(
     doc="Test function definition with body always present.",
     traits=[SYMBOL_DEFINE, ISOLATED_FROM_ABOVE],
     interfaces=[FuncLikeInterface(callee="callee", visibility="visibility", cc="cc", body="body")],
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+    ),
     attrs=[
         AttrDef("callee", "symbol"),
         AttrDef("visibility", "enum", enum_def=_Visibility, optional=True),
@@ -945,6 +957,12 @@ test_decl = Op(
             args_as_operands=True,
         )
     ],
+    symbol_def=SymbolDefinition(
+        field="callee",
+        name="function",
+        interfaces=["func_like"],
+        bytecode_kind="LOOM_SYMBOL_FUNC_DEF",
+    ),
     attrs=[
         AttrDef("callee", "symbol"),
         AttrDef("visibility", "enum", enum_def=_Visibility, optional=True),
@@ -967,6 +985,34 @@ test_decl = Op(
     ],
     examples=[
         "test.decl @identity(%input: f32) -> (%input as f32)",
+    ],
+)
+
+# ============================================================================
+# test.record — attr-only module record symbol
+# ============================================================================
+
+test_record = Op(
+    "test.record",
+    group=test_ops,
+    doc="Test named module record with generic symbol payload metadata.",
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="record",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef("dict", "dict", optional=True),
+    ],
+    format=[
+        SymbolRef("symbol"),
+        AttrDict("dict"),
+    ],
+    examples=[
+        'test.record @target {arch = "gfx1100", lanes = 64}',
     ],
 )
 
@@ -1399,6 +1445,7 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_br,
     test_func,
     test_decl,
+    test_record,
     test_attrs,
     test_operand_dict,
     test_attr_table,

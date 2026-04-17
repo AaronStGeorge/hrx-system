@@ -231,7 +231,8 @@ iree_status_t loom_call_graph_build(const loom_module_t* module,
   uint16_t func_count = 0;
   loom_symbol_t* sym = NULL;
   loom_module_for_each_symbol(module, sym) {
-    if (loom_symbol_kind_is_function_like(sym->kind) && sym->defining_op) {
+    if (loom_symbol_implements(sym, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) &&
+        sym->defining_op) {
       loom_func_like_t func = loom_func_like_cast(module, sym->defining_op);
       if (loom_func_like_body(func)) ++func_count;
     }
@@ -265,7 +266,8 @@ iree_status_t loom_call_graph_build(const loom_module_t* module,
   // Walk each function body to find call ops.
   uint16_t node_index = 0;
   loom_module_for_each_symbol(module, sym) {
-    if (!loom_symbol_kind_is_function_like(sym->kind) || !sym->defining_op) {
+    if (!loom_symbol_implements(sym, LOOM_SYMBOL_INTERFACE_FUNC_LIKE) ||
+        !sym->defining_op) {
       continue;
     }
     loom_func_like_t func = loom_func_like_cast(module, sym->defining_op);

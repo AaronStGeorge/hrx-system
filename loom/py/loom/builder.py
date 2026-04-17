@@ -366,7 +366,9 @@ class IRBuilder:
     def _insert_operation(self, op_decl: Op, operation: Operation) -> None:
         """Insert operation into module symbol state or the current block."""
         if op_decl.has_trait("SymbolDefine"):
-            symbol_index = self._module.add_symbol(symbol_from_operation(operation))
+            symbol_index = self._module.add_symbol(
+                symbol_from_operation(operation, op_decl)
+            )
             record_operation_value_metadata(
                 self._module,
                 operation,

@@ -1204,12 +1204,14 @@ class Region:
 class SymbolKind(IntEnum):
     """Symbol kind encoded in bytecode SYMBOLS entries."""
 
+    NONE = -1
     FUNC_DEF = 0
     FUNC_DECL = 1
     FUNC_TEMPLATE = 2
     FUNC_UKERNEL = 3
     GLOBAL = 4
     EXECUTABLE = 5
+    RECORD = 6
 
 
 # Symbol flags.
@@ -1256,24 +1258,32 @@ class Symbol:
         return (self.flags & SYMBOL_FLAG_PUBLIC) != 0
 
 
-_OP_NAME_TO_SYMBOL_KIND: dict[str, SymbolKind] = {
-    "func.def": SymbolKind.FUNC_DEF,
-    "func.decl": SymbolKind.FUNC_DECL,
-    "func.template": SymbolKind.FUNC_TEMPLATE,
-    "func.ukernel": SymbolKind.FUNC_UKERNEL,
-    "global.constant": SymbolKind.GLOBAL,
-    "global.variable": SymbolKind.GLOBAL,
+_BYTECODE_SYMBOL_KIND_BY_NAME: dict[str, SymbolKind] = {
+    "LOOM_SYMBOL_FUNC_DEF": SymbolKind.FUNC_DEF,
+    "LOOM_SYMBOL_FUNC_DECL": SymbolKind.FUNC_DECL,
+    "LOOM_SYMBOL_FUNC_TEMPLATE": SymbolKind.FUNC_TEMPLATE,
+    "LOOM_SYMBOL_FUNC_UKERNEL": SymbolKind.FUNC_UKERNEL,
+    "LOOM_SYMBOL_GLOBAL": SymbolKind.GLOBAL,
+    "LOOM_SYMBOL_EXECUTABLE": SymbolKind.EXECUTABLE,
+    "LOOM_SYMBOL_RECORD": SymbolKind.RECORD,
 }
 
 
-def symbol_from_operation(operation: Operation) -> Symbol:
+def symbol_from_operation(operation: Operation, op_decl: Any | None = None) -> Symbol:
     """Build a module Symbol entry for a symbol-defining operation.
 
-    Ops not listed in _OP_NAME_TO_SYMBOL_KIND default to FUNC_DEF. This keeps
-    test dialect symbol ops working without a dialect-specific symbol-kind map.
+    The op declaration is the source of truth for which attribute defines the
+    symbol and which legacy bytecode payload kind, if any, should be used. This
+    keeps Python symbol materialization aligned with the generated C metadata
+    instead of maintaining a second op-name table.
     """
-    kind = _OP_NAME_TO_SYMBOL_KIND.get(operation.name, SymbolKind.FUNC_DEF)
-    name_attr = "symbol" if kind == SymbolKind.GLOBAL else "callee"
+    symbol_def = getattr(op_decl, "symbol_def", None)
+    if symbol_def is None:
+        raise ValueError(
+            f"op '{operation.name}' does not declare a generated symbol_def"
+        )
+    kind = _BYTECODE_SYMBOL_KIND_BY_NAME.get(symbol_def.bytecode_kind, SymbolKind.NONE)
+    name_attr = symbol_def.field
     symbol_flags = 0
     if operation.attributes.get("visibility") == "public":
         symbol_flags |= SYMBOL_FLAG_PUBLIC

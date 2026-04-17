@@ -32,27 +32,10 @@ static iree_string_view_t loom_test_symbol_name(const loom_module_t* module,
   return IREE_SV("<unnamed>");
 }
 
-static iree_string_view_t loom_test_symbol_kind_name(
-    loom_symbol_kind_t symbol_kind) {
-  switch (symbol_kind) {
-    case LOOM_SYMBOL_NONE:
-      return IREE_SV("unresolved");
-    case LOOM_SYMBOL_FUNC_DEF:
-      return IREE_SV("func.def");
-    case LOOM_SYMBOL_FUNC_DECL:
-      return IREE_SV("func.decl");
-    case LOOM_SYMBOL_FUNC_TEMPLATE:
-      return IREE_SV("func.template");
-    case LOOM_SYMBOL_FUNC_UKERNEL:
-      return IREE_SV("func.ukernel");
-    case LOOM_SYMBOL_GLOBAL:
-      return IREE_SV("global");
-    case LOOM_SYMBOL_EXECUTABLE:
-      return IREE_SV("executable");
-    case LOOM_SYMBOL_COUNT_:
-      break;
-  }
-  return IREE_SV("unknown");
+static iree_string_view_t loom_test_symbol_definition_name(
+    const loom_symbol_t* symbol) {
+  if (!symbol || !symbol->definition) return IREE_SV("unresolved");
+  return loom_symbol_definition_descriptor_name(symbol->definition);
 }
 
 static iree_status_t loom_test_emit_callee_diagnostic(
@@ -80,7 +63,7 @@ static iree_status_t loom_test_emit_callee_kind_mismatch(
     const loom_symbol_t* symbol) {
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_test_symbol_name(module, callee)),
-      loom_param_string(loom_test_symbol_kind_name(symbol->kind)),
+      loom_param_string(loom_test_symbol_definition_name(symbol)),
       loom_param_string(IREE_SV("function")),
   };
   return loom_test_emit_callee_diagnostic(
@@ -98,7 +81,7 @@ static const loom_symbol_t* loom_test_lookup_callee_symbol(
   }
 
   const loom_symbol_t* symbol = &module->symbols.entries[callee.symbol_id];
-  if (symbol->kind == LOOM_SYMBOL_NONE || symbol->defining_op == NULL) {
+  if (symbol->definition == NULL || symbol->defining_op == NULL) {
     return NULL;
   }
   return symbol;
@@ -421,8 +404,10 @@ iree_status_t loom_test_invoke_verify(const loom_module_t* module,
   }
 
   loom_test_callee_signature_t signature = {0};
-  if (!loom_symbol_kind_is_function_like(symbol->kind) ||
-      !loom_test_load_callee_signature(module, symbol, &signature)) {
+  if (!loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_FUNC_LIKE)) {
+    return iree_ok_status();
+  }
+  if (!loom_test_load_callee_signature(module, symbol, &signature)) {
     return loom_test_emit_callee_kind_mismatch(
         module, op, emitter, loom_test_invoke_callee(op), symbol);
   }
