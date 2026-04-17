@@ -216,5 +216,25 @@ TEST_F(TargetVerifyTest, BundleRejectsWrongRecordClass) {
   EXPECT_TRUE(diagnostic->related_locations[0].has_source_range);
 }
 
+TEST_F(TargetVerifyTest, RejectsDuplicateTargetRecordDefinition) {
+  DiagnosticCapture capture;
+  VerifySource(
+      "target.config @duplicate {contract_set_key = \"default\", "
+      "contract_feature_bits = 0}\n"
+      "target.config @duplicate {contract_set_key = \"other\", "
+      "contract_feature_bits = 1}\n",
+      &capture);
+
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(
+      capture, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 5));
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "duplicate");
+  ExpectError(*diagnostic, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 5),
+              LOOM_EMITTER_VERIFIER);
+  ASSERT_EQ(diagnostic->related_locations.size(), 1u);
+  EXPECT_EQ(diagnostic->related_locations[0].label, "first definition here");
+  EXPECT_TRUE(diagnostic->related_locations[0].has_source_range);
+}
+
 }  // namespace
 }  // namespace loom

@@ -2106,6 +2106,23 @@
     ]
   },
   {
+    "error_id": "ERR_SYMBOL_005",
+    "domain": 6,
+    "domain_name": "SYMBOL",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Duplicate symbol definition.",
+    "message_template": "symbol '@{symbol_name}' is already defined",
+    "params": [
+      {
+        "name": "symbol_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
     "error_id": "ERR_PARSE_001",
     "domain": 7,
     "domain_name": "PARSE",

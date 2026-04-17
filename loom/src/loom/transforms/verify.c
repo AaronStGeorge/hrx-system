@@ -977,6 +977,57 @@ static iree_status_t loom_verify_diagnostic_emitter_fn(
   return loom_verify_pending_diagnostic_status(state);
 }
 
+static void loom_verify_emit_symbol_definition_diagnostic(
+    loom_verify_state_t* state, const loom_op_t* op, loom_symbol_ref_t ref,
+    uint8_t symbol_attr_index, const loom_symbol_t* symbol) {
+  loom_diagnostic_param_t params[] = {
+      loom_verify_param_string_for_diagnostic_field(
+          loom_verify_symbol_name(state, ref), LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+          symbol_attr_index),
+  };
+  loom_diagnostic_related_op_t related_ops[] = {{
+      .label = IREE_SV("first definition here"),
+      .op = symbol->defining_op,
+  }};
+  loom_diagnostic_emission_t emission = {
+      .op = op,
+      .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 5),
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .related_ops = related_ops,
+      .related_op_count = IREE_ARRAYSIZE(related_ops),
+  };
+  loom_verify_emit_diagnostic(state, &emission);
+}
+
+static iree_status_t loom_verify_symbol_definition(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable) {
+  if (!vtable->symbol_def || !vtable->attr_descriptors) {
+    return iree_ok_status();
+  }
+  uint8_t symbol_attr_index = vtable->symbol_def->name_attr_index;
+  if (symbol_attr_index >= vtable->attribute_count ||
+      symbol_attr_index >= op->attribute_count) {
+    return iree_ok_status();
+  }
+  const loom_attr_descriptor_t* descriptor =
+      &vtable->attr_descriptors[symbol_attr_index];
+  if (descriptor->attr_kind != LOOM_ATTR_SYMBOL) return iree_ok_status();
+  loom_symbol_ref_t ref =
+      loom_attr_as_symbol(loom_op_const_attrs(op)[symbol_attr_index]);
+  if (!loom_symbol_ref_is_valid(ref) || ref.module_id != 0 ||
+      ref.symbol_id >= state->module->symbols.count) {
+    return iree_ok_status();
+  }
+  const loom_symbol_t* symbol = &state->module->symbols.entries[ref.symbol_id];
+  if (symbol->defining_op && symbol->defining_op != op) {
+    loom_verify_emit_symbol_definition_diagnostic(state, op, ref,
+                                                  symbol_attr_index, symbol);
+  }
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Vtable lookup
 //===----------------------------------------------------------------------===//
@@ -4277,6 +4328,8 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 
   // Symbol reference attributes must point to valid symbol table entries.
+  IREE_RETURN_IF_ERROR(loom_verify_symbol_definition(state, op, vtable));
+  IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
   loom_verify_symbol_references(state, op, vtable);
   IREE_RETURN_IF_ERROR(loom_verify_pending_diagnostic_status(state));
 

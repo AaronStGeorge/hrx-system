@@ -1680,6 +1680,10 @@ void loom_module_link_symbol_defining_op(loom_module_t* module, loom_op_t* op,
   loom_symbol_ref_t ref = loom_attr_as_symbol(attrs[symbol_attr_index]);
   if (loom_symbol_ref_is_valid(ref) && ref.module_id == 0 &&
       ref.symbol_id < module->symbols.count) {
+    if (module->symbols.entries[ref.symbol_id].defining_op &&
+        module->symbols.entries[ref.symbol_id].defining_op != op) {
+      return;
+    }
     module->symbols.entries[ref.symbol_id].defining_op = op;
     module->symbols.entries[ref.symbol_id].definition = vtable->symbol_def;
     module->symbols.entries[ref.symbol_id].kind =

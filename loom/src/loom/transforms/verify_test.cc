@@ -1747,6 +1747,37 @@ TEST_F(VerifyTest, RejectsNonLocalSymbolRef) {
   ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, 0);
 }
 
+TEST_F(VerifyTest, RejectsDuplicateSymbolDefinition) {
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&builder_, IREE_SV("duplicate"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module_, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+
+  loom_op_t* first_decl = nullptr;
+  IREE_ASSERT_OK(loom_test_decl_build(&builder_, 0, 0, 0, callee, nullptr, 0,
+                                      nullptr, 0, nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &first_decl));
+  EXPECT_EQ(module_->symbols.entries[symbol_id].defining_op, first_decl);
+
+  loom_op_t* second_decl = nullptr;
+  IREE_ASSERT_OK(loom_test_decl_build(&builder_, 0, 0, 0, callee, nullptr, 0,
+                                      nullptr, 0, nullptr, 0,
+                                      LOOM_LOCATION_UNKNOWN, &second_decl));
+  EXPECT_EQ(module_->symbols.entries[symbol_id].defining_op, first_decl);
+
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 5));
+  ASSERT_NE(entry, nullptr)
+      << "Expected SYMBOL/005 duplicate symbol definition error";
+  EXPECT_EQ(GetStringParam(*entry, 0), "duplicate");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE, 0);
+}
+
 //===----------------------------------------------------------------------===//
 // SSA encoding reference validation
 //===----------------------------------------------------------------------===//

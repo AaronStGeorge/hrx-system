@@ -58,9 +58,20 @@ ERR_SYMBOL_004 = ErrorDef(
     params=(ErrorParam("module_id", ParamKind.U32),),
 )
 
+# ERR_SYMBOL_005: Symbol is defined more than once.
+ERR_SYMBOL_005 = ErrorDef(
+    domain=ErrorDomain.SYMBOL,
+    code=5,
+    severity=Severity.ERROR,
+    summary="Duplicate symbol definition.",
+    message="symbol '@{symbol_name}' is already defined",
+    params=(ErrorParam("symbol_name", ParamKind.STRING),),
+)
+
 ALL_SYMBOL_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SYMBOL_001,
     ERR_SYMBOL_002,
     ERR_SYMBOL_003,
     ERR_SYMBOL_004,
+    ERR_SYMBOL_005,
 )
