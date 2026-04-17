@@ -47,7 +47,10 @@ loom_cc_library(
     name = "descriptors",
     srcs = ["descriptors.c"],
     hdrs = ["descriptors.h"],
-    deps = ["//runtime/src/iree/base"],
+    deps = [
+        "//loom/src/loom/util:bstring",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_cc_test(

@@ -19,6 +19,7 @@ loom_cc_library(
     "descriptors.c"
   DEPS
     iree::base
+    loom::src::loom::util::bstring
   PUBLIC
 )
 

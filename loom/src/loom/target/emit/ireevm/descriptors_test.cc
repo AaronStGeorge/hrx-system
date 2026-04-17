@@ -63,8 +63,8 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorFingerprintIsStable) {
   loom_low_fingerprint_t fingerprint = {};
   IREE_ASSERT_OK(loom_low_descriptor_set_compute_fingerprint(descriptor_set,
                                                              &fingerprint));
-  EXPECT_EQ(fingerprint.low, UINT64_C(9708103317755296508));
-  EXPECT_EQ(fingerprint.high, UINT64_C(12545568297801738333));
+  EXPECT_EQ(fingerprint.low, UINT64_C(3224395707371742904));
+  EXPECT_EQ(fingerprint.high, UINT64_C(187231647689077189));
 
   bool matches = false;
   IREE_ASSERT_OK(

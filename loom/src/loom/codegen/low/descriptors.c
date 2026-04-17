@@ -63,11 +63,11 @@ static void loom_low_fingerprint_builder_i64(
 }
 
 static void loom_low_fingerprint_builder_bytes(
-    loom_low_fingerprint_builder_t* builder, const char* data,
+    loom_low_fingerprint_builder_t* builder, const uint8_t* data,
     uint32_t data_length) {
   loom_low_fingerprint_builder_u32(builder, data_length);
   for (uint32_t i = 0; i < data_length; ++i) {
-    loom_low_fingerprint_builder_byte(builder, (uint8_t)data[i]);
+    loom_low_fingerprint_builder_byte(builder, data[i]);
   }
 }
 
@@ -104,42 +104,42 @@ static iree_status_t loom_low_verify_span(uint32_t start, uint32_t count,
 }
 
 static iree_status_t loom_low_descriptor_set_string_impl(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t string_offset,
-    bool allow_none, iree_string_view_t* out_string) {
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_bstring_table_offset_t string_offset, bool allow_none,
+    iree_string_view_t* out_string) {
   *out_string = iree_string_view_empty();
   if (string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
     if (allow_none) return iree_ok_status();
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "required low descriptor string offset is NONE");
   }
-  if (descriptor_set->string_data == NULL ||
-      descriptor_set->string_data_length == 0) {
+  if (descriptor_set->string_table.data == NULL ||
+      descriptor_set->string_table.data_length == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor string table is empty");
   }
-  if (string_offset >= descriptor_set->string_data_length) {
+  if (string_offset >= descriptor_set->string_table.data_length) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "low descriptor string offset %" PRIu32
                             " exceeds string table length %" PRIu32,
-                            string_offset, descriptor_set->string_data_length);
+                            string_offset,
+                            descriptor_set->string_table.data_length);
   }
-  const char* data = descriptor_set->string_data + string_offset;
-  uint32_t remaining = descriptor_set->string_data_length - string_offset;
-  for (uint32_t i = 0; i < remaining; ++i) {
-    if (data[i] == '\0') {
-      *out_string = iree_make_string_view(data, i);
-      return iree_ok_status();
-    }
+  loom_bstring_t bstring = NULL;
+  if (!loom_bstring_table_try_get(&descriptor_set->string_table, string_offset,
+                                  &bstring)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor string offset %" PRIu32
+                            " does not name a complete B-string",
+                            string_offset);
   }
-  return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                          "low descriptor string offset %" PRIu32
-                          " has no NUL terminator in string table",
-                          string_offset);
+  *out_string = loom_bstring_view(bstring);
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_required_string(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t string_offset,
-    const char* field_name) {
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_bstring_table_offset_t string_offset, const char* field_name) {
   iree_string_view_t value = iree_string_view_empty();
   iree_status_t status = loom_low_descriptor_set_string_impl(
       descriptor_set, string_offset, /*allow_none=*/false, &value);
@@ -151,8 +151,8 @@ static iree_status_t loom_low_verify_required_string(
 }
 
 static iree_status_t loom_low_verify_optional_string(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t string_offset,
-    const char* field_name) {
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_bstring_table_offset_t string_offset, const char* field_name) {
   iree_string_view_t value = iree_string_view_empty();
   iree_status_t status = loom_low_descriptor_set_string_impl(
       descriptor_set, string_offset, /*allow_none=*/true, &value);
@@ -260,8 +260,6 @@ static iree_status_t loom_low_verify_descriptor(
   IREE_RETURN_IF_ERROR(loom_low_verify_optional_string(
       descriptor_set, descriptor->mnemonic_string_offset,
       "descriptor.mnemonic"));
-  IREE_RETURN_IF_ERROR(loom_low_verify_optional_string(
-      descriptor_set, descriptor->source_string_offset, "descriptor.source"));
   IREE_RETURN_IF_ERROR(loom_low_verify_optional_string(
       descriptor_set, descriptor->semantic_tag_string_offset,
       "descriptor.semantic_tag"));
@@ -623,7 +621,6 @@ static void loom_low_fingerprint_descriptor(
     const loom_low_descriptor_t* descriptor) {
   loom_low_fingerprint_builder_u32(builder, descriptor->key_string_offset);
   loom_low_fingerprint_builder_u32(builder, descriptor->mnemonic_string_offset);
-  loom_low_fingerprint_builder_u32(builder, descriptor->source_string_offset);
   loom_low_fingerprint_builder_u32(builder,
                                    descriptor->semantic_tag_string_offset);
   loom_low_fingerprint_builder_u32(builder,
@@ -693,7 +690,7 @@ static iree_status_t loom_low_append_json_string(iree_string_builder_t* builder,
 static iree_status_t loom_low_descriptor_set_append_string_field(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder, const char* field_name,
-    uint32_t string_offset) {
+    loom_bstring_table_offset_t string_offset) {
   iree_string_view_t value = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(
       loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
@@ -720,8 +717,8 @@ iree_status_t loom_low_descriptor_set_compute_fingerprint(
                             "low descriptor set is required");
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_tables_present(descriptor_set));
-  if (descriptor_set->string_data_length != 0 &&
-      descriptor_set->string_data == NULL) {
+  if (descriptor_set->string_table.data_length != 0 &&
+      descriptor_set->string_table.data == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor string table pointer is required "
                             "when its length is non-zero");
@@ -729,8 +726,9 @@ iree_status_t loom_low_descriptor_set_compute_fingerprint(
 
   loom_low_fingerprint_builder_t builder =
       loom_low_fingerprint_builder_initialize();
-  loom_low_fingerprint_builder_bytes(&builder, "loom.low.descriptor_set.v1",
-                                     sizeof("loom.low.descriptor_set.v1") - 1);
+  loom_low_fingerprint_builder_bytes(
+      &builder, (const uint8_t*)"loom.low.descriptor_set.v1",
+      sizeof("loom.low.descriptor_set.v1") - 1);
   loom_low_fingerprint_builder_u32(&builder, descriptor_set->abi_version);
   loom_low_fingerprint_builder_u32(&builder, descriptor_set->generator_version);
   loom_low_fingerprint_builder_u32(&builder, descriptor_set->key_string_offset);
@@ -738,8 +736,9 @@ iree_status_t loom_low_descriptor_set_compute_fingerprint(
                                    descriptor_set->target_key_string_offset);
   loom_low_fingerprint_builder_u32(&builder,
                                    descriptor_set->feature_key_string_offset);
-  loom_low_fingerprint_builder_bytes(&builder, descriptor_set->string_data,
-                                     descriptor_set->string_data_length);
+  loom_low_fingerprint_builder_bytes(&builder,
+                                     descriptor_set->string_table.data,
+                                     descriptor_set->string_table.data_length);
 
   loom_low_fingerprint_builder_u32(&builder, descriptor_set->descriptor_count);
   for (uint32_t i = 0; i < descriptor_set->descriptor_count; ++i) {
@@ -887,8 +886,8 @@ iree_status_t loom_low_descriptor_set_verify(
 }
 
 iree_status_t loom_low_descriptor_set_string(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t string_offset,
-    iree_string_view_t* out_string) {
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string) {
   if (out_string == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor string output is required");

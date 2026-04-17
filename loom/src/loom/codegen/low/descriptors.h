@@ -17,16 +17,17 @@
 
 #include "iree/base/api.h"
 #include "iree/base/string_builder.h"
+#include "loom/util/bstring.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 1u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 2u
 
 // Sentinel for absent string-table offsets.
-#define LOOM_LOW_STRING_OFFSET_NONE UINT32_MAX
+#define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
 
 // Sentinel for absent 16-bit table identifiers.
 #define LOOM_LOW_ID_NONE UINT16_MAX
@@ -269,7 +270,7 @@ typedef uint16_t loom_low_descriptor_flags_t;
 
 typedef struct loom_low_reg_class_t {
   // String-table offset for the stable register-class name.
-  uint32_t name_string_offset;
+  loom_bstring_table_offset_t name_string_offset;
   // Target bank identifier used by allocators and pressure reporting.
   uint16_t target_bank_id;
   // Register-class behavioral flags.
@@ -293,7 +294,7 @@ typedef struct loom_low_reg_class_alt_t {
 
 typedef struct loom_low_operand_t {
   // String-table offset for the descriptor field name.
-  uint32_t field_name_string_offset;
+  loom_bstring_table_offset_t field_name_string_offset;
   // Semantic role this operand row plays.
   loom_low_operand_role_t role;
   // Operand flags used by verifier, allocator, and emitter.
@@ -314,7 +315,7 @@ typedef struct loom_low_operand_t {
 
 typedef struct loom_low_immediate_t {
   // String-table offset for the immediate field name.
-  uint32_t field_name_string_offset;
+  loom_bstring_table_offset_t field_name_string_offset;
   // Immediate interpretation used by verifier and emitter.
   loom_low_immediate_kind_t kind;
   // Immediate flags such as symbolic or relative.
@@ -375,7 +376,7 @@ typedef struct loom_low_pressure_delta_t {
 
 typedef struct loom_low_resource_t {
   // String-table offset for the stable resource name.
-  uint32_t name_string_offset;
+  loom_bstring_table_offset_t name_string_offset;
   // Number of resource units available per cycle.
   uint16_t capacity_per_cycle;
   // Resource flags for target-owned refinements.
@@ -403,7 +404,7 @@ typedef struct loom_low_hazard_t {
 
 typedef struct loom_low_schedule_class_t {
   // String-table offset for the stable schedule-class name.
-  uint32_t name_string_offset;
+  loom_bstring_table_offset_t name_string_offset;
   // Latency in cycles when latency_kind is exact or estimated.
   uint16_t latency_cycles;
   // Latency interpretation for scheduling and diagnostics.
@@ -428,13 +429,11 @@ typedef struct loom_low_schedule_class_t {
 
 typedef struct loom_low_descriptor_t {
   // String-table offset for the stable descriptor key.
-  uint32_t key_string_offset;
+  loom_bstring_table_offset_t key_string_offset;
   // String-table offset for the target mnemonic or packet name.
-  uint32_t mnemonic_string_offset;
-  // String-table offset for the source provenance string.
-  uint32_t source_string_offset;
+  loom_bstring_table_offset_t mnemonic_string_offset;
   // String-table offset for the primary semantic tag.
-  uint32_t semantic_tag_string_offset;
+  loom_bstring_table_offset_t semantic_tag_string_offset;
   // First feature-mask word required by this descriptor.
   uint32_t feature_mask_word_start;
   // Number of feature-mask words required by this descriptor.
@@ -473,15 +472,13 @@ typedef struct loom_low_descriptor_set_t {
   // Stable content fingerprint for every table field except this field.
   loom_low_fingerprint_t fingerprint;
   // String-table offset for the descriptor-set key.
-  uint32_t key_string_offset;
+  loom_bstring_table_offset_t key_string_offset;
   // String-table offset for the target-family key.
-  uint32_t target_key_string_offset;
+  loom_bstring_table_offset_t target_key_string_offset;
   // String-table offset for the feature namespace key.
-  uint32_t feature_key_string_offset;
-  // NUL-separated string table used by all string offsets.
-  const char* string_data;
-  // Size in bytes of string_data, including terminators.
-  uint32_t string_data_length;
+  loom_bstring_table_offset_t feature_key_string_offset;
+  // Packed B-string table used by all string offsets.
+  loom_bstring_table_t string_table;
   // Dense descriptor rows owned by this set.
   const loom_low_descriptor_t* descriptors;
   // Number of descriptor rows owned by this set.
@@ -556,11 +553,11 @@ iree_status_t loom_low_descriptor_set_fingerprint_matches(
 iree_status_t loom_low_descriptor_set_verify(
     const loom_low_descriptor_set_t* descriptor_set);
 
-// Returns the NUL-terminated string view at |string_offset|. A NONE offset
-// returns an empty string.
+// Returns the B-string view at |string_offset|. A NONE offset returns an empty
+// string.
 iree_status_t loom_low_descriptor_set_string(
-    const loom_low_descriptor_set_t* descriptor_set, uint32_t string_offset,
-    iree_string_view_t* out_string);
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_bstring_table_offset_t string_offset, iree_string_view_t* out_string);
 
 // Returns a descriptor row by ordinal, or NULL when |descriptor_ordinal| is out
 // of bounds.

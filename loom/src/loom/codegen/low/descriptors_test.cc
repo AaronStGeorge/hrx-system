@@ -6,7 +6,6 @@
 
 #include "loom/codegen/low/descriptors.h"
 
-#include <cstddef>
 #include <string>
 
 #include "iree/testing/gtest.h"
@@ -15,52 +14,74 @@
 namespace loom {
 namespace {
 
-struct TestStrings {
-  char empty[sizeof("")];
-  char set_key[sizeof("test.core")];
-  char target_key[sizeof("test.target")];
-  char feature_key[sizeof("test.features")];
-  char reg_gpr[sizeof("test.gpr")];
-  char field_dst[sizeof("dst")];
-  char field_lhs[sizeof("lhs")];
-  char field_rhs[sizeof("rhs")];
-  char field_value[sizeof("value")];
-  char resource_alu[sizeof("test.alu")];
-  char schedule_const[sizeof("test.const")];
-  char schedule_alu[sizeof("test.alu.i32")];
-  char descriptor_const[sizeof("test.const.i32")];
-  char descriptor_add[sizeof("test.add.i32")];
-  char mnemonic_const[sizeof("const.i32")];
-  char mnemonic_add[sizeof("add.i32")];
-  char source[sizeof("descriptors_test.cc")];
-  char semantic_const[sizeof("integer.const.i32")];
-  char semantic_add[sizeof("integer.add.i32")];
+static const uint8_t kTestStrings[] =
+    "\x00"
+    "\x09"
+    "test.core"
+    "\x0b"
+    "test.target"
+    "\x0d"
+    "test.features"
+    "\x08"
+    "test.gpr"
+    "\x03"
+    "dst"
+    "\x03"
+    "lhs"
+    "\x03"
+    "rhs"
+    "\x05"
+    "value"
+    "\x08"
+    "test.alu"
+    "\x0a"
+    "test.const"
+    "\x0c"
+    "test.alu.i32"
+    "\x0e"
+    "test.const.i32"
+    "\x0c"
+    "test.add.i32"
+    "\x09"
+    "const.i32"
+    "\x07"
+    "add.i32"
+    "\x11"
+    "integer.const.i32"
+    "\x0f"
+    "integer.add.i32";
+
+enum {
+  TEST_STRING_empty = 0,
+  TEST_STRING_set_key = TEST_STRING_empty + sizeof(""),
+  TEST_STRING_target_key = TEST_STRING_set_key + sizeof("test.core"),
+  TEST_STRING_feature_key = TEST_STRING_target_key + sizeof("test.target"),
+  TEST_STRING_reg_gpr = TEST_STRING_feature_key + sizeof("test.features"),
+  TEST_STRING_field_dst = TEST_STRING_reg_gpr + sizeof("test.gpr"),
+  TEST_STRING_field_lhs = TEST_STRING_field_dst + sizeof("dst"),
+  TEST_STRING_field_rhs = TEST_STRING_field_lhs + sizeof("lhs"),
+  TEST_STRING_field_value = TEST_STRING_field_rhs + sizeof("rhs"),
+  TEST_STRING_resource_alu = TEST_STRING_field_value + sizeof("value"),
+  TEST_STRING_schedule_const = TEST_STRING_resource_alu + sizeof("test.alu"),
+  TEST_STRING_schedule_alu = TEST_STRING_schedule_const + sizeof("test.const"),
+  TEST_STRING_descriptor_const =
+      TEST_STRING_schedule_alu + sizeof("test.alu.i32"),
+  TEST_STRING_descriptor_add =
+      TEST_STRING_descriptor_const + sizeof("test.const.i32"),
+  TEST_STRING_mnemonic_const =
+      TEST_STRING_descriptor_add + sizeof("test.add.i32"),
+  TEST_STRING_mnemonic_add = TEST_STRING_mnemonic_const + sizeof("const.i32"),
+  TEST_STRING_semantic_const = TEST_STRING_mnemonic_add + sizeof("add.i32"),
+  TEST_STRING_semantic_add =
+      TEST_STRING_semantic_const + sizeof("integer.const.i32"),
+  TEST_STRING_END = TEST_STRING_semantic_add + sizeof("integer.add.i32"),
 };
 
-static const TestStrings kTestStrings = {
-    "",
-    "test.core",
-    "test.target",
-    "test.features",
-    "test.gpr",
-    "dst",
-    "lhs",
-    "rhs",
-    "value",
-    "test.alu",
-    "test.const",
-    "test.alu.i32",
-    "test.const.i32",
-    "test.add.i32",
-    "const.i32",
-    "add.i32",
-    "descriptors_test.cc",
-    "integer.const.i32",
-    "integer.add.i32",
-};
+static_assert(TEST_STRING_END == sizeof(kTestStrings) - 1,
+              "test descriptor string offsets must cover the table payload");
 
 #define TEST_STRING_OFFSET(field) \
-  static_cast<uint32_t>(offsetof(TestStrings, field))
+  static_cast<loom_bstring_table_offset_t>(TEST_STRING_##field)
 
 struct TestTables {
   loom_low_descriptor_t descriptors[2];
@@ -145,7 +166,6 @@ void InitializeTestTables(TestTables* tables) {
       TEST_STRING_OFFSET(descriptor_const);
   tables->descriptors[0].mnemonic_string_offset =
       TEST_STRING_OFFSET(mnemonic_const);
-  tables->descriptors[0].source_string_offset = TEST_STRING_OFFSET(source);
   tables->descriptors[0].semantic_tag_string_offset =
       TEST_STRING_OFFSET(semantic_const);
   tables->descriptors[0].operand_start = 0;
@@ -159,7 +179,6 @@ void InitializeTestTables(TestTables* tables) {
   tables->descriptors[1].key_string_offset = TEST_STRING_OFFSET(descriptor_add);
   tables->descriptors[1].mnemonic_string_offset =
       TEST_STRING_OFFSET(mnemonic_add);
-  tables->descriptors[1].source_string_offset = TEST_STRING_OFFSET(source);
   tables->descriptors[1].semantic_tag_string_offset =
       TEST_STRING_OFFSET(semantic_add);
   tables->descriptors[1].feature_mask_word_start = 0;
@@ -175,8 +194,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.key_string_offset = TEST_STRING_OFFSET(set_key);
   tables->set.target_key_string_offset = TEST_STRING_OFFSET(target_key);
   tables->set.feature_key_string_offset = TEST_STRING_OFFSET(feature_key);
-  tables->set.string_data = reinterpret_cast<const char*>(&kTestStrings);
-  tables->set.string_data_length = sizeof(kTestStrings);
+  tables->set.string_table.data = kTestStrings;
+  tables->set.string_table.data_length = sizeof(kTestStrings) - 1;
   tables->set.descriptors = tables->descriptors;
   tables->set.descriptor_count = IREE_ARRAYSIZE(tables->descriptors);
   tables->set.operands = tables->operands;
