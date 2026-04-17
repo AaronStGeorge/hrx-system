@@ -1,0 +1,102 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "matrix_contract_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+)
+
+iree_assert_no_dependency(
+    name = "matrix_facts_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:matrix_facts",
+)
+
+iree_assert_no_dependency(
+    name = "matrix_contract_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+)
+
+#===------------------------------------------------------------------------===#
+# AMDGPU matrix contracts
+#===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "matrix_contract",
+    srcs = ["matrix_contract.c"],
+    hdrs = ["matrix_contract.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
+    name = "matrix_facts",
+    srcs = ["matrix_facts.c"],
+    hdrs = ["matrix_facts.h"],
+    deps = [
+        ":matrix_contract",
+        "//loom/src/loom/util:fact_table",
+    ],
+)
+
+loom_cc_test(
+    name = "matrix_contract_test",
+    srcs = ["matrix_contract_test.cc"],
+    deps = [
+        ":matrix_contract",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "matrix_contract_fixture_test",
+    srcs = ["matrix_contract_fixture_test.cc"],
+    deps = [
+        ":matrix_contract",
+        ":matrix_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/buffer",
+        "//loom/src/loom/ops/encoding",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/testing:context",
+        "//loom/src/loom/transforms:verify",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "matrix_facts_test",
+    srcs = ["matrix_facts_test.cc"],
+    deps = [
+        ":matrix_contract",
+        ":matrix_facts",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

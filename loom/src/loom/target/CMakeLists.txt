@@ -10,4 +10,14 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    types
+  HDRS
+    "types.h"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

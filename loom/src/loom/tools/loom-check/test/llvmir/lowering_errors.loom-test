@@ -1,7 +1,7 @@
 // RUN: emit llvmir-body
 
-// Missing CPU packed-dot features fail loudly instead of selecting a fallback.
-// ERROR@+1: LOWERING/001 "vector.dot4i" "matching CPU packed-dot feature"
+// Missing x86 packed-dot features fail loudly instead of selecting a fallback.
+// ERROR@+1: LOWERING/001 "vector.dot4i" "matching x86 packed-dot feature"
 func.def @dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
   %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
   func.return %dot : vector<8xi32>

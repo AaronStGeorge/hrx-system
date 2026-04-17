@@ -6,7 +6,7 @@
 
 #include "loom/tools/loom-check/requirements.h"
 
-#include "loom/target/llvmir/tool.h"
+#include "loom/target/emit/llvmir/tool.h"
 
 static bool loom_check_case_has_requirement(const loom_check_case_t* test_case,
                                             iree_string_view_t requirement) {
