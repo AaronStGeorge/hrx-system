@@ -45,6 +45,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "cfg_simplify_scf_pipeline"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/cfg_simplify_scf_pipeline.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "kernel_async_legality"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel_async_legality.loom-test"

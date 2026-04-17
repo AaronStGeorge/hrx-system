@@ -82,3 +82,50 @@ func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4x
   test.use %view : view<4xf32, %layout>
   func.return
 }
+
+// ====
+
+func.def @fuses_single_predecessor_block_args(%a: i32) -> (i32) {
+  cfg.br ^middle(%a : i32)
+^middle(%x : i32):
+  cfg.br ^exit(%x : i32)
+^exit(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @fuses_single_predecessor_block_args(%a: i32) -> (i32) {
+  cfg.br ^exit
+  ^exit:
+  func.return %a : i32
+}
+
+// ====
+
+func.def @preserves_loop_carried_args(%n: index, %seed: i32, %x: i32) -> (i32) {
+  %zero = index.constant 0 : index
+  %one = index.constant 1 : index
+  cfg.br ^loop(%zero, %seed : index, i32)
+  ^loop(%i : index, %acc : i32):
+  %keep_going = index.cmp slt, %i, %n : index
+  cfg.cond_br %keep_going, ^body, ^exit : i1
+  ^body:
+  %next = test.addi %acc, %x : i32
+  %next_i = index.add %i, %one : index
+  cfg.br ^loop(%next_i, %next : index, i32)
+  ^exit:
+  func.return %acc : i32
+}
+
+// ====
+
+func.def @preserves_effectful_forward_block(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  cfg.cond_br %cond, ^effect, ^exit : i1
+  ^effect:
+  view.store %value, %view[0] : f32, view<1xf32, %layout>
+  cfg.br ^exit
+  ^exit:
+  func.return
+}
