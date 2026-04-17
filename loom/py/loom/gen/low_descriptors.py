@@ -125,6 +125,7 @@ class _CompiledDescriptorSet:
     pressure_deltas: list[PressureDelta]
     feature_mask_words: list[int]
     descriptor_rows: list[dict[str, int]]
+    descriptor_refs: list[tuple[str, int]]
     schedule_rows: list[dict[str, int]]
 
 
@@ -407,6 +408,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             }
         )
 
+    descriptor_refs = sorted((descriptor.key, i) for i, descriptor in enumerate(selected_descriptors))
+
     return _CompiledDescriptorSet(
         spec=spec,
         descriptors=selected_descriptors,
@@ -428,6 +431,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         pressure_deltas=pressure_deltas,
         feature_mask_words=feature_mask_words,
         descriptor_rows=descriptor_rows,
+        descriptor_refs=descriptor_refs,
         schedule_rows=schedule_rows,
     )
 
@@ -761,6 +765,19 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
             for i, descriptor in enumerate(compiled.descriptors)
         ],
     )
+    _emit_array(
+        lines,
+        "loom_low_descriptor_ref_t",
+        spec.c_table_prefix,
+        "DescriptorRefs",
+        [
+            [
+                f".key_string_offset = {pool.ref(f'descriptor_{descriptor_key}')},",
+                f".descriptor_ordinal = {descriptor_ordinal},",
+            ]
+            for descriptor_key, descriptor_ordinal in compiled.descriptor_refs
+        ],
+    )
 
     lines.append(f"static const loom_low_descriptor_set_t k{spec.c_table_prefix}Set = {{")
     lines.extend(
@@ -777,6 +794,8 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
             "        },",
             f"    .descriptors = k{spec.c_table_prefix}Descriptors,",
             f"    .descriptor_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}Descriptors),",
+            f"    .descriptor_refs = k{spec.c_table_prefix}DescriptorRefs,",
+            f"    .descriptor_ref_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}DescriptorRefs),",
         ]
     )
 
@@ -848,6 +867,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
         "generator_version": spec.generator_version,
         "table_counts": {
             "descriptors": len(compiled.descriptors),
+            "descriptor_refs": len(compiled.descriptor_refs),
             "operands": len(compiled.operands),
             "immediates": len(compiled.immediates),
             "effects": len(compiled.effects),

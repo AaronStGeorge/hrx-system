@@ -778,6 +778,46 @@ static const loom_low_descriptor_t kIreeVmCoreDescriptors[] = {
     },
 };
 
+static const loom_low_descriptor_ref_t kIreeVmCoreDescriptorRefs[] = {
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_add_i32,
+        .descriptor_ordinal = 1,
+    },
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_br,
+        .descriptor_ordinal = 4,
+    },
+    {
+        .key_string_offset =
+            IREE_VM_CORE_STRING_descriptor_iree_vm_call_import_i32,
+        .descriptor_ordinal = 6,
+    },
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_cmp_eq_i32,
+        .descriptor_ordinal = 3,
+    },
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_cond_br_i32,
+        .descriptor_ordinal = 5,
+    },
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_const_i32,
+        .descriptor_ordinal = 0,
+    },
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_return_i32,
+        .descriptor_ordinal = 7,
+    },
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_return_void,
+        .descriptor_ordinal = 8,
+    },
+    {
+        .key_string_offset = IREE_VM_CORE_STRING_descriptor_iree_vm_sub_i32,
+        .descriptor_ordinal = 2,
+    },
+};
+
 static const loom_low_descriptor_set_t kIreeVmCoreSet = {
     .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,
     .generator_version = 1,
@@ -791,6 +831,8 @@ static const loom_low_descriptor_set_t kIreeVmCoreSet = {
         },
     .descriptors = kIreeVmCoreDescriptors,
     .descriptor_count = IREE_ARRAYSIZE(kIreeVmCoreDescriptors),
+    .descriptor_refs = kIreeVmCoreDescriptorRefs,
+    .descriptor_ref_count = IREE_ARRAYSIZE(kIreeVmCoreDescriptorRefs),
     .operands = kIreeVmCoreOperands,
     .operand_count = IREE_ARRAYSIZE(kIreeVmCoreOperands),
     .immediates = kIreeVmCoreImmediates,

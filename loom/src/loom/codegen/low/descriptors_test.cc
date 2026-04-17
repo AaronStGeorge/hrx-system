@@ -70,6 +70,7 @@ static_assert(TEST_STRING_END == sizeof(kTestStrings) - 1,
 
 struct TestTables {
   loom_low_descriptor_t descriptors[2];
+  loom_low_descriptor_ref_t descriptor_refs[2];
   loom_low_operand_t operands[4];
   loom_low_immediate_t immediates[1];
   loom_low_reg_class_t reg_classes[1];
@@ -174,6 +175,13 @@ void InitializeTestTables(TestTables* tables) {
   tables->descriptors[1].schedule_class_id = 1;
   tables->descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE;
 
+  tables->descriptor_refs[0].key_string_offset =
+      TEST_STRING_OFFSET(descriptor_add);
+  tables->descriptor_refs[0].descriptor_ordinal = 1;
+  tables->descriptor_refs[1].key_string_offset =
+      TEST_STRING_OFFSET(descriptor_const);
+  tables->descriptor_refs[1].descriptor_ordinal = 0;
+
   tables->set.abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION;
   tables->set.generator_version = 7;
   tables->set.key_string_offset = TEST_STRING_OFFSET(set_key);
@@ -183,6 +191,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.string_table.data_length = sizeof(kTestStrings) - 1;
   tables->set.descriptors = tables->descriptors;
   tables->set.descriptor_count = IREE_ARRAYSIZE(tables->descriptors);
+  tables->set.descriptor_refs = tables->descriptor_refs;
+  tables->set.descriptor_ref_count = IREE_ARRAYSIZE(tables->descriptor_refs);
   tables->set.operands = tables->operands;
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
   tables->set.immediates = tables->immediates;
@@ -243,6 +253,34 @@ TEST(LowDescriptorsTest, RejectsDuplicateKeys) {
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
   EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnsortedDescriptorReferences) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptor_refs[0].key_string_offset =
+      TEST_STRING_OFFSET(descriptor_const);
+  tables.descriptor_refs[0].descriptor_ordinal = 0;
+  tables.descriptor_refs[1].key_string_offset =
+      TEST_STRING_OFFSET(descriptor_add);
+  tables.descriptor_refs[1].descriptor_ordinal = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_ignore(status);
+}
+
+TEST(LowDescriptorsTest, LookupRejectsIncompleteDescriptorReferences) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.set.descriptor_ref_count = 0;
+
+  uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
+  iree_status_t status = loom_low_descriptor_set_lookup_descriptor(
+      &tables.set, IREE_SV("test.add.i32"), &descriptor_ordinal);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   iree_status_ignore(status);
 }
 

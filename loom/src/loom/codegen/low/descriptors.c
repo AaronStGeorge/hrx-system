@@ -98,6 +98,9 @@ static iree_status_t loom_low_verify_tables_present(
       descriptor_set->descriptors, descriptor_set->descriptor_count,
       "descriptors"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->descriptor_refs, descriptor_set->descriptor_ref_count,
+      "descriptor_refs"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->operands, descriptor_set->operand_count, "operands"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->immediates, descriptor_set->immediate_count,
@@ -132,24 +135,54 @@ static iree_status_t loom_low_verify_tables_present(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_verify_descriptor_keys_unique(
+static iree_status_t loom_low_verify_descriptor_refs(
     const loom_low_descriptor_set_t* descriptor_set) {
-  for (uint32_t i = 0; i < descriptor_set->descriptor_count; ++i) {
-    iree_string_view_t lhs = iree_string_view_empty();
+  if (descriptor_set->descriptor_ref_count !=
+      descriptor_set->descriptor_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor reference map count %" PRIu32
+                            " does not match descriptor count %" PRIu32,
+                            descriptor_set->descriptor_ref_count,
+                            descriptor_set->descriptor_count);
+  }
+  iree_string_view_t previous_key = iree_string_view_empty();
+  for (uint32_t i = 0; i < descriptor_set->descriptor_ref_count; ++i) {
+    const loom_low_descriptor_ref_t* descriptor_ref =
+        &descriptor_set->descriptor_refs[i];
+    iree_string_view_t ref_key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
-        descriptor_set, descriptor_set->descriptors[i].key_string_offset,
-        /*allow_none=*/false, &lhs));
-    for (uint32_t j = i + 1; j < descriptor_set->descriptor_count; ++j) {
-      iree_string_view_t rhs = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
-          descriptor_set, descriptor_set->descriptors[j].key_string_offset,
-          /*allow_none=*/false, &rhs));
-      if (iree_string_view_equal(lhs, rhs)) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "duplicate low descriptor key '%.*s'",
-                                (int)lhs.size, lhs.data);
-      }
+        descriptor_set, descriptor_ref->key_string_offset, /*allow_none=*/false,
+        &ref_key));
+    if (i > 0 && iree_string_view_compare(previous_key, ref_key) >= 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor reference map is not strictly sorted near '%.*s'",
+          (int)ref_key.size, ref_key.data);
     }
+    if (descriptor_ref->descriptor_ordinal >=
+        descriptor_set->descriptor_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low descriptor reference '%.*s' points at descriptor ordinal "
+          "%" PRIu32 " but only %" PRIu32 " descriptors exist",
+          (int)ref_key.size, ref_key.data, descriptor_ref->descriptor_ordinal,
+          descriptor_set->descriptor_count);
+    }
+    iree_string_view_t descriptor_key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+        descriptor_set,
+        descriptor_set->descriptors[descriptor_ref->descriptor_ordinal]
+            .key_string_offset,
+        /*allow_none=*/false, &descriptor_key));
+    if (!iree_string_view_equal(ref_key, descriptor_key)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor reference key '%.*s' does not "
+                              "match descriptor %" PRIu32 " key '%.*s'",
+                              (int)ref_key.size, ref_key.data,
+                              descriptor_ref->descriptor_ordinal,
+                              (int)descriptor_key.size, descriptor_key.data);
+    }
+    previous_key = ref_key;
   }
   return iree_ok_status();
 }
@@ -543,7 +576,7 @@ iree_status_t loom_low_descriptor_set_verify(
   for (uint32_t i = 0; i < descriptor_set->pressure_delta_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_verify_pressure_delta(descriptor_set, i));
   }
-  return loom_low_verify_descriptor_keys_unique(descriptor_set);
+  return loom_low_verify_descriptor_refs(descriptor_set);
 }
 
 iree_status_t loom_low_descriptor_set_string(
@@ -584,14 +617,48 @@ iree_status_t loom_low_descriptor_set_lookup_descriptor(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor set is required");
   }
-  for (uint32_t i = 0; i < descriptor_set->descriptor_count; ++i) {
-    iree_string_view_t descriptor_key = iree_string_view_empty();
+  if (descriptor_set->descriptor_ref_count !=
+      descriptor_set->descriptor_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor reference map count %" PRIu32
+                            " does not match descriptor count %" PRIu32,
+                            descriptor_set->descriptor_ref_count,
+                            descriptor_set->descriptor_count);
+  }
+  if (descriptor_set->descriptor_ref_count != 0 &&
+      descriptor_set->descriptor_refs == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor reference map is required");
+  }
+  uint32_t low = 0;
+  uint32_t high = descriptor_set->descriptor_ref_count;
+  while (low < high) {
+    const uint32_t mid = low + (high - low) / 2;
+    const loom_low_descriptor_ref_t* descriptor_ref =
+        &descriptor_set->descriptor_refs[mid];
+    iree_string_view_t descriptor_ref_key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
-        descriptor_set, descriptor_set->descriptors[i].key_string_offset,
-        /*allow_none=*/false, &descriptor_key));
-    if (iree_string_view_equal(descriptor_key, key)) {
-      *out_descriptor_ordinal = i;
+        descriptor_set, descriptor_ref->key_string_offset, /*allow_none=*/false,
+        &descriptor_ref_key));
+    const int comparison = iree_string_view_compare(descriptor_ref_key, key);
+    if (comparison == 0) {
+      if (descriptor_ref->descriptor_ordinal >=
+          descriptor_set->descriptor_count) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low descriptor reference '%.*s' points at descriptor ordinal "
+            "%" PRIu32 " but only %" PRIu32 " descriptors exist",
+            (int)descriptor_ref_key.size, descriptor_ref_key.data,
+            descriptor_ref->descriptor_ordinal,
+            descriptor_set->descriptor_count);
+      }
+      *out_descriptor_ordinal = descriptor_ref->descriptor_ordinal;
       return iree_ok_status();
+    }
+    if (comparison < 0) {
+      low = mid + 1;
+    } else {
+      high = mid;
     }
   }
   return iree_make_status(IREE_STATUS_NOT_FOUND,
@@ -624,14 +691,15 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       descriptor_set->abi_version, descriptor_set->generator_version));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,
-      ",\"table_counts\":{\"descriptors\":%" PRIu32 ",\"operands\":%" PRIu32
+      ",\"table_counts\":{\"descriptors\":%" PRIu32
+      ",\"descriptor_refs\":%" PRIu32 ",\"operands\":%" PRIu32
       ",\"immediates\":%" PRIu32 ",\"effects\":%" PRIu32
       ",\"constraints\":%" PRIu32 ",\"reg_classes\":%" PRIu32
       ",\"schedule_classes\":%" PRIu32 "}",
-      descriptor_set->descriptor_count, descriptor_set->operand_count,
-      descriptor_set->immediate_count, descriptor_set->effect_count,
-      descriptor_set->constraint_count, descriptor_set->reg_class_count,
-      descriptor_set->schedule_class_count));
+      descriptor_set->descriptor_count, descriptor_set->descriptor_ref_count,
+      descriptor_set->operand_count, descriptor_set->immediate_count,
+      descriptor_set->effect_count, descriptor_set->constraint_count,
+      descriptor_set->reg_class_count, descriptor_set->schedule_class_count));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, ",\"descriptors\":["));
   for (uint32_t i = 0; i < descriptor_set->descriptor_count; ++i) {

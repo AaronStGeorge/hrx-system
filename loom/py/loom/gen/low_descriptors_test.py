@@ -27,8 +27,9 @@ def test_generate_ireevm_core_descriptor_set() -> None:
 
     manifest = json.loads(generated.manifest_json)
     assert manifest["key"] == "iree.vm.core"
-    assert manifest["abi_version"] == 3
+    assert manifest["abi_version"] == 4
     assert manifest["table_counts"]["descriptors"] >= 9
+    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert any(descriptor["key"] == "iree.vm.call.import.i32" for descriptor in manifest["descriptors"])
 
 
@@ -41,6 +42,7 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
 
     assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["iree.vm.add.i32"]
     assert manifest["table_counts"]["descriptors"] == 1
+    assert manifest["table_counts"]["descriptor_refs"] == 1
     assert manifest["table_counts"]["reg_classes"] == 6
     assert manifest["table_counts"]["reg_class_alts"] == 1
     assert manifest["table_counts"]["schedule_classes"] == 1

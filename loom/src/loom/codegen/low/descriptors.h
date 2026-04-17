@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 3u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 4u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -456,6 +456,13 @@ typedef struct loom_low_descriptor_t {
   loom_low_descriptor_flags_t flags;
 } loom_low_descriptor_t;
 
+typedef struct loom_low_descriptor_ref_t {
+  // String-table offset for the stable symbolic descriptor key.
+  loom_bstring_table_offset_t key_string_offset;
+  // Ordinal of the referenced descriptor row.
+  uint32_t descriptor_ordinal;
+} loom_low_descriptor_ref_t;
+
 typedef struct loom_low_descriptor_set_t {
   // Descriptor table ABI version.
   uint32_t abi_version;
@@ -473,6 +480,10 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_descriptor_t* descriptors;
   // Number of descriptor rows owned by this set.
   uint32_t descriptor_count;
+  // Sorted symbolic descriptor-key reference rows.
+  const loom_low_descriptor_ref_t* descriptor_refs;
+  // Number of symbolic descriptor-key reference rows.
+  uint32_t descriptor_ref_count;
   // Dense operand/result rows referenced by descriptors.
   const loom_low_operand_t* operands;
   // Number of operand/result rows owned by this set.

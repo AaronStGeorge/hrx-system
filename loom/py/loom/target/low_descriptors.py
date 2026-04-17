@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 3
+LOW_DESCRIPTOR_SET_ABI_VERSION = 4
 
 
 class CEnum(Enum):
