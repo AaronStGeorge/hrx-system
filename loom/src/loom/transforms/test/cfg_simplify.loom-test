@@ -213,9 +213,8 @@ func.def @folds_dominated_compare_from_true_edge(%i: index, %n: index, %a: i32, 
 // ----
 func.def @folds_dominated_compare_from_true_edge(%i: index, %n: index, %a: i32, %b: i32) -> (i32) {
   %cond = index.cmp slt, %i, %n : index
-  cfg.cond_br %cond, ^then, ^else : i1
-^then:
-  %again = index.cmp slt, %i, %n : index
+  cfg.cond_br %cond, ^taken, ^else : i1
+^taken:
   cfg.br ^join(%a : i32)
 ^else:
   cfg.br ^join(%b : i32)
@@ -244,11 +243,10 @@ func.def @folds_dominated_compare_from_false_edge(%i: index, %n: index, %a: i32,
 // ----
 func.def @folds_dominated_compare_from_false_edge(%i: index, %n: index, %a: i32, %b: i32) -> (i32) {
   %cond = index.cmp slt, %i, %n : index
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^taken : i1
 ^then:
   cfg.br ^join(%a : i32)
-^else:
-  %again = index.cmp sge, %i, %n : index
+^taken:
   cfg.br ^join(%b : i32)
 ^join(%result : i32):
   func.return %result : i32
@@ -281,11 +279,10 @@ func.def @folds_compare_after_equivalent_incoming_edges(%guard: i1, %i: index, %
   %cond = index.cmp slt, %i, %n : index
   cfg.cond_br %guard, ^left, ^right : i1
 ^left:
-  cfg.cond_br %cond, ^join, ^exit : i1
+  cfg.cond_br %cond, ^taken, ^exit : i1
 ^right:
-  cfg.cond_br %cond, ^join, ^exit : i1
-^join:
-  %again = index.cmp slt, %i, %n : index
+  cfg.cond_br %cond, ^taken, ^exit : i1
+^taken:
   cfg.br ^ret(%a : i32)
 ^exit:
   cfg.br ^ret(%b : i32)
@@ -325,16 +322,11 @@ func.def @transports_compare_facts_through_block_args(%guard: i1, %li: index, %l
   cfg.cond_br %guard, ^left, ^right : i1
 ^left:
   %left_cond = index.cmp slt, %li, %ln : index
-  cfg.cond_br %left_cond, ^left_pass, ^exit : i1
-^left_pass:
-  cfg.br ^join(%li, %ln : index, index)
+  cfg.cond_br %left_cond, ^taken, ^exit : i1
 ^right:
   %right_cond = index.cmp slt, %ri, %rn : index
-  cfg.cond_br %right_cond, ^right_pass, ^exit : i1
-^right_pass:
-  cfg.br ^join(%ri, %rn : index, index)
-^join(%x : index, %y : index):
-  %again = index.cmp slt, %x, %y : index
+  cfg.cond_br %right_cond, ^taken, ^exit : i1
+^taken:
   cfg.br ^ret(%a : i32)
 ^exit:
   cfg.br ^ret(%b : i32)
@@ -344,7 +336,7 @@ func.def @transports_compare_facts_through_block_args(%guard: i1, %li: index, %l
 
 // ====
 
-func.def @preserves_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
+func.def @threads_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %guard, ^left, ^right : i1
 ^left:
   %left_cond = index.cmp slt, %li, %ln : index
@@ -360,6 +352,100 @@ func.def @preserves_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li:
   cfg.br ^ret(%a : i32)
 ^dead:
   cfg.br ^ret(%b : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @threads_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  %left_cond = index.cmp slt, %li, %ln : index
+  cfg.cond_br %left_cond, ^taken, ^exit : i1
+^right:
+  %again = index.cmp slt, %ri, %rn : index
+  cfg.cond_br %again, ^taken, ^dead : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^dead:
+  cfg.br ^ret(%b : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
+func.def @preserves_compare_with_unproven_block_arg_facts(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  cfg.br ^join(%li, %ln : index, index)
+^right:
+  cfg.br ^join(%ri, %rn : index, index)
+^join(%x : index, %y : index):
+  %again = index.cmp slt, %x, %y : index
+  cfg.cond_br %again, ^taken, ^dead : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^dead:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
+func.def @threads_direct_branch_through_known_block_arg(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^left, ^exit : i1
+^left:
+  cfg.br ^dispatch(%cond : i1)
+^dispatch(%known : i1):
+  cfg.cond_br %known, ^taken, ^dead : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^dead:
+  cfg.br ^ret(%b : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @threads_direct_branch_through_known_block_arg(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^taken, ^exit : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
+func.def @threads_conditional_predecessor_through_known_block(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^dispatch, ^exit : i1
+^dispatch:
+  cfg.cond_br %cond, ^taken, ^dead : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^dead:
+  cfg.br ^ret(%b : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @threads_conditional_predecessor_through_known_block(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^taken, ^exit : i1
+^taken:
+  cfg.br ^ret(%a : i32)
 ^exit:
   cfg.br ^ret(%b : i32)
 ^ret(%result : i32):
@@ -393,11 +479,8 @@ func.def @folds_dominated_boolean_and_relations(%i: index, %n: index, %j: index,
   %i_in_range = index.cmp slt, %i, %n : index
   %j_nonzero = index.cmp ne, %j, %z : index
   %cond = scalar.andi %i_in_range, %j_nonzero : i1
-  cfg.cond_br %cond, ^then, ^else : i1
-^then:
-  %i_again = index.cmp slt, %i, %n : index
-  %j_again = index.cmp ne, %j, %z : index
-  %both = scalar.andi %i_again, %j_again : i1
+  cfg.cond_br %cond, ^taken, ^else : i1
+^taken:
   cfg.br ^join(%a : i32)
 ^else:
   cfg.br ^join(%b : i32)
