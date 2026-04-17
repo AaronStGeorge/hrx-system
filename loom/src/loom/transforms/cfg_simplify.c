@@ -1722,6 +1722,15 @@ static iree_status_t loom_cfg_simplify_fuse_single_predecessor_blocks(
 // Duplicate block merging
 //===----------------------------------------------------------------------===//
 
+#define LOOM_CFG_SIMPLIFY_ALPHA_EQUIV_MAX_OPS 8
+#define LOOM_CFG_SIMPLIFY_ALPHA_EQUIV_MAX_VALUES 32
+
+typedef struct loom_cfg_simplify_value_map_t {
+  loom_value_id_t source_values[LOOM_CFG_SIMPLIFY_ALPHA_EQUIV_MAX_VALUES];
+  loom_value_id_t target_values[LOOM_CFG_SIMPLIFY_ALPHA_EQUIV_MAX_VALUES];
+  iree_host_size_t count;
+} loom_cfg_simplify_value_map_t;
+
 static bool loom_cfg_simplify_is_mergeable_terminal_block(
     const loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
     uint16_t block_index) {
@@ -1795,24 +1804,286 @@ static bool loom_cfg_simplify_find_duplicate_terminal_block(
   return false;
 }
 
+static bool loom_cfg_simplify_value_map_append(
+    loom_cfg_simplify_value_map_t* map, loom_value_id_t source_value,
+    loom_value_id_t target_value) {
+  if (source_value == LOOM_VALUE_ID_INVALID ||
+      target_value == LOOM_VALUE_ID_INVALID) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < map->count; ++i) {
+    if (map->source_values[i] == source_value) {
+      return map->target_values[i] == target_value;
+    }
+    if (map->target_values[i] == target_value) return false;
+  }
+  if (map->count >= LOOM_CFG_SIMPLIFY_ALPHA_EQUIV_MAX_VALUES) return false;
+  map->source_values[map->count] = source_value;
+  map->target_values[map->count] = target_value;
+  ++map->count;
+  return true;
+}
+
+static loom_value_id_t loom_cfg_simplify_value_map_lookup(
+    const loom_cfg_simplify_value_map_t* map, loom_value_id_t source_value) {
+  for (iree_host_size_t i = 0; i < map->count; ++i) {
+    if (map->source_values[i] == source_value) return map->target_values[i];
+  }
+  return source_value;
+}
+
+static bool loom_cfg_simplify_values_equal_after_map(
+    const loom_cfg_simplify_value_map_t* map, loom_value_id_t source_value,
+    loom_value_id_t target_value) {
+  return loom_cfg_simplify_value_map_lookup(map, source_value) == target_value;
+}
+
+static bool loom_cfg_simplify_types_equal_after_map(
+    const loom_cfg_simplify_value_map_t* map, loom_type_t source_type,
+    loom_type_t target_type) {
+  loom_type_value_remap_t remap = {
+      .source_values = map->source_values,
+      .target_values = map->target_values,
+      .count = map->count,
+  };
+  return loom_type_equal_after_value_remap(source_type, target_type, &remap);
+}
+
+static bool loom_cfg_simplify_op_is_alpha_mergeable(
+    const loom_cfg_simplify_state_t* state, const loom_op_t* op) {
+  if (!op || op->region_count != 0 || op->tied_result_count != 0) {
+    return false;
+  }
+  loom_trait_flags_t traits = loom_op_effective_traits(state->module, op);
+  if (!iree_all_bits_set(traits, LOOM_TRAIT_PURE)) return false;
+  if (loom_traits_may_read(traits) || loom_traits_may_write(traits) ||
+      loom_traits_has_unique_identity(traits) ||
+      iree_any_bit_set(traits, LOOM_TRAIT_HINT)) {
+    return false;
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_block_values_stay_in_block(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* block) {
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    if (!loom_cfg_simplify_value_uses_stay_in_block(
+            state, loom_block_arg_id(block, i), block)) {
+      return false;
+    }
+  }
+  loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    const loom_value_id_t* results = loom_op_const_results(op);
+    for (uint16_t i = 0; i < op->result_count; ++i) {
+      if (!loom_cfg_simplify_value_uses_stay_in_block(state, results[i],
+                                                      block)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_is_alpha_merge_candidate(
+    const loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    uint16_t block_index) {
+  if (block_index == 0 ||
+      !loom_cfg_graph_block_is_reachable(graph, block_index)) {
+    return false;
+  }
+  const loom_block_t* block = graph->blocks[block_index].block;
+  if (!block || block->op_count == 0 ||
+      block->op_count > LOOM_CFG_SIMPLIFY_ALPHA_EQUIV_MAX_OPS ||
+      !loom_cfg_simplify_block_values_stay_in_block(state, block)) {
+    return false;
+  }
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    if (!loom_cfg_simplify_op_is_alpha_mergeable(state, op)) return false;
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_successors_equal_after_map(
+    const loom_block_t* source_block, const loom_block_t* target_block,
+    const loom_op_t* source_op, const loom_op_t* target_op) {
+  loom_block_t* const* source_successors = loom_op_const_successors(source_op);
+  loom_block_t* const* target_successors = loom_op_const_successors(target_op);
+  for (uint8_t i = 0; i < source_op->successor_count; ++i) {
+    loom_block_t* source_successor = source_successors[i];
+    loom_block_t* target_successor = target_successors[i];
+    if (source_successor == source_block || source_successor == target_block ||
+        target_successor == source_block || target_successor == target_block) {
+      return false;
+    }
+    if (source_successor != target_successor) return false;
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_attributes_equal(const loom_op_t* source_op,
+                                               const loom_op_t* target_op) {
+  const loom_attribute_t* source_attrs = loom_op_attrs((loom_op_t*)source_op);
+  const loom_attribute_t* target_attrs = loom_op_attrs((loom_op_t*)target_op);
+  for (uint8_t i = 0; i < source_op->attribute_count; ++i) {
+    if (!loom_attribute_equal(&source_attrs[i], &target_attrs[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_ops_equal_after_map(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* source_block,
+    const loom_block_t* target_block, const loom_op_t* source_op,
+    const loom_op_t* target_op, loom_cfg_simplify_value_map_t* map) {
+  if (source_op->kind != target_op->kind ||
+      source_op->operand_count != target_op->operand_count ||
+      source_op->result_count != target_op->result_count ||
+      source_op->tied_result_count != target_op->tied_result_count ||
+      source_op->region_count != target_op->region_count ||
+      source_op->successor_count != target_op->successor_count ||
+      source_op->attribute_count != target_op->attribute_count ||
+      source_op->instance_flags != target_op->instance_flags ||
+      !loom_cfg_simplify_op_is_alpha_mergeable(state, source_op) ||
+      !loom_cfg_simplify_op_is_alpha_mergeable(state, target_op)) {
+    return false;
+  }
+
+  const loom_value_id_t* source_operands =
+      loom_op_operands((loom_op_t*)source_op);
+  const loom_value_id_t* target_operands =
+      loom_op_operands((loom_op_t*)target_op);
+  for (uint16_t i = 0; i < source_op->operand_count; ++i) {
+    if (!loom_cfg_simplify_values_equal_after_map(map, source_operands[i],
+                                                  target_operands[i])) {
+      return false;
+    }
+  }
+
+  const loom_value_id_t* source_results = loom_op_const_results(source_op);
+  const loom_value_id_t* target_results = loom_op_const_results(target_op);
+  for (uint16_t i = 0; i < source_op->result_count; ++i) {
+    if (!loom_cfg_simplify_value_map_append(map, source_results[i],
+                                            target_results[i])) {
+      return false;
+    }
+  }
+  for (uint16_t i = 0; i < source_op->result_count; ++i) {
+    loom_type_t source_type =
+        loom_module_value_type(state->module, source_results[i]);
+    loom_type_t target_type =
+        loom_module_value_type(state->module, target_results[i]);
+    if (!loom_cfg_simplify_types_equal_after_map(map, source_type,
+                                                 target_type)) {
+      return false;
+    }
+  }
+
+  return loom_cfg_simplify_successors_equal_after_map(
+             source_block, target_block, source_op, target_op) &&
+         loom_cfg_simplify_attributes_equal(source_op, target_op);
+}
+
+static bool loom_cfg_simplify_block_args_equal_after_map(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* source_block,
+    const loom_block_t* target_block, loom_cfg_simplify_value_map_t* map) {
+  if (source_block->arg_count != target_block->arg_count) return false;
+  for (uint16_t i = 0; i < source_block->arg_count; ++i) {
+    if (!loom_cfg_simplify_value_map_append(
+            map, loom_block_arg_id(source_block, i),
+            loom_block_arg_id(target_block, i))) {
+      return false;
+    }
+  }
+  for (uint16_t i = 0; i < source_block->arg_count; ++i) {
+    loom_type_t source_type = loom_module_value_type(
+        state->module, loom_block_arg_id(source_block, i));
+    loom_type_t target_type = loom_module_value_type(
+        state->module, loom_block_arg_id(target_block, i));
+    if (!loom_cfg_simplify_types_equal_after_map(map, source_type,
+                                                 target_type)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_blocks_alpha_equivalent(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* source_block,
+    const loom_block_t* target_block) {
+  if (source_block->op_count != target_block->op_count) return false;
+
+  loom_cfg_simplify_value_map_t map = {0};
+  if (!loom_cfg_simplify_block_args_equal_after_map(state, source_block,
+                                                    target_block, &map)) {
+    return false;
+  }
+
+  const loom_op_t* source_op = source_block->first_op;
+  const loom_op_t* target_op = target_block->first_op;
+  while (source_op && target_op) {
+    if (!loom_cfg_simplify_ops_equal_after_map(
+            state, source_block, target_block, source_op, target_op, &map)) {
+      return false;
+    }
+    source_op = source_op->next_op;
+    target_op = target_op->next_op;
+  }
+  return !source_op && !target_op;
+}
+
+static bool loom_cfg_simplify_find_alpha_equivalent_block(
+    const loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    uint16_t block_index, loom_block_t** out_canonical_block) {
+  *out_canonical_block = NULL;
+  if (!loom_cfg_simplify_is_alpha_merge_candidate(state, graph, block_index)) {
+    return false;
+  }
+  const loom_block_t* block = graph->blocks[block_index].block;
+  for (uint16_t canonical_index = 1; canonical_index < block_index;
+       ++canonical_index) {
+    if (!loom_cfg_simplify_is_alpha_merge_candidate(state, graph,
+                                                    canonical_index)) {
+      continue;
+    }
+    loom_block_t* canonical_block =
+        (loom_block_t*)graph->blocks[canonical_index].block;
+    if (!loom_cfg_simplify_blocks_alpha_equivalent(state, block,
+                                                   canonical_block)) {
+      continue;
+    }
+    *out_canonical_block = canonical_block;
+    return true;
+  }
+  return false;
+}
+
 static bool loom_cfg_simplify_can_redirect_successor(
-    const loom_op_t* terminator, const loom_block_t* old_dest,
-    const loom_block_t* new_dest) {
-  if (!new_dest || new_dest->arg_count != 0) return false;
+    const loom_cfg_simplify_state_t* state, const loom_op_t* terminator,
+    const loom_block_t* old_dest, const loom_block_t* new_dest) {
+  if (!new_dest) return false;
   if (loom_cfg_br_isa(terminator)) {
+    loom_value_slice_t args = loom_cfg_br_args((loom_op_t*)terminator);
     return loom_cfg_br_dest(terminator) == old_dest &&
-           loom_cfg_br_args(terminator).count == 0;
+           args.count == old_dest->arg_count &&
+           args.count == new_dest->arg_count &&
+           loom_cfg_simplify_branch_args_available_before(state, args,
+                                                          terminator) &&
+           loom_cfg_simplify_branch_args_match_dest(state, new_dest, args);
   }
   if (loom_cfg_cond_br_isa(terminator)) {
-    return loom_cfg_cond_br_true_dest(terminator) == old_dest ||
-           loom_cfg_cond_br_false_dest(terminator) == old_dest;
+    return old_dest->arg_count == 0 && new_dest->arg_count == 0 &&
+           (loom_cfg_cond_br_true_dest(terminator) == old_dest ||
+            loom_cfg_cond_br_false_dest(terminator) == old_dest);
   }
   return false;
 }
 
 static bool loom_cfg_simplify_can_redirect_block_predecessors(
-    const loom_cfg_graph_t* graph, uint16_t block_index,
-    loom_block_t* new_dest) {
+    const loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    uint16_t block_index, loom_block_t* new_dest) {
   loom_block_t* old_dest = (loom_block_t*)graph->blocks[block_index].block;
   loom_cfg_block_index_span_t predecessors =
       loom_cfg_graph_predecessors(graph, block_index);
@@ -1821,9 +2092,10 @@ static bool loom_cfg_simplify_can_redirect_block_predecessors(
     const loom_block_t* predecessor =
         graph->blocks[predecessors.values[i]].block;
     if (!predecessor) return false;
+    if (predecessor == old_dest || predecessor == new_dest) return false;
     loom_op_t* terminator = ((loom_block_t*)predecessor)->last_op;
     if (!terminator || !loom_cfg_simplify_can_redirect_successor(
-                           terminator, old_dest, new_dest)) {
+                           state, terminator, old_dest, new_dest)) {
       return false;
     }
   }
@@ -1834,7 +2106,9 @@ static iree_status_t loom_cfg_simplify_redirect_successor(
     loom_cfg_simplify_state_t* state, loom_op_t* terminator,
     loom_block_t* old_dest, loom_block_t* new_dest) {
   if (loom_cfg_br_isa(terminator)) {
-    return loom_cfg_simplify_replace_br(state, terminator, new_dest, NULL, 0);
+    loom_value_slice_t args = loom_cfg_br_args(terminator);
+    return loom_cfg_simplify_replace_br(state, terminator, new_dest,
+                                        args.values, args.count);
   }
 
   loom_block_t** successors = loom_op_successors(terminator);
@@ -1867,6 +2141,37 @@ static iree_status_t loom_cfg_simplify_redirect_block_predecessors(
   return iree_ok_status();
 }
 
+static iree_status_t loom_cfg_simplify_merge_alpha_equivalent_blocks(
+    loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
+    bool* out_changed) {
+  if (graph->malformed) return iree_ok_status();
+  for (uint16_t block_index = 1; block_index < graph->block_count;
+       ++block_index) {
+    loom_block_t* canonical_block = NULL;
+    if (!loom_cfg_simplify_find_alpha_equivalent_block(
+            state, graph, block_index, &canonical_block)) {
+      continue;
+    }
+    if (!loom_cfg_simplify_can_redirect_block_predecessors(
+            state, graph, block_index, canonical_block)) {
+      continue;
+    }
+
+    IREE_RETURN_IF_ERROR(loom_cfg_simplify_redirect_block_predecessors(
+        state, graph, block_index, canonical_block));
+    IREE_RETURN_IF_ERROR(
+        loom_cfg_simplify_remove_cfg_block(state, graph, block_index));
+    if (state->pass->statistics) {
+      loom_pass_statistic_add(
+          state->pass, LOOM_CFG_SIMPLIFY_STAT_DUPLICATE_BLOCKS_MERGED, 1);
+    }
+    state->rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
+    *out_changed = true;
+    return iree_ok_status();
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_cfg_simplify_merge_duplicate_terminal_blocks(
     loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
     bool* out_changed) {
@@ -1879,8 +2184,8 @@ static iree_status_t loom_cfg_simplify_merge_duplicate_terminal_blocks(
       continue;
     }
 
-    if (!loom_cfg_simplify_can_redirect_block_predecessors(graph, block_index,
-                                                           canonical_block)) {
+    if (!loom_cfg_simplify_can_redirect_block_predecessors(
+            state, graph, block_index, canonical_block)) {
       continue;
     }
     IREE_RETURN_IF_ERROR(loom_cfg_simplify_redirect_block_predecessors(
@@ -2158,6 +2463,9 @@ static iree_status_t loom_cfg_simplify_process_cfg_region(
       state, &graph, out_changed));
   if (*out_changed) return iree_ok_status();
   IREE_RETURN_IF_ERROR(loom_cfg_simplify_merge_duplicate_terminal_blocks(
+      state, &graph, out_changed));
+  if (*out_changed) return iree_ok_status();
+  IREE_RETURN_IF_ERROR(loom_cfg_simplify_merge_alpha_equivalent_blocks(
       state, &graph, out_changed));
   if (*out_changed) return iree_ok_status();
   return loom_cfg_simplify_remove_redundant_block_args(state, &graph,

@@ -104,6 +104,122 @@ func.def @merges_duplicate_return_blocks(%cond: i1, %value: i32) -> (i32) {
 
 // ====
 
+func.def @merges_alpha_equivalent_pure_blocks(%cond: i1, %a: i32, %b: i32, %c: i32) -> (i32) {
+  cfg.cond_br %cond, ^left, ^right : i1
+^left:
+  %left_sum = test.addi %a, %b : i32
+  %left_result = test.addi %left_sum, %c : i32
+  cfg.br ^join(%left_result : i32)
+^right:
+  %right_sum = test.addi %a, %b : i32
+  %right_result = test.addi %right_sum, %c : i32
+  cfg.br ^join(%right_result : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @merges_alpha_equivalent_pure_blocks(%cond: i1, %a: i32, %b: i32, %c: i32) -> (i32) {
+  %left_sum = test.addi %a, %b : i32
+  %left_result = test.addi %left_sum, %c : i32
+  func.return %left_result : i32
+}
+
+// ====
+
+func.def @merges_alpha_equivalent_blocks_with_args(%choose: i1, %left_pick: i1, %right_pick: i1, %a: i32, %b: i32, %c: i32) -> (i32) {
+  cfg.cond_br %choose, ^left_dispatch, ^right_dispatch : i1
+^left_dispatch:
+  cfg.cond_br %left_pick, ^left_a, ^left_b : i1
+^left_a:
+  cfg.br ^left(%a, %b : i32, i32)
+^left_b:
+  cfg.br ^left(%b, %a : i32, i32)
+^right_dispatch:
+  cfg.cond_br %right_pick, ^right_a, ^right_b : i1
+^right_a:
+  cfg.br ^right(%a, %b : i32, i32)
+^right_b:
+  cfg.br ^right(%b, %a : i32, i32)
+^left(%x : i32, %y : i32):
+  %left_sum = test.addi %x, %y : i32
+  %left_result = test.addi %left_sum, %c : i32
+  cfg.br ^join(%left_result : i32)
+^right(%p : i32, %q : i32):
+  %right_sum = test.addi %p, %q : i32
+  %right_result = test.addi %right_sum, %c : i32
+  cfg.br ^join(%right_result : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @merges_alpha_equivalent_blocks_with_args(%choose: i1, %left_pick: i1, %right_pick: i1, %a: i32, %b: i32, %c: i32) -> (i32) {
+  cfg.cond_br %choose, ^left_dispatch, ^right_dispatch : i1
+^left_dispatch:
+  cfg.cond_br %left_pick, ^left_a, ^left_b : i1
+^left_a:
+  cfg.br ^left(%a, %b : i32, i32)
+^left_b:
+  cfg.br ^left(%b, %a : i32, i32)
+^right_dispatch:
+  cfg.cond_br %right_pick, ^left_a, ^left_b : i1
+^left(%x : i32, %y : i32):
+  %left_sum = test.addi %x, %y : i32
+  %left_result = test.addi %left_sum, %c : i32
+  func.return %left_result : i32
+}
+
+// ====
+
+func.def @preserves_effectful_alpha_candidate(%cond: i1, %buffer: buffer, %offset: offset, %value: f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  cfg.cond_br %cond, ^left, ^right : i1
+^left:
+  view.store %value, %view[0] : f32, view<1xf32, %layout>
+  cfg.br ^exit
+^right:
+  view.store %value, %view[0] : f32, view<1xf32, %layout>
+  cfg.br ^exit
+^exit:
+  func.return
+}
+
+// ====
+
+func.def @preserves_alpha_candidate_with_different_successors(%cond: i1, %guard: i1, %a: i32, %b: i32, %c: i32) -> (i32) {
+  cfg.cond_br %cond, ^left, ^right : i1
+^left:
+  %left_sum = test.addi %a, %b : i32
+  cfg.cond_br %guard, ^left_exit, ^shared_exit : i1
+^right:
+  %right_sum = test.addi %a, %b : i32
+  cfg.cond_br %guard, ^right_exit, ^shared_exit : i1
+^left_exit:
+  func.return %a : i32
+^right_exit:
+  func.return %b : i32
+^shared_exit:
+  func.return %c : i32
+}
+
+// ====
+
+func.def @preserves_alpha_candidate_with_different_local_results(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^left, ^right : i1
+^left:
+  %left_sum = test.addi %a, %b : i32
+  cfg.br ^join(%left_sum : i32)
+^right:
+  %right_sum = test.addi %a, %a : i32
+  cfg.br ^join(%right_sum : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
 func.def @preserves_distinct_return_blocks(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %cond, ^then, ^else : i1
 ^then:
@@ -277,10 +393,6 @@ func.def @folds_compare_after_equivalent_incoming_edges(%guard: i1, %i: index, %
 // ----
 func.def @folds_compare_after_equivalent_incoming_edges(%guard: i1, %i: index, %n: index, %a: i32, %b: i32) -> (i32) {
   %cond = index.cmp slt, %i, %n : index
-  cfg.cond_br %guard, ^left, ^right : i1
-^left:
-  cfg.cond_br %cond, ^taken, ^exit : i1
-^right:
   cfg.cond_br %cond, ^taken, ^exit : i1
 ^taken:
   cfg.br ^ret(%a : i32)
@@ -402,15 +514,13 @@ func.def @threads_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li: i
   cfg.cond_br %guard, ^left, ^right : i1
 ^left:
   %left_cond = index.cmp slt, %li, %ln : index
-  cfg.cond_br %left_cond, ^taken, ^exit : i1
+  cfg.cond_br %left_cond, ^taken, ^dead : i1
 ^right:
   %again = index.cmp slt, %ri, %rn : index
   cfg.cond_br %again, ^taken, ^dead : i1
 ^taken:
   cfg.br ^ret(%a : i32)
 ^dead:
-  cfg.br ^ret(%b : i32)
-^exit:
   cfg.br ^ret(%b : i32)
 ^ret(%result : i32):
   func.return %result : i32
