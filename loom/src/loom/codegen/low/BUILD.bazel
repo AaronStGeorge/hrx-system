@@ -74,6 +74,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "verify",
+    srcs = ["verify.c"],
+    hdrs = ["verify.h"],
+    deps = [
+        ":target_binding",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/util:walk",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "descriptors_test",
     srcs = ["descriptors_test.cc"],
@@ -95,6 +111,22 @@ loom_cc_test(
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/target",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "verify_test",
+    srcs = ["verify_test.cc"],
+    deps = [
+        ":verify",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target/emit/ireevm:descriptors",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

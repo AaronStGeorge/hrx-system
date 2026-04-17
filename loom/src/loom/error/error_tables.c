@@ -2590,6 +2590,51 @@ static const loom_error_def_t loom_err_lowering_003 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_lowering_004_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"opcode", LOOM_PARAM_STRING},
+    {"descriptor_set_key", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_004 = {
+    .error_id = "ERR_LOWERING_004",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 4,
+    .summary = "Low descriptor is not available.",
+    .message_template =
+        "low function '@{function_name}' uses descriptor '{opcode}', but "
+        "descriptor set '{descriptor_set_key}' does not define it",
+    .fix_hint_template =
+        "Choose an opcode from descriptor set '{descriptor_set_key}' or select "
+        "a target config with a descriptor set that defines '{opcode}'",
+    .param_defs = loom_err_lowering_004_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_lowering_005_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"opcode", LOOM_PARAM_STRING},
+    {"descriptor_set_key", LOOM_PARAM_STRING},
+    {"feature_word_index", LOOM_PARAM_U32},
+    {"missing_feature_bits", LOOM_PARAM_U64},
+};
+static const loom_error_def_t loom_err_lowering_005 = {
+    .error_id = "ERR_LOWERING_005",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 5,
+    .summary = "Low descriptor feature is not enabled.",
+    .message_template =
+        "low function '@{function_name}' uses descriptor '{opcode}' from set "
+        "'{descriptor_set_key}', but feature word {feature_word_index} is "
+        "missing bits {missing_feature_bits}",
+    .fix_hint_template =
+        "Enable the missing target feature bits or choose a descriptor legal "
+        "for the selected target config",
+    .param_defs = loom_err_lowering_005_params,
+    .param_count = 5,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2637,7 +2682,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_bytecode_016,  &loom_err_bytecode_017,  &loom_err_fold_001,
     &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
     &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
-    &loom_err_lowering_003,
+    &loom_err_lowering_003,  &loom_err_lowering_004,  &loom_err_lowering_005,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

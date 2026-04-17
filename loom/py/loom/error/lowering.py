@@ -60,8 +60,51 @@ ERR_LOWERING_003 = ErrorDef(
     "choose a target config whose descriptor set is available",
 )
 
+# ERR_LOWERING_004: Low descriptor is not available.
+ERR_LOWERING_004 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=4,
+    severity=Severity.ERROR,
+    summary="Low descriptor is not available.",
+    message=(
+        "low function '@{function_name}' uses descriptor '{opcode}', but "
+        "descriptor set '{descriptor_set_key}' does not define it"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+    ),
+    fix_hint="Choose an opcode from descriptor set '{descriptor_set_key}' or "
+    "select a target config with a descriptor set that defines '{opcode}'",
+)
+
+# ERR_LOWERING_005: Low descriptor feature is not enabled.
+ERR_LOWERING_005 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=5,
+    severity=Severity.ERROR,
+    summary="Low descriptor feature is not enabled.",
+    message=(
+        "low function '@{function_name}' uses descriptor '{opcode}' from set "
+        "'{descriptor_set_key}', but feature word {feature_word_index} is "
+        "missing bits {missing_feature_bits}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("descriptor_set_key", ParamKind.STRING),
+        ErrorParam("feature_word_index", ParamKind.U32),
+        ErrorParam("missing_feature_bits", ParamKind.U64),
+    ),
+    fix_hint="Enable the missing target feature bits or choose a descriptor "
+    "legal for the selected target config",
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
     ERR_LOWERING_003,
+    ERR_LOWERING_004,
+    ERR_LOWERING_005,
 )

@@ -41,6 +41,25 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    verify
+  HDRS
+    "verify.h"
+  SRCS
+    "verify.c"
+  DEPS
+    ::target_binding
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::util::walk
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test
@@ -66,6 +85,23 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_registry
     loom::src::loom::ops::target
+    loom::src::loom::target::emit::ireevm::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    verify_test
+  SRCS
+    "verify_test.cc"
+  DEPS
+    ::verify
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
     loom::src::loom::target::emit::ireevm::descriptors
     iree::testing::gtest
     iree::testing::gtest_main

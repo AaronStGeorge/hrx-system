@@ -3451,5 +3451,71 @@
       }
     ],
     "fix_hint_template": "Link the descriptor package named by '{descriptor_set_key}' or choose a target config whose descriptor set is available"
+  },
+  {
+    "error_id": "ERR_LOWERING_004",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 4,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor is not available.",
+    "message_template": "low function '@{function_name}' uses descriptor '{opcode}', but descriptor set '{descriptor_set_key}' does not define it",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "descriptor_set_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Choose an opcode from descriptor set '{descriptor_set_key}' or select a target config with a descriptor set that defines '{opcode}'"
+  },
+  {
+    "error_id": "ERR_LOWERING_005",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor feature is not enabled.",
+    "message_template": "low function '@{function_name}' uses descriptor '{opcode}' from set '{descriptor_set_key}', but feature word {feature_word_index} is missing bits {missing_feature_bits}",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "descriptor_set_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "feature_word_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "missing_feature_bits",
+        "kind": 5,
+        "kind_name": "U64"
+      }
+    ],
+    "fix_hint_template": "Enable the missing target feature bits or choose a descriptor legal for the selected target config"
   }
 ]
