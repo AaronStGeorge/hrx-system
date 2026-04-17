@@ -16,11 +16,7 @@ func.def @folds_constant_branch_and_removes_dead(%a: i32, %b: i32) -> (i32) {
 // ----
 func.def @folds_constant_branch_and_removes_dead(%a: i32, %b: i32) -> (i32) {
   %cond = scalar.constant 1 : i1
-  cfg.br ^then
-^then:
   %sum = test.addi %a, %b : i32
-  cfg.br ^join
-^join:
   func.return %sum : i32
 }
 
@@ -36,8 +32,6 @@ func.def @forwards_empty_block(%cond: i1) {
 
 // ----
 func.def @forwards_empty_block(%cond: i1) {
-  cfg.br ^exit
-^exit:
   func.return
 }
 
@@ -77,8 +71,6 @@ func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4x
 
 // ----
 func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
-  cfg.br ^join
-^join:
   test.use %view : view<4xf32, %layout>
   func.return
 }
@@ -95,9 +87,30 @@ func.def @fuses_single_predecessor_block_args(%a: i32) -> (i32) {
 
 // ----
 func.def @fuses_single_predecessor_block_args(%a: i32) -> (i32) {
-  cfg.br ^exit
-^exit:
   func.return %a : i32
+}
+
+// ====
+
+func.def @fuses_block_with_cond_terminator(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.br ^dispatch(%a : i32)
+^dispatch(%x : i32):
+  %sum = test.addi %x, %b : i32
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  func.return %sum : i32
+^else:
+  func.return %b : i32
+}
+
+// ----
+func.def @fuses_block_with_cond_terminator(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  %sum = test.addi %a, %b : i32
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  func.return %sum : i32
+^else:
+  func.return %b : i32
 }
 
 // ====
