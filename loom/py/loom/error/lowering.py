@@ -127,6 +127,87 @@ ERR_LOWERING_006 = ErrorDef(
     "matches the packet",
 )
 
+# ERR_LOWERING_007: Low descriptor immediate attribute is missing.
+ERR_LOWERING_007 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=7,
+    severity=Severity.ERROR,
+    summary="Low descriptor immediate attribute is missing.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' requires "
+        "immediate attribute '{immediate_name}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+    ),
+    fix_hint="Provide attribute '{immediate_name}' in the low packet attrs "
+    "for descriptor '{opcode}'",
+)
+
+# ERR_LOWERING_008: Low descriptor immediate attribute is not declared.
+ERR_LOWERING_008 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=8,
+    severity=Severity.ERROR,
+    summary="Low descriptor immediate attribute is not declared.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' has "
+        "attribute '{attr_name}', but the descriptor declares no such "
+        "immediate"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("attr_name", ParamKind.STRING),
+    ),
+    fix_hint="Remove attribute '{attr_name}' or add a descriptor immediate "
+    "row that owns it",
+)
+
+# ERR_LOWERING_009: Low descriptor immediate attribute kind is invalid.
+ERR_LOWERING_009 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=9,
+    severity=Severity.ERROR,
+    summary="Low descriptor immediate attribute kind is invalid.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' immediate "
+        "'{immediate_name}' has attribute kind {actual_kind}, expected "
+        "{expected_kind}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+        ErrorParam("actual_kind", ParamKind.U32),
+        ErrorParam("expected_kind", ParamKind.STRING),
+    ),
+    fix_hint="Encode immediate '{immediate_name}' using {expected_kind}",
+)
+
+# ERR_LOWERING_010: Low descriptor immediate attribute is out of range.
+ERR_LOWERING_010 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=10,
+    severity=Severity.ERROR,
+    summary="Low descriptor immediate attribute is out of range.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' immediate "
+        "'{immediate_name}' has value {actual_value}, expected "
+        "{expected_range}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+        ErrorParam("actual_value", ParamKind.I64),
+        ErrorParam("expected_range", ParamKind.STRING),
+    ),
+    fix_hint="Choose an immediate value in {expected_range} for '{immediate_name}'",
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -134,4 +215,8 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_004,
     ERR_LOWERING_005,
     ERR_LOWERING_006,
+    ERR_LOWERING_007,
+    ERR_LOWERING_008,
+    ERR_LOWERING_009,
+    ERR_LOWERING_010,
 )

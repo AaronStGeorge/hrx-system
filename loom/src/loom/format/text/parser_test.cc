@@ -715,6 +715,17 @@ TEST_F(ParserTest, AttrDictUnsortedKeysRoundTripInCanonicalOrder) {
       << "attribute dictionary keys should print in canonical order: " << text;
 }
 
+TEST_F(ParserTest, AttrDictSymbolRefRoundTrip) {
+  std::string text = RoundTrip(
+      "test.record @target {}\n"
+      "%c = test.constant 0 : f32\n"
+      "%s = test.attrs %c {target = @target} : f32\n");
+  EXPECT_NE(text.find("test.attrs %c {target = @target} : f32"),
+            std::string::npos)
+      << "symbol references in generic dictionaries should round-trip: "
+      << text;
+}
+
 TEST_F(ParserTest, AttrDictNestedDictRoundTripInCanonicalOrder) {
   std::string text = RoundTrip(
       "%c = test.constant 0 : f32\n"

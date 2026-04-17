@@ -27,6 +27,7 @@ struct CollectedEmission {
   const loom_op_t* op = nullptr;
   std::vector<std::string> string_params;
   std::vector<loom_type_t> type_params;
+  std::vector<int64_t> i64_params;
   std::vector<uint32_t> u32_params;
   std::vector<uint64_t> u64_params;
   std::vector<loom_diagnostic_field_ref_t> field_refs;
@@ -58,6 +59,8 @@ struct EmissionCollector {
       entry.field_refs.push_back(param->field_ref);
       if (param->kind == LOOM_PARAM_STRING) {
         entry.string_params.push_back(CopyString(param->string));
+      } else if (param->kind == LOOM_PARAM_I64) {
+        entry.i64_params.push_back(param->i64);
       } else if (param->kind == LOOM_PARAM_TYPE) {
         entry.type_params.push_back(param->type);
       } else if (param->kind == LOOM_PARAM_U32) {
@@ -166,6 +169,147 @@ TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPass) {
 
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, ValidSymbolicImmediatePasses) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "test.record @target_block {}\n"
+      "low.func.def target(@vm_target) @branch() {\n"
+      "  low.op<iree.vm.br>() {target_block = @target_block} : ()\n"
+      "  low.return\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsMissingImmediateAttr) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {\n"
+      "  %c0 = low.const<iree.vm.const.i32> : reg<vm.i32>\n"
+      "  low.return %c0 : reg<vm.i32>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 7));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "constant");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "iree.vm.const.i32");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "i32_value");
+  ASSERT_GE(collector.emissions[0].field_refs.size(), 3u);
+  EXPECT_EQ(collector.emissions[0].field_refs[1].kind,
+            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE);
+  EXPECT_EQ(collector.emissions[0].field_refs[2].kind,
+            LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE);
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsUnexpectedImmediateAttr) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "reg<vm.i32>) -> (reg<vm.i32>) {\n"
+      "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) {junk = 1} : "
+      "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+      "  low.return %sum : reg<vm.i32>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 8));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "add");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "iree.vm.add.i32");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "junk");
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsImmediateKindMismatch) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {\n"
+      "  %c0 = low.const<iree.vm.const.i32> {i32_value = \"wrong\"} : "
+      "reg<vm.i32>\n"
+      "  low.return %c0 : reg<vm.i32>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 9));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 4u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "constant");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "iree.vm.const.i32");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "i32_value");
+  EXPECT_EQ(collector.emissions[0].string_params[3], "i64 signed integer");
+  ASSERT_GE(collector.emissions[0].u32_params.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].u32_params[0],
+            static_cast<uint32_t>(LOOM_ATTR_STRING));
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsImmediateRangeMismatch) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {\n"
+      "  %c0 = low.const<iree.vm.const.i32> {i32_value = 2147483648} : "
+      "reg<vm.i32>\n"
+      "  low.return %c0 : reg<vm.i32>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 10));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 4u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "constant");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "iree.vm.const.i32");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "i32_value");
+  EXPECT_EQ(collector.emissions[0].string_params[3], "-2147483648..2147483647");
+  ASSERT_GE(collector.emissions[0].i64_params.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].i64_params[0], INT64_C(2147483648));
 
   loom_module_free(module);
 }

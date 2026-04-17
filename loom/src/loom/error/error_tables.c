@@ -2662,6 +2662,90 @@ static const loom_error_def_t loom_err_lowering_006 = {
     .param_count = 7,
 };
 
+static const loom_error_param_def_t loom_err_lowering_007_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"opcode", LOOM_PARAM_STRING},
+    {"immediate_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_007 = {
+    .error_id = "ERR_LOWERING_007",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 7,
+    .summary = "Low descriptor immediate attribute is missing.",
+    .message_template =
+        "low function '@{function_name}' descriptor '{opcode}' requires "
+        "immediate attribute '{immediate_name}'",
+    .fix_hint_template =
+        "Provide attribute '{immediate_name}' in the low packet attrs for "
+        "descriptor '{opcode}'",
+    .param_defs = loom_err_lowering_007_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_lowering_008_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"opcode", LOOM_PARAM_STRING},
+    {"attr_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_008 = {
+    .error_id = "ERR_LOWERING_008",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 8,
+    .summary = "Low descriptor immediate attribute is not declared.",
+    .message_template =
+        "low function '@{function_name}' descriptor '{opcode}' has attribute "
+        "'{attr_name}', but the descriptor declares no such immediate",
+    .fix_hint_template =
+        "Remove attribute '{attr_name}' or add a descriptor immediate row that "
+        "owns it",
+    .param_defs = loom_err_lowering_008_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_lowering_009_params[] = {
+    {"function_name", LOOM_PARAM_STRING},  {"opcode", LOOM_PARAM_STRING},
+    {"immediate_name", LOOM_PARAM_STRING}, {"actual_kind", LOOM_PARAM_U32},
+    {"expected_kind", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_009 = {
+    .error_id = "ERR_LOWERING_009",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 9,
+    .summary = "Low descriptor immediate attribute kind is invalid.",
+    .message_template =
+        "low function '@{function_name}' descriptor '{opcode}' immediate "
+        "'{immediate_name}' has attribute kind {actual_kind}, expected "
+        "{expected_kind}",
+    .fix_hint_template =
+        "Encode immediate '{immediate_name}' using {expected_kind}",
+    .param_defs = loom_err_lowering_009_params,
+    .param_count = 5,
+};
+
+static const loom_error_param_def_t loom_err_lowering_010_params[] = {
+    {"function_name", LOOM_PARAM_STRING},  {"opcode", LOOM_PARAM_STRING},
+    {"immediate_name", LOOM_PARAM_STRING}, {"actual_value", LOOM_PARAM_I64},
+    {"expected_range", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_010 = {
+    .error_id = "ERR_LOWERING_010",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 10,
+    .summary = "Low descriptor immediate attribute is out of range.",
+    .message_template =
+        "low function '@{function_name}' descriptor '{opcode}' immediate "
+        "'{immediate_name}' has value {actual_value}, expected "
+        "{expected_range}",
+    .fix_hint_template =
+        "Choose an immediate value in {expected_range} for '{immediate_name}'",
+    .param_defs = loom_err_lowering_010_params,
+    .param_count = 5,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2710,7 +2794,8 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
     &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
     &loom_err_lowering_003,  &loom_err_lowering_004,  &loom_err_lowering_005,
-    &loom_err_lowering_006,
+    &loom_err_lowering_006,  &loom_err_lowering_007,  &loom_err_lowering_008,
+    &loom_err_lowering_009,  &loom_err_lowering_010,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

@@ -3565,5 +3565,137 @@
       }
     ],
     "fix_hint_template": "Choose a register type accepted by descriptor '{opcode}' for field '{field_name}' or select a descriptor whose register contract matches the packet"
+  },
+  {
+    "error_id": "ERR_LOWERING_007",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 7,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor immediate attribute is missing.",
+    "message_template": "low function '@{function_name}' descriptor '{opcode}' requires immediate attribute '{immediate_name}'",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "immediate_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Provide attribute '{immediate_name}' in the low packet attrs for descriptor '{opcode}'"
+  },
+  {
+    "error_id": "ERR_LOWERING_008",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 8,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor immediate attribute is not declared.",
+    "message_template": "low function '@{function_name}' descriptor '{opcode}' has attribute '{attr_name}', but the descriptor declares no such immediate",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "attr_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Remove attribute '{attr_name}' or add a descriptor immediate row that owns it"
+  },
+  {
+    "error_id": "ERR_LOWERING_009",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 9,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor immediate attribute kind is invalid.",
+    "message_template": "low function '@{function_name}' descriptor '{opcode}' immediate '{immediate_name}' has attribute kind {actual_kind}, expected {expected_kind}",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "immediate_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_kind",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Encode immediate '{immediate_name}' using {expected_kind}"
+  },
+  {
+    "error_id": "ERR_LOWERING_010",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 10,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor immediate attribute is out of range.",
+    "message_template": "low function '@{function_name}' descriptor '{opcode}' immediate '{immediate_name}' has value {actual_value}, expected {expected_range}",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "immediate_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_value",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "expected_range",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Choose an immediate value in {expected_range} for '{immediate_name}'"
   }
 ]

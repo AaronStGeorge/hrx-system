@@ -1761,6 +1761,8 @@ iree_status_t loom_parse_generic_attr_value(loom_parser_t* parser,
       *out_attr = loom_attr_string(string_id);
       return iree_ok_status();
     }
+    case LOOM_TOKEN_SYMBOL:
+      return loom_parse_symbol_ref_attr(parser, out_attr);
     case LOOM_TOKEN_BARE_IDENT: {
       double special_value = 0.0;
       if (loom_parse_special_f64_spelling(value_token.text, &special_value)) {

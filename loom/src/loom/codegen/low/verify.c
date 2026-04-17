@@ -120,6 +120,22 @@ static bool loom_low_verify_get_packet_opcode(const loom_module_t* module,
   return false;
 }
 
+static bool loom_low_verify_get_packet_attrs(const loom_op_t* op,
+                                             loom_named_attr_slice_t* out_attrs,
+                                             uint16_t* out_attrs_attr_index) {
+  if (loom_low_op_isa(op)) {
+    *out_attrs = loom_low_op_attrs(op);
+    *out_attrs_attr_index = loom_low_op_attrs_ATTR_INDEX;
+    return true;
+  }
+  if (loom_low_const_isa(op)) {
+    *out_attrs = loom_low_const_attrs(op);
+    *out_attrs_attr_index = loom_low_const_attrs_ATTR_INDEX;
+    return true;
+  }
+  return false;
+}
+
 static iree_status_t loom_low_verify_emit_missing_descriptor(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     iree_string_view_t opcode, uint16_t opcode_attr_index) {
@@ -135,6 +151,96 @@ static iree_status_t loom_low_verify_emit_missing_descriptor(
   return loom_low_verify_emit(
       function_state->state, op,
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 4), params,
+      IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_emit_missing_immediate(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    iree_string_view_t immediate_name, uint16_t attrs_attr_index) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_with_field_ref(
+          loom_param_string(opcode),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    opcode_attr_index)),
+      loom_param_with_field_ref(
+          loom_param_string(immediate_name),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    attrs_attr_index)),
+  };
+  return loom_low_verify_emit(
+      function_state->state, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 7), params,
+      IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_emit_unexpected_immediate_attr(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    iree_string_view_t attr_name, uint16_t attrs_attr_index) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_with_field_ref(
+          loom_param_string(opcode),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    opcode_attr_index)),
+      loom_param_with_field_ref(
+          loom_param_string(attr_name),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    attrs_attr_index)),
+  };
+  return loom_low_verify_emit(
+      function_state->state, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 8), params,
+      IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_emit_immediate_kind_mismatch(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    iree_string_view_t immediate_name, uint16_t attrs_attr_index,
+    loom_attr_kind_t actual_kind, iree_string_view_t expected_kind) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_with_field_ref(
+          loom_param_string(opcode),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    opcode_attr_index)),
+      loom_param_with_field_ref(
+          loom_param_string(immediate_name),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    attrs_attr_index)),
+      loom_param_u32(actual_kind),
+      loom_param_string(expected_kind),
+  };
+  return loom_low_verify_emit(
+      function_state->state, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 9), params,
+      IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_emit_immediate_range_mismatch(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    iree_string_view_t immediate_name, uint16_t attrs_attr_index,
+    int64_t actual_value, iree_string_view_t expected_range) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_with_field_ref(
+          loom_param_string(opcode),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    opcode_attr_index)),
+      loom_param_with_field_ref(
+          loom_param_string(immediate_name),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    attrs_attr_index)),
+      loom_param_i64(actual_value),
+      loom_param_string(expected_range),
+  };
+  return loom_low_verify_emit(
+      function_state->state, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 10), params,
       IREE_ARRAYSIZE(params), NULL, 0);
 }
 
@@ -174,6 +280,267 @@ static iree_status_t loom_low_verify_emit_missing_features(
       function_state->state, op,
       loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 5), params,
       IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static const loom_named_attr_t* loom_low_verify_find_named_attr(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    const loom_named_attr_t* entry = &attrs.entries[i];
+    iree_string_view_t entry_name =
+        loom_low_verify_string_or_empty(module, entry->name_id);
+    if (iree_string_view_equal(entry_name, name)) return entry;
+  }
+  return NULL;
+}
+
+static iree_status_t loom_low_verify_descriptor_immediate_name(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_immediate_index,
+    const loom_low_immediate_t** out_immediate,
+    iree_string_view_t* out_immediate_name) {
+  if (descriptor->immediate_start > descriptor_set->immediate_count ||
+      descriptor_immediate_index >=
+          descriptor_set->immediate_count - descriptor->immediate_start) {
+    const uint64_t immediate_row =
+        (uint64_t)descriptor->immediate_start + descriptor_immediate_index;
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low descriptor immediate row %" PRIu64
+                            " is out of range",
+                            immediate_row);
+  }
+  const uint32_t immediate_row =
+      descriptor->immediate_start + descriptor_immediate_index;
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[immediate_row];
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+      descriptor_set, immediate->field_name_string_offset, out_immediate_name));
+  *out_immediate = immediate;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_descriptor_has_immediate_name(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, iree_string_view_t attr_name,
+    bool* out_has_immediate) {
+  *out_has_immediate = false;
+  for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
+    const loom_low_immediate_t* immediate = NULL;
+    iree_string_view_t immediate_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_immediate_name(
+        descriptor_set, descriptor, i, &immediate, &immediate_name));
+    (void)immediate;
+    if (iree_string_view_equal(attr_name, immediate_name)) {
+      *out_has_immediate = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_format_signed_range(
+    loom_low_function_verify_state_t* function_state, int64_t minimum,
+    int64_t maximum, iree_string_view_t* out_range) {
+  char scratch[96];
+  int length = iree_snprintf(scratch, sizeof(scratch), "%" PRId64 "..%" PRId64,
+                             minimum, maximum);
+  if (length < 0 || (iree_host_size_t)length >= sizeof(scratch)) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "failed to format signed immediate range");
+  }
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&function_state->state->arena,
+                                           (iree_host_size_t)length,
+                                           (void**)&storage));
+  memcpy(storage, scratch, (iree_host_size_t)length);
+  *out_range = iree_make_string_view(storage, (iree_host_size_t)length);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_format_unsigned_range(
+    loom_low_function_verify_state_t* function_state, uint64_t maximum,
+    iree_string_view_t* out_range) {
+  char scratch[96];
+  int length = iree_snprintf(scratch, sizeof(scratch), "0..%" PRIu64, maximum);
+  if (length < 0 || (iree_host_size_t)length >= sizeof(scratch)) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "failed to format unsigned immediate range");
+  }
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&function_state->state->arena,
+                                           (iree_host_size_t)length,
+                                           (void**)&storage));
+  memcpy(storage, scratch, (iree_host_size_t)length);
+  *out_range = iree_make_string_view(storage, (iree_host_size_t)length);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_i64_immediate_range(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    iree_string_view_t immediate_name, uint16_t attrs_attr_index,
+    const loom_low_immediate_t* immediate, int64_t value) {
+  switch (immediate->kind) {
+    case LOOM_LOW_IMMEDIATE_KIND_SIGNED: {
+      const int64_t maximum = immediate->unsigned_max > INT64_MAX
+                                  ? INT64_MAX
+                                  : (int64_t)immediate->unsigned_max;
+      if (value >= immediate->signed_min && value <= maximum) {
+        return iree_ok_status();
+      }
+      iree_string_view_t expected_range = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_low_verify_format_signed_range(
+          function_state, immediate->signed_min, maximum, &expected_range));
+      return loom_low_verify_emit_immediate_range_mismatch(
+          function_state, op, opcode, opcode_attr_index, immediate_name,
+          attrs_attr_index, value, expected_range);
+    }
+    case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
+    case LOOM_LOW_IMMEDIATE_KIND_ORDINAL:
+    case LOOM_LOW_IMMEDIATE_KIND_ENUM: {
+      if (value >= 0 && (uint64_t)value <= immediate->unsigned_max) {
+        return iree_ok_status();
+      }
+      iree_string_view_t expected_range = iree_string_view_empty();
+      IREE_RETURN_IF_ERROR(loom_low_verify_format_unsigned_range(
+          function_state, immediate->unsigned_max, &expected_range));
+      return loom_low_verify_emit_immediate_range_mismatch(
+          function_state, op, opcode, opcode_attr_index, immediate_name,
+          attrs_attr_index, value, expected_range);
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low immediate '%.*s' has unsupported kind %u",
+                              (int)immediate_name.size, immediate_name.data,
+                              (unsigned)immediate->kind);
+  }
+}
+
+static iree_string_view_t loom_low_verify_expected_immediate_kind(
+    const loom_low_immediate_t* immediate) {
+  switch (immediate->kind) {
+    case LOOM_LOW_IMMEDIATE_KIND_SIGNED:
+      return IREE_SV("i64 signed integer");
+    case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
+      return IREE_SV("i64 unsigned integer");
+    case LOOM_LOW_IMMEDIATE_KIND_ORDINAL:
+      if (iree_all_bits_set(immediate->flags,
+                            LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC)) {
+        return IREE_SV("symbol reference or i64 ordinal");
+      }
+      return IREE_SV("i64 ordinal");
+    case LOOM_LOW_IMMEDIATE_KIND_ENUM:
+      return IREE_SV("string enum token or i64 enum ordinal");
+    default:
+      return IREE_SV("known immediate kind");
+  }
+}
+
+static iree_status_t loom_low_verify_descriptor_immediate_attr(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    iree_string_view_t immediate_name, uint16_t attrs_attr_index,
+    const loom_low_immediate_t* immediate, const loom_named_attr_t* attr) {
+  switch (immediate->kind) {
+    case LOOM_LOW_IMMEDIATE_KIND_SIGNED:
+    case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED: {
+      if (attr->value.kind != LOOM_ATTR_I64) {
+        return loom_low_verify_emit_immediate_kind_mismatch(
+            function_state, op, opcode, opcode_attr_index, immediate_name,
+            attrs_attr_index, (loom_attr_kind_t)attr->value.kind,
+            loom_low_verify_expected_immediate_kind(immediate));
+      }
+      return loom_low_verify_i64_immediate_range(
+          function_state, op, opcode, opcode_attr_index, immediate_name,
+          attrs_attr_index, immediate, attr->value.i64);
+    }
+    case LOOM_LOW_IMMEDIATE_KIND_ORDINAL: {
+      if (attr->value.kind == LOOM_ATTR_SYMBOL &&
+          iree_all_bits_set(immediate->flags,
+                            LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC)) {
+        return iree_ok_status();
+      }
+      if (attr->value.kind != LOOM_ATTR_I64) {
+        return loom_low_verify_emit_immediate_kind_mismatch(
+            function_state, op, opcode, opcode_attr_index, immediate_name,
+            attrs_attr_index, (loom_attr_kind_t)attr->value.kind,
+            loom_low_verify_expected_immediate_kind(immediate));
+      }
+      return loom_low_verify_i64_immediate_range(
+          function_state, op, opcode, opcode_attr_index, immediate_name,
+          attrs_attr_index, immediate, attr->value.i64);
+    }
+    case LOOM_LOW_IMMEDIATE_KIND_ENUM: {
+      if (attr->value.kind == LOOM_ATTR_STRING) return iree_ok_status();
+      if (attr->value.kind != LOOM_ATTR_I64) {
+        return loom_low_verify_emit_immediate_kind_mismatch(
+            function_state, op, opcode, opcode_attr_index, immediate_name,
+            attrs_attr_index, (loom_attr_kind_t)attr->value.kind,
+            loom_low_verify_expected_immediate_kind(immediate));
+      }
+      return loom_low_verify_i64_immediate_range(
+          function_state, op, opcode, opcode_attr_index, immediate_name,
+          attrs_attr_index, immediate, attr->value.i64);
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low immediate '%.*s' has unsupported kind %u",
+                              (int)immediate_name.size, immediate_name.data,
+                              (unsigned)immediate->kind);
+  }
+}
+
+static iree_status_t loom_low_verify_descriptor_immediates(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    const loom_low_descriptor_t* descriptor) {
+  const loom_module_t* module = function_state->state->module;
+  const loom_low_descriptor_set_t* descriptor_set =
+      function_state->target->descriptor_set;
+  loom_named_attr_slice_t attrs = loom_make_named_attr_slice(NULL, 0);
+  uint16_t attrs_attr_index = 0;
+  if (!loom_low_verify_get_packet_attrs(op, &attrs, &attrs_attr_index)) {
+    return iree_ok_status();
+  }
+
+  for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
+    const loom_low_immediate_t* immediate = NULL;
+    iree_string_view_t immediate_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_immediate_name(
+        descriptor_set, descriptor, i, &immediate, &immediate_name));
+    const loom_named_attr_t* attr =
+        loom_low_verify_find_named_attr(module, attrs, immediate_name);
+    if (!attr) {
+      IREE_RETURN_IF_ERROR(loom_low_verify_emit_missing_immediate(
+          function_state, op, opcode, opcode_attr_index, immediate_name,
+          attrs_attr_index));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_immediate_attr(
+          function_state, op, opcode, opcode_attr_index, immediate_name,
+          attrs_attr_index, immediate, attr));
+    }
+    if (loom_low_verify_should_stop(function_state->state)) {
+      return iree_ok_status();
+    }
+  }
+
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    const loom_named_attr_t* attr = &attrs.entries[i];
+    iree_string_view_t attr_name =
+        loom_low_verify_string_or_empty(module, attr->name_id);
+    bool has_immediate = false;
+    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_has_immediate_name(
+        descriptor_set, descriptor, attr_name, &has_immediate));
+    if (has_immediate) continue;
+    IREE_RETURN_IF_ERROR(loom_low_verify_emit_unexpected_immediate_attr(
+        function_state, op, opcode, opcode_attr_index, attr_name,
+        attrs_attr_index));
+    if (loom_low_verify_should_stop(function_state->state)) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_format_expected_register_classes(
@@ -423,6 +790,11 @@ static iree_status_t loom_low_verify_packet(
         loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1), opcode,
         opcode_attr_index, op->operand_count, expected_operand_count));
   }
+  if (loom_low_verify_should_stop(function_state->state)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_immediates(
+      function_state, op, opcode, opcode_attr_index, descriptor));
   if (loom_low_verify_should_stop(function_state->state)) {
     return iree_ok_status();
   }
