@@ -18,6 +18,7 @@
 #include "loom/transforms/branch_fusion.h"
 #include "loom/transforms/branch_sink.h"
 #include "loom/transforms/canonicalize.h"
+#include "loom/transforms/cfg_simplify.h"
 #include "loom/transforms/cse.h"
 #include "loom/transforms/dce.h"
 #include "loom/transforms/kernel_async_legality.h"
@@ -339,6 +340,9 @@ static iree_status_t loom_check_run_pipeline(
     } else if (iree_string_view_equal(entry.name, IREE_SV("branch-fusion"))) {
       info = loom_branch_fusion_pass_info();
       function_run = loom_branch_fusion_run;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("cfg-simplify"))) {
+      info = loom_cfg_simplify_pass_info();
+      function_run = loom_cfg_simplify_run;
     } else if (iree_string_view_equal(entry.name, IREE_SV("licm"))) {
       info = loom_licm_pass_info();
       function_run = loom_licm_run;

@@ -1,0 +1,84 @@
+// RUN: pass cfg-simplify
+
+func.def @folds_constant_branch_and_removes_dead(%a: i32, %b: i32) -> (i32) {
+  %cond = scalar.constant 1 : i1
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  %sum = test.addi %a, %b : i32
+  cfg.br ^join(%sum : i32)
+^else:
+  %dead = test.addi %b, %b : i32
+  cfg.br ^join(%dead : i32)
+^join(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @folds_constant_branch_and_removes_dead(%a: i32, %b: i32) -> (i32) {
+  %cond = scalar.constant 1 : i1
+  cfg.br ^then
+  ^then:
+  %sum = test.addi %a, %b : i32
+  cfg.br ^join
+  ^join:
+  func.return %sum : i32
+}
+
+// ====
+
+func.def @forwards_empty_block(%cond: i1) {
+  cfg.cond_br %cond, ^forward, ^exit : i1
+^forward:
+  cfg.br ^exit
+^exit:
+  func.return
+}
+
+// ----
+func.def @forwards_empty_block(%cond: i1) {
+  cfg.br ^exit
+  ^exit:
+  func.return
+}
+
+// ====
+
+func.def @deduplicates_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^then, ^else : i1
+^then:
+  cfg.br ^join(%a, %a : i32, i32)
+^else:
+  cfg.br ^join(%b, %b : i32, i32)
+^join(%x : i32, %y : i32):
+  %sum = test.addi %x, %y : i32
+  func.return %sum : i32
+}
+
+// ----
+func.def @deduplicates_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^then, ^else : i1
+  ^then:
+  cfg.br ^join(%a : i32)
+  ^else:
+  cfg.br ^join(%b : i32)
+  ^join(%x : i32):
+  %sum = test.addi %x, %x : i32
+  func.return %sum : i32
+}
+
+// ====
+
+func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
+  cfg.br ^join(%layout, %view : encoding<layout>, view<4xf32, %layout>)
+^join(%arg_layout : encoding<layout>, %arg_view : view<4xf32, %arg_layout>):
+  test.use %arg_view : view<4xf32, %arg_layout>
+  func.return
+}
+
+// ----
+func.def @removes_dependent_block_args(%layout: encoding<layout>, %view: view<4xf32, %layout>) {
+  cfg.br ^join
+  ^join:
+  test.use %view : view<4xf32, %layout>
+  func.return
+}

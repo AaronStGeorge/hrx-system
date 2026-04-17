@@ -1293,6 +1293,25 @@ iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,
 // IREE_STATUS_FAILED_PRECONDITION if any result still has uses.
 iree_status_t loom_op_erase(loom_module_t* module, loom_op_t* op);
 
+// Removes a closed set of non-entry blocks from |region| and compacts the
+// region block table in place.
+//
+// |remove_blocks| must contain exactly |remove_block_count| entries, one per
+// current block index in |region|. Entry block removal is rejected. Any kept op
+// successor targeting a removed block is rejected. Values defined by removed
+// block arguments or removed op subtrees may only have operand and type uses
+// inside the removed set; callers must retarget or replace external uses before
+// removing blocks.
+//
+// Removed block/op/value objects remain arena-owned for diagnostics, but the
+// blocks are detached from the region, their operations are marked dead, and
+// block-argument identity/type-use records are dropped.
+iree_status_t loom_region_remove_blocks(loom_module_t* module,
+                                        loom_region_t* region,
+                                        const bool* remove_blocks,
+                                        uint16_t remove_block_count,
+                                        uint16_t* out_removed_count);
+
 //===----------------------------------------------------------------------===//
 // Use-def list maintenance
 //===----------------------------------------------------------------------===//

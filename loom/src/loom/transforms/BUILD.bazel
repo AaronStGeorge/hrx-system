@@ -85,6 +85,23 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "cfg_simplify",
+    srcs = ["cfg_simplify.c"],
+    hdrs = ["cfg_simplify.h"],
+    deps = [
+        ":pass",
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/util:cfg_graph",
+        "//loom/src/loom/util:dominance",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "callable",
     srcs = [
         "callable.c",

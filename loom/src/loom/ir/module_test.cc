@@ -135,6 +135,123 @@ TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, RegionRemoveBlocksCompactsAndDropsClosedUses) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_region_t* body = module->body;
+  loom_block_t* dead_block = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &dead_block));
+  loom_block_t* kept_block = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &kept_block));
+
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module, i32_type, &arg));
+  IREE_ASSERT_OK(loom_block_add_arg(module, dead_block, arg));
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, dead_block, &builder);
+  loom_op_t* constant = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder, loom_attr_i64(1), i32_type,
+                                          LOOM_LOCATION_UNKNOWN, &constant));
+  loom_op_t* add = NULL;
+  IREE_ASSERT_OK(loom_test_addi_build(&builder, arg,
+                                      loom_test_constant_result(constant),
+                                      i32_type, LOOM_LOCATION_UNKNOWN, &add));
+
+  bool remove_blocks[] = {false, true, false};
+  uint16_t removed_count = 0;
+  IREE_ASSERT_OK(loom_region_remove_blocks(module, body, remove_blocks,
+                                           IREE_ARRAYSIZE(remove_blocks),
+                                           &removed_count));
+
+  EXPECT_EQ(removed_count, 1u);
+  EXPECT_EQ(body->block_count, 2u);
+  EXPECT_EQ(loom_region_block(body, 0), &body->entry_block);
+  EXPECT_EQ(loom_region_block(body, 1), kept_block);
+  EXPECT_EQ(dead_block->parent_region, nullptr);
+  EXPECT_EQ(dead_block->arg_count, 0u);
+  EXPECT_EQ(dead_block->op_count, 0u);
+  EXPECT_NE(constant->flags & LOOM_OP_FLAG_DEAD, 0u);
+  EXPECT_NE(add->flags & LOOM_OP_FLAG_DEAD, 0u);
+  EXPECT_FALSE(loom_value_is_block_arg(loom_module_value(module, arg)));
+  EXPECT_EQ(loom_module_value(module, arg)->use_count, 0u);
+  EXPECT_EQ(
+      loom_module_value(module, loom_test_constant_result(constant))->use_count,
+      0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, RegionRemoveBlocksRejectsKeptSuccessor) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_region_t* body = module->body;
+  loom_block_t* dead_block = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &dead_block));
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_region_entry_block(body),
+                          &builder);
+  loom_op_t* branch = NULL;
+  IREE_ASSERT_OK(loom_builder_allocate_op_with_successors(
+      &builder, LOOM_OP_TEST_YIELD, 0, 0, 1, 0, 0, 0, LOOM_LOCATION_UNKNOWN,
+      &branch));
+  loom_op_successors(branch)[0] = dead_block;
+  IREE_ASSERT_OK(loom_builder_finalize_op(&builder, branch));
+
+  bool remove_blocks[] = {false, true};
+  uint16_t removed_count = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_region_remove_blocks(module, body, remove_blocks,
+                                IREE_ARRAYSIZE(remove_blocks), &removed_count));
+  EXPECT_EQ(removed_count, 0u);
+  EXPECT_EQ(body->block_count, 2u);
+  EXPECT_EQ(dead_block->parent_region, body);
+
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, RegionRemoveBlocksRejectsExternalUse) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_region_t* body = module->body;
+  loom_block_t* dead_block = NULL;
+  IREE_ASSERT_OK(loom_region_append_block(module, body, &dead_block));
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, dead_block, &builder);
+  loom_op_t* constant = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder, loom_attr_i64(1), i32_type,
+                                          LOOM_LOCATION_UNKNOWN, &constant));
+  loom_builder_set_block(&builder, loom_region_entry_block(body));
+  loom_op_t* external_use = NULL;
+  IREE_ASSERT_OK(
+      loom_test_neg_build(&builder, loom_test_constant_result(constant),
+                          i32_type, LOOM_LOCATION_UNKNOWN, &external_use));
+
+  bool remove_blocks[] = {false, true};
+  uint16_t removed_count = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_FAILED_PRECONDITION,
+      loom_region_remove_blocks(module, body, remove_blocks,
+                                IREE_ARRAYSIZE(remove_blocks), &removed_count));
+  EXPECT_EQ(removed_count, 0u);
+  EXPECT_EQ(body->block_count, 2u);
+  EXPECT_EQ(constant->flags & LOOM_OP_FLAG_DEAD, 0u);
+  EXPECT_EQ(external_use->flags & LOOM_OP_FLAG_DEAD, 0u);
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, BlockRemoveArgCompactsDefinitions) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

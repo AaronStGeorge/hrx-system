@@ -48,6 +48,7 @@ loom_cc_library(
         "//loom/src/loom/transforms:branch_fusion",
         "//loom/src/loom/transforms:branch_sink",
         "//loom/src/loom/transforms:canonicalize",
+        "//loom/src/loom/transforms:cfg_simplify",
         "//loom/src/loom/transforms:cse",
         "//loom/src/loom/transforms:dce",
         "//loom/src/loom/transforms:kernel_async_legality",

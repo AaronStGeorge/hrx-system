@@ -94,6 +94,26 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    cfg_simplify
+  HDRS
+    "cfg_simplify.h"
+  SRCS
+    "cfg_simplify.c"
+  DEPS
+    ::pass
+    ::rewriter
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::cfg
+    loom::src::loom::ops::op_defs
+    loom::src::loom::util::cfg_graph
+    loom::src::loom::util::dominance
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     callable
   HDRS
     "callable.h"

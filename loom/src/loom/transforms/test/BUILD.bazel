@@ -17,6 +17,7 @@ loom_check_test_suite(
     srcs = [
         "branch_fusion.loom-test",
         "branch_sink.loom-test",
+        "cfg_simplify.loom-test",
         "kernel_async_legality.loom-test",
         "kernel_resources.loom-test",
         "licm.loom-test",
