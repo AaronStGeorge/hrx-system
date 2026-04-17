@@ -227,6 +227,62 @@ iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
   return loom_llvmir_builder_append_instruction(block, &instruction);
 }
 
+iree_status_t loom_llvmir_set_phi_incoming(
+    loom_llvmir_block_t* block, loom_llvmir_value_id_t phi_value_id,
+    const loom_llvmir_phi_incoming_t* incoming,
+    iree_host_size_t incoming_count) {
+  IREE_ASSERT_ARGUMENT(block);
+  loom_llvmir_module_t* module = block->function->module;
+  if (incoming_count > 0 && incoming == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM phi has null incoming edge storage");
+  }
+  if (phi_value_id >= module->value_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM phi incoming update references unknown "
+                            "result value");
+  }
+  loom_llvmir_value_t* phi_value = &module->values[phi_value_id];
+  if (phi_value->kind != LOOM_LLVMIR_VALUE_INSTRUCTION ||
+      phi_value->instruction.function_id != block->function->id ||
+      phi_value->instruction.block_id != block->id ||
+      phi_value->instruction.instruction_ordinal >= block->instruction_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM phi incoming update result is not defined "
+                            "by the target block");
+  }
+  loom_llvmir_instruction_t* instruction =
+      &block->instructions[phi_value->instruction.instruction_ordinal];
+  if (instruction->kind != LOOM_LLVMIR_INST_PHI ||
+      instruction->result_value_id != phi_value_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVM phi incoming update result is not a phi");
+  }
+  if (instruction->phi.incoming_count != 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "LLVM phi incoming update can only fill an empty "
+                            "incoming list");
+  }
+  for (iree_host_size_t i = 0; i < incoming_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_check_value(module, incoming[i].value));
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_check_block(block->function, incoming[i].predecessor));
+    if (module->values[incoming[i].value].type_id != phi_value->type_id) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVM phi incoming value type mismatch");
+    }
+  }
+  if (incoming_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        &module->arena, incoming_count, sizeof(*instruction->phi.incoming),
+        (void**)&instruction->phi.incoming));
+    memcpy(instruction->phi.incoming, incoming,
+           incoming_count * sizeof(*instruction->phi.incoming));
+  }
+  instruction->phi.incoming_count = incoming_count;
+  return iree_ok_status();
+}
+
 iree_status_t loom_llvmir_build_binop(loom_llvmir_block_t* block,
                                       const loom_llvmir_binop_desc_t* desc,
                                       loom_llvmir_value_id_t* out_value_id) {

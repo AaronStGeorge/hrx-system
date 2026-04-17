@@ -9,6 +9,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/llvmir/ops.h"
@@ -17,6 +18,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/llvmir/lower_internal.h"
+#include "loom/util/cfg_graph.h"
 
 static iree_string_view_t loom_llvmir_lowering_module_name(
     const loom_module_t* module) {
@@ -38,8 +40,11 @@ iree_string_view_t loom_llvmir_lowering_value_name(
 }
 
 static iree_string_view_t loom_llvmir_lowering_block_name(
-    const loom_llvmir_lowering_state_t* state, const loom_block_t* block) {
-  if (block->label_id == LOOM_STRING_ID_INVALID) return IREE_SV("entry");
+    const loom_llvmir_lowering_state_t* state, const loom_block_t* block,
+    bool is_entry_block) {
+  if (block->label_id == LOOM_STRING_ID_INVALID) {
+    return is_entry_block ? IREE_SV("entry") : IREE_SV("");
+  }
   return state->source_module->strings.entries[block->label_id];
 }
 
@@ -728,20 +733,391 @@ iree_status_t loom_llvmir_lowering_lower_source_block(
   return iree_ok_status();
 }
 
+typedef struct loom_llvmir_cfg_phi_accumulator_t {
+  // Source block argument represented by the phi result.
+  loom_value_id_t source_arg_id;
+  // LLVM block containing the phi instruction.
+  loom_llvmir_block_t* target_block;
+  // LLVM phi instruction result value.
+  loom_llvmir_value_id_t phi_value_id;
+  // Incoming edge list allocated from the function-local arena.
+  loom_llvmir_phi_incoming_t* incoming;
+  // Number of incoming edges written so far.
+  iree_host_size_t incoming_count;
+  // Number of reachable predecessor edges expected by the CFG graph.
+  iree_host_size_t incoming_capacity;
+  // True when the block argument lowers as an LLVM pointer.
+  bool is_pointer;
+  // Phi pointer address space when |is_pointer| is true.
+  uint32_t pointer_address_space;
+} loom_llvmir_cfg_phi_accumulator_t;
+
+typedef struct loom_llvmir_cfg_lowering_t {
+  // Dense graph for the source CFG region.
+  loom_cfg_graph_t graph;
+  // LLVM block for each source block in graph order.
+  loom_llvmir_block_t** target_blocks;
+  // Offset of each block's first non-entry block-argument phi accumulator.
+  iree_host_size_t* phi_starts;
+  // Flat phi accumulator table for all non-entry block arguments.
+  loom_llvmir_cfg_phi_accumulator_t* phis;
+  // Number of entries in |phis|.
+  iree_host_size_t phi_count;
+} loom_llvmir_cfg_lowering_t;
+
+static bool loom_llvmir_lowering_type_is_pointer_like(loom_type_t type) {
+  return loom_type_is_buffer(type) || loom_type_is_view(type);
+}
+
+static loom_llvmir_cfg_phi_accumulator_t* loom_llvmir_lowering_cfg_phi_for_arg(
+    loom_llvmir_cfg_lowering_t* cfg, uint16_t block_index, uint16_t arg_index) {
+  IREE_ASSERT(block_index < cfg->graph.block_count);
+  IREE_ASSERT(block_index > 0);
+  const iree_host_size_t phi_index = cfg->phi_starts[block_index] + arg_index;
+  IREE_ASSERT(phi_index < cfg->phi_count);
+  return &cfg->phis[phi_index];
+}
+
+static iree_status_t loom_llvmir_lowering_cfg_append_incoming(
+    loom_llvmir_cfg_phi_accumulator_t* phi,
+    loom_llvmir_value_id_t incoming_value, loom_llvmir_block_id_t predecessor) {
+  if (phi->incoming_count >= phi->incoming_capacity) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "CFG phi incoming edge count exceeds predecessor "
+                            "edge count");
+  }
+  phi->incoming[phi->incoming_count++] = (loom_llvmir_phi_incoming_t){
+      .value = incoming_value,
+      .predecessor = predecessor,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_cfg_build_block_arg_phi(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_block_t* source_block, uint16_t arg_index,
+    iree_host_size_t predecessor_count, iree_arena_allocator_t* arena,
+    loom_llvmir_cfg_phi_accumulator_t* phi) {
+  loom_value_id_t arg_id = loom_block_arg_id(source_block, arg_index);
+  loom_type_t arg_type = loom_module_value_type(state->source_module, arg_id);
+  loom_llvmir_type_id_t phi_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  bool is_pointer = loom_llvmir_lowering_type_is_pointer_like(arg_type);
+  uint32_t pointer_address_space = UINT32_MAX;
+  if (is_pointer) {
+    pointer_address_space =
+        state->target_profile->target_env->address_spaces.generic;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_get_pointer_type(
+        state, pointer_address_space, &phi_type));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_lower_type(state, arg_type, &phi_type));
+  }
+
+  loom_llvmir_value_id_t phi_value_id = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_build_phi(
+      target_block,
+      &(loom_llvmir_phi_desc_t){
+          .result_name = loom_llvmir_lowering_value_name(state, arg_id),
+          .result_type = phi_type,
+      },
+      &phi_value_id));
+
+  *phi = (loom_llvmir_cfg_phi_accumulator_t){
+      .source_arg_id = arg_id,
+      .target_block = target_block,
+      .phi_value_id = phi_value_id,
+      .incoming = NULL,
+      .incoming_count = 0,
+      .incoming_capacity = predecessor_count,
+      .is_pointer = is_pointer,
+      .pointer_address_space = pointer_address_space,
+  };
+  if (predecessor_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, predecessor_count,
+                                                   sizeof(*phi->incoming),
+                                                   (void**)&phi->incoming));
+  }
+  if (is_pointer) {
+    return loom_llvmir_lowering_map_pointer_value(state, arg_id, phi_value_id,
+                                                  pointer_address_space,
+                                                  /*minimum_alignment=*/0);
+  }
+  return loom_llvmir_lowering_map_value(state, arg_id, phi_value_id);
+}
+
+static iree_host_size_t loom_llvmir_lowering_cfg_reachable_predecessor_count(
+    const loom_cfg_graph_t* graph, uint16_t block_index) {
+  loom_cfg_block_index_span_t predecessors =
+      loom_cfg_graph_predecessors(graph, block_index);
+  iree_host_size_t reachable_count = 0;
+  for (iree_host_size_t i = 0; i < predecessors.count; ++i) {
+    if (loom_cfg_graph_block_is_reachable(graph, predecessors.values[i])) {
+      ++reachable_count;
+    }
+  }
+  return reachable_count;
+}
+
+static iree_status_t loom_llvmir_lowering_cfg_prepare_blocks(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_function_t* target_function, loom_region_t* body,
+    const loom_op_t* owner_op, iree_arena_allocator_t* arena,
+    loom_llvmir_cfg_lowering_t* cfg) {
+  memset(cfg, 0, sizeof(*cfg));
+  IREE_RETURN_IF_ERROR(loom_cfg_graph_build(body, arena, &cfg->graph));
+  if (cfg->graph.malformed) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, owner_op,
+        "CFG graph is malformed; run Loom verification before lowering");
+  }
+  if (cfg->graph.block_count == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "function body CFG has no blocks");
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, cfg->graph.block_count,
+                                                 sizeof(*cfg->target_blocks),
+                                                 (void**)&cfg->target_blocks));
+  for (uint16_t block_index = 0; block_index < cfg->graph.block_count;
+       ++block_index) {
+    const loom_block_t* source_block = cfg->graph.blocks[block_index].block;
+    IREE_RETURN_IF_ERROR(loom_llvmir_function_add_block(
+        target_function,
+        loom_llvmir_lowering_block_name(state, source_block, block_index == 0),
+        &cfg->target_blocks[block_index]));
+  }
+
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, cfg->graph.block_count + 1, sizeof(*cfg->phi_starts),
+      (void**)&cfg->phi_starts));
+  iree_host_size_t phi_count = 0;
+  for (uint16_t block_index = 0; block_index < cfg->graph.block_count;
+       ++block_index) {
+    cfg->phi_starts[block_index] = phi_count;
+    if (block_index == 0 ||
+        !loom_cfg_graph_block_is_reachable(&cfg->graph, block_index)) {
+      continue;
+    }
+    const loom_block_t* source_block = cfg->graph.blocks[block_index].block;
+    phi_count += source_block->arg_count;
+  }
+  cfg->phi_starts[cfg->graph.block_count] = phi_count;
+  cfg->phi_count = phi_count;
+  if (phi_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, phi_count, sizeof(*cfg->phis), (void**)&cfg->phis));
+  }
+
+  for (uint16_t block_index = 1; block_index < cfg->graph.block_count;
+       ++block_index) {
+    if (!loom_cfg_graph_block_is_reachable(&cfg->graph, block_index)) {
+      continue;
+    }
+    const loom_block_t* source_block = cfg->graph.blocks[block_index].block;
+    iree_host_size_t predecessor_count =
+        loom_llvmir_lowering_cfg_reachable_predecessor_count(&cfg->graph,
+                                                             block_index);
+    for (uint16_t arg_index = 0; arg_index < source_block->arg_count;
+         ++arg_index) {
+      loom_llvmir_cfg_phi_accumulator_t* phi =
+          loom_llvmir_lowering_cfg_phi_for_arg(cfg, block_index, arg_index);
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cfg_build_block_arg_phi(
+          state, cfg->target_blocks[block_index], source_block, arg_index,
+          predecessor_count, arena, phi));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_cfg_cast_pointer_to_phi_type(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    loom_value_id_t source_value_id, uint32_t phi_address_space,
+    loom_llvmir_value_id_t* out_value) {
+  loom_llvmir_value_id_t value = LOOM_LLVMIR_VALUE_ID_INVALID;
+  uint32_t address_space = UINT32_MAX;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_pointer(
+      state, source_value_id, &value, &address_space, NULL));
+  if (address_space == phi_address_space) {
+    *out_value = value;
+    return iree_ok_status();
+  }
+
+  loom_llvmir_type_id_t phi_type = LOOM_LLVMIR_TYPE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_get_pointer_type(
+      state, phi_address_space, &phi_type));
+  return loom_llvmir_build_cast(target_block,
+                                &(loom_llvmir_cast_desc_t){
+                                    .result_type = phi_type,
+                                    .op = LOOM_LLVMIR_CAST_ADDRESS_SPACE_CAST,
+                                    .value = value,
+                                },
+                                out_value);
+}
+
+static iree_status_t loom_llvmir_lowering_cfg_edge_value(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_llvmir_cfg_phi_accumulator_t* phi,
+    loom_value_id_t source_value_id, loom_llvmir_value_id_t* out_value) {
+  if (phi->is_pointer) {
+    return loom_llvmir_lowering_cfg_cast_pointer_to_phi_type(
+        state, target_block, source_value_id, phi->pointer_address_space,
+        out_value);
+  }
+  return loom_llvmir_lowering_lookup_value(state, source_value_id, out_value);
+}
+
+static iree_status_t loom_llvmir_lowering_lower_cfg_br(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_cfg_lowering_t* cfg,
+    loom_llvmir_block_t* target_block, const loom_op_t* op) {
+  loom_block_t* dest = loom_cfg_br_dest(op);
+  iree_host_size_t dest_index = loom_cfg_graph_block_index(&cfg->graph, dest);
+  if (dest_index == IREE_HOST_SIZE_MAX) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "cfg.br destination must belong to the function body CFG");
+  }
+  const loom_block_t* dest_block = cfg->graph.blocks[dest_index].block;
+  loom_value_slice_t args = loom_cfg_br_args(op);
+  if (args.count != dest_block->arg_count) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op,
+        "cfg.br operand count must match destination block arguments");
+  }
+
+  loom_llvmir_block_id_t predecessor = loom_llvmir_block_id(target_block);
+  for (uint16_t arg_index = 0; arg_index < dest_block->arg_count; ++arg_index) {
+    if (dest_index == 0) {
+      return loom_llvmir_lowering_unsupported_op(
+          state, op,
+          "cfg.br cannot pass arguments to the function entry block");
+    }
+    loom_llvmir_cfg_phi_accumulator_t* phi =
+        loom_llvmir_lowering_cfg_phi_for_arg(cfg, (uint16_t)dest_index,
+                                             arg_index);
+    loom_llvmir_value_id_t incoming_value = LOOM_LLVMIR_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cfg_edge_value(
+        state, target_block, phi, args.values[arg_index], &incoming_value));
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cfg_append_incoming(
+        phi, incoming_value, predecessor));
+  }
+  return loom_llvmir_build_br(
+      target_block, loom_llvmir_block_id(cfg->target_blocks[dest_index]));
+}
+
+static iree_status_t loom_llvmir_lowering_cfg_cond_dest(
+    const loom_llvmir_lowering_state_t* state,
+    const loom_llvmir_cfg_lowering_t* cfg, const loom_op_t* op,
+    loom_block_t* dest, loom_llvmir_block_id_t* out_block_id) {
+  iree_host_size_t dest_index = loom_cfg_graph_block_index(&cfg->graph, dest);
+  if (dest_index == IREE_HOST_SIZE_MAX) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op,
+        "cfg.cond_br destination must belong to the function body CFG");
+  }
+  const loom_block_t* dest_block = cfg->graph.blocks[dest_index].block;
+  if (dest_block->arg_count != 0) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op,
+        "cfg.cond_br cannot target blocks with arguments because it carries no "
+        "edge payloads");
+  }
+  *out_block_id = loom_llvmir_block_id(cfg->target_blocks[dest_index]);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_lower_cfg_cond_br(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_cfg_lowering_t* cfg,
+    loom_llvmir_block_t* target_block, const loom_op_t* op) {
+  loom_llvmir_value_id_t condition = LOOM_LLVMIR_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lookup_value(
+      state, loom_cfg_cond_br_condition(op), &condition));
+  loom_llvmir_block_id_t true_block = LOOM_LLVMIR_BLOCK_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cfg_cond_dest(
+      state, cfg, op, loom_cfg_cond_br_true_dest(op), &true_block));
+  loom_llvmir_block_id_t false_block = LOOM_LLVMIR_BLOCK_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cfg_cond_dest(
+      state, cfg, op, loom_cfg_cond_br_false_dest(op), &false_block));
+  return loom_llvmir_build_cond_br(target_block, condition, true_block,
+                                   false_block);
+}
+
+static bool loom_llvmir_lowering_op_ends_cfg_block(const loom_op_t* op) {
+  return loom_cfg_br_isa(op) || loom_cfg_cond_br_isa(op) ||
+         loom_func_return_isa(op);
+}
+
+static iree_status_t loom_llvmir_lowering_lower_cfg_block(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_function_t* target_function, loom_llvmir_cfg_lowering_t* cfg,
+    uint16_t block_index) {
+  loom_block_t* source_block =
+      (loom_block_t*)cfg->graph.blocks[block_index].block;
+  loom_llvmir_block_t* current_block = cfg->target_blocks[block_index];
+  bool saw_terminator = false;
+  loom_op_t* source_op = NULL;
+  loom_block_for_each_op(source_block, source_op) {
+    if (saw_terminator) {
+      return loom_llvmir_lowering_unsupported_op(
+          state, source_op, "CFG terminator must be last in its block");
+    }
+    if (loom_cfg_br_isa(source_op)) {
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_cfg_br(
+          state, cfg, current_block, source_op));
+      saw_terminator = true;
+    } else if (loom_cfg_cond_br_isa(source_op)) {
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_cfg_cond_br(
+          state, cfg, current_block, source_op));
+      saw_terminator = true;
+    } else {
+      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_op(
+          state, target_function, &current_block, source_op));
+      saw_terminator = loom_llvmir_lowering_op_ends_cfg_block(source_op);
+    }
+  }
+  if (!saw_terminator) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "CFG block is missing a terminator");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_lower_cfg_body(
+    loom_llvmir_lowering_state_t* state,
+    loom_llvmir_function_t* target_function, loom_region_t* body,
+    const loom_op_t* owner_op, iree_arena_allocator_t* arena) {
+  loom_llvmir_cfg_lowering_t cfg = {0};
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cfg_prepare_blocks(
+      state, target_function, body, owner_op, arena, &cfg));
+  for (uint16_t block_index = 0; block_index < cfg.graph.block_count;
+       ++block_index) {
+    if (!loom_cfg_graph_block_is_reachable(&cfg.graph, block_index)) continue;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_lower_cfg_block(
+        state, target_function, &cfg, block_index));
+  }
+  for (uint16_t block_index = 0; block_index < cfg.graph.block_count;
+       ++block_index) {
+    if (loom_cfg_graph_block_is_reachable(&cfg.graph, block_index)) continue;
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_build_unreachable(cfg.target_blocks[block_index]));
+  }
+  for (iree_host_size_t i = 0; i < cfg.phi_count; ++i) {
+    loom_llvmir_cfg_phi_accumulator_t* phi = &cfg.phis[i];
+    if (phi->incoming_count != phi->incoming_capacity) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "CFG phi incoming edge count does not match "
+                              "predecessor edge count");
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_set_phi_incoming(phi->target_block, phi->phi_value_id,
+                                     phi->incoming, phi->incoming_count));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_llvmir_lowering_lower_body(
     loom_llvmir_lowering_state_t* state,
     loom_llvmir_function_t* target_function, loom_func_like_t func) {
   loom_region_t* body = loom_func_like_body(func);
   if (!body) return iree_ok_status();
-  if (body->block_count != 1) {
-    return loom_llvmir_lowering_unsupported_op(
-        state, func.op, "CFG lowering is not wired to LLVMIR blocks yet");
-  }
-  loom_block_t* source_block = loom_region_entry_block(body);
-  loom_llvmir_block_t* target_block = NULL;
-  IREE_RETURN_IF_ERROR(loom_llvmir_function_add_block(
-      target_function, loom_llvmir_lowering_block_name(state, source_block),
-      &target_block));
 
   iree_arena_block_pool_t fact_block_pool;
   iree_arena_block_pool_initialize(4096, state->allocator, &fact_block_pool);
@@ -757,8 +1133,27 @@ static iree_status_t loom_llvmir_lowering_lower_body(
   const loom_value_fact_table_t* previous_fact_table = state->fact_table;
   if (iree_status_is_ok(status)) {
     state->fact_table = &fact_table;
-    status = loom_llvmir_lowering_lower_source_block(
-        state, target_function, source_block, &target_block, NULL);
+    if (iree_any_bit_set(body->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
+      status = loom_llvmir_lowering_lower_cfg_body(state, target_function, body,
+                                                   func.op, &fact_arena);
+    } else if (body->block_count != 1) {
+      status = loom_llvmir_lowering_unsupported_op(
+          state, func.op,
+          "multi-block function body must use CFG successor terminators before "
+          "LLVMIR lowering");
+    } else {
+      loom_block_t* source_block = loom_region_entry_block(body);
+      loom_llvmir_block_t* target_block = NULL;
+      status = loom_llvmir_function_add_block(
+          target_function,
+          loom_llvmir_lowering_block_name(state, source_block,
+                                          /*is_entry_block=*/true),
+          &target_block);
+      if (iree_status_is_ok(status)) {
+        status = loom_llvmir_lowering_lower_source_block(
+            state, target_function, source_block, &target_block, NULL);
+      }
+    }
     state->fact_table = previous_fact_table;
   }
   iree_arena_deinitialize(&fact_arena);

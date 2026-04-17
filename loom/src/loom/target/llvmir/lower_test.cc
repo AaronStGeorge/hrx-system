@@ -21,6 +21,7 @@
 #include "loom/ir/encoding.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
+#include "loom/ops/cfg/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/llvmir/ops.h"
@@ -139,6 +140,7 @@ class LlvmIrLowerTest : public ::testing::Test {
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_BUFFER, loom_buffer_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_CFG, loom_cfg_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_LLVMIR, loom_llvmir_dialect_vtables);
@@ -187,6 +189,35 @@ class LlvmIrLowerTest : public ::testing::Test {
     loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
     IREE_CHECK_OK(loom_module_intern_string(module_, name, &name_id));
     module_->values.entries[value_id].name_id = name_id;
+  }
+
+  void SetBlockLabel(loom_block_t* block, iree_string_view_t label) {
+    loom_string_id_t label_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_module_intern_string(module_, label, &label_id));
+    block->label_id = label_id;
+  }
+
+  loom_block_t* AppendLabeledBlock(loom_region_t* region,
+                                   iree_string_view_t label) {
+    loom_block_t* block = NULL;
+    IREE_CHECK_OK(loom_region_append_block(module_, region, &block));
+    SetBlockLabel(block, label);
+    return block;
+  }
+
+  loom_value_id_t AddBlockArgument(loom_block_t* block, loom_type_t type,
+                                   iree_string_view_t name) {
+    loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
+    IREE_CHECK_OK(loom_module_define_value(module_, type, &arg));
+    IREE_CHECK_OK(loom_block_add_arg(module_, block, arg));
+    SetValueName(arg, name);
+    return arg;
+  }
+
+  void SetBodyBuilderBlock(loom_builder_t* builder, loom_op_t* func_op,
+                           loom_block_t* block) {
+    loom_builder_set_block(builder, block);
+    builder->ip.parent_op = func_op;
   }
 
   uint16_t AddDenseEncoding() {
@@ -716,6 +747,175 @@ TEST_F(LlvmIrLowerTest, LowersCallsComparisonsSelectAndCasts) {
       text.find("  %selected = select i1 %predicate, i32 %called, i32 %lhs\n"),
       std::string::npos)
       << text;
+}
+
+TEST_F(LlvmIrLowerTest, LowersCfgDiamondBlockArgumentToPhi) {
+  loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+
+  loom_symbol_ref_t symbol = MakeSymbol(IREE_SV("cfg_select_i32"));
+  loom_type_t arg_types[3] = {i1, i32, i32};
+  loom_type_t result_types[1] = {i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
+      LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, symbol, arg_types,
+      IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 3);
+  SetValueName(args[0], IREE_SV("cond"));
+  SetValueName(args[1], IREE_SV("a"));
+  SetValueName(args[2], IREE_SV("b"));
+
+  loom_region_t* body = loom_func_like_body(func);
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  loom_block_t* then_block = AppendLabeledBlock(body, IREE_SV("then"));
+  loom_block_t* else_block = AppendLabeledBlock(body, IREE_SV("else"));
+  loom_block_t* join_block = AppendLabeledBlock(body, IREE_SV("join"));
+  loom_value_id_t result = AddBlockArgument(join_block, i32, IREE_SV("result"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  SetBodyBuilderBlock(&body_builder, func_op, entry_block);
+  loom_op_t* branch_op = NULL;
+  IREE_ASSERT_OK(loom_cfg_cond_br_build(&body_builder, args[0], then_block,
+                                        else_block, LOOM_LOCATION_UNKNOWN,
+                                        &branch_op));
+
+  SetBodyBuilderBlock(&body_builder, func_op, then_block);
+  loom_value_id_t then_args[1] = {args[1]};
+  IREE_ASSERT_OK(loom_cfg_br_build(&body_builder, join_block, then_args,
+                                   IREE_ARRAYSIZE(then_args),
+                                   LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  SetBodyBuilderBlock(&body_builder, func_op, else_block);
+  loom_value_id_t else_args[1] = {args[2]};
+  IREE_ASSERT_OK(loom_cfg_br_build(&body_builder, join_block, else_args,
+                                   IREE_ARRAYSIZE(else_args),
+                                   LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  SetBodyBuilderBlock(&body_builder, func_op, join_block);
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &result, 1,
+                                        LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define dso_local i32 @cfg_select_i32(i1 %cond, "
+                      "i32 %a, i32 %b) {"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("entry:\n  br i1 %cond, label %then, label %else\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("then:\n  br label %join\n"), std::string::npos) << text;
+  EXPECT_NE(text.find("else:\n  br label %join\n"), std::string::npos) << text;
+  EXPECT_TRUE(TextHasLineContaining(text, "%result = phi i32",
+                                    "[ %a, %then ], [ %b, %else ]"))
+      << text;
+  EXPECT_NE(text.find("  ret i32 %result\n"), std::string::npos) << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
+}
+
+TEST_F(LlvmIrLowerTest, LowersCfgLoopBlockArgumentsToBackedgePhis) {
+  loom_type_t i1 = loom_type_scalar(LOOM_SCALAR_TYPE_I1);
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+
+  loom_symbol_ref_t symbol = MakeSymbol(IREE_SV("cfg_loop_i32"));
+  loom_type_t arg_types[2] = {index, i32};
+  loom_type_t result_types[1] = {i32};
+  loom_op_t* func_op = NULL;
+  IREE_ASSERT_OK(loom_func_def_build(
+      &module_builder_, 0, 0, 0, 0, symbol, arg_types,
+      IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+      NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+  loom_func_like_t func = loom_func_like_cast(module_, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
+  ASSERT_EQ(arg_count, 2);
+  SetValueName(args[0], IREE_SV("n"));
+  SetValueName(args[1], IREE_SV("seed"));
+
+  loom_region_t* body = loom_func_like_body(func);
+  loom_block_t* entry_block = loom_region_entry_block(body);
+  loom_block_t* loop_block = AppendLabeledBlock(body, IREE_SV("loop"));
+  loom_block_t* body_block = AppendLabeledBlock(body, IREE_SV("body"));
+  loom_block_t* exit_block = AppendLabeledBlock(body, IREE_SV("exit"));
+  loom_value_id_t i = AddBlockArgument(loop_block, index, IREE_SV("i"));
+  loom_value_id_t acc = AddBlockArgument(loop_block, i32, IREE_SV("acc"));
+
+  loom_builder_t body_builder = BodyBuilder(func_op);
+  SetBodyBuilderBlock(&body_builder, func_op, entry_block);
+  loom_op_t* zero_op = NULL;
+  IREE_ASSERT_OK(loom_index_constant_build(
+      &body_builder, loom_attr_i64(0), index, LOOM_LOCATION_UNKNOWN, &zero_op));
+  loom_value_id_t zero = loom_index_constant_result(zero_op);
+  loom_op_t* one_op = NULL;
+  IREE_ASSERT_OK(loom_index_constant_build(
+      &body_builder, loom_attr_i64(1), index, LOOM_LOCATION_UNKNOWN, &one_op));
+  loom_value_id_t one = loom_index_constant_result(one_op);
+  loom_value_id_t entry_args[2] = {zero, args[1]};
+  loom_op_t* branch_op = NULL;
+  IREE_ASSERT_OK(loom_cfg_br_build(&body_builder, loop_block, entry_args,
+                                   IREE_ARRAYSIZE(entry_args),
+                                   LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  SetBodyBuilderBlock(&body_builder, func_op, loop_block);
+  loom_op_t* cmp_op = NULL;
+  IREE_ASSERT_OK(
+      loom_index_cmp_build(&body_builder, LOOM_INDEX_CMP_PREDICATE_SLT, i,
+                           args[0], index, i1, LOOM_LOCATION_UNKNOWN, &cmp_op));
+  loom_value_id_t keep_going = loom_index_cmp_result(cmp_op);
+  SetValueName(keep_going, IREE_SV("keep_going"));
+  IREE_ASSERT_OK(loom_cfg_cond_br_build(&body_builder, keep_going, body_block,
+                                        exit_block, LOOM_LOCATION_UNKNOWN,
+                                        &branch_op));
+
+  SetBodyBuilderBlock(&body_builder, func_op, body_block);
+  loom_op_t* next_i_op = NULL;
+  IREE_ASSERT_OK(loom_index_add_build(&body_builder, i, one, index,
+                                      LOOM_LOCATION_UNKNOWN, &next_i_op));
+  loom_value_id_t next_i = loom_index_add_result(next_i_op);
+  SetValueName(next_i, IREE_SV("next_i"));
+  loom_op_t* next_acc_op = NULL;
+  IREE_ASSERT_OK(loom_scalar_addi_build(
+      &body_builder, LOOM_SCALAR_INTOVERFLOWFLAGS_NSW, acc, args[1], i32,
+      LOOM_LOCATION_UNKNOWN, &next_acc_op));
+  loom_value_id_t next_acc = loom_scalar_addi_result(next_acc_op);
+  SetValueName(next_acc, IREE_SV("next_acc"));
+  loom_value_id_t backedge_args[2] = {next_i, next_acc};
+  IREE_ASSERT_OK(loom_cfg_br_build(&body_builder, loop_block, backedge_args,
+                                   IREE_ARRAYSIZE(backedge_args),
+                                   LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  SetBodyBuilderBlock(&body_builder, func_op, exit_block);
+  IREE_ASSERT_OK(loom_func_return_build(&body_builder, &acc, 1,
+                                        LOOM_LOCATION_UNKNOWN, &branch_op));
+
+  std::string text = LowerToText();
+  EXPECT_NE(text.find("define internal i32 @cfg_loop_i32(i64 %n, "
+                      "i32 %seed) {"),
+            std::string::npos)
+      << text;
+  EXPECT_TRUE(TextHasLineContaining(text, "%i = phi i64",
+                                    "[ 0, %entry ], [ %next_i, %body ]"))
+      << text;
+  EXPECT_TRUE(TextHasLineContaining(text, "%acc = phi i32",
+                                    "[ %seed, %entry ], [ %next_acc, %body ]"))
+      << text;
+  EXPECT_NE(text.find("  %keep_going = icmp slt i64 %i, %n\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %next_i = add i64 %i, 1\n"), std::string::npos)
+      << text;
+  EXPECT_NE(text.find("  %next_acc = add nsw i32 %acc, %seed\n"),
+            std::string::npos)
+      << text;
+  EXPECT_NE(text.find("exit:\n  ret i32 %acc\n"), std::string::npos) << text;
+  VerifyTextWithLlvmTools(text);
+  CompileX86TextToObject(text);
 }
 
 TEST_F(LlvmIrLowerTest, LowersScfSelectAsWholeValueSelect) {

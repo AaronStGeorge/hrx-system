@@ -354,6 +354,16 @@ iree_status_t loom_llvmir_build_phi(loom_llvmir_block_t* block,
                                     const loom_llvmir_phi_desc_t* desc,
                                     loom_llvmir_value_id_t* out_value_id);
 
+// Replaces the incoming edge list of an existing phi instruction result.
+//
+// This supports loop lowering where the phi result must exist before all
+// backedge values have been lowered. The phi must have been created in |block|
+// by loom_llvmir_build_phi, and its incoming list must still be empty.
+iree_status_t loom_llvmir_set_phi_incoming(
+    loom_llvmir_block_t* block, loom_llvmir_value_id_t phi_value_id,
+    const loom_llvmir_phi_incoming_t* incoming,
+    iree_host_size_t incoming_count);
+
 iree_status_t loom_llvmir_build_binop(loom_llvmir_block_t* block,
                                       const loom_llvmir_binop_desc_t* desc,
                                       loom_llvmir_value_id_t* out_value_id);

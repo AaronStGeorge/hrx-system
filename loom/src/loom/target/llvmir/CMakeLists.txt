@@ -90,6 +90,7 @@ loom_cc_library(
     loom::src::loom::ir::facts
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cache
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::encoding
     loom::src::loom::ops::func
     loom::src::loom::ops::index
@@ -99,6 +100,7 @@ loom_cc_library(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::target::cpu::packed_dot_vector
+    loom::src::loom::util::cfg_graph
     loom::src::loom::util::fact_table
   PUBLIC
 )
@@ -193,6 +195,7 @@ loom_cc_test(
     iree::io::file_handle
     loom::src::loom::ir
     loom::src::loom::ops::buffer
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::func
     loom::src::loom::ops::index
     loom::src::loom::ops::llvmir
