@@ -6,9 +6,11 @@
 
 #include "loom/tools/loom-check/llvmir_targets.h"
 
+#include "loom/target/emit/llvmir/amdgpu/legality.h"
 #include "loom/target/emit/llvmir/amdgpu/lower.h"
 #include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/test_target.h"
+#include "loom/target/emit/llvmir/x86/legality.h"
 #include "loom/target/emit/llvmir/x86/lower.h"
 #include "loom/target/emit/llvmir/x86/target_env.h"
 
@@ -30,6 +32,59 @@ static bool loom_check_llvmir_profile_has_triple(
   return profile != NULL && profile->target_env != NULL &&
          iree_string_view_equal(profile->target_env->target_triple,
                                 target_triple);
+}
+
+static bool loom_check_llvmir_bundle_has_triple(
+    const loom_target_bundle_t* bundle, iree_string_view_t target_triple) {
+  return bundle != NULL && bundle->snapshot != NULL &&
+         iree_string_view_equal(bundle->snapshot->target_triple, target_triple);
+}
+
+iree_status_t loom_check_llvmir_target_bundle_lookup(
+    iree_string_view_t profile_name, const loom_target_bundle_t** out_bundle) {
+  if (out_bundle == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVMIR target bundle output is required");
+  }
+  *out_bundle = NULL;
+
+  profile_name = iree_string_view_trim(profile_name);
+  const loom_target_bundle_t* bundles[] = {
+      loom_llvmir_target_bundle_test_object(),
+      loom_llvmir_target_bundle_x86_64_object(),
+      loom_llvmir_target_bundle_x86_64_packed_dot_object(),
+      loom_llvmir_target_bundle_amdgpu_hal(),
+  };
+  if (iree_string_view_is_empty(profile_name)) {
+    *out_bundle = bundles[0];
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(bundles); ++i) {
+    if (iree_string_view_equal(profile_name, bundles[i]->name)) {
+      *out_bundle = bundles[i];
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unknown LLVMIR target profile '%.*s'",
+                          (int)profile_name.size, profile_name.data);
+}
+
+void loom_check_llvmir_legality_providers_initialize(
+    const loom_target_bundle_t* bundle,
+    loom_check_llvmir_legality_providers_t* out_providers) {
+  IREE_ASSERT_ARGUMENT(out_providers);
+  *out_providers = (loom_check_llvmir_legality_providers_t){0};
+  if (loom_check_llvmir_bundle_has_triple(
+          bundle, IREE_SV("x86_64-unknown-linux-gnu"))) {
+    out_providers->providers[out_providers->provider_count++] =
+        loom_llvmir_x86_legality_provider();
+  }
+  if (loom_check_llvmir_bundle_has_triple(bundle,
+                                          IREE_SV("amdgcn-amd-amdhsa"))) {
+    out_providers->providers[out_providers->provider_count++] =
+        loom_llvmir_amdgpu_legality_provider();
+  }
 }
 
 void loom_check_llvmir_lowering_providers_initialize(

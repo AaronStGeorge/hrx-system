@@ -8,6 +8,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
+#include "loom/target/emit/llvmir/legality.h"
 #include "loom/target/emit/llvmir/lower.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
@@ -28,8 +29,8 @@ typedef enum loom_check_emit_format_e {
 typedef struct loom_check_emit_request_t {
   // Serialized target form to produce before comparison.
   loom_check_emit_format_t format;
-  // LLVM target/ABI profile used by lowering.
-  const loom_llvmir_target_profile_t* profile;
+  // Generic target bundle used by legality and LLVMIR profile derivation.
+  const loom_target_bundle_t* target_bundle;
 } loom_check_emit_request_t;
 
 typedef struct loom_check_emit_byte_buffer_t {
@@ -43,7 +44,7 @@ static iree_status_t loom_check_emit_parse_request(
     iree_string_view_t emit_target, loom_check_emit_request_t* out_request) {
   *out_request = (loom_check_emit_request_t){
       .format = LOOM_CHECK_EMIT_LLVMIR_TEXT,
-      .profile = NULL,
+      .target_bundle = NULL,
   };
   emit_target = iree_string_view_trim(emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
@@ -72,8 +73,8 @@ static iree_status_t loom_check_emit_parse_request(
                             "unknown emit target '%.*s'", (int)target_name.size,
                             target_name.data);
   }
-  return loom_check_llvmir_target_profile_lookup(profile_name,
-                                                 &out_request->profile);
+  return loom_check_llvmir_target_bundle_lookup(profile_name,
+                                                &out_request->target_bundle);
 }
 
 static iree_string_view_t loom_check_emit_consume_line(
@@ -559,11 +560,42 @@ iree_status_t loom_check_execute_emit(
     return status;
   }
 
+  loom_check_llvmir_legality_providers_t legality_providers;
+  loom_check_llvmir_legality_providers_initialize(request.target_bundle,
+                                                  &legality_providers);
+  loom_llvmir_target_legality_options_t legality_options = {
+      .snapshot = request.target_bundle->snapshot,
+      .export_plan = request.target_bundle->export_plan,
+      .config = request.target_bundle->config,
+      .providers = legality_providers.providers,
+      .provider_count = legality_providers.provider_count,
+  };
+  status = loom_llvmir_verify_target_legality(module, &legality_options, NULL);
+  if (!iree_status_is_ok(status)) {
+    loom_module_free(module);
+    status = loom_check_emit_finish_status_failure(
+        status, &diagnostic_collector, test_case, case_index, report, filename,
+        allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+
+  loom_llvmir_target_profile_storage_t profile_storage;
+  status = loom_llvmir_target_profile_storage_initialize_from_bundle(
+      request.target_bundle, &profile_storage);
+  if (!iree_status_is_ok(status)) {
+    loom_module_free(module);
+    status = loom_check_emit_finish_status_failure(
+        status, &diagnostic_collector, test_case, case_index, report, filename,
+        allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+  const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
   loom_check_llvmir_lowering_providers_t lowering_providers;
-  loom_check_llvmir_lowering_providers_initialize(request.profile,
-                                                  &lowering_providers);
+  loom_check_llvmir_lowering_providers_initialize(profile, &lowering_providers);
   loom_llvmir_lowering_options_t options = {
-      .target_profile = request.profile,
+      .target_profile = profile,
       .source_name = filename,
       .providers = lowering_providers.providers,
       .provider_count = lowering_providers.provider_count,
@@ -597,12 +629,12 @@ iree_status_t loom_check_execute_emit(
             lowered_module, allocator, result);
         break;
       case LOOM_CHECK_EMIT_LLVMIR_OBJECT:
-        status = loom_check_emit_write_llvmir_object(
-            lowered_module, request.profile, allocator, result);
+        status = loom_check_emit_write_llvmir_object(lowered_module, profile,
+                                                     allocator, result);
         break;
       case LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS:
         status = loom_check_emit_write_llvmir_assembly_mnemonics(
-            lowered_module, request.profile, allocator, result);
+            lowered_module, profile, allocator, result);
         break;
     }
   }
