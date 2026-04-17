@@ -49,6 +49,7 @@ loom_cc_library(
     iree::base::internal::path
     iree::io::file_handle
     iree::io::stream
+    loom::src::loom::target::cpu::packed_dot_contract
     loom::src::loom::util::stream
   PUBLIC
 )

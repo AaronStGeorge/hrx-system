@@ -103,6 +103,24 @@ attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-wo
 // ====
 // RUN: emit llvmir-body amdgpu-hal
 
+// Public device signatures use the AMDGPU HAL binding ABI.
+func.def public device @dispatch_with_bindings(%input: buffer, %output: buffer, %n: index) {
+  func.return
+}
+
+// ----
+define amdgpu_kernel void @dispatch_with_bindings(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %n) #0 !reqd_work_group_size !0 {
+entry:
+  ret void
+}
+
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-work-group-size" }
+
+!0 = !{i32 64, i32 1, i32 1}
+
+// ====
+// RUN: emit llvmir-body amdgpu-hal
+
 // AMDGPU HAL buffer arguments lower to global address-space pointers.
 func.def public device @vector_hal_kernel(%input: buffer, %output: buffer, %base: index) {
   %zero = index.constant 0 : offset

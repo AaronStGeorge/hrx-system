@@ -47,6 +47,7 @@ loom_cc_library(
         "verify.h",
     ],
     deps = [
+        "//loom/src/loom/target/cpu:packed_dot_contract",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

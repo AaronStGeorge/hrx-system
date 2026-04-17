@@ -45,6 +45,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "llvmir_packed_dot"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/packed_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "llvmir_scalar_index"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/scalar_index.loom-test"

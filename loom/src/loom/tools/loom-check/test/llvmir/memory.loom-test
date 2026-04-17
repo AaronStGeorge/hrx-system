@@ -122,3 +122,66 @@ entry:
 }
 
 declare void @llvm.prefetch.p0(ptr readonly nocapture, i32 immarg, i32 immarg, i32 immarg)
+
+// ====
+
+// A small x86 vector memory kernel preserves offset math and vector fadd.
+func.def public @saxpy4_object(%x: buffer, %y: buffer, %out: buffer, %base: index) {
+  %zero = index.constant 0 : offset
+  %step = index.constant 4 : index
+  %next = index.add %base, %step : index
+  %x_view = buffer.view %x[%zero] : buffer -> view<1024xf32, #dense>
+  %y_view = buffer.view %y[%zero] : buffer -> view<1024xf32, #dense>
+  %out_view = buffer.view %out[%zero] : buffer -> view<1024xf32, #dense>
+  %xv = vector.load %x_view[%base] : view<1024xf32, #dense> -> vector<4xf32>
+  %yv = vector.load %y_view[%next] : view<1024xf32, #dense> -> vector<4xf32>
+  %sum = vector.addf<nnan> %xv, %yv : vector<4xf32>
+  vector.store %sum, %out_view[%next] : vector<4xf32>, view<1024xf32, #dense>
+  func.return
+}
+
+// ----
+define dso_local void @saxpy4_object(ptr %x, ptr %y, ptr %out, i64 %base) {
+entry:
+  %next = add i64 %base, 4
+  %x_view = getelementptr i8, ptr %x, i64 0
+  %y_view = getelementptr i8, ptr %y, i64 0
+  %out_view = getelementptr i8, ptr %out, i64 0
+  %v10 = getelementptr float, ptr %x_view, i64 %base
+  %xv = load <4 x float>, ptr %v10
+  %v12 = getelementptr float, ptr %y_view, i64 %next
+  %yv = load <4 x float>, ptr %v12
+  %sum = fadd nnan <4 x float> %xv, %yv
+  %v15 = getelementptr float, ptr %out_view, i64 %next
+  store <4 x float> %sum, ptr %v15
+  ret void
+}
+
+// ====
+// RUN: emit llvmir-body amdgpu-hal
+
+// AMDGPU dense vector memory uses global address-space pointers.
+func.def public device @vector_dispatch(%input: buffer, %output: buffer, %base: index) {
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<1024xf32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1024xf32, #dense>
+  %loaded = vector.load %input_view[%base] : view<1024xf32, #dense> -> vector<4xf32>
+  vector.store %loaded, %output_view[%base] : vector<4xf32>, view<1024xf32, #dense>
+  func.return
+}
+
+// ----
+define amdgpu_kernel void @vector_dispatch(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 !reqd_work_group_size !0 {
+entry:
+  %input_view = getelementptr i8, ptr addrspace(1) %input, i64 0
+  %output_view = getelementptr i8, ptr addrspace(1) %output, i64 0
+  %v9 = getelementptr float, ptr addrspace(1) %input_view, i32 %base
+  %loaded = load <4 x float>, ptr addrspace(1) %v9, align 4
+  %v11 = getelementptr float, ptr addrspace(1) %output_view, i32 %base
+  store <4 x float> %loaded, ptr addrspace(1) %v11, align 4
+  ret void
+}
+
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="64,64" "uniform-work-group-size" }
+
+!0 = !{i32 64, i32 1, i32 1}

@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 
+#include "loom/target/cpu/packed_dot_contract.h"
 #include "loom/target/llvmir/types.h"
 
 static const loom_llvmir_target_env_t kX86_64UnknownLinuxGnuTargetEnv = {
@@ -62,6 +63,19 @@ static const loom_llvmir_target_profile_t kX86_64ObjectProfile = {
     .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
 };
 
+static const loom_llvmir_target_profile_t kX86_64PackedDotObjectProfile = {
+    .name = IREE_SVL("x86_64-packed-dot-object"),
+    .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
+    .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
+    .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
+    .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
+    .cpu_packed_dot_feature_bits =
+        LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_BF16 |
+        LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX512_VL |
+        LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX_VNNI |
+        LOOM_CPU_PACKED_DOT_FEATURE_X86_AVX_VNNI_INT8,
+};
+
 static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
     .name = IREE_SVL("amdgpu-hal"),
     .target_env = &kAmdgcnAmdAmdhsaTargetEnv,
@@ -81,6 +95,7 @@ static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
 
 static const loom_llvmir_target_profile_t* const kBuiltinTargetProfiles[] = {
     &kX86_64ObjectProfile,
+    &kX86_64PackedDotObjectProfile,
     &kAmdgpuHalProfile,
 };
 
