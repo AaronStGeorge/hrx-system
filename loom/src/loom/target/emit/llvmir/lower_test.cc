@@ -30,9 +30,11 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/x86/packed_dot_contract.h"
+#include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
+#include "loom/target/emit/llvmir/x86/target_env.h"
 #include "loom/util/stream.h"
 
 namespace loom {

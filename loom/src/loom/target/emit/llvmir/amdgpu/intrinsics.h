@@ -6,8 +6,8 @@
 
 // LLVM AMDGPU intrinsic declaration helpers.
 
-#ifndef LOOM_TARGET_LLVMIR_INTRINSICS_AMDGPU_H_
-#define LOOM_TARGET_LLVMIR_INTRINSICS_AMDGPU_H_
+#ifndef LOOM_TARGET_LLVMIR_AMDGPU_INTRINSICS_H_
+#define LOOM_TARGET_LLVMIR_AMDGPU_INTRINSICS_H_
 
 #include "loom/target/emit/llvmir/module.h"
 
@@ -32,4 +32,4 @@ iree_status_t loom_llvmir_declare_amdgcn_make_buffer_rsrc(
 }
 #endif
 
-#endif  // LOOM_TARGET_LLVMIR_INTRINSICS_AMDGPU_H_
+#endif  // LOOM_TARGET_LLVMIR_AMDGPU_INTRINSICS_H_

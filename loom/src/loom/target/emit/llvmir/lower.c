@@ -17,6 +17,7 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/lower_internal.h"
 #include "loom/util/cfg_graph.h"
 

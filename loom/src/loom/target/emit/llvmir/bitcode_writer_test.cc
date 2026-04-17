@@ -19,6 +19,10 @@
 #include "loom/target/emit/llvmir/test_modules.h"
 #include "loom/target/emit/llvmir/verify.h"
 
+#ifndef LOOM_LLVMIR_BITCODE_WRITER_TEST_TARGET_SCENARIOS
+#define LOOM_LLVMIR_BITCODE_WRITER_TEST_TARGET_SCENARIOS 0
+#endif
+
 namespace loom {
 namespace {
 
@@ -42,6 +46,30 @@ using StreamPtr =
     std::unique_ptr<iree_io_stream_t, void (*)(iree_io_stream_t*)>;
 using ModulePtr =
     std::unique_ptr<loom_llvmir_module_t, void (*)(loom_llvmir_module_t*)>;
+
+const loom_llvmir_target_env_t* TestX86_64UnknownLinuxGnuTargetEnv() {
+  static loom_llvmir_target_env_t target_env;
+  static bool initialized = false;
+  if (!initialized) {
+    target_env.name = IREE_SV("x86_64-unknown-linux-gnu");
+    target_env.target_triple = IREE_SV("x86_64-unknown-linux-gnu");
+    target_env.data_layout = IREE_SV(
+        "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:"
+        "64-i128:128-f80:128-n8:16:32:64-S128");
+    target_env.object_format = LOOM_LLVMIR_OBJECT_FORMAT_ELF;
+    target_env.default_pointer_bitwidth = 64;
+    target_env.index_bitwidth = 64;
+    target_env.offset_bitwidth = 64;
+    target_env.address_spaces.generic = 0;
+    target_env.address_spaces.global = 0;
+    target_env.address_spaces.local = 0;
+    target_env.address_spaces.constant = 0;
+    target_env.address_spaces.private_memory = 0;
+    target_env.address_spaces.buffer_resource = UINT32_MAX;
+    initialized = true;
+  }
+  return &target_env;
+}
 
 StreamPtr CreateStream() {
   iree_io_stream_t* stream = NULL;
@@ -77,7 +105,7 @@ void ExpectWritesBitcode(loom_llvmir_module_t* module) {
 
 TEST(LlvmIrBitcodeWriterTest, WritesModuleHeaderAndTypeBlock) {
   const loom_llvmir_target_env_t* target_env =
-      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+      TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
   IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
       target_env, IREE_SV("loom-empty"), &target_config));
@@ -114,7 +142,7 @@ TEST(LlvmIrBitcodeWriterTest, WritesModuleHeaderAndTypeBlock) {
 
 TEST(LlvmIrBitcodeWriterTest, WritesFunctionDeclarationsAndRetVoidBodies) {
   const loom_llvmir_target_env_t* target_env =
-      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+      TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
   IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
       target_env, IREE_SV("loom-functions"), &target_config));
@@ -207,7 +235,7 @@ TEST(LlvmIrBitcodeWriterTest, WritesCallConstantsFunctionBodies) {
 TEST(LlvmIrBitcodeWriterTest,
      RejectsDeclarationMetadataAttachmentsBeforeWriting) {
   const loom_llvmir_target_env_t* target_env =
-      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+      TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
   IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
       target_env, IREE_SV("loom-unsupported-declaration-metadata"),
@@ -254,7 +282,7 @@ TEST(LlvmIrBitcodeWriterTest,
 TEST(LlvmIrBitcodeWriterTest,
      RejectsInstructionMetadataAttachmentsBeforeWriting) {
   const loom_llvmir_target_env_t* target_env =
-      loom_llvmir_target_env_x86_64_unknown_linux_gnu();
+      TestX86_64UnknownLinuxGnuTargetEnv();
   loom_llvmir_target_config_t target_config = {};
   IREE_ASSERT_OK(loom_llvmir_target_env_module_config(
       target_env, IREE_SV("loom-unsupported-instruction-metadata"),
@@ -336,12 +364,18 @@ TEST_P(LlvmIrBitcodeWriterScenarioTest, WritesFixtureScenario) {
   ExpectWritesBitcode(module_ptr.get());
 }
 
+#if LOOM_LLVMIR_BITCODE_WRITER_TEST_TARGET_SCENARIOS
 INSTANTIATE_TEST_SUITE_P(
-    All, LlvmIrBitcodeWriterScenarioTest,
+    Target, LlvmIrBitcodeWriterScenarioTest,
+    testing::Values(LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS,
+                    LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS),
+    ScenarioTestName);
+#else
+INSTANTIATE_TEST_SUITE_P(
+    Core, LlvmIrBitcodeWriterScenarioTest,
     testing::Values(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4,
                     LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS,
                     LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS,
-                    LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS,
                     LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA,
                     LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT,
                     LOOM_LLVMIR_TEST_MODULE_CFG_PHI,
@@ -350,9 +384,9 @@ INSTANTIATE_TEST_SUITE_P(
                     LOOM_LLVMIR_TEST_MODULE_SHUFFLE_VECTOR,
                     LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT,
                     LOOM_LLVMIR_TEST_MODULE_CASTS,
-                    LOOM_LLVMIR_TEST_MODULE_INLINE_ASM,
-                    LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS),
+                    LOOM_LLVMIR_TEST_MODULE_INLINE_ASM),
     ScenarioTestName);
+#endif
 
 }  // namespace
 }  // namespace loom

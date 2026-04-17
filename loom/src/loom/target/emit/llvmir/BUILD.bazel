@@ -4,7 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_library",
+    "loom_cc_test",
+)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -12,18 +17,47 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+iree_assert_no_dependency(
+    name = "core_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/llvmir:core",
+)
+
+iree_assert_no_dependency(
+    name = "core_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/emit/llvmir:core",
+)
+
+iree_assert_no_dependency(
+    name = "core_no_x86_llvmir_intrinsics_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
+    target = "//loom/src/loom/target/emit/llvmir:core",
+)
+
+iree_assert_no_dependency(
+    name = "core_no_amdgpu_llvmir_intrinsics_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
+    target = "//loom/src/loom/target/emit/llvmir:core",
+)
+
+#===------------------------------------------------------------------------===#
+# Target-neutral LLVMIR core
+#===------------------------------------------------------------------------===#
+
 loom_cc_library(
-    name = "llvmir",
+    name = "core",
     srcs = [
         "bitcode_record_writer.c",
         "bitcode_writer.c",
         "bitstream_writer.c",
         "builder.c",
-        "intrinsics_amdgpu.c",
         "intrinsics_builtin.c",
-        "intrinsics_x86.c",
         "module.c",
-        "target_env.c",
         "text_writer.c",
         "tool.c",
         "types.h",
@@ -35,19 +69,14 @@ loom_cc_library(
         "bitcode_writer.h",
         "bitstream_writer.h",
         "builder.h",
-        "intrinsics.h",
-        "intrinsics_amdgpu.h",
         "intrinsics_builtin.h",
-        "intrinsics_x86.h",
         "llvmir.h",
         "module.h",
-        "target_env.h",
         "text_writer.h",
         "tool.h",
         "verify.h",
     ],
     deps = [
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -58,12 +87,69 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "target_env",
+    srcs = ["target_env.c"],
+    hdrs = ["target_env.h"],
+    deps = [
+        ":core",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "target_presets",
+    srcs = ["target_presets.c"],
+    hdrs = ["target_presets.h"],
+    deps = [
+        ":target_env",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
+        "//runtime/src/iree/base",
+    ],
+)
+
+# Compatibility umbrella for developer tools and legacy callers that want every
+# built-in LLVMIR provider. Embedders that care about target bloat should depend
+# on :core plus explicit provider packages instead.
+loom_cc_library(
+    name = "llvmir",
+    hdrs = ["intrinsics.h"],
+    deps = [
+        ":core",
+        ":target_env",
+        ":target_presets",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
+    ],
+)
+
+loom_cc_library(
+    name = "test_modules_core",
+    testonly = True,
+    srcs = ["test_modules.c"],
+    hdrs = ["test_modules.h"],
+    defines = ["LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS=0"],
+    deps = [
+        ":core",
+        ":target_env",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "test_modules",
     testonly = True,
     srcs = ["test_modules.c"],
     hdrs = ["test_modules.h"],
     deps = [
-        ":llvmir",
+        ":core",
+        ":target_env",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//runtime/src/iree/base",
     ],
 )
@@ -83,7 +169,8 @@ loom_cc_library(
         "lower_internal.h",
     ],
     deps = [
-        ":llvmir",
+        ":core",
+        ":target_env",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:cache",
@@ -98,6 +185,9 @@ loom_cc_library(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
         "//loom/src/loom/target/arch/x86:packed_dot_vector",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
@@ -109,7 +199,7 @@ loom_cc_test(
     name = "bitcode_record_writer_test",
     srcs = ["bitcode_record_writer_test.cc"],
     deps = [
-        ":llvmir",
+        ":core",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -120,7 +210,7 @@ loom_cc_test(
     name = "bitstream_writer_test",
     srcs = ["bitstream_writer_test.cc"],
     deps = [
-        ":llvmir",
+        ":core",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -131,7 +221,22 @@ loom_cc_test(
     name = "bitcode_writer_test",
     srcs = ["bitcode_writer_test.cc"],
     deps = [
-        ":llvmir",
+        ":core",
+        ":target_env",
+        ":test_modules_core",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "bitcode_writer_target_test",
+    srcs = ["bitcode_writer_test.cc"],
+    defines = ["LOOM_LLVMIR_BITCODE_WRITER_TEST_TARGET_SCENARIOS=1"],
+    deps = [
+        ":core",
+        ":target_env",
         ":test_modules",
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
@@ -143,7 +248,19 @@ loom_cc_test(
     name = "text_writer_test",
     srcs = ["text_writer_test.cc"],
     deps = [
-        ":llvmir",
+        ":core",
+        ":test_modules_core",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "text_writer_target_test",
+    srcs = ["text_writer_test.cc"],
+    defines = ["LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS=1"],
+    deps = [
+        ":core",
         ":test_modules",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -154,7 +271,11 @@ loom_cc_test(
     name = "target_env_test",
     srcs = ["target_env_test.cc"],
     deps = [
-        ":llvmir",
+        ":core",
+        ":target_env",
+        ":target_presets",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -166,7 +287,7 @@ loom_cc_test(
     srcs = ["tool_test.cc"],
     tags = ["requires-filesystem"],
     deps = [
-        ":llvmir",
+        ":core",
         ":test_modules",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/io:file_handle",
@@ -181,7 +302,7 @@ loom_cc_test(
     srcs = ["lower_test.cc"],
     tags = ["requires-filesystem"],
     deps = [
-        ":llvmir",
+        ":core",
         ":lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/buffer",
@@ -194,6 +315,8 @@ loom_cc_test(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/io:file_handle",
@@ -206,7 +329,7 @@ loom_cc_test(
     name = "verify_test",
     srcs = ["verify_test.cc"],
     deps = [
-        ":llvmir",
+        ":core",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

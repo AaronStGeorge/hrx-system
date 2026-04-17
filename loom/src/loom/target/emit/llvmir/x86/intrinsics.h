@@ -6,8 +6,8 @@
 
 // LLVM x86 intrinsic declaration helpers.
 
-#ifndef LOOM_TARGET_LLVMIR_INTRINSICS_X86_H_
-#define LOOM_TARGET_LLVMIR_INTRINSICS_X86_H_
+#ifndef LOOM_TARGET_LLVMIR_X86_INTRINSICS_H_
+#define LOOM_TARGET_LLVMIR_X86_INTRINSICS_H_
 
 #include "loom/target/emit/llvmir/module.h"
 
@@ -25,4 +25,4 @@ iree_status_t loom_llvmir_declare_x86_sse2_pause(
 }
 #endif
 
-#endif  // LOOM_TARGET_LLVMIR_INTRINSICS_X86_H_
+#endif  // LOOM_TARGET_LLVMIR_X86_INTRINSICS_H_

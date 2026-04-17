@@ -6,11 +6,11 @@
 
 // LLVM target environment descriptions.
 //
-// Target environments collect the pieces of target state that should be chosen
-// by target/ABI selection, not by the generic LLVM IR module builder. The
-// module stores a copied target_config snapshot; these descriptions are the
-// reusable source data used while constructing that snapshot and
-// target-specific pointer/address-space types.
+// Target environments collect target/ABI state chosen by a target provider, not
+// by the generic LLVM IR module builder. This header owns the shared data model
+// and target-neutral helpers; concrete target profile presets live in opt-in
+// provider packages such as target/emit/llvmir/x86 and
+// target/emit/llvmir/amdgpu.
 
 #ifndef LOOM_TARGET_LLVMIR_TARGET_ENV_H_
 #define LOOM_TARGET_LLVMIR_TARGET_ENV_H_
@@ -129,34 +129,6 @@ typedef struct loom_llvmir_target_profile_llc_arguments_t {
   iree_host_size_t count;
 } loom_llvmir_target_profile_llc_arguments_t;
 
-const loom_llvmir_target_env_t* loom_llvmir_target_env_x86_64_unknown_linux_gnu(
-    void);
-
-const loom_llvmir_target_env_t* loom_llvmir_target_env_amdgcn_amd_amdhsa(void);
-
-const loom_llvmir_target_profile_t* loom_llvmir_target_profile_x86_64_object(
-    void);
-
-const loom_llvmir_target_profile_t* loom_llvmir_target_profile_amdgpu_hal(void);
-
-// Looks up a built-in target profile by name. Empty names resolve to the
-// default host object profile.
-iree_status_t loom_llvmir_target_profile_lookup(
-    iree_string_view_t profile_name,
-    const loom_llvmir_target_profile_t** out_profile);
-
-// Initializes |out_profile| with a shallow copy of the built-in x86_64 object
-// profile. String views and |target_env| point at immutable static storage;
-// callers may overwrite profile fields for one lowering invocation.
-iree_status_t loom_llvmir_target_profile_initialize_x86_64_object(
-    loom_llvmir_target_profile_t* out_profile);
-
-// Initializes |out_profile| with a shallow copy of the built-in AMDGPU HAL
-// profile. String views and |target_env| point at immutable static storage;
-// callers may overwrite profile fields for one lowering invocation.
-iree_status_t loom_llvmir_target_profile_initialize_amdgpu_hal(
-    loom_llvmir_target_profile_t* out_profile);
-
 iree_status_t loom_llvmir_target_env_module_config(
     const loom_llvmir_target_env_t* target_env, iree_string_view_t source_name,
     loom_llvmir_target_config_t* out_config);
@@ -170,26 +142,6 @@ iree_status_t loom_llvmir_target_profile_module_config(
 iree_status_t loom_llvmir_target_profile_llc_arguments(
     const loom_llvmir_target_profile_t* profile,
     loom_llvmir_target_profile_llc_arguments_t* out_arguments);
-
-// Writes the ABI-required parameter attrs for a HAL kernel binding pointer.
-// The caller provides temporary storage; loom_llvmir_function_add_parameter()
-// copies the attrs into the target module when attaching them to a parameter.
-iree_status_t loom_llvmir_target_profile_kernel_binding_attrs(
-    const loom_llvmir_target_profile_t* profile, loom_llvmir_attr_t* attrs,
-    iree_host_size_t attr_capacity, iree_host_size_t* out_attr_count);
-
-// Adds the ABI and optimization attr group for a HAL kernel entry point.
-// Attribute values are derived from |profile| at materialization time so
-// profile copies can safely customize workgroup-size policy.
-iree_status_t loom_llvmir_target_profile_add_kernel_attr_group(
-    loom_llvmir_module_t* module, const loom_llvmir_target_profile_t* profile,
-    loom_llvmir_attr_group_id_t* out_group_id);
-
-// Attaches the fixed-workgroup-size metadata required by a HAL kernel entry
-// point.
-iree_status_t loom_llvmir_target_profile_attach_kernel_metadata(
-    loom_llvmir_function_t* function,
-    const loom_llvmir_target_profile_t* profile);
 
 #ifdef __cplusplus
 }

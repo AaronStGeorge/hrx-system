@@ -11,9 +11,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/builder.h"
+#include "loom/target/emit/llvmir/target_presets.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/verify.h"
+#include "loom/target/emit/llvmir/x86/target_env.h"
 #include "loom/util/stream.h"
 
 namespace loom {

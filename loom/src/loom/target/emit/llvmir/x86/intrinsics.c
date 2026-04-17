@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/llvmir/intrinsics_x86.h"
+#include "loom/target/emit/llvmir/x86/intrinsics.h"
 
 iree_status_t loom_llvmir_declare_x86_rdtsc(
     loom_llvmir_module_t* module, loom_llvmir_function_t** out_function) {

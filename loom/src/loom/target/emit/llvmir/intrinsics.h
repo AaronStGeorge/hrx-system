@@ -9,8 +9,8 @@
 #ifndef LOOM_TARGET_LLVMIR_INTRINSICS_H_
 #define LOOM_TARGET_LLVMIR_INTRINSICS_H_
 
-#include "loom/target/emit/llvmir/intrinsics_amdgpu.h"
+#include "loom/target/emit/llvmir/amdgpu/intrinsics.h"
 #include "loom/target/emit/llvmir/intrinsics_builtin.h"
-#include "loom/target/emit/llvmir/intrinsics_x86.h"
+#include "loom/target/emit/llvmir/x86/intrinsics.h"
 
 #endif  // LOOM_TARGET_LLVMIR_INTRINSICS_H_

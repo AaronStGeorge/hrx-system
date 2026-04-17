@@ -568,6 +568,11 @@ loom_llvmir_function_id_t loom_llvmir_function_id(
   return function ? function->id : LOOM_LLVMIR_FUNCTION_ID_INVALID;
 }
 
+loom_llvmir_module_t* loom_llvmir_function_module(
+    const loom_llvmir_function_t* function) {
+  return function ? function->module : NULL;
+}
+
 iree_status_t loom_llvmir_function_add_parameter(
     loom_llvmir_function_t* function, const loom_llvmir_parameter_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id) {

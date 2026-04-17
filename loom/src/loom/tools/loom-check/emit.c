@@ -9,6 +9,7 @@
 #include "loom/ir/module.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/lower.h"
+#include "loom/target/emit/llvmir/target_presets.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"

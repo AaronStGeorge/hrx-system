@@ -12,20 +12,16 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
-    llvmir
+    core
   HDRS
     "bitcode_format.h"
     "bitcode_record_writer.h"
     "bitcode_writer.h"
     "bitstream_writer.h"
     "builder.h"
-    "intrinsics.h"
-    "intrinsics_amdgpu.h"
     "intrinsics_builtin.h"
-    "intrinsics_x86.h"
     "llvmir.h"
     "module.h"
-    "target_env.h"
     "text_writer.h"
     "tool.h"
     "verify.h"
@@ -34,11 +30,8 @@ loom_cc_library(
     "bitcode_writer.c"
     "bitstream_writer.c"
     "builder.c"
-    "intrinsics_amdgpu.c"
     "intrinsics_builtin.c"
-    "intrinsics_x86.c"
     "module.c"
-    "target_env.c"
     "text_writer.c"
     "tool.c"
     "types.h"
@@ -49,8 +42,68 @@ loom_cc_library(
     iree::base::internal::path
     iree::io::file_handle
     iree::io::stream
-    loom::src::loom::target::arch::x86::packed_dot_contract
     loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    target_env
+  HDRS
+    "target_env.h"
+  SRCS
+    "target_env.c"
+  DEPS
+    ::core
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    target_presets
+  HDRS
+    "target_presets.h"
+  SRCS
+    "target_presets.c"
+  DEPS
+    ::target_env
+    iree::base
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::target_env
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    llvmir
+  HDRS
+    "intrinsics.h"
+  DEPS
+    ::core
+    ::target_env
+    ::target_presets
+    loom::src::loom::target::emit::llvmir::amdgpu::intrinsics
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::intrinsics
+    loom::src::loom::target::emit::llvmir::x86::target_env
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    test_modules_core
+  HDRS
+    "test_modules.h"
+  SRCS
+    "test_modules.c"
+  DEPS
+    ::core
+    ::target_env
+    iree::base
+  DEFINES
+    "LOOM_LLVMIR_TEST_MODULE_ENABLE_TARGET_PROVIDERS=0"
+  TESTONLY
   PUBLIC
 )
 
@@ -62,8 +115,13 @@ loom_cc_library(
   SRCS
     "test_modules.c"
   DEPS
-    ::llvmir
+    ::core
+    ::target_env
     iree::base
+    loom::src::loom::target::emit::llvmir::amdgpu::intrinsics
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::intrinsics
+    loom::src::loom::target::emit::llvmir::x86::target_env
   TESTONLY
   PUBLIC
 )
@@ -82,7 +140,8 @@ loom_cc_library(
     "lower_vector.c"
     "lower_vector_x86.c"
   DEPS
-    ::llvmir
+    ::core
+    ::target_env
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
@@ -99,6 +158,9 @@ loom_cc_library(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::target::arch::x86::packed_dot_vector
+    loom::src::loom::target::emit::llvmir::amdgpu::intrinsics
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::intrinsics
     loom::src::loom::util::cfg_graph
     loom::src::loom::util::fact_table
   PUBLIC
@@ -110,7 +172,7 @@ loom_cc_test(
   SRCS
     "bitcode_record_writer_test.cc"
   DEPS
-    ::llvmir
+    ::core
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
@@ -122,7 +184,7 @@ loom_cc_test(
   SRCS
     "bitstream_writer_test.cc"
   DEPS
-    ::llvmir
+    ::core
     iree::io::stream
     iree::testing::gtest
     iree::testing::gtest_main
@@ -134,7 +196,24 @@ loom_cc_test(
   SRCS
     "bitcode_writer_test.cc"
   DEPS
-    ::llvmir
+    ::core
+    ::target_env
+    ::test_modules_core
+    iree::io::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    bitcode_writer_target_test
+  SRCS
+    "bitcode_writer_test.cc"
+  DEFINES
+    "LOOM_LLVMIR_BITCODE_WRITER_TEST_TARGET_SCENARIOS=1"
+  DEPS
+    ::core
+    ::target_env
     ::test_modules
     iree::io::stream
     iree::testing::gtest
@@ -147,7 +226,21 @@ loom_cc_test(
   SRCS
     "text_writer_test.cc"
   DEPS
-    ::llvmir
+    ::core
+    ::test_modules_core
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    text_writer_target_test
+  SRCS
+    "text_writer_test.cc"
+  DEFINES
+    "LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS=1"
+  DEPS
+    ::core
     ::test_modules
     iree::testing::gtest
     iree::testing::gtest_main
@@ -159,7 +252,11 @@ loom_cc_test(
   SRCS
     "target_env_test.cc"
   DEPS
-    ::llvmir
+    ::core
+    ::target_env
+    ::target_presets
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::target_env
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
@@ -171,7 +268,7 @@ loom_cc_test(
   SRCS
     "tool_test.cc"
   DEPS
-    ::llvmir
+    ::core
     ::test_modules
     iree::io::file_handle
     iree::io::stream
@@ -188,7 +285,7 @@ loom_cc_test(
   SRCS
     "lower_test.cc"
   DEPS
-    ::llvmir
+    ::core
     ::lower
     iree::base::internal::arena
     iree::io::file_handle
@@ -203,6 +300,8 @@ loom_cc_test(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::target::arch::x86::packed_dot_contract
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::target_env
     loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
@@ -216,7 +315,7 @@ loom_cc_test(
   SRCS
     "verify_test.cc"
   DEPS
-    ::llvmir
+    ::core
     iree::testing::gtest
     iree::testing::gtest_main
 )

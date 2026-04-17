@@ -10,8 +10,10 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
-#include "loom/target/emit/llvmir/intrinsics.h"
+#include "loom/target/emit/llvmir/amdgpu/intrinsics.h"
+#include "loom/target/emit/llvmir/intrinsics_builtin.h"
 #include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/x86/intrinsics.h"
 
 static iree_status_t loom_llvmir_lowering_string_attr(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,

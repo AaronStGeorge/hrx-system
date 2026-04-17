@@ -15,6 +15,10 @@
 #include "loom/target/emit/llvmir/test_modules.h"
 #include "loom/target/emit/llvmir/verify.h"
 
+#ifndef LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS
+#define LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS 0
+#endif
+
 namespace loom {
 namespace {
 
@@ -67,12 +71,18 @@ TEST_P(LlvmIrTextWriterTest, EmitsExpectedText) {
   EXPECT_EQ(text, ToString(loom_llvmir_test_module_expected_text(GetParam())));
 }
 
+#if LOOM_LLVMIR_TEXT_WRITER_TEST_TARGET_SCENARIOS
 INSTANTIATE_TEST_SUITE_P(
-    All, LlvmIrTextWriterTest,
+    Target, LlvmIrTextWriterTest,
+    testing::Values(LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS,
+                    LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS),
+    ScenarioTestName);
+#else
+INSTANTIATE_TEST_SUITE_P(
+    Core, LlvmIrTextWriterTest,
     testing::Values(LOOM_LLVMIR_TEST_MODULE_OBJECT_VADD4,
                     LOOM_LLVMIR_TEST_MODULE_CALL_CONSTANTS,
                     LOOM_LLVMIR_TEST_MODULE_BUILTIN_INTRINSICS,
-                    LOOM_LLVMIR_TEST_MODULE_X86_INTRINSICS,
                     LOOM_LLVMIR_TEST_MODULE_STACK_ALLOCA,
                     LOOM_LLVMIR_TEST_MODULE_GLOBAL_CONSTANT,
                     LOOM_LLVMIR_TEST_MODULE_CFG_PHI,
@@ -81,9 +91,9 @@ INSTANTIATE_TEST_SUITE_P(
                     LOOM_LLVMIR_TEST_MODULE_SHUFFLE_VECTOR,
                     LOOM_LLVMIR_TEST_MODULE_COMPARE_SELECT,
                     LOOM_LLVMIR_TEST_MODULE_CASTS,
-                    LOOM_LLVMIR_TEST_MODULE_INLINE_ASM,
-                    LOOM_LLVMIR_TEST_MODULE_AMDGPU_INTRINSICS),
+                    LOOM_LLVMIR_TEST_MODULE_INLINE_ASM),
     ScenarioTestName);
+#endif
 
 }  // namespace
 }  // namespace loom

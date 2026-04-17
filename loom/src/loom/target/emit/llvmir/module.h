@@ -264,6 +264,10 @@ iree_status_t loom_llvmir_module_add_function(
 loom_llvmir_function_id_t loom_llvmir_function_id(
     const loom_llvmir_function_t* function);
 
+// Returns the parent module that owns |function|, or NULL for NULL.
+loom_llvmir_module_t* loom_llvmir_function_module(
+    const loom_llvmir_function_t* function);
+
 iree_status_t loom_llvmir_function_add_parameter(
     loom_llvmir_function_t* function, const loom_llvmir_parameter_desc_t* desc,
     loom_llvmir_value_id_t* out_value_id);

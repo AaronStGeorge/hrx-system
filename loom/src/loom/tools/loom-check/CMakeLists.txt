@@ -53,8 +53,10 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
-    loom::src::loom::target::emit::llvmir
+    loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::lower
+    loom::src::loom::target::emit::llvmir::target_env
+    loom::src::loom::target::emit::llvmir::target_presets
     loom::src::loom::testing::diff
     loom::src::loom::transforms::branch_fusion
     loom::src::loom::transforms::branch_sink
@@ -117,7 +119,7 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
-    loom::src::loom::target::emit::llvmir
+    loom::src::loom::target::emit::llvmir::core
     iree::testing::gtest
     iree::testing::gtest_main
 )
