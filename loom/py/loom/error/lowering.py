@@ -208,6 +208,35 @@ ERR_LOWERING_010 = ErrorDef(
     fix_hint="Choose an immediate value in {expected_range} for '{immediate_name}'",
 )
 
+# ERR_LOWERING_011: Low descriptor register constraint type mismatch.
+ERR_LOWERING_011 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=11,
+    severity=Severity.ERROR,
+    summary="Low descriptor register constraint type mismatch.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' "
+        "{constraint_kind} constraint requires {lhs_field_kind} "
+        "'{lhs_field_name}' type {lhs_type} to match {rhs_field_kind} "
+        "'{rhs_field_name}' type {rhs_type}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("constraint_kind", ParamKind.STRING),
+        ErrorParam("lhs_field_kind", ParamKind.STRING),
+        ErrorParam("lhs_field_name", ParamKind.STRING),
+        ErrorParam("lhs_type", ParamKind.TYPE),
+        ErrorParam("rhs_field_kind", ParamKind.STRING),
+        ErrorParam("rhs_field_name", ParamKind.STRING),
+        ErrorParam("rhs_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Choose matching register types for the constrained packet fields or "
+        "select a descriptor without the {constraint_kind} constraint"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -219,4 +248,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_008,
     ERR_LOWERING_009,
     ERR_LOWERING_010,
+    ERR_LOWERING_011,
 )

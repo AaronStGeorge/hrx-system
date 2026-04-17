@@ -3697,5 +3697,63 @@
       }
     ],
     "fix_hint_template": "Choose an immediate value in {expected_range} for '{immediate_name}'"
+  },
+  {
+    "error_id": "ERR_LOWERING_011",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 11,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor register constraint type mismatch.",
+    "message_template": "low function '@{function_name}' descriptor '{opcode}' {constraint_kind} constraint requires {lhs_field_kind} '{lhs_field_name}' type {lhs_type} to match {rhs_field_kind} '{rhs_field_name}' type {rhs_type}",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "constraint_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "lhs_field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "lhs_field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "lhs_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "rhs_field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "rhs_field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "rhs_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Choose matching register types for the constrained packet fields or select a descriptor without the {constraint_kind} constraint"
   }
 ]

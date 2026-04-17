@@ -2746,6 +2746,35 @@ static const loom_error_def_t loom_err_lowering_010 = {
     .param_count = 5,
 };
 
+static const loom_error_param_def_t loom_err_lowering_011_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"opcode", LOOM_PARAM_STRING},
+    {"constraint_kind", LOOM_PARAM_STRING},
+    {"lhs_field_kind", LOOM_PARAM_STRING},
+    {"lhs_field_name", LOOM_PARAM_STRING},
+    {"lhs_type", LOOM_PARAM_TYPE},
+    {"rhs_field_kind", LOOM_PARAM_STRING},
+    {"rhs_field_name", LOOM_PARAM_STRING},
+    {"rhs_type", LOOM_PARAM_TYPE},
+};
+static const loom_error_def_t loom_err_lowering_011 = {
+    .error_id = "ERR_LOWERING_011",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 11,
+    .summary = "Low descriptor register constraint type mismatch.",
+    .message_template =
+        "low function '@{function_name}' descriptor '{opcode}' "
+        "{constraint_kind} constraint requires {lhs_field_kind} "
+        "'{lhs_field_name}' type {lhs_type} to match {rhs_field_kind} "
+        "'{rhs_field_name}' type {rhs_type}",
+    .fix_hint_template =
+        "Choose matching register types for the constrained packet fields or "
+        "select a descriptor without the {constraint_kind} constraint",
+    .param_defs = loom_err_lowering_011_params,
+    .param_count = 9,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2795,7 +2824,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
     &loom_err_lowering_003,  &loom_err_lowering_004,  &loom_err_lowering_005,
     &loom_err_lowering_006,  &loom_err_lowering_007,  &loom_err_lowering_008,
-    &loom_err_lowering_009,  &loom_err_lowering_010,
+    &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

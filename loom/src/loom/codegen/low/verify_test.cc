@@ -517,6 +517,7 @@ static const uint8_t kFeatureTestStrings[] =
     LOOM_BSTRING_LITERAL("\x0b", "test.target")
     LOOM_BSTRING_LITERAL("\x0d", "test.features")
     LOOM_BSTRING_LITERAL("\x08", "test.gpr")
+    LOOM_BSTRING_LITERAL("\x08", "test.alt")
     LOOM_BSTRING_LITERAL("\x03", "dst")
     LOOM_BSTRING_LITERAL("\x03", "lhs")
     LOOM_BSTRING_LITERAL("\x03", "rhs")
@@ -534,7 +535,8 @@ enum {
   FEATURE_STRING_feature_key =
       FEATURE_STRING_target_key + sizeof("test.target"),
   FEATURE_STRING_reg_gpr = FEATURE_STRING_feature_key + sizeof("test.features"),
-  FEATURE_STRING_field_dst = FEATURE_STRING_reg_gpr + sizeof("test.gpr"),
+  FEATURE_STRING_reg_alt = FEATURE_STRING_reg_gpr + sizeof("test.gpr"),
+  FEATURE_STRING_field_dst = FEATURE_STRING_reg_alt + sizeof("test.alt"),
   FEATURE_STRING_field_lhs = FEATURE_STRING_field_dst + sizeof("dst"),
   FEATURE_STRING_field_rhs = FEATURE_STRING_field_lhs + sizeof("lhs"),
   FEATURE_STRING_field_exec = FEATURE_STRING_field_rhs + sizeof("rhs"),
@@ -557,8 +559,9 @@ struct FeatureTestTables {
   loom_low_descriptor_t descriptors[1];
   loom_low_descriptor_ref_t descriptor_refs[1];
   loom_low_operand_t operands[4];
-  loom_low_reg_class_t reg_classes[1];
-  loom_low_reg_class_alt_t reg_class_alts[1];
+  loom_low_constraint_t constraints[1];
+  loom_low_reg_class_t reg_classes[2];
+  loom_low_reg_class_alt_t reg_class_alts[2];
   loom_low_schedule_class_t schedule_classes[1];
   uint64_t feature_mask_words[1];
   loom_low_descriptor_set_t set;
@@ -570,30 +573,36 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->reg_classes[0].flags = LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY;
   tables->reg_classes[0].alloc_unit_bits = 32;
   tables->reg_classes[0].spill_class_id = LOOM_LOW_REG_CLASS_NONE;
+  tables->reg_classes[1].name_string_offset = FEATURE_STRING_OFFSET(reg_alt);
+  tables->reg_classes[1].flags = LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY;
+  tables->reg_classes[1].alloc_unit_bits = 32;
+  tables->reg_classes[1].spill_class_id = LOOM_LOW_REG_CLASS_NONE;
 
   tables->reg_class_alts[0].reg_class_id = 0;
   tables->reg_class_alts[0].flags = LOOM_LOW_REG_CLASS_ALT_FLAG_PREFERRED;
+  tables->reg_class_alts[1].reg_class_id = 1;
+  tables->reg_class_alts[1].flags = 0;
 
   tables->operands[0].field_name_string_offset =
       FEATURE_STRING_OFFSET(field_dst);
   tables->operands[0].role = LOOM_LOW_OPERAND_ROLE_RESULT;
-  tables->operands[0].reg_class_alt_count = 1;
+  tables->operands[0].reg_class_alt_count = 2;
   tables->operands[0].unit_count = 1;
   tables->operands[1].field_name_string_offset =
       FEATURE_STRING_OFFSET(field_lhs);
   tables->operands[1].role = LOOM_LOW_OPERAND_ROLE_OPERAND;
-  tables->operands[1].reg_class_alt_count = 1;
+  tables->operands[1].reg_class_alt_count = 2;
   tables->operands[1].unit_count = 1;
   tables->operands[2].field_name_string_offset =
       FEATURE_STRING_OFFSET(field_rhs);
   tables->operands[2].role = LOOM_LOW_OPERAND_ROLE_OPERAND;
-  tables->operands[2].reg_class_alt_count = 1;
+  tables->operands[2].reg_class_alt_count = 2;
   tables->operands[2].unit_count = 1;
   tables->operands[3].field_name_string_offset =
       FEATURE_STRING_OFFSET(field_exec);
   tables->operands[3].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
   tables->operands[3].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
-  tables->operands[3].reg_class_alt_count = 1;
+  tables->operands[3].reg_class_alt_count = 2;
   tables->operands[3].unit_count = 1;
 
   tables->schedule_classes[0].name_string_offset =
@@ -632,6 +641,7 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->set.descriptor_ref_count = IREE_ARRAYSIZE(tables->descriptor_refs);
   tables->set.operands = tables->operands;
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
+  tables->set.constraints = tables->constraints;
   tables->set.reg_classes = tables->reg_classes;
   tables->set.reg_class_count = IREE_ARRAYSIZE(tables->reg_classes);
   tables->set.reg_class_alts = tables->reg_class_alts;
@@ -641,6 +651,18 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->set.feature_mask_words = tables->feature_mask_words;
   tables->set.feature_mask_word_count =
       IREE_ARRAYSIZE(tables->feature_mask_words);
+}
+
+void AddFeatureTestConstraint(FeatureTestTables* tables,
+                              loom_low_constraint_kind_t kind,
+                              uint16_t lhs_operand_index,
+                              uint16_t rhs_operand_index) {
+  tables->constraints[0].kind = kind;
+  tables->constraints[0].lhs_operand_index = lhs_operand_index;
+  tables->constraints[0].rhs_operand_index = rhs_operand_index;
+  tables->descriptors[0].constraint_start = 0;
+  tables->descriptors[0].constraint_count = 1;
+  tables->set.constraint_count = 1;
 }
 
 TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
@@ -719,6 +741,187 @@ TEST_F(LowDescriptorVerifyTest, IgnoresImplicitDescriptorOperandRows) {
 
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, AcceptsMatchingTiedConstraintTypes) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  std::string source =
+      "test.record @snapshot {}\n"
+      "test.record @export {}\n"
+      "target.config @test_config {contract_set_key = \"test.core\", "
+      "contract_feature_bits = 5}\n"
+      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
+      "@export, config = @test_config}\n"
+      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+      "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
+      "reg<test.gpr x1>) -> reg<test.gpr x1>\n"
+      "  low.return %sum : reg<test.gpr x1>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsTiedConstraintTypeMismatch) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  std::string source =
+      "test.record @snapshot {}\n"
+      "test.record @export {}\n"
+      "target.config @test_config {contract_set_key = \"test.core\", "
+      "contract_feature_bits = 5}\n"
+      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
+      "@export, config = @test_config}\n"
+      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
+      "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
+      "reg<test.gpr x1>) -> reg<test.alt x1>\n"
+      "  low.return %sum : reg<test.alt x1>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 11));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 7u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "add");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "test.add.i32");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "tied");
+  EXPECT_EQ(collector.emissions[0].string_params[3], "result");
+  EXPECT_EQ(collector.emissions[0].string_params[4], "dst");
+  EXPECT_EQ(collector.emissions[0].string_params[5], "operand");
+  EXPECT_EQ(collector.emissions[0].string_params[6], "lhs");
+  ASSERT_GE(collector.emissions[0].type_params.size(), 2u);
+  EXPECT_FALSE(loom_type_equal(collector.emissions[0].type_params[0],
+                               collector.emissions[0].type_params[1]));
+  ASSERT_GE(collector.emissions[0].field_refs.size(), 8u);
+  EXPECT_EQ(collector.emissions[0].field_refs[4].kind,
+            LOOM_DIAGNOSTIC_FIELD_RESULT);
+  EXPECT_EQ(collector.emissions[0].field_refs[4].index, 0u);
+  EXPECT_EQ(collector.emissions[0].field_refs[7].kind,
+            LOOM_DIAGNOSTIC_FIELD_OPERAND);
+  EXPECT_EQ(collector.emissions[0].field_refs[7].index, 0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsDestructiveConstraintTypeMismatch) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE, 0, 1);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  std::string source =
+      "test.record @snapshot {}\n"
+      "test.record @export {}\n"
+      "target.config @test_config {contract_set_key = \"test.core\", "
+      "contract_feature_bits = 5}\n"
+      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
+      "@export, config = @test_config}\n"
+      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
+      "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
+      "reg<test.gpr x1>) -> reg<test.alt x1>\n"
+      "  low.return %sum : reg<test.alt x1>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 11));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 3u);
+  EXPECT_EQ(collector.emissions[0].string_params[2], "destructive");
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsCommutableConstraintTypeMismatch) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  AddFeatureTestConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE, 1, 2);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  std::string source =
+      "test.record @snapshot {}\n"
+      "test.record @export {}\n"
+      "target.config @test_config {contract_set_key = \"test.core\", "
+      "contract_feature_bits = 5}\n"
+      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
+      "@export, config = @test_config}\n"
+      "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+      "%rhs : reg<test.alt x1>) -> (reg<test.gpr x1>) {\n"
+      "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
+      "reg<test.alt x1>) -> reg<test.gpr x1>\n"
+      "  low.return %sum : reg<test.gpr x1>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 11));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 7u);
+  EXPECT_EQ(collector.emissions[0].string_params[2], "commutable");
+  EXPECT_EQ(collector.emissions[0].string_params[4], "lhs");
+  EXPECT_EQ(collector.emissions[0].string_params[6], "rhs");
+  ASSERT_GE(collector.emissions[0].field_refs.size(), 8u);
+  EXPECT_EQ(collector.emissions[0].field_refs[4].kind,
+            LOOM_DIAGNOSTIC_FIELD_OPERAND);
+  EXPECT_EQ(collector.emissions[0].field_refs[4].index, 0u);
+  EXPECT_EQ(collector.emissions[0].field_refs[7].kind,
+            LOOM_DIAGNOSTIC_FIELD_OPERAND);
+  EXPECT_EQ(collector.emissions[0].field_refs[7].index, 1u);
 
   loom_module_free(module);
 }
