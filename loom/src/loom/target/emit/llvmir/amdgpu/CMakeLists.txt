@@ -25,6 +25,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower.c"
+  DEPS
+    ::intrinsics
+    iree::base
+    loom::src::loom::ops::llvmir
+    loom::src::loom::target::emit::llvmir::lower
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_env
   HDRS
     "target_env.h"

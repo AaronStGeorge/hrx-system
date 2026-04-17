@@ -21,8 +21,8 @@ extern "C" {
 #endif
 
 typedef struct loom_llvmir_lowering_intrinsic_cache_key_t {
-  // Source llvmir.intrinsic kind attribute value.
-  uint8_t kind;
+  // Source llvmir.intrinsic kind string id.
+  loom_string_id_t kind_id;
   // First intrinsic overload discriminator, or zero when unused.
   uint32_t discriminator0;
   // Second intrinsic overload discriminator, or zero when unused.
@@ -30,6 +30,9 @@ typedef struct loom_llvmir_lowering_intrinsic_cache_key_t {
   // Third intrinsic overload discriminator, or zero when unused.
   uint32_t discriminator2;
 } loom_llvmir_lowering_intrinsic_cache_key_t;
+
+typedef iree_status_t (*loom_llvmir_lowering_provider_intrinsic_decl_fn_t)(
+    loom_llvmir_module_t* module, loom_llvmir_function_t** out_function);
 
 struct loom_llvmir_lowering_state_t {
   // Source Loom module being lowered.
@@ -92,6 +95,41 @@ iree_status_t loom_llvmir_lowering_unsupported_op(
 iree_status_t loom_llvmir_lowering_unsupported_type(
     const loom_llvmir_lowering_state_t* state, loom_type_t type,
     const char* detail);
+
+bool loom_llvmir_lowering_lookup_provider_intrinsic(
+    const loom_llvmir_lowering_state_t* state, const void* key,
+    loom_llvmir_function_t** out_function);
+
+iree_status_t loom_llvmir_lowering_cache_provider_intrinsic(
+    loom_llvmir_lowering_state_t* state, const void* key,
+    loom_llvmir_function_t* function);
+
+iree_status_t loom_llvmir_lowering_declare_provider_intrinsic_cached(
+    loom_llvmir_lowering_state_t* state, const void* key,
+    loom_llvmir_lowering_provider_intrinsic_decl_fn_t declare_fn,
+    loom_llvmir_function_t** out_function);
+
+iree_status_t loom_llvmir_lowering_string_attr(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    iree_string_view_t attr_name, loom_string_id_t string_id,
+    iree_string_view_t* out_string);
+
+iree_status_t loom_llvmir_lowering_expect_intrinsic_shape(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    iree_host_size_t operand_count, iree_host_size_t result_count,
+    const char* detail);
+
+iree_status_t loom_llvmir_lowering_expect_scalar_result(
+    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    loom_scalar_type_t expected_type, const char* detail);
+
+iree_status_t loom_llvmir_lowering_try_provider_op(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, bool* out_handled);
+
+iree_status_t loom_llvmir_lowering_lower_declared_call(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, loom_llvmir_function_t* function);
 
 iree_status_t loom_llvmir_lowering_lower_scalar_type(
     loom_llvmir_lowering_state_t* state, loom_scalar_type_t scalar_type,

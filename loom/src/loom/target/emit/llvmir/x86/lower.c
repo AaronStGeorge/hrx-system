@@ -8,9 +8,65 @@
 
 #include "loom/target/emit/llvmir/x86/lower.h"
 
+#include "loom/ops/llvmir/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/packed_dot_vector.h"
 #include "loom/target/emit/llvmir/lower_internal.h"
+#include "loom/target/emit/llvmir/x86/intrinsics.h"
+
+static bool loom_llvmir_x86_target_profile_is_x86(
+    const loom_llvmir_lowering_state_t* state) {
+  return iree_string_view_equal(
+      state->target_profile->target_env->target_triple,
+      IREE_SV("x86_64-unknown-linux-gnu"));
+}
+
+static iree_status_t loom_llvmir_x86_lower_intrinsic(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, iree_string_view_t kind) {
+  if (!loom_llvmir_x86_target_profile_is_x86(state)) {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "x86 llvmir.intrinsic requires an x86 target environment");
+  }
+
+  loom_llvmir_function_t* function = NULL;
+  if (iree_string_view_equal(kind, IREE_SV("llvm.x86.rdtsc"))) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
+        state, op, 0, 1, "llvm.x86.rdtsc expects () -> i64"));
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_result(
+        state, op, LOOM_SCALAR_TYPE_I64, "llvm.x86.rdtsc expects () -> i64"));
+    static const uint8_t kRdtscIntrinsicKey = 0;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_declare_provider_intrinsic_cached(
+        state, &kRdtscIntrinsicKey, loom_llvmir_declare_x86_rdtsc, &function));
+  } else if (iree_string_view_equal(kind, IREE_SV("llvm.x86.sse2.pause"))) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
+        state, op, 0, 0, "llvm.x86.sse2.pause expects () -> ()"));
+    static const uint8_t kPauseIntrinsicKey = 0;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_declare_provider_intrinsic_cached(
+        state, &kPauseIntrinsicKey, loom_llvmir_declare_x86_sse2_pause,
+        &function));
+  } else {
+    return iree_ok_status();
+  }
+
+  return loom_llvmir_lowering_lower_declared_call(state, target_block, op,
+                                                  function);
+}
+
+static iree_status_t loom_llvmir_x86_try_lower_intrinsic(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, bool* out_handled) {
+  loom_string_id_t kind_id = loom_llvmir_intrinsic_kind(op);
+  iree_string_view_t kind = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_string_attr(
+      state, op, IREE_SV("kind"), kind_id, &kind));
+  if (!iree_string_view_equal(kind, IREE_SV("llvm.x86.rdtsc")) &&
+      !iree_string_view_equal(kind, IREE_SV("llvm.x86.sse2.pause"))) {
+    return iree_ok_status();
+  }
+  *out_handled = true;
+  return loom_llvmir_x86_lower_intrinsic(state, target_block, op, kind);
+}
 
 static iree_status_t loom_llvmir_lowering_x86_packed_dot_scalar_type(
     loom_llvmir_lowering_state_t* state,
@@ -106,18 +162,9 @@ static iree_status_t loom_llvmir_lowering_declare_x86_packed_dot_intrinsic(
     loom_llvmir_lowering_state_t* state,
     const loom_x86_packed_dot_descriptor_t* descriptor,
     loom_llvmir_function_t** out_function) {
-  for (iree_host_size_t i = 0; i < state->provider_intrinsic_function_count;
-       ++i) {
-    if (state->provider_intrinsic_keys[i] == descriptor) {
-      *out_function = state->provider_intrinsic_functions[i];
-      return iree_ok_status();
-    }
-  }
-  if (state->provider_intrinsic_function_count >=
-      IREE_ARRAYSIZE(state->provider_intrinsic_functions)) {
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "LLVM target-provider intrinsic cache capacity exceeded");
+  if (loom_llvmir_lowering_lookup_provider_intrinsic(state, descriptor,
+                                                     out_function)) {
+    return iree_ok_status();
   }
 
   loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -165,9 +212,8 @@ static iree_status_t loom_llvmir_lowering_declare_x86_packed_dot_intrinsic(
                                            &parameter));
   }
 
-  iree_host_size_t cache_ordinal = state->provider_intrinsic_function_count++;
-  state->provider_intrinsic_keys[cache_ordinal] = descriptor;
-  state->provider_intrinsic_functions[cache_ordinal] = function;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_cache_provider_intrinsic(
+      state, descriptor, function));
   *out_function = function;
   return iree_ok_status();
 }
@@ -252,6 +298,9 @@ static iree_status_t loom_llvmir_x86_try_lower_op(
   (void)provider;
   *out_handled = false;
   switch (op->kind) {
+    case LOOM_OP_LLVMIR_INTRINSIC:
+      return loom_llvmir_x86_try_lower_intrinsic(state, target_block, op,
+                                                 out_handled);
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I: {
       loom_x86_packed_dot_match_request_t request = {0};

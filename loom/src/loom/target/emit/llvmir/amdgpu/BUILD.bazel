@@ -23,6 +23,18 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "lower",
+    srcs = ["lower.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        ":intrinsics",
+        "//loom/src/loom/ops/llvmir",
+        "//loom/src/loom/target/emit/llvmir:lower",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "target_env",
     srcs = ["target_env.c"],
     hdrs = ["target_env.h"],

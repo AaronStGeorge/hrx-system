@@ -6,16 +6,15 @@
 
 """Tests for the LLVM IR target dialect declarations."""
 
-from loom.assembly import Flags, FormatElement, OptionalGroup, ResultTypeList, Scope, TemplateParam
+from loom.assembly import Flags, FormatElement, OpRef, OptionalGroup, ResultTypeList, Scope
 from loom.dialect.llvmir import (
     ALL_LLVMIR_OPS,
     AsmFlags,
-    IntrinsicKind,
     llvmir_inline_asm,
     llvmir_intrinsic,
     llvmir_ops,
 )
-from loom.dsl import ANY, ATTR_TYPE_ENUM, ATTR_TYPE_FLAGS, ATTR_TYPE_STRING, UNKNOWN_EFFECTS
+from loom.dsl import ANY, ATTR_TYPE_FLAGS, ATTR_TYPE_STRING, UNKNOWN_EFFECTS
 
 
 def _format_contains(elements: tuple[FormatElement, ...], element_type: type[object]) -> bool:
@@ -79,21 +78,7 @@ class TestLlvmIrDialect:
         assert op.results[0].type_constraint == ANY
         assert op.results[0].variadic
         assert [attr.name for attr in op.attrs] == ["kind"]
-        assert op.attrs[0].attr_type == ATTR_TYPE_ENUM
-        assert op.attrs[0].enum_def is IntrinsicKind
+        assert op.attrs[0].attr_type == ATTR_TYPE_STRING
         assert UNKNOWN_EFFECTS in op.traits
-        assert any(isinstance(element, TemplateParam) for element in op.format)
+        assert any(isinstance(element, OpRef) for element in op.format)
         assert _format_contains(op.format, ResultTypeList)
-
-    def test_intrinsic_kinds_use_llvm_spellings(self) -> None:
-        assert [(case.keyword, case.value) for case in IntrinsicKind.cases] == [
-            ("llvm.x86.rdtsc", 0),
-            ("llvm.x86.sse2.pause", 1),
-            ("llvm.amdgcn.workitem.id.x", 2),
-            ("llvm.amdgcn.workitem.id.y", 3),
-            ("llvm.amdgcn.workitem.id.z", 4),
-            ("llvm.memcpy", 5),
-            ("llvm.memset", 6),
-            ("llvm.lifetime.start", 7),
-            ("llvm.lifetime.end", 8),
-        ]

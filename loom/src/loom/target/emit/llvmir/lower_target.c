@@ -10,12 +10,10 @@
 #include "loom/ops/index/ops.h"
 #include "loom/ops/llvmir/ops.h"
 #include "loom/ops/scalar/ops.h"
-#include "loom/target/emit/llvmir/amdgpu/intrinsics.h"
 #include "loom/target/emit/llvmir/intrinsics_builtin.h"
 #include "loom/target/emit/llvmir/lower_internal.h"
-#include "loom/target/emit/llvmir/x86/intrinsics.h"
 
-static iree_status_t loom_llvmir_lowering_string_attr(
+iree_status_t loom_llvmir_lowering_string_attr(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     iree_string_view_t attr_name, loom_string_id_t string_id,
     iree_string_view_t* out_string) {
@@ -130,12 +128,13 @@ iree_status_t loom_llvmir_lowering_lower_inline_asm(
 static bool loom_llvmir_lowering_intrinsic_key_equal(
     const loom_llvmir_lowering_intrinsic_cache_key_t* lhs,
     const loom_llvmir_lowering_intrinsic_cache_key_t* rhs) {
-  return lhs->kind == rhs->kind && lhs->discriminator0 == rhs->discriminator0 &&
+  return lhs->kind_id == rhs->kind_id &&
+         lhs->discriminator0 == rhs->discriminator0 &&
          lhs->discriminator1 == rhs->discriminator1 &&
          lhs->discriminator2 == rhs->discriminator2;
 }
 
-static iree_status_t loom_llvmir_lowering_expect_intrinsic_shape(
+iree_status_t loom_llvmir_lowering_expect_intrinsic_shape(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     iree_host_size_t operand_count, iree_host_size_t result_count,
     const char* detail) {
@@ -149,7 +148,7 @@ static iree_status_t loom_llvmir_lowering_expect_intrinsic_shape(
   return iree_ok_status();
 }
 
-static iree_status_t loom_llvmir_lowering_expect_scalar_result(
+iree_status_t loom_llvmir_lowering_expect_scalar_result(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
     loom_scalar_type_t expected_type, const char* detail) {
   if (op->result_count != 1) {
@@ -263,146 +262,77 @@ static iree_status_t loom_llvmir_lowering_expect_pointer_operand_address_space(
   return iree_ok_status();
 }
 
-static bool loom_llvmir_lowering_intrinsic_is_x86(uint8_t kind) {
-  return kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC ||
-         kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE;
-}
-
-static bool loom_llvmir_lowering_intrinsic_is_amdgpu(uint8_t kind) {
-  return kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X ||
-         kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y ||
-         kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z;
-}
-
-static bool loom_llvmir_lowering_target_triple_is(
-    const loom_llvmir_lowering_state_t* state, iree_string_view_t triple) {
-  return iree_string_view_equal(
-      state->target_profile->target_env->target_triple, triple);
-}
-
-static iree_status_t loom_llvmir_lowering_validate_intrinsic_target(
+static iree_status_t loom_llvmir_lowering_validate_builtin_intrinsic(
     const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
-    uint8_t kind) {
-  if (loom_llvmir_lowering_intrinsic_is_x86(kind) &&
-      !loom_llvmir_lowering_target_triple_is(
-          state, IREE_SV("x86_64-unknown-linux-gnu"))) {
-    return loom_llvmir_lowering_unsupported_op(
-        state, op, "x86 llvmir.intrinsic requires an x86 target environment");
+    iree_string_view_t kind, loom_string_id_t kind_id,
+    loom_llvmir_lowering_intrinsic_cache_key_t* out_key, bool* out_handled) {
+  *out_key = (loom_llvmir_lowering_intrinsic_cache_key_t){
+      .kind_id = kind_id,
+  };
+  *out_handled = true;
+  if (iree_string_view_equal(kind, IREE_SV("llvm.memcpy"))) {
+    const char* detail =
+        "llvm.memcpy expects (ptr target, ptr source, integer length, "
+        "i1 constant volatile) -> ()";
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_expect_intrinsic_shape(state, op, 4, 0, detail));
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_expect_pointer_operand_address_space(
+            state, op, 0, detail, &out_key->discriminator0));
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_expect_pointer_operand_address_space(
+            state, op, 1, detail, &out_key->discriminator1));
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_integer_operand_bit_width(
+        state, op, 2, detail, &out_key->discriminator2));
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
+        state, op, 3, LOOM_SCALAR_TYPE_I1, detail));
+    return loom_llvmir_lowering_expect_constant_operand(state, op, 3, detail);
   }
-  if (loom_llvmir_lowering_intrinsic_is_amdgpu(kind) &&
-      !loom_llvmir_lowering_target_triple_is(state,
-                                             IREE_SV("amdgcn-amd-amdhsa"))) {
-    return loom_llvmir_lowering_unsupported_op(
-        state, op,
-        "AMDGPU llvmir.intrinsic requires an AMDGPU target environment");
+  if (iree_string_view_equal(kind, IREE_SV("llvm.memset"))) {
+    const char* detail =
+        "llvm.memset expects (ptr target, i8 value, integer length, "
+        "i1 constant volatile) -> ()";
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_expect_intrinsic_shape(state, op, 4, 0, detail));
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_expect_pointer_operand_address_space(
+            state, op, 0, detail, &out_key->discriminator0));
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
+        state, op, 1, LOOM_SCALAR_TYPE_I8, detail));
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_integer_operand_bit_width(
+        state, op, 2, detail, &out_key->discriminator1));
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
+        state, op, 3, LOOM_SCALAR_TYPE_I1, detail));
+    return loom_llvmir_lowering_expect_constant_operand(state, op, 3, detail);
   }
+  if (iree_string_view_equal(kind, IREE_SV("llvm.lifetime.start")) ||
+      iree_string_view_equal(kind, IREE_SV("llvm.lifetime.end"))) {
+    const bool is_start =
+        iree_string_view_equal(kind, IREE_SV("llvm.lifetime.start"));
+    const char* detail =
+        is_start ? "llvm.lifetime.start expects (i64 constant size, ptr) -> ()"
+                 : "llvm.lifetime.end expects (i64 constant size, ptr) -> ()";
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_expect_intrinsic_shape(state, op, 2, 0, detail));
+    uint32_t size_bit_width = 0;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_integer_operand_bit_width(
+        state, op, 0, detail, &size_bit_width));
+    if (size_bit_width != 64) {
+      return loom_llvmir_lowering_unsupported_op(state, op, detail);
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_lowering_expect_constant_operand(state, op, 0, detail));
+    return loom_llvmir_lowering_expect_pointer_operand_address_space(
+        state, op, 1, detail, &out_key->discriminator0);
+  }
+
+  *out_handled = false;
   return iree_ok_status();
 }
 
-static iree_status_t loom_llvmir_lowering_validate_intrinsic(
-    const loom_llvmir_lowering_state_t* state, const loom_op_t* op,
-    uint8_t kind, loom_llvmir_lowering_intrinsic_cache_key_t* out_key) {
-  *out_key = (loom_llvmir_lowering_intrinsic_cache_key_t){
-      .kind = kind,
-  };
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_lowering_validate_intrinsic_target(state, op, kind));
-  switch (kind) {
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
-          state, op, 0, 1, "llvm.x86.rdtsc expects () -> i64"));
-      return loom_llvmir_lowering_expect_scalar_result(
-          state, op, LOOM_SCALAR_TYPE_I64, "llvm.x86.rdtsc expects () -> i64");
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE:
-      return loom_llvmir_lowering_expect_intrinsic_shape(
-          state, op, 0, 0, "llvm.x86.sse2.pause expects () -> ()");
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
-          state, op, 0, 1, "llvm.amdgcn.workitem.id.x expects () -> i32"));
-      return loom_llvmir_lowering_expect_scalar_result(
-          state, op, LOOM_SCALAR_TYPE_I32,
-          "llvm.amdgcn.workitem.id.x expects () -> i32");
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
-          state, op, 0, 1, "llvm.amdgcn.workitem.id.y expects () -> i32"));
-      return loom_llvmir_lowering_expect_scalar_result(
-          state, op, LOOM_SCALAR_TYPE_I32,
-          "llvm.amdgcn.workitem.id.y expects () -> i32");
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_intrinsic_shape(
-          state, op, 0, 1, "llvm.amdgcn.workitem.id.z expects () -> i32"));
-      return loom_llvmir_lowering_expect_scalar_result(
-          state, op, LOOM_SCALAR_TYPE_I32,
-          "llvm.amdgcn.workitem.id.z expects () -> i32");
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY: {
-      const char* detail =
-          "llvm.memcpy expects (ptr target, ptr source, integer length, "
-          "i1 constant volatile) -> ()";
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_intrinsic_shape(state, op, 4, 0, detail));
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_pointer_operand_address_space(
-              state, op, 0, detail, &out_key->discriminator0));
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_pointer_operand_address_space(
-              state, op, 1, detail, &out_key->discriminator1));
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_integer_operand_bit_width(
-              state, op, 2, detail, &out_key->discriminator2));
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
-          state, op, 3, LOOM_SCALAR_TYPE_I1, detail));
-      return loom_llvmir_lowering_expect_constant_operand(state, op, 3, detail);
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMSET: {
-      const char* detail =
-          "llvm.memset expects (ptr target, i8 value, integer length, "
-          "i1 constant volatile) -> ()";
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_intrinsic_shape(state, op, 4, 0, detail));
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_pointer_operand_address_space(
-              state, op, 0, detail, &out_key->discriminator0));
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
-          state, op, 1, LOOM_SCALAR_TYPE_I8, detail));
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_integer_operand_bit_width(
-              state, op, 2, detail, &out_key->discriminator1));
-      IREE_RETURN_IF_ERROR(loom_llvmir_lowering_expect_scalar_operand(
-          state, op, 3, LOOM_SCALAR_TYPE_I1, detail));
-      return loom_llvmir_lowering_expect_constant_operand(state, op, 3, detail);
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START:
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_END: {
-      const char* detail =
-          kind == LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START
-              ? "llvm.lifetime.start expects (i64 constant size, ptr) -> ()"
-              : "llvm.lifetime.end expects (i64 constant size, ptr) -> ()";
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_intrinsic_shape(state, op, 2, 0, detail));
-      uint32_t size_bit_width = 0;
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_integer_operand_bit_width(
-              state, op, 0, detail, &size_bit_width));
-      if (size_bit_width != 64) {
-        return loom_llvmir_lowering_unsupported_op(state, op, detail);
-      }
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_lowering_expect_constant_operand(state, op, 0, detail));
-      return loom_llvmir_lowering_expect_pointer_operand_address_space(
-          state, op, 1, detail, &out_key->discriminator0);
-    }
-    default:
-      return loom_llvmir_lowering_unsupported_op(
-          state, op, "unknown llvmir.intrinsic kind");
-  }
-}
-
-static iree_status_t loom_llvmir_lowering_declare_intrinsic(
+static iree_status_t loom_llvmir_lowering_declare_builtin_intrinsic(
     loom_llvmir_lowering_state_t* state, const loom_op_t* op,
+    iree_string_view_t kind,
     const loom_llvmir_lowering_intrinsic_cache_key_t* key,
     loom_llvmir_function_t** out_function) {
   for (iree_host_size_t i = 0; i < state->intrinsic_function_count; ++i) {
@@ -419,57 +349,23 @@ static iree_status_t loom_llvmir_lowering_declare_intrinsic(
   }
 
   loom_llvmir_function_t* function = NULL;
-  switch (key->kind) {
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC: {
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_declare_x86_rdtsc(state->target_module, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE: {
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_declare_x86_sse2_pause(state->target_module, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_declare_amdgcn_workitem_id_x(
-          state->target_module, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_declare_amdgcn_workitem_id_y(
-          state->target_module, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_declare_amdgcn_workitem_id_z(
-          state->target_module, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_declare_memcpy(
-          state->target_module, key->discriminator0, key->discriminator1,
-          key->discriminator2, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMSET: {
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_declare_memset(state->target_module, key->discriminator0,
-                                     key->discriminator1, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_start(
-          state->target_module, key->discriminator0, &function));
-      break;
-    }
-    case LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_END: {
-      IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_end(
-          state->target_module, key->discriminator0, &function));
-      break;
-    }
-    default:
-      return loom_llvmir_lowering_unsupported_op(
-          state, op, "unknown llvmir.intrinsic kind");
+  if (iree_string_view_equal(kind, IREE_SV("llvm.memcpy"))) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_declare_memcpy(
+        state->target_module, key->discriminator0, key->discriminator1,
+        key->discriminator2, &function));
+  } else if (iree_string_view_equal(kind, IREE_SV("llvm.memset"))) {
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_declare_memset(state->target_module, key->discriminator0,
+                                   key->discriminator1, &function));
+  } else if (iree_string_view_equal(kind, IREE_SV("llvm.lifetime.start"))) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_start(
+        state->target_module, key->discriminator0, &function));
+  } else if (iree_string_view_equal(kind, IREE_SV("llvm.lifetime.end"))) {
+    IREE_RETURN_IF_ERROR(loom_llvmir_declare_lifetime_end(
+        state->target_module, key->discriminator0, &function));
+  } else {
+    return loom_llvmir_lowering_unsupported_op(
+        state, op, "unknown target-independent llvmir.intrinsic kind");
   }
 
   iree_host_size_t ordinal = state->intrinsic_function_count++;
@@ -479,17 +375,9 @@ static iree_status_t loom_llvmir_lowering_declare_intrinsic(
   return iree_ok_status();
 }
 
-iree_status_t loom_llvmir_lowering_lower_intrinsic(
+iree_status_t loom_llvmir_lowering_lower_declared_call(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
-    const loom_op_t* op) {
-  uint8_t kind = loom_llvmir_intrinsic_kind(op);
-  loom_llvmir_lowering_intrinsic_cache_key_t key;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_lowering_validate_intrinsic(state, op, kind, &key));
-  loom_llvmir_function_t* function = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_llvmir_lowering_declare_intrinsic(state, op, &key, &function));
-
+    const loom_op_t* op, loom_llvmir_function_t* function) {
   loom_llvmir_value_id_t* args = NULL;
   iree_status_t status = iree_ok_status();
   if (op->operand_count > 0) {
@@ -520,4 +408,33 @@ iree_status_t loom_llvmir_lowering_lower_intrinsic(
   }
   iree_allocator_free(state->allocator, args);
   return status;
+}
+
+iree_status_t loom_llvmir_lowering_lower_intrinsic(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op) {
+  loom_string_id_t kind_id = loom_llvmir_intrinsic_kind(op);
+  iree_string_view_t kind = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_string_attr(
+      state, op, IREE_SV("kind"), kind_id, &kind));
+
+  loom_llvmir_lowering_intrinsic_cache_key_t key;
+  bool handled = false;
+  IREE_RETURN_IF_ERROR(loom_llvmir_lowering_validate_builtin_intrinsic(
+      state, op, kind, kind_id, &key, &handled));
+  if (handled) {
+    loom_llvmir_function_t* function = NULL;
+    IREE_RETURN_IF_ERROR(loom_llvmir_lowering_declare_builtin_intrinsic(
+        state, op, kind, &key, &function));
+    return loom_llvmir_lowering_lower_declared_call(state, target_block, op,
+                                                    function);
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_try_provider_op(state, target_block, op, &handled));
+  if (handled) {
+    return iree_ok_status();
+  }
+  return loom_llvmir_lowering_unsupported_op(state, op,
+                                             "unknown llvmir.intrinsic kind");
 }

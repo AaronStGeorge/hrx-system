@@ -17,7 +17,6 @@
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
-#include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/lower_internal.h"
 #include "loom/util/cfg_graph.h"
 
@@ -80,6 +79,51 @@ iree_status_t loom_llvmir_lowering_unsupported_type(
                           "unsupported for target profile %.*s: %s",
                           (unsigned)kind, (int)profile_name.size,
                           profile_name.data, detail);
+}
+
+bool loom_llvmir_lowering_lookup_provider_intrinsic(
+    const loom_llvmir_lowering_state_t* state, const void* key,
+    loom_llvmir_function_t** out_function) {
+  for (iree_host_size_t i = 0; i < state->provider_intrinsic_function_count;
+       ++i) {
+    if (state->provider_intrinsic_keys[i] == key) {
+      *out_function = state->provider_intrinsic_functions[i];
+      return true;
+    }
+  }
+  *out_function = NULL;
+  return false;
+}
+
+iree_status_t loom_llvmir_lowering_cache_provider_intrinsic(
+    loom_llvmir_lowering_state_t* state, const void* key,
+    loom_llvmir_function_t* function) {
+  if (state->provider_intrinsic_function_count >=
+      IREE_ARRAYSIZE(state->provider_intrinsic_functions)) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "LLVM target-provider intrinsic cache capacity exceeded");
+  }
+  iree_host_size_t cache_ordinal = state->provider_intrinsic_function_count++;
+  state->provider_intrinsic_keys[cache_ordinal] = key;
+  state->provider_intrinsic_functions[cache_ordinal] = function;
+  return iree_ok_status();
+}
+
+iree_status_t loom_llvmir_lowering_declare_provider_intrinsic_cached(
+    loom_llvmir_lowering_state_t* state, const void* key,
+    loom_llvmir_lowering_provider_intrinsic_decl_fn_t declare_fn,
+    loom_llvmir_function_t** out_function) {
+  if (loom_llvmir_lowering_lookup_provider_intrinsic(state, key,
+                                                     out_function)) {
+    return iree_ok_status();
+  }
+  loom_llvmir_function_t* function = NULL;
+  IREE_RETURN_IF_ERROR(declare_fn(state->target_module, &function));
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_cache_provider_intrinsic(state, key, function));
+  *out_function = function;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_llvmir_lowering_get_integer_type(
@@ -540,7 +584,7 @@ static iree_status_t loom_llvmir_lowering_lower_return(
   return loom_llvmir_build_ret(target_block, value);
 }
 
-static iree_status_t loom_llvmir_lowering_try_provider_op(
+iree_status_t loom_llvmir_lowering_try_provider_op(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op, bool* out_handled) {
   *out_handled = false;

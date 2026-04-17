@@ -17,7 +17,7 @@ extern "C" {
 
 enum {
   LOOM_CHECK_LLVMIR_TARGET_PROFILE_PROVIDER_COUNT = 2,
-  LOOM_CHECK_LLVMIR_LOWERING_PROVIDER_COUNT = 1,
+  LOOM_CHECK_LLVMIR_LOWERING_PROVIDER_COUNT = 2,
 };
 
 typedef struct loom_check_llvmir_target_profile_registry_t {

@@ -9,7 +9,6 @@
 from loom.dialect.llvmir.defs import (
     ALL_LLVMIR_OPS,
     AsmFlags,
-    IntrinsicKind,
     llvmir_inline_asm,
     llvmir_intrinsic,
     llvmir_ops,
@@ -18,7 +17,6 @@ from loom.dialect.llvmir.defs import (
 __all__ = [
     "llvmir_ops",
     "AsmFlags",
-    "IntrinsicKind",
     "llvmir_inline_asm",
     "llvmir_intrinsic",
     "ALL_LLVMIR_OPS",

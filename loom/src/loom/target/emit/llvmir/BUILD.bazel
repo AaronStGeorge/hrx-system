@@ -40,6 +40,24 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "lower_no_x86_llvmir_intrinsics_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
+    target = "//loom/src/loom/target/emit/llvmir:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_amdgpu_llvmir_intrinsics_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
+    target = "//loom/src/loom/target/emit/llvmir:lower",
+)
+
+iree_assert_no_dependency(
+    name = "lower_no_amdgpu_target_env_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+    target = "//loom/src/loom/target/emit/llvmir:lower",
+)
+
+iree_assert_no_dependency(
     name = "core_no_x86_llvmir_intrinsics_dep",
     dependency = "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
     target = "//loom/src/loom/target/emit/llvmir:core",
@@ -187,9 +205,6 @@ loom_cc_library(
         "//loom/src/loom/ops/scf",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:intrinsics",
-        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
-        "//loom/src/loom/target/emit/llvmir/x86:intrinsics",
         "//loom/src/loom/util:cfg_graph",
         "//loom/src/loom/util:fact_table",
         "//runtime/src/iree/base",
@@ -317,6 +332,7 @@ loom_cc_test(
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/ops/view",
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:lower",
         "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
         "//loom/src/loom/target/emit/llvmir/x86:lower",
         "//loom/src/loom/target/emit/llvmir/x86:target_env",

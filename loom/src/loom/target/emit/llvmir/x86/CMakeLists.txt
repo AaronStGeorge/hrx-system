@@ -45,7 +45,9 @@ loom_cc_library(
   SRCS
     "lower.c"
   DEPS
+    ::intrinsics
     iree::base
+    loom::src::loom::ops::llvmir
     loom::src::loom::ops::vector
     loom::src::loom::target::arch::x86::packed_dot_vector
     loom::src::loom::target::emit::llvmir::lower

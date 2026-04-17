@@ -55,6 +55,7 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::emit::llvmir::amdgpu::lower
     loom::src::loom::target::emit::llvmir::amdgpu::target_env
     loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::lower

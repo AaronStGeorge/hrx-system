@@ -30,6 +30,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/x86/packed_dot_contract.h"
+#include "loom/target/emit/llvmir/amdgpu/lower.h"
 #include "loom/target/emit/llvmir/amdgpu/target_env.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
@@ -177,6 +178,16 @@ class LlvmIrLowerTest : public ::testing::Test {
                                                  (uint16_t)count));
   }
 
+  loom_string_id_t InternString(iree_string_view_t string) {
+    loom_string_id_t string_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_module_intern_string(module_, string, &string_id));
+    return string_id;
+  }
+
+  loom_string_id_t IntrinsicKind(iree_string_view_t kind) {
+    return InternString(kind);
+  }
+
   loom_symbol_ref_t MakeSymbol(iree_string_view_t name) {
     loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
     IREE_CHECK_OK(loom_module_intern_string(module_, name, &name_id));
@@ -248,6 +259,7 @@ class LlvmIrLowerTest : public ::testing::Test {
                             loom_llvmir_module_t** out_lowered) {
     const loom_llvmir_lowering_provider_t* providers[] = {
         loom_llvmir_x86_lowering_provider(),
+        loom_llvmir_amdgpu_lowering_provider(),
     };
     loom_llvmir_lowering_options_t options = {};
     options.target_profile = profile;
@@ -2111,7 +2123,7 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuScalarVectorHalKernelFixture) {
   loom_type_t intrinsic_result_types[1] = {i32};
   loom_op_t* tid_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X, NULL,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.amdgcn.workitem.id.x")), NULL,
       0, intrinsic_result_types, IREE_ARRAYSIZE(intrinsic_result_types), NULL,
       0, LOOM_LOCATION_UNKNOWN, &tid_op));
   loom_value_id_t tid_x =
@@ -2362,34 +2374,34 @@ TEST_F(LlvmIrLowerTest, LowersSourceMemoryIntrinsics) {
   loom_value_id_t lifetime_args[2] = {lifetime_size, args[0]};
   loom_op_t* lifetime_start_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_START,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.lifetime.start")),
       lifetime_args, IREE_ARRAYSIZE(lifetime_args), NULL, 0, NULL, 0,
       LOOM_LOCATION_UNKNOWN, &lifetime_start_op));
 
   loom_value_id_t memset_args[4] = {args[0], fill_value, args[2], is_volatile};
   loom_op_t* memset_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMSET, memset_args,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.memset")), memset_args,
       IREE_ARRAYSIZE(memset_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
       &memset_op));
 
   loom_value_id_t memcpy_args[4] = {args[0], args[1], args[2], is_volatile};
   loom_op_t* first_memcpy_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY, memcpy_args,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.memcpy")), memcpy_args,
       IREE_ARRAYSIZE(memcpy_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
       &first_memcpy_op));
   loom_op_t* second_memcpy_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY, memcpy_args,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.memcpy")), memcpy_args,
       IREE_ARRAYSIZE(memcpy_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
       &second_memcpy_op));
 
   loom_op_t* lifetime_end_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_LIFETIME_END,
-      lifetime_args, IREE_ARRAYSIZE(lifetime_args), NULL, 0, NULL, 0,
-      LOOM_LOCATION_UNKNOWN, &lifetime_end_op));
+      &body_builder, IntrinsicKind(IREE_SV("llvm.lifetime.end")), lifetime_args,
+      IREE_ARRAYSIZE(lifetime_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
+      &lifetime_end_op));
   loom_op_t* return_op = NULL;
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &return_op));
@@ -2460,7 +2472,7 @@ TEST_F(LlvmIrLowerTest, RejectsMemoryIntrinsicDynamicImmarg) {
   loom_value_id_t memcpy_args[4] = {args[0], args[1], args[2], args[3]};
   loom_op_t* memcpy_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_MEMCPY, memcpy_args,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.memcpy")), memcpy_args,
       IREE_ARRAYSIZE(memcpy_args), NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,
       &memcpy_op));
   loom_op_t* return_op = NULL;
@@ -2540,11 +2552,11 @@ TEST_F(LlvmIrLowerTest, LowersX86IntrinsicsToStructuredCalls) {
   loom_builder_t body_builder = BodyBuilder(func_op);
   loom_op_t* pause_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_SSE2_PAUSE, NULL, 0,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.x86.sse2.pause")), NULL, 0,
       NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &pause_op));
   loom_op_t* first_tsc_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC, NULL, 0,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.x86.rdtsc")), NULL, 0,
       result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
       LOOM_LOCATION_UNKNOWN, &first_tsc_op));
   SetValueName(
@@ -2552,7 +2564,7 @@ TEST_F(LlvmIrLowerTest, LowersX86IntrinsicsToStructuredCalls) {
       IREE_SV("ignored"));
   loom_op_t* second_tsc_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_X86_RDTSC, NULL, 0,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.x86.rdtsc")), NULL, 0,
       result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
       LOOM_LOCATION_UNKNOWN, &second_tsc_op));
   loom_value_id_t ticks =
@@ -2597,7 +2609,7 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuWorkitemIntrinsicsToStructuredCalls) {
   loom_builder_t body_builder = BodyBuilder(func_op);
   loom_op_t* tid_x_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_X, NULL,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.amdgcn.workitem.id.x")), NULL,
       0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
       LOOM_LOCATION_UNKNOWN, &tid_x_op));
   loom_value_id_t tid_x =
@@ -2605,7 +2617,7 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuWorkitemIntrinsicsToStructuredCalls) {
   SetValueName(tid_x, IREE_SV("tid_x"));
   loom_op_t* tid_y_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y, NULL,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.amdgcn.workitem.id.y")), NULL,
       0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
       LOOM_LOCATION_UNKNOWN, &tid_y_op));
   loom_value_id_t tid_y =
@@ -2613,7 +2625,7 @@ TEST_F(LlvmIrLowerTest, LowersAmdgpuWorkitemIntrinsicsToStructuredCalls) {
   SetValueName(tid_y, IREE_SV("tid_y"));
   loom_op_t* tid_z_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Z, NULL,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.amdgcn.workitem.id.z")), NULL,
       0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
       LOOM_LOCATION_UNKNOWN, &tid_z_op));
   loom_value_id_t tid_z =
@@ -2658,7 +2670,7 @@ TEST_F(LlvmIrLowerTest, RejectsAmdgpuIntrinsicOnX86Profile) {
   loom_builder_t body_builder = BodyBuilder(func_op);
   loom_op_t* tid_op = NULL;
   IREE_ASSERT_OK(loom_llvmir_intrinsic_build(
-      &body_builder, LOOM_LLVMIR_INTRINSIC_KIND_LLVM_AMDGCN_WORKITEM_ID_Y, NULL,
+      &body_builder, IntrinsicKind(IREE_SV("llvm.amdgcn.workitem.id.y")), NULL,
       0, result_types, IREE_ARRAYSIZE(result_types), NULL, 0,
       LOOM_LOCATION_UNKNOWN, &tid_op));
   loom_value_id_t tid =
@@ -2666,9 +2678,14 @@ TEST_F(LlvmIrLowerTest, RejectsAmdgpuIntrinsicOnX86Profile) {
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, &tid, 1,
                                         LOOM_LOCATION_UNKNOWN, &tid_op));
 
+  const loom_llvmir_lowering_provider_t* providers[] = {
+      loom_llvmir_amdgpu_lowering_provider(),
+  };
   loom_llvmir_lowering_options_t options = {};
   options.target_profile = loom_llvmir_target_profile_x86_64_object();
   options.source_name = IREE_SV("lower_test");
+  options.providers = providers;
+  options.provider_count = IREE_ARRAYSIZE(providers);
   loom_llvmir_module_t* lowered = NULL;
   iree_status_t status = loom_llvmir_lower_module(
       module_, &options, iree_allocator_system(), &lowered);

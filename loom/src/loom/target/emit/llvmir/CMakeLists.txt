@@ -154,9 +154,6 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
-    loom::src::loom::target::emit::llvmir::amdgpu::intrinsics
-    loom::src::loom::target::emit::llvmir::amdgpu::target_env
-    loom::src::loom::target::emit::llvmir::x86::intrinsics
     loom::src::loom::util::cfg_graph
     loom::src::loom::util::fact_table
   PUBLIC
@@ -296,6 +293,7 @@ loom_cc_test(
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
     loom::src::loom::target::arch::x86::packed_dot_contract
+    loom::src::loom::target::emit::llvmir::amdgpu::lower
     loom::src::loom::target::emit::llvmir::amdgpu::target_env
     loom::src::loom::target::emit::llvmir::x86::lower
     loom::src::loom::target::emit::llvmir::x86::target_env
