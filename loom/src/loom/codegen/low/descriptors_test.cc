@@ -73,6 +73,7 @@ struct TestTables {
   loom_low_descriptor_ref_t descriptor_refs[2];
   loom_low_operand_t operands[4];
   loom_low_immediate_t immediates[1];
+  loom_low_effect_t effects[1];
   loom_low_constraint_t constraints[1];
   loom_low_reg_class_t reg_classes[1];
   loom_low_reg_class_alt_t reg_class_alts[1];
@@ -198,6 +199,7 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
   tables->set.immediates = tables->immediates;
   tables->set.immediate_count = IREE_ARRAYSIZE(tables->immediates);
+  tables->set.effects = tables->effects;
   tables->set.constraints = tables->constraints;
   tables->set.reg_classes = tables->reg_classes;
   tables->set.reg_class_count = IREE_ARRAYSIZE(tables->reg_classes);
@@ -226,6 +228,15 @@ void AddAddDescriptorConstraint(TestTables* tables,
   tables->set.constraint_count = 1;
 }
 
+void AddAddDescriptorEffect(TestTables* tables, loom_low_effect_kind_t kind,
+                            loom_low_memory_space_t memory_space) {
+  tables->effects[0].kind = kind;
+  tables->effects[0].memory_space = memory_space;
+  tables->descriptors[1].effect_start = 0;
+  tables->descriptors[1].effect_count = 1;
+  tables->set.effect_count = 1;
+}
+
 TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
   TestTables tables;
   InitializeTestTables(&tables);
@@ -244,9 +255,8 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
 
   iree_status_t status = loom_low_descriptor_set_lookup_descriptor(
       &tables.set, IREE_SV("test.missing"), &descriptor_ordinal);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_NOT_FOUND);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
   EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
-  iree_status_ignore(status);
 }
 
 TEST(LowDescriptorsTest, RejectsMalformedSpans) {
@@ -255,8 +265,7 @@ TEST(LowDescriptorsTest, RejectsMalformedSpans) {
   tables.descriptors[1].operand_count = 4;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_OUT_OF_RANGE);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, status);
 }
 
 TEST(LowDescriptorsTest, RejectsNonResultRoleInResultPrefix) {
@@ -265,8 +274,7 @@ TEST(LowDescriptorsTest, RejectsNonResultRoleInResultPrefix) {
   tables.operands[1].role = LOOM_LOW_OPERAND_ROLE_OPERAND;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsResultRoleAfterResultPrefix) {
@@ -275,8 +283,7 @@ TEST(LowDescriptorsTest, RejectsResultRoleAfterResultPrefix) {
   tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_RESULT;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsOperandResultRows) {
@@ -285,8 +292,7 @@ TEST(LowDescriptorsTest, RejectsOperandResultRows) {
   tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsImplicitRowsWithoutImplicitFlag) {
@@ -295,8 +301,7 @@ TEST(LowDescriptorsTest, RejectsImplicitRowsWithoutImplicitFlag) {
   tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, AcceptsImplicitRowsWithImplicitFlag) {
@@ -368,8 +373,7 @@ TEST(LowDescriptorsTest, RejectsTiedConstraintWithoutRhs) {
                              LOOM_LOW_ID_NONE);
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsTiedConstraintWithoutResultLhs) {
@@ -378,8 +382,7 @@ TEST(LowDescriptorsTest, RejectsTiedConstraintWithoutResultLhs) {
   AddAddDescriptorConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 1, 2);
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsCommutableConstraintOnResult) {
@@ -389,8 +392,7 @@ TEST(LowDescriptorsTest, RejectsCommutableConstraintOnResult) {
                              1);
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsDestructiveConstraintWithoutResultLhs) {
@@ -400,8 +402,7 @@ TEST(LowDescriptorsTest, RejectsDestructiveConstraintWithoutResultLhs) {
                              2);
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsEarlyClobberConstraintOnOperand) {
@@ -411,8 +412,7 @@ TEST(LowDescriptorsTest, RejectsEarlyClobberConstraintOnOperand) {
                              LOOM_LOW_ID_NONE);
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsFoldableConstraintOnOperand) {
@@ -422,8 +422,109 @@ TEST(LowDescriptorsTest, RejectsFoldableConstraintOnOperand) {
                              LOOM_LOW_ID_NONE);
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, AcceptsDeadRemovableReadEffect) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, AcceptsSideEffectingReadEffect) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING;
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsWriteEffectWithoutSideEffectingFlag) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_WRITE,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsSideEffectingWithoutEffects) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsDeadRemovableSideEffectingDescriptor) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
+                                LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE;
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsReadEffectWithoutMemorySpace) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_NONE);
+  tables.descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING;
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsTerminatorWithoutControlEffect) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_CALL,
+                         LOOM_LOW_MEMORY_SPACE_NONE);
+  tables.descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING |
+                                LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR;
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_CALL;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsControlEffectWithoutTerminator) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_CONTROL,
+                         LOOM_LOW_MEMORY_SPACE_NONE);
+  tables.descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING;
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsScheduleClassMissingEffectFlag) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.descriptors[1].flags = LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsDuplicateKeys) {
@@ -433,8 +534,7 @@ TEST(LowDescriptorsTest, RejectsDuplicateKeys) {
       tables.descriptors[0].key_string_offset;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, RejectsUnsortedDescriptorReferences) {
@@ -448,8 +548,7 @@ TEST(LowDescriptorsTest, RejectsUnsortedDescriptorReferences) {
   tables.descriptor_refs[1].descriptor_ordinal = 1;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, LookupRejectsIncompleteDescriptorReferences) {
@@ -460,9 +559,8 @@ TEST(LowDescriptorsTest, LookupRejectsIncompleteDescriptorReferences) {
   uint32_t descriptor_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   iree_status_t status = loom_low_descriptor_set_lookup_descriptor(
       &tables.set, IREE_SV("test.add.i32"), &descriptor_ordinal);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
-  iree_status_ignore(status);
 }
 
 TEST(LowDescriptorsTest, RejectsUnknownScheduleModelData) {
@@ -471,8 +569,7 @@ TEST(LowDescriptorsTest, RejectsUnknownScheduleModelData) {
   tables.schedule_classes[1].model_quality = LOOM_LOW_MODEL_QUALITY_UNKNOWN;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorsTest, FormatsManifestJson) {

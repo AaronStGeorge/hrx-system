@@ -200,9 +200,8 @@ TEST_F(LlvmIrLowerTest, LoweringRequiresTargetProfile) {
   std::memset(&options, 0, sizeof(options));
   iree_status_t status = loom_llvmir_lower_module(
       module_, &options, iree_allocator_system(), &lowered);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(lowered, nullptr);
-  iree_status_free(status);
 }
 
 TEST_F(LlvmIrLowerTest, LoweringRejectsInvalidProvider) {
@@ -213,9 +212,8 @@ TEST_F(LlvmIrLowerTest, LoweringRejectsInvalidProvider) {
   loom_llvmir_module_t* lowered = NULL;
   iree_status_t status = LowerModule(loom_llvmir_target_profile_test_object(),
                                      &invalid_provider, &lowered);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(lowered, nullptr);
-  iree_status_free(status);
 }
 
 TEST_F(LlvmIrLowerTest, LowersCoreOpsWithTestTarget) {
@@ -233,12 +231,11 @@ TEST_F(LlvmIrLowerTest, TargetContractOpsRequireProvider) {
   loom_llvmir_module_t* lowered = NULL;
   iree_status_t status = LowerModule(&lowered);
   std::string message = StatusToString(status);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_UNIMPLEMENTED);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
   EXPECT_EQ(lowered, nullptr);
   EXPECT_NE(message.find("explicit target lowering provider"),
             std::string::npos)
       << message;
-  iree_status_free(status);
 }
 
 }  // namespace

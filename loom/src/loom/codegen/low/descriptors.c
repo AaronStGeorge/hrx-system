@@ -299,6 +299,140 @@ static iree_status_t loom_low_verify_descriptor_constraints(
   return iree_ok_status();
 }
 
+static bool loom_low_memory_space_is_valid(loom_low_memory_space_t space) {
+  switch (space) {
+    case LOOM_LOW_MEMORY_SPACE_NONE:
+    case LOOM_LOW_MEMORY_SPACE_GENERIC:
+    case LOOM_LOW_MEMORY_SPACE_GLOBAL:
+    case LOOM_LOW_MEMORY_SPACE_WORKGROUP:
+    case LOOM_LOW_MEMORY_SPACE_STACK:
+    case LOOM_LOW_MEMORY_SPACE_VM_REF:
+    case LOOM_LOW_MEMORY_SPACE_WASM_MEMORY:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static loom_low_schedule_class_flags_t
+loom_low_schedule_flags_required_for_effect(loom_low_effect_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_EFFECT_KIND_READ:
+      return LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
+    case LOOM_LOW_EFFECT_KIND_WRITE:
+      return LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;
+    case LOOM_LOW_EFFECT_KIND_CALL:
+      return LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_CALL;
+    case LOOM_LOW_EFFECT_KIND_CONTROL:
+      return LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL;
+    default:
+      return 0;
+  }
+}
+
+static bool loom_low_effect_kind_requires_side_effecting_flag(
+    loom_low_effect_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_EFFECT_KIND_WRITE:
+    case LOOM_LOW_EFFECT_KIND_CALL:
+    case LOOM_LOW_EFFECT_KIND_BARRIER:
+    case LOOM_LOW_EFFECT_KIND_COUNTER:
+    case LOOM_LOW_EFFECT_KIND_CONTROL:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_low_verify_descriptor_effect_contract(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  const bool is_side_effecting = iree_all_bits_set(
+      descriptor->flags, LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING);
+  const bool is_terminator =
+      iree_all_bits_set(descriptor->flags, LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR);
+  const bool is_dead_removable = iree_all_bits_set(
+      descriptor->flags, LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE);
+  if (is_side_effecting && is_dead_removable) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " is both side-effecting and dead-removable",
+                            descriptor_index);
+  }
+  if (is_terminator && !is_side_effecting) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " is a terminator but is not side-effecting",
+                            descriptor_index);
+  }
+  if (descriptor->effect_count == 0 && is_side_effecting) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " is side-effecting but has no effect rows",
+                            descriptor_index);
+  }
+  if (descriptor->effect_count == 0) {
+    return iree_ok_status();
+  }
+
+  bool has_control_effect = false;
+  loom_low_schedule_class_flags_t required_schedule_flags = 0;
+  for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+    const uint32_t effect_index = descriptor->effect_start + i;
+    const loom_low_effect_t* effect = &descriptor_set->effects[effect_index];
+    if (effect->kind == LOOM_LOW_EFFECT_KIND_READ ||
+        effect->kind == LOOM_LOW_EFFECT_KIND_WRITE) {
+      if (effect->memory_space == LOOM_LOW_MEMORY_SPACE_NONE) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low descriptor %" PRIu32 " effect %" PRIu32
+                                " reads or writes no memory space",
+                                descriptor_index, effect_index);
+      }
+    }
+    if (effect->kind == LOOM_LOW_EFFECT_KIND_CONTROL) {
+      has_control_effect = true;
+    }
+    if (!is_side_effecting &&
+        loom_low_effect_kind_requires_side_effecting_flag(effect->kind)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32 " effect %" PRIu32
+                              " requires the side-effecting descriptor flag",
+                              descriptor_index, effect_index);
+    }
+    required_schedule_flags |=
+        loom_low_schedule_flags_required_for_effect(effect->kind);
+  }
+
+  if (is_terminator && !has_control_effect) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " is a terminator but has no control effect",
+                            descriptor_index);
+  }
+  if (has_control_effect && !is_terminator) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " has a control effect but is not a terminator",
+                            descriptor_index);
+  }
+  if (descriptor->schedule_class_id != LOOM_LOW_SCHEDULE_CLASS_NONE &&
+      required_schedule_flags != 0) {
+    const loom_low_schedule_class_t* schedule_class =
+        &descriptor_set->schedule_classes[descriptor->schedule_class_id];
+    const loom_low_schedule_class_flags_t missing_flags =
+        required_schedule_flags & ~schedule_class->flags;
+    if (missing_flags != 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32
+                              " effect rows require schedule flags 0x%x but "
+                              "schedule class %" PRIu16 " is missing 0x%x",
+                              descriptor_index, required_schedule_flags,
+                              descriptor->schedule_class_id, missing_flags);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_operand_roles(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
@@ -387,6 +521,8 @@ static iree_status_t loom_low_verify_descriptor(
                             descriptor_set->schedule_class_count);
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_roles(
+      descriptor_set, descriptor, descriptor_index));
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_effect_contract(
       descriptor_set, descriptor, descriptor_index));
   return loom_low_verify_descriptor_constraints(descriptor_set, descriptor);
 }
@@ -549,6 +685,12 @@ static iree_status_t loom_low_verify_effect(uint32_t effect_index,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low effect %" PRIu32 " has unknown kind",
                             effect_index);
+  }
+  if (!loom_low_memory_space_is_valid(effect->memory_space)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low effect %" PRIu32
+                            " has invalid memory space %u",
+                            effect_index, (unsigned)effect->memory_space);
   }
   return iree_ok_status();
 }

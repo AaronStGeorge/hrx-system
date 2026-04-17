@@ -473,9 +473,7 @@ TEST_F(PassManagerTest, ErrorPropagation) {
       iree_string_view_empty()));
 
   iree_status_t status = loom_pass_manager_run(&manager, module_);
-  EXPECT_FALSE(iree_status_is_ok(status));
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INTERNAL);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, status);
 
   loom_pass_manager_deinitialize(&manager);
 }
@@ -502,8 +500,7 @@ TEST_F(PassManagerTest, ErrorStopsPipeline) {
 
   pipeline_order_count = 0;
   iree_status_t status = loom_pass_manager_run(&manager, module_);
-  EXPECT_FALSE(iree_status_is_ok(status));
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, status);
 
   // Only pass A ran. Pass C was not reached.
   EXPECT_EQ(pipeline_order_count, 1);

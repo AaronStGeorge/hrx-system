@@ -353,8 +353,7 @@ TEST(LlvmIrTargetEnvTest, RejectsMalformedDerivedAmdgpuHalProfile) {
   iree_status_t status =
       loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
                                                                 &storage);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
@@ -375,9 +374,8 @@ TEST(LlvmIrTargetEnvTest, RejectsUnknownRegisteredProfileName) {
   const loom_llvmir_target_profile_t* profile = nullptr;
   iree_status_t status =
       LookupRegisteredProfile(IREE_SV("spirv-vulkan"), &profile);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(profile, nullptr);
-  iree_status_ignore(status);
 }
 
 TEST(LlvmIrTargetEnvTest, RegistryOnlySeesExplicitProviders) {
@@ -397,9 +395,8 @@ TEST(LlvmIrTargetEnvTest, RegistryOnlySeesExplicitProviders) {
   profile = nullptr;
   iree_status_t status = loom_llvmir_target_profile_registry_lookup(
       &registry, IREE_SV("amdgpu-hal"), &profile);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(profile, nullptr);
-  iree_status_ignore(status);
 }
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileMaterializesKernelDecorations) {
@@ -549,8 +546,7 @@ TEST(LlvmIrTargetEnvTest, RejectsInvalidAmdgpuHalProfileValues) {
   iree_status_t status = loom_llvmir_target_profile_kernel_binding_attrs(
       &profile, binding_attrs, IREE_ARRAYSIZE(binding_attrs),
       &binding_attr_count);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
   loom_llvmir_target_config_t config = {};
@@ -566,8 +562,7 @@ TEST(LlvmIrTargetEnvTest, RejectsInvalidAmdgpuHalProfileValues) {
   loom_llvmir_attr_group_id_t attr_group = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
   status = loom_llvmir_target_profile_add_kernel_attr_group(
       module_ptr.get(), &profile, &attr_group);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   IREE_ASSERT_OK(loom_llvmir_target_profile_initialize_amdgpu_hal(&profile));
   loom_llvmir_type_id_t void_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -586,8 +581,7 @@ TEST(LlvmIrTargetEnvTest, RejectsInvalidAmdgpuHalProfileValues) {
   profile.amdgpu_hal.required_workgroup_size.x = 0;
   status =
       loom_llvmir_target_profile_attach_kernel_metadata(function, &profile);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 }  // namespace

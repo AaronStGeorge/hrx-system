@@ -163,7 +163,6 @@ TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotFeatureRejection) {
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT);
   EXPECT_EQ(ToString(diagnostic.provider_name), "x86");
   EXPECT_EQ(ToString(diagnostic.target_detail), "features");
-  iree_status_free(status);
 }
 
 TEST_F(LlvmIrX86LegalityTest, ReportsPackedDotDescriptorSelection) {

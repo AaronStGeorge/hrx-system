@@ -162,8 +162,7 @@ TEST_F(LowTargetBindingTest, RegistryRejectsDuplicateKeys) {
       .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
   };
   iree_status_t status = loom_low_descriptor_registry_verify(&registry);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_ALREADY_EXISTS);
-  iree_status_free(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
 }
 
 TEST_F(LowTargetBindingTest, RegistryRejectsNullEntries) {
@@ -176,15 +175,13 @@ TEST_F(LowTargetBindingTest, RegistryRejectsNullEntries) {
       .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
   };
   iree_status_t status = loom_low_descriptor_registry_verify(&registry);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_free(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   const loom_low_descriptor_set_t* descriptor_set = nullptr;
   status = loom_low_descriptor_registry_lookup(&registry, IREE_SV("missing"),
                                                &descriptor_set);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(descriptor_set, nullptr);
-  iree_status_free(status);
 }
 
 TEST_F(LowTargetBindingTest, ResolvesBundleConfigAndDescriptorSet) {

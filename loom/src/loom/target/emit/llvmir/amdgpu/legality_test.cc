@@ -162,7 +162,6 @@ TEST_F(LlvmIrAmdgpuLegalityTest, RejectsHalViewParameter) {
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI);
   EXPECT_NE(ToString(diagnostic.detail).find("view parameters"),
             std::string::npos);
-  iree_status_free(status);
 }
 
 }  // namespace

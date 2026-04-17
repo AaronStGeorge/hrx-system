@@ -251,7 +251,6 @@ TEST_F(LlvmIrLegalityTest, RejectsStructuredScfBeforeLowering) {
   EXPECT_EQ(ToString(diagnostic.op_name), "scf.if");
   EXPECT_NE(ToString(diagnostic.detail).find("lowered to CFG"),
             std::string::npos);
-  iree_status_free(status);
 }
 
 TEST_F(LlvmIrLegalityTest, RejectsUnknownIntrinsicKind) {
@@ -262,7 +261,6 @@ TEST_F(LlvmIrLegalityTest, RejectsUnknownIntrinsicKind) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_INTRINSIC);
   EXPECT_EQ(ToString(diagnostic.target_detail), "llvm.imaginary");
-  iree_status_free(status);
 }
 
 TEST_F(LlvmIrLegalityTest, RejectsFp8TypeBeforeLowering) {
@@ -273,7 +271,6 @@ TEST_F(LlvmIrLegalityTest, RejectsFp8TypeBeforeLowering) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
   EXPECT_EQ(diagnostic.code, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TYPE);
   EXPECT_EQ(ToString(diagnostic.target_detail), "fp8");
-  iree_status_free(status);
 }
 
 TEST_F(LlvmIrLegalityTest, RejectsTargetContractWithoutProvider) {
@@ -286,7 +283,6 @@ TEST_F(LlvmIrLegalityTest, RejectsTargetContractWithoutProvider) {
             LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_TARGET_CONTRACT);
   EXPECT_NE(ToString(diagnostic.detail).find("target legality provider"),
             std::string::npos);
-  iree_status_free(status);
 }
 
 }  // namespace

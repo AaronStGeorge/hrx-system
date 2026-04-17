@@ -116,22 +116,19 @@ TEST(TargetRecordsTest, FingerprintsIncludeConfigPolicy) {
 TEST(TargetRecordsTest, RejectsMissingInputs) {
   uint64_t fingerprint = 0;
   iree_status_t status = loom_target_snapshot_fingerprint(NULL, &fingerprint);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(fingerprint, 0u);
-  iree_status_ignore(status);
 
   loom_target_snapshot_t snapshot = TestSnapshot();
   status = loom_target_snapshot_fingerprint(&snapshot, NULL);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
-  iree_status_ignore(status);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 
   loom_target_export_plan_t export_plan = TestExportPlan();
   loom_target_config_t config = TestConfig();
   loom_target_bundle_t broken_bundle = TestBundle(NULL, &export_plan, &config);
   status = loom_target_bundle_fingerprint(&broken_bundle, &fingerprint);
-  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(fingerprint, 0u);
-  iree_status_ignore(status);
 }
 
 }  // namespace
