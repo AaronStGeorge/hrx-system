@@ -926,6 +926,38 @@ TEST_F(ExecuteTest, EmitModeReportsUnknownLlvmProfile) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsSetShape) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit low-descriptor-manifest iree.vm.core\n"
+                   "func.def @unused() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"key\":\"iree.vm.core\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"target\":\"iree.vm\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"table_counts\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptors\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"iree.vm.add.i32\""), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit low-descriptor-manifest definitely.missing\n"
+                   "func.def @unused() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("unknown low descriptor set"),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, FormatModeUnimplemented) {
   loom_check_result_t result;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,
