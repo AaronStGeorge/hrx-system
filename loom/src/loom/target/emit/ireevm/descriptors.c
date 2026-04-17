@@ -422,11 +422,6 @@ static const loom_low_descriptor_t kDescriptors[] = {
 static const loom_low_descriptor_set_t kDescriptorSet = {
     .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,
     .generator_version = 1,
-    .fingerprint =
-        {
-            .low = UINT64_C(3224395707371742904),
-            .high = UINT64_C(187231647689077189),
-        },
     .key_string_offset = VM_STRING_OFFSET(set_key),
     .target_key_string_offset = VM_STRING_OFFSET(target_key),
     .feature_key_string_offset = VM_STRING_OFFSET(feature_key),

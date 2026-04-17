@@ -56,22 +56,6 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorLookupUsesStableKeys) {
   EXPECT_NE(branch_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR, 0u);
 }
 
-TEST(IreeVmDescriptorsTest, CoreDescriptorFingerprintMatchesEmbeddedValue) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_ireevm_core_descriptor_set();
-
-  loom_low_fingerprint_t fingerprint = {};
-  IREE_ASSERT_OK(loom_low_descriptor_set_compute_fingerprint(descriptor_set,
-                                                             &fingerprint));
-  EXPECT_NE(fingerprint.low, UINT64_C(0));
-  EXPECT_NE(fingerprint.high, UINT64_C(0));
-
-  bool matches = false;
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_fingerprint_matches(descriptor_set, &matches));
-  EXPECT_TRUE(matches);
-}
-
 TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_ireevm_core_descriptor_set();
@@ -85,7 +69,7 @@ TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {
   iree_string_builder_deinitialize(&builder);
 
   EXPECT_NE(json.find("\"key\":\"iree.vm.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"abi_version\":2"), std::string::npos);
+  EXPECT_NE(json.find("\"abi_version\":3"), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"iree.vm.call.import.i32\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"iree.vm.cond_br.i32\""), std::string::npos);

@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 2u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 3u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -43,14 +43,6 @@ extern "C" {
 
 // Sentinel for absent resources.
 #define LOOM_LOW_RESOURCE_NONE UINT16_MAX
-
-// Stable 128-bit content fingerprint used by target snapshots and cache keys.
-typedef struct loom_low_fingerprint_t {
-  // Low 64 bits of the descriptor-set content fingerprint.
-  uint64_t low;
-  // High 64 bits of the descriptor-set content fingerprint.
-  uint64_t high;
-} loom_low_fingerprint_t;
 
 typedef enum loom_low_operand_role_e {
   // Unknown or uninitialized operand role.
@@ -469,8 +461,6 @@ typedef struct loom_low_descriptor_set_t {
   uint32_t abi_version;
   // Generator or hand-authored schema version.
   uint32_t generator_version;
-  // Stable content fingerprint for every table field except this field.
-  loom_low_fingerprint_t fingerprint;
   // String-table offset for the descriptor-set key.
   loom_bstring_table_offset_t key_string_offset;
   // String-table offset for the target-family key.
@@ -532,20 +522,6 @@ typedef struct loom_low_descriptor_set_t {
   // Number of feature-mask words owned by this set.
   uint32_t feature_mask_word_count;
 } loom_low_descriptor_set_t;
-
-// Returns whether two descriptor fingerprints are identical.
-bool loom_low_fingerprint_equal(loom_low_fingerprint_t lhs,
-                                loom_low_fingerprint_t rhs);
-
-// Computes the stable content fingerprint for |descriptor_set|. The embedded
-// fingerprint field is intentionally excluded from the hash.
-iree_status_t loom_low_descriptor_set_compute_fingerprint(
-    const loom_low_descriptor_set_t* descriptor_set,
-    loom_low_fingerprint_t* out_fingerprint);
-
-// Returns whether |descriptor_set|'s embedded fingerprint matches its content.
-iree_status_t loom_low_descriptor_set_fingerprint_matches(
-    const loom_low_descriptor_set_t* descriptor_set, bool* out_matches);
 
 // Verifies structural integrity of a descriptor set. This checks table spans,
 // string offsets, descriptor key uniqueness, and cross-table references; it

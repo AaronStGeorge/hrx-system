@@ -8,7 +8,8 @@
 //
 // These helpers operate only on target-neutral records from types.h. Target
 // families own the records themselves; this file only defines generic mechanics
-// such as stable fingerprints for cache keys and diagnostics.
+// such as compact equality fingerprints for transient cache keys and
+// diagnostics. These fingerprints are not durable artifact identity.
 
 #ifndef LOOM_TARGET_RECORDS_H_
 #define LOOM_TARGET_RECORDS_H_
@@ -19,25 +20,26 @@
 extern "C" {
 #endif
 
-// Computes a stable content fingerprint for |snapshot|. The fingerprint covers
-// every v0 snapshot field in declaration order and is suitable for cache-key
-// inputs and equality-oriented tests, not for adversarial hashing.
+// Computes a content fingerprint for |snapshot|. The fingerprint covers
+// every v0 snapshot field in declaration order and is suitable for transient
+// cache-key inputs, not for durable module identity or adversarial hashing.
 iree_status_t loom_target_snapshot_fingerprint(
     const loom_target_snapshot_t* snapshot, uint64_t* out_fingerprint);
 
-// Computes a stable content fingerprint for |export_plan|. The fingerprint
+// Computes a content fingerprint for |export_plan|. The fingerprint
 // covers every v0 export-plan field in declaration order and is suitable for
-// cache-key inputs and equality-oriented tests, not for adversarial hashing.
+// transient cache-key inputs, not for durable module identity or adversarial
+// hashing.
 iree_status_t loom_target_export_plan_fingerprint(
     const loom_target_export_plan_t* export_plan, uint64_t* out_fingerprint);
 
-// Computes a stable content fingerprint for |config|. The fingerprint covers
+// Computes a content fingerprint for |config|. The fingerprint covers
 // every v0 config field in declaration order and is suitable for cache-key
-// inputs and equality-oriented tests, not for adversarial hashing.
+// inputs, not for durable module identity or adversarial hashing.
 iree_status_t loom_target_config_fingerprint(const loom_target_config_t* config,
                                              uint64_t* out_fingerprint);
 
-// Computes a stable content fingerprint for |bundle| from its name and the
+// Computes a content fingerprint for |bundle| from its name and the
 // content fingerprints of the referenced snapshot, export plan, and config.
 iree_status_t loom_target_bundle_fingerprint(const loom_target_bundle_t* bundle,
                                              uint64_t* out_fingerprint);

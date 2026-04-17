@@ -256,29 +256,9 @@ TEST(LowDescriptorsTest, RejectsUnknownScheduleModelData) {
   iree_status_ignore(status);
 }
 
-TEST(LowDescriptorsTest, FingerprintChangesWithContent) {
-  TestTables tables;
-  InitializeTestTables(&tables);
-  loom_low_fingerprint_t fingerprint = {};
-  IREE_ASSERT_OK(
-      loom_low_descriptor_set_compute_fingerprint(&tables.set, &fingerprint));
-  EXPECT_NE(fingerprint.low, 0u);
-  EXPECT_NE(fingerprint.high, 0u);
-
-  TestTables changed_tables;
-  InitializeTestTables(&changed_tables);
-  changed_tables.set.generator_version += 1;
-  loom_low_fingerprint_t changed_fingerprint = {};
-  IREE_ASSERT_OK(loom_low_descriptor_set_compute_fingerprint(
-      &changed_tables.set, &changed_fingerprint));
-  EXPECT_FALSE(loom_low_fingerprint_equal(fingerprint, changed_fingerprint));
-}
-
 TEST(LowDescriptorsTest, FormatsManifestJson) {
   TestTables tables;
   InitializeTestTables(&tables);
-  IREE_ASSERT_OK(loom_low_descriptor_set_compute_fingerprint(
-      &tables.set, &tables.set.fingerprint));
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -289,7 +269,6 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
   iree_string_builder_deinitialize(&builder);
 
   EXPECT_NE(json.find("\"key\":\"test.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"fingerprint\":\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"test.add.i32\""), std::string::npos);
   EXPECT_NE(json.find("\"schedule_class\":1"), std::string::npos);
 }
