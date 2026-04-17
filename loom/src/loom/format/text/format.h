@@ -306,6 +306,20 @@
 // function-type ::= '(' type-list ')' '->' '(' type-list ')'
 // type-list     ::= (type (',' type)*)?
 //
+// --- Register types ---
+//
+// register-type  ::= 'reg' '<' register-class register-units? '>'
+// register-class ::= identifier '.' identifier ('.' identifier)*
+// register-units ::= 'x' integer | 'x' digit+
+//
+// Register types are target-low allocation values. The class name is always
+// namespace-qualified (for example amdgpu.vgpr, x86.zmm, wasm.v128) and the
+// optional unit suffix gives the number of class units carried by one SSA
+// value.
+//
+//   reg<amdgpu.vgpr>                   One AMDGPU VGPR.
+//   reg<amdgpu.vgpr x4>                Four contiguous VGPR-class units.
+//
 // --- Dialect types ---
 //
 // dialect-type ::= dialect-type-name

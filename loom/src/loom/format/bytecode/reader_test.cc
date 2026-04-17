@@ -154,6 +154,31 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateRegisterDeclModule() {
+    loom_module_t* module = CreateModule("reader_register_decl");
+    loom_string_id_t reg_class_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("amdgpu.vgpr"),
+                                            &reg_class_id));
+    loom_type_t reg_type = loom_type_register(reg_class_id, 4);
+    IREE_CHECK_OK(loom_module_intern_type(module, reg_type, &reg_type));
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("reg_decl"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_op_t* decl_op = nullptr;
+    IREE_CHECK_OK(loom_test_decl_build(
+        &builder, 0, /*visibility=*/0, /*cc=*/0, callee, &reg_type,
+        /*arg_types_count=*/1, &reg_type, /*result_count=*/1, nullptr, 0,
+        LOOM_LOCATION_UNKNOWN, &decl_op));
+    return module;
+  }
+
   loom_module_t* CreateDynamicGlobalModule() {
     loom_module_t* module = CreateModule("reader_dynamic_global");
     loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
@@ -1619,6 +1644,10 @@ TEST_F(ReaderTest, CanonicalRoundTripPreservesTypesAttrsAndPredicates) {
   loom_module_t* dynamic_global_module = CreateDynamicGlobalModule();
   ExpectCanonicalBytecodeRoundTrip(dynamic_global_module);
   loom_module_free(dynamic_global_module);
+
+  loom_module_t* register_decl_module = CreateRegisterDeclModule();
+  ExpectCanonicalBytecodeRoundTrip(register_decl_module);
+  loom_module_free(register_decl_module);
 
   loom_module_t* dynamic_module = CreateDynamicDimFunctionModule();
   ExpectCanonicalBytecodeRoundTrip(dynamic_module);

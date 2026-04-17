@@ -466,6 +466,11 @@ class PrintOpTest : public ::testing::Test {
   loom_builder_t builder_;
 };
 
+TEST_F(PrintOpTest, PrintRegisterType) {
+  loom_type_t type = loom_type_register(intern("amdgpu.vgpr"), 4);
+  EXPECT_EQ(print_type(type, module_), "reg<amdgpu.vgpr x4>");
+}
+
 //===----------------------------------------------------------------------===//
 // Simple ops (no regions)
 //===----------------------------------------------------------------------===//

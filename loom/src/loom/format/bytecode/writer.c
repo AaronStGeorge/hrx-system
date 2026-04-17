@@ -472,6 +472,11 @@ static uint32_t loom_bytecode_type_wire_hash(loom_type_t type) {
       }
       return hash;
     }
+    case LOOM_TYPE_REGISTER:
+      hash = loom_bytecode_type_hash_mix_u32(hash,
+                                             loom_type_register_class_id(type));
+      return loom_bytecode_type_hash_mix_u64(
+          hash, loom_type_register_unit_count(type));
     case LOOM_TYPE_ENCODING:
       return loom_bytecode_type_hash_mix_u8(
           hash, (uint8_t)loom_type_encoding_role(type));
@@ -558,6 +563,10 @@ static bool loom_bytecode_type_wire_equal(loom_type_t a, loom_type_t b) {
       }
       return true;
     }
+    case LOOM_TYPE_REGISTER:
+      return loom_type_register_class_id(a) == loom_type_register_class_id(b) &&
+             loom_type_register_unit_count(a) ==
+                 loom_type_register_unit_count(b);
     case LOOM_TYPE_ENCODING:
       return loom_type_encoding_role(a) == loom_type_encoding_role(b);
     default:
@@ -803,6 +812,15 @@ static iree_status_t loom_bytecode_numbering_intern_type(
       for (uint16_t i = 0; i < param_count; ++i) {
         IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_type(
             numbering, params[i], &unused_id));
+      }
+      break;
+    }
+    case LOOM_TYPE_REGISTER: {
+      loom_string_id_t reg_class_id = loom_type_register_class_id(type);
+      if (reg_class_id < numbering->module->strings.count) {
+        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+            numbering, numbering->module->strings.entries[reg_class_id],
+            &unused_id));
       }
       break;
     }
@@ -1558,6 +1576,9 @@ static iree_status_t loom_bytecode_type_kind_byte(loom_type_kind_t kind,
       return iree_ok_status();
     case LOOM_TYPE_DIALECT:
       *out_byte = LOOM_BYTECODE_TYPE_DIALECT;
+      return iree_ok_status();
+    case LOOM_TYPE_REGISTER:
+      *out_byte = LOOM_BYTECODE_TYPE_REGISTER;
       return iree_ok_status();
     case LOOM_TYPE_ENCODING:
       *out_byte = LOOM_BYTECODE_TYPE_ENCODING;
@@ -3121,6 +3142,20 @@ static iree_status_t loom_bytecode_write_types_section(
           IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
               page_writer, param_type_id));
         }
+        break;
+      }
+      case LOOM_TYPE_REGISTER: {
+        loom_string_id_t reg_class_id = loom_type_register_class_id(type);
+        uint32_t class_writer_id = 0;
+        if (reg_class_id < numbering->module->strings.count) {
+          IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
+              numbering, numbering->module->strings.entries[reg_class_id],
+              &class_writer_id));
+        }
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, class_writer_id));
+        IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+            page_writer, loom_type_register_unit_count(type)));
         break;
       }
       case LOOM_TYPE_ENCODING: {

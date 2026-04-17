@@ -62,7 +62,7 @@
 //
 //   offset  size  field
 //   0       4     magic: "LOOM" (0x4C 0x4F 0x4F 0x4D)
-//   4       1     format_version (currently 8)
+//   4       1     format_version (currently 9)
 //   5       1     location_mode (see loom_bytecode_location_mode_t)
 //   6       2     module_count
 //   8       4     file_string_pool_length (bytes)
@@ -85,7 +85,7 @@ extern "C" {
 
 #define LOOM_BYTECODE_MAGIC "LOOM"
 #define LOOM_BYTECODE_MAGIC_LENGTH 4
-#define LOOM_BYTECODE_FORMAT_VERSION 8
+#define LOOM_BYTECODE_FORMAT_VERSION 9
 
 // File-level source-location mode stored in the file header.
 enum loom_bytecode_location_mode_e {
@@ -318,7 +318,7 @@ typedef enum loom_bytecode_section_kind_e {
 //     [kind: byte]
 //       0 = none, 1 = scalar, 2 = tile, 3 = tensor, 4 = group,
 //       5 = function, 6 = dialect, 7 = encoding, 8 = pool,
-//       9 = vector, 10 = view, 11 = buffer
+//       9 = vector, 10 = view, 11 = buffer, 12 = register
 //     (SCALAR: [element_type: byte])
 //     (TILE/TENSOR/VECTOR/VIEW:
 //       [element_type: byte]
@@ -347,6 +347,9 @@ typedef enum loom_bytecode_section_kind_e {
 //     (POOL:
 //       [is_dynamic: byte]          (0 = static, 1 = dynamic)
 //       (if static: [size: varint]) (block size in bytes))
+//     (REGISTER:
+//       [class_id: varint]          (string table index)
+//       [unit_count: varint]        (non-zero register-class unit count))
 
 // ==========================================================================
 // ENCODINGS section
@@ -795,6 +798,7 @@ typedef enum loom_bytecode_type_kind_e {
   LOOM_BYTECODE_TYPE_VECTOR = 9,
   LOOM_BYTECODE_TYPE_VIEW = 10,
   LOOM_BYTECODE_TYPE_BUFFER = 11,
+  LOOM_BYTECODE_TYPE_REGISTER = 12,
 } loom_bytecode_type_kind_t;
 
 // Group scope byte in the TYPES section (GROUP payload).

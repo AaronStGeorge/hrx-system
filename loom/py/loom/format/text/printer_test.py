@@ -46,6 +46,7 @@ from loom.ir import (
     Operation,
     PoolType,
     Region,
+    RegisterType,
     ScalarType,
     ScalarTypeKind,
     ShapedType,
@@ -253,6 +254,10 @@ class TestPrintType:
 
     def test_buffer_type(self) -> None:
         assert print_type(BUFFER_TYPE) == "buffer"
+
+    def test_register_type(self) -> None:
+        assert print_type(RegisterType("amdgpu.vgpr")) == "reg<amdgpu.vgpr>"
+        assert print_type(RegisterType("amdgpu.vgpr", 4)) == "reg<amdgpu.vgpr x4>"
 
     def test_dialect_type_opaque(self) -> None:
         from loom.ir import DialectType

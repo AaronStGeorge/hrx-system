@@ -13,6 +13,7 @@
 //   Tensor types:    tensor<[%M]xf32>     (logical tensor value)
 //   Tile types:      tile<[%M]x4xf32>     (tile-level aggregate value)
 //   Vector types:    vector<[%M]xf32>     (register lane grid value)
+//   Register types:  reg<amdgpu.vgpr x4> (target-low register allocation value)
 //   Buffer types:    buffer               (opaque storage identity)
 //   View types:      view<[%M]xf32, %layout> (typed buffer projection)
 //   Group types:     group<scope>         (barrier scoping)
@@ -112,6 +113,10 @@
 // Function types may carry SSA-specific dim bindings within their
 // arg/result types, so the embedded types are stored by value (24
 // bytes each), not interned.
+//
+// Register types use dims[0] as a string ID naming a namespace-qualified
+// register class and dims[1] as a unit count. The op descriptor supplies value
+// semantics; the type only describes allocation shape.
 //
 // Type equality is structural: callers should use loom_type_equal() on the
 // by-value representation. The module type table deduplicates equal entries,
@@ -219,18 +224,19 @@ typedef uint64_t loom_overflow_dim_t;
 // versioning. Keep this enum append-only and map values explicitly in the
 // bytecode reader/writer when the wire format diverges.
 typedef enum loom_type_kind_e {
-  LOOM_TYPE_NONE = 0,      // Absence of a type (no-result ops).
-  LOOM_TYPE_SCALAR = 1,    // f32, i8, index, etc.
-  LOOM_TYPE_TILE = 2,      // tile<[%M]x4xf32>
-  LOOM_TYPE_TENSOR = 3,    // tensor<[%M]xf32>
-  LOOM_TYPE_GROUP = 4,     // group<scope>
-  LOOM_TYPE_FUNCTION = 5,  // (types) -> (types)
-  LOOM_TYPE_DIALECT = 6,   // hal.buffer, vm.ref<T>, etc.
-  LOOM_TYPE_ENCODING = 7,  // encoding<role> (first-class SSA encoding value)
-  LOOM_TYPE_POOL = 8,      // pool<[%block_size]> (block-managed memory)
-  LOOM_TYPE_VECTOR = 9,    // vector<[%M]xf32> (register lane grid)
-  LOOM_TYPE_VIEW = 10,     // view<[%M]xf32, %layout> (buffer projection)
-  LOOM_TYPE_BUFFER = 11,   // buffer (opaque storage identity)
+  LOOM_TYPE_NONE = 0,       // Absence of a type (no-result ops).
+  LOOM_TYPE_SCALAR = 1,     // f32, i8, index, etc.
+  LOOM_TYPE_TILE = 2,       // tile<[%M]x4xf32>
+  LOOM_TYPE_TENSOR = 3,     // tensor<[%M]xf32>
+  LOOM_TYPE_GROUP = 4,      // group<scope>
+  LOOM_TYPE_FUNCTION = 5,   // (types) -> (types)
+  LOOM_TYPE_DIALECT = 6,    // hal.buffer, vm.ref<T>, etc.
+  LOOM_TYPE_ENCODING = 7,   // encoding<role> (first-class SSA encoding value)
+  LOOM_TYPE_POOL = 8,       // pool<[%block_size]> (block-managed memory)
+  LOOM_TYPE_VECTOR = 9,     // vector<[%M]xf32> (register lane grid)
+  LOOM_TYPE_VIEW = 10,      // view<[%M]xf32, %layout> (buffer projection)
+  LOOM_TYPE_BUFFER = 11,    // buffer (opaque storage identity)
+  LOOM_TYPE_REGISTER = 12,  // reg<amdgpu.vgpr x4> (target-low registers)
   LOOM_TYPE_COUNT_,
 } loom_type_kind_t;
 
@@ -505,6 +511,10 @@ static inline bool loom_type_is_buffer(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_BUFFER;
 }
 
+static inline bool loom_type_is_register(loom_type_t type) {
+  return loom_type_kind(type) == LOOM_TYPE_REGISTER;
+}
+
 static inline bool loom_type_is_function(loom_type_t type) {
   return loom_type_kind(type) == LOOM_TYPE_FUNCTION;
 }
@@ -535,6 +545,14 @@ static inline bool loom_type_can_have_encoding(loom_type_t type) {
   loom_type_kind_t kind = loom_type_kind(type);
   return kind == LOOM_TYPE_TILE || kind == LOOM_TYPE_TENSOR ||
          kind == LOOM_TYPE_VIEW;
+}
+
+// Returns true if |name| has the namespace-qualified register-class shape used
+// by target-low register types, such as "amdgpu.vgpr" or "x86.zmm".
+static inline bool loom_register_class_name_is_qualified(
+    iree_string_view_t name) {
+  iree_host_size_t dot = iree_string_view_find_char(name, '.', 0);
+  return dot != IREE_STRING_VIEW_NPOS && dot > 0 && dot + 1 < name.size;
 }
 
 // --- Type comparison ---
@@ -680,6 +698,32 @@ static inline loom_type_t loom_type_buffer(void) {
       LOOM_TYPE_BUFFER, (loom_scalar_type_t)0, 0,
       LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
   return type;
+}
+
+// Creates a target-low register type. |reg_class_id| names a
+// namespace-qualified register class such as "amdgpu.vgpr" in the module
+// string table. |unit_count| is the number of class units carried by the SSA
+// value and must be non-zero.
+static inline loom_type_t loom_type_register(loom_string_id_t reg_class_id,
+                                             uint32_t unit_count) {
+  IREE_ASSERT(unit_count > 0, "register unit count must be non-zero");
+  loom_type_t type = {0};
+  type.header = loom_type_make_header(
+      LOOM_TYPE_REGISTER, (loom_scalar_type_t)0, 0,
+      LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
+  type.dims[0] = reg_class_id;
+  type.dims[1] = unit_count;
+  return type;
+}
+
+// Returns the register class string ID for a target-low register type.
+static inline loom_string_id_t loom_type_register_class_id(loom_type_t type) {
+  return (loom_string_id_t)type.dims[0];
+}
+
+// Returns the number of register-class units carried by the type.
+static inline uint32_t loom_type_register_unit_count(loom_type_t type) {
+  return (uint32_t)type.dims[1];
 }
 
 // Creates a pool type with a single block_size dimension.

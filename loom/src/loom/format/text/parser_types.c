@@ -860,6 +860,64 @@ static iree_status_t loom_parse_encoding_type(loom_parser_t* parser,
   return iree_ok_status();
 }
 
+static iree_status_t loom_parse_register_unit_suffix(loom_parser_t* parser,
+                                                     loom_token_t suffix_token,
+                                                     uint32_t* out_unit_count) {
+  iree_string_view_t count_text = iree_string_view_empty();
+  if (iree_string_view_equal(suffix_token.text, IREE_SV("x"))) {
+    loom_token_t count_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_INTEGER, &count_token);
+    count_text = count_token.text;
+    suffix_token = count_token;
+  } else if (suffix_token.text.size >= 2 && suffix_token.text.data[0] == 'x') {
+    count_text = iree_make_string_view(suffix_token.text.data + 1,
+                                       suffix_token.text.size - 1);
+  } else {
+    return loom_parser_emit_unexpected_token(
+        parser, suffix_token, IREE_SV("register unit suffix 'xN'"));
+  }
+
+  uint32_t unit_count = 0;
+  if (!iree_string_view_atoi_uint32(count_text, &unit_count) ||
+      unit_count == 0) {
+    return loom_parser_emit_unexpected_token(
+        parser, suffix_token, IREE_SV("positive register unit suffix 'xN'"));
+  }
+  *out_unit_count = unit_count;
+  return iree_ok_status();
+}
+
+// Parses a target-low register type. Called after the `reg` keyword has been
+// consumed. Grammar: reg<namespace.class> | reg<namespace.class xN>.
+static iree_status_t loom_parse_register_type(loom_parser_t* parser,
+                                              loom_type_t* out_type) {
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_LANGLE)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'<'"));
+  }
+
+  loom_token_t class_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_OP_NAME, &class_token);
+  if (!loom_register_class_name_is_qualified(class_token.text)) {
+    return loom_parser_emit_unexpected_token(
+        parser, class_token, IREE_SV("namespace-qualified register class"));
+  }
+  uint32_t unit_count = 1;
+  if (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RANGLE)) {
+    loom_token_t suffix_token = loom_token_none();
+    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_BARE_IDENT, &suffix_token);
+    IREE_RETURN_IF_ERROR(
+        loom_parse_register_unit_suffix(parser, suffix_token, &unit_count));
+  }
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
+
+  loom_string_id_t class_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(parser->module, class_token.text, &class_id));
+  loom_type_t type = loom_type_register(class_id, unit_count);
+  return loom_module_intern_type(parser->module, type, out_type);
+}
+
 // Consumes keyword, expects LANGLE, dispatches to the type-specific
 // parser. Shared entry for tile, tensor, vector, view, pool, and group.
 static iree_status_t loom_parse_angle_bracketed_type(
@@ -931,6 +989,12 @@ iree_status_t loom_parse_type(loom_parser_t* parser,
     if (iree_string_view_equal(token.text, IREE_SV("encoding"))) {
       loom_tokenizer_next(&parser->tokenizer);
       return loom_parse_encoding_type(parser, out_type);
+    }
+
+    // "reg" keyword.
+    if (iree_string_view_equal(token.text, IREE_SV("reg"))) {
+      loom_tokenizer_next(&parser->tokenizer);
+      return loom_parse_register_type(parser, out_type);
     }
 
     bool matched_registered_type = false;

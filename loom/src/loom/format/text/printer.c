@@ -564,6 +564,24 @@ iree_status_t loom_text_print_type(loom_type_t type,
       }
       return iree_ok_status();
     }
+    case LOOM_TYPE_REGISTER: {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "reg<"));
+      loom_string_id_t class_id = loom_type_register_class_id(type);
+      if (module && class_id < module->strings.count) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write(
+            stream, module->strings.entries[class_id]));
+      } else {
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_cstring(stream, "?register"));
+      }
+      uint32_t unit_count = loom_type_register_unit_count(type);
+      if (unit_count != 1) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " x"));
+        IREE_RETURN_IF_ERROR(
+            loom_output_stream_write_format(stream, "%u", unit_count));
+      }
+      return loom_output_stream_write_cstring(stream, ">");
+    }
     case LOOM_TYPE_ENCODING:
       return loom_print_encoding_type(stream, type);
     case LOOM_TYPE_BUFFER:

@@ -229,6 +229,7 @@ static bool loom_test_signature_type_matches(
     case LOOM_TYPE_GROUP:
     case LOOM_TYPE_ENCODING:
     case LOOM_TYPE_BUFFER:
+    case LOOM_TYPE_REGISTER:
     case LOOM_TYPE_COUNT_:
       return true;
   }

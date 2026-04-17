@@ -88,6 +88,7 @@ from loom.ir import (
     Predicate,
     PredicateArg,
     Region,
+    RegisterType,
     ScalarType,
     ShapedType,
     StaticDim,
@@ -197,6 +198,8 @@ def print_type(
                 print_type(t, context, type_registry) for t in results
             )
             return f"({arg_strs}) -> ({result_strs})"
+        case RegisterType():
+            return repr(ir_type)
         case NoneType():
             return "none"
         case EncodingType():

@@ -72,6 +72,7 @@ from loom.ir import (
     PlaceholderType,
     PoolType,
     Region,
+    RegisterType,
     ScalarType,
     ScalarTypeKind,
     ShapedType,
@@ -704,6 +705,9 @@ class TestTypesSection:
     def test_dialect_type_nested(self) -> None:
         inner = DialectType("vm.list", (I32,))
         self._roundtrip_type(DialectType("vm.ref", (inner,)))
+
+    def test_register_type(self) -> None:
+        self._roundtrip_type(RegisterType("amdgpu.vgpr", 4))
 
     def test_pool_static(self) -> None:
         self._roundtrip_type(PoolType(StaticDim(65536)))

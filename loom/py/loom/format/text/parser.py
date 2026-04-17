@@ -102,6 +102,7 @@ from loom.ir import (
     Predicate,
     PredicateArg,
     Region,
+    RegisterType,
     ScalarType,
     ScalarTypeKind,
     ShapedType,
@@ -563,6 +564,8 @@ def _is_type_start(token: Token, type_registry: dict[str, TypeDef]) -> bool:
             return True
         if token.text == "encoding":
             return True
+        if token.text == "reg":
+            return True
         if token.text in type_registry:
             return True
         return False
@@ -610,6 +613,10 @@ def parse_type_from_tokens(
         tokenizer.expect(TokenKind.RANGLE)
         return EncodingType(role), {}
 
+    # Register type keyword?
+    if token.kind == TokenKind.BARE_IDENT and token.text == "reg":
+        return _parse_register_type(tokenizer)
+
     # Registered type (BARE_IDENT like "tile" or OP_NAME like "hal.buffer")?
     if token.kind in (TokenKind.BARE_IDENT, TokenKind.OP_NAME):
         type_def = type_registry.get(token.text)
@@ -655,6 +662,41 @@ def parse_type_from_tokens(
         token.location,
         tokenizer._filename,
     )
+
+
+def _parse_register_type(tokenizer: Tokenizer) -> tuple[RegisterType, dict[int, int]]:
+    """Parse reg<namespace.class> or reg<namespace.class xN>."""
+    tokenizer.expect(TokenKind.BARE_IDENT, "reg")
+    tokenizer.expect(TokenKind.LANGLE)
+    class_token = tokenizer.expect(TokenKind.OP_NAME)
+    unit_count = 1
+    if not tokenizer.at(TokenKind.RANGLE):
+        suffix_token = tokenizer.expect(TokenKind.BARE_IDENT)
+        if suffix_token.text == "x":
+            count_token = tokenizer.expect(TokenKind.INTEGER)
+            count_text = count_token.text
+            location = count_token.location
+        elif suffix_token.text.startswith("x") and suffix_token.text[1:].isdigit():
+            count_text = suffix_token.text[1:]
+            location = suffix_token.location
+        else:
+            raise ParseError(
+                "expected register unit suffix 'xN'",
+                suffix_token.location,
+                tokenizer._filename,
+            )
+        unit_count = int(count_text, 10)
+        if unit_count < 1:
+            raise ParseError(
+                "register unit count must be >= 1",
+                location,
+                tokenizer._filename,
+            )
+    tokenizer.expect(TokenKind.RANGLE)
+    try:
+        return RegisterType(class_token.text, unit_count), {}
+    except ValueError as err:
+        raise ParseError(str(err), class_token.location, tokenizer._filename) from err
 
 
 def parse_type_string(

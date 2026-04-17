@@ -97,6 +97,30 @@ TEST(TypesTest, DialectTypeEqualAndHashAreStructural) {
   EXPECT_FALSE(loom_type_equal(first, different_params));
 }
 
+TEST(TypesTest, RegisterTypeEqualAndHashAreStructural) {
+  loom_type_t first = loom_type_register((loom_string_id_t)42, 4);
+  loom_type_t duplicate = loom_type_register((loom_string_id_t)42, 4);
+  loom_type_t different_class = loom_type_register((loom_string_id_t)43, 4);
+  loom_type_t different_units = loom_type_register((loom_string_id_t)42, 8);
+
+  EXPECT_TRUE(loom_type_is_register(first));
+  EXPECT_EQ(loom_type_register_class_id(first), 42u);
+  EXPECT_EQ(loom_type_register_unit_count(first), 4u);
+  EXPECT_TRUE(loom_type_equal(first, duplicate));
+  EXPECT_EQ(loom_type_hash(first), loom_type_hash(duplicate));
+  EXPECT_FALSE(loom_type_equal(first, different_class));
+  EXPECT_FALSE(loom_type_equal(first, different_units));
+}
+
+TEST(TypesTest, RegisterClassNamesMustBeNamespaceQualified) {
+  EXPECT_TRUE(loom_register_class_name_is_qualified(IREE_SV("amdgpu.vgpr")));
+  EXPECT_TRUE(
+      loom_register_class_name_is_qualified(IREE_SV("wasm.local.v128")));
+  EXPECT_FALSE(loom_register_class_name_is_qualified(IREE_SV("vgpr")));
+  EXPECT_FALSE(loom_register_class_name_is_qualified(IREE_SV(".vgpr")));
+  EXPECT_FALSE(loom_register_class_name_is_qualified(IREE_SV("amdgpu.")));
+}
+
 TEST(TypesTest, VectorIsShapedButLayoutFree) {
   loom_type_t type = loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
                                          loom_dim_pack_static(16), 0);

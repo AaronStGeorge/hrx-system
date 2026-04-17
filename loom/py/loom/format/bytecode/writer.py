@@ -48,6 +48,7 @@ from loom.ir import (
     Predicate,
     PredicateArg,
     Region,
+    RegisterType,
     ScalarType,
     ShapedType,
     StaticDim,
@@ -125,6 +126,7 @@ BYTECODE_TYPE_KIND_BY_IR_KIND: dict[TypeKind, int] = {
     TypeKind.VECTOR: 9,
     TypeKind.VIEW: 10,
     TypeKind.BUFFER: 11,
+    TypeKind.REGISTER: 12,
 }
 
 BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
@@ -133,7 +135,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 8
+FORMAT_VERSION = 9
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -485,6 +487,8 @@ class BytecodeWriter:
                 self._ctx.intern_string(name)
                 for p in params:
                     self._number_type(p)
+            case RegisterType(reg_class=reg_class):
+                self._ctx.intern_string(reg_class)
             case _:
                 pass
         # Intern the parent AFTER sub-types (ensures sub-types have lower IDs).
@@ -647,6 +651,10 @@ class BytecodeWriter:
                 buf.write_varint(len(params))
                 for param in params:
                     buf.write_varint(self._ctx.intern_type(param))
+            case RegisterType(reg_class=reg_class, unit_count=unit_count):
+                buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.REGISTER])
+                buf.write_varint(self._ctx.strings[reg_class])
+                buf.write_varint(unit_count)
             case EncodingType(role=role):
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.ENCODING])
                 buf.write_u8(role.value)

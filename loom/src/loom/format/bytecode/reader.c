@@ -1445,6 +1445,9 @@ static iree_status_t loom_bytecode_reader_decode_type_kind(
     case LOOM_BYTECODE_TYPE_BUFFER:
       *out_kind = LOOM_TYPE_BUFFER;
       return iree_ok_status();
+    case LOOM_BYTECODE_TYPE_REGISTER:
+      *out_kind = LOOM_TYPE_REGISTER;
+      return iree_ok_status();
     default: {
       loom_diagnostic_param_t params[] = {
           loom_param_u32(kind_byte),
@@ -1760,6 +1763,44 @@ static iree_status_t loom_bytecode_reader_read_types(
                    ? loom_type_dialect_opaque((loom_string_id_t)name_id)
                    : loom_type_dialect((loom_string_id_t)name_id,
                                        (uint16_t)param_count, params);
+        break;
+      }
+      case LOOM_TYPE_REGISTER: {
+        uint64_t class_offset =
+            loom_bytecode_reader_cursor_absolute_position(&cursor);
+        uint64_t class_id = 0;
+        uint64_t unit_count = 0;
+        IREE_RETURN_IF_ERROR(
+            loom_bytecode_reader_read_uvarint(reader, &cursor, &class_id));
+        uint64_t unit_offset =
+            loom_bytecode_reader_cursor_absolute_position(&cursor);
+        IREE_RETURN_IF_ERROR(
+            loom_bytecode_reader_read_uvarint(reader, &cursor, &unit_count));
+        if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+        iree_string_view_t unused_class = {0};
+        IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_string_ref(
+            reader, class_id, IREE_SV("register_class"), class_offset,
+            &unused_class));
+        if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
+        if (!loom_register_class_name_is_qualified(unused_class)) {
+          return loom_bytecode_reader_emit_invalid_field(
+              reader, IREE_SV("TYPES"), IREE_SV("type"), type_index,
+              IREE_SV("register_class"), class_offset,
+              IREE_SV("register class must be namespace-qualified"));
+        }
+        if (unit_count == 0) {
+          return loom_bytecode_reader_emit_invalid_field(
+              reader, IREE_SV("TYPES"), IREE_SV("type"), type_index,
+              IREE_SV("register_units"), unit_offset,
+              IREE_SV("register unit count must be non-zero"));
+        }
+        if (unit_count > UINT32_MAX) {
+          return loom_bytecode_reader_emit_count_exceeds(
+              reader, IREE_SV("register_units"), unit_count, UINT32_MAX,
+              type_offset);
+        }
+        type = loom_type_register((loom_string_id_t)class_id,
+                                  (uint32_t)unit_count);
         break;
       }
       case LOOM_TYPE_ENCODING: {

@@ -63,6 +63,7 @@ from loom.ir import (
     Predicate,
     PredicateArg,
     Region,
+    RegisterType,
     ScalarType,
     ScalarTypeKind,
     ShapedType,
@@ -528,6 +529,13 @@ class BytecodeReader:
                         type_idx, offset = decode_varint(data, offset)
                         params.append(self._types[type_idx])
                     ir_type = DialectType(self._strings[name_id], tuple(params))
+                case TypeKind.REGISTER:
+                    class_id, offset = decode_varint(data, offset)
+                    unit_count, offset = decode_varint(data, offset)
+                    try:
+                        ir_type = RegisterType(self._strings[class_id], unit_count)
+                    except ValueError as err:
+                        raise BytecodeError(str(err)) from err
                 case TypeKind.ENCODING:
                     role_byte = data[offset]
                     offset += 1

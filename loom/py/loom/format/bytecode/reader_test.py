@@ -52,6 +52,7 @@ from loom.ir import (
     Module,
     Operation,
     Region,
+    RegisterType,
     ScalarType,
     ScalarTypeKind,
     ShapedType,
@@ -741,6 +742,10 @@ class TestTypeRoundTrips:
         assert isinstance(loaded.params[1], DialectType)
         assert loaded.params[0].name == "hal.buffer"
         assert loaded.params[1].name == "hal.fence"
+
+    def test_register_type(self) -> None:
+        t = RegisterType("amdgpu.vgpr", 4)
+        assert self._roundtrip_type(t) == t
 
     def test_buffer_type(self) -> None:
         assert self._roundtrip_type(BUFFER_TYPE) is BUFFER_TYPE

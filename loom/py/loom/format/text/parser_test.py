@@ -54,6 +54,7 @@ from loom.ir import (
     GroupType,
     Module,
     Operation,
+    RegisterType,
     ScalarType,
     ScalarTypeKind,
     ShapedType,
@@ -427,6 +428,30 @@ class TestParseBufferType:
     def test_basic(self) -> None:
         result = _parse_type("buffer")
         assert result is BUFFER_TYPE
+
+
+# ============================================================================
+# Register type
+# ============================================================================
+
+
+class TestParseRegisterType:
+    def test_single_unit(self) -> None:
+        assert _parse_type("reg<amdgpu.vgpr>") == RegisterType("amdgpu.vgpr")
+
+    def test_multiple_units(self) -> None:
+        assert _parse_type("reg<amdgpu.vgpr x4>") == RegisterType("amdgpu.vgpr", 4)
+
+    def test_multiple_units_with_spaced_suffix(self) -> None:
+        assert _parse_type("reg<amdgpu.vgpr x 4>") == RegisterType("amdgpu.vgpr", 4)
+
+    def test_requires_namespace(self) -> None:
+        with pytest.raises(ParseError, match="expected OP_NAME"):
+            _parse_type("reg<vgpr>")
+
+    def test_rejects_zero_units(self) -> None:
+        with pytest.raises(ParseError, match="unit count"):
+            _parse_type("reg<amdgpu.vgpr x0>")
 
 
 # ============================================================================
