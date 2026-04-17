@@ -6,6 +6,8 @@
 
 // Lowering for x86-native Loom vector contracts into structured LLVMIR ops.
 
+#include "loom/target/emit/llvmir/x86/lower.h"
+
 #include "loom/ops/vector/ops.h"
 #include "loom/target/arch/x86/packed_dot_vector.h"
 #include "loom/target/emit/llvmir/lower_internal.h"
@@ -104,18 +106,18 @@ static iree_status_t loom_llvmir_lowering_declare_x86_packed_dot_intrinsic(
     loom_llvmir_lowering_state_t* state,
     const loom_x86_packed_dot_descriptor_t* descriptor,
     loom_llvmir_function_t** out_function) {
-  for (iree_host_size_t i = 0;
-       i < state->x86_packed_dot_intrinsic_function_count; ++i) {
-    if (state->x86_packed_dot_intrinsic_keys[i] == descriptor) {
-      *out_function = state->x86_packed_dot_intrinsic_functions[i];
+  for (iree_host_size_t i = 0; i < state->provider_intrinsic_function_count;
+       ++i) {
+    if (state->provider_intrinsic_keys[i] == descriptor) {
+      *out_function = state->provider_intrinsic_functions[i];
       return iree_ok_status();
     }
   }
-  if (state->x86_packed_dot_intrinsic_function_count >=
-      IREE_ARRAYSIZE(state->x86_packed_dot_intrinsic_functions)) {
+  if (state->provider_intrinsic_function_count >=
+      IREE_ARRAYSIZE(state->provider_intrinsic_functions)) {
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
-        "LLVM x86 packed-dot intrinsic cache capacity exceeded");
+        "LLVM target-provider intrinsic cache capacity exceeded");
   }
 
   loom_llvmir_type_id_t result_type = LOOM_LLVMIR_TYPE_ID_INVALID;
@@ -163,10 +165,9 @@ static iree_status_t loom_llvmir_lowering_declare_x86_packed_dot_intrinsic(
                                            &parameter));
   }
 
-  iree_host_size_t cache_ordinal =
-      state->x86_packed_dot_intrinsic_function_count++;
-  state->x86_packed_dot_intrinsic_keys[cache_ordinal] = descriptor;
-  state->x86_packed_dot_intrinsic_functions[cache_ordinal] = function;
+  iree_host_size_t cache_ordinal = state->provider_intrinsic_function_count++;
+  state->provider_intrinsic_keys[cache_ordinal] = descriptor;
+  state->provider_intrinsic_functions[cache_ordinal] = function;
   *out_function = function;
   return iree_ok_status();
 }
@@ -186,15 +187,9 @@ static const char* loom_llvmir_lowering_x86_packed_dot_rejection_detail(
   return "no x86 packed-dot descriptor matches this vector dot op";
 }
 
-iree_status_t loom_llvmir_lowering_lower_vector_x86_packed_dot(
+static iree_status_t loom_llvmir_lowering_lower_vector_x86_packed_dot(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
-    const loom_op_t* op) {
-  loom_x86_packed_dot_match_request_t request = {0};
-  if (!loom_x86_packed_dot_match_request_from_vector_op(state->source_module,
-                                                        op, &request)) {
-    return loom_llvmir_lowering_unsupported_op(
-        state, op, "vector dot op is not an x86 packed-dot register contract");
-  }
+    const loom_op_t* op, loom_x86_packed_dot_match_request_t request) {
   request.feature_bits = (loom_x86_packed_dot_feature_bits_t)
                              state->target_profile->x86_packed_dot_feature_bits;
 
@@ -248,4 +243,36 @@ iree_status_t loom_llvmir_lowering_lower_vector_x86_packed_dot(
                              },
                              &result));
   return loom_llvmir_lowering_map_single_result(state, op, result);
+}
+
+static iree_status_t loom_llvmir_x86_try_lower_op(
+    const loom_llvmir_lowering_provider_t* provider,
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, bool* out_handled) {
+  (void)provider;
+  *out_handled = false;
+  switch (op->kind) {
+    case LOOM_OP_VECTOR_DOT2F:
+    case LOOM_OP_VECTOR_DOT4I: {
+      loom_x86_packed_dot_match_request_t request = {0};
+      if (!loom_x86_packed_dot_match_request_from_vector_op(
+              state->source_module, op, &request)) {
+        return iree_ok_status();
+      }
+      *out_handled = true;
+      return loom_llvmir_lowering_lower_vector_x86_packed_dot(
+          state, target_block, op, request);
+    }
+    default:
+      return iree_ok_status();
+  }
+}
+
+static const loom_llvmir_lowering_provider_t kX86LoweringProvider = {
+    .name = IREE_SVL("x86"),
+    .try_lower_op = loom_llvmir_x86_try_lower_op,
+};
+
+const loom_llvmir_lowering_provider_t* loom_llvmir_x86_lowering_provider(void) {
+  return &kX86LoweringProvider;
 }

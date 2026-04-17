@@ -540,6 +540,35 @@ static iree_status_t loom_llvmir_lowering_lower_return(
   return loom_llvmir_build_ret(target_block, value);
 }
 
+static iree_status_t loom_llvmir_lowering_try_provider_op(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, bool* out_handled) {
+  *out_handled = false;
+  for (iree_host_size_t i = 0; i < state->provider_count; ++i) {
+    const loom_llvmir_lowering_provider_t* provider = state->providers[i];
+    bool handled = false;
+    IREE_RETURN_IF_ERROR(
+        provider->try_lower_op(provider, state, target_block, op, &handled));
+    if (handled) {
+      *out_handled = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_llvmir_lowering_lower_provider_op_or_unsupported(
+    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
+    const loom_op_t* op, const char* unsupported_detail) {
+  bool handled = false;
+  IREE_RETURN_IF_ERROR(
+      loom_llvmir_lowering_try_provider_op(state, target_block, op, &handled));
+  if (handled) {
+    return iree_ok_status();
+  }
+  return loom_llvmir_lowering_unsupported_op(state, op, unsupported_detail);
+}
+
 static iree_status_t loom_llvmir_lowering_lower_op(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op) {
@@ -589,8 +618,9 @@ static iree_status_t loom_llvmir_lowering_lower_op(
       return loom_llvmir_lowering_lower_vector_binop(state, target_block, op);
     case LOOM_OP_VECTOR_DOT2F:
     case LOOM_OP_VECTOR_DOT4I:
-      return loom_llvmir_lowering_lower_vector_x86_packed_dot(state,
-                                                              target_block, op);
+      return loom_llvmir_lowering_lower_provider_op_or_unsupported(
+          state, target_block, op,
+          "vector dot op requires an explicit target lowering provider");
     case LOOM_OP_VECTOR_DOT8I4:
       return loom_llvmir_lowering_unsupported_op(
           state, op,
@@ -1177,10 +1207,23 @@ static iree_status_t loom_llvmir_lowering_state_initialize(
   state->source_module = source_module;
   state->target_profile = options->target_profile;
   state->allocator = allocator;
+  state->providers = options->providers;
+  state->provider_count = options->provider_count;
   state->value_map_count = source_module->values.count;
   state->symbol_function_count = source_module->symbols.count;
   state->kernel_attr_group_id = LOOM_LLVMIR_ATTR_GROUP_ID_INVALID;
   state->nontemporal_metadata_id = LOOM_LLVMIR_METADATA_ID_INVALID;
+  if (state->provider_count > 0 && state->providers == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "LLVMIR lowering providers are required");
+  }
+  for (iree_host_size_t i = 0; i < state->provider_count; ++i) {
+    if (state->providers[i] == NULL ||
+        state->providers[i]->try_lower_op == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "LLVMIR lowering provider is invalid");
+    }
+  }
 
   iree_string_view_t source_name = options->source_name;
   if (iree_string_view_is_empty(source_name)) {

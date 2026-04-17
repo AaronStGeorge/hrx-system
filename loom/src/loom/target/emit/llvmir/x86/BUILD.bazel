@@ -32,3 +32,15 @@ loom_cc_library(
         "//runtime/src/iree/base",
     ],
 )
+
+loom_cc_library(
+    name = "lower",
+    srcs = ["lower.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target/arch/x86:packed_dot_vector",
+        "//loom/src/loom/target/emit/llvmir:lower",
+        "//runtime/src/iree/base",
+    ],
+)

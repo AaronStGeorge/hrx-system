@@ -7,6 +7,7 @@
 #include "loom/tools/loom-check/llvmir_targets.h"
 
 #include "loom/target/emit/llvmir/amdgpu/target_env.h"
+#include "loom/target/emit/llvmir/x86/lower.h"
 #include "loom/target/emit/llvmir/x86/target_env.h"
 
 void loom_check_llvmir_target_profile_registry_initialize(
@@ -19,6 +20,12 @@ void loom_check_llvmir_target_profile_registry_initialize(
       .providers = out_registry->providers,
       .provider_count = IREE_ARRAYSIZE(out_registry->providers),
   };
+}
+
+void loom_check_llvmir_lowering_providers_initialize(
+    loom_check_llvmir_lowering_providers_t* out_providers) {
+  IREE_ASSERT_ARGUMENT(out_providers);
+  out_providers->providers[0] = loom_llvmir_x86_lowering_provider();
 }
 
 iree_status_t loom_check_llvmir_target_profile_lookup(

@@ -31,7 +31,7 @@ typedef struct loom_llvmir_lowering_intrinsic_cache_key_t {
   uint32_t discriminator2;
 } loom_llvmir_lowering_intrinsic_cache_key_t;
 
-typedef struct loom_llvmir_lowering_state_t {
+struct loom_llvmir_lowering_state_t {
   // Source Loom module being lowered.
   const loom_module_t* source_module;
   // Target structured LLVM IR module being populated.
@@ -40,6 +40,10 @@ typedef struct loom_llvmir_lowering_state_t {
   const loom_llvmir_target_profile_t* target_profile;
   // Host allocator used for temporary lowering maps.
   iree_allocator_t allocator;
+  // Optional target-specific lowering providers.
+  const loom_llvmir_lowering_provider_t* const* providers;
+  // Number of provider pointers in |providers|.
+  iree_host_size_t provider_count;
   // Map from source Loom value id to target LLVMIR value id.
   loom_llvmir_value_id_t* value_map;
   // Number of entries in |value_map|.
@@ -70,13 +74,13 @@ typedef struct loom_llvmir_lowering_state_t {
   loom_llvmir_function_t* intrinsic_functions[32];
   // Number of cached source intrinsic declarations.
   iree_host_size_t intrinsic_function_count;
-  // Cached x86 packed-dot descriptor keys.
-  const void* x86_packed_dot_intrinsic_keys[64];
-  // Cached x86 packed-dot LLVM intrinsic declarations.
-  loom_llvmir_function_t* x86_packed_dot_intrinsic_functions[64];
-  // Number of cached x86 packed-dot LLVM intrinsic declarations.
-  iree_host_size_t x86_packed_dot_intrinsic_function_count;
-} loom_llvmir_lowering_state_t;
+  // Cached target-provider intrinsic keys.
+  const void* provider_intrinsic_keys[64];
+  // Cached target-provider LLVM intrinsic declarations.
+  loom_llvmir_function_t* provider_intrinsic_functions[64];
+  // Number of cached target-provider LLVM intrinsic declarations.
+  iree_host_size_t provider_intrinsic_function_count;
+};
 
 iree_string_view_t loom_llvmir_lowering_value_name(
     const loom_llvmir_lowering_state_t* state, loom_value_id_t value_id);
@@ -258,10 +262,6 @@ iree_status_t loom_llvmir_lowering_lower_vector_select(
     const loom_op_t* op);
 
 iree_status_t loom_llvmir_lowering_lower_vector_cast(
-    loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
-    const loom_op_t* op);
-
-iree_status_t loom_llvmir_lowering_lower_vector_x86_packed_dot(
     loom_llvmir_lowering_state_t* state, loom_llvmir_block_t* target_block,
     const loom_op_t* op);
 

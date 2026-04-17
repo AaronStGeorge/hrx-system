@@ -37,4 +37,19 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower.c"
+  DEPS
+    iree::base
+    loom::src::loom::ops::vector
+    loom::src::loom::target::arch::x86::packed_dot_vector
+    loom::src::loom::target::emit::llvmir::lower
+  PUBLIC
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

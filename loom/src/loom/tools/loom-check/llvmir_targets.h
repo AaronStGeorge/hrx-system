@@ -8,6 +8,7 @@
 #define LOOM_TOOLS_LOOM_CHECK_LLVMIR_TARGETS_H_
 
 #include "iree/base/api.h"
+#include "loom/target/emit/llvmir/lower.h"
 #include "loom/target/emit/llvmir/target_presets.h"
 
 #ifdef __cplusplus
@@ -16,6 +17,7 @@ extern "C" {
 
 enum {
   LOOM_CHECK_LLVMIR_TARGET_PROFILE_PROVIDER_COUNT = 2,
+  LOOM_CHECK_LLVMIR_LOWERING_PROVIDER_COUNT = 1,
 };
 
 typedef struct loom_check_llvmir_target_profile_registry_t {
@@ -26,10 +28,21 @@ typedef struct loom_check_llvmir_target_profile_registry_t {
   loom_llvmir_target_profile_registry_t registry;
 } loom_check_llvmir_target_profile_registry_t;
 
+typedef struct loom_check_llvmir_lowering_providers_t {
+  // Target-specific lowering providers exposed to loom-check emit tests.
+  const loom_llvmir_lowering_provider_t*
+      providers[LOOM_CHECK_LLVMIR_LOWERING_PROVIDER_COUNT];
+} loom_check_llvmir_lowering_providers_t;
+
 // Initializes |out_registry| with the LLVMIR target providers that loom-check
 // intentionally exposes to developer tests.
 void loom_check_llvmir_target_profile_registry_initialize(
     loom_check_llvmir_target_profile_registry_t* out_registry);
+
+// Initializes |out_providers| with the LLVMIR lowering providers that
+// loom-check intentionally exposes to developer tests.
+void loom_check_llvmir_lowering_providers_initialize(
+    loom_check_llvmir_lowering_providers_t* out_providers);
 
 // Looks up a profile in the loom-check LLVMIR target provider registry.
 iree_status_t loom_check_llvmir_target_profile_lookup(

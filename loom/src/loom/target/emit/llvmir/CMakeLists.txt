@@ -136,7 +136,6 @@ loom_cc_library(
     "lower_scalar.c"
     "lower_target.c"
     "lower_vector.c"
-    "lower_vector_x86.c"
   DEPS
     ::core
     ::target_env
@@ -155,7 +154,6 @@ loom_cc_library(
     loom::src::loom::ops::scf
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
-    loom::src::loom::target::arch::x86::packed_dot_vector
     loom::src::loom::target::emit::llvmir::amdgpu::intrinsics
     loom::src::loom::target::emit::llvmir::amdgpu::target_env
     loom::src::loom::target::emit::llvmir::x86::intrinsics
@@ -299,6 +297,7 @@ loom_cc_test(
     loom::src::loom::ops::view
     loom::src::loom::target::arch::x86::packed_dot_contract
     loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::lower
     loom::src::loom::target::emit::llvmir::x86::target_env
     loom::src::loom::util::stream
     iree::testing::gtest

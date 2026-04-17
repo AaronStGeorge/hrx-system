@@ -34,6 +34,7 @@
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
+#include "loom/target/emit/llvmir/x86/lower.h"
 #include "loom/target/emit/llvmir/x86/target_env.h"
 #include "loom/util/stream.h"
 
@@ -245,9 +246,14 @@ class LlvmIrLowerTest : public ::testing::Test {
 
   iree_status_t LowerModule(const loom_llvmir_target_profile_t* profile,
                             loom_llvmir_module_t** out_lowered) {
-    loom_llvmir_lowering_options_t options;
+    const loom_llvmir_lowering_provider_t* providers[] = {
+        loom_llvmir_x86_lowering_provider(),
+    };
+    loom_llvmir_lowering_options_t options = {};
     options.target_profile = profile;
     options.source_name = IREE_SV("lower_test");
+    options.providers = providers;
+    options.provider_count = IREE_ARRAYSIZE(providers);
     return loom_llvmir_lower_module(module_, &options, iree_allocator_system(),
                                     out_lowered);
   }
@@ -2233,7 +2239,7 @@ TEST_F(LlvmIrLowerTest, RejectsVectorLoadWithoutDenseEncoding) {
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, &loaded, 1,
                                         LOOM_LOCATION_UNKNOWN, &load_op));
 
-  loom_llvmir_lowering_options_t options;
+  loom_llvmir_lowering_options_t options = {};
   options.target_profile = loom_llvmir_target_profile_x86_64_object();
   options.source_name = IREE_SV("lower_test");
   loom_llvmir_module_t* lowered = NULL;
@@ -2461,7 +2467,7 @@ TEST_F(LlvmIrLowerTest, RejectsMemoryIntrinsicDynamicImmarg) {
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &return_op));
 
-  loom_llvmir_lowering_options_t options;
+  loom_llvmir_lowering_options_t options = {};
   options.target_profile = loom_llvmir_target_profile_x86_64_object();
   options.source_name = IREE_SV("lower_test");
   loom_llvmir_module_t* lowered = NULL;
@@ -2660,7 +2666,7 @@ TEST_F(LlvmIrLowerTest, RejectsAmdgpuIntrinsicOnX86Profile) {
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, &tid, 1,
                                         LOOM_LOCATION_UNKNOWN, &tid_op));
 
-  loom_llvmir_lowering_options_t options;
+  loom_llvmir_lowering_options_t options = {};
   options.target_profile = loom_llvmir_target_profile_x86_64_object();
   options.source_name = IREE_SV("lower_test");
   loom_llvmir_module_t* lowered = NULL;
@@ -2742,7 +2748,7 @@ TEST_F(LlvmIrLowerTest, RejectsAmdgpuHalKernelViewParameter) {
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, NULL, 0,
                                         LOOM_LOCATION_UNKNOWN, &return_op));
 
-  loom_llvmir_lowering_options_t options;
+  loom_llvmir_lowering_options_t options = {};
   options.target_profile = loom_llvmir_target_profile_amdgpu_hal();
   options.source_name = IREE_SV("lower_test");
   loom_llvmir_module_t* lowered = NULL;
@@ -2777,7 +2783,7 @@ TEST_F(LlvmIrLowerTest, ReportsUnsupportedOpName) {
   IREE_ASSERT_OK(loom_func_return_build(&body_builder, &poison, 1,
                                         LOOM_LOCATION_UNKNOWN, &poison_op));
 
-  loom_llvmir_lowering_options_t options;
+  loom_llvmir_lowering_options_t options = {};
   options.target_profile = loom_llvmir_target_profile_x86_64_object();
   options.source_name = IREE_SV("lower_test");
   loom_llvmir_module_t* lowered = NULL;
