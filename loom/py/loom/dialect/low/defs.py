@@ -297,13 +297,13 @@ low_copy = Op(
 )
 
 # ============================================================================
-# low.invoke — call or interop edge to a function-like symbol
+# low.invoke — call or interop edge to a low function symbol
 # ============================================================================
 
 low_invoke = Op(
     "low.invoke",
     group=low_ops,
-    doc="Call or interop edge to a function-like symbol.",
+    doc="Call or interop edge to a low function symbol.",
     operands=[Operand("operands", ANY, variadic=True)],
     attrs=[
         AttrDef(
@@ -314,6 +314,7 @@ low_invoke = Op(
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_invoke_verify",
     format=[
         SymbolRef("callee"),
         GLUE,

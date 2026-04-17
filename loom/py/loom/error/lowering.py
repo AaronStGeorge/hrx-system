@@ -261,6 +261,51 @@ ERR_LOWERING_012 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_013: Low invoke signature count mismatch.
+ERR_LOWERING_013 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=13,
+    severity=Severity.ERROR,
+    summary="Low invoke signature count mismatch.",
+    message=(
+        "low.invoke callee '@{callee_name}' {field_kind} count is "
+        "{actual_count}, expected {expected_count}"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("field_kind", ParamKind.STRING),
+        ErrorParam("actual_count", ParamKind.U32),
+        ErrorParam("expected_count", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Match the low.invoke {field_kind} list to the callee low-function signature"
+    ),
+)
+
+# ERR_LOWERING_014: Low invoke signature type mismatch.
+ERR_LOWERING_014 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=14,
+    severity=Severity.ERROR,
+    summary="Low invoke signature type mismatch.",
+    message=(
+        "low.invoke callee '@{callee_name}' {field_kind} {field_index} has "
+        "type {actual_type}, expected callee {callee_field_kind} type "
+        "{expected_type}"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("field_kind", ParamKind.STRING),
+        ErrorParam("field_index", ParamKind.U32),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("callee_field_kind", ParamKind.STRING),
+        ErrorParam("expected_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Match the low.invoke {field_kind} type to the callee low-function signature"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -274,4 +319,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_010,
     ERR_LOWERING_011,
     ERR_LOWERING_012,
+    ERR_LOWERING_013,
+    ERR_LOWERING_014,
 )

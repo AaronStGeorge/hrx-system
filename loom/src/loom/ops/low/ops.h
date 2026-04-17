@@ -185,7 +185,7 @@ iree_status_t loom_low_copy_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_LOW_INVOKE: Call or interop edge to a function-like symbol.
+// LOOM_OP_LOW_INVOKE: Call or interop edge to a low function symbol.
 // %result = low.invoke @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)
 LOOM_DEFINE_ISA(loom_low_invoke_isa, LOOM_OP_LOW_INVOKE)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_invoke_operands, 0)
@@ -202,6 +202,9 @@ iree_status_t loom_low_invoke_build(
     iree_host_size_t tied_result_count,
     loom_location_id_t location,
     loom_op_t** out_op);
+iree_status_t loom_low_invoke_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the low dialect.
 const loom_op_vtable_t* const* loom_low_dialect_vtables(

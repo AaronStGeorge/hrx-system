@@ -3793,5 +3793,81 @@
       }
     ],
     "fix_hint_template": "Choose an enum token or numeric value declared by enum domain '{enum_domain}' for '{immediate_name}'"
+  },
+  {
+    "error_id": "ERR_LOWERING_013",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 13,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low invoke signature count mismatch.",
+    "message_template": "low.invoke callee '@{callee_name}' {field_kind} count is {actual_count}, expected {expected_count}",
+    "params": [
+      {
+        "name": "callee_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "expected_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Match the low.invoke {field_kind} list to the callee low-function signature"
+  },
+  {
+    "error_id": "ERR_LOWERING_014",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 14,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low invoke signature type mismatch.",
+    "message_template": "low.invoke callee '@{callee_name}' {field_kind} {field_index} has type {actual_type}, expected callee {callee_field_kind} type {expected_type}",
+    "params": [
+      {
+        "name": "callee_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "callee_field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Match the low.invoke {field_kind} type to the callee low-function signature"
   }
 ]

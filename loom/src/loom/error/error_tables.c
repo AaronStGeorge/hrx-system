@@ -2797,6 +2797,53 @@ static const loom_error_def_t loom_err_lowering_012 = {
     .param_count = 5,
 };
 
+static const loom_error_param_def_t loom_err_lowering_013_params[] = {
+    {"callee_name", LOOM_PARAM_STRING},
+    {"field_kind", LOOM_PARAM_STRING},
+    {"actual_count", LOOM_PARAM_U32},
+    {"expected_count", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_lowering_013 = {
+    .error_id = "ERR_LOWERING_013",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 13,
+    .summary = "Low invoke signature count mismatch.",
+    .message_template =
+        "low.invoke callee '@{callee_name}' {field_kind} count is "
+        "{actual_count}, expected {expected_count}",
+    .fix_hint_template =
+        "Match the low.invoke {field_kind} list to the callee low-function "
+        "signature",
+    .param_defs = loom_err_lowering_013_params,
+    .param_count = 4,
+};
+
+static const loom_error_param_def_t loom_err_lowering_014_params[] = {
+    {"callee_name", LOOM_PARAM_STRING},
+    {"field_kind", LOOM_PARAM_STRING},
+    {"field_index", LOOM_PARAM_U32},
+    {"actual_type", LOOM_PARAM_TYPE},
+    {"callee_field_kind", LOOM_PARAM_STRING},
+    {"expected_type", LOOM_PARAM_TYPE},
+};
+static const loom_error_def_t loom_err_lowering_014 = {
+    .error_id = "ERR_LOWERING_014",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 14,
+    .summary = "Low invoke signature type mismatch.",
+    .message_template =
+        "low.invoke callee '@{callee_name}' {field_kind} {field_index} has "
+        "type {actual_type}, expected callee {callee_field_kind} type "
+        "{expected_type}",
+    .fix_hint_template =
+        "Match the low.invoke {field_kind} type to the callee low-function "
+        "signature",
+    .param_defs = loom_err_lowering_014_params,
+    .param_count = 6,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2847,7 +2894,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_003,  &loom_err_lowering_004,  &loom_err_lowering_005,
     &loom_err_lowering_006,  &loom_err_lowering_007,  &loom_err_lowering_008,
     &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
-    &loom_err_lowering_012,
+    &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,
