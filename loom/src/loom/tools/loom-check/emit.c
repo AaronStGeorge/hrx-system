@@ -12,6 +12,7 @@
 #include "loom/target/llvmir/text_writer.h"
 #include "loom/target/llvmir/tool.h"
 #include "loom/target/llvmir/verify.h"
+#include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/util/stream.h"
 
@@ -35,16 +36,6 @@ typedef struct loom_check_emit_byte_buffer_t {
   // Number of valid bytes in |data|.
   iree_host_size_t length;
 } loom_check_emit_byte_buffer_t;
-
-static iree_status_t loom_check_emit_status_failure(
-    iree_status_t failure_status, loom_check_result_t* result) {
-  result->raw_outcome = LOOM_CHECK_FAIL;
-  iree_status_t append_status =
-      iree_string_builder_append_status(&result->detail, failure_status);
-  iree_status_ignore(failure_status);
-  IREE_RETURN_IF_ERROR(append_status);
-  return iree_string_builder_append_cstring(&result->detail, "\n");
-}
 
 static iree_status_t loom_check_emit_parse_request(
     iree_string_view_t emit_target, loom_check_emit_request_t* out_request) {
@@ -77,6 +68,127 @@ static iree_status_t loom_check_emit_parse_request(
   return loom_llvmir_target_profile_lookup(profile_name, &out_request->profile);
 }
 
+static iree_string_view_t loom_check_emit_consume_line(
+    iree_string_view_t* remaining) {
+  iree_host_size_t newline_pos =
+      iree_string_view_find(*remaining, IREE_SV("\n"), 0);
+  if (newline_pos == IREE_STRING_VIEW_NPOS) {
+    iree_string_view_t line = *remaining;
+    *remaining = iree_string_view_empty();
+    return line;
+  }
+  iree_string_view_t line = iree_string_view_substr(*remaining, 0, newline_pos);
+  *remaining =
+      iree_string_view_substr(*remaining, newline_pos + 1, IREE_HOST_SIZE_MAX);
+  return line;
+}
+
+static bool loom_check_emit_line_has_ir(iree_string_view_t line) {
+  line = iree_string_view_trim(line);
+  return !iree_string_view_is_empty(line) &&
+         !iree_string_view_starts_with(line, IREE_SV("//"));
+}
+
+static loom_source_range_t loom_check_emit_first_ir_source_range(
+    const loom_check_case_t* test_case, iree_string_view_t filename) {
+  if (iree_string_view_is_empty(test_case->input)) {
+    return (loom_source_range_t){
+        .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
+    };
+  }
+
+  iree_string_view_t remaining = test_case->input;
+  uint32_t line_number = 1;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t line = loom_check_emit_consume_line(&remaining);
+    if (loom_check_emit_line_has_ir(line)) {
+      iree_host_size_t indentation_length = 0;
+      while (indentation_length < line.size &&
+             (line.data[indentation_length] == ' ' ||
+              line.data[indentation_length] == '\t')) {
+        ++indentation_length;
+      }
+      iree_host_size_t start =
+          (iree_host_size_t)(line.data - test_case->input.data) +
+          indentation_length;
+      return (loom_source_range_t){
+          .provenance = LOOM_SOURCE_PROVENANCE_EXACT_SOURCE,
+          .filename = filename,
+          .source = test_case->input,
+          .start = start,
+          .end = start + 1,
+          .start_line = line_number,
+          .start_column = (uint32_t)indentation_length + 1,
+          .end_line = line_number,
+          .end_column = (uint32_t)indentation_length + 2,
+      };
+    }
+    ++line_number;
+  }
+
+  return (loom_source_range_t){
+      .provenance = LOOM_SOURCE_PROVENANCE_UNAVAILABLE_SOURCE,
+  };
+}
+
+static iree_status_t loom_check_emit_collect_status_diagnostic(
+    loom_check_diagnostic_collector_t* collector,
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    iree_status_t failure_status, iree_allocator_t allocator) {
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 1);
+  if (!error) {
+    iree_status_ignore(failure_status);
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "LOWERING/001 diagnostic is not registered");
+  }
+
+  char* status_buffer = NULL;
+  iree_host_size_t status_length = 0;
+  if (!iree_status_to_string(failure_status, &allocator, &status_buffer,
+                             &status_length)) {
+    iree_status_ignore(failure_status);
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "failed to render lowering failure status");
+  }
+
+  iree_string_view_t status_text =
+      iree_make_string_view(status_buffer, status_length);
+  loom_diagnostic_param_t params[3] = {
+      loom_param_string(IREE_SV("module")),
+      loom_param_string(IREE_SV("llvmir")),
+      loom_param_string(status_text),
+  };
+  loom_source_range_t source_range =
+      loom_check_emit_first_ir_source_range(test_case, filename);
+  loom_diagnostic_t diagnostic = {
+      .severity = error->severity,
+      .error = error,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .emitter = LOOM_EMITTER_PASS,
+      .origin = source_range,
+      .source_location = source_range,
+  };
+  iree_status_t status =
+      loom_check_diagnostic_collector_sink(collector, &diagnostic);
+
+  iree_allocator_free(allocator, status_buffer);
+  iree_status_ignore(failure_status);
+  return status;
+}
+
+static iree_status_t loom_check_emit_finish_status_failure(
+    iree_status_t failure_status, loom_check_diagnostic_collector_t* collector,
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    iree_allocator_t allocator, loom_check_result_t* result) {
+  IREE_RETURN_IF_ERROR(loom_check_emit_collect_status_diagnostic(
+      collector, test_case, filename, failure_status, allocator));
+  return loom_check_diagnostic_collector_finish(
+      collector, test_case, case_index, report, allocator, result);
+}
+
 static iree_status_t loom_check_emit_compare_output(
     const loom_check_case_t* test_case, iree_allocator_t allocator,
     loom_check_result_t* result) {
@@ -101,21 +213,6 @@ static iree_status_t loom_check_emit_compare_output(
 
   iree_string_builder_deinitialize(&stripped_expected);
   return status;
-}
-
-static iree_string_view_t loom_check_emit_consume_line(
-    iree_string_view_t* remaining) {
-  iree_host_size_t newline_pos =
-      iree_string_view_find(*remaining, IREE_SV("\n"), 0);
-  if (newline_pos == IREE_STRING_VIEW_NPOS) {
-    iree_string_view_t line = *remaining;
-    *remaining = iree_string_view_empty();
-    return line;
-  }
-  iree_string_view_t line = iree_string_view_substr(*remaining, 0, newline_pos);
-  *remaining =
-      iree_string_view_substr(*remaining, newline_pos + 1, IREE_HOST_SIZE_MAX);
-  return line;
 }
 
 static iree_status_t loom_check_emit_strip_llvmir_comments(
@@ -300,17 +397,28 @@ static iree_status_t loom_check_emit_write_llvmir_object(
   return status;
 }
 
-iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
-                                      iree_string_view_t filename,
-                                      loom_context_t* context,
-                                      iree_arena_block_pool_t* block_pool,
-                                      iree_allocator_t allocator,
-                                      loom_check_result_t* result) {
+iree_status_t loom_check_execute_emit(
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, loom_check_result_t* result) {
+  iree_arena_allocator_t diagnostic_arena;
+  iree_arena_initialize(block_pool, &diagnostic_arena);
+  loom_check_diagnostic_collector_t diagnostic_collector = {
+      .arena = &diagnostic_arena,
+      .host_allocator = allocator,
+      .result = result,
+  };
+
   loom_check_emit_request_t request;
   iree_status_t status =
       loom_check_emit_parse_request(test_case->emit_target, &request);
   if (!iree_status_is_ok(status)) {
-    return loom_check_emit_status_failure(status, result);
+    status = loom_check_emit_finish_status_failure(
+        status, &diagnostic_collector, test_case, case_index, report, filename,
+        allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
   }
 
   iree_string_builder_t stripped_input;
@@ -318,26 +426,32 @@ iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
   status = loom_check_strip_comments(test_case->input, &stripped_input);
   if (!iree_status_is_ok(status)) {
     iree_string_builder_deinitialize(&stripped_input);
+    iree_arena_deinitialize(&diagnostic_arena);
     return status;
   }
 
   loom_module_t* module = NULL;
-  loom_check_diagnostic_capture_t diagnostic_capture = {
-      .detail = &result->detail,
-      .result = result,
-  };
   loom_text_parse_options_t parse_options = {
-      .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
-                          .user_data = &diagnostic_capture},
+      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
+                          .user_data = &diagnostic_collector},
       .max_errors = 20,
   };
   status = loom_text_parse(iree_string_builder_view(&stripped_input), filename,
                            context, block_pool, &parse_options, &module);
+  diagnostic_collector.module = module;
   iree_string_builder_deinitialize(&stripped_input);
-  IREE_RETURN_IF_ERROR(status);
-  if (!module) {
-    result->raw_outcome = LOOM_CHECK_FAIL;
-    return iree_ok_status();
+  if (!iree_status_is_ok(status)) {
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+  if (!module || diagnostic_collector.count > 0) {
+    status = loom_check_diagnostic_collector_finish(&diagnostic_collector,
+                                                    test_case, case_index,
+                                                    report, allocator, result);
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
   }
 
   loom_llvmir_lowering_options_t options = {
@@ -348,8 +462,14 @@ iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
   status =
       loom_llvmir_lower_module(module, &options, allocator, &lowered_module);
   loom_module_free(module);
+  diagnostic_collector.module = NULL;
   if (!iree_status_is_ok(status)) {
-    return loom_check_emit_status_failure(status, result);
+    loom_llvmir_module_free(lowered_module);
+    status = loom_check_emit_finish_status_failure(
+        status, &diagnostic_collector, test_case, case_index, report, filename,
+        allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
   }
 
   status = loom_llvmir_verify_module(lowered_module);
@@ -374,8 +494,22 @@ iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
   }
   loom_llvmir_module_free(lowered_module);
   if (!iree_status_is_ok(status)) {
-    return loom_check_emit_status_failure(status, result);
+    status = loom_check_emit_finish_status_failure(
+        status, &diagnostic_collector, test_case, case_index, report, filename,
+        allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
   }
 
-  return loom_check_emit_compare_output(test_case, allocator, result);
+  if (test_case->annotation_count > 0) {
+    status = loom_check_diagnostic_collector_finish(&diagnostic_collector,
+                                                    test_case, case_index,
+                                                    report, allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+
+  status = loom_check_emit_compare_output(test_case, allocator, result);
+  iree_arena_deinitialize(&diagnostic_arena);
+  return status;
 }

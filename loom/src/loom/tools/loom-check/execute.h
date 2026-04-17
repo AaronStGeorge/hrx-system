@@ -199,12 +199,11 @@ iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
 // Strips comments from input, parses, lowers to the target specified in
 // test_case->emit_target, writes a comparable target output form, and compares
 // against the expected section. Same diff/update behavior as roundtrip.
-iree_status_t loom_check_execute_emit(const loom_check_case_t* test_case,
-                                      iree_string_view_t filename,
-                                      loom_context_t* context,
-                                      iree_arena_block_pool_t* block_pool,
-                                      iree_allocator_t allocator,
-                                      loom_check_result_t* result);
+iree_status_t loom_check_execute_emit(
+    const loom_check_case_t* test_case, iree_host_size_t case_index,
+    loom_check_file_report_t* report, iree_string_view_t filename,
+    loom_context_t* context, iree_arena_block_pool_t* block_pool,
+    iree_allocator_t allocator, loom_check_result_t* result);
 
 #ifdef __cplusplus
 }

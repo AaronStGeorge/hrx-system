@@ -267,8 +267,9 @@ iree_status_t loom_check_execute_case(
       break;
     }
     case LOOM_CHECK_MODE_EMIT: {
-      IREE_RETURN_IF_ERROR(loom_check_execute_emit(
-          test_case, filename, context, block_pool, allocator, result));
+      IREE_RETURN_IF_ERROR(
+          loom_check_execute_emit(test_case, case_index, report, filename,
+                                  context, block_pool, allocator, result));
       break;
     }
     default:

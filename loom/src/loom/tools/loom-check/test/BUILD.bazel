@@ -16,6 +16,7 @@ loom_check_test_suite(
     srcs = [
         "emit.loom-test",
         "llvmir/intrinsics.loom-test",
+        "llvmir/lowering_errors.loom-test",
         "llvmir/memory.loom-test",
         "llvmir/packed_dot.loom-test",
         "llvmir/scalar_index.loom-test",

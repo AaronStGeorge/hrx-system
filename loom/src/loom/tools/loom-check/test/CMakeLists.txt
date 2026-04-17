@@ -34,6 +34,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "llvmir_lowering_errors"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/lowering_errors.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "llvmir_memory"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/memory.loom-test"

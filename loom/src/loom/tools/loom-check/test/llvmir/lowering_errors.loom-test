@@ -1,0 +1,82 @@
+// RUN: emit llvmir-body
+
+// Missing CPU packed-dot features fail loudly instead of selecting a fallback.
+// ERROR@+1: LOWERING/001 "vector.dot4i" "matching CPU packed-dot feature"
+func.def @dot4_s8s8(%lhs: vector<32xi8>, %rhs: vector<32xi8>, %acc: vector<8xi32>) -> (vector<8xi32>) {
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  func.return %dot : vector<8xi32>
+}
+
+// ====
+
+// Packed i4 dot has no implicit LLVMIR reference expansion.
+// ERROR@+1: LOWERING/001 "vector.dot8i4" "packed i4 dot needs explicit unpack"
+func.def @dot8_i4(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xi32>) -> (vector<4xi32>) {
+  %dot = vector.dot8i4<s4s4> %lhs, %rhs, %acc : vector<4xi32>
+  func.return %dot : vector<4xi32>
+}
+
+// ====
+
+// Packed fp8/bf8 dot has no implicit LLVMIR reference expansion.
+// ERROR@+1: LOWERING/001 "vector.dot4f8" "packed fp8/bf8 dot needs explicit decode"
+func.def @dot4_f8(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %acc: vector<4xf32>) -> (vector<4xf32>) {
+  %dot = vector.dot4f8<fp8bf8> %lhs, %rhs, %acc : vector<4xi32>, vector<4xf32>
+  func.return %dot : vector<4xf32>
+}
+
+// ====
+
+// Vector memory lowering currently requires dense address layouts.
+// ERROR@+1: LOWERING/001 "vector.load" "dense address layouts"
+func.def @vector_load_strided(%buffer: buffer, %offset: offset) -> (vector<4xf32>) {
+  %view = buffer.view %buffer[%offset] : buffer -> view<4xf32, #strided<stride=8>>
+  %loaded = vector.load %view[0] : view<4xf32, #strided<stride=8>> -> vector<4xf32>
+  func.return %loaded : vector<4xf32>
+}
+
+// ====
+
+// LLVM immarg operands must be compile-time constants.
+// ERROR@+1: LOWERING/001 "llvmir.intrinsic" "llvm.memcpy expects" "constant volatile"
+func.def public @dynamic_memcpy_volatile(%target: buffer, %source: buffer, %length: offset, %is_volatile: i1) {
+  llvmir.intrinsic<llvm.memcpy> (%target, %source, %length, %is_volatile) : (buffer, buffer, offset, i1)
+  func.return
+}
+
+// ====
+
+// AMDGPU intrinsics are rejected when the selected target profile is x86.
+// ERROR@+1: LOWERING/001 "llvmir.intrinsic" "requires an AMDGPU target"
+func.def public @amdgpu_intrinsic_on_x86() -> (i32) {
+  %tid = llvmir.intrinsic<llvm.amdgcn.workitem.id.y> () : () -> i32
+  func.return %tid : i32
+}
+
+// ====
+// RUN: emit llvmir-body amdgpu-hal
+
+// Device kernel view parameters require an explicit ABI adapter.
+// ERROR@+1: LOWERING/001 "view parameters need an explicit ABI adapter"
+func.def public device @bad_view_dispatch(%view: view<1xf32, #dense>) {
+  func.return
+}
+
+// ====
+// RUN: emit llvmir-body
+
+// Unsupported source ops report the op name in the lowering diagnostic.
+// ERROR@+1: LOWERING/001 "scalar.poison"
+func.def public @bad() -> (i32) {
+  %poison = scalar.poison : i32
+  func.return %poison : i32
+}
+
+// ====
+// RUN: emit llvmir spirv-vulkan
+
+// Unknown LLVMIR target profiles are reported before parsing/lowering.
+// ERROR@+1: LOWERING/001 "unknown LLVMIR target profile"
+func.def @unknown_profile() {
+  func.return
+}
