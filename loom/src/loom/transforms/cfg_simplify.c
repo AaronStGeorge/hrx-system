@@ -303,8 +303,8 @@ static bool loom_cfg_simplify_match_trivial_forward_block(
     loom_value_slice_t* out_args) {
   *out_dest = NULL;
   *out_args = (loom_value_slice_t){0};
-  if (!block || block->arg_count != 0 || block->first_op != block->last_op ||
-      !block->first_op || !loom_cfg_br_isa(block->first_op)) {
+  if (!block || block->first_op != block->last_op || !block->first_op ||
+      !loom_cfg_br_isa(block->first_op)) {
     return false;
   }
   loom_block_t* dest = loom_cfg_br_dest(block->first_op);
@@ -313,6 +313,28 @@ static bool loom_cfg_simplify_match_trivial_forward_block(
   *out_args = loom_cfg_br_args(block->first_op);
   if (out_args->count != dest->arg_count) return false;
   return true;
+}
+
+static bool loom_cfg_simplify_map_forward_arg(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* forward_block,
+    loom_value_slice_t predecessor_args, loom_value_id_t forward_arg,
+    loom_value_id_t* out_arg) {
+  *out_arg = LOOM_VALUE_ID_INVALID;
+  if (forward_arg == LOOM_VALUE_ID_INVALID ||
+      forward_arg >= state->module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(state->module, forward_arg);
+  if (!loom_value_is_block_arg(value) ||
+      loom_value_def_block(value) != forward_block) {
+    *out_arg = forward_arg;
+    return true;
+  }
+
+  uint16_t arg_index = loom_value_def_index(value);
+  if (arg_index >= predecessor_args.count) return false;
+  *out_arg = predecessor_args.values[arg_index];
+  return *out_arg != LOOM_VALUE_ID_INVALID;
 }
 
 static bool loom_cfg_simplify_branch_args_available_before(
@@ -329,6 +351,77 @@ static bool loom_cfg_simplify_branch_args_available_before(
   return true;
 }
 
+static bool loom_cfg_simplify_branch_args_match_dest(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* dest,
+    loom_value_slice_t args) {
+  if (!dest || args.count != dest->arg_count) return false;
+  loom_type_value_remap_t remap = {
+      .source_values = dest->arg_ids,
+      .target_values = args.values,
+      .count = dest->arg_count,
+  };
+  for (uint16_t i = 0; i < dest->arg_count; ++i) {
+    loom_value_id_t actual_id = args.values[i];
+    loom_value_id_t expected_id = loom_block_arg_id(dest, i);
+    if (actual_id == LOOM_VALUE_ID_INVALID ||
+        expected_id == LOOM_VALUE_ID_INVALID ||
+        actual_id >= state->module->values.count ||
+        expected_id >= state->module->values.count) {
+      return false;
+    }
+    loom_type_t actual_type = loom_module_value_type(state->module, actual_id);
+    loom_type_t expected_type =
+        loom_module_value_type(state->module, expected_id);
+    if (!loom_type_equal_after_value_remap(expected_type, actual_type,
+                                           &remap)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_cfg_simplify_compose_forward_args(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* forward_block,
+    loom_op_t* predecessor_br, const loom_block_t* new_dest,
+    loom_value_slice_t forward_args, loom_value_slice_t* out_args,
+    bool* out_valid) {
+  *out_args = (loom_value_slice_t){0};
+  *out_valid = false;
+
+  loom_value_slice_t predecessor_args = loom_cfg_br_args(predecessor_br);
+  if (predecessor_args.count != forward_block->arg_count) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t* composed_args = NULL;
+  if (forward_args.count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->analysis_arena, forward_args.count, sizeof(*composed_args),
+        (void**)&composed_args));
+  }
+  for (uint16_t i = 0; i < forward_args.count; ++i) {
+    if (!loom_cfg_simplify_map_forward_arg(
+            state, forward_block, predecessor_args, forward_args.values[i],
+            &composed_args[i])) {
+      return iree_ok_status();
+    }
+  }
+
+  loom_value_slice_t composed = {
+      .values = composed_args,
+      .count = forward_args.count,
+  };
+  if (!loom_cfg_simplify_branch_args_available_before(state, composed,
+                                                      predecessor_br) ||
+      !loom_cfg_simplify_branch_args_match_dest(state, new_dest, composed)) {
+    return iree_ok_status();
+  }
+
+  *out_args = composed;
+  *out_valid = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_cfg_simplify_forward_branch_edge(
     loom_cfg_simplify_state_t* state, loom_op_t* predecessor_br,
     loom_block_t* old_dest, loom_block_t* new_dest, loom_value_slice_t new_args,
@@ -337,12 +430,18 @@ static iree_status_t loom_cfg_simplify_forward_branch_edge(
       loom_cfg_br_dest(predecessor_br) != old_dest) {
     return iree_ok_status();
   }
-  if (!loom_cfg_simplify_branch_args_available_before(state, new_args,
-                                                      predecessor_br)) {
+
+  loom_value_slice_t composed_args = {0};
+  bool valid_args = false;
+  IREE_RETURN_IF_ERROR(loom_cfg_simplify_compose_forward_args(
+      state, old_dest, predecessor_br, new_dest, new_args, &composed_args,
+      &valid_args));
+  if (!valid_args) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_cfg_simplify_replace_br(
-      state, predecessor_br, new_dest, new_args.values, new_args.count));
+  IREE_RETURN_IF_ERROR(
+      loom_cfg_simplify_replace_br(state, predecessor_br, new_dest,
+                                   composed_args.values, composed_args.count));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass, LOOM_CFG_SIMPLIFY_STAT_EDGES_FORWARDED,
                             1);
@@ -355,7 +454,8 @@ static iree_status_t loom_cfg_simplify_forward_cond_br_edge(
     loom_cfg_simplify_state_t* state, loom_op_t* predecessor_cond_br,
     loom_block_t* old_dest, loom_block_t* new_dest, loom_value_slice_t new_args,
     bool* out_changed) {
-  if (!loom_cfg_cond_br_isa(predecessor_cond_br) || new_args.count != 0) {
+  if (!loom_cfg_cond_br_isa(predecessor_cond_br) || old_dest->arg_count != 0 ||
+      new_args.count != 0) {
     return iree_ok_status();
   }
   if (!new_dest || new_dest->arg_count != 0) return iree_ok_status();

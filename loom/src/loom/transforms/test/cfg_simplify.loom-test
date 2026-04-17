@@ -37,6 +37,33 @@ func.def @forwards_empty_block(%cond: i1) {
 
 // ====
 
+func.def @forwards_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^left, ^right : i1
+^left:
+  cfg.br ^forward(%a, %b : i32, i32)
+^right:
+  cfg.br ^forward(%b, %a : i32, i32)
+^forward(%x : i32, %y : i32):
+  cfg.br ^join(%y, %x : i32, i32)
+^join(%p : i32, %q : i32):
+  %sum = test.addi %p, %q : i32
+  func.return %sum : i32
+}
+
+// ----
+func.def @forwards_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %cond, ^left, ^right : i1
+^left:
+  cfg.br ^join(%b, %a : i32, i32)
+^right:
+  cfg.br ^join(%a, %b : i32, i32)
+^join(%p : i32, %q : i32):
+  %sum = test.addi %p, %q : i32
+  func.return %sum : i32
+}
+
+// ====
+
 func.def @deduplicates_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %cond, ^then, ^else : i1
 ^then:
