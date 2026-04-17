@@ -3755,5 +3755,43 @@
       }
     ],
     "fix_hint_template": "Choose matching register types for the constrained packet fields or select a descriptor without the {constraint_kind} constraint"
+  },
+  {
+    "error_id": "ERR_LOWERING_012",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor enum immediate value is not in domain.",
+    "message_template": "low function '@{function_name}' descriptor '{opcode}' immediate '{immediate_name}' has enum value '{actual_value}', expected a value from enum domain '{enum_domain}'",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "immediate_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_value",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "enum_domain",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Choose an enum token or numeric value declared by enum domain '{enum_domain}' for '{immediate_name}'"
   }
 ]

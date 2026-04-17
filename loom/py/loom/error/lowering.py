@@ -237,6 +237,30 @@ ERR_LOWERING_011 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_012: Low descriptor enum immediate value is not in domain.
+ERR_LOWERING_012 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=12,
+    severity=Severity.ERROR,
+    summary="Low descriptor enum immediate value is not in domain.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' immediate "
+        "'{immediate_name}' has enum value '{actual_value}', expected a "
+        "value from enum domain '{enum_domain}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("immediate_name", ParamKind.STRING),
+        ErrorParam("actual_value", ParamKind.STRING),
+        ErrorParam("enum_domain", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Choose an enum token or numeric value declared by enum domain "
+        "'{enum_domain}' for '{immediate_name}'"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -249,4 +273,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_009,
     ERR_LOWERING_010,
     ERR_LOWERING_011,
+    ERR_LOWERING_012,
 )

@@ -82,7 +82,7 @@ TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {
   iree_string_builder_deinitialize(&builder);
 
   EXPECT_NE(json.find("\"key\":\"iree.vm.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"abi_version\":4"), std::string::npos);
+  EXPECT_NE(json.find("\"abi_version\":5"), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"iree.vm.call.import.i32\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"iree.vm.cond_br.i32\""), std::string::npos);

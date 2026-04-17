@@ -106,6 +106,12 @@ static iree_status_t loom_low_verify_tables_present(
       descriptor_set->immediates, descriptor_set->immediate_count,
       "immediates"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->enum_domains, descriptor_set->enum_domain_count,
+      "enum_domains"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->enum_values, descriptor_set->enum_value_count,
+      "enum_values"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->effects, descriptor_set->effect_count, "effects"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->constraints, descriptor_set->constraint_count,
@@ -585,6 +591,26 @@ static iree_status_t loom_low_verify_immediate(
                             "low immediate %" PRIu32 " has unknown kind",
                             immediate_index);
   }
+  if (immediate->kind == LOOM_LOW_IMMEDIATE_KIND_ENUM) {
+    if (immediate->enum_domain_id == LOOM_LOW_ENUM_DOMAIN_NONE) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low enum immediate %" PRIu32 " has no enum domain", immediate_index);
+    }
+    if (immediate->enum_domain_id >= descriptor_set->enum_domain_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low enum immediate %" PRIu32
+                              " references enum domain %" PRIu16
+                              " but only %" PRIu32 " domains exist",
+                              immediate_index, immediate->enum_domain_id,
+                              descriptor_set->enum_domain_count);
+    }
+  } else if (immediate->enum_domain_id != LOOM_LOW_ENUM_DOMAIN_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low non-enum immediate %" PRIu32
+                            " references enum domain %" PRIu16,
+                            immediate_index, immediate->enum_domain_id);
+  }
   if (immediate->bit_width > 64) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low immediate %" PRIu32
@@ -592,6 +618,49 @@ static iree_status_t loom_low_verify_immediate(
                             immediate_index, immediate->bit_width);
   }
   return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_enum_domain(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t enum_domain_index) {
+  const loom_low_enum_domain_t* domain =
+      &descriptor_set->enum_domains[enum_domain_index];
+  IREE_RETURN_IF_ERROR(loom_low_verify_required_string(
+      descriptor_set, domain->name_string_offset, "enum_domain.name"));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_span(domain->value_start, domain->value_count,
+                           descriptor_set->enum_value_count, "enum_values"));
+  if (domain->value_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low enum domain %" PRIu32 " has no values",
+                            enum_domain_index);
+  }
+  iree_string_view_t previous_token = iree_string_view_empty();
+  for (uint16_t i = 0; i < domain->value_count; ++i) {
+    const uint32_t value_index = domain->value_start + i;
+    const loom_low_enum_value_t* value =
+        &descriptor_set->enum_values[value_index];
+    iree_string_view_t token = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        descriptor_set, value->token_string_offset, &token));
+    if (i != 0 && iree_string_view_compare(previous_token, token) >= 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low enum domain %" PRIu32
+                              " value tokens are not strictly sorted",
+                              enum_domain_index);
+    }
+    previous_token = token;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_enum_value(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t enum_value_index) {
+  const loom_low_enum_value_t* value =
+      &descriptor_set->enum_values[enum_value_index];
+  return loom_low_verify_required_string(
+      descriptor_set, value->token_string_offset, "enum_value.token");
 }
 
 static iree_status_t loom_low_verify_reg_class(
@@ -887,6 +956,12 @@ iree_status_t loom_low_descriptor_set_verify(
   for (uint32_t i = 0; i < descriptor_set->immediate_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_verify_immediate(descriptor_set, i));
   }
+  for (uint32_t i = 0; i < descriptor_set->enum_domain_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_enum_domain(descriptor_set, i));
+  }
+  for (uint32_t i = 0; i < descriptor_set->enum_value_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_enum_value(descriptor_set, i));
+  }
   for (uint32_t i = 0; i < descriptor_set->effect_count; ++i) {
     IREE_RETURN_IF_ERROR(
         loom_low_verify_effect(i, &descriptor_set->effects[i]));
@@ -1034,11 +1109,13 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       builder,
       ",\"table_counts\":{\"descriptors\":%" PRIu32
       ",\"descriptor_refs\":%" PRIu32 ",\"operands\":%" PRIu32
-      ",\"immediates\":%" PRIu32 ",\"effects\":%" PRIu32
+      ",\"immediates\":%" PRIu32 ",\"enum_domains\":%" PRIu32
+      ",\"enum_values\":%" PRIu32 ",\"effects\":%" PRIu32
       ",\"constraints\":%" PRIu32 ",\"reg_classes\":%" PRIu32
       ",\"schedule_classes\":%" PRIu32 "}",
       descriptor_set->descriptor_count, descriptor_set->descriptor_ref_count,
       descriptor_set->operand_count, descriptor_set->immediate_count,
+      descriptor_set->enum_domain_count, descriptor_set->enum_value_count,
       descriptor_set->effect_count, descriptor_set->constraint_count,
       descriptor_set->reg_class_count, descriptor_set->schedule_class_count));
   IREE_RETURN_IF_ERROR(

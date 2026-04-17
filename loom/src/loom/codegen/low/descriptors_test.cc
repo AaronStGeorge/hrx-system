@@ -33,7 +33,11 @@ static const uint8_t kTestStrings[] =
     LOOM_BSTRING_LITERAL("\x09", "const.i32")
     LOOM_BSTRING_LITERAL("\x07", "add.i32")
     LOOM_BSTRING_LITERAL("\x11", "integer.const.i32")
-    LOOM_BSTRING_LITERAL("\x0f", "integer.add.i32");
+    LOOM_BSTRING_LITERAL("\x0f", "integer.add.i32")
+    LOOM_BSTRING_LITERAL("\x04", "mode")
+    LOOM_BSTRING_LITERAL("\x09", "test.mode")
+    LOOM_BSTRING_LITERAL("\x04", "fast")
+    LOOM_BSTRING_LITERAL("\x04", "slow");
 // clang-format on
 
 enum {
@@ -59,7 +63,11 @@ enum {
   TEST_STRING_semantic_const = TEST_STRING_mnemonic_add + sizeof("add.i32"),
   TEST_STRING_semantic_add =
       TEST_STRING_semantic_const + sizeof("integer.const.i32"),
-  TEST_STRING_END = TEST_STRING_semantic_add + sizeof("integer.add.i32"),
+  TEST_STRING_field_mode = TEST_STRING_semantic_add + sizeof("integer.add.i32"),
+  TEST_STRING_enum_mode = TEST_STRING_field_mode + sizeof("mode"),
+  TEST_STRING_enum_fast = TEST_STRING_enum_mode + sizeof("test.mode"),
+  TEST_STRING_enum_slow = TEST_STRING_enum_fast + sizeof("fast"),
+  TEST_STRING_END = TEST_STRING_enum_slow + sizeof("slow"),
 };
 
 static_assert(TEST_STRING_END == sizeof(kTestStrings) - 1,
@@ -73,6 +81,8 @@ struct TestTables {
   loom_low_descriptor_ref_t descriptor_refs[2];
   loom_low_operand_t operands[4];
   loom_low_immediate_t immediates[1];
+  loom_low_enum_domain_t enum_domains[1];
+  loom_low_enum_value_t enum_values[2];
   loom_low_effect_t effects[1];
   loom_low_constraint_t constraints[1];
   loom_low_reg_class_t reg_classes[1];
@@ -124,8 +134,18 @@ void InitializeTestTables(TestTables* tables) {
       TEST_STRING_OFFSET(field_value);
   tables->immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_SIGNED;
   tables->immediates[0].bit_width = 32;
+  tables->immediates[0].enum_domain_id = LOOM_LOW_ENUM_DOMAIN_NONE;
   tables->immediates[0].signed_min = INT32_MIN;
   tables->immediates[0].unsigned_max = INT32_MAX;
+
+  tables->enum_domains[0].name_string_offset = TEST_STRING_OFFSET(enum_mode);
+  tables->enum_domains[0].value_start = 0;
+  tables->enum_domains[0].value_count = 2;
+
+  tables->enum_values[0].token_string_offset = TEST_STRING_OFFSET(enum_fast);
+  tables->enum_values[0].value = 0;
+  tables->enum_values[1].token_string_offset = TEST_STRING_OFFSET(enum_slow);
+  tables->enum_values[1].value = 1;
 
   tables->resources[0].name_string_offset = TEST_STRING_OFFSET(resource_alu);
   tables->resources[0].capacity_per_cycle = 1;
@@ -199,6 +219,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
   tables->set.immediates = tables->immediates;
   tables->set.immediate_count = IREE_ARRAYSIZE(tables->immediates);
+  tables->set.enum_domains = tables->enum_domains;
+  tables->set.enum_values = tables->enum_values;
   tables->set.effects = tables->effects;
   tables->set.constraints = tables->constraints;
   tables->set.reg_classes = tables->reg_classes;
@@ -567,6 +589,72 @@ TEST(LowDescriptorsTest, RejectsUnknownScheduleModelData) {
   TestTables tables;
   InitializeTestTables(&tables);
   tables.schedule_classes[1].model_quality = LOOM_LOW_MODEL_QUALITY_UNKNOWN;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, AcceptsEnumImmediateDomain) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].field_name_string_offset =
+      TEST_STRING_OFFSET(field_mode);
+  tables.immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_ENUM;
+  tables.immediates[0].enum_domain_id = 0;
+  tables.set.enum_domain_count = 1;
+  tables.set.enum_value_count = 2;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsEnumImmediateWithoutDomain) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_ENUM;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsEnumImmediateDomainOutOfRange) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_ENUM;
+  tables.immediates[0].enum_domain_id = 1;
+  tables.set.enum_domain_count = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, status);
+}
+
+TEST(LowDescriptorsTest, RejectsNonEnumImmediateWithDomain) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].enum_domain_id = 0;
+  tables.set.enum_domain_count = 1;
+  tables.set.enum_value_count = 2;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsEnumDomainWithoutValues) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.enum_domains[0].value_count = 0;
+  tables.set.enum_domain_count = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnsortedEnumDomainValues) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.enum_values[0].token_string_offset = TEST_STRING_OFFSET(enum_slow);
+  tables.enum_values[1].token_string_offset = TEST_STRING_OFFSET(enum_fast);
+  tables.set.enum_domain_count = 1;
+  tables.set.enum_value_count = 2;
 
   iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);

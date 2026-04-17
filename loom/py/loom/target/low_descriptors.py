@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 4
+LOW_DESCRIPTOR_SET_ABI_VERSION = 5
 
 
 class CEnum(Enum):
@@ -172,9 +172,22 @@ class Immediate:
     kind: ImmediateKind
     flags: tuple[ImmediateFlag, ...] = ()
     bit_width: int = 0
+    enum_domain: str | None = None
     encoding_id: int = 0
     signed_min: int = 0
     unsigned_max: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class EnumValue:
+    token: str
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class EnumDomain:
+    name: str
+    values: tuple[EnumValue, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,3 +285,4 @@ class DescriptorSet:
     resources: tuple[Resource, ...]
     schedule_classes: tuple[ScheduleClass, ...]
     descriptors: tuple[Descriptor, ...]
+    enum_domains: tuple[EnumDomain, ...] = ()

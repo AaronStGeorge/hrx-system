@@ -522,7 +522,11 @@ static const uint8_t kFeatureTestStrings[] =
     LOOM_BSTRING_LITERAL("\x03", "lhs")
     LOOM_BSTRING_LITERAL("\x03", "rhs")
     LOOM_BSTRING_LITERAL("\x04", "exec")
+    LOOM_BSTRING_LITERAL("\x04", "mode")
     LOOM_BSTRING_LITERAL("\x08", "test.alu")
+    LOOM_BSTRING_LITERAL("\x09", "test.mode")
+    LOOM_BSTRING_LITERAL("\x04", "fast")
+    LOOM_BSTRING_LITERAL("\x04", "slow")
     LOOM_BSTRING_LITERAL("\x0c", "test.add.i32")
     LOOM_BSTRING_LITERAL("\x07", "add.i32")
     LOOM_BSTRING_LITERAL("\x0f", "integer.add.i32");
@@ -540,9 +544,12 @@ enum {
   FEATURE_STRING_field_lhs = FEATURE_STRING_field_dst + sizeof("dst"),
   FEATURE_STRING_field_rhs = FEATURE_STRING_field_lhs + sizeof("lhs"),
   FEATURE_STRING_field_exec = FEATURE_STRING_field_rhs + sizeof("rhs"),
-  FEATURE_STRING_schedule_alu = FEATURE_STRING_field_exec + sizeof("exec"),
-  FEATURE_STRING_descriptor_add =
-      FEATURE_STRING_schedule_alu + sizeof("test.alu"),
+  FEATURE_STRING_field_mode = FEATURE_STRING_field_exec + sizeof("exec"),
+  FEATURE_STRING_schedule_alu = FEATURE_STRING_field_mode + sizeof("mode"),
+  FEATURE_STRING_enum_mode = FEATURE_STRING_schedule_alu + sizeof("test.alu"),
+  FEATURE_STRING_enum_fast = FEATURE_STRING_enum_mode + sizeof("test.mode"),
+  FEATURE_STRING_enum_slow = FEATURE_STRING_enum_fast + sizeof("fast"),
+  FEATURE_STRING_descriptor_add = FEATURE_STRING_enum_slow + sizeof("slow"),
   FEATURE_STRING_mnemonic_add =
       FEATURE_STRING_descriptor_add + sizeof("test.add.i32"),
   FEATURE_STRING_semantic_add = FEATURE_STRING_mnemonic_add + sizeof("add.i32"),
@@ -559,6 +566,9 @@ struct FeatureTestTables {
   loom_low_descriptor_t descriptors[1];
   loom_low_descriptor_ref_t descriptor_refs[1];
   loom_low_operand_t operands[4];
+  loom_low_immediate_t immediates[1];
+  loom_low_enum_domain_t enum_domains[1];
+  loom_low_enum_value_t enum_values[2];
   loom_low_constraint_t constraints[1];
   loom_low_reg_class_t reg_classes[2];
   loom_low_reg_class_alt_t reg_class_alts[2];
@@ -605,6 +615,20 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->operands[3].reg_class_alt_count = 2;
   tables->operands[3].unit_count = 1;
 
+  tables->immediates[0].field_name_string_offset =
+      FEATURE_STRING_OFFSET(field_mode);
+  tables->immediates[0].kind = LOOM_LOW_IMMEDIATE_KIND_ENUM;
+  tables->immediates[0].enum_domain_id = 0;
+
+  tables->enum_domains[0].name_string_offset = FEATURE_STRING_OFFSET(enum_mode);
+  tables->enum_domains[0].value_start = 0;
+  tables->enum_domains[0].value_count = 2;
+
+  tables->enum_values[0].token_string_offset = FEATURE_STRING_OFFSET(enum_fast);
+  tables->enum_values[0].value = 0;
+  tables->enum_values[1].token_string_offset = FEATURE_STRING_OFFSET(enum_slow);
+  tables->enum_values[1].value = 1;
+
   tables->schedule_classes[0].name_string_offset =
       FEATURE_STRING_OFFSET(schedule_alu);
   tables->schedule_classes[0].latency_kind = LOOM_LOW_LATENCY_KIND_EXACT;
@@ -641,6 +665,9 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
   tables->set.descriptor_ref_count = IREE_ARRAYSIZE(tables->descriptor_refs);
   tables->set.operands = tables->operands;
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
+  tables->set.immediates = tables->immediates;
+  tables->set.enum_domains = tables->enum_domains;
+  tables->set.enum_values = tables->enum_values;
   tables->set.constraints = tables->constraints;
   tables->set.reg_classes = tables->reg_classes;
   tables->set.reg_class_count = IREE_ARRAYSIZE(tables->reg_classes);
@@ -653,6 +680,14 @@ void InitializeFeatureTestTables(FeatureTestTables* tables) {
       IREE_ARRAYSIZE(tables->feature_mask_words);
 }
 
+void EnableFeatureTestEnumImmediate(FeatureTestTables* tables) {
+  tables->descriptors[0].immediate_start = 0;
+  tables->descriptors[0].immediate_count = 1;
+  tables->set.immediate_count = 1;
+  tables->set.enum_domain_count = 1;
+  tables->set.enum_value_count = 2;
+}
+
 void AddFeatureTestConstraint(FeatureTestTables* tables,
                               loom_low_constraint_kind_t kind,
                               uint16_t lhs_operand_index,
@@ -663,6 +698,23 @@ void AddFeatureTestConstraint(FeatureTestTables* tables,
   tables->descriptors[0].constraint_start = 0;
   tables->descriptors[0].constraint_count = 1;
   tables->set.constraint_count = 1;
+}
+
+std::string FeatureEnumImmediateSource(const char* mode_value) {
+  return std::string(
+             "test.record @snapshot {}\n"
+             "test.record @export {}\n"
+             "target.config @test_config {contract_set_key = \"test.core\", "
+             "contract_feature_bits = 5}\n"
+             "target.bundle @test_target {snapshot = @snapshot, export_plan = "
+             "@export, config = @test_config}\n"
+             "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
+             "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
+             "  %sum = low.op<test.add.i32>(%lhs, %rhs) {mode = ") +
+         mode_value +
+         "} : (reg<test.gpr x1>, reg<test.gpr x1>) -> reg<test.gpr x1>\n"
+         "  low.return %sum : reg<test.gpr x1>\n"
+         "}\n";
 }
 
 TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
@@ -706,6 +758,114 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
   EXPECT_EQ(collector.emissions[0].u32_params[0], 0u);
   ASSERT_GE(collector.emissions[0].u64_params.size(), 1u);
   EXPECT_EQ(collector.emissions[0].u64_params[0], UINT64_C(0x4));
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, ValidEnumImmediateTokenPasses) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  EnableFeatureTestEnumImmediate(&tables);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  loom_module_t* module = ParseSource(FeatureEnumImmediateSource("fast"));
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, ValidEnumImmediateOrdinalPasses) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  EnableFeatureTestEnumImmediate(&tables);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  loom_module_t* module = ParseSource(FeatureEnumImmediateSource("1"));
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsUnknownEnumImmediateToken) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  EnableFeatureTestEnumImmediate(&tables);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  loom_module_t* module = ParseSource(FeatureEnumImmediateSource("missing"));
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 12));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 5u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "add");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "test.add.i32");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "mode");
+  EXPECT_EQ(collector.emissions[0].string_params[3], "missing");
+  EXPECT_EQ(collector.emissions[0].string_params[4], "test.mode");
+
+  loom_module_free(module);
+}
+
+TEST_F(LowDescriptorVerifyTest, RejectsUnknownEnumImmediateOrdinal) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  EnableFeatureTestEnumImmediate(&tables);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  loom_module_t* module = ParseSource(FeatureEnumImmediateSource("7"));
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_result_t result = VerifyModule(module, &registry, &collector);
+
+  EXPECT_EQ(result.error_count, 1u);
+  ASSERT_EQ(collector.emissions.size(), 1u);
+  EXPECT_EQ(collector.emissions[0].error,
+            loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 12));
+  ASSERT_GE(collector.emissions[0].string_params.size(), 5u);
+  EXPECT_EQ(collector.emissions[0].string_params[0], "add");
+  EXPECT_EQ(collector.emissions[0].string_params[1], "test.add.i32");
+  EXPECT_EQ(collector.emissions[0].string_params[2], "mode");
+  EXPECT_EQ(collector.emissions[0].string_params[3], "7");
+  EXPECT_EQ(collector.emissions[0].string_params[4], "test.mode");
 
   loom_module_free(module);
 }

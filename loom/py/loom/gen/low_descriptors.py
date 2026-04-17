@@ -30,8 +30,11 @@ from loom.target.low_descriptors import (
     Descriptor,
     DescriptorSet,
     Effect,
+    EnumDomain,
+    EnumValue,
     Hazard,
     Immediate,
+    ImmediateKind,
     IssueUse,
     Operand,
     OperandRole,
@@ -110,14 +113,18 @@ class _CompiledDescriptorSet:
     reg_classes: list[RegClass]
     resources: list[Resource]
     schedule_classes: list[ScheduleClass]
+    enum_domains: list[EnumDomain]
     reg_class_ids: dict[str, int]
     resource_ids: dict[str, int]
     schedule_class_ids: dict[str, int]
+    enum_domain_ids: dict[str, int]
     string_pool: _StringPool
     reg_class_alts: list[tuple[int | None, tuple[RegClassAltFlag, ...]]]
     operands: list[Operand]
     operand_alt_starts: list[int]
     immediates: list[Immediate]
+    enum_values: list[EnumValue]
+    immediate_enum_domain_ids: list[int | None]
     effects: list[Effect]
     constraints: list[Constraint]
     issue_uses: list[IssueUse]
@@ -127,6 +134,7 @@ class _CompiledDescriptorSet:
     descriptor_rows: list[dict[str, int]]
     descriptor_refs: list[tuple[str, int]]
     schedule_rows: list[dict[str, int]]
+    enum_domain_rows: list[dict[str, int]]
 
 
 def _c_identifier(value: str) -> str:
@@ -240,12 +248,26 @@ def _validate_descriptor_operands(descriptor: Descriptor) -> int:
     return result_count
 
 
+def _validate_enum_domain(domain: EnumDomain) -> tuple[EnumValue, ...]:
+    if not domain.values:
+        raise ValueError(f"enum domain '{domain.name}' has no values")
+    by_token: dict[str, EnumValue] = {}
+    for value in domain.values:
+        if value.token in by_token:
+            raise ValueError(f"enum domain '{domain.name}' repeats token '{value.token}'")
+        by_token[value.token] = value
+        if value.value < -(1 << 63) or value.value > (1 << 63) - 1:
+            raise ValueError(f"enum domain '{domain.name}' token '{value.token}' value does not fit i64")
+    return tuple(sorted(domain.values, key=lambda value: value.token))
+
+
 def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> _CompiledDescriptorSet:
     if spec.generator_version == 0:
         raise ValueError(f"descriptor set '{spec.key}' has zero generator version")
     reg_class_inputs = _dedupe_by_name(spec.reg_classes, lambda item: item.name)
     resource_inputs = _dedupe_by_name(spec.resources, lambda item: item.name)
     schedule_inputs = _dedupe_by_name(spec.schedule_classes, lambda item: item.name)
+    enum_domain_inputs = _dedupe_by_name(spec.enum_domains, lambda item: item.name)
     _dedupe_by_name(spec.descriptors, lambda item: item.key)
 
     selected_descriptors = _select_descriptors(spec, allowlist)
@@ -258,6 +280,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     used_reg_class_names: set[str] = set(reg_class_inputs)
     used_resource_names: set[str] = set()
     used_schedule_names: set[str] = set()
+    used_enum_domain_names: set[str] = set()
 
     for descriptor in selected_descriptors:
         _validate_descriptor_operands(descriptor)
@@ -266,6 +289,15 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         if descriptor.schedule_class not in schedule_inputs:
             raise ValueError(f"descriptor '{descriptor.key}' references unknown schedule class '{descriptor.schedule_class}'")
         used_schedule_names.add(descriptor.schedule_class)
+        for immediate in descriptor.immediates:
+            if immediate.kind is ImmediateKind.ENUM:
+                if immediate.enum_domain is None:
+                    raise ValueError(f"descriptor '{descriptor.key}' enum immediate '{immediate.field_name}' has no enum domain")
+                if immediate.enum_domain not in enum_domain_inputs:
+                    raise ValueError(f"descriptor '{descriptor.key}' enum immediate '{immediate.field_name}' references unknown enum domain '{immediate.enum_domain}'")
+                used_enum_domain_names.add(immediate.enum_domain)
+            elif immediate.enum_domain is not None:
+                raise ValueError(f"descriptor '{descriptor.key}' non-enum immediate '{immediate.field_name}' references enum domain '{immediate.enum_domain}'")
         for operand in descriptor.operands:
             for reg_alt in operand.reg_alts:
                 if reg_alt.reg_class is None:
@@ -302,10 +334,12 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     reg_classes = [reg_class for reg_class in spec.reg_classes if reg_class.name in used_reg_class_names]
     resources = [resource for resource in spec.resources if resource.name in used_resource_names]
     schedule_classes = [schedule_class for schedule_class in spec.schedule_classes if schedule_class.name in used_schedule_names]
+    enum_domains = [domain for domain in spec.enum_domains if domain.name in used_enum_domain_names]
 
     reg_class_ids = {reg_class.name: i for i, reg_class in enumerate(reg_classes)}
     resource_ids = {resource.name: i for i, resource in enumerate(resources)}
     schedule_class_ids = {schedule_class.name: i for i, schedule_class in enumerate(schedule_classes)}
+    enum_domain_ids = {domain.name: i for i, domain in enumerate(enum_domains)}
 
     string_pool = _StringPool(spec.c_enum_prefix)
     string_pool.intern("empty", "")
@@ -320,6 +354,10 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         string_pool.intern(f"resource_{resource.name}", resource.name)
     for schedule_class in schedule_classes:
         string_pool.intern(f"schedule_{schedule_class.name}", schedule_class.name)
+    for enum_domain in enum_domains:
+        string_pool.intern(f"enum_domain_{enum_domain.name}", enum_domain.name)
+        for enum_value in _validate_enum_domain(enum_domain):
+            string_pool.intern(f"enum_value_{enum_domain.name}_{enum_value.token}", enum_value.token)
     for descriptor in selected_descriptors:
         string_pool.intern(f"descriptor_{descriptor.key}", descriptor.key)
         if descriptor.mnemonic is not None:
@@ -337,6 +375,8 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     operands: list[Operand] = []
     operand_alt_starts: list[int] = []
     immediates: list[Immediate] = []
+    enum_values: list[EnumValue] = []
+    immediate_enum_domain_ids: list[int | None] = []
     effects: list[Effect] = []
     constraints: list[Constraint] = []
     issue_uses: list[IssueUse] = []
@@ -345,6 +385,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     feature_mask_words: list[int] = []
     descriptor_rows: list[dict[str, int]] = []
     schedule_rows: list[dict[str, int]] = []
+    enum_domain_rows: list[dict[str, int]] = []
 
     for schedule_class in schedule_classes:
         issue_use_start = len(issue_uses)
@@ -361,6 +402,17 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
                 "hazard_count": len(schedule_class.hazards),
                 "pressure_delta_start": pressure_delta_start,
                 "pressure_delta_count": len(schedule_class.pressure_deltas),
+            }
+        )
+
+    for enum_domain in enum_domains:
+        value_start = len(enum_values)
+        sorted_values = _validate_enum_domain(enum_domain)
+        enum_values.extend(sorted_values)
+        enum_domain_rows.append(
+            {
+                "value_start": value_start,
+                "value_count": len(sorted_values),
             }
         )
 
@@ -383,6 +435,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             operand_alt_starts.append(alt_start)
         immediate_start = len(immediates)
         immediates.extend(descriptor.immediates)
+        immediate_enum_domain_ids.extend((None if immediate.enum_domain is None else enum_domain_ids[immediate.enum_domain]) for immediate in descriptor.immediates)
         if descriptor.effects:
             effect_start = effect_group_starts.get(descriptor.effects)
             if effect_start is None:
@@ -419,14 +472,18 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         reg_classes=reg_classes,
         resources=resources,
         schedule_classes=schedule_classes,
+        enum_domains=enum_domains,
         reg_class_ids=reg_class_ids,
         resource_ids=resource_ids,
         schedule_class_ids=schedule_class_ids,
+        enum_domain_ids=enum_domain_ids,
         string_pool=string_pool,
         reg_class_alts=reg_class_alts,
         operands=operands,
         operand_alt_starts=operand_alt_starts,
         immediates=immediates,
+        enum_values=enum_values,
+        immediate_enum_domain_ids=immediate_enum_domain_ids,
         effects=effects,
         constraints=constraints,
         issue_uses=issue_uses,
@@ -436,6 +493,7 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         descriptor_rows=descriptor_rows,
         descriptor_refs=descriptor_refs,
         schedule_rows=schedule_rows,
+        enum_domain_rows=enum_domain_rows,
     )
 
 
@@ -613,11 +671,40 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
                 f".kind = {immediate.kind.c_name},",
                 f".flags = {_flag_expr(immediate.flags)},",
                 f".bit_width = {immediate.bit_width},",
+                ".enum_domain_id = " + ("LOOM_LOW_ENUM_DOMAIN_NONE" if compiled.immediate_enum_domain_ids[i] is None else str(compiled.immediate_enum_domain_ids[i])) + ",",
                 f".encoding_id = {immediate.encoding_id},",
                 f".signed_min = {_i64_literal(immediate.signed_min)},",
                 f".unsigned_max = {_u64_literal(immediate.unsigned_max)},",
             ]
-            for immediate in compiled.immediates
+            for i, immediate in enumerate(compiled.immediates)
+        ],
+    )
+    _emit_array(
+        lines,
+        "loom_low_enum_domain_t",
+        spec.c_table_prefix,
+        "EnumDomains",
+        [
+            [
+                f".name_string_offset = {pool.ref(f'enum_domain_{domain.name}')},",
+                f".value_start = {compiled.enum_domain_rows[i]['value_start']},",
+                f".value_count = {compiled.enum_domain_rows[i]['value_count']},",
+            ]
+            for i, domain in enumerate(compiled.enum_domains)
+        ],
+    )
+    _emit_array(
+        lines,
+        "loom_low_enum_value_t",
+        spec.c_table_prefix,
+        "EnumValues",
+        [
+            [
+                f".token_string_offset = {pool.ref(f'enum_value_{domain.name}_{value.token}')},",
+                f".value = {_i64_literal(value.value)},",
+            ]
+            for domain in compiled.enum_domains
+            for value in _validate_enum_domain(domain)
         ],
     )
     _emit_array(
@@ -805,6 +892,8 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
     table_count_fields = {
         "operands": "operand_count",
         "immediates": "immediate_count",
+        "enum_domains": "enum_domain_count",
+        "enum_values": "enum_value_count",
         "effects": "effect_count",
         "constraints": "constraint_count",
         "reg_classes": "reg_class_count",
@@ -824,6 +913,8 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
 
     append_optional_table("operands", "Operands")
     append_optional_table("immediates", "Immediates")
+    append_optional_table("enum_domains", "EnumDomains")
+    append_optional_table("enum_values", "EnumValues")
     append_optional_table("effects", "Effects")
     append_optional_table("constraints", "Constraints")
     append_optional_table("reg_classes", "RegClasses")
@@ -873,6 +964,8 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
             "descriptor_refs": len(compiled.descriptor_refs),
             "operands": len(compiled.operands),
             "immediates": len(compiled.immediates),
+            "enum_domains": len(compiled.enum_domains),
+            "enum_values": len(compiled.enum_values),
             "effects": len(compiled.effects),
             "constraints": len(compiled.constraints),
             "reg_classes": len(compiled.reg_classes),

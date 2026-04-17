@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 4u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 5u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -40,6 +40,9 @@ extern "C" {
 
 // Sentinel for absent register classes.
 #define LOOM_LOW_REG_CLASS_NONE UINT16_MAX
+
+// Sentinel for absent enum immediate domains.
+#define LOOM_LOW_ENUM_DOMAIN_NONE UINT16_MAX
 
 // Sentinel for absent resources.
 #define LOOM_LOW_RESOURCE_NONE UINT16_MAX
@@ -314,6 +317,8 @@ typedef struct loom_low_immediate_t {
   loom_low_immediate_flags_t flags;
   // Encoded immediate width in bits.
   uint16_t bit_width;
+  // Enum-domain table identifier for ENUM immediates.
+  uint16_t enum_domain_id;
   // Reserved for generator-owned immediate encoding variants.
   uint16_t encoding_id;
   // Inclusive signed minimum when kind is signed.
@@ -321,6 +326,24 @@ typedef struct loom_low_immediate_t {
   // Inclusive unsigned maximum when kind is unsigned or ordinal.
   uint64_t unsigned_max;
 } loom_low_immediate_t;
+
+typedef struct loom_low_enum_domain_t {
+  // String-table offset for the stable enum-domain name.
+  loom_bstring_table_offset_t name_string_offset;
+  // First enum-value row for this domain.
+  uint32_t value_start;
+  // Number of enum-value rows for this domain.
+  uint16_t value_count;
+  // Reserved for future enum-domain flags.
+  uint16_t reserved;
+} loom_low_enum_domain_t;
+
+typedef struct loom_low_enum_value_t {
+  // String-table offset for the stable enum token.
+  loom_bstring_table_offset_t token_string_offset;
+  // Numeric value encoded for this token.
+  int64_t value;
+} loom_low_enum_value_t;
 
 typedef struct loom_low_effect_t {
   // Effect kind used by dependency and legality construction.
@@ -492,6 +515,14 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_immediate_t* immediates;
   // Number of immediate rows owned by this set.
   uint32_t immediate_count;
+  // Dense enum-domain rows referenced by ENUM immediates.
+  const loom_low_enum_domain_t* enum_domains;
+  // Number of enum-domain rows owned by this set.
+  uint32_t enum_domain_count;
+  // Dense enum-value rows referenced by enum domains.
+  const loom_low_enum_value_t* enum_values;
+  // Number of enum-value rows owned by this set.
+  uint32_t enum_value_count;
   // Dense effect rows referenced by descriptors.
   const loom_low_effect_t* effects;
   // Number of effect rows owned by this set.

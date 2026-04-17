@@ -2775,6 +2775,28 @@ static const loom_error_def_t loom_err_lowering_011 = {
     .param_count = 9,
 };
 
+static const loom_error_param_def_t loom_err_lowering_012_params[] = {
+    {"function_name", LOOM_PARAM_STRING},  {"opcode", LOOM_PARAM_STRING},
+    {"immediate_name", LOOM_PARAM_STRING}, {"actual_value", LOOM_PARAM_STRING},
+    {"enum_domain", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_012 = {
+    .error_id = "ERR_LOWERING_012",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 12,
+    .summary = "Low descriptor enum immediate value is not in domain.",
+    .message_template =
+        "low function '@{function_name}' descriptor '{opcode}' immediate "
+        "'{immediate_name}' has enum value '{actual_value}', expected a value "
+        "from enum domain '{enum_domain}'",
+    .fix_hint_template =
+        "Choose an enum token or numeric value declared by enum domain "
+        "'{enum_domain}' for '{immediate_name}'",
+    .param_defs = loom_err_lowering_012_params,
+    .param_count = 5,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2825,6 +2847,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_003,  &loom_err_lowering_004,  &loom_err_lowering_005,
     &loom_err_lowering_006,  &loom_err_lowering_007,  &loom_err_lowering_008,
     &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
+    &loom_err_lowering_012,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

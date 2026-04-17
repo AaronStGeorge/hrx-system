@@ -15,7 +15,7 @@ import pytest
 from loom.gen.low_descriptors import DescriptorAllowlist, generate_descriptor_set
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
-from loom.target.low_descriptors import OperandRole
+from loom.target.low_descriptors import EnumDomain, EnumValue, ImmediateKind, OperandRole
 
 
 def test_generate_ireevm_core_descriptor_set() -> None:
@@ -29,7 +29,7 @@ def test_generate_ireevm_core_descriptor_set() -> None:
 
     manifest = json.loads(generated.manifest_json)
     assert manifest["key"] == "iree.vm.core"
-    assert manifest["abi_version"] == 4
+    assert manifest["abi_version"] == 5
     assert manifest["table_counts"]["descriptors"] >= 9
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert any(descriptor["key"] == "iree.vm.call.import.i32" for descriptor in manifest["descriptors"])
@@ -65,7 +65,7 @@ def test_generate_wasm_core_simd128_descriptor_set() -> None:
     assert manifest["key"] == "wasm.core.simd128"
     assert manifest["target"] == "wasm"
     assert manifest["feature_namespace"] == "wasm.simd128.v1"
-    assert manifest["abi_version"] == 4
+    assert manifest["abi_version"] == 5
     assert manifest["table_counts"]["descriptors"] >= 12
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert any(descriptor["key"] == "wasm.v128.load" for descriptor in manifest["descriptors"])
@@ -100,6 +100,93 @@ def test_generator_rejects_missing_schedule_resource() -> None:
             bad_resource_set,
             DescriptorAllowlist(keys=("iree.vm.add.i32",)),
         )
+
+
+def test_generator_emits_enum_immediate_domains() -> None:
+    domain = EnumDomain(
+        "vm.condition",
+        values=(EnumValue("ne", 1), EnumValue("eq", 0)),
+    )
+    enum_immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        kind=ImmediateKind.ENUM,
+        enum_domain="vm.condition",
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(enum_immediate,),
+    )
+    descriptor_set = replace(
+        IREEVM_CORE_DESCRIPTOR_SET,
+        enum_domains=(domain,),
+        descriptors=(descriptor,),
+    )
+
+    generated = generate_descriptor_set(descriptor_set)
+    manifest = json.loads(generated.manifest_json)
+
+    assert "loom_low_enum_domain_t" in generated.source
+    assert "vm.condition" in generated.source
+    assert "eq" in generated.source
+    assert "ne" in generated.source
+    assert manifest["table_counts"]["enum_domains"] == 1
+    assert manifest["table_counts"]["enum_values"] == 2
+
+
+def test_generator_rejects_missing_enum_immediate_domain() -> None:
+    enum_immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        kind=ImmediateKind.ENUM,
+        enum_domain=None,
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(enum_immediate,),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' enum immediate 'i32_value' has no enum domain"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_unknown_enum_immediate_domain() -> None:
+    enum_immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        kind=ImmediateKind.ENUM,
+        enum_domain="missing",
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(enum_immediate,),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' enum immediate 'i32_value' references unknown enum domain 'missing'"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_non_enum_immediate_domain() -> None:
+    enum_immediate = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0].immediates[0],
+        enum_domain="vm.condition",
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        immediates=(enum_immediate,),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' non-enum immediate 'i32_value' references enum domain 'vm.condition'"),
+    ):
+        generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_missing_schedule_class() -> None:

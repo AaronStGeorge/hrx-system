@@ -76,7 +76,7 @@ TEST(WasmDescriptorsTest, ManifestNamesSimdAndMemoryPackets) {
   iree_string_builder_deinitialize(&builder);
 
   EXPECT_NE(json.find("\"key\":\"wasm.core.simd128\""), std::string::npos);
-  EXPECT_NE(json.find("\"abi_version\":4"), std::string::npos);
+  EXPECT_NE(json.find("\"abi_version\":5"), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"wasm.i32x4.add\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"wasm.v128.load\""), std::string::npos);
   EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
