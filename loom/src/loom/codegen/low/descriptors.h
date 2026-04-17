@@ -1,0 +1,586 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Dense target-low descriptor table ABI.
+//
+// The low descriptor table is the compact runtime form consumed by target-low
+// verification, scheduling, allocation feedback, and final target emitters.
+// Generator inputs can be rich and target-specific; this ABI is intentionally
+// flat, pointer-light, and shardable so selected target packages can link only
+// the descriptor sets they need.
+
+#ifndef LOOM_CODEGEN_LOW_DESCRIPTORS_H_
+#define LOOM_CODEGEN_LOW_DESCRIPTORS_H_
+
+#include "iree/base/api.h"
+#include "iree/base/string_builder.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// ABI version for descriptor sets consumed by this header.
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 1u
+
+// Sentinel for absent string-table offsets.
+#define LOOM_LOW_STRING_OFFSET_NONE UINT32_MAX
+
+// Sentinel for absent 16-bit table identifiers.
+#define LOOM_LOW_ID_NONE UINT16_MAX
+
+// Sentinel for absent descriptor ordinals.
+#define LOOM_LOW_DESCRIPTOR_ORDINAL_NONE UINT32_MAX
+
+// Sentinel for absent schedule classes.
+#define LOOM_LOW_SCHEDULE_CLASS_NONE UINT16_MAX
+
+// Sentinel for absent register classes.
+#define LOOM_LOW_REG_CLASS_NONE UINT16_MAX
+
+// Sentinel for absent resources.
+#define LOOM_LOW_RESOURCE_NONE UINT16_MAX
+
+// Stable 128-bit content fingerprint used by target snapshots and cache keys.
+typedef struct loom_low_fingerprint_t {
+  // Low 64 bits of the descriptor-set content fingerprint.
+  uint64_t low;
+  // High 64 bits of the descriptor-set content fingerprint.
+  uint64_t high;
+} loom_low_fingerprint_t;
+
+typedef enum loom_low_operand_role_e {
+  // Unknown or uninitialized operand role.
+  LOOM_LOW_OPERAND_ROLE_UNKNOWN = 0,
+  // SSA result defined by the descriptor.
+  LOOM_LOW_OPERAND_ROLE_RESULT = 1,
+  // SSA operand consumed by the descriptor.
+  LOOM_LOW_OPERAND_ROLE_OPERAND = 2,
+  // Descriptor operand that is both read and written.
+  LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT = 3,
+  // Predicate or mask operand controlling execution.
+  LOOM_LOW_OPERAND_ROLE_PREDICATE = 4,
+  // Memory-address, resource, or descriptor operand.
+  LOOM_LOW_OPERAND_ROLE_RESOURCE = 5,
+  // Target-owned implicit architectural operand.
+  LOOM_LOW_OPERAND_ROLE_IMPLICIT = 6,
+} loom_low_operand_role_t;
+
+// Bitset of descriptor operand flags.
+typedef uint16_t loom_low_operand_flags_t;
+
+// Operand is implicit in assembly or bytecode but participates in semantics.
+#define LOOM_LOW_OPERAND_FLAG_IMPLICIT ((uint16_t)1u << 0)
+// Operand is tied to another operand by a constraint row.
+#define LOOM_LOW_OPERAND_FLAG_TIED ((uint16_t)1u << 1)
+// Operand must be considered early-clobbered by allocation.
+#define LOOM_LOW_OPERAND_FLAG_EARLY_CLOBBER ((uint16_t)1u << 2)
+// Operand is optional for some descriptor forms.
+#define LOOM_LOW_OPERAND_FLAG_OPTIONAL ((uint16_t)1u << 3)
+
+// Bitset of register-class alternative flags.
+typedef uint16_t loom_low_reg_class_alt_flags_t;
+
+// Register-class alternative is preferred by target lowering.
+#define LOOM_LOW_REG_CLASS_ALT_FLAG_PREFERRED ((uint16_t)1u << 0)
+// Alternative represents an immediate or literal instead of a register class.
+#define LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE ((uint16_t)1u << 1)
+// Alternative is legal only after physical register assignment.
+#define LOOM_LOW_REG_CLASS_ALT_FLAG_PHYSICAL_ONLY ((uint16_t)1u << 2)
+
+// Bitset of register-class flags.
+typedef uint16_t loom_low_reg_class_flags_t;
+
+// Register class is virtual-only and has no physical register inventory.
+#define LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY ((uint16_t)1u << 0)
+// Register class represents target-visible physical registers.
+#define LOOM_LOW_REG_CLASS_FLAG_PHYSICAL ((uint16_t)1u << 1)
+// Register class contains reference-counted or GC-visible references.
+#define LOOM_LOW_REG_CLASS_FLAG_REFERENCE ((uint16_t)1u << 2)
+
+typedef enum loom_low_immediate_kind_e {
+  // Unknown or uninitialized immediate kind.
+  LOOM_LOW_IMMEDIATE_KIND_UNKNOWN = 0,
+  // Signed integer immediate.
+  LOOM_LOW_IMMEDIATE_KIND_SIGNED = 1,
+  // Unsigned integer immediate.
+  LOOM_LOW_IMMEDIATE_KIND_UNSIGNED = 2,
+  // Symbol, function, block, or descriptor ordinal immediate.
+  LOOM_LOW_IMMEDIATE_KIND_ORDINAL = 3,
+  // Target-specific enum immediate.
+  LOOM_LOW_IMMEDIATE_KIND_ENUM = 4,
+} loom_low_immediate_kind_t;
+
+// Bitset of immediate flags.
+typedef uint16_t loom_low_immediate_flags_t;
+
+// Immediate is resolved from a symbolic reference before final emission.
+#define LOOM_LOW_IMMEDIATE_FLAG_SYMBOLIC ((uint16_t)1u << 0)
+// Immediate value is encoded relative to the current packet or block.
+#define LOOM_LOW_IMMEDIATE_FLAG_RELATIVE ((uint16_t)1u << 1)
+
+typedef enum loom_low_effect_kind_e {
+  // Unknown or uninitialized effect kind.
+  LOOM_LOW_EFFECT_KIND_UNKNOWN = 0,
+  // Descriptor reads memory or an external resource.
+  LOOM_LOW_EFFECT_KIND_READ = 1,
+  // Descriptor writes memory or an external resource.
+  LOOM_LOW_EFFECT_KIND_WRITE = 2,
+  // Descriptor may call outside the current low region.
+  LOOM_LOW_EFFECT_KIND_CALL = 3,
+  // Descriptor is a scheduling or memory barrier.
+  LOOM_LOW_EFFECT_KIND_BARRIER = 4,
+  // Descriptor observes or mutates a target counter.
+  LOOM_LOW_EFFECT_KIND_COUNTER = 5,
+  // Descriptor has convergent execution semantics.
+  LOOM_LOW_EFFECT_KIND_CONVERGENT = 6,
+  // Descriptor changes control flow.
+  LOOM_LOW_EFFECT_KIND_CONTROL = 7,
+} loom_low_effect_kind_t;
+
+typedef enum loom_low_memory_space_e {
+  // Effect has no memory-space attachment.
+  LOOM_LOW_MEMORY_SPACE_NONE = 0,
+  // Generic or target-default memory space.
+  LOOM_LOW_MEMORY_SPACE_GENERIC = 1,
+  // Device or process global memory.
+  LOOM_LOW_MEMORY_SPACE_GLOBAL = 2,
+  // Workgroup, shared, or LDS memory.
+  LOOM_LOW_MEMORY_SPACE_WORKGROUP = 3,
+  // Stack, frame, or spill memory.
+  LOOM_LOW_MEMORY_SPACE_STACK = 4,
+  // IREE VM reference table or reference state.
+  LOOM_LOW_MEMORY_SPACE_VM_REF = 5,
+  // Wasm linear memory.
+  LOOM_LOW_MEMORY_SPACE_WASM_MEMORY = 6,
+} loom_low_memory_space_t;
+
+// Bitset of effect flags.
+typedef uint16_t loom_low_effect_flags_t;
+
+// Effect must be preserved during scheduling.
+#define LOOM_LOW_EFFECT_FLAG_ORDERED ((uint16_t)1u << 0)
+// Effect participates in alias-like dependency construction.
+#define LOOM_LOW_EFFECT_FLAG_DEPENDENCY ((uint16_t)1u << 1)
+
+typedef enum loom_low_constraint_kind_e {
+  // Unknown or uninitialized constraint kind.
+  LOOM_LOW_CONSTRAINT_KIND_UNKNOWN = 0,
+  // Two descriptor operands must use the same assigned register.
+  LOOM_LOW_CONSTRAINT_KIND_TIED = 1,
+  // The descriptor may commute two operands.
+  LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE = 2,
+  // Operand is destructively updated.
+  LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE = 3,
+  // Operand or result has early-clobber allocation semantics.
+  LOOM_LOW_CONSTRAINT_KIND_EARLY_CLOBBER = 4,
+  // Descriptor may be rematerialized instead of spilled.
+  LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE = 5,
+  // Descriptor may participate in algebraic folding.
+  LOOM_LOW_CONSTRAINT_KIND_FOLDABLE = 6,
+} loom_low_constraint_kind_t;
+
+// Bitset of descriptor constraint flags.
+typedef uint16_t loom_low_constraint_flags_t;
+
+typedef enum loom_low_latency_kind_e {
+  // Unknown or uninitialized latency kind.
+  LOOM_LOW_LATENCY_KIND_UNKNOWN = 0,
+  // Latency is exact for this target model.
+  LOOM_LOW_LATENCY_KIND_EXACT = 1,
+  // Latency is calibrated but may vary by microarchitecture or operands.
+  LOOM_LOW_LATENCY_KIND_ESTIMATE = 2,
+  // Latency is intentionally variable or data dependent.
+  LOOM_LOW_LATENCY_KIND_VARIABLE = 3,
+} loom_low_latency_kind_t;
+
+typedef enum loom_low_model_quality_e {
+  // Unknown or uninitialized schedule model quality.
+  LOOM_LOW_MODEL_QUALITY_UNKNOWN = 0,
+  // Schedule model is exact enough to enforce.
+  LOOM_LOW_MODEL_QUALITY_EXACT = 1,
+  // Schedule model is calibrated from measurements.
+  LOOM_LOW_MODEL_QUALITY_CALIBRATED = 2,
+  // Schedule model is an estimate suitable for diagnostics and search.
+  LOOM_LOW_MODEL_QUALITY_ESTIMATED = 3,
+  // Schedule model is an explicit fallback.
+  LOOM_LOW_MODEL_QUALITY_FALLBACK = 4,
+} loom_low_model_quality_t;
+
+// Bitset of schedule-class flags.
+typedef uint16_t loom_low_schedule_class_flags_t;
+
+// Schedule class may read memory.
+#define LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD ((uint16_t)1u << 0)
+// Schedule class may write memory.
+#define LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE ((uint16_t)1u << 1)
+// Schedule class may call out of the current low region.
+#define LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_CALL ((uint16_t)1u << 2)
+// Schedule class changes control flow.
+#define LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL ((uint16_t)1u << 3)
+
+typedef enum loom_low_resource_kind_e {
+  // Unknown or uninitialized resource kind.
+  LOOM_LOW_RESOURCE_KIND_UNKNOWN = 0,
+  // Scalar arithmetic or interpreter ALU resource.
+  LOOM_LOW_RESOURCE_KIND_SCALAR_ALU = 1,
+  // Vector arithmetic resource.
+  LOOM_LOW_RESOURCE_KIND_VECTOR_ALU = 2,
+  // Matrix or tensor-core-like resource.
+  LOOM_LOW_RESOURCE_KIND_MATRIX = 3,
+  // Load pipeline or address-generation resource.
+  LOOM_LOW_RESOURCE_KIND_LOAD = 4,
+  // Store pipeline or address-generation resource.
+  LOOM_LOW_RESOURCE_KIND_STORE = 5,
+  // Branch, call, or control resource.
+  LOOM_LOW_RESOURCE_KIND_CONTROL = 6,
+} loom_low_resource_kind_t;
+
+// Bitset of resource flags.
+typedef uint16_t loom_low_resource_flags_t;
+
+typedef enum loom_low_hazard_kind_e {
+  // Unknown or uninitialized hazard kind.
+  LOOM_LOW_HAZARD_KIND_UNKNOWN = 0,
+  // Consumer must be at least a fixed distance after producer.
+  LOOM_LOW_HAZARD_KIND_MIN_DISTANCE = 1,
+  // Consumer requires a target counter wait.
+  LOOM_LOW_HAZARD_KIND_WAIT_COUNTER = 2,
+  // Producer/consumer can use a bypass path.
+  LOOM_LOW_HAZARD_KIND_BYPASS = 3,
+  // Producer/consumer can or must fuse.
+  LOOM_LOW_HAZARD_KIND_FUSION = 4,
+} loom_low_hazard_kind_t;
+
+// Bitset of hazard flags.
+typedef uint16_t loom_low_hazard_flags_t;
+
+// Bitset of descriptor flags.
+typedef uint16_t loom_low_descriptor_flags_t;
+
+// Descriptor has target-visible side effects.
+#define LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING ((uint16_t)1u << 0)
+// Descriptor is a terminator for the containing low block.
+#define LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR ((uint16_t)1u << 1)
+// Descriptor may be safely removed when all results are dead.
+#define LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE ((uint16_t)1u << 2)
+
+typedef struct loom_low_reg_class_t {
+  // String-table offset for the stable register-class name.
+  uint32_t name_string_offset;
+  // Target bank identifier used by allocators and pressure reporting.
+  uint16_t target_bank_id;
+  // Register-class behavioral flags.
+  loom_low_reg_class_flags_t flags;
+  // Number of bits in one allocation unit.
+  uint16_t alloc_unit_bits;
+  // Number of physical registers, or zero when virtual/unbounded.
+  uint16_t physical_count;
+  // Alias-set identifier shared by overlapping register classes.
+  uint16_t alias_set_id;
+  // Register class used for spill/reload values, or LOOM_LOW_REG_CLASS_NONE.
+  uint16_t spill_class_id;
+} loom_low_reg_class_t;
+
+typedef struct loom_low_reg_class_alt_t {
+  // Register-class table identifier, or LOOM_LOW_REG_CLASS_NONE for literals.
+  uint16_t reg_class_id;
+  // Alternative flags such as preferred, immediate, or physical-only.
+  loom_low_reg_class_alt_flags_t flags;
+} loom_low_reg_class_alt_t;
+
+typedef struct loom_low_operand_t {
+  // String-table offset for the descriptor field name.
+  uint32_t field_name_string_offset;
+  // Semantic role this operand row plays.
+  loom_low_operand_role_t role;
+  // Operand flags used by verifier, allocator, and emitter.
+  loom_low_operand_flags_t flags;
+  // First register-class alternative row for this operand.
+  uint16_t reg_class_alt_start;
+  // Number of register-class alternatives accepted by this operand.
+  uint16_t reg_class_alt_count;
+  // Number of allocation units consumed or produced.
+  uint16_t unit_count;
+  // Target-owned data-format identifier.
+  uint16_t data_format_id;
+  // Scheduling stage where the operand is read.
+  uint16_t read_stage;
+  // Scheduling stage where the operand result becomes ready.
+  uint16_t ready_stage;
+} loom_low_operand_t;
+
+typedef struct loom_low_immediate_t {
+  // String-table offset for the immediate field name.
+  uint32_t field_name_string_offset;
+  // Immediate interpretation used by verifier and emitter.
+  loom_low_immediate_kind_t kind;
+  // Immediate flags such as symbolic or relative.
+  loom_low_immediate_flags_t flags;
+  // Encoded immediate width in bits.
+  uint16_t bit_width;
+  // Reserved for generator-owned immediate encoding variants.
+  uint16_t encoding_id;
+  // Inclusive signed minimum when kind is signed.
+  int64_t signed_min;
+  // Inclusive unsigned maximum when kind is unsigned or ordinal.
+  uint64_t unsigned_max;
+} loom_low_immediate_t;
+
+typedef struct loom_low_effect_t {
+  // Effect kind used by dependency and legality construction.
+  loom_low_effect_kind_t kind;
+  // Memory space or external resource touched by the effect.
+  loom_low_memory_space_t memory_space;
+  // Target-owned scope identifier for ordering and visibility.
+  uint16_t scope_id;
+  // Effect flags used by scheduling and verification.
+  loom_low_effect_flags_t flags;
+  // Target counter identifier for counter effects.
+  uint16_t counter_id;
+  // Access width in bits, or zero when not width-specific.
+  uint16_t width_bits;
+} loom_low_effect_t;
+
+typedef struct loom_low_constraint_t {
+  // Constraint kind used by verification and allocation.
+  loom_low_constraint_kind_t kind;
+  // First descriptor operand index participating in the constraint.
+  uint16_t lhs_operand_index;
+  // Second descriptor operand index, or LOOM_LOW_ID_NONE when unary.
+  uint16_t rhs_operand_index;
+  // Constraint flags for target-owned refinements.
+  loom_low_constraint_flags_t flags;
+} loom_low_constraint_t;
+
+typedef struct loom_low_issue_use_t {
+  // Resource identifier consumed by this issue-use row.
+  uint16_t resource_id;
+  // Number of cycles the resource is occupied.
+  uint16_t cycles;
+  // Number of resource units consumed per cycle.
+  uint16_t units;
+  // Pipeline stage associated with this use.
+  uint16_t stage;
+} loom_low_issue_use_t;
+
+typedef struct loom_low_pressure_delta_t {
+  // Register class whose pressure changes.
+  uint16_t reg_class_id;
+  // Signed pressure delta in allocation units.
+  int16_t delta;
+} loom_low_pressure_delta_t;
+
+typedef struct loom_low_resource_t {
+  // String-table offset for the stable resource name.
+  uint32_t name_string_offset;
+  // Number of resource units available per cycle.
+  uint16_t capacity_per_cycle;
+  // Resource flags for target-owned refinements.
+  loom_low_resource_flags_t flags;
+  // Abstract resource kind used by generic diagnostics.
+  loom_low_resource_kind_t kind;
+  // Contention group identifier for related resources.
+  uint16_t contention_group_id;
+} loom_low_resource_t;
+
+typedef struct loom_low_hazard_t {
+  // Hazard kind used by schedule policy and verification.
+  loom_low_hazard_kind_t kind;
+  // Resource, counter, or target-owned hazard identifier.
+  uint16_t resource_or_counter_id;
+  // Producer pipeline stage participating in the hazard.
+  uint16_t producer_stage;
+  // Consumer pipeline stage participating in the hazard.
+  uint16_t consumer_stage;
+  // Required distance or target-owned hazard value.
+  uint16_t distance;
+  // Hazard flags for target-owned refinements.
+  loom_low_hazard_flags_t flags;
+} loom_low_hazard_t;
+
+typedef struct loom_low_schedule_class_t {
+  // String-table offset for the stable schedule-class name.
+  uint32_t name_string_offset;
+  // Latency in cycles when latency_kind is exact or estimated.
+  uint16_t latency_cycles;
+  // Latency interpretation for scheduling and diagnostics.
+  loom_low_latency_kind_t latency_kind;
+  // First issue-use row for this schedule class.
+  uint16_t issue_use_start;
+  // Number of issue-use rows for this schedule class.
+  uint16_t issue_use_count;
+  // First hazard row for this schedule class.
+  uint16_t hazard_start;
+  // Number of hazard rows for this schedule class.
+  uint16_t hazard_count;
+  // Schedule-class flags such as load, store, call, or control.
+  loom_low_schedule_class_flags_t flags;
+  // Quality of the schedule model data.
+  loom_low_model_quality_t model_quality;
+  // First pressure-delta row for this schedule class.
+  uint16_t pressure_delta_start;
+  // Number of pressure-delta rows for this schedule class.
+  uint16_t pressure_delta_count;
+} loom_low_schedule_class_t;
+
+typedef struct loom_low_descriptor_t {
+  // String-table offset for the stable descriptor key.
+  uint32_t key_string_offset;
+  // String-table offset for the target mnemonic or packet name.
+  uint32_t mnemonic_string_offset;
+  // String-table offset for the source provenance string.
+  uint32_t source_string_offset;
+  // String-table offset for the primary semantic tag.
+  uint32_t semantic_tag_string_offset;
+  // First feature-mask word required by this descriptor.
+  uint32_t feature_mask_word_start;
+  // Number of feature-mask words required by this descriptor.
+  uint16_t feature_mask_word_count;
+  // Target-owned encoding identifier.
+  uint16_t encoding_id;
+  // First operand/result row for this descriptor.
+  uint32_t operand_start;
+  // Total number of operand/result rows for this descriptor.
+  uint16_t operand_count;
+  // Number of leading operand rows that define results.
+  uint16_t result_count;
+  // First immediate row for this descriptor.
+  uint32_t immediate_start;
+  // Number of immediate rows for this descriptor.
+  uint16_t immediate_count;
+  // First effect row for this descriptor.
+  uint32_t effect_start;
+  // Number of effect rows for this descriptor.
+  uint16_t effect_count;
+  // First constraint row for this descriptor.
+  uint32_t constraint_start;
+  // Number of constraint rows for this descriptor.
+  uint16_t constraint_count;
+  // Schedule-class identifier, or LOOM_LOW_SCHEDULE_CLASS_NONE.
+  uint16_t schedule_class_id;
+  // Descriptor flags used by verifier, scheduler, and optimizer.
+  loom_low_descriptor_flags_t flags;
+} loom_low_descriptor_t;
+
+typedef struct loom_low_descriptor_set_t {
+  // Descriptor table ABI version.
+  uint32_t abi_version;
+  // Generator or hand-authored schema version.
+  uint32_t generator_version;
+  // Stable content fingerprint for every table field except this field.
+  loom_low_fingerprint_t fingerprint;
+  // String-table offset for the descriptor-set key.
+  uint32_t key_string_offset;
+  // String-table offset for the target-family key.
+  uint32_t target_key_string_offset;
+  // String-table offset for the feature namespace key.
+  uint32_t feature_key_string_offset;
+  // NUL-separated string table used by all string offsets.
+  const char* string_data;
+  // Size in bytes of string_data, including terminators.
+  uint32_t string_data_length;
+  // Dense descriptor rows owned by this set.
+  const loom_low_descriptor_t* descriptors;
+  // Number of descriptor rows owned by this set.
+  uint32_t descriptor_count;
+  // Dense operand/result rows referenced by descriptors.
+  const loom_low_operand_t* operands;
+  // Number of operand/result rows owned by this set.
+  uint32_t operand_count;
+  // Dense immediate rows referenced by descriptors.
+  const loom_low_immediate_t* immediates;
+  // Number of immediate rows owned by this set.
+  uint32_t immediate_count;
+  // Dense effect rows referenced by descriptors.
+  const loom_low_effect_t* effects;
+  // Number of effect rows owned by this set.
+  uint32_t effect_count;
+  // Dense constraint rows referenced by descriptors.
+  const loom_low_constraint_t* constraints;
+  // Number of constraint rows owned by this set.
+  uint32_t constraint_count;
+  // Dense register classes accepted by descriptor operands.
+  const loom_low_reg_class_t* reg_classes;
+  // Number of register classes owned by this set.
+  uint32_t reg_class_count;
+  // Dense register-class alternative rows referenced by operands.
+  const loom_low_reg_class_alt_t* reg_class_alts;
+  // Number of register-class alternative rows owned by this set.
+  uint32_t reg_class_alt_count;
+  // Dense schedule classes referenced by descriptors.
+  const loom_low_schedule_class_t* schedule_classes;
+  // Number of schedule classes owned by this set.
+  uint32_t schedule_class_count;
+  // Dense issue-use rows referenced by schedule classes.
+  const loom_low_issue_use_t* issue_uses;
+  // Number of issue-use rows owned by this set.
+  uint32_t issue_use_count;
+  // Dense target resources referenced by issue-use rows.
+  const loom_low_resource_t* resources;
+  // Number of resources owned by this set.
+  uint32_t resource_count;
+  // Dense hazard rows referenced by schedule classes.
+  const loom_low_hazard_t* hazards;
+  // Number of hazard rows owned by this set.
+  uint32_t hazard_count;
+  // Dense pressure-delta rows referenced by schedule classes.
+  const loom_low_pressure_delta_t* pressure_deltas;
+  // Number of pressure-delta rows owned by this set.
+  uint32_t pressure_delta_count;
+  // Dense feature-mask words referenced by descriptors.
+  const uint64_t* feature_mask_words;
+  // Number of feature-mask words owned by this set.
+  uint32_t feature_mask_word_count;
+} loom_low_descriptor_set_t;
+
+// Returns whether two descriptor fingerprints are identical.
+bool loom_low_fingerprint_equal(loom_low_fingerprint_t lhs,
+                                loom_low_fingerprint_t rhs);
+
+// Computes the stable content fingerprint for |descriptor_set|. The embedded
+// fingerprint field is intentionally excluded from the hash.
+iree_status_t loom_low_descriptor_set_compute_fingerprint(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_low_fingerprint_t* out_fingerprint);
+
+// Returns whether |descriptor_set|'s embedded fingerprint matches its content.
+iree_status_t loom_low_descriptor_set_fingerprint_matches(
+    const loom_low_descriptor_set_t* descriptor_set, bool* out_matches);
+
+// Verifies structural integrity of a descriptor set. This checks table spans,
+// string offsets, descriptor key uniqueness, and cross-table references; it
+// does not perform full target legality.
+iree_status_t loom_low_descriptor_set_verify(
+    const loom_low_descriptor_set_t* descriptor_set);
+
+// Returns the NUL-terminated string view at |string_offset|. A NONE offset
+// returns an empty string.
+iree_status_t loom_low_descriptor_set_string(
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t string_offset,
+    iree_string_view_t* out_string);
+
+// Returns a descriptor row by ordinal, or NULL when |descriptor_ordinal| is out
+// of bounds.
+const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t descriptor_ordinal);
+
+// Resolves a symbolic descriptor key to an ordinal in |descriptor_set|.
+iree_status_t loom_low_descriptor_set_lookup_descriptor(
+    const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
+    uint32_t* out_descriptor_ordinal);
+
+// Appends a compact JSON manifest for |descriptor_set| to |builder|. The JSON
+// is a diagnostic and test format, not the runtime representation.
+iree_status_t loom_low_descriptor_set_format_manifest_json(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // LOOM_CODEGEN_LOW_DESCRIPTORS_H_
