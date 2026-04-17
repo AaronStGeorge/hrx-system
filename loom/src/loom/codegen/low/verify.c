@@ -7,6 +7,7 @@
 #include "loom/codegen/low/verify.h"
 
 #include <inttypes.h>
+#include <string.h>
 
 #include "iree/base/internal/arena.h"
 #include "loom/error/error_defs.h"
@@ -175,6 +176,178 @@ static iree_status_t loom_low_verify_emit_missing_features(
       IREE_ARRAYSIZE(params), NULL, 0);
 }
 
+static iree_status_t loom_low_verify_format_expected_register_classes(
+    loom_low_function_verify_state_t* function_state,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_t* descriptor_operand,
+    iree_string_view_t* out_expected_reg_classes) {
+  *out_expected_reg_classes = iree_string_view_empty();
+  iree_host_size_t byte_count = 0;
+  uint32_t reg_class_count = 0;
+  for (uint16_t i = 0; i < descriptor_operand->reg_class_alt_count; ++i) {
+    const uint16_t alt_index = descriptor_operand->reg_class_alt_start + i;
+    const loom_low_reg_class_alt_t* alt =
+        &descriptor_set->reg_class_alts[alt_index];
+    if (iree_all_bits_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE)) {
+      continue;
+    }
+    const loom_low_reg_class_t* reg_class =
+        &descriptor_set->reg_classes[alt->reg_class_id];
+    iree_string_view_t reg_class_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        descriptor_set, reg_class->name_string_offset, &reg_class_name));
+    if (reg_class_count > 0) byte_count += 3;
+    byte_count += reg_class_name.size;
+    ++reg_class_count;
+  }
+  if (reg_class_count == 0) {
+    *out_expected_reg_classes = IREE_SV("<none>");
+    return iree_ok_status();
+  }
+
+  char* storage = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(&function_state->state->arena,
+                                           byte_count, (void**)&storage));
+  char* cursor = storage;
+  uint32_t appended_count = 0;
+  for (uint16_t i = 0; i < descriptor_operand->reg_class_alt_count; ++i) {
+    const uint16_t alt_index = descriptor_operand->reg_class_alt_start + i;
+    const loom_low_reg_class_alt_t* alt =
+        &descriptor_set->reg_class_alts[alt_index];
+    if (iree_all_bits_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE)) {
+      continue;
+    }
+    const loom_low_reg_class_t* reg_class =
+        &descriptor_set->reg_classes[alt->reg_class_id];
+    iree_string_view_t reg_class_name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        descriptor_set, reg_class->name_string_offset, &reg_class_name));
+    if (appended_count > 0) {
+      memcpy(cursor, " | ", 3);
+      cursor += 3;
+    }
+    memcpy(cursor, reg_class_name.data, reg_class_name.size);
+    cursor += reg_class_name.size;
+    ++appended_count;
+  }
+  *out_expected_reg_classes = iree_make_string_view(storage, byte_count);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_operand_accepts_register_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_t* descriptor_operand,
+    iree_string_view_t actual_reg_class, bool* out_accepted) {
+  *out_accepted = false;
+  for (uint16_t i = 0; i < descriptor_operand->reg_class_alt_count; ++i) {
+    const uint16_t alt_index = descriptor_operand->reg_class_alt_start + i;
+    const loom_low_reg_class_alt_t* alt =
+        &descriptor_set->reg_class_alts[alt_index];
+    if (iree_all_bits_set(alt->flags, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE)) {
+      continue;
+    }
+    const loom_low_reg_class_t* reg_class =
+        &descriptor_set->reg_classes[alt->reg_class_id];
+    iree_string_view_t expected_reg_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+        descriptor_set, reg_class->name_string_offset, &expected_reg_class));
+    if (iree_string_view_equal(actual_reg_class, expected_reg_class)) {
+      *out_accepted = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_emit_register_type_mismatch(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    iree_string_view_t field_kind, loom_diagnostic_field_ref_t field_ref,
+    iree_string_view_t field_name, loom_type_t actual_type,
+    iree_string_view_t expected_reg_classes, uint32_t expected_unit_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_with_field_ref(
+          loom_param_string(opcode),
+          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                                    opcode_attr_index)),
+      loom_param_string(field_kind),
+      loom_param_with_field_ref(loom_param_string(field_name), field_ref),
+      loom_param_type(actual_type),
+      loom_param_string(expected_reg_classes),
+      loom_param_u32(expected_unit_count),
+  };
+  return loom_low_verify_emit(
+      function_state->state, op,
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 6), params,
+      IREE_ARRAYSIZE(params), NULL, 0);
+}
+
+static iree_status_t loom_low_verify_descriptor_register_field(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_operand_index) {
+  const loom_module_t* module = function_state->state->module;
+  const loom_low_descriptor_set_t* descriptor_set =
+      function_state->target->descriptor_set;
+  const uint32_t operand_row =
+      descriptor->operand_start + descriptor_operand_index;
+  const loom_low_operand_t* descriptor_operand =
+      &descriptor_set->operands[operand_row];
+
+  const bool is_result = descriptor_operand_index < descriptor->result_count;
+  const uint16_t field_index =
+      is_result
+          ? descriptor_operand_index
+          : (uint16_t)(descriptor_operand_index - descriptor->result_count);
+  const loom_value_id_t value_id =
+      is_result ? loom_op_const_results(op)[field_index]
+                : loom_op_const_operands(op)[field_index];
+  const loom_type_t actual_type = loom_module_value_type(module, value_id);
+
+  bool accepted = false;
+  if (loom_type_is_register(actual_type) &&
+      loom_type_register_unit_count(actual_type) ==
+          descriptor_operand->unit_count) {
+    iree_string_view_t actual_reg_class = loom_low_verify_string_or_empty(
+        module, loom_type_register_class_id(actual_type));
+    IREE_RETURN_IF_ERROR(loom_low_verify_operand_accepts_register_class(
+        descriptor_set, descriptor_operand, actual_reg_class, &accepted));
+  }
+  if (accepted) return iree_ok_status();
+
+  iree_string_view_t expected_reg_classes = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_verify_format_expected_register_classes(
+      function_state, descriptor_set, descriptor_operand,
+      &expected_reg_classes));
+  iree_string_view_t field_name = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string(
+      descriptor_set, descriptor_operand->field_name_string_offset,
+      &field_name));
+  const loom_diagnostic_field_ref_t field_ref = loom_diagnostic_field_ref(
+      is_result ? LOOM_DIAGNOSTIC_FIELD_RESULT : LOOM_DIAGNOSTIC_FIELD_OPERAND,
+      field_index);
+  return loom_low_verify_emit_register_type_mismatch(
+      function_state, op, opcode, opcode_attr_index,
+      is_result ? IREE_SV("result") : IREE_SV("operand"), field_ref, field_name,
+      actual_type, expected_reg_classes, descriptor_operand->unit_count);
+}
+
+static iree_status_t loom_low_verify_descriptor_registers(
+    loom_low_function_verify_state_t* function_state, const loom_op_t* op,
+    iree_string_view_t opcode, uint16_t opcode_attr_index,
+    const loom_low_descriptor_t* descriptor) {
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_register_field(
+        function_state, op, opcode, opcode_attr_index, descriptor, i));
+    if (loom_low_verify_should_stop(function_state->state)) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_features(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     iree_string_view_t opcode, uint16_t opcode_attr_index,
@@ -249,6 +422,14 @@ static iree_status_t loom_low_verify_packet(
         function_state, op,
         loom_error_def_lookup(LOOM_ERROR_DOMAIN_STRUCTURE, 1), opcode,
         opcode_attr_index, op->operand_count, expected_operand_count));
+  }
+  if (loom_low_verify_should_stop(function_state->state)) {
+    return iree_ok_status();
+  }
+  if (op->result_count == expected_result_count &&
+      op->operand_count == expected_operand_count) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_registers(
+        function_state, op, opcode, opcode_attr_index, descriptor));
   }
   if (loom_low_verify_should_stop(function_state->state)) {
     return iree_ok_status();

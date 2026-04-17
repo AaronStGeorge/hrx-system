@@ -101,10 +101,37 @@ ERR_LOWERING_005 = ErrorDef(
     "legal for the selected target config",
 )
 
+# ERR_LOWERING_006: Low descriptor register type constraint violated.
+ERR_LOWERING_006 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=6,
+    severity=Severity.ERROR,
+    summary="Low descriptor register type constraint violated.",
+    message=(
+        "low function '@{function_name}' descriptor '{opcode}' "
+        "{field_kind} '{field_name}' has type {actual_type}, expected "
+        "register class in [{expected_reg_classes}] with "
+        "{expected_unit_count} unit(s)"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("opcode", ParamKind.STRING),
+        ErrorParam("field_kind", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("expected_reg_classes", ParamKind.STRING),
+        ErrorParam("expected_unit_count", ParamKind.U32),
+    ),
+    fix_hint="Choose a register type accepted by descriptor '{opcode}' for "
+    "field '{field_name}' or select a descriptor whose register contract "
+    "matches the packet",
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
     ERR_LOWERING_003,
     ERR_LOWERING_004,
     ERR_LOWERING_005,
+    ERR_LOWERING_006,
 )

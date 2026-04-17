@@ -3517,5 +3517,53 @@
       }
     ],
     "fix_hint_template": "Enable the missing target feature bits or choose a descriptor legal for the selected target config"
+  },
+  {
+    "error_id": "ERR_LOWERING_006",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 6,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low descriptor register type constraint violated.",
+    "message_template": "low function '@{function_name}' descriptor '{opcode}' {field_kind} '{field_name}' has type {actual_type}, expected register class in [{expected_reg_classes}] with {expected_unit_count} unit(s)",
+    "params": [
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "opcode",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_reg_classes",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_unit_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ],
+    "fix_hint_template": "Choose a register type accepted by descriptor '{opcode}' for field '{field_name}' or select a descriptor whose register contract matches the packet"
   }
 ]

@@ -2635,6 +2635,33 @@ static const loom_error_def_t loom_err_lowering_005 = {
     .param_count = 5,
 };
 
+static const loom_error_param_def_t loom_err_lowering_006_params[] = {
+    {"function_name", LOOM_PARAM_STRING},
+    {"opcode", LOOM_PARAM_STRING},
+    {"field_kind", LOOM_PARAM_STRING},
+    {"field_name", LOOM_PARAM_STRING},
+    {"actual_type", LOOM_PARAM_TYPE},
+    {"expected_reg_classes", LOOM_PARAM_STRING},
+    {"expected_unit_count", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_lowering_006 = {
+    .error_id = "ERR_LOWERING_006",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 6,
+    .summary = "Low descriptor register type constraint violated.",
+    .message_template =
+        "low function '@{function_name}' descriptor '{opcode}' {field_kind} "
+        "'{field_name}' has type {actual_type}, expected register class in "
+        "[{expected_reg_classes}] with {expected_unit_count} unit(s)",
+    .fix_hint_template =
+        "Choose a register type accepted by descriptor '{opcode}' for field "
+        "'{field_name}' or select a descriptor whose register contract matches "
+        "the packet",
+    .param_defs = loom_err_lowering_006_params,
+    .param_count = 7,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2683,6 +2710,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_fold_002,      &loom_err_fold_003,      &loom_err_fold_004,
     &loom_err_fold_005,      &loom_err_lowering_001,  &loom_err_lowering_002,
     &loom_err_lowering_003,  &loom_err_lowering_004,  &loom_err_lowering_005,
+    &loom_err_lowering_006,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,
