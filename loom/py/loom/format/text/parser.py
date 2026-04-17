@@ -1755,7 +1755,7 @@ class Parser:
 
                 case AttrDict(field=dict_field):
                     if tok.at(TokenKind.LBRACE):
-                        self._parse_attr_dict(parsed, dict_field)
+                        self._parse_attr_dict(parsed, dict_field, op_decl)
 
                 case AttrTable(keys=keys_field, values=values_field):
                     self._parse_attr_table(parsed, op_decl, keys_field, values_field)
@@ -1949,11 +1949,15 @@ class Parser:
 
     # --- Attribute parsing ---
 
-    def _parse_attr_value(self, attr_def: AttrDef | None) -> Any:
+    def _parse_attr_value(
+        self, attr_def: AttrDef | None, *, attr_dict_nesting_depth: int = 0
+    ) -> Any:
         """Parse an attribute value based on its AttrDef type."""
         tok = self._tokenizer
         if attr_def is None:
-            return self._parse_any_attr_value()
+            return self._parse_any_attr_value(
+                attr_dict_nesting_depth=attr_dict_nesting_depth
+            )
 
         match attr_def.attr_type:
             case "i64":
@@ -2010,9 +2014,13 @@ class Parser:
                     ),
                 )
             case "any":
-                return self._parse_any_attr_value()
+                return self._parse_any_attr_value(
+                    attr_dict_nesting_depth=attr_dict_nesting_depth
+                )
             case _:
-                return self._parse_any_attr_value()
+                return self._parse_any_attr_value(
+                    attr_dict_nesting_depth=attr_dict_nesting_depth
+                )
 
     def _parse_any_attr_value(self, attr_dict_nesting_depth: int = 0) -> Any:
         """Parse any attribute value (type-agnostic)."""
@@ -2579,7 +2587,9 @@ class Parser:
 
     # --- Attr dict ---
 
-    def _parse_attr_dict(self, parsed: ParsedFields, field: str) -> None:
+    def _parse_attr_dict(
+        self, parsed: ParsedFields, field: str, op_decl: Op | None
+    ) -> None:
         """Parse {key = value, ...} into a named dict attribute."""
         tok = self._tokenizer
         tok.expect(TokenKind.LBRACE)
@@ -2602,7 +2612,8 @@ class Parser:
                 )
             seen_keys.add(key)
             tok.expect(TokenKind.EQUALS)
-            value = self._parse_any_attr_value(attr_dict_nesting_depth=1)
+            attr_def = None if field or op_decl is None else op_decl.attr(key)
+            value = self._parse_attr_value(attr_def, attr_dict_nesting_depth=1)
             entries.append((key, value))
             tok.try_consume(TokenKind.COMMA)
         tok.expect(TokenKind.RBRACE)

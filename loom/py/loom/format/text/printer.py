@@ -463,6 +463,12 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
     """
     if attr_def is not None and attr_def.attr_type == "enum":
         return str(value)
+    if attr_def is not None and attr_def.attr_type == "symbol":
+        if not isinstance(value, str):
+            raise TypeError(f"symbol attribute value must be a string: {value!r}")
+        if value.startswith("@"):
+            raise ValueError(f"symbol attribute value must not include '@': {value!r}")
+        return "@" + value
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -702,6 +708,8 @@ class Printer:
         for block in region.blocks:
             # Block label (if named and not the entry block).
             if block.label:
+                saved_indent = self._indent
+                self._indent = max(self._indent - 1, 0)
                 self._emit_comments(block.comments)
                 arg_strs = ""
                 if block.arg_ids:
@@ -712,6 +720,7 @@ class Printer:
                         args.append(f"{name}: {arg_type}")
                     arg_strs = "(" + ", ".join(args) + ")"
                 self._emit(f"^{block.label}{arg_strs}:")
+                self._indent = saved_indent
             final_live_op_index = self._printable_final_op_index(block)
             for i, op in enumerate(block.ops):
                 if not op.is_dead:

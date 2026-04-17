@@ -62,6 +62,11 @@ def main() -> int:
         cwd=REPO_ROOT,
     )
     ok &= _run(
+        "low descriptors",
+        [sys.executable, "loom/py/loom/gen/run.py", "low_descriptors"],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
         "textmate",
         [sys.executable, "loom/py/loom/gen/run.py", "textmate"],
         cwd=REPO_ROOT,

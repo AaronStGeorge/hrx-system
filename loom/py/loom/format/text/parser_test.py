@@ -1154,8 +1154,8 @@ class TestRoundTrip:
         self._roundtrip_text(
             "// top-level function\n"
             "func.def @comments() {\n"
-            "  // explicit entry block\n"
-            "  ^entry:\n"
+            "// explicit entry block\n"
+            "^entry:\n"
             "  // body terminator\n"
             "  test.yield\n"
             "}\n"

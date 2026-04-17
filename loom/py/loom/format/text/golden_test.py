@@ -22,6 +22,7 @@ from loom.dialect.llvmir import ALL_LLVMIR_OPS
 from loom.dialect.pool import ALL_POOL_OPS
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scf import ALL_SCF_OPS
+from loom.dialect.target import ALL_TARGET_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.view import ALL_VIEW_OPS
@@ -46,6 +47,7 @@ _ALL_OPS = (
     *ALL_INDEX_OPS,
     *ALL_KERNEL_OPS,
     *ALL_LLVMIR_OPS,
+    *ALL_TARGET_OPS,
 )
 
 _ALL_TYPES = (

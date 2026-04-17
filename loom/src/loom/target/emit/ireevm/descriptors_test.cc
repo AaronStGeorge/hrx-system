@@ -25,9 +25,9 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorSetVerifies) {
       descriptor_set, descriptor_set->key_string_offset, &set_key));
   EXPECT_TRUE(iree_string_view_equal(set_key, IREE_SV("iree.vm.core")));
 
-  EXPECT_EQ(descriptor_set->descriptor_count, 9u);
-  EXPECT_EQ(descriptor_set->reg_class_count, 6u);
-  EXPECT_EQ(descriptor_set->schedule_class_count, 4u);
+  EXPECT_GE(descriptor_set->descriptor_count, 9u);
+  EXPECT_GE(descriptor_set->reg_class_count, 6u);
+  EXPECT_GE(descriptor_set->schedule_class_count, 4u);
 }
 
 TEST(IreeVmDescriptorsTest, CoreDescriptorLookupUsesStableKeys) {

@@ -9,12 +9,13 @@
 Usage:
     python3 loom/py/loom/gen/run.py builders
     python3 loom/py/loom/gen/run.py c_tables
+    python3 loom/py/loom/gen/run.py low_descriptors
     python3 loom/py/loom/gen/run.py textmate
 """
 
 from __future__ import annotations
 
-import runpy
+import importlib
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ GENERATORS = {
     "builders": "loom.gen.builders",
     "c_errors": "loom.gen.c_errors",
     "c_tables": "loom.gen.c_tables",
+    "low_descriptors": "loom.gen.low_descriptors",
     "textmate": "loom.gen.textmate",
 }
 
@@ -43,7 +45,8 @@ def main(argv: list[str]) -> int:
         print(f"error: run from repository root: {repo_root}", file=sys.stderr)
         return 2
 
-    runpy.run_module(GENERATORS[argv[1]], run_name="__main__")
+    module = importlib.import_module(GENERATORS[argv[1]])
+    module.main()
     return 0
 
 
