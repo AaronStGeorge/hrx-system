@@ -344,6 +344,15 @@ static bool loom_cfg_simplify_condition_operands_equal(
   }
 }
 
+static loom_condition_integer_operand_t
+loom_cfg_simplify_condition_value_operand(loom_value_id_t value_id) {
+  return (loom_condition_integer_operand_t){
+      .kind = LOOM_CONDITION_INTEGER_OPERAND_VALUE,
+      .value_id = value_id,
+      .constant = 0,
+  };
+}
+
 static bool loom_cfg_simplify_condition_relation_implies(
     const loom_condition_integer_relation_t* known,
     const loom_condition_integer_relation_t* queried, bool* out_result) {
@@ -362,6 +371,22 @@ static bool loom_cfg_simplify_condition_relation_implies(
   }
 
   return false;
+}
+
+static bool loom_cfg_simplify_condition_relations_equivalent(
+    const loom_condition_integer_relation_t* lhs,
+    const loom_condition_integer_relation_t* rhs) {
+  bool lhs_implies_rhs = false;
+  if (!loom_cfg_simplify_condition_relation_implies(lhs, rhs,
+                                                    &lhs_implies_rhs) ||
+      !lhs_implies_rhs) {
+    return false;
+  }
+
+  bool rhs_implies_lhs = false;
+  return loom_cfg_simplify_condition_relation_implies(rhs, lhs,
+                                                      &rhs_implies_lhs) &&
+         rhs_implies_lhs;
 }
 
 static bool loom_cfg_simplify_condition_relation_meet(
@@ -384,6 +409,24 @@ static bool loom_cfg_simplify_condition_relation_meet(
   }
 
   return false;
+}
+
+static iree_status_t loom_cfg_simplify_append_condition_relation(
+    loom_condition_integer_relation_t* relations,
+    iree_host_size_t relation_capacity, iree_host_size_t* inout_relation_count,
+    loom_condition_integer_relation_t relation) {
+  for (iree_host_size_t i = 0; i < *inout_relation_count; ++i) {
+    if (loom_cfg_simplify_condition_relations_equivalent(&relations[i],
+                                                         &relation)) {
+      return iree_ok_status();
+    }
+  }
+  if (*inout_relation_count >= relation_capacity) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "CFG path relation capacity exceeded");
+  }
+  relations[(*inout_relation_count)++] = relation;
+  return iree_ok_status();
 }
 
 static iree_host_size_t loom_cfg_simplify_intersect_condition_relations(
@@ -427,9 +470,132 @@ static iree_status_t loom_cfg_simplify_copy_condition_relations(
   return iree_ok_status();
 }
 
+static bool loom_cfg_simplify_block_entry_path_facts_equal(
+    const loom_cfg_simplify_block_entry_path_facts_t* lhs,
+    const loom_cfg_simplify_block_entry_path_facts_t* rhs) {
+  if (lhs->condition != rhs->condition ||
+      lhs->condition_value != rhs->condition_value ||
+      lhs->condition_known != rhs->condition_known ||
+      lhs->integer_relation_count != rhs->integer_relation_count) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < lhs->integer_relation_count; ++i) {
+    if (!loom_cfg_simplify_condition_relations_equivalent(
+            &lhs->integer_relations[i], &rhs->integer_relations[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_value_available_at_block_entry(
+    const loom_cfg_simplify_state_t* state, loom_value_id_t value_id,
+    const loom_block_t* block) {
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      value_id >= state->module->values.count || !block || !block->first_op) {
+    return false;
+  }
+  return loom_value_is_available_before_op(state->dominance, value_id,
+                                           block->first_op) &&
+         loom_value_type_is_available_before_op(state->dominance, value_id,
+                                                block->first_op);
+}
+
+static bool loom_cfg_simplify_try_map_branch_arg_to_block_arg(
+    const loom_block_t* block, loom_value_slice_t branch_args,
+    loom_value_id_t value_id, loom_value_id_t* out_block_arg,
+    bool* out_ambiguous) {
+  *out_block_arg = LOOM_VALUE_ID_INVALID;
+  *out_ambiguous = false;
+  if (!block || branch_args.count != block->arg_count) return false;
+
+  bool found_mapping = false;
+  for (uint16_t i = 0; i < branch_args.count; ++i) {
+    if (branch_args.values[i] != value_id) continue;
+    if (found_mapping) {
+      *out_ambiguous = true;
+      *out_block_arg = LOOM_VALUE_ID_INVALID;
+      return false;
+    }
+    *out_block_arg = loom_block_arg_id(block, i);
+    found_mapping = true;
+  }
+  return found_mapping;
+}
+
+static bool loom_cfg_simplify_remap_condition_operand_to_block_entry(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* block,
+    loom_op_t* predecessor_terminator, loom_condition_integer_operand_t operand,
+    loom_condition_integer_operand_t* out_operand) {
+  *out_operand = operand;
+  if (operand.kind != LOOM_CONDITION_INTEGER_OPERAND_VALUE) return true;
+
+  if (loom_cfg_br_isa(predecessor_terminator) &&
+      loom_cfg_br_dest(predecessor_terminator) == block) {
+    loom_value_id_t block_arg = LOOM_VALUE_ID_INVALID;
+    bool ambiguous_mapping = false;
+    bool found_mapping = loom_cfg_simplify_try_map_branch_arg_to_block_arg(
+        block, loom_cfg_br_args(predecessor_terminator), operand.value_id,
+        &block_arg, &ambiguous_mapping);
+    if (ambiguous_mapping) return false;
+    if (found_mapping) {
+      *out_operand = loom_cfg_simplify_condition_value_operand(block_arg);
+      return true;
+    }
+  }
+
+  if (!loom_cfg_simplify_value_available_at_block_entry(state, operand.value_id,
+                                                        block)) {
+    return false;
+  }
+  return true;
+}
+
+static bool loom_cfg_simplify_remap_condition_relation_to_block_entry(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* block,
+    loom_op_t* predecessor_terminator,
+    const loom_condition_integer_relation_t* relation,
+    loom_condition_integer_relation_t* out_relation) {
+  *out_relation = *relation;
+  if (!loom_cfg_simplify_remap_condition_operand_to_block_entry(
+          state, block, predecessor_terminator, relation->left,
+          &out_relation->left)) {
+    return false;
+  }
+  if (!loom_cfg_simplify_remap_condition_operand_to_block_entry(
+          state, block, predecessor_terminator, relation->right,
+          &out_relation->right)) {
+    return false;
+  }
+  return true;
+}
+
+static iree_status_t loom_cfg_simplify_append_remapped_condition_relations(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* block,
+    loom_op_t* predecessor_terminator,
+    const loom_condition_integer_relation_t* source_relations,
+    iree_host_size_t source_relation_count,
+    loom_condition_integer_relation_t* relations,
+    iree_host_size_t relation_capacity,
+    iree_host_size_t* inout_relation_count) {
+  for (iree_host_size_t i = 0; i < source_relation_count; ++i) {
+    loom_condition_integer_relation_t remapped_relation = {0};
+    if (!loom_cfg_simplify_remap_condition_relation_to_block_entry(
+            state, block, predecessor_terminator, &source_relations[i],
+            &remapped_relation)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_cfg_simplify_append_condition_relation(
+        relations, relation_capacity, inout_relation_count, remapped_relation));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_cfg_simplify_compute_block_entry_path_facts(
     loom_cfg_simplify_state_t* state, const loom_cfg_graph_t* graph,
-    uint16_t block_index, loom_cfg_simplify_block_entry_path_facts_t* fact) {
+    const loom_cfg_simplify_block_entry_path_facts_t* current_facts,
+    uint16_t block_index, loom_condition_integer_relation_t* relation_storage,
+    loom_cfg_simplify_block_entry_path_facts_t* fact) {
   *fact = (loom_cfg_simplify_block_entry_path_facts_t){
       .condition = LOOM_VALUE_ID_INVALID,
   };
@@ -445,8 +611,6 @@ static iree_status_t loom_cfg_simplify_compute_block_entry_path_facts(
   bool saw_reachable_predecessor = false;
   bool condition_candidate_initialized = false;
   bool condition_candidate_valid = true;
-  loom_condition_integer_relation_t
-      relation_storage[LOOM_CFG_SIMPLIFY_EDGE_RELATION_CAPACITY];
   iree_host_size_t relation_count = 0;
   bool relation_meet_initialized = false;
   loom_cfg_block_index_span_t predecessors =
@@ -485,6 +649,17 @@ static iree_status_t loom_cfg_simplify_compute_block_entry_path_facts(
           loom_condition_facts_query(state->module, state->fact_table,
                                      edge_condition, edge_value, &edge_facts));
     }
+    if (current_facts) {
+      const loom_cfg_simplify_block_entry_path_facts_t* predecessor_facts =
+          &current_facts[predecessor_index];
+      IREE_RETURN_IF_ERROR(
+          loom_cfg_simplify_append_remapped_condition_relations(
+              state, block, predecessor->last_op,
+              predecessor_facts->integer_relations,
+              predecessor_facts->integer_relation_count, edge_relation_storage,
+              IREE_ARRAYSIZE(edge_relation_storage),
+              &edge_facts.integer_relation_count));
+    }
 
     if (!relation_meet_initialized) {
       relation_count = edge_facts.integer_relation_count;
@@ -505,8 +680,9 @@ static iree_status_t loom_cfg_simplify_compute_block_entry_path_facts(
   if (!fact->condition_known) {
     fact->condition = LOOM_VALUE_ID_INVALID;
   }
-  return loom_cfg_simplify_copy_condition_relations(state, relation_storage,
-                                                    relation_count, fact);
+  fact->integer_relations = relation_storage;
+  fact->integer_relation_count = relation_count;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_cfg_simplify_compute_block_entry_path_fact_table(
@@ -519,13 +695,39 @@ static iree_status_t loom_cfg_simplify_compute_block_entry_path_fact_table(
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate_array(state->analysis_arena, graph->block_count,
                                 sizeof(*facts), (void**)&facts));
-  for (uint16_t block_index = 0; block_index < graph->block_count;
-       ++block_index) {
-    IREE_RETURN_IF_ERROR(loom_cfg_simplify_compute_block_entry_path_facts(
-        state, graph, block_index, &facts[block_index]));
+  memset(facts, 0, graph->block_count * sizeof(*facts));
+
+  iree_host_size_t max_iterations = (iree_host_size_t)graph->block_count + 1;
+  for (iree_host_size_t iteration = 0; iteration < max_iterations;
+       ++iteration) {
+    bool changed = false;
+    for (uint16_t block_index = 0; block_index < graph->block_count;
+         ++block_index) {
+      loom_condition_integer_relation_t
+          relation_storage[LOOM_CFG_SIMPLIFY_EDGE_RELATION_CAPACITY];
+      loom_cfg_simplify_block_entry_path_facts_t computed_facts = {0};
+      IREE_RETURN_IF_ERROR(loom_cfg_simplify_compute_block_entry_path_facts(
+          state, graph, facts, block_index, relation_storage, &computed_facts));
+      if (loom_cfg_simplify_block_entry_path_facts_equal(&facts[block_index],
+                                                         &computed_facts)) {
+        continue;
+      }
+      loom_cfg_simplify_block_entry_path_facts_t copied_facts = computed_facts;
+      copied_facts.integer_relations = NULL;
+      copied_facts.integer_relation_count = 0;
+      IREE_RETURN_IF_ERROR(loom_cfg_simplify_copy_condition_relations(
+          state, computed_facts.integer_relations,
+          computed_facts.integer_relation_count, &copied_facts));
+      facts[block_index] = copied_facts;
+      changed = true;
+    }
+    if (!changed) {
+      *out_facts = facts;
+      return iree_ok_status();
+    }
   }
-  *out_facts = facts;
-  return iree_ok_status();
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                          "CFG path fact propagation did not converge");
 }
 
 static bool loom_cfg_simplify_path_fact_dominates_op(

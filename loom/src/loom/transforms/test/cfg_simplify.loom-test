@@ -295,6 +295,79 @@ func.def @folds_compare_after_equivalent_incoming_edges(%guard: i1, %i: index, %
 
 // ====
 
+func.def @transports_compare_facts_through_block_args(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  %left_cond = index.cmp slt, %li, %ln : index
+  cfg.cond_br %left_cond, ^left_pass, ^exit : i1
+^left_pass:
+  cfg.br ^join(%li, %ln : index, index)
+^right:
+  %right_cond = index.cmp slt, %ri, %rn : index
+  cfg.cond_br %right_cond, ^right_pass, ^exit : i1
+^right_pass:
+  cfg.br ^join(%ri, %rn : index, index)
+^join(%x : index, %y : index):
+  %again = index.cmp slt, %x, %y : index
+  cfg.cond_br %again, ^taken, ^dead : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^dead:
+  cfg.br ^ret(%b : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ----
+func.def @transports_compare_facts_through_block_args(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  %left_cond = index.cmp slt, %li, %ln : index
+  cfg.cond_br %left_cond, ^left_pass, ^exit : i1
+^left_pass:
+  cfg.br ^join(%li, %ln : index, index)
+^right:
+  %right_cond = index.cmp slt, %ri, %rn : index
+  cfg.cond_br %right_cond, ^right_pass, ^exit : i1
+^right_pass:
+  cfg.br ^join(%ri, %rn : index, index)
+^join(%x : index, %y : index):
+  %again = index.cmp slt, %x, %y : index
+  cfg.br ^ret(%a : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
+func.def @preserves_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li: index, %ln: index, %ri: index, %rn: index, %a: i32, %b: i32) -> (i32) {
+  cfg.cond_br %guard, ^left, ^right : i1
+^left:
+  %left_cond = index.cmp slt, %li, %ln : index
+  cfg.cond_br %left_cond, ^left_pass, ^exit : i1
+^left_pass:
+  cfg.br ^join(%li, %ln : index, index)
+^right:
+  cfg.br ^join(%ri, %rn : index, index)
+^join(%x : index, %y : index):
+  %again = index.cmp slt, %x, %y : index
+  cfg.cond_br %again, ^taken, ^dead : i1
+^taken:
+  cfg.br ^ret(%a : i32)
+^dead:
+  cfg.br ^ret(%b : i32)
+^exit:
+  cfg.br ^ret(%b : i32)
+^ret(%result : i32):
+  func.return %result : i32
+}
+
+// ====
+
 func.def @folds_dominated_boolean_and_relations(%i: index, %n: index, %j: index, %z: index, %a: i32, %b: i32) -> (i32) {
   %i_in_range = index.cmp slt, %i, %n : index
   %j_nonzero = index.cmp ne, %j, %z : index
