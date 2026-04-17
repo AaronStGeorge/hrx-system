@@ -20,6 +20,7 @@ loom_check_test_suite(
         "llvmir/memory.loom-test",
         "llvmir/packed_dot.loom-test",
         "llvmir/scalar_index.loom-test",
+        "llvmir/toolchain.loom-test",
         "llvmir/vector_core.loom-test",
         "pass.loom-test",
         "requires.loom-test",

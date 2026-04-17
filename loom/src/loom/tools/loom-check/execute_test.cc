@@ -12,68 +12,10 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
-#include "loom/target/llvmir/tool.h"
 #include "loom/tools/loom-check/check.h"
 
 namespace loom {
 namespace {
-
-bool IsToolUnavailable(iree_status_t status) {
-  iree_status_code_t code = iree_status_code(status);
-  return code == IREE_STATUS_NOT_FOUND || code == IREE_STATUS_UNAVAILABLE ||
-         code == IREE_STATUS_UNIMPLEMENTED;
-}
-
-std::string StatusToString(iree_status_t status) {
-  iree_allocator_t allocator = iree_allocator_system();
-  char* buffer = nullptr;
-  iree_host_size_t length = 0;
-  if (iree_status_to_string(status, &allocator, &buffer, &length)) {
-    std::string result(buffer, length);
-    iree_allocator_free(allocator, buffer);
-    return result;
-  }
-  return std::string("status code ") +
-         std::to_string(static_cast<int>(iree_status_code(status)));
-}
-
-void SkipIfLlvmToolUnavailable(loom_llvmir_tool_kind_t tool_kind) {
-  loom_llvmir_toolchain_t toolchain;
-  loom_llvmir_toolchain_initialize_from_environment(&toolchain);
-  loom_llvmir_tool_output_t version_text = {};
-  iree_status_t status = loom_llvmir_tool_query_version(
-      &toolchain, tool_kind, iree_allocator_system(), &version_text);
-  if (IsToolUnavailable(status)) {
-    std::string message = StatusToString(status);
-    iree_status_ignore(status);
-    GTEST_SKIP() << message;
-  }
-  IREE_ASSERT_OK(status);
-  loom_llvmir_tool_output_deinitialize(&version_text, iree_allocator_system());
-}
-
-void SkipIfLlcTargetUnavailable(const char* target_name,
-                                const char* fallback_target_name) {
-  loom_llvmir_toolchain_t toolchain;
-  loom_llvmir_toolchain_initialize_from_environment(&toolchain);
-  loom_llvmir_tool_output_t version_text = {};
-  iree_status_t status = loom_llvmir_tool_query_version(
-      &toolchain, LOOM_LLVMIR_TOOL_LLC, iree_allocator_system(), &version_text);
-  if (IsToolUnavailable(status)) {
-    std::string message = StatusToString(status);
-    iree_status_ignore(status);
-    GTEST_SKIP() << message;
-  }
-  IREE_ASSERT_OK(status);
-  std::string version =
-      version_text.data ? std::string(version_text.data, version_text.length)
-                        : std::string();
-  loom_llvmir_tool_output_deinitialize(&version_text, iree_allocator_system());
-  if (version.find(target_name) == std::string::npos &&
-      version.find(fallback_target_name) == std::string::npos) {
-    GTEST_SKIP() << "installed llc does not advertise target " << target_name;
-  }
-}
 
 class ExecuteTest : public ::testing::Test {
  protected:
@@ -903,56 +845,6 @@ TEST_F(ExecuteTest, EmitModeLlvmIrBodyText) {
                    "  %sum = add i32 %lhs, %rhs\n"
                    "  ret i32 %sum\n"
                    "}\n",
-                   &result));
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
-      << "detail: " << DetailString(result)
-      << "\nactual: " << ActualOutputString(result);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitModeLlvmIrBitcodeDisassembly) {
-  SkipIfLlvmToolUnavailable(LOOM_LLVMIR_TOOL_LLVM_DIS);
-
-  loom_check_result_t result;
-  IREE_ASSERT_OK(ExecuteFirst(
-      "// RUN: emit llvmir-bitcode\n"
-      "// REQUIRES: llvm-dis\n"
-      "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
-      "  %sum = scalar.addi %lhs, %rhs : i32\n"
-      "  func.return %sum : i32\n"
-      "}\n"
-      "// ----\n"
-      "source_filename = \"test.loom-test\"\n"
-      "target datalayout = "
-      "\"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:"
-      "128-n8:16:32:64-S128\"\n"
-      "target triple = \"x86_64-unknown-linux-gnu\"\n"
-      "\n"
-      "define internal i32 @add(i32 %lhs, i32 %rhs) {\n"
-      "entry:\n"
-      "  %sum = add i32 %lhs, %rhs\n"
-      "  ret i32 %sum\n"
-      "}\n",
-      &result));
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
-      << "detail: " << DetailString(result)
-      << "\nactual: " << ActualOutputString(result);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitModeLlvmIrObject) {
-  SkipIfLlcTargetUnavailable("x86", "X86");
-
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit llvmir-object\n"
-                   "// REQUIRES: llc, llc-x86\n"
-                   "func.def @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
-                   "  %sum = scalar.addi %lhs, %rhs : i32\n"
-                   "  func.return %sum : i32\n"
-                   "}\n"
-                   "// ----\n"
-                   "object emitted: x86_64-object\n",
                    &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS)
       << "detail: " << DetailString(result)

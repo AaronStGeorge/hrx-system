@@ -78,6 +78,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "llvmir_toolchain"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/toolchain.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "llvmir_vector_core"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/llvmir/vector_core.loom-test"
