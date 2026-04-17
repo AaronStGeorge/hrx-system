@@ -24,39 +24,36 @@ package(
 iree_assert_no_dependency(
     name = "descriptors_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
-    target = "//loom/src/loom/codegen/low:descriptors",
+    target = "//loom/src/loom/target/arch/wasm:descriptors",
 )
 
 iree_assert_no_dependency(
     name = "descriptors_no_amdgpu_arch_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-    target = "//loom/src/loom/codegen/low:descriptors",
+    target = "//loom/src/loom/target/arch/wasm:descriptors",
 )
 
 iree_assert_no_dependency(
-    name = "descriptors_no_wasm_arch_dep",
-    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
-    target = "//loom/src/loom/codegen/low:descriptors",
+    name = "descriptors_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/wasm:descriptors",
 )
 
 iree_assert_no_dependency(
     name = "descriptors_no_llvmir_emit_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
-    target = "//loom/src/loom/codegen/low:descriptors",
+    target = "//loom/src/loom/target/arch/wasm:descriptors",
 )
 
 #===------------------------------------------------------------------------===#
-# Dense low descriptor tables
+# Wasm low descriptors
 #===------------------------------------------------------------------------===#
 
 loom_cc_library(
     name = "descriptors",
     srcs = ["descriptors.c"],
     hdrs = ["descriptors.h"],
-    deps = [
-        "//loom/src/loom/util:bstring",
-        "//runtime/src/iree/base",
-    ],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
 loom_cc_test(
@@ -64,6 +61,7 @@ loom_cc_test(
     srcs = ["descriptors_test.cc"],
     deps = [
         ":descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

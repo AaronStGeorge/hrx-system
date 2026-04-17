@@ -37,13 +37,26 @@ TEST(IreeVmDescriptorsTest, CoreDescriptorLookupUsesStableKeys) {
   uint32_t add_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
       descriptor_set, IREE_SV("iree.vm.add.i32"), &add_ordinal));
-  EXPECT_EQ(add_ordinal, 1u);
+  EXPECT_NE(add_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
   const loom_low_descriptor_t* add_descriptor =
       loom_low_descriptor_set_descriptor_at(descriptor_set, add_ordinal);
   ASSERT_NE(add_descriptor, nullptr);
+  iree_string_view_t add_key = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+      descriptor_set, add_descriptor->key_string_offset, &add_key));
+  EXPECT_TRUE(iree_string_view_equal(add_key, IREE_SV("iree.vm.add.i32")));
   EXPECT_EQ(add_descriptor->operand_count, 3u);
   EXPECT_EQ(add_descriptor->result_count, 1u);
-  EXPECT_EQ(add_descriptor->schedule_class_id, 1u);
+  ASSERT_NE(add_descriptor->schedule_class_id, LOOM_LOW_SCHEDULE_CLASS_NONE);
+  ASSERT_LT(add_descriptor->schedule_class_id,
+            descriptor_set->schedule_class_count);
+  iree_string_view_t add_schedule_name = iree_string_view_empty();
+  IREE_ASSERT_OK(loom_low_descriptor_set_string(
+      descriptor_set,
+      descriptor_set->schedule_classes[add_descriptor->schedule_class_id]
+          .name_string_offset,
+      &add_schedule_name));
+  EXPECT_TRUE(iree_string_view_equal(add_schedule_name, IREE_SV("vm.alu.i32")));
 
   uint32_t branch_ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   IREE_ASSERT_OK(loom_low_descriptor_set_lookup_descriptor(
@@ -73,7 +86,7 @@ TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {
   EXPECT_NE(json.find("\"key\":\"iree.vm.call.import.i32\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"iree.vm.cond_br.i32\""), std::string::npos);
-  EXPECT_NE(json.find("\"schedule_class\":3"), std::string::npos);
+  EXPECT_NE(json.find("\"effects\":1"), std::string::npos);
 }
 
 }  // namespace

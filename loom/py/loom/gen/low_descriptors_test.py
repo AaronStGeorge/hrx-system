@@ -12,6 +12,7 @@ from dataclasses import replace
 import pytest
 
 from loom.gen.low_descriptors import DescriptorAllowlist, generate_descriptor_set
+from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import OperandRole
 
@@ -48,6 +49,25 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     assert manifest["table_counts"]["schedule_classes"] == 1
     assert manifest["table_counts"]["resources"] == 1
     assert "iree.vm.call.import.i32" not in generated.source
+
+
+def test_generate_wasm_core_simd128_descriptor_set() -> None:
+    generated = generate_descriptor_set(WASM_CORE_SIMD128_DESCRIPTOR_SET)
+
+    assert "loom_wasm_core_simd128_descriptor_set" in generated.header
+    assert 'LOOM_BSTRING_LITERAL("\\x11", "wasm.core.simd128")' in generated.source
+    assert "wasm.i32x4.add" in generated.source
+    assert "fingerprint" not in generated.source
+    assert "fingerprint" not in generated.manifest_json
+
+    manifest = json.loads(generated.manifest_json)
+    assert manifest["key"] == "wasm.core.simd128"
+    assert manifest["target"] == "wasm"
+    assert manifest["feature_namespace"] == "wasm.simd128.v1"
+    assert manifest["abi_version"] == 4
+    assert manifest["table_counts"]["descriptors"] >= 12
+    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert any(descriptor["key"] == "wasm.v128.load" for descriptor in manifest["descriptors"])
 
 
 def test_allowlist_accepts_semantic_tags() -> None:

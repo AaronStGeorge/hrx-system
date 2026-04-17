@@ -34,6 +34,12 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "descriptors_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/emit/ireevm:descriptors",
+)
+
+iree_assert_no_dependency(
     name = "descriptors_no_llvmir_emit_dep",
     dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
     target = "//loom/src/loom/target/emit/ireevm:descriptors",
