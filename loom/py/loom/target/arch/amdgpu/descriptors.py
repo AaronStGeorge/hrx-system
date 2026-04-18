@@ -10,6 +10,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom.target.arch.amdgpu.descriptor_overlay import (
+    AmdgpuDescriptorOverlay,
+    AmdgpuOperandOverlay,
+    materialize_amdgpu_descriptor_overlays,
+)
+from loom.target.arch.amdgpu.isa_snapshot import (
+    AmdgpuIsaSnapshot,
+    parse_amdgpu_isa_snapshot_json,
+)
 from loom.target.low_descriptors import (
     Constraint,
     ConstraintKind,
@@ -271,6 +280,152 @@ _DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.TIED, 0, 1),
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
     Constraint(ConstraintKind.EARLY_CLOBBER, 0),
+)
+
+
+def _load_amdgpu_isa_snapshot(filename: str) -> AmdgpuIsaSnapshot:
+    path = Path(__file__).with_name(filename)
+    return parse_amdgpu_isa_snapshot_json(
+        path.read_text(encoding="utf-8"), source_name=str(path)
+    )
+
+
+_GFX11_ISA_SNAPSHOT = _load_amdgpu_isa_snapshot("gfx11_isa_snapshot.json")
+
+_GFX11_CORE_OVERLAY_DESCRIPTORS = materialize_amdgpu_descriptor_overlays(
+    _GFX11_ISA_SNAPSHOT,
+    (
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.s_add_u32",
+            instruction_name="S_ADD_U32",
+            mnemonic="s_add_u32",
+            encoding_name="ENC_SOP2",
+            semantic_tag="integer.add.u32",
+            schedule_class=_SCHEDULE_SALU,
+            operands=(
+                AmdgpuOperandOverlay("SDST", _sgpr_result()),
+                AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
+                AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
+            ),
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.v_add_u32",
+            instruction_name="V_ADD_NC_U32",
+            mnemonic="v_add_u32",
+            encoding_name="ENC_VOP2",
+            semantic_tag="integer.add.u32",
+            schedule_class=_SCHEDULE_VALU,
+            operands=(
+                AmdgpuOperandOverlay("VDST", _vgpr_result()),
+                AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+                AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
+            ),
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.s_buffer_load_dword",
+            instruction_name="S_BUFFER_LOAD_DWORD",
+            mnemonic="s_buffer_load_dword",
+            encoding_name="ENC_SMEM",
+            semantic_tag="memory.load.u32",
+            schedule_class=_SCHEDULE_SMEM_LOAD,
+            operands=(
+                AmdgpuOperandOverlay("SDATA", _sgpr_result()),
+                AmdgpuOperandOverlay("SBASE", _sgpr_resource("resource", units=4)),
+                AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+            ),
+            immediates=(_OFFSET_IMMEDIATE,),
+            effects=(_GLOBAL_LOAD_EFFECT,),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.buffer_load_dword",
+            instruction_name="BUFFER_LOAD_DWORD",
+            mnemonic="buffer_load_dword",
+            encoding_name="ENC_MUBUF",
+            semantic_tag="memory.load.u32",
+            schedule_class=_SCHEDULE_VMEM_LOAD,
+            operands=(
+                AmdgpuOperandOverlay("VDATA", _vgpr_result()),
+                AmdgpuOperandOverlay("SRSRC", _sgpr_resource("resource", units=4)),
+                AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+                AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+            ),
+            immediates=(_OFFSET_IMMEDIATE,),
+            effects=(_GLOBAL_LOAD_EFFECT,),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.buffer_store_dword",
+            instruction_name="BUFFER_STORE_DWORD",
+            mnemonic="buffer_store_dword",
+            encoding_name="ENC_MUBUF",
+            semantic_tag="memory.store.u32",
+            schedule_class=_SCHEDULE_VMEM_STORE,
+            operands=(
+                AmdgpuOperandOverlay("VDATA", _vgpr_operand("value")),
+                AmdgpuOperandOverlay("SRSRC", _sgpr_resource("resource", units=4)),
+                AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
+                AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+            ),
+            immediates=(_OFFSET_IMMEDIATE,),
+            effects=(_GLOBAL_STORE_EFFECT,),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.v_wmma_f32_16x16x16_f16",
+            instruction_name="V_WMMA_F32_16X16X16_F16",
+            mnemonic="v_wmma_f32_16x16x16_f16",
+            encoding_name="ENC_VOP3P",
+            semantic_tag="matrix.wmma.f32.16x16x16.f16",
+            schedule_class=_SCHEDULE_WMMA,
+            operands=(
+                AmdgpuOperandOverlay("VDST", _vgpr_result(units=8)),
+                AmdgpuOperandOverlay("SRC0", _vgpr_operand("a", units=4)),
+                AmdgpuOperandOverlay("SRC1", _vgpr_operand("b", units=4)),
+                AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc", units=8)),
+            ),
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.s_waitcnt",
+            instruction_name="S_WAITCNT",
+            mnemonic="s_waitcnt",
+            encoding_name="ENC_SOPP",
+            semantic_tag="control.waitcnt",
+            schedule_class=_SCHEDULE_WAIT,
+            operands=(),
+            immediate_fields=("SIMM16",),
+            immediates=(_VMCNT_IMMEDIATE, _LGKMCNT_IMMEDIATE),
+            effects=(_WAIT_EFFECT,),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.s_waitcnt_depctr",
+            instruction_name="S_WAITCNT_DEPCTR",
+            mnemonic="s_waitcnt_depctr",
+            encoding_name="ENC_SOPP",
+            semantic_tag="control.waitcnt.alu",
+            schedule_class=_SCHEDULE_WAIT,
+            operands=(),
+            immediate_fields=("SIMM16",),
+            immediates=(_DEPCTR_IMMEDIATE,),
+            effects=(_ALU_WAIT_EFFECT,),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        AmdgpuDescriptorOverlay(
+            descriptor_key="amdgpu.s_wait_idle",
+            instruction_name="S_WAIT_IDLE",
+            mnemonic="s_wait_idle",
+            encoding_name="ENC_SOPP",
+            semantic_tag="control.waitcnt.idle",
+            schedule_class=_SCHEDULE_WAIT,
+            operands=(),
+            effects=(_WAIT_EFFECT,),
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+    ),
 )
 
 AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
@@ -540,116 +695,7 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        Descriptor(
-            key="amdgpu.s_add_u32",
-            mnemonic="s_add_u32",
-            semantic_tag="integer.add.u32",
-            operands=(_sgpr_result(), _sgpr_operand("lhs"), _sgpr_operand("rhs")),
-            schedule_class=_SCHEDULE_SALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="amdgpu.v_add_u32",
-            mnemonic="v_add_u32",
-            semantic_tag="integer.add.u32",
-            operands=(_vgpr_result(), _vgpr_operand("lhs"), _vgpr_operand("rhs")),
-            encoding_id=37,
-            schedule_class=_SCHEDULE_VALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="amdgpu.s_buffer_load_dword",
-            mnemonic="s_buffer_load_dword",
-            semantic_tag="memory.load.u32",
-            operands=(
-                _sgpr_result(),
-                _sgpr_resource("resource", units=4),
-                _sgpr_operand("soffset"),
-            ),
-            immediates=(_OFFSET_IMMEDIATE,),
-            effects=(_GLOBAL_LOAD_EFFECT,),
-            encoding_id=8,
-            schedule_class=_SCHEDULE_SMEM_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="amdgpu.buffer_load_dword",
-            mnemonic="buffer_load_dword",
-            semantic_tag="memory.load.u32",
-            operands=(
-                _vgpr_result(),
-                _sgpr_resource("resource", units=4),
-                _vgpr_operand("vaddr"),
-                _sgpr_operand("soffset"),
-            ),
-            immediates=(_OFFSET_IMMEDIATE,),
-            effects=(_GLOBAL_LOAD_EFFECT,),
-            encoding_id=20,
-            schedule_class=_SCHEDULE_VMEM_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="amdgpu.buffer_store_dword",
-            mnemonic="buffer_store_dword",
-            semantic_tag="memory.store.u32",
-            operands=(
-                _vgpr_operand("value"),
-                _sgpr_resource("resource", units=4),
-                _vgpr_operand("vaddr"),
-                _sgpr_operand("soffset"),
-            ),
-            immediates=(_OFFSET_IMMEDIATE,),
-            effects=(_GLOBAL_STORE_EFFECT,),
-            encoding_id=26,
-            schedule_class=_SCHEDULE_VMEM_STORE,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="amdgpu.v_wmma_f32_16x16x16_f16",
-            mnemonic="v_wmma_f32_16x16x16_f16",
-            semantic_tag="matrix.wmma.f32.16x16x16.f16",
-            operands=(
-                _vgpr_result(units=8),
-                _vgpr_operand("a", units=4),
-                _vgpr_operand("b", units=4),
-                _vgpr_const_operand("acc", units=8),
-            ),
-            encoding_id=64,
-            schedule_class=_SCHEDULE_WMMA,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="amdgpu.s_waitcnt",
-            mnemonic="s_waitcnt",
-            semantic_tag="control.waitcnt",
-            operands=(),
-            immediates=(_VMCNT_IMMEDIATE, _LGKMCNT_IMMEDIATE),
-            effects=(_WAIT_EFFECT,),
-            encoding_id=9,
-            schedule_class=_SCHEDULE_WAIT,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="amdgpu.s_waitcnt_depctr",
-            mnemonic="s_waitcnt_depctr",
-            semantic_tag="control.waitcnt.alu",
-            operands=(),
-            immediates=(_DEPCTR_IMMEDIATE,),
-            effects=(_ALU_WAIT_EFFECT,),
-            encoding_id=8,
-            schedule_class=_SCHEDULE_WAIT,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="amdgpu.s_wait_idle",
-            mnemonic="s_wait_idle",
-            semantic_tag="control.waitcnt.idle",
-            operands=(),
-            effects=(_WAIT_EFFECT,),
-            encoding_id=10,
-            schedule_class=_SCHEDULE_WAIT,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
+        *_GFX11_CORE_OVERLAY_DESCRIPTORS,
     ),
 )
 
