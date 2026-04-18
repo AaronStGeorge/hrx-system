@@ -12,11 +12,11 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
-    descriptors
+    gfx950_descriptors
   HDRS
-    "descriptors.h"
+    "gfx950_descriptors.h"
   SRCS
-    "descriptors.c"
+    "gfx950_descriptors.c"
   DEPS
     loom::src::loom::codegen::low::descriptors
   PUBLIC
@@ -24,11 +24,11 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    descriptors_test
+    gfx950_descriptors_test
   SRCS
-    "descriptors_test.cc"
+    "gfx950_descriptors_test.cc"
   DEPS
-    ::descriptors
+    ::gfx950_descriptors
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
     iree::testing::gtest_main
