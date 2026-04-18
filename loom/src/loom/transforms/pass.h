@@ -160,6 +160,8 @@ struct loom_pass_t {
   // agent-actionable failures while still returning a non-OK status to abort
   // the pipeline.
   iree_diagnostic_emitter_t diagnostic_emitter;
+  // Opaque per-entry caller data borrowed from the pipeline entry.
+  void* user_data;
 };
 
 // Increments a statistic counter by |delta|.
@@ -183,6 +185,8 @@ typedef struct loom_pipeline_entry_t {
   loom_pass_create_fn_t create;
   loom_pass_destroy_fn_t destroy;
   iree_string_view_t options;
+  // Opaque caller data copied into the pass instance when this entry runs.
+  void* user_data;
 } loom_pipeline_entry_t;
 
 enum loom_pass_manager_flag_bits_e {
@@ -224,13 +228,15 @@ iree_status_t loom_pass_manager_add_module_pass(loom_pass_manager_t* manager,
                                                 loom_module_pass_fn_t run,
                                                 loom_pass_create_fn_t create,
                                                 loom_pass_destroy_fn_t destroy,
-                                                iree_string_view_t options);
+                                                iree_string_view_t options,
+                                                void* user_data);
 
 // Adds a function pass to the pipeline.
 iree_status_t loom_pass_manager_add_function_pass(
     loom_pass_manager_t* manager, const loom_pass_info_t* info,
     loom_function_pass_fn_t run, loom_pass_create_fn_t create,
-    loom_pass_destroy_fn_t destroy, iree_string_view_t options);
+    loom_pass_destroy_fn_t destroy, iree_string_view_t options,
+    void* user_data);
 
 // Runs the full pipeline on a module. Each pipeline entry gets a fresh
 // instance arena, and function passes additionally get a resettable

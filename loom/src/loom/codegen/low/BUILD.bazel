@@ -100,6 +100,42 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "allocation_pass_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:allocation_pass",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_pass_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:allocation_pass",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_pass_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:allocation_pass",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_pass_no_target_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry",
+    target = "//loom/src/loom/codegen/low:allocation_pass",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_pass_no_test_low_registry_dep",
+    dependency = "//loom/src/loom/target/test:low_registry",
+    target = "//loom/src/loom/codegen/low:allocation_pass",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_pass_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:allocation_pass",
+)
+
+iree_assert_no_dependency(
     name = "allocation_materialization_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/codegen/low:allocation_materialization",
@@ -255,9 +291,9 @@ loom_cc_library(
     deps = [
         ":allocation",
         ":allocation_materialization",
+        ":descriptors",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/transforms:pass",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

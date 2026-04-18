@@ -136,7 +136,7 @@ class VectorMemoryFootprintTest : public ::testing::Test {
       status = loom_pass_manager_add_function_pass(
           &manager, loom_vector_memory_footprint_pass_info(),
           loom_vector_memory_footprint_run, NULL, NULL,
-          iree_string_view_empty());
+          iree_string_view_empty(), NULL);
     }
     if (iree_status_is_ok(status)) {
       status = loom_pass_manager_run(&manager, module);

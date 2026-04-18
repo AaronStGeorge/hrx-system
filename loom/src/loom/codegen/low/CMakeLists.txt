@@ -123,11 +123,11 @@ loom_cc_library(
   DEPS
     ::allocation
     ::allocation_materialization
+    ::descriptors
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::transforms::pass
   PUBLIC
 )

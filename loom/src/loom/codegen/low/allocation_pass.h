@@ -10,6 +10,7 @@
 #define LOOM_CODEGEN_LOW_ALLOCATION_PASS_H_
 
 #include "iree/base/api.h"
+#include "loom/codegen/low/descriptors.h"
 #include "loom/ir/ir.h"
 #include "loom/transforms/pass.h"
 
@@ -18,6 +19,11 @@ extern "C" {
 #endif
 
 const loom_pass_info_t* loom_low_materialize_allocation_pass_info(void);
+
+typedef struct loom_low_materialize_allocation_pass_config_t {
+  // Selected target-low descriptor registry used to interpret low ops.
+  const loom_low_descriptor_registry_t* descriptor_registry;
+} loom_low_materialize_allocation_pass_config_t;
 
 iree_status_t loom_low_materialize_allocation_create(
     loom_pass_t* pass, iree_string_view_t options);

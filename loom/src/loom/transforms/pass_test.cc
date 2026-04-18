@@ -200,11 +200,33 @@ TEST_F(PassManagerTest, RunsModulePass) {
 
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, test_module_pass_run, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
 
   module_pass_call_count = 0;
   IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
   EXPECT_EQ(module_pass_call_count, 1);
+
+  loom_pass_manager_deinitialize(&manager);
+}
+
+static int user_data_sentinel = 0;
+
+static iree_status_t user_data_pass_run(loom_pass_t* pass,
+                                        loom_module_t* module) {
+  IREE_ASSERT_EQ(pass->user_data, &user_data_sentinel);
+  return iree_ok_status();
+}
+
+TEST_F(PassManagerTest, PassEntryUserDataIsVisibleDuringRun) {
+  loom_pass_manager_t manager;
+  IREE_ASSERT_OK(loom_pass_manager_initialize(
+      &block_pool_, 0, iree_allocator_system(), &manager));
+
+  IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
+      &manager, &kTestModulePassInfo, user_data_pass_run, NULL, NULL,
+      iree_string_view_empty(), &user_data_sentinel));
+
+  IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
 
   loom_pass_manager_deinitialize(&manager);
 }
@@ -240,7 +262,7 @@ TEST_F(PassManagerTest, RunsFunctionPass) {
 
   IREE_ASSERT_OK(loom_pass_manager_add_function_pass(
       &manager, &kTestFunctionPassInfo, test_function_pass_run, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
 
   function_pass_call_count = 0;
   IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
@@ -272,7 +294,7 @@ TEST_F(PassManagerTest, ArenaPerPass) {
 
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, arena_capture_pass_run, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
 
   captured_arena = nullptr;
   IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
@@ -360,7 +382,7 @@ TEST_F(PassManagerTest, FunctionPassArenaResetsBetweenFunctions) {
   IREE_ASSERT_OK(loom_pass_manager_add_function_pass(
       &manager, &kFunctionArenaTestPassInfo, function_arena_test_run,
       function_arena_test_create, function_arena_test_destroy,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
 
   function_arena_destroyed_run_count = 0;
   IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
@@ -395,9 +417,9 @@ TEST_F(PassManagerTest, Statistics) {
   IREE_ASSERT_OK(loom_pass_manager_initialize(
       &block_pool_, 0, iree_allocator_system(), &manager));
 
-  IREE_ASSERT_OK(loom_pass_manager_add_module_pass(&manager, &kStatsPassInfo,
-                                                   stats_pass_run, NULL, NULL,
-                                                   iree_string_view_empty()));
+  IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
+      &manager, &kStatsPassInfo, stats_pass_run, NULL, NULL,
+      iree_string_view_empty(), NULL));
 
   IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
   // Statistics are accumulated during the run. The pass incremented
@@ -436,13 +458,13 @@ TEST_F(PassManagerTest, PipelineOrdering) {
 
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, order_pass_a, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, order_pass_b, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, order_pass_c, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
 
   pipeline_order_count = 0;
   IREE_ASSERT_OK(loom_pass_manager_run(&manager, module_));
@@ -470,7 +492,7 @@ TEST_F(PassManagerTest, ErrorPropagation) {
 
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, failing_pass_run, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
 
   iree_status_t status = loom_pass_manager_run(&manager, module_);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INTERNAL, status);
@@ -490,13 +512,13 @@ TEST_F(PassManagerTest, ErrorStopsPipeline) {
   // Pass A succeeds, pass B fails, pass C should not run.
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, order_pass_a, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, failing_pass_run, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
   IREE_ASSERT_OK(loom_pass_manager_add_module_pass(
       &manager, &kTestModulePassInfo, order_pass_c, NULL, NULL,
-      iree_string_view_empty()));
+      iree_string_view_empty(), NULL));
 
   pipeline_order_count = 0;
   iree_status_t status = loom_pass_manager_run(&manager, module_);

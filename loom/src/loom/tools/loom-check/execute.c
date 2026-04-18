@@ -237,23 +237,26 @@ iree_status_t loom_check_execute_case(
 // Runs a comma-separated pass pipeline on a module.
 static iree_status_t loom_check_run_pipeline(
     iree_string_view_t pipeline, iree_arena_block_pool_t* block_pool,
-    iree_diagnostic_emitter_t diagnostic_emitter, loom_module_t* module) {
+    iree_diagnostic_emitter_t diagnostic_emitter,
+    const loom_low_descriptor_registry_t* low_descriptor_registry,
+    loom_module_t* module) {
   loom_pass_manager_t manager;
   IREE_RETURN_IF_ERROR(loom_pass_manager_initialize(
       block_pool, 0, iree_allocator_system(), &manager));
   manager.diagnostic_emitter = diagnostic_emitter;
+  loom_low_materialize_allocation_pass_config_t
+      low_materialize_allocation_config = {
+          .descriptor_registry = low_descriptor_registry,
+      };
 
   // Parse comma-separated pass names and add each to the pipeline.
+  iree_status_t status = iree_ok_status();
   iree_string_view_t remaining = pipeline;
-  while (true) {
+  while (iree_status_is_ok(status)) {
     loom_pass_pipeline_entry_spec_t entry = {0};
     bool has_entry = false;
-    iree_status_t status =
-        loom_pass_pipeline_consume_entry(&remaining, &entry, &has_entry);
-    if (!iree_status_is_ok(status)) {
-      loom_pass_manager_deinitialize(&manager);
-      return status;
-    }
+    status = loom_pass_pipeline_consume_entry(&remaining, &entry, &has_entry);
+    if (!iree_status_is_ok(status)) break;
     if (!has_entry) break;
 
     const loom_pass_info_t* info = NULL;
@@ -261,6 +264,7 @@ static iree_status_t loom_check_run_pipeline(
     loom_function_pass_fn_t function_run = NULL;
     loom_pass_create_fn_t create = NULL;
     loom_pass_destroy_fn_t destroy = NULL;
+    void* pass_user_data = NULL;
     if (iree_string_view_equal(entry.name, IREE_SV("canonicalize"))) {
       info = loom_canonicalize_pass_info();
       function_run = loom_canonicalize_run;
@@ -277,6 +281,7 @@ static iree_status_t loom_check_run_pipeline(
       info = loom_low_materialize_allocation_pass_info();
       function_run = loom_low_materialize_allocation_run;
       create = loom_low_materialize_allocation_create;
+      pass_user_data = &low_materialize_allocation_config;
     } else if (iree_string_view_equal(entry.name,
                                       IREE_SV("normalize-kernel-resources"))) {
       info = loom_normalize_kernel_resources_pass_info();
@@ -337,19 +342,19 @@ static iree_status_t loom_check_run_pipeline(
     if (iree_status_is_ok(status) && info) {
       if (info->kind == LOOM_PASS_MODULE) {
         status = loom_pass_manager_add_module_pass(
-            &manager, info, module_run, create, destroy, entry.options);
+            &manager, info, module_run, create, destroy, entry.options,
+            pass_user_data);
       } else {
         status = loom_pass_manager_add_function_pass(
-            &manager, info, function_run, create, destroy, entry.options);
+            &manager, info, function_run, create, destroy, entry.options,
+            pass_user_data);
       }
-    }
-    if (!iree_status_is_ok(status)) {
-      loom_pass_manager_deinitialize(&manager);
-      return status;
     }
   }
 
-  iree_status_t status = loom_pass_manager_run(&manager, module);
+  if (iree_status_is_ok(status)) {
+    status = loom_pass_manager_run(&manager, module);
+  }
   loom_pass_manager_deinitialize(&manager);
   return status;
 }
@@ -496,7 +501,8 @@ iree_status_t loom_check_execute_pass(
   };
   if (iree_status_is_ok(status)) {
     status = loom_check_run_pipeline(test_case->pipeline, block_pool,
-                                     pass_diagnostic_emitter, module);
+                                     pass_diagnostic_emitter,
+                                     &low_registry.registry, module);
   }
   if (!iree_status_is_ok(status)) {
     if (pass_diagnostic_capture.emission_count > 0 ||

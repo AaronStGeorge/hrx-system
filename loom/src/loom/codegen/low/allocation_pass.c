@@ -11,7 +11,6 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/low_descriptor_registry_core_test.h"
 
 typedef struct loom_low_materialize_allocation_pass_state_t {
   // Fixed register budget overrides parsed from the pass options.
@@ -224,10 +223,16 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
 
   loom_low_materialize_allocation_pass_state_t* state =
       (loom_low_materialize_allocation_pass_state_t*)pass->state;
-  loom_target_low_descriptor_registry_t target_registry;
-  loom_target_low_descriptor_registry_initialize(&target_registry);
+  const loom_low_materialize_allocation_pass_config_t* config =
+      (const loom_low_materialize_allocation_pass_config_t*)pass->user_data;
+  if (!config || !config->descriptor_registry) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "pass 'low-materialize-allocation' requires an injected low "
+        "descriptor registry");
+  }
   loom_low_allocation_options_t allocation_options = {
-      .descriptor_registry = &target_registry.registry,
+      .descriptor_registry = config->descriptor_registry,
       .budgets = state ? state->budgets : NULL,
       .budget_count = state ? state->budget_count : 0,
       .emitter = pass->diagnostic_emitter,

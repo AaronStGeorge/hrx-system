@@ -215,7 +215,8 @@ iree_status_t loom_pass_manager_add_module_pass(loom_pass_manager_t* manager,
                                                 loom_module_pass_fn_t run,
                                                 loom_pass_create_fn_t create,
                                                 loom_pass_destroy_fn_t destroy,
-                                                iree_string_view_t options) {
+                                                iree_string_view_t options,
+                                                void* user_data) {
   IREE_RETURN_IF_ERROR(loom_pass_manager_ensure_capacity(manager));
   manager->entries[manager->count++] = (loom_pipeline_entry_t){
       .info = info,
@@ -223,6 +224,7 @@ iree_status_t loom_pass_manager_add_module_pass(loom_pass_manager_t* manager,
       .create = create,
       .destroy = destroy,
       .options = options,
+      .user_data = user_data,
   };
   return iree_ok_status();
 }
@@ -230,7 +232,8 @@ iree_status_t loom_pass_manager_add_module_pass(loom_pass_manager_t* manager,
 iree_status_t loom_pass_manager_add_function_pass(
     loom_pass_manager_t* manager, const loom_pass_info_t* info,
     loom_function_pass_fn_t run, loom_pass_create_fn_t create,
-    loom_pass_destroy_fn_t destroy, iree_string_view_t options) {
+    loom_pass_destroy_fn_t destroy, iree_string_view_t options,
+    void* user_data) {
   IREE_RETURN_IF_ERROR(loom_pass_manager_ensure_capacity(manager));
   manager->entries[manager->count++] = (loom_pipeline_entry_t){
       .info = info,
@@ -238,6 +241,7 @@ iree_status_t loom_pass_manager_add_function_pass(
       .create = create,
       .destroy = destroy,
       .options = options,
+      .user_data = user_data,
   };
   return iree_ok_status();
 }
@@ -288,6 +292,7 @@ static iree_status_t loom_pass_manager_run_entry(loom_pass_manager_t* manager,
       .instance_arena = &instance_arena,
       .arena = &instance_arena,
       .diagnostic_emitter = manager->diagnostic_emitter,
+      .user_data = entry->user_data,
   };
 
   // Allocate statistics counters from the stable instance arena.
