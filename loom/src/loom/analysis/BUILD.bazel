@@ -69,6 +69,49 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "liveness",
+    srcs = ["liveness.c"],
+    hdrs = ["liveness.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:cfg_graph",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "liveness_json",
+    srcs = ["liveness_json.c"],
+    hdrs = ["liveness_json.h"],
+    deps = [
+        ":liveness",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "liveness_test",
+    srcs = ["liveness_test.cc"],
+    deps = [
+        ":liveness",
+        ":liveness_json",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:op_registry",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "integer_relation",
     srcs = ["integer_relation.c"],
     hdrs = ["integer_relation.h"],

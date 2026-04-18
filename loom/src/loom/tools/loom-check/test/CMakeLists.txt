@@ -100,6 +100,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "low_schedule"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/low_schedule.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "low_verify"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/low_verify.loom-test"

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/util/liveness.h"
+#include "loom/analysis/liveness.h"
 
 #include <memory>
 #include <string>
@@ -12,12 +12,12 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/analysis/liveness_json.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/op_registry.h"
-#include "loom/util/liveness_json.h"
 
 namespace loom {
 namespace {

@@ -11,8 +11,8 @@
 // references embedded in types. Target-specific consumers map the resulting
 // pressure classes to allocation policies, diagnostics, and schedule scoring.
 
-#ifndef LOOM_UTIL_LIVENESS_H_
-#define LOOM_UTIL_LIVENESS_H_
+#ifndef LOOM_ANALYSIS_LIVENESS_H_
+#define LOOM_ANALYSIS_LIVENESS_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
@@ -187,4 +187,4 @@ iree_status_t loom_liveness_collect_pressure_budget_violations(
 }
 #endif
 
-#endif  // LOOM_UTIL_LIVENESS_H_
+#endif  // LOOM_ANALYSIS_LIVENESS_H_

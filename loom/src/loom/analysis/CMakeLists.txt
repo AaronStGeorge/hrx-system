@@ -76,6 +76,56 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    liveness
+  HDRS
+    "liveness.h"
+  SRCS
+    "liveness.c"
+  DEPS
+    iree::base
+    iree::base::internal
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::util::cfg_graph
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    liveness_json
+  HDRS
+    "liveness_json.h"
+  SRCS
+    "liveness_json.c"
+  DEPS
+    ::liveness
+    iree::base
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    liveness_test
+  SRCS
+    "liveness_test.cc"
+  DEPS
+    ::liveness
+    ::liveness_json
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::op_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     integer_relation
   HDRS
     "integer_relation.h"

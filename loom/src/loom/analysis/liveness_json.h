@@ -9,11 +9,11 @@
 // This is intentionally split from liveness.h so schedulers and allocators can
 // consume the core analysis without depending on text printing or JSON helpers.
 
-#ifndef LOOM_UTIL_LIVENESS_JSON_H_
-#define LOOM_UTIL_LIVENESS_JSON_H_
+#ifndef LOOM_ANALYSIS_LIVENESS_JSON_H_
+#define LOOM_ANALYSIS_LIVENESS_JSON_H_
 
 #include "iree/base/api.h"
-#include "loom/util/liveness.h"
+#include "loom/analysis/liveness.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,4 +28,4 @@ iree_status_t loom_liveness_format_json(
 }
 #endif
 
-#endif  // LOOM_UTIL_LIVENESS_JSON_H_
+#endif  // LOOM_ANALYSIS_LIVENESS_JSON_H_

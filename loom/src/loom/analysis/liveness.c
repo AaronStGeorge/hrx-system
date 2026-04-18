@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/util/liveness.h"
+#include "loom/analysis/liveness.h"
 
 #include "iree/base/internal/math.h"
 #include "loom/ir/module.h"
