@@ -19,7 +19,8 @@ TEST(LowDescriptorRegistryTest, RegistryVerifiesSelectedTargetPackages) {
 
   EXPECT_NE(registry.registry.descriptor_set_providers, nullptr);
   EXPECT_GT(registry.registry.descriptor_set_provider_count, 0u);
-  IREE_EXPECT_OK(loom_low_descriptor_registry_verify(&registry.registry));
+  IREE_EXPECT_OK(loom_target_low_descriptor_registry_verify(
+      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION));
 }
 
 TEST(LowDescriptorRegistryTest, RegistrySatisfiesTargetLowFoundation) {
@@ -192,6 +193,50 @@ TEST(LowDescriptorRegistryTest, MissingBundleKeyFailsLoudly) {
   EXPECT_EQ(bundle, nullptr);
 }
 
+TEST(LowDescriptorRegistryTest, RegistryRejectsMissingBundleTable) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_low_descriptor_registry_initialize(&registry);
+  registry.target_bundles = nullptr;
+
+  iree_status_t status = loom_target_low_descriptor_registry_verify(
+      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+
+  const loom_target_bundle_t* bundle = nullptr;
+  status = loom_target_low_descriptor_registry_lookup_bundle(
+      &registry, IREE_SV("iree-vm"), &bundle);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+  EXPECT_EQ(bundle, nullptr);
+}
+
+TEST(LowDescriptorRegistryTest, RegistryRejectsMismatchedDescriptorView) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_low_descriptor_registry_initialize(&registry);
+  registry.registry.descriptor_set_provider_count = 0;
+
+  iree_status_t status = loom_target_low_descriptor_registry_verify(
+      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorRegistryTest, RegistryRejectsDuplicateBundleKeys) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_low_descriptor_registry_initialize(&registry);
+
+  const loom_target_bundle_t* bundle = nullptr;
+  IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
+      &registry, IREE_SV("iree-vm"), &bundle));
+  ASSERT_NE(bundle, nullptr);
+
+  const loom_target_bundle_t* duplicate_bundles[] = {bundle, bundle};
+  registry.target_bundles = duplicate_bundles;
+  registry.target_bundle_count = IREE_ARRAYSIZE(duplicate_bundles);
+
+  iree_status_t status = loom_target_low_descriptor_registry_verify(
+      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_target_low_descriptor_registry_initialize(&registry);
@@ -223,6 +268,34 @@ TEST(LowDescriptorRegistryTest, BundleSelectionRequiresExplicitLinkedSet) {
       LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION, &descriptor_set);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
   EXPECT_EQ(descriptor_set, nullptr);
+}
+
+TEST(LowDescriptorRegistryTest, RegistryRejectsBundleSelectingMissingSet) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_low_descriptor_registry_initialize(&registry);
+
+  const loom_target_bundle_t* source_bundle = nullptr;
+  IREE_ASSERT_OK(loom_target_low_descriptor_registry_lookup_bundle(
+      &registry, IREE_SV("iree-vm"), &source_bundle));
+  ASSERT_NE(source_bundle, nullptr);
+
+  const loom_target_config_t missing_config = {
+      .name = IREE_SVL("missing"),
+      .contract_set_key = IREE_SVL("target.missing"),
+  };
+  const loom_target_bundle_t missing_bundle = {
+      .name = IREE_SVL("missing-bundle"),
+      .snapshot = source_bundle->snapshot,
+      .export_plan = source_bundle->export_plan,
+      .config = &missing_config,
+  };
+  const loom_target_bundle_t* bundles[] = {&missing_bundle};
+  registry.target_bundles = bundles;
+  registry.target_bundle_count = IREE_ARRAYSIZE(bundles);
+
+  iree_status_t status = loom_target_low_descriptor_registry_verify(
+      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
 }
 
 }  // namespace

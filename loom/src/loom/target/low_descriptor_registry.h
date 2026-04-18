@@ -42,6 +42,14 @@ typedef struct loom_target_low_descriptor_registry_t {
 void loom_target_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);
 
+// Verifies that the linked target-low registry package is internally
+// consistent. This checks the descriptor registry, bundle table, unique bundle
+// keys, required target records, and that each bundle selects a linked
+// descriptor set satisfying |requirements|.
+iree_status_t loom_target_low_descriptor_registry_verify(
+    const loom_target_low_descriptor_registry_t* registry,
+    loom_low_descriptor_requirement_flags_t requirements);
+
 // Looks up a descriptor set by key in the selected target registry.
 iree_status_t loom_target_low_descriptor_set_lookup(
     iree_string_view_t key,
