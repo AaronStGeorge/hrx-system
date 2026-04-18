@@ -17,7 +17,7 @@
 #include "loom/ops/op_registry.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/ir_records.h"
-#include "loom/target/low_descriptor_registry.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 
 namespace loom {
 namespace {

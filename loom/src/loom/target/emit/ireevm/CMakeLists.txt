@@ -22,6 +22,22 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    low_registry
+  HDRS
+    "low_registry.h"
+  SRCS
+    "low_registry.c"
+  DEPS
+    ::descriptors
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::target::low_descriptor_registry_base
+    loom::src::loom::target::types
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     descriptors_test
@@ -30,6 +46,20 @@ loom_cc_test(
   DEPS
     ::descriptors
     loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    low_registry_test
+  SRCS
+    "low_registry_test.cc"
+  DEPS
+    ::low_registry
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::requirements
+    loom::src::loom::target::low_descriptor_registry_base
     iree::testing::gtest
     iree::testing::gtest_main
 )

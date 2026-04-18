@@ -9,71 +9,25 @@
 #include <inttypes.h>
 #include <stdint.h>
 
-#include "loom/target/test/descriptors.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
-static const loom_target_snapshot_t kTestLowSnapshot = {
-    .name = IREE_SVL("test-low"),
-    .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
-    .target_triple = IREE_SVL("test-low"),
-    .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
-    .target_cpu = IREE_SVL("test-low"),
-    .default_pointer_bitwidth = 64,
-    .index_bitwidth = 64,
-    .offset_bitwidth = 64,
-    .memory_spaces =
-        {
-            .generic = 0,
-            .global = 0,
-            .workgroup = UINT32_MAX,
-            .constant = 0,
-            .private_memory = 0,
-            .host = UINT32_MAX,
-            .descriptor = UINT32_MAX,
-        },
-};
-
-static const loom_target_export_plan_t kTestLowExportPlan = {
-    .name = IREE_SVL("test-low-function"),
-    .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
-    .linkage = LOOM_TARGET_LINKAGE_DSO_LOCAL,
-};
-
-static const loom_target_config_t kTestLowConfig = {
-    .name = IREE_SVL("test.low.core"),
-    .contract_set_key = IREE_SVL("test.low.core"),
-};
-
-static const loom_target_bundle_t kTestLowBundle = {
-    .name = IREE_SVL("test-low"),
-    .snapshot = &kTestLowSnapshot,
-    .export_plan = &kTestLowExportPlan,
-    .config = &kTestLowConfig,
-};
-
-static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
-    loom_test_low_core_descriptor_set,
-};
-
-static const loom_target_bundle_t* const kLowTargetBundles[] = {
-    &kTestLowBundle,
-};
-
-void loom_target_low_descriptor_registry_initialize(
-    loom_target_low_descriptor_registry_t* out_registry) {
+void loom_target_low_descriptor_registry_initialize_from_tables(
+    loom_target_low_descriptor_registry_t* out_registry,
+    const loom_low_descriptor_set_provider_t* descriptor_set_providers,
+    iree_host_size_t descriptor_set_provider_count,
+    const loom_target_bundle_t* const* target_bundles,
+    iree_host_size_t target_bundle_count) {
   IREE_ASSERT_ARGUMENT(out_registry);
   *out_registry = (loom_target_low_descriptor_registry_t){
-      .descriptor_set_providers = kLowDescriptorSetProviders,
-      .descriptor_set_provider_count =
-          IREE_ARRAYSIZE(kLowDescriptorSetProviders),
-      .target_bundles = kLowTargetBundles,
-      .target_bundle_count = IREE_ARRAYSIZE(kLowTargetBundles),
+      .descriptor_set_providers = descriptor_set_providers,
+      .descriptor_set_provider_count = descriptor_set_provider_count,
+      .target_bundles = target_bundles,
+      .target_bundle_count = target_bundle_count,
       .registry =
           {
-              .descriptor_set_providers = kLowDescriptorSetProviders,
-              .descriptor_set_provider_count =
-                  IREE_ARRAYSIZE(kLowDescriptorSetProviders),
+              .descriptor_set_providers = descriptor_set_providers,
+              .descriptor_set_provider_count = descriptor_set_provider_count,
           },
   };
 }
@@ -388,15 +342,6 @@ iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
   return loom_output_stream_write_cstring(&stream, "]}");
 }
 
-iree_status_t loom_target_low_descriptor_set_lookup(
-    iree_string_view_t key,
-    const loom_low_descriptor_set_t** out_descriptor_set) {
-  loom_target_low_descriptor_registry_t registry;
-  loom_target_low_descriptor_registry_initialize(&registry);
-  return loom_low_descriptor_registry_lookup(&registry.registry, key,
-                                             out_descriptor_set);
-}
-
 iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_view_t key, const loom_target_bundle_t** out_bundle) {
@@ -409,14 +354,6 @@ iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
       loom_target_low_descriptor_registry_presets(registry);
   return loom_target_preset_registry_lookup_bundle(&preset_registry, key,
                                                    out_bundle);
-}
-
-iree_status_t loom_target_low_bundle_lookup(
-    iree_string_view_t key, const loom_target_bundle_t** out_bundle) {
-  loom_target_low_descriptor_registry_t registry;
-  loom_target_low_descriptor_registry_initialize(&registry);
-  return loom_target_low_descriptor_registry_lookup_bundle(&registry, key,
-                                                           out_bundle);
 }
 
 iree_status_t loom_target_low_descriptor_set_select_for_bundle(

@@ -24,7 +24,7 @@
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/ir_records.h"
-#include "loom/target/low_descriptor_registry.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"

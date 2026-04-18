@@ -11,7 +11,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/low_descriptor_registry.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 
 typedef struct loom_low_materialize_allocation_pass_state_t {
   // Fixed register budget overrides parsed from the pass options.

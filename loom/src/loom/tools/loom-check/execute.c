@@ -15,7 +15,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
-#include "loom/target/low_descriptor_registry.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/presets.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"

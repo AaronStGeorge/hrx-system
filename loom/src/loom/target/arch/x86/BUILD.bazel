@@ -135,6 +135,30 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
 )
 
+iree_assert_no_dependency(
+    name = "low_registry_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/arch/x86:low_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_registry_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/x86:low_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_registry_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/x86:low_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_registry_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/x86:low_registry",
+)
+
 #===------------------------------------------------------------------------===#
 # x86 low descriptors
 #===------------------------------------------------------------------------===#
@@ -177,6 +201,34 @@ loom_cc_test(
         ":packed_dot_contract",
         ":packed_dot_descriptors",
         "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "low_registry",
+    srcs = ["low_registry.c"],
+    hdrs = ["low_registry.h"],
+    deps = [
+        ":avx512_descriptors",
+        ":feature_bits",
+        ":packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target:low_descriptor_registry_base",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "low_registry_test",
+    srcs = ["low_registry_test.cc"],
+    deps = [
+        ":low_registry",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:requirements",
+        "//loom/src/loom/target:low_descriptor_registry_base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

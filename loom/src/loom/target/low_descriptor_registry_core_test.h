@@ -1,0 +1,42 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Default core test-low registry package.
+//
+// This package intentionally links only the synthetic test-low descriptor set
+// and preset bundle. It is the default registry for core compiler tests and
+// tools that must not acquire x86, AMDGPU, Wasm, VM, or LLVMIR tables by
+// accident. Production tools that need real backend descriptor sets should use
+// backend-specific registry packages instead.
+
+#ifndef LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_CORE_TEST_H_
+#define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_CORE_TEST_H_
+
+#include "loom/target/low_descriptor_registry.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Initializes the default core test-low descriptor-set registry.
+void loom_target_low_descriptor_registry_initialize(
+    loom_target_low_descriptor_registry_t* out_registry);
+
+// Looks up a descriptor set by key in the default core test-low registry.
+iree_status_t loom_target_low_descriptor_set_lookup(
+    iree_string_view_t key,
+    const loom_low_descriptor_set_t** out_descriptor_set);
+
+// Looks up a target-low preset bundle by key in the default core test-low
+// registry.
+iree_status_t loom_target_low_bundle_lookup(
+    iree_string_view_t key, const loom_target_bundle_t** out_bundle);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_CORE_TEST_H_

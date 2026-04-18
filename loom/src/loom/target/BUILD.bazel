@@ -73,7 +73,7 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "low_descriptor_registry",
+    name = "low_descriptor_registry_base",
     srcs = ["low_descriptor_registry.c"],
     hdrs = ["low_descriptor_registry.h"],
     deps = [
@@ -81,9 +81,26 @@ loom_cc_library(
         ":types",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "low_descriptor_registry",
+    srcs = ["low_descriptor_registry_core_test.c"],
+    hdrs = [
+        "low_descriptor_registry.h",
+        "low_descriptor_registry_core_test.h",
+    ],
+    deps = [
+        ":low_descriptor_registry_base",
+        ":preset_registry",
+        ":types",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:requirements",
+        "//loom/src/loom/target/test:low_registry",
         "//runtime/src/iree/base",
     ],
 )

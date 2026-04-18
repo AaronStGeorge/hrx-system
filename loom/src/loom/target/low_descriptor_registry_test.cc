@@ -4,13 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/low_descriptor_registry.h"
-
 #include <string>
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 
 namespace loom {
 namespace {

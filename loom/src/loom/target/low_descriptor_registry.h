@@ -4,14 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Core linked low descriptor registry for backend-independent Loom tests.
+// Linked low descriptor registry package support.
 //
-// This package intentionally links only the synthetic test-low descriptor set
-// and preset bundle. It is the default registry for core compiler tests and
-// tools that must not acquire x86, AMDGPU, Wasm, VM, or LLVMIR tables by
-// accident. Production tools that need real backend descriptor sets should use
-// backend-specific registry packages instead of growing this package into a
-// global target join point.
+// These target-neutral support functions operate on caller-provided
+// descriptor-set and target-bundle tables. Concrete registry packages live with
+// the target families that own the linked descriptor providers and target
+// bundles.
 
 #ifndef LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_H_
 #define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_H_
@@ -39,9 +37,14 @@ typedef struct loom_target_low_descriptor_registry_t {
   loom_low_descriptor_registry_t registry;
 } loom_target_low_descriptor_registry_t;
 
-// Initializes the core test-low descriptor-set registry.
-void loom_target_low_descriptor_registry_initialize(
-    loom_target_low_descriptor_registry_t* out_registry);
+// Initializes |out_registry| from linked package tables. The provider and
+// bundle tables are borrowed and must outlive |out_registry|.
+void loom_target_low_descriptor_registry_initialize_from_tables(
+    loom_target_low_descriptor_registry_t* out_registry,
+    const loom_low_descriptor_set_provider_t* descriptor_set_providers,
+    iree_host_size_t descriptor_set_provider_count,
+    const loom_target_bundle_t* const* target_bundles,
+    iree_host_size_t target_bundle_count);
 
 // Returns a generic preset-registry view over |registry|'s bundle table.
 static inline loom_target_preset_registry_t
@@ -70,19 +73,10 @@ iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
     loom_low_descriptor_requirement_flags_t requirements,
     iree_string_builder_t* builder);
 
-// Looks up a descriptor set by key in the selected target registry.
-iree_status_t loom_target_low_descriptor_set_lookup(
-    iree_string_view_t key,
-    const loom_low_descriptor_set_t** out_descriptor_set);
-
 // Looks up a target-low preset bundle by key in |registry|. Empty keys are not
 // defaulted because low target selection must be explicit and reproducible.
 iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
     const loom_target_low_descriptor_registry_t* registry,
-    iree_string_view_t key, const loom_target_bundle_t** out_bundle);
-
-// Looks up a target-low preset bundle by key in the selected target registry.
-iree_status_t loom_target_low_bundle_lookup(
     iree_string_view_t key, const loom_target_bundle_t** out_bundle);
 
 // Selects the descriptor set named by |bundle->config->contract_set_key| from

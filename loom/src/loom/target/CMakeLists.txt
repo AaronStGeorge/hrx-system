@@ -80,7 +80,7 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    low_descriptor_registry
+    low_descriptor_registry_base
   HDRS
     "low_descriptor_registry.h"
   SRCS
@@ -91,9 +91,27 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::test::descriptors
     loom::src::loom::util::json
     loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    low_descriptor_registry
+  HDRS
+    "low_descriptor_registry.h"
+    "low_descriptor_registry_core_test.h"
+  SRCS
+    "low_descriptor_registry_core_test.c"
+  DEPS
+    ::low_descriptor_registry_base
+    ::preset_registry
+    ::types
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::requirements
+    loom::src::loom::target::test::low_registry
   PUBLIC
 )
 
