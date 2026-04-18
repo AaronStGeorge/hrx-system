@@ -91,15 +91,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::requirements
-    loom::src::loom::target::arch::amdgpu::gfx11_descriptors
-    loom::src::loom::target::arch::amdgpu::gfx1250_descriptors
-    loom::src::loom::target::arch::amdgpu::gfx12_descriptors
-    loom::src::loom::target::arch::amdgpu::gfx950_descriptors
-    loom::src::loom::target::arch::wasm::descriptors
-    loom::src::loom::target::arch::x86::avx512_descriptors
-    loom::src::loom::target::arch::x86::feature_bits
-    loom::src::loom::target::arch::x86::packed_dot_descriptors
-    loom::src::loom::target::emit::ireevm::descriptors
+    loom::src::loom::target::test::descriptors
     loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC

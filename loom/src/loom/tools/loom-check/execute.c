@@ -16,6 +16,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/presets.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/requirements.h"
@@ -459,6 +460,19 @@ iree_status_t loom_check_execute_pass(
                                                     report, allocator, result);
   }
   if (!iree_status_is_ok(status) || diagnostic_collector.count > 0) {
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+
+  loom_target_low_descriptor_registry_t low_registry;
+  loom_target_low_descriptor_registry_initialize(&low_registry);
+  const loom_target_preset_registry_t preset_registry =
+      loom_target_low_descriptor_registry_presets(&low_registry);
+  iree_host_size_t expanded_preset_count = 0;
+  status = loom_target_expand_presets(module, &preset_registry,
+                                      &expanded_preset_count);
+  if (!iree_status_is_ok(status)) {
     loom_module_free(module);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;

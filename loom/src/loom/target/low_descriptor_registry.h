@@ -4,13 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Linked low descriptor registry for selected Loom target packages.
+// Core linked low descriptor registry for backend-independent Loom tests.
 //
-// This package is the build-level join point for descriptor sets that a tool or
-// compiler binary elects to link. The target-independent codegen/low substrate
-// remains free of architecture and emitter dependencies; callers that want the
-// bundled registry depend on this library instead of recreating descriptor-set
-// arrays locally.
+// This package intentionally links only the synthetic test-low descriptor set
+// and preset bundle. It is the default registry for core compiler tests and
+// tools that must not acquire x86, AMDGPU, Wasm, VM, or LLVMIR tables by
+// accident. Production tools that need real backend descriptor sets should use
+// backend-specific registry packages instead of growing this package into a
+// global target join point.
 
 #ifndef LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_H_
 #define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_H_
@@ -38,8 +39,7 @@ typedef struct loom_target_low_descriptor_registry_t {
   loom_low_descriptor_registry_t registry;
 } loom_target_low_descriptor_registry_t;
 
-// Initializes the descriptor-set registry selected by the current target
-// package build.
+// Initializes the core test-low descriptor-set registry.
 void loom_target_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);
 

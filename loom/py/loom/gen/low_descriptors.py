@@ -1027,6 +1027,7 @@ def main() -> None:
         X86_PACKED_DOT_DESCRIPTOR_SET,
     )
     from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
+    from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
 
     descriptor_sets = (
         IREEVM_CORE_DESCRIPTOR_SET,
@@ -1037,6 +1038,7 @@ def main() -> None:
         AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
+        TEST_LOW_CORE_DESCRIPTOR_SET,
     )
     for descriptor_set in descriptor_sets:
         write_descriptor_set(descriptor_set)

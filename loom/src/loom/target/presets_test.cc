@@ -75,7 +75,7 @@ class TargetPresetsTest : public ::testing::Test {
 
 TEST_F(TargetPresetsTest, ExpandsPresetToConcreteTargetRecords) {
   const char source[] =
-      "target.preset @vm_target {key = \"iree-vm\", source = @sched}\n"
+      "target.preset @test_target {key = \"test-low\", source = @sched}\n"
       "func.def @sched() {\n"
       "  func.return\n"
       "}\n";
@@ -96,22 +96,22 @@ TEST_F(TargetPresetsTest, ExpandsPresetToConcreteTargetRecords) {
 
   loom_target_ir_bundle_storage_t storage = {};
   IREE_ASSERT_OK(loom_target_ir_bundle_from_symbol_name(
-      module, IREE_SV("vm_target"), &storage));
-  EXPECT_EQ(ToString(storage.bundle.name), "vm_target");
-  EXPECT_EQ(storage.snapshot.codegen_format, LOOM_TARGET_CODEGEN_FORMAT_VM);
-  EXPECT_EQ(storage.snapshot.artifact_format,
-            LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE);
-  EXPECT_EQ(storage.export_plan.abi_kind, LOOM_TARGET_ABI_VM_MODULE_FUNCTION);
+      module, IREE_SV("test_target"), &storage));
+  EXPECT_EQ(ToString(storage.bundle.name), "test_target");
+  EXPECT_EQ(storage.snapshot.codegen_format,
+            LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE);
+  EXPECT_EQ(storage.snapshot.artifact_format, LOOM_TARGET_ARTIFACT_FORMAT_ELF);
+  EXPECT_EQ(storage.export_plan.abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
   EXPECT_EQ(ToString(storage.export_plan.source_symbol), "sched");
   EXPECT_EQ(ToString(storage.export_plan.export_symbol), "sched");
-  EXPECT_EQ(ToString(storage.config.contract_set_key), "iree.vm.core");
+  EXPECT_EQ(ToString(storage.config.contract_set_key), "test.low.core");
 
   loom_module_free(module);
 }
 
 TEST_F(TargetPresetsTest, RejectsUnknownPresetKey) {
   const char source[] =
-      "target.preset @vm_target {key = \"missing-target\", source = @sched}\n"
+      "target.preset @test_target {key = \"missing-target\", source = @sched}\n"
       "func.def @sched() {\n"
       "  func.return\n"
       "}\n";
@@ -131,9 +131,9 @@ TEST_F(TargetPresetsTest, RejectsUnknownPresetKey) {
 
 TEST_F(TargetPresetsTest, RejectsDuplicateGeneratedSymbols) {
   const char source[] =
-      "target.config @vm_target__snapshot {contract_set_key = "
-      "\"iree.vm.core\", contract_feature_bits = 0}\n"
-      "target.preset @vm_target {key = \"iree-vm\", source = @sched}\n"
+      "target.config @test_target__snapshot {contract_set_key = "
+      "\"test.low.core\", contract_feature_bits = 0}\n"
+      "target.preset @test_target {key = \"test-low\", source = @sched}\n"
       "func.def @sched() {\n"
       "  func.return\n"
       "}\n";
@@ -153,9 +153,9 @@ TEST_F(TargetPresetsTest, RejectsDuplicateGeneratedSymbols) {
 
 TEST_F(TargetPresetsTest, RejectsLaterDuplicateWithoutAddingEarlierSiblings) {
   const char source[] =
-      "target.config @vm_target__config {contract_set_key = "
-      "\"iree.vm.core\", contract_feature_bits = 0}\n"
-      "target.preset @vm_target {key = \"iree-vm\", source = @sched}\n"
+      "target.config @test_target__config {contract_set_key = "
+      "\"test.low.core\", contract_feature_bits = 0}\n"
+      "target.preset @test_target {key = \"test-low\", source = @sched}\n"
       "func.def @sched() {\n"
       "  func.return\n"
       "}\n";
@@ -169,16 +169,16 @@ TEST_F(TargetPresetsTest, RejectsLaterDuplicateWithoutAddingEarlierSiblings) {
       loom_target_expand_presets(module, &preset_registry, &expanded_count);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
   EXPECT_EQ(expanded_count, 0u);
-  EXPECT_FALSE(HasSymbol(module, IREE_SV("vm_target__snapshot")));
-  EXPECT_FALSE(HasSymbol(module, IREE_SV("vm_target__export")));
-  EXPECT_TRUE(HasSymbol(module, IREE_SV("vm_target__config")));
+  EXPECT_FALSE(HasSymbol(module, IREE_SV("test_target__snapshot")));
+  EXPECT_FALSE(HasSymbol(module, IREE_SV("test_target__export")));
+  EXPECT_TRUE(HasSymbol(module, IREE_SV("test_target__config")));
 
   loom_module_free(module);
 }
 
 TEST_F(TargetPresetsTest, RejectsUnresolvedExportSymbol) {
   const char source[] =
-      "target.preset @vm_target {key = \"iree-vm\", source = @missing}\n";
+      "target.preset @test_target {key = \"test-low\", source = @missing}\n";
   loom_module_t* module = ParseSource(source);
   ASSERT_NE(module, nullptr);
 

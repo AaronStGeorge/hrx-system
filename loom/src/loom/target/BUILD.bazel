@@ -82,6 +82,72 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_x86_feature_bits_dep",
+    dependency = "//loom/src/loom/target/arch/x86:feature_bits",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_x86_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/x86:avx512_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_x86_packed_dot_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_amdgpu_matrix_contract_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_amdgpu_gfx11_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_amdgpu_gfx12_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_amdgpu_gfx1250_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_amdgpu_gfx950_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_wasm_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_ireevm_descriptors_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
     name = "presets_no_x86_arch_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/target:presets",
@@ -170,15 +236,7 @@ loom_cc_library(
         ":types",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:requirements",
-        "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
-        "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
-        "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
-        "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:avx512_descriptors",
-        "//loom/src/loom/target/arch/x86:feature_bits",
-        "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
-        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",

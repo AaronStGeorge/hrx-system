@@ -258,31 +258,16 @@ TEST_F(ExecuteTest, VerifyCleanIR) {
   loom_check_result_deinitialize(&result);
 }
 
-static const char kVerifyVmTargetRecords[] =
-    "target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "
-    "\"iree-vm\", data_layout = \"\", artifact_format = vm_bytecode, "
-    "target_cpu = \"\", target_features = \"\", default_pointer_bitwidth = "
-    "64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, "
-    "memory_space_global = 0, memory_space_workgroup = 0, "
-    "memory_space_constant = 0, memory_space_private = 0, "
-    "memory_space_host = 0, memory_space_descriptor = 0}\n"
-    "target.export @vm_export {export_symbol = \"constant\", abi = "
-    "vm_module_function, linkage = default, hal_binding_alignment = 0, "
-    "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
-    "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
-    "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
-    "target.config @vm_config {contract_set_key = \"iree.vm.core\", "
-    "contract_feature_bits = 0}\n"
-    "target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = "
-    "@vm_export, config = @vm_config}\n";
+static const char kVerifyTestLowPreset[] =
+    "target.preset @test_target {key = \"test-low\", source = @constant}\n";
 
 TEST_F(ExecuteTest, VerifyRunsLowDescriptorVerifier) {
   loom_check_result_t result;
   std::string source =
-      std::string("// RUN: verify\n") + kVerifyVmTargetRecords +
-      "low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {\n"
-      "  %c0 = low.const<iree.vm.const.i32> : reg<vm.i32>\n"
-      "  low.return %c0 : reg<vm.i32>\n"
+      std::string("// RUN: verify\n") + kVerifyTestLowPreset +
+      "low.func.def target(@test_target) @constant() -> (reg<test.i32>) {\n"
+      "  %c0 = low.const<test.const.i32> : reg<test.i32>\n"
+      "  low.return %c0 : reg<test.i32>\n"
       "}\n";
   IREE_ASSERT_OK(ExecuteFirst(source.c_str(), &result));
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL)
@@ -294,7 +279,7 @@ TEST_F(ExecuteTest, VerifyRunsLowDescriptorVerifier) {
             std::string::npos);
   EXPECT_NE(diagnostic_json.find("\"emitter\":\"verifier\""),
             std::string::npos);
-  EXPECT_NE(diagnostic_json.find("\"opcode\":\"iree.vm.const.i32\""),
+  EXPECT_NE(diagnostic_json.find("\"opcode\":\"test.const.i32\""),
             std::string::npos);
   EXPECT_NE(diagnostic_json.find("\"immediate_name\":\"i32_value\""),
             std::string::npos);
@@ -974,57 +959,23 @@ TEST_F(ExecuteTest, EmitModeReportsUnknownLlvmProfile) {
 TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsSetShape) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit low-descriptor-manifest iree.vm.core\n"
+      ExecuteFirst("// RUN: emit low-descriptor-manifest test.low.core\n"
                    "func.def @unused() {\n"
                    "}\n",
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   const std::string actual_output = ActualOutputString(result);
-  EXPECT_NE(actual_output.find("\"key\":\"iree.vm.core\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"target\":\"iree.vm\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"key\":\"test.low.core\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"target\":\"test.low\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"table_counts\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"descriptors\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"iree.vm.add.i32\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"test.add.i32\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"test.load.v4i32\""), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
-TEST_F(ExecuteTest, EmitLowDescriptorManifestUsesLowRegistry) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit low-descriptor-manifest wasm.core.simd128\n"
-                   "func.def @unused() {\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  const std::string actual_output = ActualOutputString(result);
-  EXPECT_NE(actual_output.find("\"key\":\"wasm.core.simd128\""),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("\"target\":\"wasm\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"wasm.i32x4.add\""), std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitLowDescriptorManifestExposesX86NativeShards) {
-  loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit low-descriptor-manifest x86.avx512.core\n"
-                   "func.def @unused() {\n"
-                   "}\n",
-                   &result));
-  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
-  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  const std::string actual_output = ActualOutputString(result);
-  EXPECT_NE(actual_output.find("\"key\":\"x86.avx512.core\""),
-            std::string::npos);
-  EXPECT_NE(actual_output.find("\"target\":\"x86\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"x86.avx512.vpdpbusd.zmm\""),
-            std::string::npos);
-  loom_check_result_deinitialize(&result);
-}
-
-TEST_F(ExecuteTest, EmitLowDescriptorManifestExposesAmdgpuNativeShards) {
+TEST_F(ExecuteTest, EmitLowDescriptorManifestRejectsBackendSets) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit low-descriptor-manifest amdgpu.gfx1250.core\n"
@@ -1033,15 +984,8 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestExposesAmdgpuNativeShards) {
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
-  const std::string actual_output = ActualOutputString(result);
-  EXPECT_NE(actual_output.find("\"key\":\"amdgpu.gfx1250.core\""),
+  EXPECT_NE(DetailString(result).find("unknown low descriptor set"),
             std::string::npos);
-  EXPECT_NE(actual_output.find("\"target\":\"amdgpu\""), std::string::npos);
-  EXPECT_NE(
-      actual_output.find("\"amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8\""),
-      std::string::npos);
-  EXPECT_NE(actual_output.find("\"dead_removable\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"pseudo\""), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 
@@ -1071,15 +1015,16 @@ TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
   const std::string actual_output = ActualOutputString(result);
   EXPECT_NE(actual_output.find("\"descriptor_set_count\":"), std::string::npos);
   EXPECT_NE(actual_output.find("\"bundle_count\":"), std::string::npos);
-  EXPECT_NE(actual_output.find("\"key\":\"amdgpu-gfx11-hal\""),
+  EXPECT_NE(actual_output.find("\"key\":\"test-low\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"target_cpu\":\"test-low\""),
             std::string::npos);
-  EXPECT_NE(actual_output.find("\"target_cpu\":\"gfx1100\""),
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"test.low.core\""),
             std::string::npos);
-  EXPECT_NE(actual_output.find("\"descriptor_set\":\"amdgpu.gfx11.core\""),
+  EXPECT_EQ(actual_output.find("\"key\":\"amdgpu-gfx11-hal\""),
             std::string::npos);
-  EXPECT_NE(actual_output.find("\"key\":\"wasm32-simd128\""),
+  EXPECT_EQ(actual_output.find("\"key\":\"wasm32-simd128\""),
             std::string::npos);
-  EXPECT_NE(actual_output.find("\"key\":\"x86_64-avx512-object\""),
+  EXPECT_EQ(actual_output.find("\"key\":\"x86_64-avx512-object\""),
             std::string::npos);
   loom_check_result_deinitialize(&result);
 }
@@ -1088,12 +1033,13 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsPressureSummary) {
   loom_check_result_t result;
   IREE_ASSERT_OK(
       ExecuteFirst("// RUN: emit liveness-json @pressure\n"
-                   "func.def @pressure(%a: reg<vm.i32>, %b: reg<vm.i32>, "
-                   "%c: reg<vm.i32>) -> (reg<vm.i32>) {\n"
-                   "  %ab = low.copy %a : reg<vm.i32> -> reg<vm.i32>\n"
-                   "  %bc = low.copy %b : reg<vm.i32> -> reg<vm.i32>\n"
-                   "  %cc = low.copy %c : reg<vm.i32> -> reg<vm.i32>\n"
-                   "  func.return %ab : reg<vm.i32>\n"
+                   "func.def @pressure(%a: reg<test.i32>, "
+                   "%b: reg<test.i32>, %c: reg<test.i32>) -> "
+                   "(reg<test.i32>) {\n"
+                   "  %ab = low.copy %a : reg<test.i32> -> reg<test.i32>\n"
+                   "  %bc = low.copy %b : reg<test.i32> -> reg<test.i32>\n"
+                   "  %cc = low.copy %c : reg<test.i32> -> reg<test.i32>\n"
+                   "  func.return %ab : reg<test.i32>\n"
                    "}\n",
                    &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
@@ -1103,7 +1049,7 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsPressureSummary) {
             std::string::npos);
   EXPECT_NE(actual_output.find("\"intervals\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"pressure_summaries\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"register_class\":\"vm.i32\""),
+  EXPECT_NE(actual_output.find("\"register_class\":\"test.i32\""),
             std::string::npos);
   EXPECT_NE(actual_output.find("\"peak_live_units\":3"), std::string::npos);
   loom_check_result_deinitialize(&result);
