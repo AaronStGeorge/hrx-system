@@ -36,11 +36,38 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    packed_dot_descriptors
+  HDRS
+    "packed_dot_descriptors.h"
+  SRCS
+    "packed_dot_descriptors.c"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    packed_dot_descriptors_test
+  SRCS
+    "packed_dot_descriptors_test.cc"
+  DEPS
+    ::packed_dot_contract
+    ::packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     packed_dot_contract
   HDRS
     "packed_dot_contract.h"
+    "packed_dot_contract_data.h"
   SRCS
     "packed_dot_contract.c"
+    "packed_dot_contract_data.c"
   DEPS
     iree::base
   PUBLIC

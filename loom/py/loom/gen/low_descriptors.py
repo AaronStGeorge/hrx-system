@@ -998,25 +998,31 @@ def write_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | N
 
 
 def main() -> None:
+    from loom.gen.x86_packed_dot_contract import write_x86_packed_dot_contract_data
     from loom.target.arch.amdgpu.descriptors import (
         AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
     )
     from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
-    from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
+    from loom.target.arch.x86.descriptors import (
+        X86_AVX512_CORE_DESCRIPTOR_SET,
+        X86_PACKED_DOT_DESCRIPTOR_SET,
+    )
     from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 
     descriptor_sets = (
         IREEVM_CORE_DESCRIPTOR_SET,
         WASM_CORE_SIMD128_DESCRIPTOR_SET,
         X86_AVX512_CORE_DESCRIPTOR_SET,
+        X86_PACKED_DOT_DESCRIPTOR_SET,
         AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
     )
     for descriptor_set in descriptor_sets:
         write_descriptor_set(descriptor_set)
+    write_x86_packed_dot_contract_data()
     print(f"Generated {len(descriptor_sets)} low descriptor sets")
 
 

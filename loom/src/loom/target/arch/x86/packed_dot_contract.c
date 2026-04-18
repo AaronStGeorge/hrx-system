@@ -6,386 +6,14 @@
 
 #include "loom/target/arch/x86/packed_dot_contract.h"
 
-#define PACKED_DOT_SHAPE(vector_bits_value, input_lanes_value, \
-                         result_lanes_value, group_size_value) \
-  (loom_x86_packed_dot_shape_t) {                              \
-    .vector_bit_width = (vector_bits_value),                   \
-    .input_lane_count = (input_lanes_value),                   \
-    .result_lane_count = (result_lanes_value),                 \
-    .reduction_group_size = (group_size_value),                \
-  }
+#include "loom/target/arch/x86/packed_dot_contract_data.h"
 
-#define PACKED_DOT_DESCRIPTOR_WITH_ABI(                                      \
-    name_value, intrinsic_name_value, source_abi_value, mnemonic_value,      \
-    family_value, feature_bits_value, flags_value, vector_bits_value,        \
-    input_lanes_value, result_lanes_value, group_size_value, lhs_type_value, \
-    rhs_type_value, accumulator_type_value, result_type_value)               \
-  {                                                                          \
-      .name = IREE_SVL(name_value),                                          \
-      .llvm_intrinsic_name = IREE_SVL(intrinsic_name_value),                 \
-      .llvm_source_abi = (source_abi_value),                                 \
-      .instruction_mnemonic = IREE_SVL(mnemonic_value),                      \
-      .family = (family_value),                                              \
-      .required_feature_bits = (feature_bits_value),                         \
-      .flags = (flags_value),                                                \
-      .shape = PACKED_DOT_SHAPE(vector_bits_value, input_lanes_value,        \
-                                result_lanes_value, group_size_value),       \
-      .lhs_numeric_type = (lhs_type_value),                                  \
-      .rhs_numeric_type = (rhs_type_value),                                  \
-      .accumulator_numeric_type = (accumulator_type_value),                  \
-      .result_numeric_type = (result_type_value),                            \
-  }
-
-#define PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR(                                     \
-    name_value, intrinsic_name_value, mnemonic_value, family_value,            \
-    feature_bits_value, flags_value, vector_bits_value, input_lanes_value,     \
-    result_lanes_value, group_size_value, lhs_type_value, rhs_type_value,      \
-    accumulator_type_value, result_type_value)                                 \
-  PACKED_DOT_DESCRIPTOR_WITH_ABI(                                              \
-      name_value, intrinsic_name_value,                                        \
-      LOOM_X86_PACKED_DOT_LLVM_SOURCE_ABI_PAYLOAD, mnemonic_value,             \
-      family_value, feature_bits_value, flags_value, vector_bits_value,        \
-      input_lanes_value, result_lanes_value, group_size_value, lhs_type_value, \
-      rhs_type_value, accumulator_type_value, result_type_value)
-
-#define PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(                                 \
-    name_value, intrinsic_name_value, mnemonic_value, family_value,            \
-    feature_bits_value, flags_value, vector_bits_value, input_lanes_value,     \
-    result_lanes_value, group_size_value, lhs_type_value, rhs_type_value,      \
-    accumulator_type_value, result_type_value)                                 \
-  PACKED_DOT_DESCRIPTOR_WITH_ABI(                                              \
-      name_value, intrinsic_name_value,                                        \
-      LOOM_X86_PACKED_DOT_LLVM_SOURCE_ABI_ACCUMULATOR_VECTOR, mnemonic_value,  \
-      family_value, feature_bits_value, flags_value, vector_bits_value,        \
-      input_lanes_value, result_lanes_value, group_size_value, lhs_type_value, \
-      rhs_type_value, accumulator_type_value, result_type_value)
-
-#define AVX512_VNNI_FEATURES_512 (LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI)
 #define AVX512_VNNI_FEATURES_128_256         \
   (LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI | \
    LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL)
-#define AVX512_BF16_FEATURES_512 (LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16)
 #define AVX512_BF16_FEATURES_128_256         \
   (LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 | \
    LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL)
-#define AVX_VNNI_FEATURES (LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI)
-#define AVX_VNNI_INT8_FEATURES (LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8)
-#define AVX_VNNI_INT16_FEATURES (LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT16)
-#define AVX10_2_FEATURES (LOOM_X86_PACKED_DOT_FEATURE_AVX10_2)
-#define SATURATING_FLAGS (LOOM_X86_PACKED_DOT_CONTRACT_FLAG_SATURATING)
-
-static const loom_x86_packed_dot_descriptor_t kPackedDotDescriptors[] = {
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpbusd.128", "llvm.x86.avx512.vpdpbusd.128",
-        "vpdpbusd", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, 0, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpbusd.256", "llvm.x86.avx512.vpdpbusd.256",
-        "vpdpbusd", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, 0, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpbusd.512", "llvm.x86.avx512.vpdpbusd.512",
-        "vpdpbusd", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_512, 0, 512, 64, 16, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpbusds.128", "llvm.x86.avx512.vpdpbusds.128",
-        "vpdpbusds", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, SATURATING_FLAGS, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpbusds.256", "llvm.x86.avx512.vpdpbusds.256",
-        "vpdpbusds", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, SATURATING_FLAGS, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpbusds.512", "llvm.x86.avx512.vpdpbusds.512",
-        "vpdpbusds", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_512, SATURATING_FLAGS, 512, 64, 16, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpwssd.128", "llvm.x86.avx512.vpdpwssd.128",
-        "vpdpwssd", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, 0, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpwssd.256", "llvm.x86.avx512.vpdpwssd.256",
-        "vpdpwssd", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, 0, 256, 16, 8, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpwssd.512", "llvm.x86.avx512.vpdpwssd.512",
-        "vpdpwssd", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_512, 0, 512, 32, 16, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpwssds.128", "llvm.x86.avx512.vpdpwssds.128",
-        "vpdpwssds", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, SATURATING_FLAGS, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpwssds.256", "llvm.x86.avx512.vpdpwssds.256",
-        "vpdpwssds", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_128_256, SATURATING_FLAGS, 256, 16, 8, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx512-vnni.vpdpwssds.512", "llvm.x86.avx512.vpdpwssds.512",
-        "vpdpwssds", LOOM_X86_PACKED_DOT_FAMILY_AVX512_VNNI,
-        AVX512_VNNI_FEATURES_512, SATURATING_FLAGS, 512, 32, 16, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpbusd.128", "llvm.x86.avx512.vpdpbusd.128", "vpdpbusd",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES, 0, 128, 16, 4,
-        4, LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpbusd.256", "llvm.x86.avx512.vpdpbusd.256", "vpdpbusd",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES, 0, 256, 32, 8,
-        4, LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpbusds.128", "llvm.x86.avx512.vpdpbusds.128",
-        "vpdpbusds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES,
-        SATURATING_FLAGS, 128, 16, 4, 4, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I32,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpbusds.256", "llvm.x86.avx512.vpdpbusds.256",
-        "vpdpbusds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES,
-        SATURATING_FLAGS, 256, 32, 8, 4, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I32,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpwssd.128", "llvm.x86.avx512.vpdpwssd.128", "vpdpwssd",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES, 0, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpwssd.256", "llvm.x86.avx512.vpdpwssd.256", "vpdpwssd",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES, 0, 256, 16, 8,
-        2, LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpwssds.128", "llvm.x86.avx512.vpdpwssds.128",
-        "vpdpwssds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES,
-        SATURATING_FLAGS, 128, 8, 4, 2, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I32,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni.vpdpwssds.256", "llvm.x86.avx512.vpdpwssds.256",
-        "vpdpwssds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI, AVX_VNNI_FEATURES,
-        SATURATING_FLAGS, 256, 16, 8, 2, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_I32,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32),
-
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbssd.128", "llvm.x86.avx2.vpdpbssd.128",
-        "vpdpbssd", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, 0, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbssd.256", "llvm.x86.avx2.vpdpbssd.256",
-        "vpdpbssd", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, 0, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbssds.128", "llvm.x86.avx2.vpdpbssds.128",
-        "vpdpbssds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, SATURATING_FLAGS, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbssds.256", "llvm.x86.avx2.vpdpbssds.256",
-        "vpdpbssds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, SATURATING_FLAGS, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbsud.128", "llvm.x86.avx2.vpdpbsud.128",
-        "vpdpbsud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, 0, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbsud.256", "llvm.x86.avx2.vpdpbsud.256",
-        "vpdpbsud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, 0, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbsuds.128", "llvm.x86.avx2.vpdpbsuds.128",
-        "vpdpbsuds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, SATURATING_FLAGS, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbsuds.256", "llvm.x86.avx2.vpdpbsuds.256",
-        "vpdpbsuds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, SATURATING_FLAGS, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbuud.128", "llvm.x86.avx2.vpdpbuud.128",
-        "vpdpbuud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, 0, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbuud.256", "llvm.x86.avx2.vpdpbuud.256",
-        "vpdpbuud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, 0, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbuuds.128", "llvm.x86.avx2.vpdpbuuds.128",
-        "vpdpbuuds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, SATURATING_FLAGS, 128, 16, 4, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int8.vpdpbuuds.256", "llvm.x86.avx2.vpdpbuuds.256",
-        "vpdpbuuds", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT8,
-        AVX_VNNI_INT8_FEATURES, SATURATING_FLAGS, 256, 32, 8, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int16.vpdpwsud.128", "llvm.x86.avx2.vpdpwsud.128",
-        "vpdpwsud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT16,
-        AVX_VNNI_INT16_FEATURES, 0, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_U16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int16.vpdpwsud.256", "llvm.x86.avx2.vpdpwsud.256",
-        "vpdpwsud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT16,
-        AVX_VNNI_INT16_FEATURES, 0, 256, 16, 8, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_U16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int16.vpdpwusd.128", "llvm.x86.avx2.vpdpwusd.128",
-        "vpdpwusd", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT16,
-        AVX_VNNI_INT16_FEATURES, 0, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_U16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int16.vpdpwusd.256", "llvm.x86.avx2.vpdpwusd.256",
-        "vpdpwusd", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT16,
-        AVX_VNNI_INT16_FEATURES, 0, 256, 16, 8, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_U16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int16.vpdpwuud.128", "llvm.x86.avx2.vpdpwuud.128",
-        "vpdpwuud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT16,
-        AVX_VNNI_INT16_FEATURES, 0, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_U16, LOOM_X86_PACKED_DOT_NUMERIC_U16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx-vnni-int16.vpdpwuud.256", "llvm.x86.avx2.vpdpwuud.256",
-        "vpdpwuud", LOOM_X86_PACKED_DOT_FAMILY_AVX_VNNI_INT16,
-        AVX_VNNI_INT16_FEATURES, 0, 256, 16, 8, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_U16, LOOM_X86_PACKED_DOT_NUMERIC_U16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpbssd.512", "llvm.x86.avx10.vpdpbssd.512", "vpdpbssd",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 512, 64, 16, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpbsud.512", "llvm.x86.avx10.vpdpbsud.512", "vpdpbsud",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 512, 64, 16, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpbuud.512", "llvm.x86.avx10.vpdpbuud.512", "vpdpbuud",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 512, 64, 16, 4,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpbssds.512", "llvm.x86.avx10.vpdpbssds.512",
-        "vpdpbssds", LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES,
-        SATURATING_FLAGS, 512, 64, 16, 4, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_I8, LOOM_X86_PACKED_DOT_NUMERIC_I32,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpbsuds.512", "llvm.x86.avx10.vpdpbsuds.512",
-        "vpdpbsuds", LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES,
-        SATURATING_FLAGS, 512, 64, 16, 4, LOOM_X86_PACKED_DOT_NUMERIC_I8,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I32,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpbuuds.512", "llvm.x86.avx10.vpdpbuuds.512",
-        "vpdpbuuds", LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES,
-        SATURATING_FLAGS, 512, 64, 16, 4, LOOM_X86_PACKED_DOT_NUMERIC_U8,
-        LOOM_X86_PACKED_DOT_NUMERIC_U8, LOOM_X86_PACKED_DOT_NUMERIC_I32,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpwsud.512", "llvm.x86.avx10.vpdpwsud.512", "vpdpwsud",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 512, 32, 16, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_I16, LOOM_X86_PACKED_DOT_NUMERIC_U16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpwusd.512", "llvm.x86.avx10.vpdpwusd.512", "vpdpwusd",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 512, 32, 16, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_U16, LOOM_X86_PACKED_DOT_NUMERIC_I16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR(
-        "x86.avx10.2.vpdpwuud.512", "llvm.x86.avx10.vpdpwuud.512", "vpdpwuud",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 512, 32, 16, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_U16, LOOM_X86_PACKED_DOT_NUMERIC_U16,
-        LOOM_X86_PACKED_DOT_NUMERIC_I32, LOOM_X86_PACKED_DOT_NUMERIC_I32),
-    PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR(
-        "x86.avx10.2.vdpphps.128", "llvm.x86.avx10.vdpphps.128", "vdpphps",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_F16, LOOM_X86_PACKED_DOT_NUMERIC_F16,
-        LOOM_X86_PACKED_DOT_NUMERIC_F32, LOOM_X86_PACKED_DOT_NUMERIC_F32),
-    PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR(
-        "x86.avx10.2.vdpphps.256", "llvm.x86.avx10.vdpphps.256", "vdpphps",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 256, 16, 8, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_F16, LOOM_X86_PACKED_DOT_NUMERIC_F16,
-        LOOM_X86_PACKED_DOT_NUMERIC_F32, LOOM_X86_PACKED_DOT_NUMERIC_F32),
-    PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR(
-        "x86.avx10.2.vdpphps.512", "llvm.x86.avx10.vdpphps.512", "vdpphps",
-        LOOM_X86_PACKED_DOT_FAMILY_AVX10_2, AVX10_2_FEATURES, 0, 512, 32, 16, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_F16, LOOM_X86_PACKED_DOT_NUMERIC_F16,
-        LOOM_X86_PACKED_DOT_NUMERIC_F32, LOOM_X86_PACKED_DOT_NUMERIC_F32),
-
-    PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR(
-        "x86.avx512-bf16.vdpbf16ps.128", "llvm.x86.avx512bf16.dpbf16ps.128",
-        "vdpbf16ps", LOOM_X86_PACKED_DOT_FAMILY_AVX512_BF16,
-        AVX512_BF16_FEATURES_128_256, 0, 128, 8, 4, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_BF16, LOOM_X86_PACKED_DOT_NUMERIC_BF16,
-        LOOM_X86_PACKED_DOT_NUMERIC_F32, LOOM_X86_PACKED_DOT_NUMERIC_F32),
-    PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR(
-        "x86.avx512-bf16.vdpbf16ps.256", "llvm.x86.avx512bf16.dpbf16ps.256",
-        "vdpbf16ps", LOOM_X86_PACKED_DOT_FAMILY_AVX512_BF16,
-        AVX512_BF16_FEATURES_128_256, 0, 256, 16, 8, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_BF16, LOOM_X86_PACKED_DOT_NUMERIC_BF16,
-        LOOM_X86_PACKED_DOT_NUMERIC_F32, LOOM_X86_PACKED_DOT_NUMERIC_F32),
-    PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR(
-        "x86.avx512-bf16.vdpbf16ps.512", "llvm.x86.avx512bf16.dpbf16ps.512",
-        "vdpbf16ps", LOOM_X86_PACKED_DOT_FAMILY_AVX512_BF16,
-        AVX512_BF16_FEATURES_512, 0, 512, 32, 16, 2,
-        LOOM_X86_PACKED_DOT_NUMERIC_BF16, LOOM_X86_PACKED_DOT_NUMERIC_BF16,
-        LOOM_X86_PACKED_DOT_NUMERIC_F32, LOOM_X86_PACKED_DOT_NUMERIC_F32),
-};
 
 iree_string_view_t loom_x86_packed_dot_family_name(
     loom_x86_packed_dot_family_t family) {
@@ -479,20 +107,21 @@ iree_status_t loom_x86_packed_dot_feature_bits_for_name(
 }
 
 iree_host_size_t loom_x86_packed_dot_descriptor_count(void) {
-  return IREE_ARRAYSIZE(kPackedDotDescriptors);
+  return loom_x86_packed_dot_builtin_descriptor_count;
 }
 
 const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_descriptor_at(
     iree_host_size_t index) {
-  if (index >= IREE_ARRAYSIZE(kPackedDotDescriptors)) return NULL;
-  return &kPackedDotDescriptors[index];
+  if (index >= loom_x86_packed_dot_builtin_descriptor_count) return NULL;
+  return &loom_x86_packed_dot_builtin_descriptors[index];
 }
 
 const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_find_by_name(
     iree_string_view_t name) {
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kPackedDotDescriptors); ++i) {
+  for (iree_host_size_t i = 0; i < loom_x86_packed_dot_builtin_descriptor_count;
+       ++i) {
     const loom_x86_packed_dot_descriptor_t* descriptor =
-        &kPackedDotDescriptors[i];
+        &loom_x86_packed_dot_builtin_descriptors[i];
     if (iree_string_view_equal(name, descriptor->name)) return descriptor;
   }
   return NULL;
@@ -563,7 +192,7 @@ const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_select(
     const loom_x86_packed_dot_match_request_t* request,
     loom_x86_packed_dot_match_diagnostic_t* out_diagnostic) {
   loom_x86_packed_dot_match_diagnostic_t diagnostic = {
-      .descriptor_count = IREE_ARRAYSIZE(kPackedDotDescriptors),
+      .descriptor_count = loom_x86_packed_dot_builtin_descriptor_count,
   };
   if (request == NULL) {
     diagnostic.rejection_bits = LOOM_X86_PACKED_DOT_REJECTION_INVALID_REQUEST;
@@ -571,9 +200,10 @@ const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_select(
     return NULL;
   }
 
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kPackedDotDescriptors); ++i) {
+  for (iree_host_size_t i = 0; i < loom_x86_packed_dot_builtin_descriptor_count;
+       ++i) {
     const loom_x86_packed_dot_descriptor_t* descriptor =
-        &kPackedDotDescriptors[i];
+        &loom_x86_packed_dot_builtin_descriptors[i];
     if (!loom_x86_packed_dot_family_matches(descriptor, request)) {
       continue;
     }
@@ -619,16 +249,5 @@ const loom_x86_packed_dot_descriptor_t* loom_x86_packed_dot_select(
   return NULL;
 }
 
-#undef PACKED_DOT_ACCUMULATOR_ABI_DESCRIPTOR
-#undef PACKED_DOT_PAYLOAD_ABI_DESCRIPTOR
-#undef PACKED_DOT_DESCRIPTOR_WITH_ABI
-#undef PACKED_DOT_SHAPE
-#undef AVX512_VNNI_FEATURES_512
 #undef AVX512_VNNI_FEATURES_128_256
-#undef AVX512_BF16_FEATURES_512
 #undef AVX512_BF16_FEATURES_128_256
-#undef AVX_VNNI_FEATURES
-#undef AVX_VNNI_INT8_FEATURES
-#undef AVX_VNNI_INT16_FEATURES
-#undef AVX10_2_FEATURES
-#undef SATURATING_FLAGS

@@ -10,6 +10,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom.target.arch.x86.packed_dot_data import (
+    CONTRACT_FLAG_SATURATING,
+    NUMERIC_BF16,
+    NUMERIC_F16,
+    NUMERIC_F32,
+    NUMERIC_I8,
+    NUMERIC_I16,
+    NUMERIC_I32,
+    NUMERIC_U8,
+    NUMERIC_U16,
+    X86_PACKED_DOT_DESCRIPTORS,
+    PackedDotDescriptor,
+)
 from loom.target.low_descriptors import (
     Constraint,
     ConstraintKind,
@@ -38,6 +51,8 @@ from loom.target.low_descriptors import (
 )
 
 _REG_GPR64 = "x86.gpr64"
+_REG_XMM = "x86.xmm"
+_REG_YMM = "x86.ymm"
 _REG_ZMM = "x86.zmm"
 _REG_K = "x86.k"
 
@@ -59,6 +74,8 @@ _SCHEDULE_MEMORY_STORE = "x86.memory.store"
 _SCHEDULE_CONTROL = "x86.control"
 
 _GPR64_ALT = (RegClassAlt(_REG_GPR64),)
+_XMM_ALT = (RegClassAlt(_REG_XMM),)
+_YMM_ALT = (RegClassAlt(_REG_YMM),)
 _ZMM_ALT = (RegClassAlt(_REG_ZMM),)
 _K_ALT = (RegClassAlt(_REG_K),)
 
@@ -81,6 +98,28 @@ def _zmm_result(field_name: str = "dst") -> Operand:
 
 def _zmm_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _ZMM_ALT)
+
+
+def _vector_reg_alt(vector_bit_width: int) -> tuple[RegClassAlt, ...]:
+    match vector_bit_width:
+        case 128:
+            return _XMM_ALT
+        case 256:
+            return _YMM_ALT
+        case 512:
+            return _ZMM_ALT
+        case _:
+            raise ValueError(
+                f"unsupported x86 vector register width {vector_bit_width}"
+            )
+
+
+def _vector_result(vector_bit_width: int, field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _vector_reg_alt(vector_bit_width))
+
+
+def _vector_operand(vector_bit_width: int, field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _vector_reg_alt(vector_bit_width))
 
 
 def _k_result(field_name: str = "dst") -> Operand:
@@ -130,6 +169,47 @@ _DOT_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.TIED, 0, 1),
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
 )
+
+_PACKED_DOT_NUMERIC_TAGS = {
+    NUMERIC_I8: "s8",
+    NUMERIC_U8: "u8",
+    NUMERIC_I16: "s16",
+    NUMERIC_U16: "u16",
+    NUMERIC_F16: "f16",
+    NUMERIC_BF16: "bf16",
+    NUMERIC_I32: "i32",
+    NUMERIC_F32: "f32",
+}
+
+
+def _packed_dot_semantic_tag(descriptor: PackedDotDescriptor) -> str:
+    lhs_tag = _PACKED_DOT_NUMERIC_TAGS[descriptor.lhs_numeric_type]
+    rhs_tag = _PACKED_DOT_NUMERIC_TAGS[descriptor.rhs_numeric_type]
+    result_tag = _PACKED_DOT_NUMERIC_TAGS[descriptor.result_numeric_type]
+    saturating_suffix = ".sat" if descriptor.flags & CONTRACT_FLAG_SATURATING else ""
+    return (
+        f"dot.{lhs_tag}{rhs_tag}.{result_tag}x"
+        f"{descriptor.result_lane_count}{saturating_suffix}"
+    )
+
+
+def _packed_dot_descriptor(descriptor: PackedDotDescriptor) -> Descriptor:
+    return Descriptor(
+        key=descriptor.key,
+        mnemonic=descriptor.mnemonic,
+        semantic_tag=_packed_dot_semantic_tag(descriptor),
+        operands=(
+            _vector_result(descriptor.vector_bit_width),
+            _vector_operand(descriptor.vector_bit_width, "acc"),
+            _vector_operand(descriptor.vector_bit_width, "lhs"),
+            _vector_operand(descriptor.vector_bit_width, "rhs"),
+        ),
+        constraints=_DOT_ACCUMULATOR_CONSTRAINTS,
+        schedule_class=_SCHEDULE_VECTOR_DOT,
+        feature_mask_words=(descriptor.required_feature_bits,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
 
 X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="x86.avx512.core",
@@ -301,5 +381,39 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
         ),
+    ),
+)
+
+X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
+    key="x86.packed_dot.core",
+    target_key="x86",
+    feature_key="x86.packed_dot.v1",
+    c_header_path=Path("loom/src/loom/target/arch/x86/packed_dot_descriptors.h"),
+    c_source_path=Path("loom/src/loom/target/arch/x86/packed_dot_descriptors.c"),
+    header_guard="LOOM_TARGET_ARCH_X86_PACKED_DOT_DESCRIPTORS_H_",
+    public_header="loom/target/arch/x86/packed_dot_descriptors.h",
+    function_name="loom_x86_packed_dot_core_descriptor_set",
+    c_table_prefix="X86PackedDotCore",
+    c_enum_prefix="X86_PACKED_DOT_CORE",
+    generator_version=1,
+    reg_classes=(
+        RegClass(_REG_XMM, 128, flags=(RegClassFlag.PHYSICAL,), physical_count=32),
+        RegClass(_REG_YMM, 256, flags=(RegClassFlag.PHYSICAL,), physical_count=32),
+        RegClass(_REG_ZMM, 512, flags=(RegClassFlag.PHYSICAL,), physical_count=32),
+    ),
+    resources=(
+        Resource(_RESOURCE_DOT, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),
+    ),
+    schedule_classes=(
+        ScheduleClass(
+            _SCHEDULE_VECTOR_DOT,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=4,
+            issue_uses=(IssueUse(_RESOURCE_DOT, cycles=1, units=1),),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+    ),
+    descriptors=tuple(
+        _packed_dot_descriptor(descriptor) for descriptor in X86_PACKED_DOT_DESCRIPTORS
     ),
 )

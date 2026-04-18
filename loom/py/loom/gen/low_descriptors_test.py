@@ -19,7 +19,10 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
 )
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
-from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
+from loom.target.arch.x86.descriptors import (
+    X86_AVX512_CORE_DESCRIPTOR_SET,
+    X86_PACKED_DOT_DESCRIPTOR_SET,
+)
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import EnumDomain, EnumValue, ImmediateKind, OperandRole
 
@@ -172,6 +175,30 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     assert any(descriptor["key"] == "x86.avx512.vpdpbusd.zmm" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.kandq" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.jmp" for descriptor in manifest["descriptors"])
+
+
+def test_generate_x86_packed_dot_descriptor_set() -> None:
+    generated = generate_descriptor_set(X86_PACKED_DOT_DESCRIPTOR_SET)
+
+    assert "loom_x86_packed_dot_core_descriptor_set" in generated.header
+    assert 'LOOM_BSTRING_LITERAL("\\x13", "x86.packed_dot.core")' in generated.source
+    assert "x86.avx512-vnni.vpdpbusd.512" in generated.source
+    assert "x86.avx512-bf16.vdpbf16ps.512" in generated.source
+    assert "x86.avx-vnni-int8.vpdpbssd.256" in generated.source
+    assert "x86.avx10.2.vdpphps.512" in generated.source
+    assert "fingerprint" not in generated.source
+    assert "fingerprint" not in generated.manifest_json
+
+    manifest = json.loads(generated.manifest_json)
+    assert manifest["key"] == "x86.packed_dot.core"
+    assert manifest["target"] == "x86"
+    assert manifest["feature_namespace"] == "x86.packed_dot.v1"
+    assert manifest["abi_version"] == 5
+    assert manifest["table_counts"]["descriptors"] >= 53
+    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["reg_classes"] == 3
+    assert manifest["table_counts"]["feature_mask_words"] >= 53
+    assert any(descriptor["key"] == "x86.avx10.2.vdpphps.512" for descriptor in manifest["descriptors"])
 
 
 def test_allowlist_accepts_semantic_tags() -> None:

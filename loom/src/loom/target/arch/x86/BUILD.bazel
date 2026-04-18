@@ -63,6 +63,24 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/arch/x86:avx512_descriptors",
 )
 
+iree_assert_no_dependency(
+    name = "packed_dot_descriptors_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "packed_dot_descriptors_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "packed_dot_descriptors_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
+)
+
 #===------------------------------------------------------------------------===#
 # x86 low descriptors
 #===------------------------------------------------------------------------===#
@@ -85,14 +103,39 @@ loom_cc_test(
     ],
 )
 
+loom_cc_library(
+    name = "packed_dot_descriptors",
+    srcs = ["packed_dot_descriptors.c"],
+    hdrs = ["packed_dot_descriptors.h"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_test(
+    name = "packed_dot_descriptors_test",
+    srcs = ["packed_dot_descriptors_test.cc"],
+    deps = [
+        ":packed_dot_contract",
+        ":packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 #===------------------------------------------------------------------------===#
 # x86 packed-dot contracts
 #===------------------------------------------------------------------------===#
 
 loom_cc_library(
     name = "packed_dot_contract",
-    srcs = ["packed_dot_contract.c"],
-    hdrs = ["packed_dot_contract.h"],
+    srcs = [
+        "packed_dot_contract.c",
+        "packed_dot_contract_data.c",
+    ],
+    hdrs = [
+        "packed_dot_contract.h",
+        "packed_dot_contract_data.h",
+    ],
     deps = ["//runtime/src/iree/base"],
 )
 
