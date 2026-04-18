@@ -34,6 +34,30 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "target_types_no_llvmir_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target:types",
+)
+
+iree_assert_no_dependency(
+    name = "target_records_no_llvmir_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target:records",
+)
+
+iree_assert_no_dependency(
+    name = "target_ir_records_no_llvmir_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target:ir_records",
+)
+
+iree_assert_no_dependency(
+    name = "target_low_descriptor_registry_no_llvmir_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
     name = "lower_no_x86_packed_dot_vector_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_vector",
     target = "//loom/src/loom/target/emit/llvmir:lower",

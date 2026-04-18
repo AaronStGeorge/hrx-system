@@ -40,9 +40,57 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "target_types_no_packed_dot_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:types",
+)
+
+iree_assert_no_dependency(
+    name = "target_records_no_packed_dot_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:records",
+)
+
+iree_assert_no_dependency(
+    name = "target_ir_records_no_packed_dot_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:ir_records",
+)
+
+iree_assert_no_dependency(
+    name = "target_preset_registry_no_packed_dot_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:preset_registry",
+)
+
+iree_assert_no_dependency(
+    name = "target_presets_no_packed_dot_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:presets",
+)
+
+iree_assert_no_dependency(
+    name = "target_low_descriptor_registry_no_feature_bits_dep",
+    dependency = "//loom/src/loom/target/arch/x86:feature_bits",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
+    name = "target_low_descriptor_registry_no_packed_dot_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
+iree_assert_no_dependency(
     name = "avx512_descriptors_no_amdgpu_arch_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
     target = "//loom/src/loom/target/arch/x86:avx512_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "target_low_descriptor_registry_no_avx512_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/x86:avx512_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
 )
 
 iree_assert_no_dependency(
@@ -67,6 +115,12 @@ iree_assert_no_dependency(
     name = "packed_dot_descriptors_no_amdgpu_arch_dep",
     dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
     target = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "target_low_descriptor_registry_no_packed_dot_descriptors_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
 )
 
 iree_assert_no_dependency(

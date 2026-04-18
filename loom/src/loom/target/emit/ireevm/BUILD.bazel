@@ -45,6 +45,12 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/emit/ireevm:descriptors",
 )
 
+iree_assert_no_dependency(
+    name = "target_low_descriptor_registry_no_descriptors_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
 #===------------------------------------------------------------------------===#
 # IREE VM low descriptors
 #===------------------------------------------------------------------------===#
