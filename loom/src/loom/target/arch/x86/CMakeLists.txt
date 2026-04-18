@@ -12,6 +12,30 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    avx512_descriptors
+  HDRS
+    "avx512_descriptors.h"
+  SRCS
+    "avx512_descriptors.c"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    avx512_descriptors_test
+  SRCS
+    "avx512_descriptors_test.cc"
+  DEPS
+    ::avx512_descriptors
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     packed_dot_contract
   HDRS
     "packed_dot_contract.h"

@@ -39,6 +39,52 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/arch/x86:packed_dot_contract",
 )
 
+iree_assert_no_dependency(
+    name = "avx512_descriptors_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/arch/x86:avx512_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "avx512_descriptors_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/x86:avx512_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "avx512_descriptors_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/x86:avx512_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "avx512_descriptors_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/x86:avx512_descriptors",
+)
+
+#===------------------------------------------------------------------------===#
+# x86 low descriptors
+#===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "avx512_descriptors",
+    srcs = ["avx512_descriptors.c"],
+    hdrs = ["avx512_descriptors.h"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_test(
+    name = "avx512_descriptors_test",
+    srcs = ["avx512_descriptors_test.cc"],
+    deps = [
+        ":avx512_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 #===------------------------------------------------------------------------===#
 # x86 packed-dot contracts
 #===------------------------------------------------------------------------===#

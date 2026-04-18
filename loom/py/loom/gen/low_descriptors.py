@@ -1003,11 +1003,13 @@ def main() -> None:
         AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
     )
     from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+    from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
     from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 
     descriptor_sets = (
         IREEVM_CORE_DESCRIPTOR_SET,
         WASM_CORE_SIMD128_DESCRIPTOR_SET,
+        X86_AVX512_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
         AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
     )

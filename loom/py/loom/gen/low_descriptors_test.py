@@ -18,6 +18,7 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
 )
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
+from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import EnumDomain, EnumValue, ImmediateKind, OperandRole
 
@@ -119,6 +120,33 @@ def test_generate_amdgpu_gfx12_core_descriptor_set() -> None:
     assert manifest["table_counts"]["resources"] >= 6
     assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.s_wait_loadcnt" for descriptor in manifest["descriptors"])
+
+
+def test_generate_x86_avx512_core_descriptor_set() -> None:
+    generated = generate_descriptor_set(X86_AVX512_CORE_DESCRIPTOR_SET)
+
+    assert "loom_x86_avx512_core_descriptor_set" in generated.header
+    assert 'LOOM_BSTRING_LITERAL("\\x0f", "x86.avx512.core")' in generated.source
+    assert "x86.avx512.vpaddd.zmm" in generated.source
+    assert "x86.avx512.vpdpbusd.zmm" in generated.source
+    assert "x86.avx512.vdpbf16ps.zmm" in generated.source
+    assert "x86.avx512.kandq" in generated.source
+    assert "x86.avx512.jmp" in generated.source
+    assert "fingerprint" not in generated.source
+    assert "fingerprint" not in generated.manifest_json
+
+    manifest = json.loads(generated.manifest_json)
+    assert manifest["key"] == "x86.avx512.core"
+    assert manifest["target"] == "x86"
+    assert manifest["feature_namespace"] == "x86.avx512.v1"
+    assert manifest["abi_version"] == 5
+    assert manifest["table_counts"]["descriptors"] >= 7
+    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["reg_classes"] == 3
+    assert manifest["table_counts"]["resources"] >= 7
+    assert any(descriptor["key"] == "x86.avx512.vpdpbusd.zmm" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "x86.avx512.kandq" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "x86.avx512.jmp" for descriptor in manifest["descriptors"])
 
 
 def test_allowlist_accepts_semantic_tags() -> None:

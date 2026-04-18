@@ -232,6 +232,8 @@ typedef enum loom_low_resource_kind_e {
   LOOM_LOW_RESOURCE_KIND_STORE = 5,
   // Branch, call, or control resource.
   LOOM_LOW_RESOURCE_KIND_CONTROL = 6,
+  // Address generation resource feeding load/store pipelines.
+  LOOM_LOW_RESOURCE_KIND_ADDRESS = 7,
 } loom_low_resource_kind_t;
 
 // Bitset of resource flags.
