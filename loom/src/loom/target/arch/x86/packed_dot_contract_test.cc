@@ -100,8 +100,7 @@ TEST(PackedDotContractTest, Avx512VnniByteDescriptor) {
   EXPECT_EQ(descriptor->llvm_source_abi,
             LOOM_X86_PACKED_DOT_LLVM_SOURCE_ABI_ACCUMULATOR_VECTOR);
   EXPECT_EQ(ToString(descriptor->instruction_mnemonic), "vpdpbusd");
-  EXPECT_EQ(descriptor->required_feature_bits,
-            LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI);
+  EXPECT_EQ(descriptor->required_feature_bits, LOOM_X86_FEATURE_AVX512_VNNI);
   EXPECT_EQ(descriptor->shape.vector_bit_width, 512);
   EXPECT_EQ(descriptor->shape.input_lane_count, 64);
   EXPECT_EQ(descriptor->shape.result_lane_count, 16);
@@ -146,8 +145,7 @@ TEST(PackedDotContractTest, Avx512Bf16Descriptor) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_X86_PACKED_DOT_FAMILY_AVX512_BF16);
   EXPECT_EQ(descriptor->required_feature_bits,
-            LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 |
-                LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL);
+            LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL);
   EXPECT_EQ(descriptor->llvm_source_abi,
             LOOM_X86_PACKED_DOT_LLVM_SOURCE_ABI_PAYLOAD);
   EXPECT_EQ(ToString(descriptor->instruction_mnemonic), "vdpbf16ps");
@@ -156,15 +154,12 @@ TEST(PackedDotContractTest, Avx512Bf16Descriptor) {
 }
 
 TEST(PackedDotContractTest, FeatureNamesMapToFeatureBits) {
-  EXPECT_EQ(FeatureBits("x86-avx-vnni"), LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI);
-  EXPECT_EQ(FeatureBits("x86-avx-vnni-int8"),
-            LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8);
+  EXPECT_EQ(FeatureBits("x86-avx-vnni"), LOOM_X86_FEATURE_AVX_VNNI);
+  EXPECT_EQ(FeatureBits("x86-avx-vnni-int8"), LOOM_X86_FEATURE_AVX_VNNI_INT8);
   EXPECT_EQ(FeatureBits("x86-avx512-vnni-vl"),
-            LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI |
-                LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL);
+            LOOM_X86_FEATURE_AVX512_VNNI | LOOM_X86_FEATURE_AVX512_VL);
   EXPECT_EQ(FeatureBits("x86-avx512-bf16-vl"),
-            LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 |
-                LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL);
+            LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_x86_packed_dot_feature_bits_for_name(
                             IREE_SV("x86-imaginary"), nullptr));

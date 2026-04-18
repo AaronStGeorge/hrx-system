@@ -8,12 +8,10 @@
 
 #include "loom/target/arch/x86/packed_dot_contract_data.h"
 
-#define AVX512_VNNI_FEATURES_128_256         \
-  (LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI | \
-   LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL)
-#define AVX512_BF16_FEATURES_128_256         \
-  (LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 | \
-   LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL)
+#define AVX512_VNNI_FEATURES_128_256 \
+  (LOOM_X86_FEATURE_AVX512_VNNI | LOOM_X86_FEATURE_AVX512_VL)
+#define AVX512_BF16_FEATURES_128_256 \
+  (LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL)
 
 iree_string_view_t loom_x86_packed_dot_family_name(
     loom_x86_packed_dot_family_t family) {
@@ -70,7 +68,7 @@ iree_status_t loom_x86_packed_dot_feature_bits_for_name(
   }
   *out_feature_bits = 0;
   if (iree_string_view_equal(name, IREE_SV("x86-avx512-vnni"))) {
-    *out_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI;
+    *out_feature_bits = LOOM_X86_FEATURE_AVX512_VNNI;
     return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("x86-avx512-vnni-vl"))) {
@@ -78,23 +76,23 @@ iree_status_t loom_x86_packed_dot_feature_bits_for_name(
     return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("x86-avx-vnni"))) {
-    *out_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI;
+    *out_feature_bits = LOOM_X86_FEATURE_AVX_VNNI;
     return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("x86-avx-vnni-int8"))) {
-    *out_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8;
+    *out_feature_bits = LOOM_X86_FEATURE_AVX_VNNI_INT8;
     return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("x86-avx-vnni-int16"))) {
-    *out_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT16;
+    *out_feature_bits = LOOM_X86_FEATURE_AVX_VNNI_INT16;
     return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("x86-avx10.2"))) {
-    *out_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX10_2;
+    *out_feature_bits = LOOM_X86_FEATURE_AVX10_2;
     return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("x86-avx512-bf16"))) {
-    *out_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16;
+    *out_feature_bits = LOOM_X86_FEATURE_AVX512_BF16;
     return iree_ok_status();
   }
   if (iree_string_view_equal(name, IREE_SV("x86-avx512-bf16-vl"))) {

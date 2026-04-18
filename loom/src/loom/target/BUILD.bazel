@@ -57,6 +57,12 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target:records",
 )
 
+iree_assert_no_dependency(
+    name = "low_descriptor_registry_no_x86_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:low_descriptor_registry",
+)
+
 #===------------------------------------------------------------------------===#
 # Target-neutral data shapes
 #===------------------------------------------------------------------------===#
@@ -91,7 +97,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
         "//loom/src/loom/target/arch/wasm:descriptors",
         "//loom/src/loom/target/arch/x86:avx512_descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/arch/x86:feature_bits",
         "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
         "//loom/src/loom/target/emit/ireevm:descriptors",
         "//runtime/src/iree/base",

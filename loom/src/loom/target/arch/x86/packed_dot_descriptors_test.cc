@@ -88,7 +88,7 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
   EXPECT_EQ(
       descriptor_set
           ->feature_mask_words[avx512_descriptor->feature_mask_word_start],
-      LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI);
+      LOOM_X86_FEATURE_AVX512_VNNI);
 
   const loom_low_descriptor_t* saturating_descriptor = LookupDescriptor(
       descriptor_set, IREE_SV("x86.avx512-vnni.vpdpbusds.512"));
@@ -102,7 +102,7 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
   ASSERT_NE(int8_descriptor, nullptr);
   EXPECT_EQ(descriptor_set
                 ->feature_mask_words[int8_descriptor->feature_mask_word_start],
-            LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8);
+            LOOM_X86_FEATURE_AVX_VNNI_INT8);
 
   const loom_low_descriptor_t* avx10_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx10.2.vdpphps.512"));
@@ -112,7 +112,7 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
             "dot.f16f16.f32x16");
   EXPECT_EQ(descriptor_set
                 ->feature_mask_words[avx10_descriptor->feature_mask_word_start],
-            LOOM_X86_PACKED_DOT_FEATURE_AVX10_2);
+            LOOM_X86_FEATURE_AVX10_2);
 
   const loom_low_descriptor_t* bf16_descriptor = LookupDescriptor(
       descriptor_set, IREE_SV("x86.avx512-bf16.vdpbf16ps.512"));
@@ -122,7 +122,7 @@ TEST(X86PackedDotDescriptorsTest, RepresentativeContractsCarryLowMetadata) {
             "dot.bf16bf16.f32x16");
   EXPECT_EQ(descriptor_set
                 ->feature_mask_words[bf16_descriptor->feature_mask_word_start],
-            LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16);
+            LOOM_X86_FEATURE_AVX512_BF16);
 }
 
 TEST(X86PackedDotDescriptorsTest, ManifestNamesPackedDotMetadata) {

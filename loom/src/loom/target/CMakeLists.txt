@@ -51,7 +51,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::gfx950_descriptors
     loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::arch::x86::avx512_descriptors
-    loom::src::loom::target::arch::x86::packed_dot_contract
+    loom::src::loom::target::arch::x86::feature_bits
     loom::src::loom::target::arch::x86::packed_dot_descriptors
     loom::src::loom::target::emit::ireevm::descriptors
   PUBLIC

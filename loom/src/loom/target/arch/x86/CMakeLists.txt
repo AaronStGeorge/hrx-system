@@ -12,6 +12,16 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    feature_bits
+  HDRS
+    "feature_bits.h"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     avx512_descriptors
   HDRS
     "avx512_descriptors.h"
@@ -69,6 +79,7 @@ loom_cc_library(
     "packed_dot_contract.c"
     "packed_dot_contract_data.c"
   DEPS
+    ::feature_bits
     iree::base
   PUBLIC
 )

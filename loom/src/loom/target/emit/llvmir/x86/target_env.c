@@ -6,7 +6,7 @@
 
 #include "loom/target/emit/llvmir/x86/target_env.h"
 
-#include "loom/target/arch/x86/packed_dot_contract.h"
+#include "loom/target/arch/x86/feature_bits.h"
 
 #define LOOM_LLVMIR_X86_64_TARGET_TRIPLE IREE_SVL("x86_64-unknown-linux-gnu")
 #define LOOM_LLVMIR_X86_64_DATA_LAYOUT              \
@@ -93,10 +93,9 @@ static const loom_target_config_t kX86_64ObjectConfig = {
 static const loom_target_config_t kX86_64PackedDotObjectConfig = {
     .name = IREE_SVL("packed-dot"),
     .contract_set_key = LOOM_LLVMIR_X86_64_PACKED_DOT_CONTRACT_SET,
-    .contract_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 |
-                             LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL |
-                             LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI |
-                             LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8,
+    .contract_feature_bits =
+        LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL |
+        LOOM_X86_FEATURE_AVX_VNNI | LOOM_X86_FEATURE_AVX_VNNI_INT8,
 };
 
 static const loom_target_bundle_t kX86_64ObjectBundle = {
@@ -131,10 +130,9 @@ static const loom_llvmir_target_profile_t kX86_64PackedDotObjectProfile = {
     .target_features = LOOM_LLVMIR_X86_64_PACKED_DOT_FEATURES,
     .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
     .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
-    .x86_packed_dot_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 |
-                                   LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL |
-                                   LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI |
-                                   LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8,
+    .x86_packed_dot_feature_bits =
+        LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL |
+        LOOM_X86_FEATURE_AVX_VNNI | LOOM_X86_FEATURE_AVX_VNNI_INT8,
 };
 
 static const loom_llvmir_target_profile_t* const kX86TargetProfiles[] = {

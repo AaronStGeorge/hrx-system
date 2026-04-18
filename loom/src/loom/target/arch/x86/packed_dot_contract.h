@@ -16,28 +16,14 @@
 #define LOOM_TARGET_ARCH_X86_PACKED_DOT_CONTRACT_H_
 
 #include "iree/base/api.h"
+#include "loom/target/arch/x86/feature_bits.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Bitset of x86 packed-dot features available on a selected target.
-typedef uint64_t loom_x86_packed_dot_feature_bits_t;
-
-// Target supports AVX-512 VNNI byte/word dot products.
-#define LOOM_X86_PACKED_DOT_FEATURE_AVX512_VNNI (UINT64_C(1) << 0)
-// Target supports AVX-512 VL encodings for 128-bit and 256-bit forms.
-#define LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL (UINT64_C(1) << 1)
-// Target supports VEX AVX-VNNI 128-bit and 256-bit forms.
-#define LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI (UINT64_C(1) << 2)
-// Target supports AVX-VNNI-INT8 byte dot-product forms.
-#define LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8 (UINT64_C(1) << 3)
-// Target supports AVX-VNNI-INT16 word dot-product forms.
-#define LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT16 (UINT64_C(1) << 4)
-// Target supports AVX10.2 extended VNNI dot products.
-#define LOOM_X86_PACKED_DOT_FEATURE_AVX10_2 (UINT64_C(1) << 5)
-// Target supports AVX-512 BF16 dot products.
-#define LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 (UINT64_C(1) << 6)
+// Bitset of x86 features relevant to packed-dot contract availability.
+typedef loom_x86_feature_bits_t loom_x86_packed_dot_feature_bits_t;
 
 typedef enum loom_x86_packed_dot_family_e {
   // Unknown or uninitialized packed-dot family.

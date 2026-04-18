@@ -86,6 +86,12 @@ iree_assert_no_dependency(
 #===------------------------------------------------------------------------===#
 
 loom_cc_library(
+    name = "feature_bits",
+    hdrs = ["feature_bits.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
     name = "avx512_descriptors",
     srcs = ["avx512_descriptors.c"],
     hdrs = ["avx512_descriptors.h"],
@@ -136,7 +142,10 @@ loom_cc_library(
         "packed_dot_contract.h",
         "packed_dot_contract_data.h",
     ],
-    deps = ["//runtime/src/iree/base"],
+    deps = [
+        ":feature_bits",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_cc_library(

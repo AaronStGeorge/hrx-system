@@ -14,7 +14,7 @@
 #include "loom/target/arch/amdgpu/gfx950_descriptors.h"
 #include "loom/target/arch/wasm/descriptors.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
-#include "loom/target/arch/x86/packed_dot_contract.h"
+#include "loom/target/arch/x86/feature_bits.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/emit/ireevm/descriptors.h"
 
@@ -178,10 +178,9 @@ static const loom_target_snapshot_t kX86PackedDotSnapshot = {
 static const loom_target_config_t kX86PackedDotConfig = {
     .name = IREE_SVL("x86.packed_dot.core"),
     .contract_set_key = IREE_SVL("x86.packed_dot.core"),
-    .contract_feature_bits = LOOM_X86_PACKED_DOT_FEATURE_AVX512_BF16 |
-                             LOOM_X86_PACKED_DOT_FEATURE_AVX512_VL |
-                             LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI |
-                             LOOM_X86_PACKED_DOT_FEATURE_AVX_VNNI_INT8,
+    .contract_feature_bits =
+        LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL |
+        LOOM_X86_FEATURE_AVX_VNNI | LOOM_X86_FEATURE_AVX_VNNI_INT8,
 };
 
 static const loom_target_bundle_t kX86PackedDotBundle = {

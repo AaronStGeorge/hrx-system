@@ -4,12 +4,23 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library", "loom_cc_test")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_assert_no_dependency",
+    "loom_cc_library",
+    "loom_cc_test",
+)
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+iree_assert_no_dependency(
+    name = "target_env_no_packed_dot_contract_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/emit/llvmir/x86:target_env",
 )
 
 loom_cc_library(
@@ -28,7 +39,7 @@ loom_cc_library(
     hdrs = ["target_env.h"],
     deps = [
         "//loom/src/loom/target:types",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/arch/x86:feature_bits",
         "//loom/src/loom/target/emit/llvmir:target_presets",
         "//runtime/src/iree/base",
     ],
