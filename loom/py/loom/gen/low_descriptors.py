@@ -24,10 +24,12 @@ from typing import TypeVar
 
 from loom.gen import bootstrap as _bootstrap
 from loom.target.low_descriptors import (
+    LOW_DESCRIPTOR_ENCODING_ID_NONE,
     LOW_DESCRIPTOR_SET_ABI_VERSION,
     CEnum,
     Constraint,
     Descriptor,
+    DescriptorFlag,
     DescriptorSet,
     Effect,
     EnumDomain,
@@ -185,6 +187,10 @@ def _hex_u64_literal(value: int) -> str:
     return f"UINT64_C(0x{value:x})"
 
 
+def _encoding_id_expr(value: int) -> str:
+    return "LOOM_LOW_ID_NONE" if value == LOW_DESCRIPTOR_ENCODING_ID_NONE else str(value)
+
+
 def _clang_format_source(source: str, assume_filename: Path) -> str:
     result = subprocess.run(
         ["clang-format", f"--assume-filename={assume_filename}"],
@@ -287,6 +293,12 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
 
     for descriptor in selected_descriptors:
         _validate_descriptor_operands(descriptor)
+        if descriptor.encoding_id < 0 or descriptor.encoding_id > LOW_DESCRIPTOR_ENCODING_ID_NONE:
+            raise ValueError(f"descriptor '{descriptor.key}' encoding id does not fit u16")
+        if descriptor.encoding_id == LOW_DESCRIPTOR_ENCODING_ID_NONE and DescriptorFlag.PSEUDO not in descriptor.flags:
+            raise ValueError(f"descriptor '{descriptor.key}' uses absent encoding id without the pseudo flag")
+        if DescriptorFlag.PSEUDO in descriptor.flags and descriptor.encoding_id != LOW_DESCRIPTOR_ENCODING_ID_NONE:
+            raise ValueError(f"descriptor '{descriptor.key}' uses the pseudo flag with a target encoding id")
         if descriptor.schedule_class is None:
             raise ValueError(f"descriptor '{descriptor.key}' has no schedule class")
         if descriptor.schedule_class not in schedule_inputs:
@@ -842,7 +854,7 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
                 f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
                 f".feature_mask_word_start = {compiled.descriptor_rows[i]['feature_mask_word_start']},",
                 f".feature_mask_word_count = {compiled.descriptor_rows[i]['feature_mask_word_count']},",
-                f".encoding_id = {descriptor.encoding_id},",
+                f".encoding_id = {_encoding_id_expr(descriptor.encoding_id)},",
                 f".operand_start = {compiled.descriptor_rows[i]['operand_start']},",
                 f".operand_count = {compiled.descriptor_rows[i]['operand_count']},",
                 f".result_count = {compiled.descriptor_rows[i]['result_count']},",

@@ -373,6 +373,25 @@ static bool loom_low_effect_kind_requires_side_effecting_flag(
   }
 }
 
+static iree_status_t loom_low_verify_descriptor_encoding_contract(
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  const bool is_pseudo =
+      iree_all_bits_set(descriptor->flags, LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO);
+  if (is_pseudo && descriptor->encoding_id != LOOM_LOW_ID_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " is pseudo but has target encoding id %" PRIu16,
+                            descriptor_index, descriptor->encoding_id);
+  }
+  if (!is_pseudo && descriptor->encoding_id == LOOM_LOW_ID_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor %" PRIu32
+                            " has no target encoding id but is not pseudo",
+                            descriptor_index);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor_effect_contract(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
@@ -558,6 +577,8 @@ static iree_status_t loom_low_verify_descriptor(
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_roles(
       descriptor_set, descriptor, descriptor_index));
+  IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_encoding_contract(
+      descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_effect_contract(
       descriptor_set, descriptor, descriptor_index));
   return loom_low_verify_descriptor_constraints(descriptor_set, descriptor);

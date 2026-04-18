@@ -1608,7 +1608,7 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
             AMDGPU_GFX1250_CORE_STRING_semantic_amdgpu_v_wmma_f32_16x16x32_f16,
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
-        .encoding_id = 0,
+        .encoding_id = LOOM_LOW_ID_NONE,
         .operand_start = 18,
         .operand_count = 4,
         .result_count = 1,
@@ -1619,7 +1619,8 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
         .constraint_start = 0,
         .constraint_count = 0,
         .schedule_class_id = 5,
-        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE |
+                 LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO,
     },
     {
         .key_string_offset =
@@ -1630,7 +1631,7 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
             AMDGPU_GFX1250_CORE_STRING_semantic_amdgpu_v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8,
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
-        .encoding_id = 0,
+        .encoding_id = LOOM_LOW_ID_NONE,
         .operand_start = 22,
         .operand_count = 6,
         .result_count = 1,
@@ -1641,7 +1642,8 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
         .constraint_start = 0,
         .constraint_count = 0,
         .schedule_class_id = 6,
-        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE |
+                 LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO,
     },
     {
         .key_string_offset =
@@ -1652,7 +1654,7 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
             AMDGPU_GFX1250_CORE_STRING_semantic_amdgpu_v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8,
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
-        .encoding_id = 0,
+        .encoding_id = LOOM_LOW_ID_NONE,
         .operand_start = 28,
         .operand_count = 6,
         .result_count = 1,
@@ -1663,7 +1665,8 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
         .constraint_start = 0,
         .constraint_count = 0,
         .schedule_class_id = 6,
-        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE |
+                 LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO,
     },
     {
         .key_string_offset =
@@ -1674,7 +1677,7 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
             AMDGPU_GFX1250_CORE_STRING_semantic_amdgpu_v_swmmac_f32_16x16x64_f16,
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
-        .encoding_id = 0,
+        .encoding_id = LOOM_LOW_ID_NONE,
         .operand_start = 34,
         .operand_count = 5,
         .result_count = 1,
@@ -1685,7 +1688,8 @@ static const loom_low_descriptor_t kAmdgpuGfx1250CoreDescriptors[] = {
         .constraint_start = 0,
         .constraint_count = 3,
         .schedule_class_id = 7,
-        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE |
+                 LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO,
     },
 };
 

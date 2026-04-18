@@ -20,6 +20,7 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
     AMDGPU_GFX1250_CORE_DESCRIPTOR_SET,
 )
+from loom.target.low_descriptors import LOW_DESCRIPTOR_ENCODING_ID_NONE, DescriptorFlag
 
 
 def test_gfx950_core_descriptors_are_materialized_from_snapshot() -> None:
@@ -204,6 +205,9 @@ def test_gfx1250_baseline_descriptors_are_materialized_from_snapshot() -> None:
         AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[10].key
         == "amdgpu.v_wmma_f32_16x16x32_f16"
     )
+    for descriptor in AMDGPU_GFX1250_CORE_DESCRIPTOR_SET.descriptors[10:]:
+        assert descriptor.encoding_id == LOW_DESCRIPTOR_ENCODING_ID_NONE
+        assert DescriptorFlag.PSEUDO in descriptor.flags
 
 
 def test_gfx1250_snapshot_covers_rdna4_baseline_source_facts() -> None:

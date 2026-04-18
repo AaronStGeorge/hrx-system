@@ -25,7 +25,14 @@ from loom.target.arch.x86.descriptors import (
     X86_PACKED_DOT_DESCRIPTOR_SET,
 )
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
-from loom.target.low_descriptors import EnumDomain, EnumValue, ImmediateKind, OperandRole
+from loom.target.low_descriptors import (
+    LOW_DESCRIPTOR_ENCODING_ID_NONE,
+    DescriptorFlag,
+    EnumDomain,
+    EnumValue,
+    ImmediateKind,
+    OperandRole,
+)
 
 
 def test_generate_ireevm_core_descriptor_set() -> None:
@@ -161,6 +168,8 @@ def test_generate_amdgpu_gfx1250_core_descriptor_set() -> None:
     assert "amdgpu.v_wmma_f32_16x16x32_f16" in generated.source
     assert "amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8" in generated.source
     assert "amdgpu.v_swmmac_f32_16x16x64_f16" in generated.source
+    assert ".encoding_id = LOOM_LOW_ID_NONE" in generated.source
+    assert "LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO" in generated.source
     assert "fingerprint" not in generated.source
     assert "fingerprint" not in generated.manifest_json
 
@@ -175,6 +184,7 @@ def test_generate_amdgpu_gfx1250_core_descriptor_set() -> None:
     assert manifest["table_counts"]["resources"] >= 8
     assert any(descriptor["key"] == "amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.v_swmmac_f32_16x16x64_f16" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x32_f16" and "LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO" in descriptor["flags"] for descriptor in manifest["descriptors"])
 
 
 def test_generate_x86_avx512_core_descriptor_set() -> None:
@@ -423,5 +433,36 @@ def test_generator_rejects_implicit_operand_without_implicit_flag() -> None:
     with pytest.raises(
         ValueError,
         match=("descriptor 'iree.vm.add.i32' implicit operand 'lhs' must set the implicit flag"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_absent_encoding_without_pseudo_flag() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' uses absent encoding id without the pseudo flag"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_pseudo_flag_with_target_encoding() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        flags=(
+            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].flags,
+            DescriptorFlag.PSEUDO,
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' uses the pseudo flag with a target encoding id"),
     ):
         generate_descriptor_set(descriptor_set)

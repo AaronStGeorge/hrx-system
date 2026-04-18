@@ -21,6 +21,7 @@ from loom.target.arch.amdgpu.isa_snapshot import (
     parse_amdgpu_isa_snapshot_json,
 )
 from loom.target.low_descriptors import (
+    LOW_DESCRIPTOR_ENCODING_ID_NONE,
     Constraint,
     ConstraintKind,
     Descriptor,
@@ -282,6 +283,7 @@ _DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
     Constraint(ConstraintKind.EARLY_CLOBBER, 0),
 )
+_PSEUDO_DEAD_REMOVABLE_FLAGS = (DescriptorFlag.DEAD_REMOVABLE, DescriptorFlag.PSEUDO)
 
 _IGNORE_SCC_OUTPUT = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_SSRC_SPECIAL_SCC",
@@ -1034,7 +1036,8 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _vgpr_const_operand("acc", units=8),
             ),
             schedule_class=_SCHEDULE_WMMA,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+            encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+            flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
         ),
         Descriptor(
             key="amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8",
@@ -1059,7 +1062,8 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _MATRIX_B_REUSE_IMMEDIATE,
             ),
             schedule_class=_SCHEDULE_WMMA_SCALE,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+            encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+            flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
         ),
         Descriptor(
             key="amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8",
@@ -1084,7 +1088,8 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _MATRIX_B_REUSE_IMMEDIATE,
             ),
             schedule_class=_SCHEDULE_WMMA_SCALE,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+            encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+            flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
         ),
         Descriptor(
             key="amdgpu.v_swmmac_f32_16x16x64_f16",
@@ -1100,7 +1105,8 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             immediates=(_INDEX_KEY_16_IMMEDIATE,),
             constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
             schedule_class=_SCHEDULE_SWMMAC,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+            encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+            flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
         ),
     ),
 )

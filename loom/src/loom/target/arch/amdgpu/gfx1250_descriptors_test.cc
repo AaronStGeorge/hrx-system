@@ -22,6 +22,12 @@ const loom_low_descriptor_t* LookupDescriptor(
   return loom_low_descriptor_set_descriptor_at(descriptor_set, ordinal);
 }
 
+void ExpectPseudoMatrixDescriptor(const loom_low_descriptor_t* descriptor) {
+  EXPECT_EQ(descriptor->encoding_id, LOOM_LOW_ID_NONE);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO, 0u);
+  EXPECT_NE(descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE, 0u);
+}
+
 TEST(AmdgpuDescriptorsTest, Gfx1250CoreDescriptorSetVerifies) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_amdgpu_gfx1250_core_descriptor_set();
@@ -108,13 +114,14 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   EXPECT_EQ(idle_wait_descriptor->encoding_id, 10u);
 }
 
-TEST(AmdgpuDescriptorsTest, Gfx1250WmmaPacketMatchesRdna4RegisterShape) {
+TEST(AmdgpuDescriptorsTest, Gfx1250WmmaPseudoModelsRegisterShape) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_amdgpu_gfx1250_core_descriptor_set();
 
   const loom_low_descriptor_t* wmma_descriptor = LookupDescriptor(
       descriptor_set, IREE_SV("amdgpu.v_wmma_f32_16x16x32_f16"));
   ASSERT_NE(wmma_descriptor, nullptr);
+  ExpectPseudoMatrixDescriptor(wmma_descriptor);
   EXPECT_EQ(wmma_descriptor->operand_count, 4u);
   EXPECT_EQ(wmma_descriptor->result_count, 1u);
 
@@ -155,6 +162,7 @@ TEST(AmdgpuDescriptorsTest, Gfx1250ScaledWmmaModelsScaleOperandsAndImmediates) {
       descriptor_set,
       IREE_SV("amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8"));
   ASSERT_NE(scale_descriptor, nullptr);
+  ExpectPseudoMatrixDescriptor(scale_descriptor);
   EXPECT_EQ(scale_descriptor->operand_count, 6u);
   EXPECT_EQ(scale_descriptor->result_count, 1u);
   ASSERT_EQ(scale_descriptor->immediate_count, 8u);
@@ -186,6 +194,7 @@ TEST(AmdgpuDescriptorsTest, Gfx1250ScaledWmmaModelsScaleOperandsAndImmediates) {
       descriptor_set,
       IREE_SV("amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8"));
   ASSERT_NE(scale16_descriptor, nullptr);
+  ExpectPseudoMatrixDescriptor(scale16_descriptor);
   EXPECT_EQ(scale16_descriptor->operand_count, 6u);
   ASSERT_EQ(scale16_descriptor->immediate_count, 8u);
   const loom_low_operand_t* scale16_operands =
@@ -202,6 +211,7 @@ TEST(AmdgpuDescriptorsTest,
   const loom_low_descriptor_t* swmmac_descriptor = LookupDescriptor(
       descriptor_set, IREE_SV("amdgpu.v_swmmac_f32_16x16x64_f16"));
   ASSERT_NE(swmmac_descriptor, nullptr);
+  ExpectPseudoMatrixDescriptor(swmmac_descriptor);
   EXPECT_EQ(swmmac_descriptor->operand_count, 5u);
   EXPECT_EQ(swmmac_descriptor->result_count, 1u);
   ASSERT_EQ(swmmac_descriptor->immediate_count, 1u);

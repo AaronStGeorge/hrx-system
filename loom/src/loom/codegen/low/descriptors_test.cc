@@ -457,6 +457,35 @@ TEST(LowDescriptorsTest, AcceptsDeadRemovableReadEffect) {
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
 }
 
+TEST(LowDescriptorsTest, AcceptsPseudoWithoutTargetEncoding) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptors[1].encoding_id = LOOM_LOW_ID_NONE;
+  tables.descriptors[1].flags =
+      LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE | LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsAbsentEncodingWithoutPseudoFlag) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptors[1].encoding_id = LOOM_LOW_ID_NONE;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsPseudoFlagWithTargetEncoding) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptors[1].flags =
+      LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE | LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorsTest, AcceptsSideEffectingReadEffect) {
   TestTables tables;
   InitializeTestTables(&tables);
