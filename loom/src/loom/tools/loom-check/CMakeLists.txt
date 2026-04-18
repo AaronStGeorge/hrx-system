@@ -31,14 +31,12 @@ loom_cc_library(
     "diagnostics.h"
     "execute.h"
     "llvmir_targets.h"
-    "low_targets.h"
     "requirements.h"
   SRCS
     "diagnostics.c"
     "emit.c"
     "execute.c"
     "llvmir_targets.c"
-    "low_targets.c"
     "requirements.c"
     "roundtrip.c"
     "verify.c"
@@ -60,8 +58,6 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
-    loom::src::loom::target::arch::wasm::descriptors
-    loom::src::loom::target::emit::ireevm::descriptors
     loom::src::loom::target::emit::llvmir::amdgpu::legality
     loom::src::loom::target::emit::llvmir::amdgpu::lower
     loom::src::loom::target::emit::llvmir::amdgpu::target_env
@@ -74,6 +70,7 @@ loom_cc_library(
     loom::src::loom::target::emit::llvmir::x86::legality
     loom::src::loom::target::emit::llvmir::x86::lower
     loom::src::loom::target::emit::llvmir::x86::target_env
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::types
     loom::src::loom::testing::diff
     loom::src::loom::transforms::branch_fusion

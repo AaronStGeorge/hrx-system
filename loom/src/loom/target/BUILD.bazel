@@ -77,11 +77,39 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "low_descriptor_registry",
+    srcs = ["low_descriptor_registry.c"],
+    hdrs = ["low_descriptor_registry.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/target/arch/amdgpu:gfx11_descriptors",
+        "//loom/src/loom/target/arch/amdgpu:gfx1250_descriptors",
+        "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
+        "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:avx512_descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
+        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_test(
     name = "records_test",
     srcs = ["records_test.cc"],
     deps = [
         ":records",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "low_descriptor_registry_test",
+    srcs = ["low_descriptor_registry_test.cc"],
+    deps = [
+        ":low_descriptor_registry",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

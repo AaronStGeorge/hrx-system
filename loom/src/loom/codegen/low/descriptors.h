@@ -569,11 +569,34 @@ typedef struct loom_low_descriptor_set_t {
   uint32_t feature_mask_word_count;
 } loom_low_descriptor_set_t;
 
+// Borrowed descriptor-set registry available to low verification/emission runs.
+// Entries may be in any order; lookups reject duplicate matching keys so
+// callers do not need a separate normalization step for correctness.
+typedef struct loom_low_descriptor_registry_t {
+  // Borrowed descriptor-set pointers linked into the current compiler binary.
+  const loom_low_descriptor_set_t* const* descriptor_sets;
+  // Number of descriptor-set pointers in |descriptor_sets|.
+  iree_host_size_t descriptor_set_count;
+} loom_low_descriptor_registry_t;
+
 // Verifies structural integrity of a descriptor set. This checks table spans,
 // string offsets, descriptor key uniqueness, and cross-table references; it
 // does not perform full target legality.
 iree_status_t loom_low_descriptor_set_verify(
     const loom_low_descriptor_set_t* descriptor_set);
+
+// Verifies descriptor registry integrity. Registry validation is an
+// infrastructure contract: malformed registries return status failures instead
+// of user IR diagnostics.
+iree_status_t loom_low_descriptor_registry_verify(
+    const loom_low_descriptor_registry_t* registry);
+
+// Looks up |key| in |registry|. Returns OK with NULL when no set matches.
+// Duplicate matching keys return ALREADY_EXISTS because target binding and
+// emission must be deterministic.
+iree_status_t loom_low_descriptor_registry_lookup(
+    const loom_low_descriptor_registry_t* registry, iree_string_view_t key,
+    const loom_low_descriptor_set_t** out_descriptor_set);
 
 // Returns the B-string view at |string_offset|. A NONE offset returns an empty
 // string.

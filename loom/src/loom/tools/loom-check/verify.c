@@ -9,9 +9,9 @@
 #include "loom/codegen/low/verify.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
+#include "loom/target/low_descriptor_registry.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
-#include "loom/tools/loom-check/low_targets.h"
 
 //===----------------------------------------------------------------------===//
 // Verify execution
@@ -82,8 +82,8 @@ iree_status_t loom_check_execute_verify(
       status = loom_verify_module(module, &verify_options, &verify_result);
     }
     if (iree_status_is_ok(status) && verify_result.error_count == 0) {
-      loom_check_low_descriptor_registry_t low_registry;
-      loom_check_low_descriptor_registry_initialize(&low_registry);
+      loom_target_low_descriptor_registry_t low_registry;
+      loom_target_low_descriptor_registry_initialize(&low_registry);
       loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
           .diagnostic_collector = &collector,
           .module = module,
@@ -92,6 +92,7 @@ iree_status_t loom_check_execute_verify(
           .emitter = LOOM_EMITTER_VERIFIER,
       };
       loom_low_verify_options_t low_verify_options = {
+          .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
           .descriptor_registry = &low_registry.registry,
           .emitter =
               {

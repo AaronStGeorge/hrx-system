@@ -1006,6 +1006,45 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestUsesLowRegistry) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitLowDescriptorManifestExposesX86NativeShards) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit low-descriptor-manifest x86.avx512.core\n"
+                   "func.def @unused() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"key\":\"x86.avx512.core\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"target\":\"x86\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"x86.avx512.vpdpbusd.zmm\""),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitLowDescriptorManifestExposesAmdgpuNativeShards) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit low-descriptor-manifest amdgpu.gfx1250.core\n"
+                   "func.def @unused() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"key\":\"amdgpu.gfx1250.core\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"target\":\"amdgpu\""), std::string::npos);
+  EXPECT_NE(
+      actual_output.find("\"amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8\""),
+      std::string::npos);
+  EXPECT_NE(actual_output.find("\"dead_removable\""), std::string::npos);
+  EXPECT_NE(actual_output.find("\"pseudo\""), std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
   loom_check_result_t result;
   IREE_ASSERT_OK(

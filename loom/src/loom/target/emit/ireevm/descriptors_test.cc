@@ -86,7 +86,10 @@ TEST(IreeVmDescriptorsTest, ManifestNamesCallAndControlPackets) {
   EXPECT_NE(json.find("\"key\":\"iree.vm.call.import.i32\""),
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"iree.vm.cond_br.i32\""), std::string::npos);
-  EXPECT_NE(json.find("\"effects\":1"), std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"control\""), std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"call\""), std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"ordered\",\"dependency\"]"),
+            std::string::npos);
 }
 
 }  // namespace

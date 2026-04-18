@@ -14,9 +14,9 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/target/low_descriptor_registry.h"
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
-#include "loom/tools/loom-check/low_targets.h"
 #include "loom/tools/loom-check/requirements.h"
 #include "loom/transforms/branch_fusion.h"
 #include "loom/transforms/branch_sink.h"
@@ -370,8 +370,8 @@ static iree_status_t loom_check_verify_pass_output(
   *out_failed_verification = verify_result.error_count > 0;
   if (*out_failed_verification) return iree_ok_status();
 
-  loom_check_low_descriptor_registry_t low_registry;
-  loom_check_low_descriptor_registry_initialize(&low_registry);
+  loom_target_low_descriptor_registry_t low_registry;
+  loom_target_low_descriptor_registry_initialize(&low_registry);
   loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
       .diagnostic_collector = diagnostic_collector,
       .module = module,
@@ -380,6 +380,7 @@ static iree_status_t loom_check_verify_pass_output(
       .emitter = LOOM_EMITTER_VERIFIER,
   };
   loom_low_verify_options_t low_verify_options = {
+      .flags = LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY,
       .descriptor_registry = &low_registry.registry,
       .emitter =
           {

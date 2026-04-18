@@ -33,6 +33,27 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    low_descriptor_registry
+  HDRS
+    "low_descriptor_registry.h"
+  SRCS
+    "low_descriptor_registry.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::target::arch::amdgpu::gfx11_descriptors
+    loom::src::loom::target::arch::amdgpu::gfx1250_descriptors
+    loom::src::loom::target::arch::amdgpu::gfx12_descriptors
+    loom::src::loom::target::arch::amdgpu::gfx950_descriptors
+    loom::src::loom::target::arch::wasm::descriptors
+    loom::src::loom::target::arch::x86::avx512_descriptors
+    loom::src::loom::target::arch::x86::packed_dot_descriptors
+    loom::src::loom::target::emit::ireevm::descriptors
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     records_test
@@ -40,6 +61,17 @@ loom_cc_test(
     "records_test.cc"
   DEPS
     ::records
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    low_descriptor_registry_test
+  SRCS
+    "low_descriptor_registry_test.cc"
+  DEPS
+    ::low_descriptor_registry
     iree::testing::gtest
     iree::testing::gtest_main
 )

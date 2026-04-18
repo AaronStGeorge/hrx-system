@@ -13,10 +13,10 @@
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
+#include "loom/target/low_descriptor_registry.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/llvmir_targets.h"
-#include "loom/tools/loom-check/low_targets.h"
 #include "loom/util/stream.h"
 
 typedef enum loom_check_emit_format_e {
@@ -79,7 +79,7 @@ static iree_status_t loom_check_emit_parse_request(
                                     IREE_SV("low-descriptor-json"))) {
     const loom_low_descriptor_set_t* descriptor_set = NULL;
     IREE_RETURN_IF_ERROR(
-        loom_check_low_descriptor_set_lookup(profile_name, &descriptor_set));
+        loom_target_low_descriptor_set_lookup(profile_name, &descriptor_set));
     if (descriptor_set != NULL) {
       out_request->format = LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST;
       out_request->low_descriptor_set = descriptor_set;
