@@ -74,6 +74,14 @@ typedef struct loom_pass_option_schema_t {
   uint16_t enum_value_count;
 } loom_pass_option_schema_t;
 
+// Static requirement declared by a pass descriptor.
+typedef struct loom_pass_requirement_def_t {
+  // Stable requirement key.
+  iree_string_view_t key;
+  // Human-readable description of the requirement.
+  iree_string_view_t description;
+} loom_pass_requirement_def_t;
+
 // Static descriptor for one pass implementation.
 typedef struct loom_pass_descriptor_t {
   // Canonical pass key used by textual pipelines and future pass.run ops.
@@ -98,6 +106,10 @@ typedef struct loom_pass_descriptor_t {
   const loom_pass_option_schema_t* option_schema;
   // Number of entries in |option_schema|.
   uint16_t option_schema_count;
+  // Requirement metadata needed before the pass can run.
+  const loom_pass_requirement_def_t* requirement_defs;
+  // Number of entries in |requirement_defs|.
+  uint16_t requirement_count;
 } loom_pass_descriptor_t;
 
 // Decoded value for one pass option schema entry.

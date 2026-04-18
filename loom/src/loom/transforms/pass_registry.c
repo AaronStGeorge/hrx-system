@@ -334,6 +334,48 @@ static iree_status_t loom_pass_registry_verify_option_schema(
   return iree_ok_status();
 }
 
+static iree_status_t loom_pass_registry_verify_requirements(
+    const loom_pass_descriptor_t* descriptor) {
+  if (descriptor->requirement_count > 0 && !descriptor->requirement_defs) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pass descriptor '%.*s' has no requirement defs",
+                            (int)descriptor->key.size, descriptor->key.data);
+  }
+  for (uint16_t i = 0; i < descriptor->requirement_count; ++i) {
+    const loom_pass_requirement_def_t* requirement =
+        &descriptor->requirement_defs[i];
+    if (iree_string_view_is_empty(requirement->key)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' requirement %u has no key",
+          (int)descriptor->key.size, descriptor->key.data, (unsigned)i);
+    }
+    if (iree_string_view_is_empty(requirement->description)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass descriptor '%.*s' requirement '%.*s' has no description",
+          (int)descriptor->key.size, descriptor->key.data,
+          (int)requirement->key.size, requirement->key.data);
+    }
+    if (i > 0) {
+      const loom_pass_requirement_def_t* previous =
+          &descriptor->requirement_defs[i - 1];
+      int comparison =
+          iree_string_view_compare(previous->key, requirement->key);
+      if (comparison >= 0) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "pass descriptor '%.*s' requirements must be strictly sorted; "
+            "'%.*s' precedes '%.*s'",
+            (int)descriptor->key.size, descriptor->key.data,
+            (int)previous->key.size, previous->key.data,
+            (int)requirement->key.size, requirement->key.data);
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_pass_registry_verify(const loom_pass_registry_t* registry) {
   if (!registry) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -369,6 +411,7 @@ iree_status_t loom_pass_registry_verify(const loom_pass_registry_t* registry) {
     }
     IREE_RETURN_IF_ERROR(
         loom_pass_registry_verify_option_schema(descriptor, info));
+    IREE_RETURN_IF_ERROR(loom_pass_registry_verify_requirements(descriptor));
     if (iree_any_bit_set(
             descriptor->flags,
             ~(loom_pass_descriptor_flags_t)LOOM_PASS_DESCRIPTOR_UNAVAILABLE)) {

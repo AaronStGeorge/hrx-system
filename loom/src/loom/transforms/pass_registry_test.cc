@@ -37,6 +37,59 @@ TEST(PassRegistryTest, BuiltinRegistryIsSorted) {
   }
 }
 
+TEST(PassRegistryTest, VerifiesRequirementMetadata) {
+  const loom_pass_requirement_def_t requirements[] = {
+      {
+          .key = IREE_SVL("analysis.liveness"),
+          .description = IREE_SVL("Requires precomputed liveness."),
+      },
+      {
+          .key = IREE_SVL("target.low-descriptor-registry"),
+          .description = IREE_SVL("Requires a target-low descriptor registry."),
+      },
+  };
+  const loom_pass_descriptor_t descriptor = {
+      .key = IREE_SVL("dce"),
+      .info = loom_dce_pass_info,
+      .function_run = loom_dce_run,
+      .requirement_defs = requirements,
+      .requirement_count = IREE_ARRAYSIZE(requirements),
+  };
+  const loom_pass_registry_t registry = {
+      .descriptors = &descriptor,
+      .descriptor_count = 1,
+  };
+
+  IREE_ASSERT_OK(loom_pass_registry_verify(&registry));
+}
+
+TEST(PassRegistryTest, RejectsUnsortedRequirementMetadata) {
+  const loom_pass_requirement_def_t requirements[] = {
+      {
+          .key = IREE_SVL("target.low-descriptor-registry"),
+          .description = IREE_SVL("Requires a target-low descriptor registry."),
+      },
+      {
+          .key = IREE_SVL("analysis.liveness"),
+          .description = IREE_SVL("Requires precomputed liveness."),
+      },
+  };
+  const loom_pass_descriptor_t descriptor = {
+      .key = IREE_SVL("dce"),
+      .info = loom_dce_pass_info,
+      .function_run = loom_dce_run,
+      .requirement_defs = requirements,
+      .requirement_count = IREE_ARRAYSIZE(requirements),
+  };
+  const loom_pass_registry_t registry = {
+      .descriptors = &descriptor,
+      .descriptor_count = 1,
+  };
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_pass_registry_verify(&registry));
+}
+
 TEST(PassRegistryTest, LookupKnownAndUnknownPasses) {
   const loom_pass_descriptor_t* descriptor = nullptr;
   IREE_ASSERT_OK(loom_pass_registry_lookup(
