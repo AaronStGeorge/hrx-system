@@ -132,6 +132,50 @@ TEST(JsonSink, WarningFormat) {
   EXPECT_NE(json.find("\"severity\":\"warning\""), std::string::npos);
 }
 
+TEST(JsonSink, BackendPressureRemarkIsStructured) {
+  iree_string_view_t contributors[] = {
+      IREE_SV("%acc0"),
+      IREE_SV("%acc1"),
+      IREE_SV("%a_frag0"),
+      IREE_SV("%b_frag0"),
+  };
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(IREE_SV("amdgpu.gfx950")),
+      loom_param_string(IREE_SV("matmul_q4")),
+      loom_param_string(IREE_SV("wg128_mfma_i8_k64_unroll4")),
+      loom_param_string(IREE_SV("matmul_q4_low")),
+      loom_param_string(IREE_SV("vgpr")),
+      loom_param_u32(96),
+      loom_param_u32(132),
+      loom_param_string(IREE_SV("^k_loop")),
+      loom_param_string(IREE_SV("%acc8")),
+      loom_param_string_list(contributors, IREE_ARRAYSIZE(contributors)),
+  };
+
+  loom_diagnostic_t diagnostic = {};
+  diagnostic.severity = LOOM_DIAGNOSTIC_REMARK;
+  diagnostic.error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 3);
+  diagnostic.params = params;
+  diagnostic.param_count = IREE_ARRAYSIZE(params);
+  diagnostic.emitter = LOOM_EMITTER_PASS;
+
+  std::string json = EmitJson(&diagnostic);
+  EXPECT_NE(json.find("\"severity\":\"remark\""), std::string::npos);
+  EXPECT_NE(json.find("\"error_id\":\"ERR_BACKEND_003\""), std::string::npos);
+  EXPECT_NE(json.find("\"domain\":\"BACKEND\""), std::string::npos);
+  EXPECT_NE(json.find("\"emitter\":\"pass\""), std::string::npos);
+  EXPECT_NE(json.find("\"target_key\":\"amdgpu.gfx950\""), std::string::npos);
+  EXPECT_NE(json.find("\"config_key\":\"wg128_mfma_i8_k64_unroll4\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"budget\":96"), std::string::npos);
+  EXPECT_NE(json.find("\"peak\":132"), std::string::npos);
+  EXPECT_NE(json.find("peak vgpr pressure is 132 unit(s) against budget 96"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"contributors\":[\"%acc0\",\"%acc1\",\"%a_frag0\","
+                      "\"%b_frag0\"]"),
+            std::string::npos);
+}
+
 //===----------------------------------------------------------------------===//
 // Structured diagnostics with type params
 //===----------------------------------------------------------------------===//

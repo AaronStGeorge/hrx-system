@@ -60,6 +60,7 @@ typedef enum loom_error_domain_e {
   LOOM_ERROR_DOMAIN_BYTECODE = 8,   // Format errors, version mismatches.
   LOOM_ERROR_DOMAIN_FOLD = 9,       // Poison folding, canonicalization.
   LOOM_ERROR_DOMAIN_LOWERING = 10,  // Pass legality and unsupported mappings.
+  LOOM_ERROR_DOMAIN_BACKEND = 11,   // Target codegen feedback and emission.
   LOOM_ERROR_DOMAIN_COUNT_,
 } loom_error_domain_t;
 
@@ -103,12 +104,13 @@ typedef enum loom_emitter_e {
 // Parameter kind for diagnostic parameters. Determines how the parameter
 // is stored in a loom_diagnostic_param_t and how it is rendered.
 typedef enum loom_param_kind_e {
-  LOOM_PARAM_STRING = 0,  // iree_string_view_t
-  LOOM_PARAM_I64 = 1,     // int64_t
-  LOOM_PARAM_U32 = 2,     // uint32_t
-  LOOM_PARAM_BOOL = 3,    // bool
-  LOOM_PARAM_TYPE = 4,    // loom_type_t (rendered by type printer)
-  LOOM_PARAM_U64 = 5,     // uint64_t
+  LOOM_PARAM_STRING = 0,       // iree_string_view_t
+  LOOM_PARAM_I64 = 1,          // int64_t
+  LOOM_PARAM_U32 = 2,          // uint32_t
+  LOOM_PARAM_BOOL = 3,         // bool
+  LOOM_PARAM_TYPE = 4,         // loom_type_t (rendered by type printer)
+  LOOM_PARAM_U64 = 5,          // uint64_t
+  LOOM_PARAM_STRING_LIST = 6,  // Span of iree_string_view_t values.
   LOOM_PARAM_COUNT_,
 } loom_param_kind_t;
 
@@ -156,6 +158,13 @@ typedef struct loom_error_def_t {
   uint8_t param_count;
 } loom_error_def_t;
 
+typedef struct loom_diagnostic_string_list_t {
+  // Values in stable display and serialization order.
+  const iree_string_view_t* values;
+  // Number of values in the list.
+  iree_host_size_t count;
+} loom_diagnostic_string_list_t;
+
 // A runtime parameter value, matching an error_def's param_defs entry.
 // The kind is redundant with the def but avoids chasing the def pointer
 // during rendering.
@@ -164,12 +173,13 @@ typedef struct loom_diagnostic_param_t {
   // Optional structured sidecar describing the op field this param names.
   loom_diagnostic_field_ref_t field_ref;
   union {
-    iree_string_view_t string;  // LOOM_PARAM_STRING payload.
-    int64_t i64;                // LOOM_PARAM_I64 payload.
-    uint32_t u32;               // LOOM_PARAM_U32 payload.
-    bool boolean;               // LOOM_PARAM_BOOL payload.
-    loom_type_t type;           // LOOM_PARAM_TYPE payload.
-    uint64_t u64;               // LOOM_PARAM_U64 payload.
+    iree_string_view_t string;                  // LOOM_PARAM_STRING payload.
+    int64_t i64;                                // LOOM_PARAM_I64 payload.
+    uint32_t u32;                               // LOOM_PARAM_U32 payload.
+    bool boolean;                               // LOOM_PARAM_BOOL payload.
+    loom_type_t type;                           // LOOM_PARAM_TYPE payload.
+    uint64_t u64;                               // LOOM_PARAM_U64 payload.
+    loom_diagnostic_string_list_t string_list;  // LOOM_PARAM_STRING_LIST.
   };
 } loom_diagnostic_param_t;
 
@@ -206,6 +216,16 @@ static inline loom_diagnostic_param_t loom_param_u64(uint64_t value) {
   memset(&param, 0, sizeof(param));
   param.kind = LOOM_PARAM_U64;
   param.u64 = value;
+  return param;
+}
+
+static inline loom_diagnostic_param_t loom_param_string_list(
+    const iree_string_view_t* values, iree_host_size_t count) {
+  loom_diagnostic_param_t param;
+  memset(&param, 0, sizeof(param));
+  param.kind = LOOM_PARAM_STRING_LIST;
+  param.string_list.values = values;
+  param.string_list.count = count;
   return param;
 }
 

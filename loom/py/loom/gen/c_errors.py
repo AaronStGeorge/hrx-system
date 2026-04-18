@@ -35,6 +35,7 @@ PARAM_KIND_MAP: dict[ParamKind, str] = {
     ParamKind.BOOL: "LOOM_PARAM_BOOL",
     ParamKind.TYPE: "LOOM_PARAM_TYPE",
     ParamKind.U64: "LOOM_PARAM_U64",
+    ParamKind.STRING_LIST: "LOOM_PARAM_STRING_LIST",
 }
 
 # Maps Python Severity to C enum name.
@@ -57,6 +58,7 @@ DOMAIN_MAP: dict[ErrorDomain, str] = {
     ErrorDomain.BYTECODE: "LOOM_ERROR_DOMAIN_BYTECODE",
     ErrorDomain.FOLD: "LOOM_ERROR_DOMAIN_FOLD",
     ErrorDomain.LOWERING: "LOOM_ERROR_DOMAIN_LOWERING",
+    ErrorDomain.BACKEND: "LOOM_ERROR_DOMAIN_BACKEND",
 }
 
 
@@ -221,6 +223,7 @@ def generate_error_catalog_json(errors: list[ErrorDef]) -> str:
         ParamKind.BOOL: "BOOL",
         ParamKind.TYPE: "TYPE",
         ParamKind.U64: "U64",
+        ParamKind.STRING_LIST: "STRING_LIST",
     }
 
     catalog = []

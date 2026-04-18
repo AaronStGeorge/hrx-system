@@ -28,6 +28,7 @@ static const char* const loom_error_domain_names[LOOM_ERROR_DOMAIN_COUNT_] = {
     [LOOM_ERROR_DOMAIN_BYTECODE] = "BYTECODE",
     [LOOM_ERROR_DOMAIN_FOLD] = "FOLD",
     [LOOM_ERROR_DOMAIN_LOWERING] = "LOWERING",
+    [LOOM_ERROR_DOMAIN_BACKEND] = "BACKEND",
 };
 
 const char* loom_error_domain_name(loom_error_domain_t domain) {
@@ -3049,6 +3050,295 @@ static const loom_error_def_t loom_err_lowering_023 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_backend_001_params[] = {
+    {"target_key", LOOM_PARAM_STRING},   {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},   {"function_name", LOOM_PARAM_STRING},
+    {"subject_kind", LOOM_PARAM_STRING}, {"subject_name", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_001 = {
+    .error_id = "ERR_BACKEND_001",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 1,
+    .summary = "Target legality rejected codegen input.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected {subject_kind} '{subject_name}' in '@{function_name}': "
+        "{reason}",
+    .fix_hint_template =
+        "Specialize, decompose, or retarget {subject_kind} '{subject_name}' "
+        "before backend codegen for target '{target_key}'",
+    .param_defs = loom_err_backend_001_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_backend_002_params[] = {
+    {"target_key", LOOM_PARAM_STRING},   {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},   {"function_name", LOOM_PARAM_STRING},
+    {"contract_key", LOOM_PARAM_STRING}, {"decision", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_002 = {
+    .error_id = "ERR_BACKEND_002",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 2,
+    .summary = "Target contract decision recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} contract '{contract_key}' for '@{function_name}': {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_002_params,
+    .param_count = 7,
+};
+
+static const loom_error_param_def_t loom_err_backend_003_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"value_class", LOOM_PARAM_STRING},
+    {"budget", LOOM_PARAM_U32},
+    {"peak", LOOM_PARAM_U32},
+    {"block_name", LOOM_PARAM_STRING},
+    {"operation_name", LOOM_PARAM_STRING},
+    {"contributors", LOOM_PARAM_STRING_LIST},
+};
+static const loom_error_def_t loom_err_backend_003 = {
+    .error_id = "ERR_BACKEND_003",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 3,
+    .summary = "Register pressure peak observed.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' peak {value_class} pressure is {peak} unit(s) "
+        "against budget {budget} at block '{block_name}' near "
+        "'{operation_name}'; contributors: {contributors}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_003_params,
+    .param_count = 10,
+};
+
+static const loom_error_param_def_t loom_err_backend_004_params[] = {
+    {"target_key", LOOM_PARAM_STRING},  {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},  {"function_name", LOOM_PARAM_STRING},
+    {"value_class", LOOM_PARAM_STRING}, {"budget", LOOM_PARAM_U32},
+    {"peak", LOOM_PARAM_U32},           {"region_name", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_004 = {
+    .error_id = "ERR_BACKEND_004",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_WARNING,
+    .code = 4,
+    .summary = "Register pressure budget exceeded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' exceeded {value_class} pressure budget {budget} "
+        "with peak {peak} in '{region_name}': {reason}",
+    .fix_hint_template =
+        "Reduce live values, unroll less, split accumulation, or select a "
+        "target contract with lower {value_class} pressure",
+    .param_defs = loom_err_backend_004_params,
+    .param_count = 9,
+};
+
+static const loom_error_param_def_t loom_err_backend_005_params[] = {
+    {"target_key", LOOM_PARAM_STRING},  {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},  {"function_name", LOOM_PARAM_STRING},
+    {"value_class", LOOM_PARAM_STRING}, {"budget", LOOM_PARAM_U32},
+    {"peak", LOOM_PARAM_U32},           {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_005 = {
+    .error_id = "ERR_BACKEND_005",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 5,
+    .summary = "Register allocation failed.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "failed to allocate {value_class} registers for '@{function_name}' "
+        "with budget {budget} and peak {peak}: {reason}",
+    .fix_hint_template =
+        "Lower pressure before allocation or allow spill codegen for "
+        "{value_class} values",
+    .param_defs = loom_err_backend_005_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_backend_006_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"value_name", LOOM_PARAM_STRING},
+    {"partner_value_name", LOOM_PARAM_STRING},
+    {"decision", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_006 = {
+    .error_id = "ERR_BACKEND_006",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 6,
+    .summary = "Register coalescing decision recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "{decision} coalescing '{value_name}' with '{partner_value_name}' in "
+        "'@{function_name}': {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_006_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_backend_007_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"value_name", LOOM_PARAM_STRING}, {"value_class", LOOM_PARAM_STRING},
+    {"split_count", LOOM_PARAM_U32},   {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_007 = {
+    .error_id = "ERR_BACKEND_007",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 7,
+    .summary = "Live range split inserted.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "split {value_class} value '{value_name}' in '@{function_name}' into "
+        "{split_count} range(s): {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_007_params,
+    .param_count = 8,
+};
+
+static const loom_error_param_def_t loom_err_backend_008_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"value_name", LOOM_PARAM_STRING}, {"value_class", LOOM_PARAM_STRING},
+    {"spill_bytes", LOOM_PARAM_U32},   {"store_count", LOOM_PARAM_U32},
+    {"reload_count", LOOM_PARAM_U32},  {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_008 = {
+    .error_id = "ERR_BACKEND_008",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_WARNING,
+    .code = 8,
+    .summary = "Spill traffic predicted.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "predicts spilling {value_class} value '{value_name}' in "
+        "'@{function_name}' for {spill_bytes} byte(s), {store_count} store(s), "
+        "and {reload_count} reload(s): {reason}",
+    .fix_hint_template =
+        "Use the pressure contributors for '{value_name}' to shorten the live "
+        "range or choose a lower-pressure configuration",
+    .param_defs = loom_err_backend_008_params,
+    .param_count = 10,
+};
+
+static const loom_error_param_def_t loom_err_backend_009_params[] = {
+    {"target_key", LOOM_PARAM_STRING}, {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING}, {"function_name", LOOM_PARAM_STRING},
+    {"value_name", LOOM_PARAM_STRING}, {"value_class", LOOM_PARAM_STRING},
+    {"slot_name", LOOM_PARAM_STRING},  {"spill_bytes", LOOM_PARAM_U32},
+    {"store_count", LOOM_PARAM_U32},   {"reload_count", LOOM_PARAM_U32},
+};
+static const loom_error_def_t loom_err_backend_009 = {
+    .error_id = "ERR_BACKEND_009",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_WARNING,
+    .code = 9,
+    .summary = "Spill and reload operations inserted.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "inserted spill slot '{slot_name}' for {value_class} value "
+        "'{value_name}' in '@{function_name}' using {spill_bytes} byte(s), "
+        "{store_count} store(s), and {reload_count} reload(s)",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_009_params,
+    .param_count = 10,
+};
+
+static const loom_error_param_def_t loom_err_backend_010_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"resource_name", LOOM_PARAM_STRING},
+    {"budget", LOOM_PARAM_U32},
+    {"used", LOOM_PARAM_U32},
+    {"occupancy_percent", LOOM_PARAM_U32},
+    {"limiting_resource", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_010 = {
+    .error_id = "ERR_BACKEND_010",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 10,
+    .summary = "Occupancy/resource estimate recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "'@{function_name}' uses {used} of {budget} {resource_name} unit(s) "
+        "with estimated occupancy {occupancy_percent}% limited by "
+        "'{limiting_resource}'",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_010_params,
+    .param_count = 9,
+};
+
+static const loom_error_param_def_t loom_err_backend_011_params[] = {
+    {"target_key", LOOM_PARAM_STRING},
+    {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},
+    {"function_name", LOOM_PARAM_STRING},
+    {"descriptor_key", LOOM_PARAM_STRING},
+    {"hazard_kind", LOOM_PARAM_STRING},
+    {"inserted_action", LOOM_PARAM_STRING},
+    {"cycle_cost", LOOM_PARAM_U32},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_011 = {
+    .error_id = "ERR_BACKEND_011",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_REMARK,
+    .code = 11,
+    .summary = "Scheduling hazard decision recorded.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "handled {hazard_kind} hazard for descriptor '{descriptor_key}' in "
+        "'@{function_name}' by '{inserted_action}' with cost {cycle_cost} "
+        "cycle(s): {reason}",
+    .fix_hint_template = NULL,
+    .param_defs = loom_err_backend_011_params,
+    .param_count = 9,
+};
+
+static const loom_error_param_def_t loom_err_backend_012_params[] = {
+    {"target_key", LOOM_PARAM_STRING},   {"export_name", LOOM_PARAM_STRING},
+    {"config_key", LOOM_PARAM_STRING},   {"function_name", LOOM_PARAM_STRING},
+    {"emitter_name", LOOM_PARAM_STRING}, {"artifact_kind", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_backend_012 = {
+    .error_id = "ERR_BACKEND_012",
+    .domain = LOOM_ERROR_DOMAIN_BACKEND,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 12,
+    .summary = "Backend artifact emission failed.",
+    .message_template =
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "emitter '{emitter_name}' failed to emit {artifact_kind} for "
+        "'@{function_name}': {reason}",
+    .fix_hint_template =
+        "Check target package support, descriptor encoding hooks, relocation "
+        "records, and artifact metadata for emitter '{emitter_name}'",
+    .param_defs = loom_err_backend_012_params,
+    .param_count = 7,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -3103,6 +3393,10 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
     &loom_err_lowering_018,  &loom_err_lowering_019,  &loom_err_lowering_020,
     &loom_err_lowering_021,  &loom_err_lowering_022,  &loom_err_lowering_023,
+    &loom_err_backend_001,   &loom_err_backend_002,   &loom_err_backend_003,
+    &loom_err_backend_004,   &loom_err_backend_005,   &loom_err_backend_006,
+    &loom_err_backend_007,   &loom_err_backend_008,   &loom_err_backend_009,
+    &loom_err_backend_010,   &loom_err_backend_011,   &loom_err_backend_012,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

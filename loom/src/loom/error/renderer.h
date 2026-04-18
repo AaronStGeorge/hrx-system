@@ -71,6 +71,7 @@ typedef struct loom_type_formatter_t {
 //   U64    → decimal unsigned (PRIu64)
 //   BOOL   → "true" / "false"
 //   TYPE   → type_formatter callback, or "<type>" when .fn is NULL
+//   STRING_LIST → bracketed comma-separated raw text values
 //
 // Returns iree_ok_status() on success.
 iree_status_t loom_diagnostic_render_message(

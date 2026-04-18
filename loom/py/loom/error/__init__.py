@@ -10,6 +10,8 @@ Re-exports all error definitions from domain modules and collects them
 into ALL_ERRORS for generator consumption.
 """
 
+from loom.error.backend import *  # noqa: F403
+from loom.error.backend import ALL_BACKEND_ERRORS
 from loom.error.bytecode import *  # noqa: F403
 from loom.error.bytecode import ALL_BYTECODE_ERRORS
 from loom.error.dominance import *  # noqa: F403
@@ -46,4 +48,5 @@ ALL_ERRORS: tuple[ErrorDef, ...] = (
     *ALL_BYTECODE_ERRORS,
     *ALL_FOLD_ERRORS,
     *ALL_LOWERING_ERRORS,
+    *ALL_BACKEND_ERRORS,
 )

@@ -14,7 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 // Finds the param_defs index for |name| in the error def's param schema.
-// Returns -1 if not found. Linear scan is fine — max 6 params per error.
+// Returns -1 if not found. Linear scan is fine for diagnostic schemas.
 static int loom_find_param_index(const loom_error_def_t* error,
                                  iree_string_view_t name) {
   for (iree_host_size_t i = 0; i < error->param_count; ++i) {
@@ -24,6 +24,23 @@ static int loom_find_param_index(const loom_error_def_t* error,
     }
   }
   return -1;
+}
+
+static iree_status_t loom_render_string_list(
+    loom_diagnostic_string_list_t string_list, loom_output_stream_t* stream) {
+  if (string_list.count > 0 && !string_list.values) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "string list param has count > 0 but values NULL");
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
+  for (iree_host_size_t i = 0; i < string_list.count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write(stream, string_list.values[i]));
+  }
+  return loom_output_stream_write_char(stream, ']');
 }
 
 // Renders a single param value into the stream.
@@ -39,6 +56,8 @@ static iree_status_t loom_render_param(const loom_diagnostic_param_t* param,
       return loom_output_stream_write_format(stream, "%" PRIu32, param->u32);
     case LOOM_PARAM_U64:
       return loom_output_stream_write_format(stream, "%" PRIu64, param->u64);
+    case LOOM_PARAM_STRING_LIST:
+      return loom_render_string_list(param->string_list, stream);
     case LOOM_PARAM_BOOL:
       return loom_output_stream_write_cstring(
           stream, param->boolean ? "true" : "false");

@@ -136,6 +136,36 @@ TEST(Renderer, BytecodeRangeUsesU64Params) {
 }
 
 //===----------------------------------------------------------------------===//
+// STRING_LIST params
+//===----------------------------------------------------------------------===//
+
+TEST(Renderer, StringListParam) {
+  iree_string_view_t contributors[] = {
+      IREE_SV("%acc0"),
+      IREE_SV("%acc1"),
+      IREE_SV("%a_frag0"),
+  };
+  loom_diagnostic_param_t params[10] = {
+      loom_param_string(IREE_SV("amdgpu.gfx950")),
+      loom_param_string(IREE_SV("matmul_q4")),
+      loom_param_string(IREE_SV("wg128")),
+      loom_param_string(IREE_SV("matmul_q4_low")),
+      loom_param_string(IREE_SV("vgpr")),
+      loom_param_u32(96),
+      loom_param_u32(132),
+      loom_param_string(IREE_SV("^k_loop")),
+      loom_param_string(IREE_SV("%acc8")),
+      loom_param_string_list(contributors, IREE_ARRAYSIZE(contributors)),
+  };
+
+  std::string message =
+      RenderMessage(loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 3), params,
+                    IREE_ARRAYSIZE(params));
+  EXPECT_NE(message.find("contributors: [%acc0, %acc1, %a_frag0]"),
+            std::string::npos);
+}
+
+//===----------------------------------------------------------------------===//
 // Dominance errors: STRING param
 //===----------------------------------------------------------------------===//
 

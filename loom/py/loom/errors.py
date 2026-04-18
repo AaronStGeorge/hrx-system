@@ -69,6 +69,7 @@ class ParamKind(IntEnum):
     BOOL = 3  # bool
     TYPE = 4  # loom_type_t (rendered by type printer)
     U64 = 5  # uint64_t / int
+    STRING_LIST = 6  # Sequence of iree_string_view_t / list[str]
 
 
 @unique
@@ -93,6 +94,7 @@ class ErrorDomain(IntEnum):
     BYTECODE = 8  # Format errors, version mismatches.
     FOLD = 9  # Poison folding, canonicalization.
     LOWERING = 10  # Pass lowering legality and unsupported mappings.
+    BACKEND = 11  # Target codegen feedback, allocation, scheduling, emission.
 
 
 @unique

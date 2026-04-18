@@ -4211,5 +4211,664 @@
       }
     ],
     "fix_hint_template": "Keep low function exactness and imported-code attrs complete and on the operation kind that owns them"
+  },
+  {
+    "error_id": "ERR_BACKEND_001",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 1,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Target legality rejected codegen input.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' rejected {subject_kind} '{subject_name}' in '@{function_name}': {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "subject_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "subject_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Specialize, decompose, or retarget {subject_kind} '{subject_name}' before backend codegen for target '{target_key}'"
+  },
+  {
+    "error_id": "ERR_BACKEND_002",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 2,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Target contract decision recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' {decision} contract '{contract_key}' for '@{function_name}': {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "contract_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "decision",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BACKEND_003",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 3,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Register pressure peak observed.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' peak {value_class} pressure is {peak} unit(s) against budget {budget} at block '{block_name}' near '{operation_name}'; contributors: {contributors}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "budget",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "peak",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "block_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "operation_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "contributors",
+        "kind": 6,
+        "kind_name": "STRING_LIST"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BACKEND_004",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 4,
+    "severity": 1,
+    "severity_name": "warning",
+    "summary": "Register pressure budget exceeded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' exceeded {value_class} pressure budget {budget} with peak {peak} in '{region_name}': {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "budget",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "peak",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "region_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Reduce live values, unroll less, split accumulation, or select a target contract with lower {value_class} pressure"
+  },
+  {
+    "error_id": "ERR_BACKEND_005",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 5,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Register allocation failed.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' failed to allocate {value_class} registers for '@{function_name}' with budget {budget} and peak {peak}: {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "budget",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "peak",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Lower pressure before allocation or allow spill codegen for {value_class} values"
+  },
+  {
+    "error_id": "ERR_BACKEND_006",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 6,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Register coalescing decision recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' {decision} coalescing '{value_name}' with '{partner_value_name}' in '@{function_name}': {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "partner_value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "decision",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BACKEND_007",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 7,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Live range split inserted.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' split {value_class} value '{value_name}' in '@{function_name}' into {split_count} range(s): {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "split_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BACKEND_008",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 8,
+    "severity": 1,
+    "severity_name": "warning",
+    "summary": "Spill traffic predicted.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' predicts spilling {value_class} value '{value_name}' in '@{function_name}' for {spill_bytes} byte(s), {store_count} store(s), and {reload_count} reload(s): {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "spill_bytes",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "store_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reload_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use the pressure contributors for '{value_name}' to shorten the live range or choose a lower-pressure configuration"
+  },
+  {
+    "error_id": "ERR_BACKEND_009",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 9,
+    "severity": 1,
+    "severity_name": "warning",
+    "summary": "Spill and reload operations inserted.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' inserted spill slot '{slot_name}' for {value_class} value '{value_name}' in '@{function_name}' using {spill_bytes} byte(s), {store_count} store(s), and {reload_count} reload(s)",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "value_class",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "slot_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "spill_bytes",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "store_count",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reload_count",
+        "kind": 2,
+        "kind_name": "U32"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BACKEND_010",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 10,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Occupancy/resource estimate recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' '@{function_name}' uses {used} of {budget} {resource_name} unit(s) with estimated occupancy {occupancy_percent}% limited by '{limiting_resource}'",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "resource_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "budget",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "used",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "occupancy_percent",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "limiting_resource",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BACKEND_011",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 11,
+    "severity": 2,
+    "severity_name": "remark",
+    "summary": "Scheduling hazard decision recorded.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' handled {hazard_kind} hazard for descriptor '{descriptor_key}' in '@{function_name}' by '{inserted_action}' with cost {cycle_cost} cycle(s): {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "descriptor_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "hazard_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "inserted_action",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "cycle_cost",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ]
+  },
+  {
+    "error_id": "ERR_BACKEND_012",
+    "domain": 11,
+    "domain_name": "BACKEND",
+    "code": 12,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Backend artifact emission failed.",
+    "message_template": "target '{target_key}' export '{export_name}' config '{config_key}' emitter '{emitter_name}' failed to emit {artifact_kind} for '@{function_name}': {reason}",
+    "params": [
+      {
+        "name": "target_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "export_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "config_key",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "function_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "emitter_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "artifact_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Check target package support, descriptor encoding hooks, relocation records, and artifact metadata for emitter '{emitter_name}'"
   }
 ]

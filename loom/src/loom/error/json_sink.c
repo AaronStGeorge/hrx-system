@@ -15,7 +15,7 @@
 // Param value rendering for JSON
 //===----------------------------------------------------------------------===//
 
-// Renders a single param value as a JSON value (string or number).
+// Renders a single param value as a JSON scalar or array.
 static iree_status_t loom_json_render_param_value(
     const loom_diagnostic_param_t* param, loom_type_formatter_t type_formatter,
     loom_output_stream_t* stream) {
@@ -28,6 +28,21 @@ static iree_status_t loom_json_render_param_value(
       return loom_output_stream_write_format(stream, "%" PRIu32, param->u32);
     case LOOM_PARAM_U64:
       return loom_output_stream_write_format(stream, "%" PRIu64, param->u64);
+    case LOOM_PARAM_STRING_LIST:
+      if (param->string_list.count > 0 && !param->string_list.values) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "string list param has count > 0 but values NULL");
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
+      for (iree_host_size_t i = 0; i < param->string_list.count; ++i) {
+        if (i > 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+            stream, param->string_list.values[i]));
+      }
+      return loom_output_stream_write_char(stream, ']');
     case LOOM_PARAM_BOOL:
       return loom_output_stream_write_cstring(
           stream, param->boolean ? "true" : "false");
