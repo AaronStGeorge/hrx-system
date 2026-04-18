@@ -32,6 +32,7 @@
 #include "loom/transforms/refine_boundaries.h"
 #include "loom/transforms/scf_to_cfg.h"
 #include "loom/transforms/strip_hints.h"
+#include "loom/transforms/symbol_dce.h"
 #include "loom/transforms/vector_memory_footprint.h"
 #include "loom/transforms/vector_to_scalar.h"
 #include "loom/transforms/verify.h"
@@ -302,6 +303,9 @@ static iree_status_t loom_check_run_pipeline(
     } else if (iree_string_view_equal(entry.name, IREE_SV("strip-hints"))) {
       info = loom_strip_hints_pass_info();
       function_run = loom_strip_hints_run;
+    } else if (iree_string_view_equal(entry.name, IREE_SV("symbol-dce"))) {
+      info = loom_symbol_dce_pass_info();
+      module_run = loom_symbol_dce_run;
     } else if (iree_string_view_equal(entry.name,
                                       IREE_SV("vector-to-scalar"))) {
       info = loom_vector_to_scalar_pass_info();

@@ -735,6 +735,297 @@ iree_status_t loom_module_add_symbol(loom_module_t* module,
   return iree_ok_status();
 }
 
+static iree_status_t loom_module_mark_symbol_references_in_attr(
+    const loom_module_t* module, const loom_attribute_t* attr,
+    uint8_t* referenced_symbols, uint8_t dict_depth) {
+  if (!attr) return iree_ok_status();
+  switch ((loom_attr_kind_t)attr->kind) {
+    case LOOM_ATTR_SYMBOL: {
+      loom_symbol_ref_t symbol_ref = loom_attr_as_symbol(*attr);
+      if (loom_symbol_ref_is_valid(symbol_ref) && symbol_ref.module_id == 0 &&
+          symbol_ref.symbol_id < module->symbols.count) {
+        referenced_symbols[symbol_ref.symbol_id] = 1;
+      }
+      return iree_ok_status();
+    }
+    case LOOM_ATTR_DICT:
+      if (dict_depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "dict attribute nesting exceeds max depth %u",
+                                (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
+      }
+      if (attr->count > 0 && !attr->dict_entries) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "non-empty dict attribute has a NULL entry pointer");
+      }
+      for (uint16_t i = 0; i < attr->count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_module_mark_symbol_references_in_attr(
+            module, &attr->dict_entries[i].value, referenced_symbols,
+            (uint8_t)(dict_depth + 1)));
+      }
+      return iree_ok_status();
+    default:
+      return iree_ok_status();
+  }
+}
+
+static iree_status_t loom_module_mark_symbol_references_in_attrs(
+    const loom_module_t* module, const loom_attribute_t* attrs,
+    iree_host_size_t attr_count, uint8_t* referenced_symbols) {
+  for (iree_host_size_t i = 0; i < attr_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_module_mark_symbol_references_in_attr(
+        module, &attrs[i], referenced_symbols, 0));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_mark_symbol_references_in_named_attrs(
+    const loom_module_t* module, const loom_named_attr_t* attrs,
+    iree_host_size_t attr_count, uint8_t* referenced_symbols) {
+  if (attr_count > 0 && !attrs) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty named attribute list has a NULL entry pointer");
+  }
+  for (iree_host_size_t i = 0; i < attr_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_module_mark_symbol_references_in_attr(
+        module, &attrs[i].value, referenced_symbols, 0));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_mark_symbol_references_in_region(
+    const loom_module_t* module, const loom_region_t* region,
+    uint8_t* referenced_symbols) {
+  if (!region) return iree_ok_status();
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      IREE_RETURN_IF_ERROR(loom_module_mark_symbol_references_in_attrs(
+          module, loom_op_const_attrs(op), op->attribute_count,
+          referenced_symbols));
+      loom_region_t** regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_module_mark_symbol_references_in_region(
+            module, regions[i], referenced_symbols));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_remap_symbol_attr(
+    loom_module_t* module, const uint16_t* new_symbol_ids,
+    iree_host_size_t old_symbol_count, loom_attribute_t source_attr,
+    uint8_t dict_depth, loom_attribute_t* out_target_attr, bool* out_changed) {
+  *out_target_attr = source_attr;
+  *out_changed = false;
+  switch ((loom_attr_kind_t)source_attr.kind) {
+    case LOOM_ATTR_SYMBOL: {
+      loom_symbol_ref_t symbol_ref = loom_attr_as_symbol(source_attr);
+      if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+          symbol_ref.symbol_id >= old_symbol_count) {
+        return iree_ok_status();
+      }
+      uint16_t new_symbol_id = new_symbol_ids[symbol_ref.symbol_id];
+      if (new_symbol_id == LOOM_SYMBOL_ID_INVALID) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "symbol attribute references dropped symbol id %u",
+            (unsigned)symbol_ref.symbol_id);
+      }
+      if (new_symbol_id != symbol_ref.symbol_id) {
+        out_target_attr->symbol.symbol_id = new_symbol_id;
+        *out_changed = true;
+      }
+      return iree_ok_status();
+    }
+    case LOOM_ATTR_DICT: {
+      if (dict_depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "dict attribute nesting exceeds max depth %u",
+                                (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
+      }
+      if (source_attr.count == 0) return iree_ok_status();
+      if (!source_attr.dict_entries) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "non-empty dict attribute has a NULL entry pointer");
+      }
+      loom_named_attr_t* target_entries = NULL;
+      for (uint16_t i = 0; i < source_attr.count; ++i) {
+        loom_attribute_t target_value = {0};
+        bool value_changed = false;
+        IREE_RETURN_IF_ERROR(loom_module_remap_symbol_attr(
+            module, new_symbol_ids, old_symbol_count,
+            source_attr.dict_entries[i].value, (uint8_t)(dict_depth + 1),
+            &target_value, &value_changed));
+        if (!value_changed) continue;
+        if (!target_entries) {
+          IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+              &module->arena, source_attr.count, sizeof(*target_entries),
+              (void**)&target_entries));
+          memcpy(target_entries, source_attr.dict_entries,
+                 (iree_host_size_t)source_attr.count * sizeof(*target_entries));
+        }
+        target_entries[i].value = target_value;
+      }
+      if (target_entries) {
+        *out_target_attr =
+            loom_make_canonical_attr_dict(target_entries, source_attr.count);
+        *out_changed = true;
+      }
+      return iree_ok_status();
+    }
+    default:
+      return iree_ok_status();
+  }
+}
+
+static iree_status_t loom_module_remap_symbol_attrs(
+    loom_module_t* module, const uint16_t* new_symbol_ids,
+    iree_host_size_t old_symbol_count, loom_attribute_t* attrs,
+    iree_host_size_t attr_count) {
+  for (iree_host_size_t i = 0; i < attr_count; ++i) {
+    loom_attribute_t target_attr = {0};
+    bool changed = false;
+    IREE_RETURN_IF_ERROR(
+        loom_module_remap_symbol_attr(module, new_symbol_ids, old_symbol_count,
+                                      attrs[i], 0, &target_attr, &changed));
+    if (changed) attrs[i] = target_attr;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_remap_symbol_named_attrs(
+    loom_module_t* module, const uint16_t* new_symbol_ids,
+    iree_host_size_t old_symbol_count, const loom_named_attr_t** inout_attrs,
+    iree_host_size_t attr_count) {
+  if (attr_count == 0) return iree_ok_status();
+  const loom_named_attr_t* source_attrs = *inout_attrs;
+  if (!source_attrs) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "non-empty named attribute list has a NULL entry pointer");
+  }
+  loom_named_attr_t* target_attrs = NULL;
+  for (iree_host_size_t i = 0; i < attr_count; ++i) {
+    loom_attribute_t target_value = {0};
+    bool value_changed = false;
+    IREE_RETURN_IF_ERROR(loom_module_remap_symbol_attr(
+        module, new_symbol_ids, old_symbol_count, source_attrs[i].value, 0,
+        &target_value, &value_changed));
+    if (!value_changed) continue;
+    if (!target_attrs) {
+      IREE_RETURN_IF_ERROR(iree_arena_allocate_array(&module->arena, attr_count,
+                                                     sizeof(*target_attrs),
+                                                     (void**)&target_attrs));
+      memcpy(target_attrs, source_attrs, attr_count * sizeof(*target_attrs));
+    }
+    target_attrs[i].value = target_value;
+  }
+  if (target_attrs) *inout_attrs = target_attrs;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_remap_symbol_region_attrs(
+    loom_module_t* module, const uint16_t* new_symbol_ids,
+    iree_host_size_t old_symbol_count, loom_region_t* region) {
+  if (!region) return iree_ok_status();
+  loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      IREE_RETURN_IF_ERROR(loom_module_remap_symbol_attrs(
+          module, new_symbol_ids, old_symbol_count, loom_op_attrs(op),
+          op->attribute_count));
+      loom_region_t** regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_module_remap_symbol_region_attrs(
+            module, new_symbol_ids, old_symbol_count, regions[i]));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_module_compact_symbols(loom_module_t* module,
+                                          iree_arena_allocator_t* scratch_arena,
+                                          iree_host_size_t* out_removed_count) {
+  if (out_removed_count) *out_removed_count = 0;
+  if (!module || !scratch_arena) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "module and scratch_arena are required");
+  }
+  const iree_host_size_t old_symbol_count = module->symbols.count;
+  if (old_symbol_count == 0) return iree_ok_status();
+
+  uint8_t* referenced_symbols = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      scratch_arena, old_symbol_count, sizeof(*referenced_symbols),
+      (void**)&referenced_symbols));
+  memset(referenced_symbols, 0, old_symbol_count * sizeof(*referenced_symbols));
+
+  IREE_RETURN_IF_ERROR(loom_module_mark_symbol_references_in_region(
+      module, module->body, referenced_symbols));
+  for (iree_host_size_t i = 0; i < module->encodings.count; ++i) {
+    const loom_encoding_t* encoding = &module->encodings.entries[i];
+    IREE_RETURN_IF_ERROR(loom_module_mark_symbol_references_in_named_attrs(
+        module, encoding->attributes, encoding->attribute_count,
+        referenced_symbols));
+  }
+
+  uint16_t* new_symbol_ids = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      scratch_arena, old_symbol_count, sizeof(*new_symbol_ids),
+      (void**)&new_symbol_ids));
+  memset(new_symbol_ids, 0xFF, old_symbol_count * sizeof(*new_symbol_ids));
+
+  iree_host_size_t new_symbol_count = 0;
+  iree_host_size_t removed_count = 0;
+  for (iree_host_size_t i = 0; i < old_symbol_count; ++i) {
+    const loom_symbol_t* symbol = &module->symbols.entries[i];
+    const bool has_definition = symbol->kind != LOOM_SYMBOL_NONE ||
+                                symbol->definition || symbol->defining_op;
+    const bool has_side_data = symbol->flags != 0 || symbol->use_count != 0;
+    const bool keep =
+        has_definition || has_side_data || referenced_symbols[i] != 0;
+    if (keep) {
+      new_symbol_ids[i] = (uint16_t)new_symbol_count++;
+    } else {
+      ++removed_count;
+    }
+  }
+
+  if (removed_count == 0) return iree_ok_status();
+
+  IREE_RETURN_IF_ERROR(loom_module_remap_symbol_region_attrs(
+      module, new_symbol_ids, old_symbol_count, module->body));
+  for (iree_host_size_t i = 0; i < module->encodings.count; ++i) {
+    loom_encoding_t* encoding = &module->encodings.entries[i];
+    const loom_named_attr_t* attributes = encoding->attributes;
+    IREE_RETURN_IF_ERROR(loom_module_remap_symbol_named_attrs(
+        module, new_symbol_ids, old_symbol_count, &attributes,
+        encoding->attribute_count));
+    encoding->attributes = attributes;
+  }
+
+  for (iree_host_size_t old_index = 0; old_index < old_symbol_count;
+       ++old_index) {
+    uint16_t new_symbol_id = new_symbol_ids[old_index];
+    if (new_symbol_id == LOOM_SYMBOL_ID_INVALID) continue;
+    module->symbols.entries[new_symbol_id] = module->symbols.entries[old_index];
+  }
+  memset(&module->symbols.entries[new_symbol_count], 0,
+         (old_symbol_count - new_symbol_count) *
+             sizeof(module->symbols.entries[0]));
+  module->symbols.count = new_symbol_count;
+  if (out_removed_count) *out_removed_count = removed_count;
+  return iree_ok_status();
+}
+
 //===----------------------------------------------------------------------===//
 // Location table
 //===----------------------------------------------------------------------===//

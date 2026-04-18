@@ -501,6 +501,41 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    symbol_dce
+  HDRS
+    "symbol_dce.h"
+  SRCS
+    "symbol_dce.c"
+  DEPS
+    ::pass
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    symbol_dce_test
+  SRCS
+    "symbol_dce_test.cc"
+  DEPS
+    ::symbol_dce
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::testing::context
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     vector_to_scalar
   HDRS
     "vector_to_scalar.h"

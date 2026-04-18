@@ -155,6 +155,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "symbol_dce"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/symbol_dce.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "vector_to_scalar"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/vector_to_scalar.loom-test"

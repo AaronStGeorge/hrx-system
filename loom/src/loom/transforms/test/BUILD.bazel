@@ -28,6 +28,7 @@ loom_check_test_suite(
         "refine_boundaries.loom-test",
         "scf_index.loom-test",
         "scf_to_cfg.loom-test",
+        "symbol_dce.loom-test",
         "vector_to_scalar.loom-test",
     ],
 )

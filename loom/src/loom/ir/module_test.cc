@@ -89,6 +89,77 @@ TEST_F(ModuleTest, BodyBlock) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, CompactSymbolsDropsUnreferencedTombstonesAndRenumbersRefs) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_string_id_t keep_a_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("keep_a"), &keep_a_name));
+  uint16_t keep_a_symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_add_symbol(module, keep_a_name, &keep_a_symbol_id));
+
+  loom_string_id_t drop_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("drop"), &drop_name));
+  uint16_t drop_symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, drop_name, &drop_symbol_id));
+
+  loom_string_id_t keep_b_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("keep_b"), &keep_b_name));
+  uint16_t keep_b_symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_add_symbol(module, keep_b_name, &keep_b_symbol_id));
+
+  ASSERT_EQ(keep_a_symbol_id, 0u);
+  ASSERT_EQ(drop_symbol_id, 1u);
+  ASSERT_EQ(keep_b_symbol_id, 2u);
+
+  loom_string_id_t peer_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("peer"), &peer_name));
+  loom_named_attr_t keep_a_dict[] = {{
+      .name_id = peer_name,
+      .value = loom_attr_symbol((loom_symbol_ref_t){0, keep_b_symbol_id}),
+  }};
+
+  loom_builder_t builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &builder);
+  loom_op_t* keep_a_op = NULL;
+  IREE_ASSERT_OK(loom_test_record_build(
+      &builder, (loom_symbol_ref_t){0, keep_a_symbol_id},
+      loom_make_named_attr_slice(keep_a_dict, IREE_ARRAYSIZE(keep_a_dict)),
+      LOOM_LOCATION_UNKNOWN, &keep_a_op));
+  loom_op_t* keep_b_op = NULL;
+  IREE_ASSERT_OK(loom_test_record_build(
+      &builder, (loom_symbol_ref_t){0, keep_b_symbol_id},
+      loom_make_named_attr_slice(NULL, 0), LOOM_LOCATION_UNKNOWN, &keep_b_op));
+
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(&block_pool_, &scratch_arena);
+  iree_host_size_t removed_count = 0;
+  IREE_ASSERT_OK(
+      loom_module_compact_symbols(module, &scratch_arena, &removed_count));
+  iree_arena_deinitialize(&scratch_arena);
+
+  EXPECT_EQ(removed_count, 1u);
+  EXPECT_EQ(module->symbols.count, 2u);
+  EXPECT_EQ(loom_module_find_symbol(module, keep_a_name), 0u);
+  EXPECT_EQ(loom_module_find_symbol(module, keep_b_name), 1u);
+  EXPECT_EQ(loom_module_find_symbol(module, drop_name), LOOM_SYMBOL_ID_INVALID);
+  EXPECT_EQ(loom_test_record_symbol(keep_b_op).symbol_id, 1u);
+
+  loom_named_attr_slice_t dict = loom_test_record_dict(keep_a_op);
+  ASSERT_EQ(dict.count, 1u);
+  EXPECT_EQ(loom_attr_as_symbol(dict.entries[0].value).symbol_id, 1u);
+
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, RegionAppendBlockGrowthKeepsBlockReferencesStable) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

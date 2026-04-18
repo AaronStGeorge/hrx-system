@@ -306,6 +306,22 @@ iree_status_t loom_module_add_symbol(loom_module_t* module,
                                      loom_string_id_t name_id,
                                      uint16_t* out_symbol_id);
 
+// Removes symbol-table tombstones and rewrites module-local symbol references.
+//
+// Symbol-defining op erasure leaves an unlinked LOOM_SYMBOL_NONE entry behind
+// so transient refs can still produce useful verifier diagnostics. This
+// compacts entries that are both unlinked and no longer referenced by live op
+// attributes or encoding attributes. Referenced unlinked entries are preserved;
+// callers should not expect invalid modules with dangling symbol refs to
+// serialize.
+//
+// |scratch_arena| is used only for temporary bookkeeping. Rewritten nested
+// DICT payloads are copied into |module|'s arena because op attributes and
+// encoding records keep owning those payloads after the call returns.
+iree_status_t loom_module_compact_symbols(loom_module_t* module,
+                                          iree_arena_allocator_t* scratch_arena,
+                                          iree_host_size_t* out_removed_count);
+
 // Allocates a block in the module's arena with initial op capacity.
 iree_status_t loom_module_allocate_block(loom_module_t* module,
                                          loom_block_t** out_block);
