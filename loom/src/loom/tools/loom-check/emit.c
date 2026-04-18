@@ -63,6 +63,10 @@ typedef struct loom_check_emit_request_t {
       low_allocation_budgets[LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS];
   // Number of entries in |low_allocation_budgets|.
   iree_host_size_t low_allocation_budget_count;
+  // Low scheduler diagnostic feedback requested by the RUN line.
+  loom_low_schedule_diagnostic_flags_t low_schedule_diagnostic_flags;
+  // True once a low scheduler diagnostics option has been parsed.
+  bool has_low_schedule_diagnostics_option;
 } loom_check_emit_request_t;
 
 typedef struct loom_check_emit_byte_buffer_t {
@@ -121,6 +125,55 @@ static iree_status_t loom_check_emit_parse_low_allocation_budgets(
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_emit_parse_low_schedule_option(
+    iree_string_view_t token, loom_check_emit_request_t* request) {
+  iree_string_view_t name = iree_string_view_empty();
+  iree_string_view_t value = iree_string_view_empty();
+  iree_string_view_split(token, '=', &name, &value);
+  name = iree_string_view_trim(name);
+  value = iree_string_view_trim(value);
+  if (!iree_string_view_equal(name, IREE_SV("diagnostics"))) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unknown low-schedule-json option '%.*s'",
+                            (int)name.size, name.data);
+  }
+  if (request->has_low_schedule_diagnostics_option) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate low-schedule-json option 'diagnostics'");
+  }
+  if (iree_string_view_equal(value, IREE_SV("none"))) {
+    request->low_schedule_diagnostic_flags = 0;
+  } else if (iree_string_view_equal(value, IREE_SV("pressure"))) {
+    request->low_schedule_diagnostic_flags =
+        LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low-schedule-json option 'diagnostics' expected 'none' or "
+        "'pressure', got '%.*s'",
+        (int)value.size, value.data);
+  }
+  request->has_low_schedule_diagnostics_option = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_parse_low_schedule_options(
+    iree_string_view_t text, loom_check_emit_request_t* request) {
+  text = iree_string_view_trim(text);
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(text, ' ', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (!iree_string_view_is_empty(token)) {
+      IREE_RETURN_IF_ERROR(
+          loom_check_emit_parse_low_schedule_option(token, request));
+    }
+    text = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_emit_parse_request(
     iree_string_view_t emit_target, loom_check_emit_request_t* out_request) {
   *out_request = (loom_check_emit_request_t){
@@ -131,6 +184,8 @@ static iree_status_t loom_check_emit_parse_request(
       .analysis_symbol_name = iree_string_view_empty(),
       .low_descriptor_set = NULL,
       .low_allocation_budget_count = 0,
+      .low_schedule_diagnostic_flags = 0,
+      .has_low_schedule_diagnostics_option = false,
   };
   emit_target = iree_string_view_trim(emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
@@ -174,17 +229,24 @@ static iree_status_t loom_check_emit_parse_request(
   } else if (iree_string_view_equal(target_name,
                                     IREE_SV("low-schedule-json")) ||
              iree_string_view_equal(target_name, IREE_SV("low-schedule"))) {
-    if (!iree_string_view_starts_with(profile_name, IREE_SV("@"))) {
+    iree_string_view_t symbol_name = iree_string_view_empty();
+    iree_string_view_t option_text = iree_string_view_empty();
+    iree_string_view_split(profile_name, ' ', &symbol_name, &option_text);
+    symbol_name = iree_string_view_trim(symbol_name);
+    option_text = iree_string_view_trim(option_text);
+    if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low-schedule-json requires a low function "
                               "symbol name");
     }
     out_request->analysis_symbol_name =
-        iree_string_view_substr(profile_name, 1, IREE_HOST_SIZE_MAX);
+        iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
     if (iree_string_view_is_empty(out_request->analysis_symbol_name)) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low function symbol name is required");
     }
+    IREE_RETURN_IF_ERROR(
+        loom_check_emit_parse_low_schedule_options(option_text, out_request));
     out_request->format = LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON;
     return iree_ok_status();
   } else if (iree_string_view_equal(target_name,
@@ -752,6 +814,7 @@ static iree_status_t loom_check_emit_find_low_func_def(
 static iree_status_t loom_check_emit_write_low_schedule_json(
     const loom_module_t* module, iree_string_view_t symbol_name,
     const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_low_schedule_diagnostic_flags_t diagnostic_flags,
     iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
     loom_check_result_t* result) {
   const loom_op_t* low_function = NULL;
@@ -760,6 +823,7 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   loom_low_schedule_options_t options = {
       .descriptor_registry = descriptor_registry,
       .emitter = emitter,
+      .diagnostic_flags = diagnostic_flags,
   };
   loom_low_schedule_sidecar_t sidecar = {0};
   IREE_RETURN_IF_ERROR(loom_low_schedule_function(
@@ -966,6 +1030,7 @@ iree_status_t loom_check_execute_emit(
       } else if (request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON) {
         status = loom_check_emit_write_low_schedule_json(
             module, request.analysis_symbol_name, &low_registry.registry,
+            request.low_schedule_diagnostic_flags,
             (iree_diagnostic_emitter_t){
                 .fn = loom_check_diagnostic_emitter_capture_emit,
                 .user_data = &pass_diagnostic_capture,
@@ -1001,7 +1066,9 @@ iree_status_t loom_check_execute_emit(
       iree_arena_deinitialize(&diagnostic_arena);
       return status;
     }
-    if (test_case->annotation_count > 0) {
+    if (test_case->annotation_count > 0 ||
+        pass_diagnostic_capture.emission_count > 0 ||
+        diagnostic_collector.count > 0) {
       status = loom_check_diagnostic_collector_finish(
           &diagnostic_collector, test_case, case_index, report, allocator,
           result);

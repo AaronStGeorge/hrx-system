@@ -37,6 +37,10 @@ typedef struct loom_liveness_value_class_t {
   loom_string_id_t register_class_id;
 } loom_liveness_value_class_t;
 
+// Returns true when two values contribute to the same pressure class.
+bool loom_liveness_value_class_equal(loom_liveness_value_class_t lhs,
+                                     loom_liveness_value_class_t rhs);
+
 // Half-open live interval for one value over a region-local program-point
 // number line. An interval with start_point == end_point represents a value
 // defined but not live across any point, such as a dead result.

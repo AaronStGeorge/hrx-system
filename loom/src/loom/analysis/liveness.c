@@ -205,8 +205,8 @@ static uint32_t loom_liveness_value_unit_count(const loom_module_t* module,
   return 1;
 }
 
-static bool loom_liveness_value_class_equal(loom_liveness_value_class_t lhs,
-                                            loom_liveness_value_class_t rhs) {
+bool loom_liveness_value_class_equal(loom_liveness_value_class_t lhs,
+                                     loom_liveness_value_class_t rhs) {
   return lhs.type_kind == rhs.type_kind &&
          lhs.element_type == rhs.element_type &&
          lhs.register_class_id == rhs.register_class_id;

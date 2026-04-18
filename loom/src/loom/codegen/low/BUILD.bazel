@@ -99,6 +99,36 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/codegen/low:allocation_materialization",
 )
 
+iree_assert_no_dependency(
+    name = "diagnostics_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:diagnostics",
+)
+
+iree_assert_no_dependency(
+    name = "diagnostics_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:diagnostics",
+)
+
+iree_assert_no_dependency(
+    name = "diagnostics_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:diagnostics",
+)
+
+iree_assert_no_dependency(
+    name = "diagnostics_no_target_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry",
+    target = "//loom/src/loom/codegen/low:diagnostics",
+)
+
+iree_assert_no_dependency(
+    name = "diagnostics_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:diagnostics",
+)
+
 #===------------------------------------------------------------------------===#
 # Dense low descriptor tables
 #===------------------------------------------------------------------------===#
@@ -140,6 +170,19 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "diagnostics",
+    srcs = ["diagnostics.c"],
+    hdrs = ["diagnostics.h"],
+    deps = [
+        ":target_binding",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "allocation",
     srcs = ["allocation.c"],
     hdrs = ["allocation.h"],
@@ -163,6 +206,7 @@ loom_cc_library(
     deps = [
         ":allocation",
         ":descriptors",
+        ":diagnostics",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -210,6 +254,7 @@ loom_cc_library(
     hdrs = ["schedule.h"],
     deps = [
         ":descriptors",
+        ":diagnostics",
         ":requirements",
         ":target_binding",
         "//loom/src/loom/analysis:liveness",

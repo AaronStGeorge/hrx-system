@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -20,58 +21,6 @@ typedef struct loom_low_materialized_spill_slot_t {
   // Symbol reference for the generated low.slot record.
   loom_symbol_ref_t symbol_ref;
 } loom_low_materialized_spill_slot_t;
-
-static iree_string_view_t loom_low_allocation_symbol_name(
-    const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
-  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
-      symbol_ref.symbol_id >= module->symbols.count) {
-    return IREE_SV("<unnamed>");
-  }
-  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
-  if (symbol->name_id >= module->strings.count) return IREE_SV("<unnamed>");
-  return module->strings.entries[symbol->name_id];
-}
-
-static iree_string_view_t loom_low_allocation_string_or_empty(
-    iree_string_view_t value) {
-  return iree_string_view_is_empty(value) ? IREE_SV("<empty>") : value;
-}
-
-static iree_string_view_t loom_low_allocation_function_name(
-    const loom_low_allocation_sidecar_t* sidecar) {
-  if (loom_low_func_def_isa(sidecar->function_op)) {
-    return loom_low_allocation_symbol_name(
-        sidecar->module, loom_low_func_def_callee(sidecar->function_op));
-  }
-  return IREE_SV("<unnamed>");
-}
-
-static iree_string_view_t loom_low_allocation_value_name(
-    const loom_module_t* module, loom_value_id_t value_id) {
-  if (value_id >= module->values.count) return IREE_SV("<unknown>");
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (value->name_id >= module->strings.count) return IREE_SV("<unnamed>");
-  return module->strings.entries[value->name_id];
-}
-
-static iree_string_view_t loom_low_allocation_value_class_name(
-    const loom_module_t* module, loom_liveness_value_class_t value_class) {
-  if (value_class.register_class_id == LOOM_STRING_ID_INVALID ||
-      value_class.register_class_id >= module->strings.count) {
-    return IREE_SV("<unknown>");
-  }
-  return module->strings.entries[value_class.register_class_id];
-}
-
-static const loom_op_t* loom_low_allocation_value_origin_op(
-    const loom_module_t* module, loom_value_id_t value_id,
-    const loom_op_t* fallback_op) {
-  if (value_id >= module->values.count) return fallback_op;
-  const loom_value_t* value = loom_module_value(module, value_id);
-  if (loom_value_is_block_arg(value)) return fallback_op;
-  const loom_op_t* defining_op = loom_def_op(value->def);
-  return defining_op ? defining_op : fallback_op;
-}
 
 static iree_status_t loom_low_allocation_emit_materialized_spill(
     const loom_low_allocation_sidecar_t* sidecar,
@@ -85,25 +34,23 @@ static iree_status_t loom_low_allocation_emit_materialized_spill(
   const loom_low_allocation_assignment_t* assignment =
       &sidecar->assignments[plan->assignment_index];
   loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_allocation_string_or_empty(
-          sidecar->target.bundle_storage.bundle.name)),
-      loom_param_string(loom_low_allocation_string_or_empty(
-          sidecar->target.bundle_storage.export_plan.name)),
-      loom_param_string(loom_low_allocation_string_or_empty(
-          sidecar->target.bundle_storage.config.name)),
-      loom_param_string(loom_low_allocation_function_name(sidecar)),
+      loom_param_string(loom_low_diagnostic_target_key(&sidecar->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&sidecar->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&sidecar->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          sidecar->module, sidecar->function_op)),
       loom_param_string(
-          loom_low_allocation_value_name(sidecar->module, plan->value_id)),
-      loom_param_string(loom_low_allocation_value_class_name(
+          loom_low_diagnostic_value_name(sidecar->module, plan->value_id)),
+      loom_param_string(loom_low_diagnostic_value_class_name(
           sidecar->module, assignment->value_class)),
       loom_param_string(
-          loom_low_allocation_symbol_name(sidecar->module, slot_ref)),
+          loom_low_diagnostic_symbol_name(sidecar->module, slot_ref)),
       loom_param_u32(plan->byte_size),
       loom_param_u32(plan->store_count),
       loom_param_u32(plan->reload_count),
   };
   loom_diagnostic_emission_t emission = {
-      .op = loom_low_allocation_value_origin_op(sidecar->module, plan->value_id,
+      .op = loom_low_diagnostic_value_origin_op(sidecar->module, plan->value_id,
                                                 sidecar->function_op),
       .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_BACKEND, 9),
       .params = params,

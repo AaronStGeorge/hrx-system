@@ -51,6 +51,12 @@ typedef enum loom_low_schedule_dependency_kind_e {
   LOOM_LOW_SCHEDULE_DEPENDENCY_CONTROL = 3,
 } loom_low_schedule_dependency_kind_t;
 
+enum loom_low_schedule_diagnostic_bits_e {
+  // Emits one BACKEND/003 remark per hard-bounded register-pressure summary.
+  LOOM_LOW_SCHEDULE_DIAGNOSTIC_PRESSURE_PEAKS = 1u << 0,
+};
+typedef uint32_t loom_low_schedule_diagnostic_flags_t;
+
 // One scheduled operation in a low function body.
 typedef struct loom_low_schedule_node_t {
   // Operation represented by this node.
@@ -119,6 +125,8 @@ typedef struct loom_low_schedule_options_t {
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Structured diagnostic emitter for user IR failures.
   iree_diagnostic_emitter_t emitter;
+  // Optional backend feedback diagnostics to emit after scheduling analysis.
+  loom_low_schedule_diagnostic_flags_t diagnostic_flags;
 } loom_low_schedule_options_t;
 
 // Schedule sidecar for one low.func.def body. All arrays are arena-owned by the

@@ -57,6 +57,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    diagnostics
+  HDRS
+    "diagnostics.h"
+  SRCS
+    "diagnostics.c"
+  DEPS
+    ::target_binding
+    iree::base
+    loom::src::loom::analysis::liveness
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     allocation
   HDRS
     "allocation.h"
@@ -85,6 +101,7 @@ loom_cc_library(
   DEPS
     ::allocation
     ::descriptors
+    ::diagnostics
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::error_defs
@@ -141,6 +158,7 @@ loom_cc_library(
     "schedule.c"
   DEPS
     ::descriptors
+    ::diagnostics
     ::requirements
     ::target_binding
     iree::base
