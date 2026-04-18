@@ -118,6 +118,15 @@ class LowVerifyTest : public ::testing::Test {
     return nullptr;
   }
 
+  loom_op_t* FindFirstLowSlot(loom_module_t* module) {
+    loom_op_t* op = nullptr;
+    loom_block_for_each_op(loom_module_block(module), op) {
+      if (loom_low_slot_isa(op)) return op;
+    }
+    ADD_FAILURE() << "expected module to contain low.slot";
+    return nullptr;
+  }
+
   loom_source_id_t FindContextSourceId(const char* filename) const {
     iree_string_view_t source_name = iree_make_cstring_view(filename);
     for (iree_host_size_t i = 0; i < context_.sources.count; ++i) {
@@ -1255,6 +1264,227 @@ TEST_F(LowVerifyTest, InvokeRejectsPureDirectImpureCallee) {
             "direct callee has no pure contract");
   ExpectU32Param(*diagnostic, 3, 0);
   ExpectU32Param(*diagnostic, 4, 0);
+}
+
+TEST_F(LowVerifyTest, SlotTrafficPassesWithOwnedSlot) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @slot_roundtrip(%input : reg<vm.i32>) "
+      "-> (reg<vm.i32>) {\n"
+      "  low.spill %input, @slot_roundtrip_spill {offset = 0} : reg<vm.i32>\n"
+      "  %reload = low.reload @slot_roundtrip_spill {offset = 0} : "
+      "reg<vm.i32>\n"
+      "  %addr = low.frame_index @slot_roundtrip_spill {offset = 0} : "
+      "reg<vm.ptr>\n"
+      "  low.return %reload : reg<vm.i32>\n"
+      "}\n"
+      "low.slot @slot_roundtrip_spill {function = @slot_roundtrip, space = "
+      "scratch, size = 4, align = 4}\n",
+      &capture);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, SlotRejectsSemanticFunctionOwner) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "func.def @semantic_owner() {\n"
+      "  func.return\n"
+      "}\n"
+      "low.slot @bad_slot {function = @semantic_owner, space = scratch, size "
+      "= 4, align = 4}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_slot_function_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "semantic_owner");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "low function definition");
+}
+
+TEST_F(LowVerifyTest, SlotRejectsLowFunctionDeclarationOwner) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_owner()\n"
+      "low.slot @bad_slot {function = @extern_owner, space = scratch, size = "
+      "4, align = 4}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_slot_function_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_owner");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "low function definition");
+}
+
+TEST_F(LowVerifyTest, SlotRejectsUnnamedSpace) {
+  static const char* kSource =
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @slot_owner() {\n"
+      "  low.return\n"
+      "}\n"
+      "low.slot @bad_slot {function = @slot_owner, space = scratch, size = 4, "
+      "align = 4}\n";
+  loom_module_t* module = ParseSource(kSource);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* slot = FindFirstLowSlot(module);
+  ASSERT_NE(slot, nullptr);
+  loom_op_attrs(slot)[loom_low_slot_space_ATTR_INDEX] = loom_attr_enum(0);
+
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifyParsedModule(kSource, module, &capture);
+  loom_module_free(module);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.slot");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_slot_space_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "space");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "space must name a supported low slot space");
+}
+
+TEST_F(LowVerifyTest, SlotRejectsNonPositiveSize) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @slot_owner() {\n"
+      "  low.return\n"
+      "}\n"
+      "low.slot @bad_slot {function = @slot_owner, space = scratch, size = 0, "
+      "align = 4}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.slot");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_slot_size_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "size");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "size must be positive");
+}
+
+TEST_F(LowVerifyTest, SlotRejectsNonPowerOfTwoAlignment) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @slot_owner() {\n"
+      "  low.return\n"
+      "}\n"
+      "low.slot @bad_slot {function = @slot_owner, space = scratch, size = 4, "
+      "align = 3}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.slot");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_slot_align_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "align");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "alignment must be a positive power of two");
+}
+
+TEST_F(LowVerifyTest, SpillRejectsSlotOwnedByDifferentLowFunction) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @slot_owner() {\n"
+      "  low.return\n"
+      "}\n"
+      "low.func.def target(@vm_target) @slot_user(%input : reg<vm.i32>) {\n"
+      "  low.spill %input, @owner_slot {offset = 0} : reg<vm.i32>\n"
+      "  low.return\n"
+      "}\n"
+      "low.slot @owner_slot {function = @slot_owner, space = scratch, size = "
+      "4, align = 4}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.spill");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_spill_slot_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "slot");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "slot owner must match the enclosing low function");
+}
+
+TEST_F(LowVerifyTest, ReloadRejectsOffsetOutsideSlot) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @slot_user() -> (reg<vm.i32>) {\n"
+      "  %reload = low.reload @small_slot {offset = 4} : reg<vm.i32>\n"
+      "  low.return %reload : reg<vm.i32>\n"
+      "}\n"
+      "low.slot @small_slot {function = @slot_user, space = scratch, size = "
+      "4, align = 4}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 24);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "low.reload");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_reload_offset_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "offset");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2),
+            "offset must address a byte inside the referenced slot");
+}
+
+TEST_F(LowVerifyTest, FrameIndexRejectsNonSlotRecord) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.def target(@vm_target) @slot_user() -> (reg<vm.ptr>) {\n"
+      "  %addr = low.frame_index @vm_target {offset = 0} : reg<vm.ptr>\n"
+      "  low.return %addr : reg<vm.ptr>\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_frame_index_slot_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "vm_target");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "low slot");
 }
 
 TEST_F(LowVerifyTest, DescriptorKeyRejectsEmptySegment) {

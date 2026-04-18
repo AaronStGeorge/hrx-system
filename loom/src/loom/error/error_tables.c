@@ -3050,6 +3050,27 @@ static const loom_error_def_t loom_err_lowering_023 = {
     .param_count = 3,
 };
 
+static const loom_error_param_def_t loom_err_lowering_024_params[] = {
+    {"op_name", LOOM_PARAM_STRING},
+    {"field_name", LOOM_PARAM_STRING},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_024 = {
+    .error_id = "ERR_LOWERING_024",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 24,
+    .summary = "Low structural storage op is invalid.",
+    .message_template =
+        "low structural op '{op_name}' field '{field_name}' is invalid: "
+        "{reason}",
+    .fix_hint_template =
+        "Keep low slots owned by low functions and reference them with valid "
+        "byte offsets",
+    .param_defs = loom_err_lowering_024_params,
+    .param_count = 3,
+};
+
 static const loom_error_param_def_t loom_err_backend_001_params[] = {
     {"target_key", LOOM_PARAM_STRING},   {"export_name", LOOM_PARAM_STRING},
     {"config_key", LOOM_PARAM_STRING},   {"function_name", LOOM_PARAM_STRING},
@@ -3393,10 +3414,11 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
     &loom_err_lowering_018,  &loom_err_lowering_019,  &loom_err_lowering_020,
     &loom_err_lowering_021,  &loom_err_lowering_022,  &loom_err_lowering_023,
-    &loom_err_backend_001,   &loom_err_backend_002,   &loom_err_backend_003,
-    &loom_err_backend_004,   &loom_err_backend_005,   &loom_err_backend_006,
-    &loom_err_backend_007,   &loom_err_backend_008,   &loom_err_backend_009,
-    &loom_err_backend_010,   &loom_err_backend_011,   &loom_err_backend_012,
+    &loom_err_lowering_024,  &loom_err_backend_001,   &loom_err_backend_002,
+    &loom_err_backend_003,   &loom_err_backend_004,   &loom_err_backend_005,
+    &loom_err_backend_006,   &loom_err_backend_007,   &loom_err_backend_008,
+    &loom_err_backend_009,   &loom_err_backend_010,   &loom_err_backend_011,
+    &loom_err_backend_012,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

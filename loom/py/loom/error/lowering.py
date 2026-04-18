@@ -516,6 +516,24 @@ ERR_LOWERING_023 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_024: Low structural storage op is invalid.
+ERR_LOWERING_024 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=24,
+    severity=Severity.ERROR,
+    summary="Low structural storage op is invalid.",
+    message=("low structural op '{op_name}' field '{field_name}' is invalid: {reason}"),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("field_name", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Keep low slots owned by low functions and reference them with valid "
+        "byte offsets"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -540,4 +558,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_021,
     ERR_LOWERING_022,
     ERR_LOWERING_023,
+    ERR_LOWERING_024,
 )

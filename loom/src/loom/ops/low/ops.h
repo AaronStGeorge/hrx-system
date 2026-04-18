@@ -30,7 +30,11 @@ enum {
   LOOM_OP_LOW_ABI_RESULT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 9),
   LOOM_OP_LOW_ABI_EFFECT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 10),
   LOOM_OP_LOW_ABI_CLOBBER = LOOM_OP_KIND(LOOM_DIALECT_LOW, 11),
-  LOOM_OP_LOW_COUNT_ = 12,
+  LOOM_OP_LOW_SLOT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 12),
+  LOOM_OP_LOW_SPILL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 13),
+  LOOM_OP_LOW_RELOAD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
+  LOOM_OP_LOW_FRAME_INDEX = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
+  LOOM_OP_LOW_COUNT_ = 16,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -103,6 +107,15 @@ typedef enum loom_low_abi_effect_kind_e {
   LOOM_LOW_ABI_EFFECT_KIND_UNKNOWN = 5,
   LOOM_LOW_ABI_EFFECT_KIND_COUNT_ = 6,
 } loom_low_abi_effect_kind_t;
+
+// Storage space represented by a low slot record.
+typedef enum loom_low_slot_space_e {
+  LOOM_LOW_SLOT_SPACE_STACK = 1,
+  LOOM_LOW_SLOT_SPACE_SCRATCH = 2,
+  LOOM_LOW_SLOT_SPACE_PRIVATE = 3,
+  LOOM_LOW_SLOT_SPACE_LDS = 4,
+  LOOM_LOW_SLOT_SPACE_COUNT_ = 5,
+} loom_low_slot_space_t;
 
 // LOOM_OP_LOW_FUNC_DEF: Target-bound low function definition with register-typed signature values.
 // low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
@@ -403,6 +416,78 @@ iree_status_t loom_low_abi_clobber_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_abi_clobber_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_SLOT: Explicit function-owned stack, scratch, private, or LDS storage slot.
+// low.slot @spill0 {function = @kernel, space = scratch, size = 16, align = 4}
+LOOM_DEFINE_ISA(loom_low_slot_isa, LOOM_OP_LOW_SLOT)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_slot_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_slot_function, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_low_slot_space, 2)
+LOOM_DEFINE_ATTR_I64(loom_low_slot_size, 3)
+LOOM_DEFINE_ATTR_I64(loom_low_slot_align, 4)
+iree_status_t loom_low_slot_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t function,
+    uint8_t space,
+    int64_t size,
+    int64_t align,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_slot_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_SPILL: Explicit spill store from a register value into a low slot.
+// low.spill %value, @spill0 {offset = 0} : reg<amdgpu.vgpr x4>
+LOOM_DEFINE_ISA(loom_low_spill_isa, LOOM_OP_LOW_SPILL)
+LOOM_DEFINE_OPERAND(loom_low_spill_value, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_spill_slot, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_spill_offset, 1)
+iree_status_t loom_low_spill_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_symbol_ref_t slot,
+    int64_t offset,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_spill_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_RELOAD: Explicit reload from a low slot into a register value.
+// %reload = low.reload @spill0 {offset = 0} : reg<amdgpu.vgpr x4>
+LOOM_DEFINE_ISA(loom_low_reload_isa, LOOM_OP_LOW_RELOAD)
+LOOM_DEFINE_RESULT(loom_low_reload_result, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_reload_slot, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_reload_offset, 1)
+iree_status_t loom_low_reload_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t slot,
+    int64_t offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_reload_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_FRAME_INDEX: Symbolic address calculation for a low slot before target frame layout.
+// %addr = low.frame_index @spill0 {offset = 0} : reg<x86.gpr>
+LOOM_DEFINE_ISA(loom_low_frame_index_isa, LOOM_OP_LOW_FRAME_INDEX)
+LOOM_DEFINE_RESULT(loom_low_frame_index_result, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_frame_index_slot, 0)
+LOOM_DEFINE_ATTR_I64(loom_low_frame_index_offset, 1)
+iree_status_t loom_low_frame_index_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t slot,
+    int64_t offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_frame_index_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

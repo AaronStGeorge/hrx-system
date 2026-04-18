@@ -183,6 +183,17 @@ LowCodeImportKind = EnumDef(
     doc="External code source kind for an imported low function declaration.",
 )
 
+LowSlotSpace = EnumDef(
+    "LowSlotSpace",
+    [
+        EnumCase("stack", 1, doc="CPU stack-frame storage."),
+        EnumCase("scratch", 2, doc="GPU per-lane scratch storage."),
+        EnumCase("private", 3, doc="Target-private per-invocation storage."),
+        EnumCase("lds", 4, doc="GPU local data share or workgroup storage."),
+    ],
+    doc="Storage space represented by a low slot record.",
+)
+
 # ============================================================================
 # Shared fragments
 # ============================================================================
@@ -447,6 +458,134 @@ low_copy = Op(
 )
 
 # ============================================================================
+# low.slot — explicit frame/storage slot record
+# ============================================================================
+
+low_slot = Op(
+    "low.slot",
+    group=low_ops,
+    doc="Explicit function-owned stack, scratch, private, or LDS storage slot.",
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="low slot",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "function",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
+        AttrDef("space", ATTR_TYPE_ENUM, enum_def=LowSlotSpace),
+        AttrDef("size", ATTR_TYPE_I64),
+        AttrDef("align", ATTR_TYPE_I64),
+    ],
+    verify="loom_low_slot_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        "low.slot @spill0 {function = @kernel, space = scratch, size = 16, align = 4}",
+    ],
+)
+
+# ============================================================================
+# low.spill — explicit store from a register into a low slot
+# ============================================================================
+
+low_spill = Op(
+    "low.spill",
+    group=low_ops,
+    doc="Explicit spill store from a register value into a low slot.",
+    operands=[Operand("value", REGISTER)],
+    attrs=[
+        AttrDef(
+            "slot",
+            "symbol",
+            symbol_ref=SymbolReference("low slot", ["record"]),
+        ),
+        AttrDef("offset", ATTR_TYPE_I64),
+    ],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_spill_verify",
+    format=[
+        Ref("value"),
+        COMMA,
+        SymbolRef("slot"),
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+    ],
+    examples=[
+        "low.spill %value, @spill0 {offset = 0} : reg<amdgpu.vgpr x4>",
+    ],
+)
+
+# ============================================================================
+# low.reload — explicit load from a low slot into a register
+# ============================================================================
+
+low_reload = Op(
+    "low.reload",
+    group=low_ops,
+    doc="Explicit reload from a low slot into a register value.",
+    attrs=[
+        AttrDef(
+            "slot",
+            "symbol",
+            symbol_ref=SymbolReference("low slot", ["record"]),
+        ),
+        AttrDef("offset", ATTR_TYPE_I64),
+    ],
+    results=[Result("result", REGISTER)],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_reload_verify",
+    format=[
+        SymbolRef("slot"),
+        AttrDict(),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%reload = low.reload @spill0 {offset = 0} : reg<amdgpu.vgpr x4>",
+    ],
+)
+
+# ============================================================================
+# low.frame_index — symbolic address of a low slot before final layout
+# ============================================================================
+
+low_frame_index = Op(
+    "low.frame_index",
+    group=low_ops,
+    doc="Symbolic address calculation for a low slot before target frame layout.",
+    attrs=[
+        AttrDef(
+            "slot",
+            "symbol",
+            symbol_ref=SymbolReference("low slot", ["record"]),
+        ),
+        AttrDef("offset", ATTR_TYPE_I64),
+    ],
+    results=[Result("result", REGISTER)],
+    traits=[UNKNOWN_EFFECTS],
+    verify="loom_low_frame_index_verify",
+    format=[
+        SymbolRef("slot"),
+        AttrDict(),
+        COLON,
+        ResultType("result"),
+    ],
+    examples=[
+        "%addr = low.frame_index @spill0 {offset = 0} : reg<x86.gpr>",
+    ],
+)
+
+# ============================================================================
 # low.abi.adapter — explicit semantic-to-low ABI adapter record
 # ============================================================================
 
@@ -690,4 +829,8 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_abi_result,
     low_abi_effect,
     low_abi_clobber,
+    low_slot,
+    low_spill,
+    low_reload,
+    low_frame_index,
 )

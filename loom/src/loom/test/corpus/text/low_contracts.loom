@@ -6,6 +6,15 @@ low.func.def allocation(assigned) schedule(constrained) target(@vm_target) @vm_a
   low.return %sum : reg<vm.i32>
 }
 
+low.func.def target(@vm_target) @vm_slot_roundtrip(%input: reg<vm.i32>) -> (reg<vm.i32>) {
+  low.spill %input, @vm_slot_roundtrip_spill {offset = 0} : reg<vm.i32>
+  %reload = low.reload @vm_slot_roundtrip_spill {offset = 0} : reg<vm.i32>
+  %addr = low.frame_index @vm_slot_roundtrip_spill {offset = 0} : reg<vm.ptr>
+  low.return %reload : reg<vm.i32>
+}
+
+low.slot @vm_slot_roundtrip_spill {align = 4, function = @vm_slot_roundtrip, size = 4, space = scratch}
+
 low.func.decl allocation(fixed) schedule(locked) import(vm, "iree.vm.core.add_i32") target(@vm_target) @extern_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
 
 low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = mapped, operand_count = 2, result_count = 1}

@@ -4213,6 +4213,34 @@
     "fix_hint_template": "Keep low function exactness and imported-code attrs complete and on the operation kind that owns them"
   },
   {
+    "error_id": "ERR_LOWERING_024",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 24,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low structural storage op is invalid.",
+    "message_template": "low structural op '{op_name}' field '{field_name}' is invalid: {reason}",
+    "params": [
+      {
+        "name": "op_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Keep low slots owned by low functions and reference them with valid byte offsets"
+  },
+  {
     "error_id": "ERR_BACKEND_001",
     "domain": 11,
     "domain_name": "BACKEND",
