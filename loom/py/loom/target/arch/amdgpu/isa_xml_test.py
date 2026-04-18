@@ -31,6 +31,19 @@ SAMPLE_XML = """
         <EncodingIdentifiers>
           <EncodingIdentifier Radix="2">10000000</EncodingIdentifier>
         </EncodingIdentifiers>
+        <MicrocodeFormat>
+          <BitMap>
+            <Field IsConditional="false">
+              <FieldName>OP</FieldName>
+              <BitLayout RangeCount="1">
+                <Range Order="0">
+                  <BitCount>7</BitCount>
+                  <BitOffset>16</BitOffset>
+                </Range>
+              </BitLayout>
+            </Field>
+          </BitMap>
+        </MicrocodeFormat>
       </Encoding>
       <Encoding Order="1">
         <EncodingName>ENC_VOP2</EncodingName>
@@ -39,6 +52,23 @@ SAMPLE_XML = """
         <EncodingIdentifiers>
           <EncodingIdentifier Radix="2">11000000</EncodingIdentifier>
         </EncodingIdentifiers>
+        <MicrocodeFormat>
+          <BitMap>
+            <Field IsConditional="false">
+              <FieldName>OPSEL_HI</FieldName>
+              <BitLayout RangeCount="2">
+                <Range Order="0">
+                  <BitCount>2</BitCount>
+                  <BitOffset>59</BitOffset>
+                </Range>
+                <Range Order="1">
+                  <BitCount>1</BitCount>
+                  <BitOffset>14</BitOffset>
+                </Range>
+              </BitLayout>
+            </Field>
+          </BitMap>
+        </MicrocodeFormat>
       </Encoding>
       <Encoding Order="2">
         <EncodingName>ENC_SOPP</EncodingName>
@@ -47,6 +77,19 @@ SAMPLE_XML = """
         <EncodingIdentifiers>
           <EncodingIdentifier Radix="2">10101010</EncodingIdentifier>
         </EncodingIdentifiers>
+        <MicrocodeFormat>
+          <BitMap>
+            <Field IsConditional="true">
+              <FieldName>SIMM16</FieldName>
+              <BitLayout RangeCount="1">
+                <Range Order="0">
+                  <BitCount>16</BitCount>
+                  <BitOffset>0</BitOffset>
+                </Range>
+              </BitLayout>
+            </Field>
+          </BitMap>
+        </MicrocodeFormat>
       </Encoding>
       <Encoding Order="3">
         <EncodingName>ENC_VBUFFER</EncodingName>
@@ -55,6 +98,23 @@ SAMPLE_XML = """
         <EncodingIdentifiers>
           <EncodingIdentifier Radix="2">1111000011110000</EncodingIdentifier>
         </EncodingIdentifiers>
+        <MicrocodeFormat>
+          <BitMap>
+            <Field IsConditional="false">
+              <FieldName>SBASE</FieldName>
+              <BitLayout RangeCount="1">
+                <Range Order="0">
+                  <BitCount>6</BitCount>
+                  <BitOffset>0</BitOffset>
+                  <Padding>
+                    <BitCount>1</BitCount>
+                    <Value Radix="2">0</Value>
+                  </Padding>
+                </Range>
+              </BitLayout>
+            </Field>
+          </BitMap>
+        </MicrocodeFormat>
       </Encoding>
     </Encodings>
     <Instructions>
@@ -276,6 +336,10 @@ def test_parse_amdgpu_isa_xml_text_extracts_instruction_facts() -> None:
         "ENC_SOPP",
         "ENC_VBUFFER",
     ]
+    assert spec.encoding_map()["ENC_SOP2"].fields[0].name == "OP"
+    assert spec.encoding_map()["ENC_VOP2"].fields[0].ranges[1].bit_offset == 14
+    assert spec.encoding_map()["ENC_SOPP"].fields[0].is_conditional
+    assert spec.encoding_map()["ENC_VBUFFER"].fields[0].ranges[0].padding_bit_count == 1
     assert [instruction.name for instruction in spec.instructions] == [
         "BUFFER_LOAD_B32",
         "S_ADD_CO_U32",
@@ -351,12 +415,43 @@ def test_instruction_encoding_summaries_are_deterministic() -> None:
     assert summaries[2].data_format_names == ("FMT_NUM_U32",)
 
 
+def test_encoding_field_summaries_include_ranges_and_padding() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+
+    summaries = spec.encoding_field_summaries(["ENC_VOP2", "ENC_SOPP", "ENC_VBUFFER"])
+
+    assert [
+        (summary.encoding_name, summary.field_name, summary.total_bit_count)
+        for summary in summaries
+    ] == [
+        ("ENC_SOPP", "SIMM16", 16),
+        ("ENC_VBUFFER", "SBASE", 6),
+        ("ENC_VOP2", "OPSEL_HI", 3),
+    ]
+    assert summaries[0].is_conditional
+    assert summaries[1].ranges[0].padding_bit_count == 1
+    assert summaries[1].ranges[0].padding_value == 0
+    assert summaries[1].total_padding_bit_count == 1
+    assert summaries[2].ranges[0].bit_offset == 59
+    assert summaries[2].ranges[1].bit_offset == 14
+
+
 def test_parse_amdgpu_isa_xml_rejects_missing_required_fields() -> None:
     malformed_xml = SAMPLE_XML.replace("<OperandType>OPR_SDST</OperandType>", "", 1)
 
     with pytest.raises(
         AmdgpuIsaXmlError,
         match="expected <OperandType> under <Operand>",
+    ):
+        parse_amdgpu_isa_xml_text(malformed_xml, source_name="broken.xml")
+
+
+def test_parse_amdgpu_isa_xml_rejects_bit_range_count_mismatch() -> None:
+    malformed_xml = SAMPLE_XML.replace('RangeCount="2"', 'RangeCount="3"', 1)
+
+    with pytest.raises(
+        AmdgpuIsaXmlError,
+        match="Field\\(OPSEL_HI\\) declares RangeCount=3 but has 2 ranges",
     ):
         parse_amdgpu_isa_xml_text(malformed_xml, source_name="broken.xml")
 

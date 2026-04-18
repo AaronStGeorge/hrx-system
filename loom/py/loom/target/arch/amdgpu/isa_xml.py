@@ -26,12 +26,29 @@ class AmdgpuIsaXmlError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuIsaBitRange:
+    order: int
+    bit_count: int
+    bit_offset: int
+    padding_bit_count: int = 0
+    padding_value: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuIsaEncodingField:
+    name: str
+    is_conditional: bool
+    ranges: tuple[AmdgpuIsaBitRange, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuIsaEncoding:
     name: str
     order: int
     bit_count: int
     identifier_mask: int
     identifier_values: tuple[int, ...]
+    fields: tuple[AmdgpuIsaEncodingField, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +112,16 @@ class AmdgpuIsaInstructionEncodingSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuIsaEncodingFieldSummary:
+    encoding_name: str
+    field_name: str
+    is_conditional: bool
+    ranges: tuple[AmdgpuIsaBitRange, ...]
+    total_bit_count: int
+    total_padding_bit_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuIsaSpec:
     source_name: str
     architecture_name: str
@@ -104,6 +131,51 @@ class AmdgpuIsaSpec:
 
     def encoding_map(self) -> dict[str, AmdgpuIsaEncoding]:
         return {encoding.name: encoding for encoding in self.encodings}
+
+    def select_encodings(self, names: Iterable[str]) -> tuple[AmdgpuIsaEncoding, ...]:
+        requested_names = tuple(names)
+        encodings_by_name = self.encoding_map()
+        selected: dict[str, AmdgpuIsaEncoding] = {}
+        missing_names: list[str] = []
+        for name in requested_names:
+            encoding = encodings_by_name.get(name)
+            if encoding is None:
+                missing_names.append(name)
+            else:
+                selected[encoding.name] = encoding
+        if missing_names:
+            missing_text = ", ".join(sorted(missing_names))
+            raise AmdgpuIsaXmlError(
+                f"{self.source_name}: unknown AMDGPU ISA encoding(s): {missing_text}"
+            )
+        return tuple(
+            selected[encoding.name]
+            for encoding in self.encodings
+            if encoding.name in selected
+        )
+
+    def encoding_field_summaries(
+        self, names: Iterable[str] | None = None
+    ) -> tuple[AmdgpuIsaEncodingFieldSummary, ...]:
+        if names is None:
+            encodings = self.encodings
+        else:
+            encodings = self.select_encodings(names)
+
+        summaries = [
+            _summarize_encoding_field(encoding, field)
+            for encoding in encodings
+            for field in encoding.fields
+        ]
+        return tuple(
+            sorted(
+                summaries,
+                key=lambda summary: (
+                    summary.encoding_name,
+                    summary.field_name,
+                ),
+            )
+        )
 
     def instruction_map(
         self, *, include_aliases: bool = False
@@ -287,12 +359,108 @@ def _parse_encoding(
     )
     if not identifier_values:
         raise AmdgpuIsaXmlError(f"{source_name}: {context} has no identifiers")
+    fields = _parse_encoding_fields(encoding_element, source_name, context)
     return AmdgpuIsaEncoding(
         name=name,
         order=order,
         bit_count=bit_count,
         identifier_mask=identifier_mask,
         identifier_values=identifier_values,
+        fields=fields,
+    )
+
+
+def _parse_encoding_fields(
+    encoding_element: ElementTree.Element,
+    source_name: str,
+    encoding_context: str,
+) -> tuple[AmdgpuIsaEncodingField, ...]:
+    microcode_format_element = _required_child(
+        encoding_element, "MicrocodeFormat", source_name
+    )
+    bitmap_element = _required_child(microcode_format_element, "BitMap", source_name)
+    fields = tuple(
+        _parse_encoding_field(field_element, source_name, encoding_context)
+        for field_element in bitmap_element.findall("Field")
+    )
+    if not fields:
+        raise AmdgpuIsaXmlError(f"{source_name}: {encoding_context} has no fields")
+    _ensure_unique_names(
+        (field.name for field in fields),
+        f"{encoding_context} field",
+        source_name,
+    )
+    return fields
+
+
+def _parse_encoding_field(
+    field_element: ElementTree.Element,
+    source_name: str,
+    encoding_context: str,
+) -> AmdgpuIsaEncodingField:
+    name = _required_text(field_element, "FieldName", source_name)
+    context = f"{encoding_context}/Field({name})"
+    bit_layout_element = _required_child(field_element, "BitLayout", source_name)
+    expected_range_count = _required_integer_attribute(
+        bit_layout_element, "RangeCount", source_name, context
+    )
+    ranges = tuple(
+        sorted(
+            (
+                _parse_bit_range(range_element, source_name, context)
+                for range_element in bit_layout_element.findall("Range")
+            ),
+            key=lambda bit_range: bit_range.order,
+        )
+    )
+    if expected_range_count != len(ranges):
+        raise AmdgpuIsaXmlError(
+            f"{source_name}: {context} declares RangeCount={expected_range_count} "
+            f"but has {len(ranges)} ranges"
+        )
+    if not ranges:
+        raise AmdgpuIsaXmlError(f"{source_name}: {context} has no bit ranges")
+    _ensure_unique_names(
+        (str(bit_range.order) for bit_range in ranges),
+        f"{context} range order",
+        source_name,
+    )
+    return AmdgpuIsaEncodingField(
+        name=name,
+        is_conditional=_required_boolean_attribute(
+            field_element, "IsConditional", source_name, context
+        ),
+        ranges=ranges,
+    )
+
+
+def _parse_bit_range(
+    range_element: ElementTree.Element,
+    source_name: str,
+    field_context: str,
+) -> AmdgpuIsaBitRange:
+    order = _required_integer_attribute(
+        range_element, "Order", source_name, f"{field_context}/Range"
+    )
+    context = f"{field_context}/Range({order})"
+    padding_bit_count = 0
+    padding_value = 0
+    padding_elements = range_element.findall("Padding")
+    if len(padding_elements) > 1:
+        raise AmdgpuIsaXmlError(f"{source_name}: {context} has multiple paddings")
+    if padding_elements:
+        padding_element = padding_elements[0]
+        padding_bit_count = _required_integer(padding_element, "BitCount", source_name)
+        padding_value_element = _required_child(padding_element, "Value", source_name)
+        padding_value = _parse_integer_element(
+            padding_value_element, source_name, f"{context}/Padding/Value"
+        )
+    return AmdgpuIsaBitRange(
+        order=order,
+        bit_count=_required_integer(range_element, "BitCount", source_name),
+        bit_offset=_required_integer(range_element, "BitOffset", source_name),
+        padding_bit_count=padding_bit_count,
+        padding_value=padding_value,
     )
 
 
@@ -453,6 +621,22 @@ def _parse_functional_group(
             "has no subgroups"
         )
     return AmdgpuIsaFunctionalGroup(name=name, subgroups=subgroups)
+
+
+def _summarize_encoding_field(
+    encoding: AmdgpuIsaEncoding,
+    field: AmdgpuIsaEncodingField,
+) -> AmdgpuIsaEncodingFieldSummary:
+    return AmdgpuIsaEncodingFieldSummary(
+        encoding_name=encoding.name,
+        field_name=field.name,
+        is_conditional=field.is_conditional,
+        ranges=field.ranges,
+        total_bit_count=sum(bit_range.bit_count for bit_range in field.ranges),
+        total_padding_bit_count=sum(
+            bit_range.padding_bit_count for bit_range in field.ranges
+        ),
+    )
 
 
 def _summarize_instruction_encoding(
