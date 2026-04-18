@@ -213,9 +213,12 @@ iree_status_t loom_low_descriptor_registry_verify_requirements(
     const loom_low_descriptor_registry_t* registry,
     loom_low_descriptor_requirement_flags_t requirements) {
   IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_verify(registry));
-  for (iree_host_size_t i = 0; i < registry->descriptor_set_count; ++i) {
+  iree_host_size_t descriptor_set_count =
+      loom_low_descriptor_registry_descriptor_set_count(registry);
+  for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_descriptor_set_verify_requirements(
-        registry->descriptor_sets[i], requirements));
+        loom_low_descriptor_registry_descriptor_set_at(registry, i),
+        requirements));
   }
   return iree_ok_status();
 }

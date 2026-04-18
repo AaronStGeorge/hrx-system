@@ -17,8 +17,8 @@ TEST(LowDescriptorRegistryTest, RegistryVerifiesSelectedTargetPackages) {
   loom_target_low_descriptor_registry_t registry = {};
   loom_target_low_descriptor_registry_initialize(&registry);
 
-  EXPECT_NE(registry.registry.descriptor_sets, nullptr);
-  EXPECT_GT(registry.registry.descriptor_set_count, 0u);
+  EXPECT_NE(registry.registry.descriptor_set_providers, nullptr);
+  EXPECT_GT(registry.registry.descriptor_set_provider_count, 0u);
   IREE_EXPECT_OK(loom_low_descriptor_registry_verify(&registry.registry));
 }
 

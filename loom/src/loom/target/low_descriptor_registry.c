@@ -283,32 +283,39 @@ static const loom_target_bundle_t kAmdgpuGfx1250Bundle = {
     .config = &kAmdgpuGfx1250Config,
 };
 
+static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
+    loom_ireevm_core_descriptor_set,
+    loom_wasm_core_simd128_descriptor_set,
+    loom_x86_avx512_core_descriptor_set,
+    loom_x86_packed_dot_core_descriptor_set,
+    loom_amdgpu_gfx950_core_descriptor_set,
+    loom_amdgpu_gfx11_core_descriptor_set,
+    loom_amdgpu_gfx12_core_descriptor_set,
+    loom_amdgpu_gfx1250_core_descriptor_set,
+};
+
+static const loom_target_bundle_t* const kLowTargetBundles[] = {
+    &kIreeVmBundle,       &kWasmSimd128Bundle,   &kX86Avx512Bundle,
+    &kX86PackedDotBundle, &kAmdgpuGfx950Bundle,  &kAmdgpuGfx11Bundle,
+    &kAmdgpuGfx12Bundle,  &kAmdgpuGfx1250Bundle,
+};
+
 void loom_target_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry) {
   IREE_ASSERT_ARGUMENT(out_registry);
-  *out_registry = (loom_target_low_descriptor_registry_t){0};
-  out_registry->descriptor_sets[0] = loom_ireevm_core_descriptor_set();
-  out_registry->descriptor_sets[1] = loom_wasm_core_simd128_descriptor_set();
-  out_registry->descriptor_sets[2] = loom_x86_avx512_core_descriptor_set();
-  out_registry->descriptor_sets[3] = loom_x86_packed_dot_core_descriptor_set();
-  out_registry->descriptor_sets[4] = loom_amdgpu_gfx950_core_descriptor_set();
-  out_registry->descriptor_sets[5] = loom_amdgpu_gfx11_core_descriptor_set();
-  out_registry->descriptor_sets[6] = loom_amdgpu_gfx12_core_descriptor_set();
-  out_registry->descriptor_sets[7] = loom_amdgpu_gfx1250_core_descriptor_set();
-  out_registry->target_bundles[0] = &kIreeVmBundle;
-  out_registry->target_bundles[1] = &kWasmSimd128Bundle;
-  out_registry->target_bundles[2] = &kX86Avx512Bundle;
-  out_registry->target_bundles[3] = &kX86PackedDotBundle;
-  out_registry->target_bundles[4] = &kAmdgpuGfx950Bundle;
-  out_registry->target_bundles[5] = &kAmdgpuGfx11Bundle;
-  out_registry->target_bundles[6] = &kAmdgpuGfx12Bundle;
-  out_registry->target_bundles[7] = &kAmdgpuGfx1250Bundle;
-  out_registry->registry = (loom_low_descriptor_registry_t){
-      .descriptor_sets = out_registry->descriptor_sets,
-      .descriptor_set_count = IREE_ARRAYSIZE(out_registry->descriptor_sets),
+  *out_registry = (loom_target_low_descriptor_registry_t){
+      .descriptor_set_providers = kLowDescriptorSetProviders,
+      .descriptor_set_provider_count =
+          IREE_ARRAYSIZE(kLowDescriptorSetProviders),
+      .target_bundles = kLowTargetBundles,
+      .target_bundle_count = IREE_ARRAYSIZE(kLowTargetBundles),
+      .registry =
+          {
+              .descriptor_set_providers = kLowDescriptorSetProviders,
+              .descriptor_set_provider_count =
+                  IREE_ARRAYSIZE(kLowDescriptorSetProviders),
+          },
   };
-  out_registry->target_bundle_count =
-      IREE_ARRAYSIZE(out_registry->target_bundles);
 }
 
 iree_status_t loom_target_low_descriptor_set_lookup(

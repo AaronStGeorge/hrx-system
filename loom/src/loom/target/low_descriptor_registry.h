@@ -24,20 +24,17 @@
 extern "C" {
 #endif
 
-#define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_MAX_DESCRIPTOR_SETS 8
-#define LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_MAX_TARGET_BUNDLES 8
-
 typedef struct loom_target_low_descriptor_registry_t {
-  // Borrowed descriptor-set pointers linked into this target registry package.
-  const loom_low_descriptor_set_t*
-      descriptor_sets[LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_MAX_DESCRIPTOR_SETS];
+  // Borrowed descriptor-set provider table linked into this target package.
+  const loom_low_descriptor_set_provider_t* descriptor_set_providers;
+  // Number of provider functions in |descriptor_set_providers|.
+  iree_host_size_t descriptor_set_provider_count;
   // Borrowed target-bundle preset pointers linked into this registry package.
-  const loom_target_bundle_t*
-      target_bundles[LOOM_TARGET_LOW_DESCRIPTOR_REGISTRY_MAX_TARGET_BUNDLES];
-  // Registry view over descriptor_sets.
-  loom_low_descriptor_registry_t registry;
-  // Number of valid target-bundle preset pointers in target_bundles.
+  const loom_target_bundle_t* const* target_bundles;
+  // Number of valid target-bundle preset pointers in |target_bundles|.
   iree_host_size_t target_bundle_count;
+  // Registry view over the package descriptor-set providers.
+  loom_low_descriptor_registry_t registry;
 } loom_target_low_descriptor_registry_t;
 
 // Initializes the descriptor-set registry selected by the current target

@@ -1842,6 +1842,30 @@ static iree_status_t loom_low_descriptor_set_key(
   return iree_ok_status();
 }
 
+iree_host_size_t loom_low_descriptor_registry_descriptor_set_count(
+    const loom_low_descriptor_registry_t* registry) {
+  if (registry == NULL) return 0;
+  return registry->descriptor_set_count +
+         registry->descriptor_set_provider_count;
+}
+
+const loom_low_descriptor_set_t* loom_low_descriptor_registry_descriptor_set_at(
+    const loom_low_descriptor_registry_t* registry, iree_host_size_t index) {
+  if (registry == NULL) return NULL;
+  if (index < registry->descriptor_set_count) {
+    if (registry->descriptor_sets == NULL) return NULL;
+    return registry->descriptor_sets[index];
+  }
+  index -= registry->descriptor_set_count;
+  if (index < registry->descriptor_set_provider_count) {
+    if (registry->descriptor_set_providers == NULL) return NULL;
+    loom_low_descriptor_set_provider_t provider =
+        registry->descriptor_set_providers[index];
+    return provider ? provider() : NULL;
+  }
+  return NULL;
+}
+
 iree_status_t loom_low_descriptor_registry_verify(
     const loom_low_descriptor_registry_t* registry) {
   if (registry == NULL) {
@@ -1853,16 +1877,25 @@ iree_status_t loom_low_descriptor_registry_verify(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor registry entries are required");
   }
-  for (iree_host_size_t i = 0; i < registry->descriptor_set_count; ++i) {
+  if (registry->descriptor_set_provider_count != 0 &&
+      registry->descriptor_set_providers == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor registry providers are required");
+  }
+  iree_host_size_t descriptor_set_count =
+      loom_low_descriptor_registry_descriptor_set_count(registry);
+  for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
     const loom_low_descriptor_set_t* descriptor_set =
-        registry->descriptor_sets[i];
+        loom_low_descriptor_registry_descriptor_set_at(registry, i);
     IREE_RETURN_IF_ERROR(loom_low_descriptor_set_verify(descriptor_set));
     iree_string_view_t key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(loom_low_descriptor_set_key(descriptor_set, &key));
-    for (iree_host_size_t j = i + 1; j < registry->descriptor_set_count; ++j) {
+    for (iree_host_size_t j = i + 1; j < descriptor_set_count; ++j) {
+      const loom_low_descriptor_set_t* other_descriptor_set =
+          loom_low_descriptor_registry_descriptor_set_at(registry, j);
       iree_string_view_t other_key = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_low_descriptor_set_key(
-          registry->descriptor_sets[j], &other_key));
+      IREE_RETURN_IF_ERROR(
+          loom_low_descriptor_set_key(other_descriptor_set, &other_key));
       if (iree_string_view_equal(key, other_key)) {
         return iree_make_status(
             IREE_STATUS_ALREADY_EXISTS,
@@ -1891,9 +1924,16 @@ iree_status_t loom_low_descriptor_registry_lookup(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor registry entries are required");
   }
-  for (iree_host_size_t i = 0; i < registry->descriptor_set_count; ++i) {
+  if (registry->descriptor_set_provider_count != 0 &&
+      registry->descriptor_set_providers == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor registry providers are required");
+  }
+  iree_host_size_t descriptor_set_count =
+      loom_low_descriptor_registry_descriptor_set_count(registry);
+  for (iree_host_size_t i = 0; i < descriptor_set_count; ++i) {
     const loom_low_descriptor_set_t* descriptor_set =
-        registry->descriptor_sets[i];
+        loom_low_descriptor_registry_descriptor_set_at(registry, i);
     iree_string_view_t candidate_key = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(
         loom_low_descriptor_set_key(descriptor_set, &candidate_key));

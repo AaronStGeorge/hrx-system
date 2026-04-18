@@ -272,6 +272,16 @@ void AddAddDescriptorEffect(TestTables* tables, loom_low_effect_kind_t kind,
   tables->set.effect_count = 1;
 }
 
+static const loom_low_descriptor_set_t* gProvidedDescriptorSet = nullptr;
+
+const loom_low_descriptor_set_t* ProvideTestDescriptorSet(void) {
+  return gProvidedDescriptorSet;
+}
+
+const loom_low_descriptor_set_t* ProvideNullDescriptorSet(void) {
+  return nullptr;
+}
+
 TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
   TestTables tables;
   InitializeTestTables(&tables);
@@ -292,6 +302,65 @@ TEST(LowDescriptorsTest, VerifiesAndLooksUpDescriptors) {
       &tables.set, IREE_SV("test.missing"), &descriptor_ordinal);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
   EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+}
+
+TEST(LowDescriptorsTest, ProviderBackedRegistryVerifiesAndLooksUpDescriptors) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  gProvidedDescriptorSet = &tables.set;
+  const loom_low_descriptor_set_provider_t providers[] = {
+      ProvideTestDescriptorSet,
+  };
+  const loom_low_descriptor_registry_t registry = {
+      .descriptor_set_providers = providers,
+      .descriptor_set_provider_count = IREE_ARRAYSIZE(providers),
+  };
+
+  EXPECT_EQ(loom_low_descriptor_registry_descriptor_set_count(&registry), 1u);
+  EXPECT_EQ(loom_low_descriptor_registry_descriptor_set_at(&registry, 0),
+            &tables.set);
+  EXPECT_EQ(loom_low_descriptor_registry_descriptor_set_at(&registry, 1),
+            nullptr);
+  IREE_ASSERT_OK(loom_low_descriptor_registry_verify(&registry));
+
+  const loom_low_descriptor_set_t* descriptor_set = nullptr;
+  IREE_ASSERT_OK(loom_low_descriptor_registry_lookup(
+      &registry, IREE_SV("test.core"), &descriptor_set));
+  EXPECT_EQ(descriptor_set, &tables.set);
+  gProvidedDescriptorSet = nullptr;
+}
+
+TEST(LowDescriptorsTest, RegistryRejectsNullDescriptorSetProvider) {
+  const loom_low_descriptor_set_provider_t providers[] = {
+      ProvideNullDescriptorSet,
+  };
+  const loom_low_descriptor_registry_t registry = {
+      .descriptor_set_providers = providers,
+      .descriptor_set_provider_count = IREE_ARRAYSIZE(providers),
+  };
+
+  iree_status_t status = loom_low_descriptor_registry_verify(&registry);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RegistryRejectsDuplicateDirectAndProviderKeys) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  const loom_low_descriptor_set_t* direct_sets[] = {&tables.set};
+  gProvidedDescriptorSet = &tables.set;
+  const loom_low_descriptor_set_provider_t providers[] = {
+      ProvideTestDescriptorSet,
+  };
+  const loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = direct_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(direct_sets),
+      .descriptor_set_providers = providers,
+      .descriptor_set_provider_count = IREE_ARRAYSIZE(providers),
+  };
+
+  iree_status_t status = loom_low_descriptor_registry_verify(&registry);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS, status);
+  gProvidedDescriptorSet = nullptr;
 }
 
 TEST(LowDescriptorsTest, RejectsMalformedSpans) {

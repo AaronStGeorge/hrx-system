@@ -569,15 +569,38 @@ typedef struct loom_low_descriptor_set_t {
   uint32_t feature_mask_word_count;
 } loom_low_descriptor_set_t;
 
+// Returns a borrowed descriptor set linked into a target package. Providers
+// must be stable and return the same non-NULL descriptor set for each call.
+typedef const loom_low_descriptor_set_t* (*loom_low_descriptor_set_provider_t)(
+    void);
+
 // Borrowed descriptor-set registry available to low verification/emission runs.
 // Entries may be in any order; lookups reject duplicate matching keys so
-// callers do not need a separate normalization step for correctness.
+// callers do not need a separate normalization step for correctness. Registries
+// may provide descriptor sets directly or through provider functions; provider
+// tables let package-level registries stay static and grow without embedding a
+// fixed-capacity materialization buffer.
 typedef struct loom_low_descriptor_registry_t {
   // Borrowed descriptor-set pointers linked into the current compiler binary.
   const loom_low_descriptor_set_t* const* descriptor_sets;
   // Number of descriptor-set pointers in |descriptor_sets|.
   iree_host_size_t descriptor_set_count;
+  // Borrowed descriptor-set provider functions linked into the current binary.
+  const loom_low_descriptor_set_provider_t* descriptor_set_providers;
+  // Number of provider functions in |descriptor_set_providers|.
+  iree_host_size_t descriptor_set_provider_count;
 } loom_low_descriptor_registry_t;
+
+// Returns the total number of descriptor-set slots in |registry|, including
+// direct descriptor-set pointers and provider-backed sets. NULL registries have
+// zero slots.
+iree_host_size_t loom_low_descriptor_registry_descriptor_set_count(
+    const loom_low_descriptor_registry_t* registry);
+
+// Returns the descriptor set at |index|, or NULL if |registry| is NULL, |index|
+// is out of range, or a provider row is NULL/returns NULL.
+const loom_low_descriptor_set_t* loom_low_descriptor_registry_descriptor_set_at(
+    const loom_low_descriptor_registry_t* registry, iree_host_size_t index);
 
 // Verifies structural integrity of a descriptor set. This checks table spans,
 // string offsets, descriptor key uniqueness, and cross-table references; it
