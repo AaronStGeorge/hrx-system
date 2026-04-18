@@ -306,6 +306,76 @@ ERR_LOWERING_014 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_015: Low invoke ABI adapter callee mismatch.
+ERR_LOWERING_015 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=15,
+    severity=Severity.ERROR,
+    summary="Low invoke ABI adapter callee mismatch.",
+    message=(
+        "low.invoke callee '@{callee_name}' uses ABI adapter "
+        "'@{adapter_name}' bound to callee '@{adapter_callee_name}'"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("adapter_name", ParamKind.STRING),
+        ErrorParam("adapter_callee_name", ParamKind.STRING),
+    ),
+    fix_hint="Use an ABI adapter bound to the invoked low function",
+)
+
+# ERR_LOWERING_016: Low invoke ABI adapter count mismatch.
+ERR_LOWERING_016 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=16,
+    severity=Severity.ERROR,
+    summary="Low invoke ABI adapter count mismatch.",
+    message=(
+        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
+        "{field_kind} count is {actual_count}, expected {expected_count} "
+        "for {conversion_rule} conversion"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("adapter_name", ParamKind.STRING),
+        ErrorParam("field_kind", ParamKind.STRING),
+        ErrorParam("actual_count", ParamKind.I64),
+        ErrorParam("expected_count", ParamKind.I64),
+        ErrorParam("conversion_rule", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Match the invoke, adapter record, and callee low-function signature arity"
+    ),
+)
+
+# ERR_LOWERING_017: Low invoke ABI adapter conversion type mismatch.
+ERR_LOWERING_017 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=17,
+    severity=Severity.ERROR,
+    summary="Low invoke ABI adapter conversion type mismatch.",
+    message=(
+        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
+        "{conversion_rule} conversion for {field_kind} {field_index} has "
+        "type {actual_type}, expected callee {callee_field_kind} type "
+        "{expected_type}"
+    ),
+    params=(
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("adapter_name", ParamKind.STRING),
+        ErrorParam("conversion_rule", ParamKind.STRING),
+        ErrorParam("field_kind", ParamKind.STRING),
+        ErrorParam("field_index", ParamKind.U32),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("callee_field_kind", ParamKind.STRING),
+        ErrorParam("expected_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Choose an ABI adapter conversion that accepts the semantic value type "
+        "or materialize values matching the callee register ABI"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -321,4 +391,7 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_012,
     ERR_LOWERING_013,
     ERR_LOWERING_014,
+    ERR_LOWERING_015,
+    ERR_LOWERING_016,
+    ERR_LOWERING_017,
 )

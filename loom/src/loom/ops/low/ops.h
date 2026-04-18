@@ -25,7 +25,8 @@ enum {
   LOOM_OP_LOW_CONST = LOOM_OP_KIND(LOOM_DIALECT_LOW, 4),
   LOOM_OP_LOW_COPY = LOOM_OP_KIND(LOOM_DIALECT_LOW, 5),
   LOOM_OP_LOW_INVOKE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 6),
-  LOOM_OP_LOW_COUNT_ = 7,
+  LOOM_OP_LOW_ABI_ADAPTER = LOOM_OP_KIND(LOOM_DIALECT_LOW, 7),
+  LOOM_OP_LOW_COUNT_ = 8,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -48,6 +49,12 @@ typedef enum loom_low_purity_e {
   LOOM_LOW_PURITY_PURE = 1,
   LOOM_LOW_PURITY_COUNT_ = 2,
 } loom_low_purity_t;
+
+// Semantic-to-low ABI conversion rule used by a low ABI adapter record.
+typedef enum loom_low_abi_adapter_conversion_e {
+  LOOM_LOW_ABI_ADAPTER_CONVERSION_DIRECT = 0,
+  LOOM_LOW_ABI_ADAPTER_CONVERSION_COUNT_ = 1,
+} loom_low_abi_adapter_conversion_t;
 
 // LOOM_OP_LOW_FUNC_DEF: Target-bound low function definition with register-typed signature values.
 // low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
@@ -191,11 +198,18 @@ LOOM_DEFINE_ISA(loom_low_invoke_isa, LOOM_OP_LOW_INVOKE)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_invoke_operands, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_low_invoke_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_invoke_callee, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_invoke_adapter, 1)
+enum loom_low_invoke_build_flag_bits_e {
+  LOOM_LOW_INVOKE_BUILD_FLAG_HAS_ADAPTER = 1u << 0,
+};
+typedef uint32_t loom_low_invoke_build_flags_t;
 iree_status_t loom_low_invoke_build(
     loom_builder_t* builder,
+    loom_low_invoke_build_flags_t build_flags,
     loom_symbol_ref_t callee,
     loom_may_consume const loom_value_id_t* operands,
     iree_host_size_t operands_count,
+    loom_optional loom_symbol_ref_t adapter,
     const loom_type_t* result_types,
     iree_host_size_t result_count,
     const loom_tied_result_t* tied_results,
@@ -203,6 +217,27 @@ iree_status_t loom_low_invoke_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_invoke_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_ABI_ADAPTER: Explicit adapter record for calls crossing from semantic Loom values into a low function register ABI.
+// low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = direct, operand_count = 2, result_count = 1}
+LOOM_DEFINE_ISA(loom_low_abi_adapter_isa, LOOM_OP_LOW_ABI_ADAPTER)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_adapter_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_adapter_callee, 1)
+LOOM_DEFINE_ATTR_ENUM(loom_low_abi_adapter_conversion, 2)
+LOOM_DEFINE_ATTR_I64(loom_low_abi_adapter_operand_count, 3)
+LOOM_DEFINE_ATTR_I64(loom_low_abi_adapter_result_count, 4)
+iree_status_t loom_low_abi_adapter_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t callee,
+    uint8_t conversion,
+    int64_t operand_count,
+    int64_t result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_abi_adapter_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

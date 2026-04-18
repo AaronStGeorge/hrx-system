@@ -2844,6 +2844,75 @@ static const loom_error_def_t loom_err_lowering_014 = {
     .param_count = 6,
 };
 
+static const loom_error_param_def_t loom_err_lowering_015_params[] = {
+    {"callee_name", LOOM_PARAM_STRING},
+    {"adapter_name", LOOM_PARAM_STRING},
+    {"adapter_callee_name", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_015 = {
+    .error_id = "ERR_LOWERING_015",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 15,
+    .summary = "Low invoke ABI adapter callee mismatch.",
+    .message_template =
+        "low.invoke callee '@{callee_name}' uses ABI adapter '@{adapter_name}' "
+        "bound to callee '@{adapter_callee_name}'",
+    .fix_hint_template = "Use an ABI adapter bound to the invoked low function",
+    .param_defs = loom_err_lowering_015_params,
+    .param_count = 3,
+};
+
+static const loom_error_param_def_t loom_err_lowering_016_params[] = {
+    {"callee_name", LOOM_PARAM_STRING}, {"adapter_name", LOOM_PARAM_STRING},
+    {"field_kind", LOOM_PARAM_STRING},  {"actual_count", LOOM_PARAM_I64},
+    {"expected_count", LOOM_PARAM_I64}, {"conversion_rule", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_016 = {
+    .error_id = "ERR_LOWERING_016",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 16,
+    .summary = "Low invoke ABI adapter count mismatch.",
+    .message_template =
+        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
+        "{field_kind} count is {actual_count}, expected {expected_count} for "
+        "{conversion_rule} conversion",
+    .fix_hint_template =
+        "Match the invoke, adapter record, and callee low-function signature "
+        "arity",
+    .param_defs = loom_err_lowering_016_params,
+    .param_count = 6,
+};
+
+static const loom_error_param_def_t loom_err_lowering_017_params[] = {
+    {"callee_name", LOOM_PARAM_STRING},
+    {"adapter_name", LOOM_PARAM_STRING},
+    {"conversion_rule", LOOM_PARAM_STRING},
+    {"field_kind", LOOM_PARAM_STRING},
+    {"field_index", LOOM_PARAM_U32},
+    {"actual_type", LOOM_PARAM_TYPE},
+    {"callee_field_kind", LOOM_PARAM_STRING},
+    {"expected_type", LOOM_PARAM_TYPE},
+};
+static const loom_error_def_t loom_err_lowering_017 = {
+    .error_id = "ERR_LOWERING_017",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 17,
+    .summary = "Low invoke ABI adapter conversion type mismatch.",
+    .message_template =
+        "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' "
+        "{conversion_rule} conversion for {field_kind} {field_index} has type "
+        "{actual_type}, expected callee {callee_field_kind} type "
+        "{expected_type}",
+    .fix_hint_template =
+        "Choose an ABI adapter conversion that accepts the semantic value type "
+        "or materialize values matching the callee register ABI",
+    .param_defs = loom_err_lowering_017_params,
+    .param_count = 8,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2895,6 +2964,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_006,  &loom_err_lowering_007,  &loom_err_lowering_008,
     &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
     &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
+    &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

@@ -24,6 +24,7 @@ using ::loom::testing::CapturedDiagnostic;
 using ::loom::testing::DiagnosticCapture;
 using ::loom::testing::ExpectError;
 using ::loom::testing::ExpectFieldRefParam;
+using ::loom::testing::ExpectI64Param;
 using ::loom::testing::FindDiagnostic;
 using ::loom::testing::GetStringParam;
 
@@ -135,6 +136,28 @@ TEST_F(LowVerifyTest, InvokeMatchesDirectLowFunctionSignature) {
   EXPECT_TRUE(capture.diagnostics.empty());
 }
 
+TEST_F(LowVerifyTest, InvokeMatchesDirectAbiAdapterSignature) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @gfx1100 {}\n"
+      "low.func.decl target(@gfx1100) @extern_add(%lhs : "
+      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = "
+      "direct, operand_count = 2, result_count = 1}\n"
+      "func.def @caller(%lhs : reg<amdgpu.vgpr x1>, %rhs : "
+      "reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
+      "  %sum = low.invoke @extern_add(%lhs, %rhs) {adapter = "
+      "@extern_add_direct} : "
+      "(reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "  func.return %sum : reg<amdgpu.vgpr x1>\n"
+      "}\n",
+      &capture);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+}
+
 TEST_F(LowVerifyTest, InvokeRejectsNonLowCallee) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(
@@ -161,6 +184,217 @@ TEST_F(LowVerifyTest, InvokeRejectsNonLowCallee) {
   EXPECT_EQ(GetStringParam(*diagnostic, 2), "low function");
   ASSERT_EQ(diagnostic->related_locations.size(), 1u);
   EXPECT_EQ(diagnostic->related_locations[0].label, "defined here");
+}
+
+TEST_F(LowVerifyTest, AbiAdapterRejectsNonLowCallee) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "func.decl @semantic(%arg : i32) -> (i32)\n"
+      "low.abi.adapter @bad {callee = @semantic, conversion = direct, "
+      "operand_count = 1, result_count = 1}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_abi_adapter_callee_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "semantic");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "function");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "low function");
+  ASSERT_EQ(diagnostic->related_locations.size(), 1u);
+  EXPECT_EQ(diagnostic->related_locations[0].label, "defined here");
+}
+
+TEST_F(LowVerifyTest, AbiAdapterRejectsCalleeArityMismatch) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @gfx1100 {}\n"
+      "low.func.decl target(@gfx1100) @extern_add(%lhs : "
+      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "low.abi.adapter @bad {callee = @extern_add, conversion = direct, "
+      "operand_count = 1, result_count = 1}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "bad");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "adapter operand");
+  ExpectI64Param(*diagnostic, 3, 1);
+  ExpectI64Param(*diagnostic, 4, 2);
+  EXPECT_EQ(GetStringParam(*diagnostic, 5), "direct");
+  ASSERT_GE(diagnostic->related_locations.size(), 1u);
+  EXPECT_EQ(diagnostic->related_locations[0].label, "callee defined here");
+}
+
+TEST_F(LowVerifyTest, InvokeRejectsNonAdapterRecord) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @gfx1100 {}\n"
+      "test.record @not_adapter {}\n"
+      "low.func.decl target(@gfx1100) @extern_add(%lhs : "
+      "reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)\n"
+      "low.func.def target(@gfx1100) @caller(%lhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>) {\n"
+      "  %sum = low.invoke @extern_add(%lhs) {adapter = @not_adapter} : "
+      "(reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)\n"
+      "  low.return %sum : reg<amdgpu.vgpr x1>\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_SYMBOL, 3);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_invoke_adapter_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "not_adapter");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "record");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "low ABI adapter");
+}
+
+TEST_F(LowVerifyTest, InvokeRejectsAdapterBoundToDifferentCallee) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @gfx1100 {}\n"
+      "low.func.decl target(@gfx1100) @extern_add(%lhs : "
+      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "low.func.decl target(@gfx1100) @extern_mul(%lhs : "
+      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "low.abi.adapter @mul_direct {callee = @extern_mul, conversion = direct, "
+      "operand_count = 2, result_count = 1}\n"
+      "low.func.def target(@gfx1100) @caller(%lhs : reg<amdgpu.vgpr x1>, "
+      "%rhs : reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {\n"
+      "  %sum = low.invoke @extern_add(%lhs, %rhs) {adapter = @mul_direct} : "
+      "(reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "  low.return %sum : reg<amdgpu.vgpr x1>\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 15);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  ExpectFieldRefParam(*diagnostic, 0, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_invoke_callee_ATTR_INDEX);
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_ATTRIBUTE,
+                      loom_low_invoke_adapter_ATTR_INDEX);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "mul_direct");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "extern_mul");
+  ASSERT_EQ(diagnostic->related_locations.size(), 2u);
+  EXPECT_EQ(diagnostic->related_locations[0].label, "callee defined here");
+  EXPECT_EQ(diagnostic->related_locations[1].label, "adapter defined here");
+}
+
+TEST_F(LowVerifyTest, InvokeRejectsAdapterOperandCountMismatch) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @gfx1100 {}\n"
+      "low.func.decl target(@gfx1100) @extern_add(%lhs : "
+      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = "
+      "direct, operand_count = 2, result_count = 1}\n"
+      "low.func.def target(@gfx1100) @caller(%lhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>) {\n"
+      "  %sum = low.invoke @extern_add(%lhs) {adapter = @extern_add_direct} : "
+      "(reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)\n"
+      "  low.return %sum : reg<amdgpu.vgpr x1>\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 16);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "extern_add_direct");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "invoke operand");
+  ExpectI64Param(*diagnostic, 3, 1);
+  ExpectI64Param(*diagnostic, 4, 2);
+  EXPECT_EQ(GetStringParam(*diagnostic, 5), "direct");
+}
+
+TEST_F(LowVerifyTest, InvokeRejectsAdapterDirectConversionTypeMismatch) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @gfx1100 {}\n"
+      "low.func.decl target(@gfx1100) @extern_add(%lhs : "
+      "reg<amdgpu.vgpr x1>, %rhs : reg<amdgpu.vgpr x1>) -> "
+      "(reg<amdgpu.vgpr x1>)\n"
+      "low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = "
+      "direct, operand_count = 2, result_count = 1}\n"
+      "func.def @caller(%lhs : i32, %rhs : i32) -> (i32) {\n"
+      "  %sum = low.invoke @extern_add(%lhs, %rhs) {adapter = "
+      "@extern_add_direct} : (i32, i32) -> (i32)\n"
+      "  func.return %sum : i32\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 17);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "extern_add_direct");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "direct");
+  EXPECT_EQ(GetStringParam(*diagnostic, 3), "operand");
+  ExpectFieldRefParam(*diagnostic, 3, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
+  ExpectU32Param(*diagnostic, 4, 0);
+  ASSERT_EQ(diagnostic->params[5].kind, LOOM_PARAM_TYPE);
+  ASSERT_EQ(diagnostic->params[7].kind, LOOM_PARAM_TYPE);
+  EXPECT_EQ(GetStringParam(*diagnostic, 6), "argument");
+  ASSERT_EQ(diagnostic->related_locations.size(), 2u);
+  EXPECT_EQ(diagnostic->related_locations[0].label, "callee defined here");
+  EXPECT_EQ(diagnostic->related_locations[1].label, "adapter defined here");
+}
+
+TEST_F(LowVerifyTest, InvokeWithoutAdapterRequiresDirectTypes) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @gfx1100 {}\n"
+      "low.func.decl target(@gfx1100) @extern_add(%lhs : "
+      "reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)\n"
+      "func.def @caller(%lhs : i32) -> (i32) {\n"
+      "  %sum = low.invoke @extern_add(%lhs) : (i32) -> (i32)\n"
+      "  func.return %sum : i32\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 14);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "operand");
+  ExpectFieldRefParam(*diagnostic, 1, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
+  ExpectU32Param(*diagnostic, 2, 0);
+  ASSERT_EQ(diagnostic->params[3].kind, LOOM_PARAM_TYPE);
+  EXPECT_EQ(GetStringParam(*diagnostic, 4), "argument");
+  ASSERT_EQ(diagnostic->params[5].kind, LOOM_PARAM_TYPE);
 }
 
 TEST_F(LowVerifyTest, InvokeRejectsOperandCountMismatch) {

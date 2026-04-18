@@ -42,6 +42,8 @@ from loom.assembly import (
 from loom.dialect.func.defs import CallingConv, Purity, Visibility
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_ENUM,
+    ATTR_TYPE_I64,
     ISOLATED_FROM_ABOVE,
     REGISTER,
     SYMBOL_DEFINE,
@@ -50,6 +52,8 @@ from loom.dsl import (
     AttrDef,
     BlockArgsSatisfy,
     Dialect,
+    EnumCase,
+    EnumDef,
     FuncLikeInterface,
     Op,
     Operand,
@@ -69,6 +73,22 @@ low_ops = Dialect(
     "low",
     dialect_id=0x14,
     doc="Target-low virtual-register operations.",
+)
+
+# ============================================================================
+# Shared enums
+# ============================================================================
+
+LowAbiConversion = EnumDef(
+    "LowAbiConversion",
+    [
+        EnumCase(
+            "direct",
+            0,
+            doc="Invoke operands/results are already the callee register ABI types.",
+        ),
+    ],
+    doc="Semantic-to-low ABI conversion rule used by a low ABI adapter record.",
 )
 
 # ============================================================================
@@ -297,6 +317,42 @@ low_copy = Op(
 )
 
 # ============================================================================
+# low.abi.adapter — explicit semantic-to-low ABI adapter record
+# ============================================================================
+
+low_abi_adapter = Op(
+    "low.abi.adapter",
+    group=low_ops,
+    doc=("Explicit adapter record for calls crossing from semantic Loom values into a low function register ABI."),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="low ABI adapter",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "callee",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
+        AttrDef("conversion", ATTR_TYPE_ENUM, enum_def=LowAbiConversion),
+        AttrDef("operand_count", ATTR_TYPE_I64),
+        AttrDef("result_count", ATTR_TYPE_I64),
+    ],
+    verify="loom_low_abi_adapter_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        "low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = direct, operand_count = 2, result_count = 1}",
+    ],
+)
+
+# ============================================================================
 # low.invoke — call or interop edge to a low function symbol
 # ============================================================================
 
@@ -311,6 +367,12 @@ low_invoke = Op(
             "symbol",
             symbol_ref=SymbolReference("function", ["func_like"]),
         ),
+        AttrDef(
+            "adapter",
+            "symbol",
+            optional=True,
+            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
+        ),
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
@@ -321,6 +383,7 @@ low_invoke = Op(
         LPAREN,
         Refs("operands"),
         RPAREN,
+        AttrDict(),
         COLON,
         LPAREN,
         TypesOf("operands"),
@@ -332,6 +395,7 @@ low_invoke = Op(
     ],
     examples=[
         "%result = low.invoke @extern_add(%lhs, %rhs) : (reg<amdgpu.vgpr x1>, reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>)",
+        "%result = low.invoke @extern_add(%lhs, %rhs) {adapter = @extern_add_direct} : (i32, i32) -> (i32)",
     ],
 )
 
@@ -343,4 +407,5 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_const,
     low_copy,
     low_invoke,
+    low_abi_adapter,
 )

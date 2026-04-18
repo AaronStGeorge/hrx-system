@@ -3869,5 +3869,129 @@
       }
     ],
     "fix_hint_template": "Match the low.invoke {field_kind} type to the callee low-function signature"
+  },
+  {
+    "error_id": "ERR_LOWERING_015",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 15,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low invoke ABI adapter callee mismatch.",
+    "message_template": "low.invoke callee '@{callee_name}' uses ABI adapter '@{adapter_name}' bound to callee '@{adapter_callee_name}'",
+    "params": [
+      {
+        "name": "callee_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "adapter_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "adapter_callee_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Use an ABI adapter bound to the invoked low function"
+  },
+  {
+    "error_id": "ERR_LOWERING_016",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 16,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low invoke ABI adapter count mismatch.",
+    "message_template": "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' {field_kind} count is {actual_count}, expected {expected_count} for {conversion_rule} conversion",
+    "params": [
+      {
+        "name": "callee_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "adapter_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "actual_count",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "expected_count",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "conversion_rule",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Match the invoke, adapter record, and callee low-function signature arity"
+  },
+  {
+    "error_id": "ERR_LOWERING_017",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 17,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low invoke ABI adapter conversion type mismatch.",
+    "message_template": "low.invoke callee '@{callee_name}' ABI adapter '@{adapter_name}' {conversion_rule} conversion for {field_kind} {field_index} has type {actual_type}, expected callee {callee_field_kind} type {expected_type}",
+    "params": [
+      {
+        "name": "callee_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "adapter_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "conversion_rule",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "callee_field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Choose an ABI adapter conversion that accepts the semantic value type or materialize values matching the callee register ABI"
   }
 ]
