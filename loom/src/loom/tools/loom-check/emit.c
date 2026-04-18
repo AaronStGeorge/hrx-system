@@ -7,6 +7,8 @@
 #include "iree/io/vec_stream.h"
 #include "loom/analysis/liveness.h"
 #include "loom/analysis/liveness_json.h"
+#include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/allocation_json.h"
 #include "loom/codegen/low/schedule.h"
 #include "loom/codegen/low/schedule_json.h"
 #include "loom/codegen/low/verify.h"
@@ -38,7 +40,10 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON = 6,
   LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST = 7,
   LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 8,
+  LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON = 9,
 } loom_check_emit_format_t;
+
+#define LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS 8
 
 typedef struct loom_check_emit_request_t {
   // Serialized target form to produce before comparison.
@@ -53,6 +58,11 @@ typedef struct loom_check_emit_request_t {
   iree_string_view_t analysis_symbol_name;
   // Low descriptor set used by descriptor-manifest dumps.
   const loom_low_descriptor_set_t* low_descriptor_set;
+  // Low allocation budget overrides parsed from the RUN line.
+  loom_low_allocation_budget_t
+      low_allocation_budgets[LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS];
+  // Number of entries in |low_allocation_budgets|.
+  iree_host_size_t low_allocation_budget_count;
 } loom_check_emit_request_t;
 
 typedef struct loom_check_emit_byte_buffer_t {
@@ -61,6 +71,55 @@ typedef struct loom_check_emit_byte_buffer_t {
   // Number of valid bytes in |data|.
   iree_host_size_t length;
 } loom_check_emit_byte_buffer_t;
+
+static iree_status_t loom_check_emit_parse_low_allocation_budget(
+    iree_string_view_t token, loom_check_emit_request_t* request) {
+  if (request->low_allocation_budget_count >=
+      LOOM_CHECK_LOW_ALLOCATION_MAX_BUDGETS) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "too many low allocation budget overrides");
+  }
+  iree_string_view_t register_class = iree_string_view_empty();
+  iree_string_view_t budget_text = iree_string_view_empty();
+  iree_string_view_split(token, '=', &register_class, &budget_text);
+  register_class = iree_string_view_trim(register_class);
+  budget_text = iree_string_view_trim(budget_text);
+  if (iree_string_view_is_empty(register_class) ||
+      iree_string_view_is_empty(budget_text)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low allocation budget must have the form <register-class>=<units>");
+  }
+  uint32_t max_units = 0;
+  if (!iree_string_view_atoi_uint32(budget_text, &max_units)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid low allocation budget '%.*s'",
+                            (int)budget_text.size, budget_text.data);
+  }
+  request->low_allocation_budgets[request->low_allocation_budget_count++] =
+      (loom_low_allocation_budget_t){
+          .register_class = register_class,
+          .max_units = max_units,
+      };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_emit_parse_low_allocation_budgets(
+    iree_string_view_t text, loom_check_emit_request_t* request) {
+  text = iree_string_view_trim(text);
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(text, ' ', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (!iree_string_view_is_empty(token)) {
+      IREE_RETURN_IF_ERROR(
+          loom_check_emit_parse_low_allocation_budget(token, request));
+    }
+    text = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
 
 static iree_status_t loom_check_emit_parse_request(
     iree_string_view_t emit_target, loom_check_emit_request_t* out_request) {
@@ -71,6 +130,7 @@ static iree_status_t loom_check_emit_parse_request(
       .target_bundle_symbol_name = iree_string_view_empty(),
       .analysis_symbol_name = iree_string_view_empty(),
       .low_descriptor_set = NULL,
+      .low_allocation_budget_count = 0,
   };
   emit_target = iree_string_view_trim(emit_target);
   iree_string_view_t target_name = iree_string_view_empty();
@@ -126,6 +186,29 @@ static iree_status_t loom_check_emit_parse_request(
                               "low function symbol name is required");
     }
     out_request->format = LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON;
+    return iree_ok_status();
+  } else if (iree_string_view_equal(target_name,
+                                    IREE_SV("low-allocation-json")) ||
+             iree_string_view_equal(target_name, IREE_SV("low-allocation"))) {
+    iree_string_view_t symbol_name = iree_string_view_empty();
+    iree_string_view_t budget_text = iree_string_view_empty();
+    iree_string_view_split(profile_name, ' ', &symbol_name, &budget_text);
+    symbol_name = iree_string_view_trim(symbol_name);
+    budget_text = iree_string_view_trim(budget_text);
+    if (!iree_string_view_starts_with(symbol_name, IREE_SV("@"))) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low-allocation-json requires a low function "
+                              "symbol name");
+    }
+    out_request->analysis_symbol_name =
+        iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
+    if (iree_string_view_is_empty(out_request->analysis_symbol_name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low function symbol name is required");
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_check_emit_parse_low_allocation_budgets(budget_text, out_request));
+    out_request->format = LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON;
     return iree_ok_status();
   } else if (iree_string_view_equal(target_name,
                                     IREE_SV("low-descriptor-manifest")) ||
@@ -684,6 +767,27 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   return loom_low_schedule_format_json(&sidecar, &result->actual_output);
 }
 
+static iree_status_t loom_check_emit_write_low_allocation_json(
+    const loom_module_t* module, iree_string_view_t symbol_name,
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    const loom_low_allocation_budget_t* budgets, iree_host_size_t budget_count,
+    iree_diagnostic_emitter_t emitter, iree_arena_allocator_t* analysis_arena,
+    loom_check_result_t* result) {
+  const loom_op_t* low_function = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_check_emit_find_low_func_def(module, symbol_name, &low_function));
+  loom_low_allocation_options_t options = {
+      .descriptor_registry = descriptor_registry,
+      .budgets = budgets,
+      .budget_count = budget_count,
+      .emitter = emitter,
+  };
+  loom_low_allocation_sidecar_t sidecar = {0};
+  IREE_RETURN_IF_ERROR(loom_low_allocate_function(
+      module, low_function, &options, analysis_arena, &sidecar));
+  return loom_low_allocation_format_json(&sidecar, &result->actual_output);
+}
+
 iree_status_t loom_check_execute_emit(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -774,7 +878,8 @@ iree_status_t loom_check_execute_emit(
   }
 
   if (request.format == LOOM_CHECK_EMIT_LIVENESS_JSON ||
-      request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON) {
+      request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON ||
+      request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON) {
     loom_source_entry_t source_entry = {0};
     loom_source_table_resolver_t resolver_data = {0};
     status = loom_check_source_resolver_for_case(
@@ -810,7 +915,8 @@ iree_status_t loom_check_execute_emit(
     }
     loom_target_low_descriptor_registry_t low_registry = {0};
     iree_host_size_t low_diagnostic_count = 0;
-    if (request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON) {
+    if (request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON ||
+        request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON) {
       loom_target_low_descriptor_registry_initialize(&low_registry);
       loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
           .diagnostic_collector = &diagnostic_collector,
@@ -857,9 +963,18 @@ iree_status_t loom_check_execute_emit(
       if (request.format == LOOM_CHECK_EMIT_LIVENESS_JSON) {
         status = loom_check_emit_write_liveness_json(
             module, request.analysis_symbol_name, &diagnostic_arena, result);
-      } else {
+      } else if (request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON) {
         status = loom_check_emit_write_low_schedule_json(
             module, request.analysis_symbol_name, &low_registry.registry,
+            (iree_diagnostic_emitter_t){
+                .fn = loom_check_diagnostic_emitter_capture_emit,
+                .user_data = &pass_diagnostic_capture,
+            },
+            &diagnostic_arena, result);
+      } else {
+        status = loom_check_emit_write_low_allocation_json(
+            module, request.analysis_symbol_name, &low_registry.registry,
+            request.low_allocation_budgets, request.low_allocation_budget_count,
             (iree_diagnostic_emitter_t){
                 .fn = loom_check_diagnostic_emitter_capture_emit,
                 .user_data = &pass_diagnostic_capture,
@@ -872,7 +987,7 @@ iree_status_t loom_check_execute_emit(
     if (!iree_status_is_ok(status)) {
       if (low_diagnostic_count > 0 ||
           pass_diagnostic_capture.emission_count > 0 ||
-          diagnostic_collector.count > 0 || test_case->annotation_count > 0) {
+          diagnostic_collector.count > 0) {
         iree_status_ignore(status);
         status = loom_check_diagnostic_collector_finish(
             &diagnostic_collector, test_case, case_index, report, allocator,
@@ -1014,6 +1129,11 @@ iree_status_t loom_check_execute_emit(
         status = iree_make_status(
             IREE_STATUS_INTERNAL,
             "low schedule JSON emit should bypass LLVMIR lowering");
+        break;
+      case LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON:
+        status = iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "low allocation JSON emit should bypass LLVMIR lowering");
         break;
       case LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST:
         status = iree_make_status(

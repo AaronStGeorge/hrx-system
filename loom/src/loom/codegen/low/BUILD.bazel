@@ -110,6 +110,39 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "allocation",
+    srcs = ["allocation.c"],
+    hdrs = ["allocation.h"],
+    deps = [
+        ":descriptors",
+        ":requirements",
+        ":target_binding",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "allocation_json",
+    srcs = ["allocation_json.c"],
+    hdrs = ["allocation_json.h"],
+    deps = [
+        ":allocation",
+        ":descriptors",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "schedule",
     srcs = ["schedule.c"],
     hdrs = ["schedule.h"],

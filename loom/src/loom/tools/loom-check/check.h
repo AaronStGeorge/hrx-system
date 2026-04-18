@@ -32,7 +32,9 @@
 //                           llvmir-assembly-mnemonics. Non-IR descriptor
 //                           targets include low-descriptor-manifest and
 //                           target-low-registry-manifest. Analysis targets
-//                           include liveness-json @function.
+//                           include liveness-json @function,
+//                           low-schedule-json @function, and
+//                           low-allocation-json @function [class=units...].
 //   // REQUIRES: <name>[, <name>...]
 //                           Skip the case when external tools or target
 //                           backends are unavailable.

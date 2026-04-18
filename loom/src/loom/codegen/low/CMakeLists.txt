@@ -57,6 +57,45 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    allocation
+  HDRS
+    "allocation.h"
+  SRCS
+    "allocation.c"
+  DEPS
+    ::descriptors
+    ::requirements
+    ::target_binding
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::error::emitter
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    allocation_json
+  HDRS
+    "allocation_json.h"
+  SRCS
+    "allocation_json.c"
+  DEPS
+    ::allocation
+    ::descriptors
+    iree::base
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     schedule
   HDRS
     "schedule.h"

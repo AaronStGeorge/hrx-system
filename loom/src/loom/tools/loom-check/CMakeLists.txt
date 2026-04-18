@@ -47,6 +47,8 @@ loom_cc_library(
     iree::io::stream
     loom::src::loom::analysis::liveness
     loom::src::loom::analysis::liveness_json
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::allocation_json
     loom::src::loom::codegen::low::schedule
     loom::src::loom::codegen::low::schedule_json
     loom::src::loom::codegen::low::target_binding
