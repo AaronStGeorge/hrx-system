@@ -44,6 +44,15 @@ typedef enum loom_low_allocation_remark_kind_e {
   LOOM_LOW_ALLOCATION_REMARK_SPILL = 1,
 } loom_low_allocation_remark_kind_t;
 
+typedef enum loom_low_allocation_copy_kind_e {
+  // Unknown or uninitialized copy decision kind.
+  LOOM_LOW_ALLOCATION_COPY_UNKNOWN = 0,
+  // The copy source and result share one assigned location.
+  LOOM_LOW_ALLOCATION_COPY_COALESCED = 1,
+  // The copy must remain a target move/copy after allocation.
+  LOOM_LOW_ALLOCATION_COPY_MATERIALIZED = 2,
+} loom_low_allocation_copy_kind_t;
+
 // Optional fixed register budget used by tests, tuning loops, and target
 // overlays. A missing budget uses the descriptor set's physical register count;
 // a descriptor class with physical_count == 0 is treated as unbounded.
@@ -86,6 +95,20 @@ typedef struct loom_low_allocation_remark_t {
   uint32_t required_units;
 } loom_low_allocation_remark_t;
 
+// Copy/coalescing decision for one low.copy op.
+typedef struct loom_low_allocation_copy_decision_t {
+  // Source SSA value consumed by the low.copy op.
+  loom_value_id_t source_value_id;
+  // Result SSA value produced by the low.copy op.
+  loom_value_id_t result_value_id;
+  // Assignment index for |source_value_id|.
+  uint32_t source_assignment_index;
+  // Assignment index for |result_value_id|.
+  uint32_t result_assignment_index;
+  // Whether allocation coalesced or must materialize the copy.
+  loom_low_allocation_copy_kind_t kind;
+} loom_low_allocation_copy_decision_t;
+
 // Options controlling allocation sidecar construction.
 typedef struct loom_low_allocation_options_t {
   // Descriptor registry available to the allocator.
@@ -119,8 +142,16 @@ typedef struct loom_low_allocation_sidecar_t {
   const loom_low_allocation_remark_t* remarks;
   // Number of records in |remarks|.
   iree_host_size_t remark_count;
+  // Copy/coalescing decisions in source order.
+  const loom_low_allocation_copy_decision_t* copy_decisions;
+  // Number of records in |copy_decisions|.
+  iree_host_size_t copy_decision_count;
   // Number of assignments whose location kind is SPILL_SLOT.
   iree_host_size_t spill_count;
+  // Number of low.copy ops coalesced into one location.
+  iree_host_size_t coalesced_copy_count;
+  // Number of low.copy ops that must remain materialized.
+  iree_host_size_t materialized_copy_count;
 } loom_low_allocation_sidecar_t;
 
 // Allocates one low.func.def body and writes an arena-owned sidecar. This first

@@ -110,6 +110,18 @@ static const char* loom_low_allocation_json_remark_kind_name(
   }
 }
 
+static const char* loom_low_allocation_json_copy_kind_name(
+    loom_low_allocation_copy_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_ALLOCATION_COPY_COALESCED:
+      return "coalesced";
+    case LOOM_LOW_ALLOCATION_COPY_MATERIALIZED:
+      return "materialized";
+    default:
+      return "unknown";
+  }
+}
+
 static iree_status_t loom_low_allocation_json_write_string_or_null(
     const loom_module_t* module, loom_string_id_t string_id,
     loom_output_stream_t* stream) {
@@ -249,6 +261,31 @@ static iree_status_t loom_low_allocation_json_write_remark(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_json_write_copy_decision(
+    const loom_low_allocation_sidecar_t* sidecar, iree_host_size_t index,
+    loom_output_stream_t* stream) {
+  const loom_low_allocation_copy_decision_t* copy_decision =
+      &sidecar->copy_decisions[index];
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"index\":%zu,\"kind\":", index));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      stream, loom_low_allocation_json_copy_kind_name(copy_decision->kind)));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"source_value\":"));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
+      sidecar, copy_decision->source_value_id, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"result_value\":"));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_json_write_value(
+      sidecar, copy_decision->result_value_id, stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"source_assignment\":%" PRIu32 ",\"result_assignment\":%" PRIu32 "}",
+      copy_decision->source_assignment_index,
+      copy_decision->result_assignment_index));
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_allocation_format_json(
     const loom_low_allocation_sidecar_t* sidecar,
     iree_string_builder_t* builder) {
@@ -279,8 +316,12 @@ iree_status_t loom_low_allocation_format_json(
       &stream, loom_low_allocation_json_mode_name(sidecar->allocation_mode)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
-      ",\"assignment_count\":%zu,\"remark_count\":%zu,\"spill_count\":%zu",
-      sidecar->assignment_count, sidecar->remark_count, sidecar->spill_count));
+      ",\"assignment_count\":%zu,\"remark_count\":%zu"
+      ",\"copy_decision_count\":%zu,\"spill_count\":%zu"
+      ",\"coalesced_copy_count\":%zu,\"materialized_copy_count\":%zu",
+      sidecar->assignment_count, sidecar->remark_count,
+      sidecar->copy_decision_count, sidecar->spill_count,
+      sidecar->coalesced_copy_count, sidecar->materialized_copy_count));
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"assignments\":["));
@@ -290,6 +331,17 @@ iree_status_t loom_low_allocation_format_json(
     }
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_json_write_assignment(sidecar, i, &stream));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"copy_decisions\":["));
+  for (iree_host_size_t i = 0; i < sidecar->copy_decision_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_json_write_copy_decision(sidecar, i, &stream));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
