@@ -173,6 +173,36 @@ TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPass) {
   loom_module_free(module);
 }
 
+TEST_F(LowDescriptorVerifyTest, ValidVmPacketsPassWithFoundationRequirements) {
+  std::string source =
+      std::string(kVmTargetRecords) +
+      "low.func.def target(@vm_target) @add(%lhs : reg<vm.i32>, %rhs : "
+      "reg<vm.i32>) -> (reg<vm.i32>) {\n"
+      "  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, "
+      "reg<vm.i32>) -> reg<vm.i32>\n"
+      "  low.return %sum : reg<vm.i32>\n"
+      "}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+
+  loom_low_descriptor_registry_t registry = IreeVmRegistry();
+  EmissionCollector collector;
+  loom_low_verify_options_t options = {
+      .descriptor_registry = &registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .emitter = collector.emitter(),
+      .max_errors = 20,
+  };
+  loom_low_verify_result_t result = {};
+  IREE_ASSERT_OK(loom_low_verify_module(module, &options, &result));
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
+}
+
 TEST_F(LowDescriptorVerifyTest, ValidSymbolicImmediatePasses) {
   std::string source =
       std::string(kVmTargetRecords) +
@@ -715,6 +745,37 @@ std::string FeatureEnumImmediateSource(const char* mode_value) {
          "} : (reg<test.gpr x1>, reg<test.gpr x1>) -> reg<test.gpr x1>\n"
          "  low.return %sum : reg<test.gpr x1>\n"
          "}\n";
+}
+
+TEST_F(LowDescriptorVerifyTest,
+       RejectsRegistryMissingRequestedFoundationRequirements) {
+  FeatureTestTables tables;
+  InitializeFeatureTestTables(&tables);
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+  const loom_low_descriptor_set_t* descriptor_sets[] = {&tables.set};
+  loom_low_descriptor_registry_t registry = {
+      .descriptor_sets = descriptor_sets,
+      .descriptor_set_count = IREE_ARRAYSIZE(descriptor_sets),
+  };
+
+  loom_module_t* module = ParseSource("func.def @unused() {\n}\n");
+  ASSERT_NE(module, nullptr);
+
+  EmissionCollector collector;
+  loom_low_verify_options_t options = {
+      .descriptor_registry = &registry,
+      .descriptor_requirements =
+          LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      .emitter = collector.emitter(),
+      .max_errors = 20,
+  };
+  loom_low_verify_result_t result = {};
+  iree_status_t status = loom_low_verify_module(module, &options, &result);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(collector.emissions.empty());
+
+  loom_module_free(module);
 }
 
 TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {

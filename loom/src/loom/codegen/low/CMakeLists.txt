@@ -62,6 +62,7 @@ loom_cc_library(
   SRCS
     "verify.c"
   DEPS
+    ::requirements
     ::target_binding
     iree::base
     iree::base::internal::arena

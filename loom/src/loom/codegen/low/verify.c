@@ -1239,8 +1239,12 @@ iree_status_t loom_low_verify_module(const loom_module_t* module,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low descriptor registry is required");
   }
-  if (iree_any_bit_set(options->flags,
-                       LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY)) {
+  if (options->descriptor_requirements != 0) {
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_registry_verify_requirements(
+        options->descriptor_registry, options->descriptor_requirements));
+  } else if (iree_any_bit_set(
+                 options->flags,
+                 LOOM_LOW_VERIFY_FLAG_VERIFY_DESCRIPTOR_REGISTRY)) {
     IREE_RETURN_IF_ERROR(
         loom_low_descriptor_registry_verify(options->descriptor_registry));
   }
