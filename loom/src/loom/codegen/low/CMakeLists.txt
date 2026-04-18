@@ -25,6 +25,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    requirements
+  HDRS
+    "requirements.h"
+  SRCS
+    "requirements.c"
+  DEPS
+    ::descriptors
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_binding
   HDRS
     "target_binding.h"
@@ -67,6 +80,17 @@ loom_cc_test(
     "descriptors_test.cc"
   DEPS
     ::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    requirements_test
+  SRCS
+    "requirements_test.cc"
+  DEPS
+    ::requirements
     iree::testing::gtest
     iree::testing::gtest_main
 )

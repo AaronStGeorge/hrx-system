@@ -72,6 +72,7 @@ loom_cc_test(
     "low_descriptor_registry_test.cc"
   DEPS
     ::low_descriptor_registry
+    loom::src::loom::codegen::low::requirements
     iree::testing::gtest
     iree::testing::gtest_main
 )
