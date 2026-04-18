@@ -82,3 +82,45 @@ low.func.def target(@vm_target) @constant() -> (reg<vm.i32>) {
   %c0 = low.const<iree.vm.const.i32> {i32_value = 2147483648} : reg<vm.i32>
   low.return %c0 : reg<vm.i32>
 }
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "branch", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @branch(%arg : reg<vm.i32>) -> (reg<vm.i32>) {
+  // ERROR@+1: STRUCTURE/025 "low.br" "successor 0" "expected 1"
+  low.br ^exit
+^exit(%value : reg<vm.i32>):
+  low.return %value : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "branch", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @branch(%arg : reg<vm.i32>) -> (reg<vm.i32>) {
+  %copy = low.copy %arg : reg<vm.i32> -> reg<vm.i64>
+  // ERROR@+1: STRUCTURE/026 "low.br" "successor 0" "expected reg<vm.i32>"
+  low.br ^exit(%copy : reg<vm.i64>)
+^exit(%value : reg<vm.i32>):
+  low.return %value : reg<vm.i32>
+}
+
+// ====
+
+target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
+target.export @vm_export {export_symbol = "branch", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
+target.config @vm_config {contract_set_key = "iree.vm.core", contract_feature_bits = 0}
+target.bundle @vm_target {snapshot = @vm_snapshot, export_plan = @vm_export, config = @vm_config}
+low.func.def target(@vm_target) @branch(%cond : reg<vm.i32>) {
+  // ERROR@+1: STRUCTURE/025 "low.cond_br" "successor 0" "expected 1"
+  low.cond_br %cond, ^then, ^else : reg<vm.i32>
+^then(%value : reg<vm.i32>):
+  low.return
+^else:
+  low.return
+}

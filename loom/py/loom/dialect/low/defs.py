@@ -24,6 +24,7 @@ from loom.assembly import (
     RPAREN,
     Attr,
     AttrDict,
+    BlockRef,
     FormatElement,
     FuncArgs,
     OpRef,
@@ -61,6 +62,7 @@ from loom.dsl import (
     Operand,
     RegionDef,
     Result,
+    Successor,
     SymbolDefinition,
     SymbolReference,
     YieldCountMatchesResults,
@@ -367,6 +369,67 @@ low_return = Op(
     examples=[
         "low.return",
         "low.return %value : reg<amdgpu.vgpr x1>",
+    ],
+)
+
+# ============================================================================
+# low.br — low unconditional branch
+# ============================================================================
+
+low_br = Op(
+    "low.br",
+    group=low_ops,
+    doc="Unconditional branch to a low successor block, forwarding register values.",
+    operands=[
+        Operand(
+            "args",
+            REGISTER,
+            variadic=True,
+            doc="Register values forwarded to the destination block arguments.",
+        )
+    ],
+    successors=[Successor("dest", doc="Destination low block.")],
+    traits=[TERMINATOR],
+    verify="loom_low_br_verify",
+    format=[
+        BlockRef("dest"),
+        OptionalGroup(
+            [GLUE, LPAREN, Refs("args"), COLON, TypesOf("args"), RPAREN],
+            anchor="args",
+        ),
+    ],
+    examples=[
+        "low.br ^done",
+        "low.br ^join(%value : reg<vm.i32>)",
+    ],
+)
+
+# ============================================================================
+# low.cond_br — low conditional branch
+# ============================================================================
+
+low_cond_br = Op(
+    "low.cond_br",
+    group=low_ops,
+    doc="Conditional branch to one of two low successor blocks based on a register predicate.",
+    operands=[Operand("condition", REGISTER, doc="Register predicate controlling the branch.")],
+    successors=[
+        Successor("true_dest", doc="Destination block when the predicate is true."),
+        Successor("false_dest", doc="Destination block when the predicate is false."),
+    ],
+    traits=[TERMINATOR],
+    verify="loom_low_cond_br_verify",
+    format=[
+        Ref("condition"),
+        COMMA,
+        BlockRef("true_dest"),
+        COMMA,
+        BlockRef("false_dest"),
+        COLON,
+        TypeOf("condition"),
+    ],
+    examples=[
+        "low.cond_br %condition, ^then, ^else : reg<vm.i32>",
     ],
 )
 
@@ -833,4 +896,6 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_spill,
     low_reload,
     low_frame_index,
+    low_br,
+    low_cond_br,
 )

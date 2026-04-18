@@ -31,6 +31,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    successor_verify
+  HDRS
+    "successor_verify.h"
+  SRCS
+    "successor_verify.c"
+  DEPS
+    iree::base
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     atomic
   HDRS
     "atomic.h"

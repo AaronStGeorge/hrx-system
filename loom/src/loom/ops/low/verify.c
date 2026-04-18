@@ -11,6 +11,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/ops/successor_verify.h"
 
 typedef struct loom_low_callee_signature_t {
   // Defining low.func op for related diagnostic locations.
@@ -1637,6 +1638,26 @@ iree_status_t loom_low_const_verify(const loom_module_t* module,
   return loom_low_verify_descriptor_key(module, op, emitter,
                                         loom_low_const_opcode(op),
                                         loom_low_const_opcode_ATTR_INDEX);
+}
+
+iree_status_t loom_low_br_verify(const loom_module_t* module,
+                                 const loom_op_t* op,
+                                 iree_diagnostic_emitter_t emitter) {
+  loom_value_slice_t args = loom_low_br_args(op);
+  return loom_ops_verify_successor_args(module, emitter, op, IREE_SV("low.br"),
+                                        0, loom_low_br_dest(op), args.values,
+                                        args.count);
+}
+
+iree_status_t loom_low_cond_br_verify(const loom_module_t* module,
+                                      const loom_op_t* op,
+                                      iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_ops_verify_successor_args(
+      module, emitter, op, IREE_SV("low.cond_br"), 0,
+      loom_low_cond_br_true_dest(op), NULL, 0));
+  return loom_ops_verify_successor_args(
+      module, emitter, op, IREE_SV("low.cond_br"), 1,
+      loom_low_cond_br_false_dest(op), NULL, 0);
 }
 
 iree_status_t loom_low_func_def_verify(const loom_module_t* module,

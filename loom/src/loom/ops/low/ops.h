@@ -34,7 +34,9 @@ enum {
   LOOM_OP_LOW_SPILL = LOOM_OP_KIND(LOOM_DIALECT_LOW, 13),
   LOOM_OP_LOW_RELOAD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 14),
   LOOM_OP_LOW_FRAME_INDEX = LOOM_OP_KIND(LOOM_DIALECT_LOW, 15),
-  LOOM_OP_LOW_COUNT_ = 16,
+  LOOM_OP_LOW_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 16),
+  LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
+  LOOM_OP_LOW_COUNT_ = 18,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -488,6 +490,39 @@ iree_status_t loom_low_frame_index_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_frame_index_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_BR: Unconditional branch to a low successor block, forwarding register values.
+// low.br ^done
+LOOM_DEFINE_ISA(loom_low_br_isa, LOOM_OP_LOW_BR)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_br_args, 0)
+LOOM_DEFINE_SUCCESSOR(loom_low_br_dest, 0)
+iree_status_t loom_low_br_build(
+    loom_builder_t* builder,
+    loom_block_t* dest,
+    const loom_value_id_t* args,
+    iree_host_size_t args_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_br_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_COND_BR: Conditional branch to one of two low successor blocks based on a register predicate.
+// low.cond_br %condition, ^then, ^else : reg<vm.i32>
+LOOM_DEFINE_ISA(loom_low_cond_br_isa, LOOM_OP_LOW_COND_BR)
+LOOM_DEFINE_OPERAND(loom_low_cond_br_condition, 0)
+LOOM_DEFINE_SUCCESSOR(loom_low_cond_br_true_dest, 0)
+LOOM_DEFINE_SUCCESSOR(loom_low_cond_br_false_dest, 1)
+iree_status_t loom_low_cond_br_build(
+    loom_builder_t* builder,
+    loom_value_id_t condition,
+    loom_block_t* true_dest,
+    loom_block_t* false_dest,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_cond_br_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
