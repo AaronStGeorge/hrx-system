@@ -32,10 +32,6 @@ std::string EscapeRaw(iree_string_view_t input) {
   if (iree_status_is_ok(status)) {
     iree_string_view_t view = iree_string_builder_view(&builder);
     result.assign(view.data, view.size);
-  } else {
-    IREE_EXPECT_OK(status);
-    iree_string_builder_deinitialize(&builder);
-    return result;
   }
   IREE_EXPECT_OK(status);
   iree_string_builder_deinitialize(&builder);
@@ -58,10 +54,6 @@ std::string EscapeQuoted(const char* input) {
   if (iree_status_is_ok(status)) {
     iree_string_view_t view = iree_string_builder_view(&builder);
     result.assign(view.data, view.size);
-  } else {
-    IREE_EXPECT_OK(status);
-    iree_string_builder_deinitialize(&builder);
-    return result;
   }
   IREE_EXPECT_OK(status);
   iree_string_builder_deinitialize(&builder);

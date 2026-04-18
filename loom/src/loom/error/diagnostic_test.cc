@@ -50,10 +50,6 @@ std::string FormatStructured(
   if (iree_status_is_ok(status)) {
     result = std::string(iree_string_builder_buffer(&builder),
                          iree_string_builder_size(&builder));
-  } else {
-    IREE_EXPECT_OK(status);
-    iree_string_builder_deinitialize(&builder);
-    return result;
   }
   IREE_EXPECT_OK(status);
   iree_string_builder_deinitialize(&builder);
