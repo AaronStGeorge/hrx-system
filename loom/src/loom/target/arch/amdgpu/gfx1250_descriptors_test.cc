@@ -60,6 +60,7 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   EXPECT_TRUE(iree_string_view_equal(add_key, IREE_SV("amdgpu.v_add_u32")));
   EXPECT_EQ(add_descriptor->operand_count, 3u);
   EXPECT_EQ(add_descriptor->result_count, 1u);
+  EXPECT_EQ(add_descriptor->encoding_id, 37u);
 
   const loom_low_descriptor_t* load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_dword"));
@@ -67,6 +68,7 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   EXPECT_EQ(load_descriptor->operand_count, 4u);
   EXPECT_EQ(load_descriptor->result_count, 1u);
   EXPECT_EQ(load_descriptor->effect_count, 1u);
+  EXPECT_EQ(load_descriptor->encoding_id, 20u);
   EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
@@ -76,6 +78,7 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
   EXPECT_EQ(load_wait_descriptor->operand_count, 0u);
   EXPECT_EQ(load_wait_descriptor->immediate_count, 1u);
   EXPECT_EQ(load_wait_descriptor->effect_count, 1u);
+  EXPECT_EQ(load_wait_descriptor->encoding_id, 64u);
   EXPECT_NE(
       load_wait_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
       0u);
@@ -88,6 +91,21 @@ TEST(AmdgpuDescriptorsTest, Gfx1250BaselinePacketsMatchGfx12Shape) {
       &descriptor_set->effects[load_wait_descriptor->effect_start];
   EXPECT_EQ(load_wait_effect->kind, LOOM_LOW_EFFECT_KIND_COUNTER);
   EXPECT_NE(load_wait_effect->flags & LOOM_LOW_EFFECT_FLAG_ORDERED, 0u);
+
+  const loom_low_descriptor_t* store_wait_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_storecnt"));
+  ASSERT_NE(store_wait_descriptor, nullptr);
+  EXPECT_EQ(store_wait_descriptor->encoding_id, 65u);
+
+  const loom_low_descriptor_t* alu_wait_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_alu"));
+  ASSERT_NE(alu_wait_descriptor, nullptr);
+  EXPECT_EQ(alu_wait_descriptor->encoding_id, 8u);
+
+  const loom_low_descriptor_t* idle_wait_descriptor =
+      LookupDescriptor(descriptor_set, IREE_SV("amdgpu.s_wait_idle"));
+  ASSERT_NE(idle_wait_descriptor, nullptr);
+  EXPECT_EQ(idle_wait_descriptor->encoding_id, 10u);
 }
 
 TEST(AmdgpuDescriptorsTest, Gfx1250WmmaPacketMatchesRdna4RegisterShape) {

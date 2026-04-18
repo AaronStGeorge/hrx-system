@@ -1,0 +1,1257 @@
+{
+  "schema_version": 1,
+  "snapshot_name": "amdgpu.gfx1250.v1",
+  "target_family_key": "amdgpu.gfx1250.v1",
+  "architecture": {
+    "name": "AMD RDNA 4",
+    "id": 10
+  },
+  "encodings": [
+    {
+      "name": "ENC_SOPP",
+      "order": 1,
+      "bit_count": 32,
+      "identifier_mask": 4294901760,
+      "identifier_values": [
+        3212836864,
+        3212902400,
+        3212967936,
+        3213033472,
+        3213164544,
+        3213295616,
+        3213361152,
+        3213492224,
+        3213557760,
+        3213885440,
+        3213950976,
+        3214016512,
+        3214147584,
+        3214868480,
+        3214934016,
+        3214999552,
+        3215065088,
+        3215130624,
+        3215196160,
+        3215261696,
+        3215327232,
+        3215982592,
+        3216048128,
+        3216244736,
+        3216310272,
+        3216375808,
+        3216441344,
+        3216506880,
+        3216572416,
+        3216637952,
+        3216703488,
+        3216769024,
+        3217031168,
+        3217096704,
+        3217162240,
+        3217227776,
+        3217293312,
+        3217424384,
+        3217489920,
+        3217555456,
+        3217620992
+      ],
+      "fields": [
+        {
+          "name": "ENCODING",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 9,
+              "bit_offset": 23
+            }
+          ]
+        },
+        {
+          "name": "OP",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 7,
+              "bit_offset": 16
+            }
+          ]
+        },
+        {
+          "name": "SIMM16",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 16,
+              "bit_offset": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ENC_SOP2",
+      "order": 3,
+      "bit_count": 32,
+      "identifier_mask": 4286578688,
+      "identifier_values": [
+        2147483648,
+        2155872256,
+        2164260864,
+        2172649472,
+        2181038080,
+        2189426688,
+        2197815296,
+        2214592512,
+        2222981120,
+        2231369728,
+        2239758336,
+        2248146944,
+        2256535552,
+        2264924160,
+        2273312768,
+        2281701376,
+        2290089984,
+        2298478592,
+        2306867200,
+        2315255808,
+        2323644416,
+        2332033024,
+        2340421632,
+        2348810240,
+        2357198848,
+        2365587456,
+        2373976064,
+        2382364672,
+        2390753280,
+        2399141888,
+        2407530496,
+        2415919104,
+        2424307712,
+        2432696320,
+        2441084928,
+        2449473536,
+        2457862144,
+        2466250752,
+        2474639360,
+        2483027968,
+        2491416576,
+        2499805184,
+        2508193792,
+        2516582400,
+        2524971008,
+        2533359616,
+        2550136832,
+        2558525440,
+        2566914048,
+        2575302656,
+        2583691264,
+        2592079872,
+        2684354560,
+        2692743168,
+        2701131776,
+        2709520384,
+        2717908992,
+        2743074816,
+        2751463424,
+        2759852032,
+        2768240640,
+        2776629248,
+        2785017856,
+        2793406464,
+        2801795072,
+        2810183680,
+        2818572288,
+        2826960896,
+        2835349504,
+        2843738112,
+        2852126720,
+        2860515328
+      ],
+      "fields": [
+        {
+          "name": "ENCODING",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 2,
+              "bit_offset": 30
+            }
+          ]
+        },
+        {
+          "name": "OP",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 7,
+              "bit_offset": 23
+            }
+          ]
+        },
+        {
+          "name": "SDST",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 7,
+              "bit_offset": 16
+            }
+          ]
+        },
+        {
+          "name": "SSRC0",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 8,
+              "bit_offset": 0
+            }
+          ]
+        },
+        {
+          "name": "SSRC1",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 8,
+              "bit_offset": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ENC_SMEM",
+      "order": 4,
+      "bit_count": 64,
+      "identifier_mask": 4228374528,
+      "identifier_values": [
+        4093640704,
+        4093648896,
+        4093657088,
+        4093665280,
+        4093673472,
+        4093681664,
+        4093706240,
+        4093714432,
+        4093722624,
+        4093730816,
+        4093771776,
+        4093779968,
+        4093788160,
+        4093796352,
+        4093804544,
+        4093812736,
+        4093837312,
+        4093845504,
+        4093853696,
+        4093861888,
+        4093911040,
+        4093919232,
+        4093927424,
+        4093935616,
+        4093943808,
+        4093952000,
+        4093960192,
+        4093968384
+      ],
+      "fields": [
+        {
+          "name": "ENCODING",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 6,
+              "bit_offset": 26
+            }
+          ]
+        },
+        {
+          "name": "IOFFSET",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 24,
+              "bit_offset": 32
+            }
+          ]
+        },
+        {
+          "name": "NV",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 1,
+              "bit_offset": 20
+            }
+          ]
+        },
+        {
+          "name": "OP",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 6,
+              "bit_offset": 13
+            }
+          ]
+        },
+        {
+          "name": "SBASE",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 6,
+              "bit_offset": 0,
+              "padding_bit_count": 1,
+              "padding_value": 0
+            }
+          ]
+        },
+        {
+          "name": "SCOPE",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 2,
+              "bit_offset": 21
+            }
+          ]
+        },
+        {
+          "name": "SDATA",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 7,
+              "bit_offset": 6
+            }
+          ]
+        },
+        {
+          "name": "SOFFSET",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 7,
+              "bit_offset": 57
+            }
+          ]
+        },
+        {
+          "name": "TH",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 2,
+              "bit_offset": 23
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ENC_VOP2",
+      "order": 7,
+      "bit_count": 32,
+      "identifier_mask": 4261412864,
+      "identifier_values": [
+        33554432,
+        67108864,
+        100663296,
+        134217728,
+        167772160,
+        201326592,
+        234881024,
+        268435456,
+        301989888,
+        335544320,
+        369098752,
+        402653184,
+        436207616,
+        469762048,
+        570425344,
+        603979776,
+        637534208,
+        671088640,
+        704643072,
+        738197504,
+        805306368,
+        838860800,
+        872415232,
+        905969664,
+        939524096,
+        973078528,
+        1006632960,
+        1040187392,
+        1073741824,
+        1107296256,
+        1140850688,
+        1241513984,
+        1275068416,
+        1308622848,
+        1442840576,
+        1577058304,
+        1610612736,
+        1644167168,
+        1677721600,
+        1711276032,
+        1744830464,
+        1778384896,
+        1811939328,
+        1979711488,
+        2013265920
+      ],
+      "fields": [
+        {
+          "name": "ENCODING",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 1,
+              "bit_offset": 31
+            }
+          ]
+        },
+        {
+          "name": "OP",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 6,
+              "bit_offset": 25
+            }
+          ]
+        },
+        {
+          "name": "SRC0",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 9,
+              "bit_offset": 0
+            }
+          ]
+        },
+        {
+          "name": "VDST",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 8,
+              "bit_offset": 17
+            }
+          ]
+        },
+        {
+          "name": "VSRC1",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 8,
+              "bit_offset": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ENC_VBUFFER",
+      "order": 16,
+      "bit_count": 96,
+      "identifier_mask": 4232036352,
+      "identifier_values": [
+        3288334336,
+        3288350720,
+        3288367104,
+        3288383488,
+        3288399872,
+        3288416256,
+        3288432640,
+        3288449024,
+        3288465408,
+        3288481792,
+        3288498176,
+        3288514560,
+        3288530944,
+        3288547328,
+        3288563712,
+        3288580096,
+        3288596480,
+        3288612864,
+        3288629248,
+        3288645632,
+        3288662016,
+        3288678400,
+        3288694784,
+        3288711168,
+        3288727552,
+        3288743936,
+        3288760320,
+        3288776704,
+        3288793088,
+        3288809472,
+        3288825856,
+        3288842240,
+        3288858624,
+        3288875008,
+        3288891392,
+        3288907776,
+        3288924160,
+        3288940544,
+        3288956928,
+        3288973312,
+        3289169920,
+        3289186304,
+        3289202688,
+        3289219072,
+        3289235456,
+        3289251840,
+        3289268224,
+        3289284608,
+        3289300992,
+        3289317376,
+        3289333760,
+        3289350144,
+        3289366528,
+        3289382912,
+        3289399296,
+        3289415680,
+        3289432064,
+        3289448448,
+        3289464832,
+        3289481216,
+        3289497600,
+        3289513984,
+        3289530368,
+        3289546752,
+        3289563136,
+        3289579520,
+        3289595904,
+        3289645056,
+        3289661440,
+        3289677824,
+        3289743360,
+        3289792512,
+        3289808896,
+        3290431488,
+        3290447872,
+        3290464256,
+        3290480640,
+        3290497024,
+        3290513408,
+        3290529792,
+        3290546176,
+        3290562560,
+        3290578944,
+        3290595328,
+        3290611712,
+        3290628096,
+        3290644480,
+        3290660864,
+        3290677248
+      ],
+      "fields": [
+        {
+          "name": "ENCODING",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 6,
+              "bit_offset": 26
+            }
+          ]
+        },
+        {
+          "name": "FORMAT",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 7,
+              "bit_offset": 55
+            }
+          ]
+        },
+        {
+          "name": "IDXEN",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 1,
+              "bit_offset": 63
+            }
+          ]
+        },
+        {
+          "name": "IOFFSET",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 24,
+              "bit_offset": 72
+            }
+          ]
+        },
+        {
+          "name": "NV",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 1,
+              "bit_offset": 7
+            }
+          ]
+        },
+        {
+          "name": "OFFEN",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 1,
+              "bit_offset": 62
+            }
+          ]
+        },
+        {
+          "name": "OP",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 8,
+              "bit_offset": 14
+            }
+          ]
+        },
+        {
+          "name": "RSRC",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 9,
+              "bit_offset": 41
+            }
+          ]
+        },
+        {
+          "name": "SCOPE",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 2,
+              "bit_offset": 50
+            }
+          ]
+        },
+        {
+          "name": "SOFFSET",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 7,
+              "bit_offset": 0
+            }
+          ]
+        },
+        {
+          "name": "TFE",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 1,
+              "bit_offset": 22
+            }
+          ]
+        },
+        {
+          "name": "TH",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 3,
+              "bit_offset": 52
+            }
+          ]
+        },
+        {
+          "name": "VADDR",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 8,
+              "bit_offset": 64
+            }
+          ]
+        },
+        {
+          "name": "VDATA",
+          "is_conditional": false,
+          "ranges": [
+            {
+              "order": 0,
+              "bit_count": 8,
+              "bit_offset": 32
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "instructions": [
+    {
+      "name": "BUFFER_LOAD_B32",
+      "aliases": [
+        "BUFFER_LOAD_DWORD"
+      ],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": false
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_VBUFFER",
+          "condition_name": "default",
+          "opcode": 20,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_VGPR",
+              "size_bits": 32,
+              "is_input": false,
+              "is_output": true,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "VDATA",
+              "data_format_name": "FMT_ANY"
+            },
+            {
+              "order": 2,
+              "operand_type": "OPR_VGPR",
+              "size_bits": 64,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "VADDR",
+              "data_format_name": "FMT_ANY"
+            },
+            {
+              "order": 3,
+              "operand_type": "OPR_SREG",
+              "size_bits": 128,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "RSRC",
+              "data_format_name": "FMT_RSRC_SCRATCH"
+            },
+            {
+              "order": 4,
+              "operand_type": "OPR_SREG_M0",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SOFFSET",
+              "data_format_name": "FMT_ANY"
+            },
+            {
+              "order": 5,
+              "operand_type": "OPR_GPUMEM",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": true,
+              "is_binary_microcode_required": true,
+              "data_format_name": "FMT_NUM_B32"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "VMEM",
+          "subgroups": [
+            "BUFFER"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "BUFFER_STORE_B32",
+      "aliases": [
+        "BUFFER_STORE_DWORD"
+      ],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": false
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_VBUFFER",
+          "condition_name": "default",
+          "opcode": 26,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_VGPR",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "VDATA",
+              "data_format_name": "FMT_ANY"
+            },
+            {
+              "order": 2,
+              "operand_type": "OPR_VGPR",
+              "size_bits": 64,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "VADDR",
+              "data_format_name": "FMT_ANY"
+            },
+            {
+              "order": 3,
+              "operand_type": "OPR_SREG",
+              "size_bits": 128,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "RSRC",
+              "data_format_name": "FMT_RSRC_SCRATCH"
+            },
+            {
+              "order": 4,
+              "operand_type": "OPR_SREG_M0",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SOFFSET",
+              "data_format_name": "FMT_ANY"
+            },
+            {
+              "order": 5,
+              "operand_type": "OPR_GPUMEM",
+              "size_bits": 32,
+              "is_input": false,
+              "is_output": true,
+              "is_implicit": true,
+              "is_binary_microcode_required": true,
+              "data_format_name": "FMT_NUM_B32"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "VMEM",
+          "subgroups": [
+            "BUFFER"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S_ADD_CO_U32",
+      "aliases": [
+        "S_ADD_U32"
+      ],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": false
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_SOP2",
+          "condition_name": "default",
+          "opcode": 0,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_SDST",
+              "size_bits": 32,
+              "is_input": false,
+              "is_output": true,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SDST",
+              "data_format_name": "FMT_NUM_U32"
+            },
+            {
+              "order": 2,
+              "operand_type": "OPR_SSRC",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SSRC0",
+              "data_format_name": "FMT_NUM_U32"
+            },
+            {
+              "order": 3,
+              "operand_type": "OPR_SSRC",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SSRC1",
+              "data_format_name": "FMT_NUM_U32"
+            },
+            {
+              "order": 4,
+              "operand_type": "OPR_SSRC_SPECIAL_SCC",
+              "size_bits": 1,
+              "is_input": false,
+              "is_output": true,
+              "is_implicit": true,
+              "is_binary_microcode_required": true,
+              "data_format_name": "FMT_NUM_B1"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "SALU",
+          "subgroups": [
+            "NOT_ASSIGNED"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S_BUFFER_LOAD_B32",
+      "aliases": [
+        "S_BUFFER_LOAD_DWORD"
+      ],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": false
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_SMEM",
+          "condition_name": "default",
+          "opcode": 16,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_SREG",
+              "size_bits": 32,
+              "is_input": false,
+              "is_output": true,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SDATA",
+              "data_format_name": "FMT_ANY"
+            },
+            {
+              "order": 2,
+              "operand_type": "OPR_SREG",
+              "size_bits": 128,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SBASE",
+              "data_format_name": "FMT_RSRC_SCALAR"
+            },
+            {
+              "order": 3,
+              "operand_type": "OPR_SMEM_OFFSET",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SOFFSET",
+              "data_format_name": "FMT_NUM_B32"
+            },
+            {
+              "order": 4,
+              "operand_type": "OPR_GPUMEM",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": true,
+              "is_binary_microcode_required": true,
+              "data_format_name": "FMT_NUM_B32"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "SMEM",
+          "subgroups": [
+            "NOT_ASSIGNED"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S_WAIT_ALU",
+      "aliases": [
+        "S_WAITCNT_DEPCTR"
+      ],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": true
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_SOPP",
+          "condition_name": "default",
+          "opcode": 8,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_WAIT_ALU",
+              "size_bits": 16,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SIMM16",
+              "data_format_name": "FMT_NUM_B16"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "WAVE_CONTROL",
+          "subgroups": [
+            "NOT_ASSIGNED"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S_WAIT_IDLE",
+      "aliases": [],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": true
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_SOPP",
+          "condition_name": "default",
+          "opcode": 10,
+          "operands": []
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "WAVE_CONTROL",
+          "subgroups": [
+            "NOT_ASSIGNED"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S_WAIT_LOADCNT",
+      "aliases": [],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": true
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_SOPP",
+          "condition_name": "default",
+          "opcode": 64,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_SIMM16",
+              "size_bits": 16,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SIMM16",
+              "data_format_name": "FMT_NUM_B16"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "WAVE_CONTROL",
+          "subgroups": [
+            "NOT_ASSIGNED"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S_WAIT_STORECNT",
+      "aliases": [],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": true
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_SOPP",
+          "condition_name": "default",
+          "opcode": 65,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_SIMM16",
+              "size_bits": 16,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SIMM16",
+              "data_format_name": "FMT_NUM_B16"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "WAVE_CONTROL",
+          "subgroups": [
+            "NOT_ASSIGNED"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "V_ADD_NC_U32",
+      "aliases": [],
+      "flags": {
+        "is_branch": false,
+        "is_conditional_branch": false,
+        "is_indirect_branch": false,
+        "is_program_terminator": false,
+        "is_immediately_executed": false
+      },
+      "encodings": [
+        {
+          "encoding_name": "ENC_VOP2",
+          "condition_name": "default",
+          "opcode": 37,
+          "operands": [
+            {
+              "order": 1,
+              "operand_type": "OPR_VGPR",
+              "size_bits": 32,
+              "is_input": false,
+              "is_output": true,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "VDST",
+              "data_format_name": "FMT_NUM_U32"
+            },
+            {
+              "order": 2,
+              "operand_type": "OPR_SRC",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "SRC0",
+              "data_format_name": "FMT_NUM_U32"
+            },
+            {
+              "order": 3,
+              "operand_type": "OPR_VGPR",
+              "size_bits": 32,
+              "is_input": true,
+              "is_output": false,
+              "is_implicit": false,
+              "is_binary_microcode_required": true,
+              "field_name": "VSRC1",
+              "data_format_name": "FMT_NUM_U32"
+            }
+          ]
+        }
+      ],
+      "functional_groups": [
+        {
+          "name": "VALU",
+          "subgroups": [
+            "NOT_ASSIGNED"
+          ]
+        }
+      ]
+    }
+  ]
+}
