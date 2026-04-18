@@ -10,13 +10,13 @@
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/legality.h"
 #include "loom/target/emit/llvmir/lower.h"
+#include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/emit/llvmir/text_writer.h"
 #include "loom/target/emit/llvmir/tool.h"
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
-#include "loom/tools/loom-check/llvmir_targets.h"
 #include "loom/util/stream.h"
 
 typedef enum loom_check_emit_format_e {
@@ -93,8 +93,10 @@ static iree_status_t loom_check_emit_parse_request(
                             "unknown emit target '%.*s'", (int)target_name.size,
                             target_name.data);
   }
-  return loom_check_llvmir_target_bundle_lookup(profile_name,
-                                                &out_request->target_bundle);
+  loom_llvmir_target_registry_t target_registry;
+  loom_llvmir_target_registry_initialize(&target_registry);
+  return loom_llvmir_target_registry_lookup_bundle(
+      &target_registry, profile_name, &out_request->target_bundle);
 }
 
 static iree_string_view_t loom_check_emit_consume_line(
@@ -601,9 +603,16 @@ iree_status_t loom_check_execute_emit(
     return status;
   }
 
-  loom_check_llvmir_legality_providers_t legality_providers;
-  loom_check_llvmir_legality_providers_initialize(request.target_bundle,
-                                                  &legality_providers);
+  loom_llvmir_target_registry_t target_registry;
+  loom_llvmir_target_registry_initialize(&target_registry);
+  loom_llvmir_target_legality_provider_list_t legality_providers;
+  status = loom_llvmir_target_registry_select_legality_providers(
+      &target_registry, request.target_bundle, &legality_providers);
+  if (!iree_status_is_ok(status)) {
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
   loom_llvmir_target_legality_options_t legality_options = {
       .snapshot = request.target_bundle->snapshot,
       .export_plan = request.target_bundle->export_plan,
@@ -633,8 +642,14 @@ iree_status_t loom_check_execute_emit(
     return status;
   }
   const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
-  loom_check_llvmir_lowering_providers_t lowering_providers;
-  loom_check_llvmir_lowering_providers_initialize(profile, &lowering_providers);
+  loom_llvmir_lowering_provider_list_t lowering_providers;
+  status = loom_llvmir_target_registry_select_lowering_providers(
+      &target_registry, profile, &lowering_providers);
+  if (!iree_status_is_ok(status)) {
+    loom_module_free(module);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
   loom_llvmir_lowering_options_t options = {
       .target_profile = profile,
       .source_name = filename,

@@ -263,6 +263,37 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "target_registry",
+    srcs = ["target_registry.c"],
+    hdrs = ["target_registry.h"],
+    deps = [
+        ":legality",
+        ":lower",
+        ":target_presets",
+        ":test_target",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:legality",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:lower",
+        "//loom/src/loom/target/emit/llvmir/amdgpu:target_env",
+        "//loom/src/loom/target/emit/llvmir/x86:legality",
+        "//loom/src/loom/target/emit/llvmir/x86:lower",
+        "//loom/src/loom/target/emit/llvmir/x86:target_env",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "target_registry_test",
+    srcs = ["target_registry_test.cc"],
+    deps = [
+        ":target_env",
+        ":target_registry",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_test(
     name = "bitcode_record_writer_test",
     srcs = ["bitcode_record_writer_test.cc"],

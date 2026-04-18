@@ -198,6 +198,41 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    target_registry
+  HDRS
+    "target_registry.h"
+  SRCS
+    "target_registry.c"
+  DEPS
+    ::legality
+    ::lower
+    ::target_presets
+    ::test_target
+    iree::base
+    loom::src::loom::target::emit::llvmir::amdgpu::legality
+    loom::src::loom::target::emit::llvmir::amdgpu::lower
+    loom::src::loom::target::emit::llvmir::amdgpu::target_env
+    loom::src::loom::target::emit::llvmir::x86::legality
+    loom::src::loom::target::emit::llvmir::x86::lower
+    loom::src::loom::target::emit::llvmir::x86::target_env
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    target_registry_test
+  SRCS
+    "target_registry_test.cc"
+  DEPS
+    ::target_env
+    ::target_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_test(
   NAME
     bitcode_record_writer_test

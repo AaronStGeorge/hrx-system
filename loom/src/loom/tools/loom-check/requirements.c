@@ -6,8 +6,8 @@
 
 #include "loom/tools/loom-check/requirements.h"
 
+#include "loom/target/emit/llvmir/target_registry.h"
 #include "loom/target/emit/llvmir/tool.h"
-#include "loom/tools/loom-check/llvmir_targets.h"
 
 static bool loom_check_case_has_requirement(const loom_check_case_t* test_case,
                                             iree_string_view_t requirement) {
@@ -43,11 +43,14 @@ static bool loom_check_string_contains_case_insensitive(
 
 static bool loom_check_requirement_name_is_known(
     iree_string_view_t requirement) {
+  loom_llvmir_target_registry_t target_registry;
+  loom_llvmir_target_registry_initialize(&target_registry);
   return iree_string_view_equal(requirement, IREE_SV("llvm-as")) ||
          iree_string_view_equal(requirement, IREE_SV("llvm-dis")) ||
          iree_string_view_equal(requirement, IREE_SV("opt")) ||
          iree_string_view_equal(requirement, IREE_SV("llc")) ||
-         loom_check_llvmir_llc_requirement_provider(requirement, NULL) ||
+         loom_llvmir_target_registry_llc_requirement_provider(
+             &target_registry, requirement, NULL) ||
          iree_string_view_equal(requirement,
                                 IREE_SV("loom-check-test-unavailable"));
 }
@@ -104,8 +107,11 @@ static iree_status_t loom_check_query_requirement(
   if (iree_string_view_equal(requirement, IREE_SV("llc"))) {
     return loom_check_query_llvm_tool(LOOM_LLVMIR_TOOL_LLC, allocator);
   }
+  loom_llvmir_target_registry_t target_registry;
+  loom_llvmir_target_registry_initialize(&target_registry);
   const loom_llvmir_target_profile_provider_t* provider = NULL;
-  if (loom_check_llvmir_llc_requirement_provider(requirement, &provider)) {
+  if (loom_llvmir_target_registry_llc_requirement_provider(
+          &target_registry, requirement, &provider)) {
     return loom_check_query_llc_provider(requirement, provider, allocator);
   }
   if (iree_string_view_equal(requirement,
@@ -140,11 +146,12 @@ static iree_status_t loom_check_append_supported_requirement_names(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       &result->detail, "llvm-as, llvm-dis, opt, llc"));
 
-  loom_check_llvmir_target_profile_registry_t registry;
-  loom_check_llvmir_target_profile_registry_initialize(&registry);
-  for (iree_host_size_t i = 0; i < registry.registry.provider_count; ++i) {
+  loom_llvmir_target_registry_t target_registry;
+  loom_llvmir_target_registry_initialize(&target_registry);
+  for (iree_host_size_t i = 0;
+       i < target_registry.profile_registry.provider_count; ++i) {
     const loom_llvmir_target_profile_provider_t* provider =
-        registry.registry.providers[i];
+        target_registry.profile_registry.providers[i];
     if (iree_string_view_is_empty(provider->llc_target_name)) {
       continue;
     }
@@ -215,10 +222,12 @@ static iree_status_t loom_check_require_declared_requirement(
 static bool loom_check_case_has_llc_provider_requirement(
     const loom_check_case_t* test_case,
     const loom_llvmir_target_profile_provider_t* expected_provider) {
+  loom_llvmir_target_registry_t target_registry;
+  loom_llvmir_target_registry_initialize(&target_registry);
   for (iree_host_size_t i = 0; i < test_case->requirement_count; ++i) {
     const loom_llvmir_target_profile_provider_t* provider = NULL;
-    if (!loom_check_llvmir_llc_requirement_provider(test_case->requirements[i],
-                                                    &provider)) {
+    if (!loom_llvmir_target_registry_llc_requirement_provider(
+            &target_registry, test_case->requirements[i], &provider)) {
       continue;
     }
     if (provider == expected_provider ||
@@ -284,9 +293,11 @@ static iree_status_t loom_check_require_emit_tool_declarations(
     if (!*out_continue_execution) {
       return iree_ok_status();
     }
+    loom_llvmir_target_registry_t target_registry;
+    loom_llvmir_target_registry_initialize(&target_registry);
     const loom_llvmir_target_profile_provider_t* provider = NULL;
-    iree_status_t status = loom_check_llvmir_target_profile_provider_lookup(
-        profile_name, NULL, &provider);
+    iree_status_t status = loom_llvmir_target_registry_lookup_profile_provider(
+        &target_registry, profile_name, NULL, &provider);
     if (iree_status_is_ok(status)) {
       IREE_RETURN_IF_ERROR(loom_check_require_declared_llc_provider_requirement(
           test_case, provider, result, out_continue_execution));

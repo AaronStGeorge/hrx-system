@@ -30,13 +30,11 @@ loom_cc_library(
   HDRS
     "diagnostics.h"
     "execute.h"
-    "llvmir_targets.h"
     "requirements.h"
   SRCS
     "diagnostics.c"
     "emit.c"
     "execute.c"
-    "llvmir_targets.c"
     "requirements.c"
     "roundtrip.c"
     "verify.c"
@@ -58,18 +56,11 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::op_registry
-    loom::src::loom::target::emit::llvmir::amdgpu::legality
-    loom::src::loom::target::emit::llvmir::amdgpu::lower
-    loom::src::loom::target::emit::llvmir::amdgpu::target_env
     loom::src::loom::target::emit::llvmir::core
     loom::src::loom::target::emit::llvmir::legality
     loom::src::loom::target::emit::llvmir::lower
     loom::src::loom::target::emit::llvmir::target_env
-    loom::src::loom::target::emit::llvmir::target_presets
-    loom::src::loom::target::emit::llvmir::test_target
-    loom::src::loom::target::emit::llvmir::x86::legality
-    loom::src::loom::target::emit::llvmir::x86::lower
-    loom::src::loom::target::emit::llvmir::x86::target_env
+    loom::src::loom::target::emit::llvmir::target_registry
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::types
     loom::src::loom::testing::diff
