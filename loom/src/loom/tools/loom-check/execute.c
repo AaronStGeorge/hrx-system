@@ -20,23 +20,8 @@
 #include "loom/testing/diff.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/requirements.h"
-#include "loom/transforms/branch_fusion.h"
-#include "loom/transforms/branch_sink.h"
-#include "loom/transforms/canonicalize.h"
-#include "loom/transforms/cfg_simplify.h"
-#include "loom/transforms/cse.h"
-#include "loom/transforms/dce.h"
-#include "loom/transforms/kernel_async_legality.h"
-#include "loom/transforms/kernel_resources.h"
-#include "loom/transforms/licm.h"
-#include "loom/transforms/loop_fusion.h"
 #include "loom/transforms/pass.h"
-#include "loom/transforms/refine_boundaries.h"
-#include "loom/transforms/scf_to_cfg.h"
-#include "loom/transforms/strip_hints.h"
-#include "loom/transforms/symbol_dce.h"
-#include "loom/transforms/vector_memory_footprint.h"
-#include "loom/transforms/vector_to_scalar.h"
+#include "loom/transforms/pass_registry.h"
 #include "loom/transforms/verify.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
@@ -240,6 +225,9 @@ static iree_status_t loom_check_run_pipeline(
     iree_diagnostic_emitter_t diagnostic_emitter,
     const loom_low_descriptor_registry_t* low_descriptor_registry,
     loom_module_t* module) {
+  const loom_pass_registry_t* pass_registry = loom_pass_builtin_registry();
+  IREE_RETURN_IF_ERROR(loom_pass_registry_verify(pass_registry));
+
   loom_pass_manager_t manager;
   IREE_RETURN_IF_ERROR(loom_pass_manager_initialize(
       block_pool, 0, iree_allocator_system(), &manager));
@@ -259,79 +247,20 @@ static iree_status_t loom_check_run_pipeline(
     if (!iree_status_is_ok(status)) break;
     if (!has_entry) break;
 
-    const loom_pass_info_t* info = NULL;
-    loom_module_pass_fn_t module_run = NULL;
-    loom_function_pass_fn_t function_run = NULL;
-    loom_pass_create_fn_t create = NULL;
-    loom_pass_destroy_fn_t destroy = NULL;
+    const loom_pass_descriptor_t* descriptor = NULL;
     void* pass_user_data = NULL;
-    if (iree_string_view_equal(entry.name, IREE_SV("canonicalize"))) {
-      info = loom_canonicalize_pass_info();
-      function_run = loom_canonicalize_run;
-      create = loom_canonicalize_create;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("dce"))) {
-      info = loom_dce_pass_info();
-      function_run = loom_dce_run;
-    } else if (iree_string_view_equal(entry.name,
-                                      IREE_SV("kernel-async-legality"))) {
-      info = loom_kernel_async_legality_pass_info();
-      function_run = loom_kernel_async_legality_run;
-    } else if (iree_string_view_equal(entry.name,
-                                      IREE_SV("low-materialize-allocation"))) {
-      info = loom_low_materialize_allocation_pass_info();
-      function_run = loom_low_materialize_allocation_run;
-      create = loom_low_materialize_allocation_create;
-      pass_user_data = &low_materialize_allocation_config;
-    } else if (iree_string_view_equal(entry.name,
-                                      IREE_SV("normalize-kernel-resources"))) {
-      info = loom_normalize_kernel_resources_pass_info();
-      function_run = loom_normalize_kernel_resources_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("cse"))) {
-      info = loom_cse_pass_info();
-      function_run = loom_cse_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("branch-sink"))) {
-      info = loom_branch_sink_pass_info();
-      function_run = loom_branch_sink_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("branch-fusion"))) {
-      info = loom_branch_fusion_pass_info();
-      function_run = loom_branch_fusion_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("cfg-simplify"))) {
-      info = loom_cfg_simplify_pass_info();
-      function_run = loom_cfg_simplify_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("licm"))) {
-      info = loom_licm_pass_info();
-      function_run = loom_licm_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("loop-fusion"))) {
-      info = loom_loop_fusion_pass_info();
-      function_run = loom_loop_fusion_run;
-    } else if (iree_string_view_equal(entry.name,
-                                      IREE_SV("refine-boundaries"))) {
-      info = loom_refine_boundaries_pass_info();
-      module_run = loom_refine_boundaries_run;
-      create = loom_refine_boundaries_create;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("scf-to-cfg"))) {
-      info = loom_scf_to_cfg_pass_info();
-      function_run = loom_scf_to_cfg_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("strip-hints"))) {
-      info = loom_strip_hints_pass_info();
-      function_run = loom_strip_hints_run;
-    } else if (iree_string_view_equal(entry.name, IREE_SV("symbol-dce"))) {
-      info = loom_symbol_dce_pass_info();
-      module_run = loom_symbol_dce_run;
-    } else if (iree_string_view_equal(entry.name,
-                                      IREE_SV("vector-to-scalar"))) {
-      info = loom_vector_to_scalar_pass_info();
-      function_run = loom_vector_to_scalar_run;
-    } else if (iree_string_view_equal(entry.name,
-                                      IREE_SV("vector-memory-footprint"))) {
-      info = loom_vector_memory_footprint_pass_info();
-      function_run = loom_vector_memory_footprint_run;
-    } else {
+    status = loom_pass_registry_lookup(pass_registry, entry.name, &descriptor);
+    if (iree_status_is_ok(status) && !descriptor) {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT, "unknown pass: '%.*s'",
                            (int)entry.name.size, entry.name.data);
     }
-    if (iree_status_is_ok(status) && info && create == NULL &&
+    if (iree_status_is_ok(status) &&
+        iree_string_view_equal(entry.name,
+                               IREE_SV("low-materialize-allocation"))) {
+      pass_user_data = &low_materialize_allocation_config;
+    }
+    if (iree_status_is_ok(status) && descriptor && descriptor->create == NULL &&
         !iree_string_view_is_empty(entry.options)) {
       status =
           iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -339,16 +268,9 @@ static iree_status_t loom_check_run_pipeline(
                            (int)entry.name.size, entry.name.data,
                            (int)entry.options.size, entry.options.data);
     }
-    if (iree_status_is_ok(status) && info) {
-      if (info->kind == LOOM_PASS_MODULE) {
-        status = loom_pass_manager_add_module_pass(
-            &manager, info, module_run, create, destroy, entry.options,
-            pass_user_data);
-      } else {
-        status = loom_pass_manager_add_function_pass(
-            &manager, info, function_run, create, destroy, entry.options,
-            pass_user_data);
-      }
+    if (iree_status_is_ok(status) && descriptor) {
+      status = loom_pass_manager_add_descriptor(&manager, descriptor,
+                                                entry.options, pass_user_data);
     }
   }
 

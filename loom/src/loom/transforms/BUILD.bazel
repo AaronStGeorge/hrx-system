@@ -331,6 +331,45 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "pass_registry",
+    srcs = ["pass_registry.c"],
+    hdrs = ["pass_registry.h"],
+    deps = [
+        ":branch_fusion",
+        ":branch_sink",
+        ":canonicalize",
+        ":cfg_simplify",
+        ":cse",
+        ":dce",
+        ":kernel_async_legality",
+        ":kernel_resources",
+        ":licm",
+        ":loop_fusion",
+        ":pass",
+        ":refine_boundaries",
+        ":scf_to_cfg",
+        ":strip_hints",
+        ":symbol_dce",
+        ":vector_memory_footprint",
+        ":vector_to_scalar",
+        "//loom/src/loom/codegen/low:allocation_pass",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "pass_registry_test",
+    srcs = ["pass_registry_test.cc"],
+    deps = [
+        ":dce",
+        ":pass_registry",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "remap",
     srcs = ["remap.c"],
     hdrs = ["remap.h"],

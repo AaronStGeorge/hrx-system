@@ -374,6 +374,49 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    pass_registry
+  HDRS
+    "pass_registry.h"
+  SRCS
+    "pass_registry.c"
+  DEPS
+    ::branch_fusion
+    ::branch_sink
+    ::canonicalize
+    ::cfg_simplify
+    ::cse
+    ::dce
+    ::kernel_async_legality
+    ::kernel_resources
+    ::licm
+    ::loop_fusion
+    ::pass
+    ::refine_boundaries
+    ::scf_to_cfg
+    ::strip_hints
+    ::symbol_dce
+    ::vector_memory_footprint
+    ::vector_to_scalar
+    iree::base
+    loom::src::loom::codegen::low::allocation_pass
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    pass_registry_test
+  SRCS
+    "pass_registry_test.cc"
+  DEPS
+    ::dce
+    ::pass_registry
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     remap
   HDRS
     "remap.h"
