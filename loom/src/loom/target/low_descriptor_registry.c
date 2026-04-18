@@ -643,38 +643,15 @@ iree_status_t loom_target_low_descriptor_set_lookup(
 iree_status_t loom_target_low_descriptor_registry_lookup_bundle(
     const loom_target_low_descriptor_registry_t* registry,
     iree_string_view_t key, const loom_target_bundle_t** out_bundle) {
-  if (out_bundle == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low bundle output is required");
-  }
-  *out_bundle = NULL;
   if (registry == NULL) {
+    if (out_bundle != NULL) *out_bundle = NULL;
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target-low registry is required");
   }
-  key = iree_string_view_trim(key);
-  if (iree_string_view_is_empty(key)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low bundle key is required");
-  }
-  if (registry->target_bundle_count != 0 && registry->target_bundles == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "target-low registry bundles are required");
-  }
-  for (iree_host_size_t i = 0; i < registry->target_bundle_count; ++i) {
-    const loom_target_bundle_t* bundle = registry->target_bundles[i];
-    if (bundle == NULL) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target-low registry bundle row is null");
-    }
-    if (iree_string_view_equal(bundle->name, key)) {
-      *out_bundle = bundle;
-      return iree_ok_status();
-    }
-  }
-  return iree_make_status(IREE_STATUS_NOT_FOUND,
-                          "unknown target-low bundle '%.*s'", (int)key.size,
-                          key.data);
+  const loom_target_preset_registry_t preset_registry =
+      loom_target_low_descriptor_registry_presets(registry);
+  return loom_target_preset_registry_lookup_bundle(&preset_registry, key,
+                                                   out_bundle);
 }
 
 iree_status_t loom_target_low_bundle_lookup(

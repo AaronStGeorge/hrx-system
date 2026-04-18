@@ -204,6 +204,19 @@ iree_status_t loom_target_config_verify(const loom_module_t* module,
       IREE_SV("a non-negative feature bitset"));
 }
 
+iree_status_t loom_target_preset_verify(const loom_module_t* module,
+                                        const loom_op_t* op,
+                                        iree_diagnostic_emitter_t emitter) {
+  loom_string_id_t key_id = loom_target_preset_key(op);
+  if (key_id < module->strings.count &&
+      !iree_string_view_is_empty(
+          iree_string_view_trim(module->strings.entries[key_id]))) {
+    return iree_ok_status();
+  }
+  return loom_target_emit_attr_constraint(emitter, op, IREE_SV("key"), 0,
+                                          IREE_SV("a non-empty preset key"));
+}
+
 static const loom_symbol_t* loom_target_lookup_symbol(
     const loom_module_t* module, loom_symbol_ref_t ref) {
   if (!loom_symbol_ref_is_valid(ref) || ref.module_id != 0 ||

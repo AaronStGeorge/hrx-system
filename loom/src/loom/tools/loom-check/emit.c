@@ -25,6 +25,7 @@
 #include "loom/target/emit/llvmir/verify.h"
 #include "loom/target/ir_records.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 #include "loom/transforms/verify.h"
@@ -1063,6 +1064,23 @@ iree_status_t loom_check_execute_emit(
     return status;
   }
 
+  loom_target_low_descriptor_registry_t low_registry = {0};
+  loom_target_low_descriptor_registry_initialize(&low_registry);
+  const loom_target_preset_registry_t preset_registry =
+      loom_target_low_descriptor_registry_presets(&low_registry);
+  iree_host_size_t expanded_preset_count = 0;
+  status = loom_target_expand_presets(module, &preset_registry,
+                                      &expanded_preset_count);
+  if (!iree_status_is_ok(status)) {
+    loom_module_free(module);
+    iree_string_builder_deinitialize(&stripped_input);
+    status = loom_check_emit_finish_status_failure(
+        status, &diagnostic_collector, test_case, case_index, report, filename,
+        request.emit_target_name, allocator, result);
+    iree_arena_deinitialize(&diagnostic_arena);
+    return status;
+  }
+
   if (request.format == LOOM_CHECK_EMIT_LIVENESS_JSON ||
       request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON ||
       request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON) {
@@ -1099,11 +1117,9 @@ iree_status_t loom_check_execute_emit(
       iree_arena_deinitialize(&diagnostic_arena);
       return status;
     }
-    loom_target_low_descriptor_registry_t low_registry = {0};
     iree_host_size_t low_diagnostic_count = 0;
     if (request.format == LOOM_CHECK_EMIT_LOW_SCHEDULE_JSON ||
         request.format == LOOM_CHECK_EMIT_LOW_ALLOCATION_JSON) {
-      loom_target_low_descriptor_registry_initialize(&low_registry);
       loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
           .diagnostic_collector = &diagnostic_collector,
           .module = module,

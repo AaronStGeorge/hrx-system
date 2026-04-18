@@ -50,12 +50,43 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    preset_registry
+  HDRS
+    "preset_registry.h"
+  SRCS
+    "preset_registry.c"
+  DEPS
+    ::types
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    presets
+  HDRS
+    "presets.h"
+  SRCS
+    "presets.c"
+  DEPS
+    ::preset_registry
+    ::types
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_descriptor_registry
   HDRS
     "low_descriptor_registry.h"
   SRCS
     "low_descriptor_registry.c"
   DEPS
+    ::preset_registry
     ::types
     iree::base
     loom::src::loom::codegen::low::descriptors
@@ -92,6 +123,35 @@ loom_cc_test(
     "ir_records_test.cc"
   DEPS
     ::ir_records
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::target
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    preset_registry_test
+  SRCS
+    "preset_registry_test.cc"
+  DEPS
+    ::preset_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    presets_test
+  SRCS
+    "presets_test.cc"
+  DEPS
+    ::ir_records
+    ::low_descriptor_registry
+    ::presets
     iree::base::internal::arena
     loom::src::loom::format::text::parser
     loom::src::loom::ir

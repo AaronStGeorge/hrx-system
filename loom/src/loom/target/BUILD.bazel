@@ -81,6 +81,30 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target:low_descriptor_registry",
 )
 
+iree_assert_no_dependency(
+    name = "presets_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:presets",
+)
+
+iree_assert_no_dependency(
+    name = "presets_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target:presets",
+)
+
+iree_assert_no_dependency(
+    name = "preset_registry_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:preset_registry",
+)
+
+iree_assert_no_dependency(
+    name = "preset_registry_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target:preset_registry",
+)
+
 #===------------------------------------------------------------------------===#
 # Target-neutral data shapes
 #===------------------------------------------------------------------------===#
@@ -114,10 +138,35 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "preset_registry",
+    srcs = ["preset_registry.c"],
+    hdrs = ["preset_registry.h"],
+    deps = [
+        ":types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "presets",
+    srcs = ["presets.c"],
+    hdrs = ["presets.h"],
+    deps = [
+        ":preset_registry",
+        ":types",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/target",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_descriptor_registry",
     srcs = ["low_descriptor_registry.c"],
     hdrs = ["low_descriptor_registry.h"],
     deps = [
+        ":preset_registry",
         ":types",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:requirements",
@@ -151,6 +200,33 @@ loom_cc_test(
     srcs = ["ir_records_test.cc"],
     deps = [
         ":ir_records",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/target",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "preset_registry_test",
+    srcs = ["preset_registry_test.cc"],
+    deps = [
+        ":preset_registry",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "presets_test",
+    srcs = ["presets_test.cc"],
+    deps = [
+        ":ir_records",
+        ":low_descriptor_registry",
+        ":presets",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",

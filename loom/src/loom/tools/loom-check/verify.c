@@ -10,6 +10,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/module.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/presets.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/execute.h"
 
@@ -65,10 +66,20 @@ iree_status_t loom_check_execute_verify(
   // additional diagnostics. The source resolver uses the stripped input
   // so verifier diagnostics get the same line numbers as parse diagnostics.
   if (iree_status_is_ok(status) && module) {
+    loom_target_low_descriptor_registry_t low_registry;
+    loom_target_low_descriptor_registry_initialize(&low_registry);
+    const loom_target_preset_registry_t preset_registry =
+        loom_target_low_descriptor_registry_presets(&low_registry);
+    iree_host_size_t expanded_preset_count = 0;
+    status = loom_target_expand_presets(module, &preset_registry,
+                                        &expanded_preset_count);
+
     loom_source_entry_t source_entry = {0};
     loom_source_table_resolver_t resolver_data = {0};
-    status = loom_check_source_resolver_for_case(
-        context, filename, stripped_view, &source_entry, &resolver_data);
+    if (iree_status_is_ok(status)) {
+      status = loom_check_source_resolver_for_case(
+          context, filename, stripped_view, &source_entry, &resolver_data);
+    }
     loom_verify_options_t verify_options = {
         .sink = {.fn = loom_check_diagnostic_collector_sink,
                  .user_data = &collector},
@@ -82,8 +93,6 @@ iree_status_t loom_check_execute_verify(
       status = loom_verify_module(module, &verify_options, &verify_result);
     }
     if (iree_status_is_ok(status) && verify_result.error_count == 0) {
-      loom_target_low_descriptor_registry_t low_registry;
-      loom_target_low_descriptor_registry_initialize(&low_registry);
       loom_check_diagnostic_emitter_capture_t low_diagnostic_capture = {
           .diagnostic_collector = &collector,
           .module = module,

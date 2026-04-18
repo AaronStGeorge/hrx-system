@@ -22,7 +22,8 @@ enum {
   LOOM_OP_TARGET_EXPORT = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 1),
   LOOM_OP_TARGET_CONFIG = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 2),
   LOOM_OP_TARGET_BUNDLE = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 3),
-  LOOM_OP_TARGET_COUNT_ = 4,
+  LOOM_OP_TARGET_PRESET = LOOM_OP_KIND(LOOM_DIALECT_TARGET, 4),
+  LOOM_OP_TARGET_COUNT_ = 5,
 };
 
 // Primary codegen representation emitted for a target snapshot.
@@ -184,6 +185,23 @@ iree_status_t loom_target_bundle_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_target_bundle_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_TARGET_PRESET: Compact production authoring record for command-line-style target selection. Presets are expanded early into concrete target records; late target consumers should see target.bundle, not target.preset.
+// target.preset @vm_target {key = "iree-vm", source = @sched}
+LOOM_DEFINE_ISA(loom_target_preset_isa, LOOM_OP_TARGET_PRESET)
+LOOM_DEFINE_ATTR_SYMBOL(loom_target_preset_symbol, 0)
+LOOM_DEFINE_ATTR_STRING(loom_target_preset_key, 1)
+LOOM_DEFINE_ATTR_SYMBOL(loom_target_preset_source, 2)
+iree_status_t loom_target_preset_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_string_id_t key,
+    loom_symbol_ref_t source,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_target_preset_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

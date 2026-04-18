@@ -229,6 +229,44 @@ target_config = Op(
 )
 
 # ============================================================================
+# target.preset
+# ============================================================================
+
+target_preset = Op(
+    "target.preset",
+    group=target_ops,
+    doc=(
+        "Compact production authoring record for command-line-style target "
+        "selection. Presets are expanded early into concrete target records; "
+        "late target consumers should see target.bundle, not target.preset."
+    ),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="target preset",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef("key", ATTR_TYPE_STRING),
+        AttrDef(
+            "source",
+            "symbol",
+            symbol_ref=SymbolReference("function", ["func_like"]),
+        ),
+    ],
+    verify="loom_target_preset_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        'target.preset @vm_target {key = "iree-vm", source = @sched}',
+    ],
+)
+
+# ============================================================================
 # target.bundle
 # ============================================================================
 
@@ -280,4 +318,5 @@ ALL_TARGET_OPS: tuple[Op, ...] = (
     target_export,
     target_config,
     target_bundle,
+    target_preset,
 )

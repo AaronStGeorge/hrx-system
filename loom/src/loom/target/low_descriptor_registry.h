@@ -18,6 +18,7 @@
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/requirements.h"
+#include "loom/target/preset_registry.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -41,6 +42,16 @@ typedef struct loom_target_low_descriptor_registry_t {
 // package build.
 void loom_target_low_descriptor_registry_initialize(
     loom_target_low_descriptor_registry_t* out_registry);
+
+// Returns a generic preset-registry view over |registry|'s bundle table.
+static inline loom_target_preset_registry_t
+loom_target_low_descriptor_registry_presets(
+    const loom_target_low_descriptor_registry_t* registry) {
+  return (loom_target_preset_registry_t){
+      .target_bundles = registry ? registry->target_bundles : NULL,
+      .target_bundle_count = registry ? registry->target_bundle_count : 0,
+  };
+}
 
 // Verifies that the linked target-low registry package is internally
 // consistent. This checks the descriptor registry, bundle table, unique bundle
