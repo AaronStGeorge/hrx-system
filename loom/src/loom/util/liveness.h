@@ -1,0 +1,148 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+// Liveness, live intervals, and register-pressure summaries for Loom regions.
+//
+// The analysis is intentionally target-independent. It reads ordinary Loom SSA
+// values, CFG successor edges, block arguments, branch operands, and SSA value
+// references embedded in types. Target-specific consumers map the resulting
+// pressure classes to allocation policies, diagnostics, and schedule scoring.
+
+#ifndef LOOM_UTIL_LIVENESS_H_
+#define LOOM_UTIL_LIVENESS_H_
+
+#include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
+#include "loom/ir/ir.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Class used for pressure accounting.
+//
+// Register values use LOOM_TYPE_REGISTER plus |register_class_id| so target-low
+// pressure groups naturally as amdgpu.sgpr/amdgpu.vgpr/x86.zmm/etc.
+// Non-register values use their type kind and element type with an invalid
+// register class.
+typedef struct loom_liveness_value_class_t {
+  // Loom type kind carrying the value.
+  loom_type_kind_t type_kind;
+  // Element/scalar type for scalar and shaped semantic values.
+  loom_scalar_type_t element_type;
+  // Register class string ID for LOOM_TYPE_REGISTER, otherwise invalid.
+  loom_string_id_t register_class_id;
+} loom_liveness_value_class_t;
+
+// Half-open live interval for one value over a region-local program-point
+// number line. An interval with start_point == end_point represents a value
+// defined but not live across any point, such as a dead result.
+typedef struct loom_liveness_interval_t {
+  // SSA value represented by this interval.
+  loom_value_id_t value_id;
+  // First program point where the value is live or defined.
+  uint32_t start_point;
+  // One-past-last program point where the value is live.
+  uint32_t end_point;
+  // Pressure class used for grouped summaries.
+  loom_liveness_value_class_t value_class;
+  // Number of units contributed to |value_class| when live.
+  uint32_t unit_count;
+} loom_liveness_interval_t;
+
+// Liveness for one block in the analyzed region.
+typedef struct loom_liveness_block_info_t {
+  // Region block represented by this record.
+  const loom_block_t* block;
+  // Program point before the block's first operation.
+  uint32_t start_point;
+  // Program point after the block's last operation.
+  uint32_t end_point;
+  // Values live at block entry.
+  const loom_value_id_t* live_in_values;
+  // Number of values in |live_in_values|.
+  iree_host_size_t live_in_count;
+  // Values live at block exit.
+  const loom_value_id_t* live_out_values;
+  // Number of values in |live_out_values|.
+  iree_host_size_t live_out_count;
+} loom_liveness_block_info_t;
+
+// Peak boundary pressure for one value class.
+//
+// This target-independent summary reports values simultaneously live at
+// block/op boundaries. Target-specific consumers combine it with descriptor
+// operand/result constraints when estimating per-instruction transient
+// pressure.
+typedef struct loom_liveness_pressure_summary_t {
+  // Pressure class being summarized.
+  loom_liveness_value_class_t value_class;
+  // Maximum boundary-live units observed for this class.
+  uint32_t peak_live_units;
+  // Maximum simultaneously live values observed at the same point.
+  uint32_t peak_live_values;
+  // Block containing the peak program point.
+  const loom_block_t* peak_block;
+  // Operation after which the peak was observed. NULL means block entry/exit.
+  const loom_op_t* peak_op;
+  // Program point associated with the peak.
+  uint32_t peak_point;
+} loom_liveness_pressure_summary_t;
+
+// Liveness analysis result for one region. All arrays are arena-owned by the
+// caller-provided arena passed to loom_liveness_analyze_region.
+typedef struct loom_liveness_analysis_t {
+  // Module containing the analyzed region.
+  const loom_module_t* module;
+  // Region analyzed.
+  const loom_region_t* region;
+  // True when the region had CFG successor structure.
+  bool is_cfg;
+  // Per-block liveness summaries in region block order.
+  const loom_liveness_block_info_t* blocks;
+  // Number of records in |blocks|.
+  iree_host_size_t block_count;
+  // Live intervals for values touched by the region.
+  const loom_liveness_interval_t* intervals;
+  // Number of records in |intervals|.
+  iree_host_size_t interval_count;
+  // Dense value-id to interval-index table. Entries without an interval contain
+  // UINT32_MAX. The table has |value_capacity| entries.
+  const uint32_t* value_interval_indices;
+  // Number of entries in |value_interval_indices|.
+  iree_host_size_t value_capacity;
+  // Peak pressure summaries grouped by value class.
+  const loom_liveness_pressure_summary_t* pressure_summaries;
+  // Number of records in |pressure_summaries|.
+  iree_host_size_t pressure_summary_count;
+} loom_liveness_analysis_t;
+
+// Computes liveness for |region|. The caller must keep |module| and |region|
+// immutable for as long as |out_analysis| is used and must keep |arena| alive.
+//
+// CFG regions use explicit successor edges. Structured regions use local block
+// use/def sets only; each block is analyzed independently because structured
+// control-flow semantics are represented by the containing op, not by sibling
+// block successor edges.
+iree_status_t loom_liveness_analyze_region(
+    const loom_module_t* module, const loom_region_t* region,
+    iree_arena_allocator_t* arena, loom_liveness_analysis_t* out_analysis);
+
+// Returns the interval for |value_id|, or NULL when the value is not touched by
+// the analyzed region.
+const loom_liveness_interval_t* loom_liveness_interval_for_value(
+    const loom_liveness_analysis_t* analysis, loom_value_id_t value_id);
+
+// Returns the block record for |block|, or NULL when |block| is not owned by
+// the analyzed region.
+const loom_liveness_block_info_t* loom_liveness_block_info_for_block(
+    const loom_liveness_analysis_t* analysis, const loom_block_t* block);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  // LOOM_UTIL_LIVENESS_H_

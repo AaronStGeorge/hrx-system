@@ -217,6 +217,38 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    liveness
+  HDRS
+    "liveness.h"
+  SRCS
+    "liveness.c"
+  DEPS
+    ::cfg_graph
+    iree::base
+    iree::base::internal
+    iree::base::internal::arena
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    liveness_test
+  SRCS
+    "liveness_test.cc"
+  DEPS
+    ::liveness
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::op_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     walk
   HDRS
     "walk.h"

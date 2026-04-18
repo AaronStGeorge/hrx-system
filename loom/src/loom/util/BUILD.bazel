@@ -189,6 +189,34 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "liveness",
+    srcs = ["liveness.c"],
+    hdrs = ["liveness.h"],
+    deps = [
+        ":cfg_graph",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "liveness_test",
+    srcs = ["liveness_test.cc"],
+    deps = [
+        ":liveness",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops:op_registry",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "walk",
     srcs = ["walk.c"],
     hdrs = ["walk.h"],
