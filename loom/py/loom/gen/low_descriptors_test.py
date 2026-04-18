@@ -28,12 +28,15 @@ from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     LOW_DESCRIPTOR_SET_ABI_VERSION,
+    AsmForm,
+    AsmImmediate,
     DescriptorFlag,
     EnumDomain,
     EnumValue,
     ImmediateKind,
     OperandRole,
 )
+from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
 
 
 def test_generate_ireevm_core_descriptor_set() -> None:
@@ -50,7 +53,9 @@ def test_generate_ireevm_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 9
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["asm_forms"] >= 9
     assert any(descriptor["key"] == "iree.vm.call.import.i32" for descriptor in manifest["descriptors"])
+    assert any(form["mnemonic"] == "vm.add.i32" for form in manifest["asm_forms"])
 
 
 def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
@@ -63,6 +68,7 @@ def test_allowlist_closes_over_referenced_descriptor_tables() -> None:
     assert [descriptor["key"] for descriptor in manifest["descriptors"]] == ["iree.vm.add.i32"]
     assert manifest["table_counts"]["descriptors"] == 1
     assert manifest["table_counts"]["descriptor_refs"] == 1
+    assert manifest["table_counts"]["asm_forms"] == 1
     assert manifest["table_counts"]["reg_classes"] == 6
     assert manifest["table_counts"]["reg_class_alts"] == 1
     assert manifest["table_counts"]["schedule_classes"] == 1
@@ -86,7 +92,9 @@ def test_generate_wasm_core_simd128_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 12
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["asm_forms"] >= 12
     assert any(descriptor["key"] == "wasm.v128.load" for descriptor in manifest["descriptors"])
+    assert any(form["mnemonic"] == "i32x4.add" for form in manifest["asm_forms"])
 
 
 def test_generate_amdgpu_gfx950_core_descriptor_set() -> None:
@@ -106,6 +114,7 @@ def test_generate_amdgpu_gfx950_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 8
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["asm_forms"] >= 8
     assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["resources"] >= 6
     assert any(descriptor["key"] == "amdgpu.v_mfma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
@@ -130,11 +139,13 @@ def test_generate_amdgpu_gfx11_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 10
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["asm_forms"] >= 10
     assert manifest["table_counts"]["reg_classes"] == 2
     assert manifest["table_counts"]["resources"] >= 7
     assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.s_waitcnt" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "amdgpu.s_waitcnt_depctr" for descriptor in manifest["descriptors"])
+    assert any(form["mnemonic"] == "s_waitcnt" and {"field": "vmcnt", "name": "vmcnt"} in form["immediates"] for form in manifest["asm_forms"])
 
 
 def test_generate_amdgpu_gfx12_core_descriptor_set() -> None:
@@ -155,6 +166,7 @@ def test_generate_amdgpu_gfx12_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 10
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["asm_forms"] >= 10
     assert manifest["table_counts"]["reg_classes"] == 2
     assert manifest["table_counts"]["resources"] >= 6
     assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
@@ -181,6 +193,7 @@ def test_generate_amdgpu_gfx1250_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 14
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["asm_forms"] >= 14
     assert manifest["table_counts"]["reg_classes"] == 2
     assert manifest["table_counts"]["resources"] >= 8
     assert any(descriptor["key"] == "amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8" for descriptor in manifest["descriptors"])
@@ -208,11 +221,13 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 7
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["asm_forms"] >= 6
     assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["resources"] >= 7
     assert any(descriptor["key"] == "x86.avx512.vpdpbusd.zmm" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.kandq" for descriptor in manifest["descriptors"])
     assert any(descriptor["key"] == "x86.avx512.jmp" for descriptor in manifest["descriptors"])
+    assert any(form["mnemonic"] == "vpaddd" for form in manifest["asm_forms"])
 
 
 def test_generate_x86_packed_dot_descriptor_set() -> None:
@@ -239,6 +254,17 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
     assert any(descriptor["key"] == "x86.avx10.2.vdpphps.512" for descriptor in manifest["descriptors"])
 
 
+def test_generate_test_low_core_descriptor_set() -> None:
+    generated = generate_descriptor_set(TEST_LOW_CORE_DESCRIPTOR_SET)
+    manifest = json.loads(generated.manifest_json)
+
+    assert manifest["key"] == "test.low.core"
+    assert manifest["target"] == "test.low"
+    assert manifest["table_counts"]["asm_forms"] >= 13
+    assert any(descriptor["key"] == "test.spv.op_iadd.i32" for descriptor in manifest["descriptors"])
+    assert any(form["mnemonic"] == "OpIAdd" for form in manifest["asm_forms"])
+
+
 def test_allowlist_accepts_semantic_tags() -> None:
     generated = generate_descriptor_set(
         IREEVM_CORE_DESCRIPTOR_SET,
@@ -255,6 +281,117 @@ def test_allowlist_rejects_unknown_descriptor_key() -> None:
             IREEVM_CORE_DESCRIPTOR_SET,
             DescriptorAllowlist(keys=("missing",)),
         )
+
+
+def test_generator_rejects_asm_form_unknown_operand_field() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        asm_forms=(AsmForm(results=("dst",), operands=("lhs", "missing")),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' asm form 'vm.add.i32' operand references unknown operand field 'missing'"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_asm_form_result_with_operand_role() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        asm_forms=(AsmForm(results=("lhs",), operands=("rhs",)),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' asm form 'vm.add.i32' result field 'lhs' names a non-result operand"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_ambiguous_asm_mnemonics() -> None:
+    first = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        asm_forms=(AsmForm(mnemonic="dup", results=("dst",), operands=("lhs", "rhs")),),
+    )
+    second = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[2],
+        asm_forms=(AsmForm(mnemonic="dup", results=("dst",), operands=("lhs", "rhs")),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(first, second))
+
+    with pytest.raises(
+        ValueError,
+        match=("asm mnemonic 'dup' is ambiguous between descriptors 'iree.vm.add.i32' and 'iree.vm.sub.i32'"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_asm_form_unknown_immediate_field() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[0],
+        asm_forms=(AsmForm(results=("dst",), immediates=(AsmImmediate("missing"),)),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.const.i32' asm form 'vm.const.i32' immediate references unknown immediate field 'missing'"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_duplicate_asm_immediate_name() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[5],
+        asm_forms=(
+            AsmForm(
+                operands=("cond",),
+                immediates=(
+                    AsmImmediate("true_block", name="target"),
+                    AsmImmediate("false_block", name="target"),
+                ),
+            ),
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.cond_br.i32' asm form 'vm.cond_br.i32' uses immediate name 'target' more than once"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_asm_form_without_mnemonic() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        mnemonic=None,
+        asm_forms=(AsmForm(results=("dst",), operands=("lhs", "rhs")),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' asm form must specify a mnemonic because the descriptor has no default mnemonic"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_empty_asm_form_mnemonic() -> None:
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        asm_forms=(AsmForm(mnemonic="", results=("dst",), operands=("lhs", "rhs")),),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' asm form specifies an empty mnemonic"),
+    ):
+        generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_missing_schedule_resource() -> None:

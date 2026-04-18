@@ -26,6 +26,7 @@ from loom.gen import bootstrap as _bootstrap
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
     LOW_DESCRIPTOR_SET_ABI_VERSION,
+    AsmForm,
     CEnum,
     Constraint,
     Descriptor,
@@ -136,8 +137,31 @@ class _CompiledDescriptorSet:
     feature_mask_words: list[int]
     descriptor_rows: list[dict[str, int]]
     descriptor_refs: list[tuple[str, int]]
+    asm_forms: list[_CompiledAsmForm]
+    asm_operand_indices: list[int]
+    asm_immediates: list[_CompiledAsmImmediate]
     schedule_rows: list[dict[str, int]]
     enum_domain_rows: list[dict[str, int]]
+
+
+@dataclass(frozen=True, slots=True)
+class _CompiledAsmImmediate:
+    immediate_index: int
+    name_label: str | None
+    name: str | None
+
+
+@dataclass(slots=True)
+class _CompiledAsmForm:
+    descriptor_ordinal: int
+    mnemonic_label: str
+    mnemonic: str
+    result_indices: tuple[int, ...]
+    operand_indices: tuple[int, ...]
+    immediates: tuple[_CompiledAsmImmediate, ...]
+    result_index_start: int = 0
+    operand_index_start: int = 0
+    immediate_start: int = 0
 
 
 def _c_identifier(value: str) -> str:
@@ -270,6 +294,137 @@ def _validate_enum_domain(domain: EnumDomain) -> tuple[EnumValue, ...]:
     return tuple(sorted(domain.values, key=lambda value: value.token))
 
 
+def _asm_form_mnemonic(descriptor: Descriptor, asm_form: AsmForm) -> str:
+    mnemonic = descriptor.mnemonic if asm_form.mnemonic is None else asm_form.mnemonic
+    if mnemonic is None:
+        raise ValueError(f"descriptor '{descriptor.key}' asm form must specify a mnemonic because the descriptor has no default mnemonic")
+    if mnemonic == "":
+        raise ValueError(f"descriptor '{descriptor.key}' asm form specifies an empty mnemonic")
+    if len(mnemonic.encode()) > 255:
+        raise ValueError(f"descriptor '{descriptor.key}' asm mnemonic '{mnemonic}' exceeds 255 bytes")
+    return mnemonic
+
+
+def _index_descriptor_fields(
+    descriptor: Descriptor,
+) -> tuple[dict[str, int], dict[str, int]]:
+    operand_indices: dict[str, int] = {}
+    for i, operand in enumerate(descriptor.operands):
+        if operand.field_name in operand_indices:
+            raise ValueError(f"descriptor '{descriptor.key}' operand field '{operand.field_name}' is duplicated and cannot be used by asm forms")
+        operand_indices[operand.field_name] = i
+
+    immediate_indices: dict[str, int] = {}
+    for i, immediate in enumerate(descriptor.immediates):
+        if immediate.field_name in immediate_indices:
+            raise ValueError(f"descriptor '{descriptor.key}' immediate field '{immediate.field_name}' is duplicated and cannot be used by asm forms")
+        immediate_indices[immediate.field_name] = i
+    return operand_indices, immediate_indices
+
+
+def _validate_unique_asm_fields(descriptor: Descriptor, asm_form: AsmForm, mnemonic: str) -> None:
+    seen_fields: set[str] = set()
+    for field_name in (
+        *asm_form.results,
+        *asm_form.operands,
+        *(immediate.field_name for immediate in asm_form.immediates),
+    ):
+        if field_name in seen_fields:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' references field '{field_name}' more than once")
+        seen_fields.add(field_name)
+
+
+def _compile_asm_form(
+    string_pool: _StringPool,
+    descriptor: Descriptor,
+    descriptor_ordinal: int,
+    asm_form: AsmForm,
+    form_ordinal: int,
+) -> _CompiledAsmForm:
+    mnemonic = _asm_form_mnemonic(descriptor, asm_form)
+    _validate_unique_asm_fields(descriptor, asm_form, mnemonic)
+    operand_indices, immediate_indices = _index_descriptor_fields(descriptor)
+
+    mnemonic_label = string_pool.intern(f"asm_mnemonic_{descriptor.key}_{form_ordinal}", mnemonic)
+
+    result_indices = []
+    for field_name in asm_form.results:
+        operand_index = operand_indices.get(field_name)
+        if operand_index is None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' result references unknown operand field '{field_name}'")
+        operand = descriptor.operands[operand_index]
+        if operand.role is not OperandRole.RESULT:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' result field '{field_name}' names a non-result operand")
+        result_indices.append(operand_index)
+
+    packet_operand_roles = {
+        OperandRole.OPERAND,
+        OperandRole.PREDICATE,
+        OperandRole.RESOURCE,
+    }
+    operand_order = []
+    for field_name in asm_form.operands:
+        operand_index = operand_indices.get(field_name)
+        if operand_index is None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' operand references unknown operand field '{field_name}'")
+        operand = descriptor.operands[operand_index]
+        if operand.role not in packet_operand_roles:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' operand field '{field_name}' does not name an explicit packet operand")
+        if OperandFlag.IMPLICIT in operand.flags:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' operand field '{field_name}' is marked implicit")
+        operand_order.append(operand_index)
+
+    immediate_order = []
+    seen_immediate_names: set[str] = set()
+    for immediate in asm_form.immediates:
+        immediate_index = immediate_indices.get(immediate.field_name)
+        if immediate_index is None:
+            raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' immediate references unknown immediate field '{immediate.field_name}'")
+        name_label = None
+        if immediate.name is not None:
+            if immediate.name == "":
+                raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' immediate '{immediate.field_name}' has an empty name")
+            if len(immediate.name.encode()) > 255:
+                raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' immediate name '{immediate.name}' exceeds 255 bytes")
+            if immediate.name in seen_immediate_names:
+                raise ValueError(f"descriptor '{descriptor.key}' asm form '{mnemonic}' uses immediate name '{immediate.name}' more than once")
+            seen_immediate_names.add(immediate.name)
+            name_label = string_pool.intern(
+                f"asm_immediate_{descriptor.key}_{form_ordinal}_{immediate.field_name}",
+                immediate.name,
+            )
+        immediate_order.append(
+            _CompiledAsmImmediate(
+                immediate_index=immediate_index,
+                name_label=name_label,
+                name=immediate.name,
+            )
+        )
+
+    return _CompiledAsmForm(
+        descriptor_ordinal=descriptor_ordinal,
+        mnemonic_label=mnemonic_label,
+        mnemonic=mnemonic,
+        result_indices=tuple(result_indices),
+        operand_indices=tuple(operand_order),
+        immediates=tuple(immediate_order),
+    )
+
+
+def _compile_asm_forms(string_pool: _StringPool, descriptors: Sequence[Descriptor]) -> list[_CompiledAsmForm]:
+    compiled_forms: list[_CompiledAsmForm] = []
+    seen_mnemonics: dict[str, str] = {}
+    for descriptor_ordinal, descriptor in enumerate(descriptors):
+        for form_ordinal, asm_form in enumerate(descriptor.asm_forms):
+            compiled_form = _compile_asm_form(string_pool, descriptor, descriptor_ordinal, asm_form, form_ordinal)
+            previous_descriptor_key = seen_mnemonics.get(compiled_form.mnemonic)
+            if previous_descriptor_key is not None:
+                raise ValueError(f"asm mnemonic '{compiled_form.mnemonic}' is ambiguous between descriptors '{previous_descriptor_key}' and '{descriptor.key}'")
+            seen_mnemonics[compiled_form.mnemonic] = descriptor.key
+            compiled_forms.append(compiled_form)
+    return sorted(compiled_forms, key=lambda form: form.mnemonic)
+
+
 def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> _CompiledDescriptorSet:
     if spec.generator_version == 0:
         raise ValueError(f"descriptor set '{spec.key}' has zero generator version")
@@ -383,6 +538,17 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
             string_pool.intern(f"field_{operand.field_name}", operand.field_name)
         for immediate in descriptor.immediates:
             string_pool.intern(f"immediate_{immediate.field_name}", immediate.field_name)
+
+    asm_forms = _compile_asm_forms(string_pool, selected_descriptors)
+    asm_operand_indices: list[int] = []
+    asm_immediates: list[_CompiledAsmImmediate] = []
+    for asm_form in asm_forms:
+        asm_form.result_index_start = len(asm_operand_indices)
+        asm_operand_indices.extend(asm_form.result_indices)
+        asm_form.operand_index_start = len(asm_operand_indices)
+        asm_operand_indices.extend(asm_form.operand_indices)
+        asm_form.immediate_start = len(asm_immediates)
+        asm_immediates.extend(asm_form.immediates)
 
     reg_class_alts: list[tuple[int | None, tuple[RegClassAltFlag, ...]]] = []
     reg_alt_group_starts: dict[tuple[tuple[int | None, tuple[RegClassAltFlag, ...]], ...], int] = {}
@@ -507,6 +673,9 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         feature_mask_words=feature_mask_words,
         descriptor_rows=descriptor_rows,
         descriptor_refs=descriptor_refs,
+        asm_forms=asm_forms,
+        asm_operand_indices=asm_operand_indices,
+        asm_immediates=asm_immediates,
         schedule_rows=schedule_rows,
         enum_domain_rows=enum_domain_rows,
     )
@@ -884,6 +1053,43 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
             for descriptor_key, descriptor_ordinal in compiled.descriptor_refs
         ],
     )
+    if compiled.asm_operand_indices:
+        lines.append(f"static const uint16_t k{spec.c_table_prefix}AsmOperandIndices[] = {{")
+        lines.extend(f"    {operand_index}," for operand_index in compiled.asm_operand_indices)
+        lines.append("};")
+        lines.append("")
+    _emit_array(
+        lines,
+        "loom_low_asm_immediate_t",
+        spec.c_table_prefix,
+        "AsmImmediates",
+        [
+            [
+                f".immediate_index = {immediate.immediate_index},",
+                f".name_string_offset = {_optional_string_expr(pool, immediate.name_label)},",
+            ]
+            for immediate in compiled.asm_immediates
+        ],
+    )
+    _emit_array(
+        lines,
+        "loom_low_asm_form_t",
+        spec.c_table_prefix,
+        "AsmForms",
+        [
+            [
+                f".mnemonic_string_offset = {pool.ref(asm_form.mnemonic_label)},",
+                f".descriptor_ordinal = {asm_form.descriptor_ordinal},",
+                f".result_operand_index_start = {asm_form.result_index_start},",
+                f".result_operand_index_count = {len(asm_form.result_indices)},",
+                f".operand_index_start = {asm_form.operand_index_start},",
+                f".operand_index_count = {len(asm_form.operand_indices)},",
+                f".immediate_start = {asm_form.immediate_start},",
+                f".immediate_count = {len(asm_form.immediates)},",
+            ]
+            for asm_form in compiled.asm_forms
+        ],
+    )
 
     lines.append(f"static const loom_low_descriptor_set_t k{spec.c_table_prefix}Set = {{")
     lines.extend(
@@ -919,6 +1125,9 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
         "resources": "resource_count",
         "hazards": "hazard_count",
         "pressure_deltas": "pressure_delta_count",
+        "asm_forms": "asm_form_count",
+        "asm_operand_indices": "asm_operand_index_count",
+        "asm_immediates": "asm_immediate_count",
     }
 
     def append_optional_table(field_name: str, table_name: str) -> None:
@@ -940,6 +1149,9 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
     append_optional_table("resources", "Resources")
     append_optional_table("hazards", "Hazards")
     append_optional_table("pressure_deltas", "PressureDeltas")
+    append_optional_table("asm_forms", "AsmForms")
+    append_optional_table("asm_operand_indices", "AsmOperandIndices")
+    append_optional_table("asm_immediates", "AsmImmediates")
     if compiled.feature_mask_words:
         lines.append(f"    .feature_mask_words = k{spec.c_table_prefix}FeatureMaskWords,")
         lines.append(f"    .feature_mask_word_count = IREE_ARRAYSIZE(k{spec.c_table_prefix}FeatureMaskWords),")
@@ -966,7 +1178,28 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
                 "results": compiled.descriptor_rows[i]["result_count"],
                 "immediates": compiled.descriptor_rows[i]["immediate_count"],
                 "effects": compiled.descriptor_rows[i]["effect_count"],
+                "asm_forms": sum(1 for asm_form in compiled.asm_forms if asm_form.descriptor_ordinal == i),
                 "flags": [flag.c_name for flag in descriptor.flags],
+            }
+        )
+    asm_forms = []
+    for i, asm_form in enumerate(compiled.asm_forms):
+        descriptor = compiled.descriptors[asm_form.descriptor_ordinal]
+        asm_forms.append(
+            {
+                "ordinal": i,
+                "mnemonic": asm_form.mnemonic,
+                "descriptor": asm_form.descriptor_ordinal,
+                "descriptor_key": descriptor.key,
+                "results": [descriptor.operands[operand_index].field_name for operand_index in asm_form.result_indices],
+                "operands": [descriptor.operands[operand_index].field_name for operand_index in asm_form.operand_indices],
+                "immediates": [
+                    {
+                        "field": descriptor.immediates[immediate.immediate_index].field_name,
+                        "name": immediate.name or "",
+                    }
+                    for immediate in asm_form.immediates
+                ],
             }
         )
     manifest = {
@@ -992,7 +1225,11 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
             "hazards": len(compiled.hazards),
             "pressure_deltas": len(compiled.pressure_deltas),
             "feature_mask_words": len(compiled.feature_mask_words),
+            "asm_forms": len(compiled.asm_forms),
+            "asm_operand_indices": len(compiled.asm_operand_indices),
+            "asm_immediates": len(compiled.asm_immediates),
         },
+        "asm_forms": asm_forms,
         "descriptors": descriptors,
     }
     return json.dumps(manifest, indent=2, sort_keys=True) + "\n"

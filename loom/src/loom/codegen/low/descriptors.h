@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 6u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 7u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -34,6 +34,9 @@ extern "C" {
 
 // Sentinel for absent descriptor ordinals.
 #define LOOM_LOW_DESCRIPTOR_ORDINAL_NONE UINT32_MAX
+
+// Sentinel for absent asm-form ordinals.
+#define LOOM_LOW_ASM_FORM_ORDINAL_NONE UINT32_MAX
 
 // Sentinel used before verification; verified descriptors must name a class.
 #define LOOM_LOW_SCHEDULE_CLASS_NONE UINT16_MAX
@@ -505,6 +508,32 @@ typedef struct loom_low_descriptor_ref_t {
   uint32_t descriptor_ordinal;
 } loom_low_descriptor_ref_t;
 
+typedef struct loom_low_asm_immediate_t {
+  // Descriptor-local immediate index printed or parsed by this asm field.
+  uint16_t immediate_index;
+  // Optional string-table offset for a named immediate spelling.
+  loom_bstring_table_offset_t name_string_offset;
+} loom_low_asm_immediate_t;
+
+typedef struct loom_low_asm_form_t {
+  // String-table offset for the unqualified asm mnemonic.
+  loom_bstring_table_offset_t mnemonic_string_offset;
+  // Descriptor ordinal selected by this asm form.
+  uint32_t descriptor_ordinal;
+  // First descriptor-local result operand index in asm_operand_indices.
+  uint32_t result_operand_index_start;
+  // Number of result operand indices for this asm form.
+  uint16_t result_operand_index_count;
+  // First descriptor-local input operand index in asm_operand_indices.
+  uint32_t operand_index_start;
+  // Number of input operand indices for this asm form.
+  uint16_t operand_index_count;
+  // First immediate spelling row for this asm form.
+  uint32_t immediate_start;
+  // Number of immediate spelling rows for this asm form.
+  uint16_t immediate_count;
+} loom_low_asm_form_t;
+
 typedef struct loom_low_descriptor_set_t {
   // Descriptor table ABI version.
   uint32_t abi_version;
@@ -526,6 +555,18 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_descriptor_ref_t* descriptor_refs;
   // Number of symbolic descriptor-key reference rows.
   uint32_t descriptor_ref_count;
+  // Sorted asm forms keyed by unqualified mnemonic.
+  const loom_low_asm_form_t* asm_forms;
+  // Number of asm form rows owned by this set.
+  uint32_t asm_form_count;
+  // Packed descriptor-local operand indices referenced by asm forms.
+  const uint16_t* asm_operand_indices;
+  // Number of descriptor-local operand index rows owned by this set.
+  uint32_t asm_operand_index_count;
+  // Packed immediate spelling rows referenced by asm forms.
+  const loom_low_asm_immediate_t* asm_immediates;
+  // Number of immediate spelling rows owned by this set.
+  uint32_t asm_immediate_count;
   // Dense operand/result rows referenced by descriptors.
   const loom_low_operand_t* operands;
   // Number of operand/result rows owned by this set.
@@ -648,10 +689,22 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal);
 
+// Returns an asm form row by ordinal, or NULL when |asm_form_ordinal| is out of
+// bounds.
+const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t asm_form_ordinal);
+
 // Resolves a symbolic descriptor key to an ordinal in |descriptor_set|.
 iree_status_t loom_low_descriptor_set_lookup_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
     uint32_t* out_descriptor_ordinal);
+
+// Resolves an unqualified asm mnemonic to an asm form ordinal in
+// |descriptor_set|. Descriptor sets verify that asm mnemonics are sorted and
+// unambiguous.
+iree_status_t loom_low_descriptor_set_lookup_asm_form(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t mnemonic, uint32_t* out_asm_form_ordinal);
 
 // Appends a compact JSON manifest for |descriptor_set| to |builder|. The JSON
 // is a diagnostic and test format, not the runtime representation.

@@ -24,6 +24,8 @@ from loom.target.arch.x86.packed_dot_data import (
     PackedDotDescriptor,
 )
 from loom.target.low_descriptors import (
+    AsmForm,
+    AsmImmediate,
     Constraint,
     ConstraintKind,
     Descriptor,
@@ -79,6 +81,21 @@ _XMM_ALT = (RegClassAlt(_REG_XMM),)
 _YMM_ALT = (RegClassAlt(_REG_YMM),)
 _ZMM_ALT = (RegClassAlt(_REG_ZMM),)
 _K_ALT = (RegClassAlt(_REG_K),)
+
+
+def _asm(
+    *,
+    results: tuple[str, ...] = (),
+    operands: tuple[str, ...] = (),
+    immediates: tuple[str, ...] = (),
+) -> tuple[AsmForm, ...]:
+    return (
+        AsmForm(
+            results=results,
+            operands=operands,
+            immediates=tuple(AsmImmediate(field_name) for field_name in immediates),
+        ),
+    )
 
 
 def _gpr64_result(field_name: str = "dst") -> Operand:
@@ -323,6 +340,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vpaddd",
             semantic_tag="integer.add.i32x16",
             operands=(_zmm_result(), _zmm_operand("lhs"), _zmm_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -357,6 +375,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _zmm_operand("rhs"),
             ),
             constraints=_DOT_ACCUMULATOR_CONSTRAINTS,
+            asm_forms=_asm(results=("dst",), operands=("acc", "lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_DOT,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -371,6 +390,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _zmm_operand("rhs"),
             ),
             constraints=_DOT_ACCUMULATOR_CONSTRAINTS,
+            asm_forms=_asm(results=("dst",), operands=("acc", "lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_DOT,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -379,6 +399,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="kandq",
             semantic_tag="mask.and.i64",
             operands=(_k_result(), _k_operand("lhs"), _k_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_MASK,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -387,6 +408,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="mov",
             semantic_tag="integer.move.i64",
             operands=(_gpr64_result(), _gpr64_operand("src")),
+            asm_forms=_asm(results=("dst",), operands=("src",)),
             schedule_class=_SCHEDULE_SCALAR,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -396,6 +418,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="control.branch",
             operands=(),
             immediates=(_TARGET_BLOCK_IMMEDIATE,),
+            asm_forms=_asm(immediates=("target_block",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),

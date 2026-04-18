@@ -829,6 +829,132 @@ static const loom_low_descriptor_ref_t kIreeVmCoreDescriptorRefs[] = {
     },
 };
 
+static const uint16_t kIreeVmCoreAsmOperandIndices[] = {
+    0, 1, 2, 0, 1, 0, 1, 2, 0, 0, 0, 0, 1, 2,
+};
+
+static const loom_low_asm_immediate_t kIreeVmCoreAsmImmediates[] = {
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 1,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+};
+
+static const loom_low_asm_form_t kIreeVmCoreAsmForms[] = {
+    {
+        .mnemonic_string_offset = IREE_VM_CORE_STRING_mnemonic_iree_vm_add_i32,
+        .descriptor_ordinal = 1,
+        .result_operand_index_start = 0,
+        .result_operand_index_count = 1,
+        .operand_index_start = 1,
+        .operand_index_count = 2,
+        .immediate_start = 0,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset = IREE_VM_CORE_STRING_mnemonic_iree_vm_br,
+        .descriptor_ordinal = 4,
+        .result_operand_index_start = 3,
+        .result_operand_index_count = 0,
+        .operand_index_start = 3,
+        .operand_index_count = 0,
+        .immediate_start = 0,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            IREE_VM_CORE_STRING_mnemonic_iree_vm_call_import_i32,
+        .descriptor_ordinal = 6,
+        .result_operand_index_start = 3,
+        .result_operand_index_count = 1,
+        .operand_index_start = 4,
+        .operand_index_count = 1,
+        .immediate_start = 1,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            IREE_VM_CORE_STRING_mnemonic_iree_vm_cmp_eq_i32,
+        .descriptor_ordinal = 3,
+        .result_operand_index_start = 5,
+        .result_operand_index_count = 1,
+        .operand_index_start = 6,
+        .operand_index_count = 2,
+        .immediate_start = 2,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            IREE_VM_CORE_STRING_mnemonic_iree_vm_cond_br_i32,
+        .descriptor_ordinal = 5,
+        .result_operand_index_start = 8,
+        .result_operand_index_count = 0,
+        .operand_index_start = 8,
+        .operand_index_count = 1,
+        .immediate_start = 2,
+        .immediate_count = 2,
+    },
+    {
+        .mnemonic_string_offset =
+            IREE_VM_CORE_STRING_mnemonic_iree_vm_const_i32,
+        .descriptor_ordinal = 0,
+        .result_operand_index_start = 9,
+        .result_operand_index_count = 1,
+        .operand_index_start = 10,
+        .operand_index_count = 0,
+        .immediate_start = 4,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            IREE_VM_CORE_STRING_mnemonic_iree_vm_return_i32,
+        .descriptor_ordinal = 7,
+        .result_operand_index_start = 10,
+        .result_operand_index_count = 0,
+        .operand_index_start = 10,
+        .operand_index_count = 1,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            IREE_VM_CORE_STRING_mnemonic_iree_vm_return_void,
+        .descriptor_ordinal = 8,
+        .result_operand_index_start = 11,
+        .result_operand_index_count = 0,
+        .operand_index_start = 11,
+        .operand_index_count = 0,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset = IREE_VM_CORE_STRING_mnemonic_iree_vm_sub_i32,
+        .descriptor_ordinal = 2,
+        .result_operand_index_start = 11,
+        .result_operand_index_count = 1,
+        .operand_index_start = 12,
+        .operand_index_count = 2,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+};
+
 static const loom_low_descriptor_set_t kIreeVmCoreSet = {
     .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,
     .generator_version = 1,
@@ -860,6 +986,12 @@ static const loom_low_descriptor_set_t kIreeVmCoreSet = {
     .issue_use_count = IREE_ARRAYSIZE(kIreeVmCoreIssueUses),
     .resources = kIreeVmCoreResources,
     .resource_count = IREE_ARRAYSIZE(kIreeVmCoreResources),
+    .asm_forms = kIreeVmCoreAsmForms,
+    .asm_form_count = IREE_ARRAYSIZE(kIreeVmCoreAsmForms),
+    .asm_operand_indices = kIreeVmCoreAsmOperandIndices,
+    .asm_operand_index_count = IREE_ARRAYSIZE(kIreeVmCoreAsmOperandIndices),
+    .asm_immediates = kIreeVmCoreAsmImmediates,
+    .asm_immediate_count = IREE_ARRAYSIZE(kIreeVmCoreAsmImmediates),
 };
 
 const loom_low_descriptor_set_t* loom_ireevm_core_descriptor_set(void) {

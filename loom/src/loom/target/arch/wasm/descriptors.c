@@ -1172,6 +1172,178 @@ static const loom_low_descriptor_ref_t kWasmCoreSimd128DescriptorRefs[] = {
     },
 };
 
+static const uint16_t kWasmCoreSimd128AsmOperandIndices[] = {
+    0, 0, 1, 2, 0, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 0, 0, 0, 1, 0, 1,
+};
+
+static const loom_low_asm_immediate_t kWasmCoreSimd128AsmImmediates[] = {
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 1,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+};
+
+static const loom_low_asm_form_t kWasmCoreSimd128AsmForms[] = {
+    {
+        .mnemonic_string_offset = WASM_CORE_SIMD128_STRING_mnemonic_wasm_br,
+        .descriptor_ordinal = 10,
+        .result_operand_index_start = 0,
+        .result_operand_index_count = 0,
+        .operand_index_start = 0,
+        .operand_index_count = 0,
+        .immediate_start = 0,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_br_if_i32,
+        .descriptor_ordinal = 11,
+        .result_operand_index_start = 0,
+        .result_operand_index_count = 0,
+        .operand_index_start = 0,
+        .operand_index_count = 1,
+        .immediate_start = 1,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_i32_add,
+        .descriptor_ordinal = 1,
+        .result_operand_index_start = 1,
+        .result_operand_index_count = 1,
+        .operand_index_start = 2,
+        .operand_index_count = 2,
+        .immediate_start = 2,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_i32_const,
+        .descriptor_ordinal = 0,
+        .result_operand_index_start = 4,
+        .result_operand_index_count = 1,
+        .operand_index_start = 5,
+        .operand_index_count = 0,
+        .immediate_start = 2,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_i32_lt_u,
+        .descriptor_ordinal = 3,
+        .result_operand_index_start = 5,
+        .result_operand_index_count = 1,
+        .operand_index_start = 6,
+        .operand_index_count = 2,
+        .immediate_start = 3,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_i32_sub,
+        .descriptor_ordinal = 2,
+        .result_operand_index_start = 8,
+        .result_operand_index_count = 1,
+        .operand_index_start = 9,
+        .operand_index_count = 2,
+        .immediate_start = 3,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_i32x4_add,
+        .descriptor_ordinal = 6,
+        .result_operand_index_start = 11,
+        .result_operand_index_count = 1,
+        .operand_index_start = 12,
+        .operand_index_count = 2,
+        .immediate_start = 3,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_i32x4_mul,
+        .descriptor_ordinal = 7,
+        .result_operand_index_start = 14,
+        .result_operand_index_count = 1,
+        .operand_index_start = 15,
+        .operand_index_count = 2,
+        .immediate_start = 3,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_i32x4_splat,
+        .descriptor_ordinal = 5,
+        .result_operand_index_start = 17,
+        .result_operand_index_count = 1,
+        .operand_index_start = 18,
+        .operand_index_count = 1,
+        .immediate_start = 3,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_return_v128,
+        .descriptor_ordinal = 12,
+        .result_operand_index_start = 19,
+        .result_operand_index_count = 0,
+        .operand_index_start = 19,
+        .operand_index_count = 1,
+        .immediate_start = 3,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_v128_const,
+        .descriptor_ordinal = 4,
+        .result_operand_index_start = 20,
+        .result_operand_index_count = 1,
+        .operand_index_start = 21,
+        .operand_index_count = 0,
+        .immediate_start = 3,
+        .immediate_count = 2,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_v128_load,
+        .descriptor_ordinal = 8,
+        .result_operand_index_start = 21,
+        .result_operand_index_count = 1,
+        .operand_index_start = 22,
+        .operand_index_count = 1,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            WASM_CORE_SIMD128_STRING_mnemonic_wasm_v128_store,
+        .descriptor_ordinal = 9,
+        .result_operand_index_start = 23,
+        .result_operand_index_count = 0,
+        .operand_index_start = 23,
+        .operand_index_count = 2,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+};
+
 static const loom_low_descriptor_set_t kWasmCoreSimd128Set = {
     .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,
     .generator_version = 1,
@@ -1203,6 +1375,13 @@ static const loom_low_descriptor_set_t kWasmCoreSimd128Set = {
     .issue_use_count = IREE_ARRAYSIZE(kWasmCoreSimd128IssueUses),
     .resources = kWasmCoreSimd128Resources,
     .resource_count = IREE_ARRAYSIZE(kWasmCoreSimd128Resources),
+    .asm_forms = kWasmCoreSimd128AsmForms,
+    .asm_form_count = IREE_ARRAYSIZE(kWasmCoreSimd128AsmForms),
+    .asm_operand_indices = kWasmCoreSimd128AsmOperandIndices,
+    .asm_operand_index_count =
+        IREE_ARRAYSIZE(kWasmCoreSimd128AsmOperandIndices),
+    .asm_immediates = kWasmCoreSimd128AsmImmediates,
+    .asm_immediate_count = IREE_ARRAYSIZE(kWasmCoreSimd128AsmImmediates),
 };
 
 const loom_low_descriptor_set_t* loom_wasm_core_simd128_descriptor_set(void) {

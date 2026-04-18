@@ -11,6 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.target.low_descriptors import (
+    AsmForm,
+    AsmImmediate,
     Descriptor,
     DescriptorFlag,
     DescriptorSet,
@@ -52,6 +54,21 @@ _RESOURCE_CONTROL = "vm.control"
 _RESOURCE_CALL = "vm.call"
 
 _I32_ALT = (RegClassAlt(_REG_I32),)
+
+
+def _asm(
+    *,
+    results: tuple[str, ...] = (),
+    operands: tuple[str, ...] = (),
+    immediates: tuple[str, ...] = (),
+) -> tuple[AsmForm, ...]:
+    return (
+        AsmForm(
+            results=results,
+            operands=operands,
+            immediates=tuple(AsmImmediate(field_name) for field_name in immediates),
+        ),
+    )
 
 
 def _i32_result(field_name: str = "dst") -> Operand:
@@ -196,6 +213,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.i32",
             operands=(_i32_result(),),
             immediates=(_I32_VALUE_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
             schedule_class=_SCHEDULE_CONST,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -204,6 +222,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vm.add.i32",
             semantic_tag="integer.add.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_ALU_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -212,6 +231,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vm.sub.i32",
             semantic_tag="integer.sub.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_ALU_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -220,6 +240,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vm.cmp.eq.i32",
             semantic_tag="integer.cmp.eq.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_ALU_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -229,6 +250,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="control.branch",
             operands=(),
             immediates=(_TARGET_BLOCK_IMMEDIATE,),
+            asm_forms=_asm(immediates=("target_block",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -239,6 +261,9 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="control.cond_branch.i32",
             operands=(_i32_predicate("cond"),),
             immediates=(_TRUE_BLOCK_IMMEDIATE, _FALSE_BLOCK_IMMEDIATE),
+            asm_forms=_asm(
+                operands=("cond",), immediates=("true_block", "false_block")
+            ),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -249,6 +274,9 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="call.import.i32",
             operands=(_i32_result(), _i32_operand("arg0")),
             immediates=(_CALLEE_IMMEDIATE,),
+            asm_forms=_asm(
+                results=("dst",), operands=("arg0",), immediates=("callee_ordinal",)
+            ),
             effects=(_CALL_EFFECT,),
             schedule_class=_SCHEDULE_CALL,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -258,6 +286,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vm.return.i32",
             semantic_tag="control.return.i32",
             operands=(_i32_operand("value"),),
+            asm_forms=_asm(operands=("value",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -267,6 +296,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="vm.return.void",
             semantic_tag="control.return.void",
             operands=(),
+            asm_forms=_asm(),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),

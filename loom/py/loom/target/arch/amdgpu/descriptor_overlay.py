@@ -25,6 +25,8 @@ from loom.target.arch.amdgpu.isa_xml import (
     AmdgpuIsaXmlError,
 )
 from loom.target.low_descriptors import (
+    AsmForm,
+    AsmImmediate,
     Constraint,
     Descriptor,
     DescriptorFlag,
@@ -77,6 +79,31 @@ class AmdgpuDescriptorOverlay:
     flags: tuple[DescriptorFlag, ...] = ()
 
 
+def _asm_forms_for_overlay(overlay: AmdgpuDescriptorOverlay) -> tuple[AsmForm, ...]:
+    results = []
+    operands = []
+    for operand_overlay in overlay.operands:
+        operand = operand_overlay.descriptor_operand
+        if operand.role is OperandRole.RESULT:
+            results.append(operand.field_name)
+        elif operand.role in (
+            OperandRole.OPERAND,
+            OperandRole.PREDICATE,
+            OperandRole.RESOURCE,
+        ):
+            operands.append(operand.field_name)
+    return (
+        AsmForm(
+            results=tuple(results),
+            operands=tuple(operands),
+            immediates=tuple(
+                AsmImmediate(immediate.field_name, name=immediate.field_name)
+                for immediate in overlay.immediates
+            ),
+        ),
+    )
+
+
 def materialize_amdgpu_descriptor_overlay(
     spec: AmdgpuIsaFactSource, overlay: AmdgpuDescriptorOverlay
 ) -> Descriptor:
@@ -96,6 +123,7 @@ def materialize_amdgpu_descriptor_overlay(
             if implicit_overlay.descriptor_operand is not None
         ),
         immediates=overlay.immediates,
+        asm_forms=_asm_forms_for_overlay(overlay),
         effects=overlay.effects,
         constraints=overlay.constraints,
         feature_mask_words=overlay.feature_mask_words,

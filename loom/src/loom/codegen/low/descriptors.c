@@ -104,6 +104,27 @@ static iree_status_t loom_low_verify_optional_string(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_non_empty_required_string(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_bstring_table_offset_t string_offset, const char* field_name,
+    iree_string_view_t* out_value) {
+  iree_string_view_t value = iree_string_view_empty();
+  iree_status_t status = loom_low_descriptor_set_string_impl(
+      descriptor_set, string_offset, /*allow_none=*/false, &value);
+  if (!iree_status_is_ok(status)) {
+    return iree_status_annotate_f(status, "invalid required string field '%s'",
+                                  field_name);
+  }
+  if (iree_string_view_is_empty(value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "required low descriptor string field '%s' is "
+                            "empty",
+                            field_name);
+  }
+  if (out_value != NULL) *out_value = value;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_tables_present(
     const loom_low_descriptor_set_t* descriptor_set) {
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
@@ -112,6 +133,14 @@ static iree_status_t loom_low_verify_tables_present(
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->descriptor_refs, descriptor_set->descriptor_ref_count,
       "descriptor_refs"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->asm_forms, descriptor_set->asm_form_count, "asm_forms"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->asm_operand_indices,
+      descriptor_set->asm_operand_index_count, "asm_operand_indices"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->asm_immediates, descriptor_set->asm_immediate_count,
+      "asm_immediates"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->operands, descriptor_set->operand_count, "operands"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
@@ -224,6 +253,183 @@ static bool loom_low_operand_role_is_valid(loom_low_operand_role_t role) {
     default:
       return false;
   }
+}
+
+static iree_status_t loom_low_verify_asm_operand_indices(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index,
+    uint32_t start, uint16_t count, bool expect_result) {
+  for (uint16_t i = 0; i < count; ++i) {
+    const uint16_t operand_index =
+        descriptor_set->asm_operand_indices[start + i];
+    if (operand_index >= descriptor->operand_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low asm form for descriptor %" PRIu32 " references operand %" PRIu16
+          " but descriptor has only %" PRIu16 " operands",
+          descriptor_index, operand_index, descriptor->operand_count);
+    }
+    for (uint16_t j = 0; j < i; ++j) {
+      if (descriptor_set->asm_operand_indices[start + j] == operand_index) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm form for descriptor %" PRIu32
+                                " references operand %" PRIu16
+                                " more than once",
+                                descriptor_index, operand_index);
+      }
+    }
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[descriptor->operand_start + operand_index];
+    if (expect_result) {
+      if (operand_index >= descriptor->result_count ||
+          operand->role != LOOM_LOW_OPERAND_ROLE_RESULT) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm form for descriptor %" PRIu32
+                                " result operand %" PRIu16
+                                " does not name a descriptor result",
+                                descriptor_index, operand_index);
+      }
+    } else if (!loom_low_operand_role_is_packet_operand(operand->role) ||
+               iree_all_bits_set(operand->flags,
+                                 LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm form for descriptor %" PRIu32
+                              " operand %" PRIu16
+                              " does not name an explicit packet operand",
+                              descriptor_index, operand_index);
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_asm_immediates(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_asm_form_t* asm_form,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index) {
+  for (uint16_t i = 0; i < asm_form->immediate_count; ++i) {
+    const uint32_t row_index = asm_form->immediate_start + i;
+    const loom_low_asm_immediate_t* asm_immediate =
+        &descriptor_set->asm_immediates[row_index];
+    if (asm_immediate->immediate_index >= descriptor->immediate_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low asm form for descriptor %" PRIu32
+                              " references immediate %" PRIu16
+                              " but descriptor has only %" PRIu16 " immediates",
+                              descriptor_index, asm_immediate->immediate_index,
+                              descriptor->immediate_count);
+    }
+    for (uint16_t j = 0; j < i; ++j) {
+      const loom_low_asm_immediate_t* previous =
+          &descriptor_set->asm_immediates[asm_form->immediate_start + j];
+      if (previous->immediate_index == asm_immediate->immediate_index) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low asm form for descriptor %" PRIu32
+            " references immediate %" PRIu16 " more than once",
+            descriptor_index, asm_immediate->immediate_index);
+      }
+    }
+
+    iree_string_view_t name = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+        descriptor_set, asm_immediate->name_string_offset, /*allow_none=*/true,
+        &name));
+    if (asm_immediate->name_string_offset != LOOM_LOW_STRING_OFFSET_NONE &&
+        iree_string_view_is_empty(name)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm form for descriptor %" PRIu32
+                              " has an empty immediate name",
+                              descriptor_index);
+    }
+    if (!iree_string_view_is_empty(name)) {
+      for (uint16_t j = 0; j < i; ++j) {
+        const loom_low_asm_immediate_t* previous =
+            &descriptor_set->asm_immediates[asm_form->immediate_start + j];
+        iree_string_view_t previous_name = iree_string_view_empty();
+        IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+            descriptor_set, previous->name_string_offset, /*allow_none=*/true,
+            &previous_name));
+        if (iree_string_view_equal(previous_name, name)) {
+          return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "low asm form for descriptor %" PRIu32
+                                  " uses immediate name '%.*s' more than once",
+                                  descriptor_index, (int)name.size, name.data);
+        }
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_asm_form(
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t asm_form_index,
+    iree_string_view_t* out_mnemonic) {
+  const loom_low_asm_form_t* asm_form =
+      &descriptor_set->asm_forms[asm_form_index];
+  iree_string_view_t mnemonic = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+      descriptor_set, asm_form->mnemonic_string_offset, "asm_form.mnemonic",
+      &mnemonic));
+  if (asm_form->descriptor_ordinal >= descriptor_set->descriptor_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low asm form %" PRIu32
+                            " references descriptor ordinal %" PRIu32
+                            " but only %" PRIu32 " descriptors exist",
+                            asm_form_index, asm_form->descriptor_ordinal,
+                            descriptor_set->descriptor_count);
+  }
+  const loom_low_descriptor_t* descriptor =
+      &descriptor_set->descriptors[asm_form->descriptor_ordinal];
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      asm_form->result_operand_index_start,
+      asm_form->result_operand_index_count,
+      descriptor_set->asm_operand_index_count, "asm_operand_indices"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      asm_form->operand_index_start, asm_form->operand_index_count,
+      descriptor_set->asm_operand_index_count, "asm_operand_indices"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      asm_form->immediate_start, asm_form->immediate_count,
+      descriptor_set->asm_immediate_count, "asm_immediates"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_asm_operand_indices(
+      descriptor_set, descriptor, asm_form->descriptor_ordinal,
+      asm_form->result_operand_index_start,
+      asm_form->result_operand_index_count, /*expect_result=*/true));
+  IREE_RETURN_IF_ERROR(loom_low_verify_asm_operand_indices(
+      descriptor_set, descriptor, asm_form->descriptor_ordinal,
+      asm_form->operand_index_start, asm_form->operand_index_count,
+      /*expect_result=*/false));
+  IREE_RETURN_IF_ERROR(loom_low_verify_asm_immediates(
+      descriptor_set, asm_form, descriptor, asm_form->descriptor_ordinal));
+  if (out_mnemonic != NULL) *out_mnemonic = mnemonic;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_asm_forms(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  if (descriptor_set->asm_form_count == 0) {
+    if (descriptor_set->asm_operand_index_count != 0 ||
+        descriptor_set->asm_immediate_count != 0) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low descriptor set has asm operand or immediate rows but no asm "
+          "forms");
+    }
+    return iree_ok_status();
+  }
+  iree_string_view_t previous_mnemonic = iree_string_view_empty();
+  for (uint32_t i = 0; i < descriptor_set->asm_form_count; ++i) {
+    iree_string_view_t mnemonic = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_asm_form(descriptor_set, i, &mnemonic));
+    if (i > 0 && iree_string_view_compare(previous_mnemonic, mnemonic) >= 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm forms are not strictly sorted near "
+                              "mnemonic '%.*s'",
+                              (int)mnemonic.size, mnemonic.data);
+    }
+    previous_mnemonic = mnemonic;
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_verify_binary_constraint(
@@ -1729,6 +1935,93 @@ static iree_status_t loom_low_append_manifest_constraint(
       constraint->flags);
 }
 
+static iree_status_t loom_low_append_manifest_asm_operand_fields(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_descriptor_t* descriptor,
+    uint32_t start, uint16_t count) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "["));
+  for (uint16_t i = 0; i < count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const uint16_t operand_index =
+        descriptor_set->asm_operand_indices[start + i];
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[descriptor->operand_start + operand_index];
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, operand->field_name_string_offset));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
+static iree_status_t loom_low_append_manifest_asm_immediates(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_asm_form_t* asm_form,
+    const loom_low_descriptor_t* descriptor) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "["));
+  for (uint16_t i = 0; i < asm_form->immediate_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_asm_immediate_t* asm_immediate =
+        &descriptor_set->asm_immediates[asm_form->immediate_start + i];
+    const loom_low_immediate_t* immediate =
+        &descriptor_set->immediates[descriptor->immediate_start +
+                                    asm_immediate->immediate_index];
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(builder, "{\"field\":"));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, immediate->field_name_string_offset));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(builder, ",\"name\":"));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, asm_immediate->name_string_offset));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
+static iree_status_t loom_low_append_manifest_asm_forms(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ",\"asm_forms\":["));
+  for (uint32_t i = 0; i < descriptor_set->asm_form_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_asm_form_t* asm_form = &descriptor_set->asm_forms[i];
+    const loom_low_descriptor_t* descriptor =
+        &descriptor_set->descriptors[asm_form->descriptor_ordinal];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "{\"ordinal\":%" PRIu32 ",\"mnemonic\":", i));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, asm_form->mnemonic_string_offset));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, ",\"descriptor\":%" PRIu32 ",\"descriptor_key\":",
+        asm_form->descriptor_ordinal));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, descriptor->key_string_offset));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(builder, ",\"results\":"));
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_asm_operand_fields(
+        descriptor_set, builder, descriptor,
+        asm_form->result_operand_index_start,
+        asm_form->result_operand_index_count));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(builder, ",\"operands\":"));
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_asm_operand_fields(
+        descriptor_set, builder, descriptor, asm_form->operand_index_start,
+        asm_form->operand_index_count));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(builder, ",\"immediates\":"));
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_asm_immediates(
+        descriptor_set, builder, asm_form, descriptor));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
 static iree_status_t loom_low_append_manifest_descriptor_rows(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder, const loom_low_descriptor_t* descriptor) {
@@ -1860,6 +2153,7 @@ iree_status_t loom_low_descriptor_set_verify(
   for (uint32_t i = 0; i < descriptor_set->pressure_delta_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_verify_pressure_delta(descriptor_set, i));
   }
+  IREE_RETURN_IF_ERROR(loom_low_verify_asm_forms(descriptor_set));
   return loom_low_verify_descriptor_refs(descriptor_set);
 }
 
@@ -2013,6 +2307,16 @@ const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
   return &descriptor_set->descriptors[descriptor_ordinal];
 }
 
+const loom_low_asm_form_t* loom_low_descriptor_set_asm_form_at(
+    const loom_low_descriptor_set_t* descriptor_set,
+    uint32_t asm_form_ordinal) {
+  if (descriptor_set == NULL ||
+      asm_form_ordinal >= descriptor_set->asm_form_count) {
+    return NULL;
+  }
+  return &descriptor_set->asm_forms[asm_form_ordinal];
+}
+
 iree_status_t loom_low_descriptor_set_lookup_descriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key,
     uint32_t* out_descriptor_ordinal) {
@@ -2074,6 +2378,56 @@ iree_status_t loom_low_descriptor_set_lookup_descriptor(
                           (int)key.size, key.data);
 }
 
+iree_status_t loom_low_descriptor_set_lookup_asm_form(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t mnemonic, uint32_t* out_asm_form_ordinal) {
+  if (out_asm_form_ordinal == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low asm form lookup output is required");
+  }
+  *out_asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  if (descriptor_set == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low descriptor set is required");
+  }
+  if (descriptor_set->asm_form_count != 0 &&
+      descriptor_set->asm_forms == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low asm form table is required");
+  }
+  uint32_t low = 0;
+  uint32_t high = descriptor_set->asm_form_count;
+  while (low < high) {
+    const uint32_t mid = low + (high - low) / 2;
+    const loom_low_asm_form_t* asm_form = &descriptor_set->asm_forms[mid];
+    iree_string_view_t asm_mnemonic = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_string_impl(
+        descriptor_set, asm_form->mnemonic_string_offset, /*allow_none=*/false,
+        &asm_mnemonic));
+    const int comparison = iree_string_view_compare(asm_mnemonic, mnemonic);
+    if (comparison == 0) {
+      if (asm_form->descriptor_ordinal >= descriptor_set->descriptor_count) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low asm form '%.*s' points at descriptor "
+            "ordinal %" PRIu32 " but only %" PRIu32 " descriptors exist",
+            (int)asm_mnemonic.size, asm_mnemonic.data,
+            asm_form->descriptor_ordinal, descriptor_set->descriptor_count);
+      }
+      *out_asm_form_ordinal = mid;
+      return iree_ok_status();
+    }
+    if (comparison < 0) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return iree_make_status(IREE_STATUS_NOT_FOUND,
+                          "low asm mnemonic '%.*s' was not found",
+                          (int)mnemonic.size, mnemonic.data);
+}
+
 iree_status_t loom_low_descriptor_set_format_manifest_json(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder) {
@@ -2100,22 +2454,24 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,
       ",\"table_counts\":{\"descriptors\":%" PRIu32
-      ",\"descriptor_refs\":%" PRIu32 ",\"operands\":%" PRIu32
-      ",\"immediates\":%" PRIu32 ",\"enum_domains\":%" PRIu32
-      ",\"enum_values\":%" PRIu32 ",\"effects\":%" PRIu32
-      ",\"constraints\":%" PRIu32 ",\"reg_classes\":%" PRIu32
-      ",\"reg_class_alts\":%" PRIu32 ",\"schedule_classes\":%" PRIu32
-      ",\"issue_uses\":%" PRIu32 ",\"resources\":%" PRIu32
-      ",\"hazards\":%" PRIu32 ",\"pressure_deltas\":%" PRIu32
-      ",\"feature_mask_words\":%" PRIu32 "}",
+      ",\"descriptor_refs\":%" PRIu32 ",\"asm_forms\":%" PRIu32
+      ",\"asm_operand_indices\":%" PRIu32 ",\"asm_immediates\":%" PRIu32
+      ",\"operands\":%" PRIu32 ",\"immediates\":%" PRIu32
+      ",\"enum_domains\":%" PRIu32 ",\"enum_values\":%" PRIu32
+      ",\"effects\":%" PRIu32 ",\"constraints\":%" PRIu32
+      ",\"reg_classes\":%" PRIu32 ",\"reg_class_alts\":%" PRIu32
+      ",\"schedule_classes\":%" PRIu32 ",\"issue_uses\":%" PRIu32
+      ",\"resources\":%" PRIu32 ",\"hazards\":%" PRIu32
+      ",\"pressure_deltas\":%" PRIu32 ",\"feature_mask_words\":%" PRIu32 "}",
       descriptor_set->descriptor_count, descriptor_set->descriptor_ref_count,
-      descriptor_set->operand_count, descriptor_set->immediate_count,
-      descriptor_set->enum_domain_count, descriptor_set->enum_value_count,
-      descriptor_set->effect_count, descriptor_set->constraint_count,
-      descriptor_set->reg_class_count, descriptor_set->reg_class_alt_count,
-      descriptor_set->schedule_class_count, descriptor_set->issue_use_count,
-      descriptor_set->resource_count, descriptor_set->hazard_count,
-      descriptor_set->pressure_delta_count,
+      descriptor_set->asm_form_count, descriptor_set->asm_operand_index_count,
+      descriptor_set->asm_immediate_count, descriptor_set->operand_count,
+      descriptor_set->immediate_count, descriptor_set->enum_domain_count,
+      descriptor_set->enum_value_count, descriptor_set->effect_count,
+      descriptor_set->constraint_count, descriptor_set->reg_class_count,
+      descriptor_set->reg_class_alt_count, descriptor_set->schedule_class_count,
+      descriptor_set->issue_use_count, descriptor_set->resource_count,
+      descriptor_set->hazard_count, descriptor_set->pressure_delta_count,
       descriptor_set->feature_mask_word_count));
   IREE_RETURN_IF_ERROR(
       loom_low_append_manifest_reg_classes(descriptor_set, builder));
@@ -2123,6 +2479,8 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       loom_low_append_manifest_resources(descriptor_set, builder));
   IREE_RETURN_IF_ERROR(
       loom_low_append_manifest_schedule_classes(descriptor_set, builder));
+  IREE_RETURN_IF_ERROR(
+      loom_low_append_manifest_asm_forms(descriptor_set, builder));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, ",\"descriptors\":["));
   for (uint32_t i = 0; i < descriptor_set->descriptor_count; ++i) {

@@ -979,6 +979,86 @@ static const loom_low_descriptor_ref_t kX86Avx512CoreDescriptorRefs[] = {
     },
 };
 
+static const uint16_t kX86Avx512CoreAsmOperandIndices[] = {
+    0, 1, 2, 0, 1, 0, 1, 2, 3, 0, 1, 2, 0, 1, 2, 3,
+};
+
+static const loom_low_asm_immediate_t kX86Avx512CoreAsmImmediates[] = {
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+};
+
+static const loom_low_asm_form_t kX86Avx512CoreAsmForms[] = {
+    {
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_jmp,
+        .descriptor_ordinal = 7,
+        .result_operand_index_start = 0,
+        .result_operand_index_count = 0,
+        .operand_index_start = 0,
+        .operand_index_count = 0,
+        .immediate_start = 0,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_kandq,
+        .descriptor_ordinal = 5,
+        .result_operand_index_start = 0,
+        .result_operand_index_count = 1,
+        .operand_index_start = 1,
+        .operand_index_count = 2,
+        .immediate_start = 1,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_mov_gpr64,
+        .descriptor_ordinal = 6,
+        .result_operand_index_start = 3,
+        .result_operand_index_count = 1,
+        .operand_index_start = 4,
+        .operand_index_count = 1,
+        .immediate_start = 1,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vdpbf16ps_zmm,
+        .descriptor_ordinal = 4,
+        .result_operand_index_start = 5,
+        .result_operand_index_count = 1,
+        .operand_index_start = 6,
+        .operand_index_count = 3,
+        .immediate_start = 1,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vpaddd_zmm,
+        .descriptor_ordinal = 0,
+        .result_operand_index_start = 9,
+        .result_operand_index_count = 1,
+        .operand_index_start = 10,
+        .operand_index_count = 2,
+        .immediate_start = 1,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            X86_AVX512_CORE_STRING_mnemonic_x86_avx512_vpdpbusd_zmm,
+        .descriptor_ordinal = 3,
+        .result_operand_index_start = 12,
+        .result_operand_index_count = 1,
+        .operand_index_start = 13,
+        .operand_index_count = 3,
+        .immediate_start = 1,
+        .immediate_count = 0,
+    },
+};
+
 static const loom_low_descriptor_set_t kX86Avx512CoreSet = {
     .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,
     .generator_version = 1,
@@ -1012,6 +1092,12 @@ static const loom_low_descriptor_set_t kX86Avx512CoreSet = {
     .issue_use_count = IREE_ARRAYSIZE(kX86Avx512CoreIssueUses),
     .resources = kX86Avx512CoreResources,
     .resource_count = IREE_ARRAYSIZE(kX86Avx512CoreResources),
+    .asm_forms = kX86Avx512CoreAsmForms,
+    .asm_form_count = IREE_ARRAYSIZE(kX86Avx512CoreAsmForms),
+    .asm_operand_indices = kX86Avx512CoreAsmOperandIndices,
+    .asm_operand_index_count = IREE_ARRAYSIZE(kX86Avx512CoreAsmOperandIndices),
+    .asm_immediates = kX86Avx512CoreAsmImmediates,
+    .asm_immediate_count = IREE_ARRAYSIZE(kX86Avx512CoreAsmImmediates),
 };
 
 const loom_low_descriptor_set_t* loom_x86_avx512_core_descriptor_set(void) {

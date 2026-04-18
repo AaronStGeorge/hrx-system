@@ -14,6 +14,14 @@
 namespace loom {
 namespace {
 
+std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
+                     loom_bstring_table_offset_t string_offset) {
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_EXPECT_OK(
+      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  return std::string(value.data, value.size);
+}
+
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
   uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
@@ -178,6 +186,28 @@ TEST(X86DescriptorsTest, Avx512DotPacketsExposeDestructiveAccumulator) {
       LookupDescriptor(descriptor_set, IREE_SV("x86.avx512.vdpbf16ps.zmm"));
   ASSERT_NE(bf16_dot_descriptor, nullptr);
   EXPECT_EQ(bf16_dot_descriptor->constraint_count, 2u);
+}
+
+TEST(X86DescriptorsTest, Avx512AsmFormsNameUnambiguousPackets) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_x86_avx512_core_descriptor_set();
+  ASSERT_GE(descriptor_set->asm_form_count, 6u);
+
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("vpaddd"), &asm_form_ordinal));
+  const loom_low_asm_form_t* asm_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
+  EXPECT_EQ(asm_form->operand_index_count, 2u);
+
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                            asm_form->descriptor_ordinal);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
+            "x86.avx512.vpaddd.zmm");
 }
 
 TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {

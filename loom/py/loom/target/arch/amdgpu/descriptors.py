@@ -22,6 +22,8 @@ from loom.target.arch.amdgpu.isa_snapshot import (
 )
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
+    AsmForm,
+    AsmImmediate,
     Constraint,
     ConstraintKind,
     Descriptor,
@@ -90,6 +92,25 @@ _VGPR_AGPR_CONST_ALT = (
     RegClassAlt(_REG_AGPR),
     RegClassAlt(None, flags=(RegClassAltFlag.IMMEDIATE,)),
 )
+
+
+def _asm(
+    *,
+    results: tuple[str, ...] = (),
+    operands: tuple[str, ...] = (),
+    immediates: tuple[str, ...] = (),
+    named_immediates: bool = False,
+) -> tuple[AsmForm, ...]:
+    return (
+        AsmForm(
+            results=results,
+            operands=operands,
+            immediates=tuple(
+                AsmImmediate(field_name, name=field_name if named_immediates else None)
+                for field_name in immediates
+            ),
+        ),
+    )
 
 
 def _sgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
@@ -743,6 +764,7 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.u32",
             operands=(_sgpr_result(),),
             immediates=(_U32_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -849,6 +871,7 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.u32",
             operands=(_sgpr_result(),),
             immediates=(_U32_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -955,6 +978,7 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.u32",
             operands=(_sgpr_result(),),
             immediates=(_U32_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -1076,6 +1100,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.u32",
             operands=(_sgpr_result(),),
             immediates=(_U32_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("imm32",)),
             schedule_class=_SCHEDULE_SALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -1090,6 +1115,7 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _vgpr_operand("b", units=8),
                 _vgpr_const_operand("acc", units=8),
             ),
+            asm_forms=_asm(results=("dst",), operands=("a", "b", "acc")),
             schedule_class=_SCHEDULE_WMMA,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
@@ -1115,6 +1141,21 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _MATRIX_B_SCALE_FORMAT_IMMEDIATE,
                 _MATRIX_A_REUSE_IMMEDIATE,
                 _MATRIX_B_REUSE_IMMEDIATE,
+            ),
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("a", "b", "acc", "scale_src0", "scale_src1"),
+                immediates=(
+                    "matrix_a_fmt",
+                    "matrix_b_fmt",
+                    "matrix_a_scale",
+                    "matrix_b_scale",
+                    "matrix_a_scale_fmt",
+                    "matrix_b_scale_fmt",
+                    "matrix_a_reuse",
+                    "matrix_b_reuse",
+                ),
+                named_immediates=True,
             ),
             schedule_class=_SCHEDULE_WMMA_SCALE,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
@@ -1142,6 +1183,21 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _MATRIX_A_REUSE_IMMEDIATE,
                 _MATRIX_B_REUSE_IMMEDIATE,
             ),
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("a", "b", "acc", "scale_src0", "scale_src1"),
+                immediates=(
+                    "matrix_a_fmt",
+                    "matrix_b_fmt",
+                    "matrix_a_scale",
+                    "matrix_b_scale",
+                    "matrix_a_scale_fmt",
+                    "matrix_b_scale_fmt",
+                    "matrix_a_reuse",
+                    "matrix_b_reuse",
+                ),
+                named_immediates=True,
+            ),
             schedule_class=_SCHEDULE_WMMA_SCALE,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
@@ -1159,6 +1215,12 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
             ),
             immediates=(_INDEX_KEY_16_IMMEDIATE,),
             constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
+            asm_forms=_asm(
+                results=("dst",),
+                operands=("acc", "a", "b", "index"),
+                immediates=("index_key_16bit",),
+                named_immediates=True,
+            ),
             schedule_class=_SCHEDULE_SWMMAC,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,

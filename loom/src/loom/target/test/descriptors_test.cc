@@ -133,6 +133,28 @@ TEST(TestLowDescriptorsTest, PhysicalClassHasTargetVisiblePressureBudget) {
   EXPECT_TRUE(found_physical_class);
 }
 
+TEST(TestLowDescriptorsTest, AsmFormsExposeGenericAndSpirvLikePackets) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_test_low_core_descriptor_set();
+  ASSERT_GE(descriptor_set->asm_form_count, 13u);
+
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("OpIAdd"), &asm_form_ordinal));
+  const loom_low_asm_form_t* asm_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
+  EXPECT_EQ(asm_form->operand_index_count, 2u);
+
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                            asm_form->descriptor_ordinal);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(ToString(descriptor_set, descriptor->key_string_offset),
+            "test.spv.op_iadd.i32");
+}
+
 TEST(TestLowDescriptorsTest, ManifestNamesRepresentativePackets) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_test_low_core_descriptor_set();

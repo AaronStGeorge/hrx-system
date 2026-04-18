@@ -79,6 +79,9 @@ static_assert(TEST_STRING_END == sizeof(kTestStrings) - 1,
 struct TestTables {
   loom_low_descriptor_t descriptors[2];
   loom_low_descriptor_ref_t descriptor_refs[2];
+  loom_low_asm_form_t asm_forms[2];
+  uint16_t asm_operand_indices[4];
+  loom_low_asm_immediate_t asm_immediates[1];
   loom_low_operand_t operands[4];
   loom_low_immediate_t immediates[1];
   loom_low_enum_domain_t enum_domains[1];
@@ -227,6 +230,9 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.descriptor_count = IREE_ARRAYSIZE(tables->descriptors);
   tables->set.descriptor_refs = tables->descriptor_refs;
   tables->set.descriptor_ref_count = IREE_ARRAYSIZE(tables->descriptor_refs);
+  tables->set.asm_forms = tables->asm_forms;
+  tables->set.asm_operand_indices = tables->asm_operand_indices;
+  tables->set.asm_immediates = tables->asm_immediates;
   tables->set.operands = tables->operands;
   tables->set.operand_count = IREE_ARRAYSIZE(tables->operands);
   tables->set.immediates = tables->immediates;
@@ -250,6 +256,41 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.feature_mask_words = tables->feature_mask_words;
   tables->set.feature_mask_word_count =
       IREE_ARRAYSIZE(tables->feature_mask_words);
+}
+
+void AddAsmForms(TestTables* tables) {
+  tables->asm_operand_indices[0] = 0;
+  tables->asm_operand_indices[1] = 1;
+  tables->asm_operand_indices[2] = 2;
+  tables->asm_operand_indices[3] = 0;
+
+  tables->asm_immediates[0].immediate_index = 0;
+  tables->asm_immediates[0].name_string_offset = LOOM_LOW_STRING_OFFSET_NONE;
+
+  tables->asm_forms[0].mnemonic_string_offset =
+      TEST_STRING_OFFSET(mnemonic_add);
+  tables->asm_forms[0].descriptor_ordinal = 1;
+  tables->asm_forms[0].result_operand_index_start = 0;
+  tables->asm_forms[0].result_operand_index_count = 1;
+  tables->asm_forms[0].operand_index_start = 1;
+  tables->asm_forms[0].operand_index_count = 2;
+  tables->asm_forms[0].immediate_start = 0;
+  tables->asm_forms[0].immediate_count = 0;
+
+  tables->asm_forms[1].mnemonic_string_offset =
+      TEST_STRING_OFFSET(mnemonic_const);
+  tables->asm_forms[1].descriptor_ordinal = 0;
+  tables->asm_forms[1].result_operand_index_start = 3;
+  tables->asm_forms[1].result_operand_index_count = 1;
+  tables->asm_forms[1].operand_index_start = 4;
+  tables->asm_forms[1].operand_index_count = 0;
+  tables->asm_forms[1].immediate_start = 0;
+  tables->asm_forms[1].immediate_count = 1;
+
+  tables->set.asm_form_count = IREE_ARRAYSIZE(tables->asm_forms);
+  tables->set.asm_operand_index_count =
+      IREE_ARRAYSIZE(tables->asm_operand_indices);
+  tables->set.asm_immediate_count = IREE_ARRAYSIZE(tables->asm_immediates);
 }
 
 void AddAddDescriptorConstraint(TestTables* tables,
@@ -820,6 +861,86 @@ TEST(LowDescriptorsTest, LookupRejectsIncompleteDescriptorReferences) {
       &tables.set, IREE_SV("test.add.i32"), &descriptor_ordinal);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
   EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
+}
+
+TEST(LowDescriptorsTest, AcceptsAsmFormsAndLookup) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      &tables.set, IREE_SV("add.i32"), &asm_form_ordinal));
+  EXPECT_EQ(asm_form_ordinal, 0u);
+  const loom_low_asm_form_t* asm_form =
+      loom_low_descriptor_set_asm_form_at(&tables.set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->descriptor_ordinal, 1u);
+  EXPECT_EQ(asm_form->result_operand_index_count, 1u);
+  EXPECT_EQ(asm_form->operand_index_count, 2u);
+
+  asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  iree_status_t status = loom_low_descriptor_set_lookup_asm_form(
+      &tables.set, IREE_SV("missing"), &asm_form_ordinal);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND, status);
+  EXPECT_EQ(asm_form_ordinal, LOOM_LOW_ASM_FORM_ORDINAL_NONE);
+}
+
+TEST(LowDescriptorsTest, RejectsUnsortedAsmForms) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.asm_forms[0].mnemonic_string_offset =
+      TEST_STRING_OFFSET(mnemonic_const);
+  tables.asm_forms[1].mnemonic_string_offset = TEST_STRING_OFFSET(mnemonic_add);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsAsmFormOperandWithResultRole) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.asm_operand_indices[1] = 0;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsAsmFormImmediateOutOfRange) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+  tables.asm_immediates[0].immediate_index = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE, status);
+}
+
+TEST(LowDescriptorsTest, ManifestIncludesAsmForms) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAsmForms(&tables);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(
+      loom_low_descriptor_set_format_manifest_json(&tables.set, &builder));
+  std::string json(iree_string_builder_buffer(&builder),
+                   iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_NE(json.find("\"asm_forms\":[{\"ordinal\":0,\"mnemonic\":\"add.i32\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"descriptor_key\":\"test.add.i32\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"results\":[\"dst\"],\"operands\":[\"lhs\",\"rhs\"]"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"immediates\":[{\"field\":\"value\",\"name\":\"\"}]"),
+            std::string::npos);
 }
 
 TEST(LowDescriptorsTest, RejectsRegisterClassWithoutStorageKind) {

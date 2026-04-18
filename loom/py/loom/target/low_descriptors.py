@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 6
+LOW_DESCRIPTOR_SET_ABI_VERSION = 7
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -190,6 +190,20 @@ class Immediate:
 
 
 @dataclass(frozen=True, slots=True)
+class AsmImmediate:
+    field_name: str
+    name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AsmForm:
+    mnemonic: str | None = None
+    results: tuple[str, ...] = ()
+    operands: tuple[str, ...] = ()
+    immediates: tuple[AsmImmediate, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class EnumValue:
     token: str
     value: int
@@ -272,6 +286,7 @@ class Descriptor:
     operands: tuple[Operand, ...]
     schedule_class: str
     immediates: tuple[Immediate, ...] = ()
+    asm_forms: tuple[AsmForm, ...] = ()
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()
     feature_mask_words: tuple[int, ...] = ()

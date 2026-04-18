@@ -39,6 +39,9 @@ static const uint8_t kTestLowCoreStringData[] =
     LOOM_BSTRING_LITERAL("\x0f", "integer.add.i32")
     LOOM_BSTRING_LITERAL("\x03", "lhs")
     LOOM_BSTRING_LITERAL("\x03", "rhs")
+    LOOM_BSTRING_LITERAL("\x14", "test.spv.op_iadd.i32")
+    LOOM_BSTRING_LITERAL("\x06", "OpIAdd")
+    LOOM_BSTRING_LITERAL("\x11", "spirv.op_iadd.i32")
     LOOM_BSTRING_LITERAL("\x0f", "test.cmp.eq.i32")
     LOOM_BSTRING_LITERAL("\x12", "integer.cmp.eq.i32")
     LOOM_BSTRING_LITERAL("\x0e", "test.add.v4i32")
@@ -123,8 +126,16 @@ enum {
       TEST_LOW_CORE_STRING_semantic_test_add_i32 + sizeof("integer.add.i32"),
   TEST_LOW_CORE_STRING_field_rhs =
       TEST_LOW_CORE_STRING_field_lhs + sizeof("lhs"),
-  TEST_LOW_CORE_STRING_descriptor_test_cmp_eq_i32 =
+  TEST_LOW_CORE_STRING_descriptor_test_spv_op_iadd_i32 =
       TEST_LOW_CORE_STRING_field_rhs + sizeof("rhs"),
+  TEST_LOW_CORE_STRING_mnemonic_test_spv_op_iadd_i32 =
+      TEST_LOW_CORE_STRING_descriptor_test_spv_op_iadd_i32 +
+      sizeof("test.spv.op_iadd.i32"),
+  TEST_LOW_CORE_STRING_semantic_test_spv_op_iadd_i32 =
+      TEST_LOW_CORE_STRING_mnemonic_test_spv_op_iadd_i32 + sizeof("OpIAdd"),
+  TEST_LOW_CORE_STRING_descriptor_test_cmp_eq_i32 =
+      TEST_LOW_CORE_STRING_semantic_test_spv_op_iadd_i32 +
+      sizeof("spirv.op_iadd.i32"),
   TEST_LOW_CORE_STRING_semantic_test_cmp_eq_i32 =
       TEST_LOW_CORE_STRING_descriptor_test_cmp_eq_i32 +
       sizeof("test.cmp.eq.i32"),
@@ -273,6 +284,39 @@ static const loom_low_operand_t kTestLowCoreOperands[] = {
     {
         .field_name_string_offset = TEST_LOW_CORE_STRING_field_dst,
         .role = LOOM_LOW_OPERAND_ROLE_RESULT,
+        .flags = 0,
+        .reg_class_alt_start = 0,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = TEST_LOW_CORE_STRING_field_dst,
+        .role = LOOM_LOW_OPERAND_ROLE_RESULT,
+        .flags = 0,
+        .reg_class_alt_start = 0,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = TEST_LOW_CORE_STRING_field_lhs,
+        .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
+        .flags = 0,
+        .reg_class_alt_start = 0,
+        .reg_class_alt_count = 1,
+        .unit_count = 1,
+        .data_format_id = 0,
+        .read_stage = 0,
+        .ready_stage = 0,
+    },
+    {
+        .field_name_string_offset = TEST_LOW_CORE_STRING_field_rhs,
+        .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
         .flags = 0,
         .reg_class_alt_start = 0,
         .reg_class_alt_count = 1,
@@ -832,6 +876,28 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
     },
     {
+        .key_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_spv_op_iadd_i32,
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_mnemonic_test_spv_op_iadd_i32,
+        .semantic_tag_string_offset =
+            TEST_LOW_CORE_STRING_semantic_test_spv_op_iadd_i32,
+        .feature_mask_word_start = 0,
+        .feature_mask_word_count = 0,
+        .encoding_id = 0,
+        .operand_start = 4,
+        .operand_count = 3,
+        .result_count = 1,
+        .immediate_start = 1,
+        .immediate_count = 0,
+        .effect_start = 0,
+        .effect_count = 0,
+        .constraint_start = 0,
+        .constraint_count = 0,
+        .schedule_class_id = 1,
+        .flags = LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE,
+    },
+    {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_cmp_eq_i32,
         .mnemonic_string_offset =
             TEST_LOW_CORE_STRING_descriptor_test_cmp_eq_i32,
@@ -840,7 +906,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 4,
+        .operand_start = 7,
         .operand_count = 3,
         .result_count = 1,
         .immediate_start = 1,
@@ -861,7 +927,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 7,
+        .operand_start = 10,
         .operand_count = 3,
         .result_count = 1,
         .immediate_start = 1,
@@ -881,7 +947,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 10,
+        .operand_start = 13,
         .operand_count = 3,
         .result_count = 1,
         .immediate_start = 1,
@@ -902,7 +968,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 13,
+        .operand_start = 16,
         .operand_count = 2,
         .result_count = 1,
         .immediate_start = 1,
@@ -923,7 +989,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 15,
+        .operand_start = 18,
         .operand_count = 2,
         .result_count = 0,
         .immediate_start = 1,
@@ -943,7 +1009,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 17,
+        .operand_start = 20,
         .operand_count = 2,
         .result_count = 1,
         .immediate_start = 1,
@@ -962,7 +1028,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 19,
+        .operand_start = 22,
         .operand_count = 0,
         .result_count = 0,
         .immediate_start = 2,
@@ -984,7 +1050,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 19,
+        .operand_start = 22,
         .operand_count = 1,
         .result_count = 0,
         .immediate_start = 3,
@@ -1006,7 +1072,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 20,
+        .operand_start = 23,
         .operand_count = 1,
         .result_count = 0,
         .immediate_start = 5,
@@ -1028,7 +1094,7 @@ static const loom_low_descriptor_t kTestLowCoreDescriptors[] = {
         .feature_mask_word_start = 0,
         .feature_mask_word_count = 0,
         .encoding_id = 0,
-        .operand_start = 21,
+        .operand_start = 24,
         .operand_count = 0,
         .result_count = 0,
         .immediate_start = 5,
@@ -1050,27 +1116,27 @@ static const loom_low_descriptor_ref_t kTestLowCoreDescriptorRefs[] = {
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_add_phys,
-        .descriptor_ordinal = 4,
+        .descriptor_ordinal = 5,
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_add_v4i32,
-        .descriptor_ordinal = 3,
+        .descriptor_ordinal = 4,
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_br,
-        .descriptor_ordinal = 8,
+        .descriptor_ordinal = 9,
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_call_i32,
-        .descriptor_ordinal = 7,
+        .descriptor_ordinal = 8,
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_cmp_eq_i32,
-        .descriptor_ordinal = 2,
+        .descriptor_ordinal = 3,
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_cond_br_i32,
-        .descriptor_ordinal = 9,
+        .descriptor_ordinal = 10,
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_const_i32,
@@ -1078,19 +1144,193 @@ static const loom_low_descriptor_ref_t kTestLowCoreDescriptorRefs[] = {
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_load_v4i32,
-        .descriptor_ordinal = 5,
+        .descriptor_ordinal = 6,
     },
     {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_return_i32,
-        .descriptor_ordinal = 10,
-    },
-    {
-        .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_return_void,
         .descriptor_ordinal = 11,
     },
     {
+        .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_return_void,
+        .descriptor_ordinal = 12,
+    },
+    {
+        .key_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_spv_op_iadd_i32,
+        .descriptor_ordinal = 2,
+    },
+    {
         .key_string_offset = TEST_LOW_CORE_STRING_descriptor_test_store_v4i32,
+        .descriptor_ordinal = 7,
+    },
+};
+
+static const uint16_t kTestLowCoreAsmOperandIndices[] = {
+    0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 0, 1, 2, 0, 0, 0, 1, 0, 0, 1,
+};
+
+static const loom_low_asm_immediate_t kTestLowCoreAsmImmediates[] = {
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 1,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+    {
+        .immediate_index = 0,
+        .name_string_offset = LOOM_LOW_STRING_OFFSET_NONE,
+    },
+};
+
+static const loom_low_asm_form_t kTestLowCoreAsmForms[] = {
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_mnemonic_test_spv_op_iadd_i32,
+        .descriptor_ordinal = 2,
+        .result_operand_index_start = 0,
+        .result_operand_index_count = 1,
+        .operand_index_start = 1,
+        .operand_index_count = 2,
+        .immediate_start = 0,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset = TEST_LOW_CORE_STRING_descriptor_test_add_i32,
+        .descriptor_ordinal = 1,
+        .result_operand_index_start = 3,
+        .result_operand_index_count = 1,
+        .operand_index_start = 4,
+        .operand_index_count = 2,
+        .immediate_start = 0,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset = TEST_LOW_CORE_STRING_descriptor_test_add_phys,
+        .descriptor_ordinal = 5,
+        .result_operand_index_start = 6,
+        .result_operand_index_count = 1,
+        .operand_index_start = 7,
+        .operand_index_count = 2,
+        .immediate_start = 0,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_add_v4i32,
+        .descriptor_ordinal = 4,
+        .result_operand_index_start = 9,
+        .result_operand_index_count = 1,
+        .operand_index_start = 10,
+        .operand_index_count = 2,
+        .immediate_start = 0,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset = TEST_LOW_CORE_STRING_descriptor_test_br,
+        .descriptor_ordinal = 9,
+        .result_operand_index_start = 12,
+        .result_operand_index_count = 0,
+        .operand_index_start = 12,
+        .operand_index_count = 0,
+        .immediate_start = 0,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset = TEST_LOW_CORE_STRING_descriptor_test_call_i32,
+        .descriptor_ordinal = 8,
+        .result_operand_index_start = 12,
+        .result_operand_index_count = 1,
+        .operand_index_start = 13,
+        .operand_index_count = 1,
+        .immediate_start = 1,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_cmp_eq_i32,
+        .descriptor_ordinal = 3,
+        .result_operand_index_start = 14,
+        .result_operand_index_count = 1,
+        .operand_index_start = 15,
+        .operand_index_count = 2,
+        .immediate_start = 2,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_cond_br_i32,
+        .descriptor_ordinal = 10,
+        .result_operand_index_start = 17,
+        .result_operand_index_count = 0,
+        .operand_index_start = 17,
+        .operand_index_count = 1,
+        .immediate_start = 2,
+        .immediate_count = 2,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_const_i32,
+        .descriptor_ordinal = 0,
+        .result_operand_index_start = 18,
+        .result_operand_index_count = 1,
+        .operand_index_start = 19,
+        .operand_index_count = 0,
+        .immediate_start = 4,
+        .immediate_count = 1,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_load_v4i32,
         .descriptor_ordinal = 6,
+        .result_operand_index_start = 19,
+        .result_operand_index_count = 1,
+        .operand_index_start = 20,
+        .operand_index_count = 1,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_return_i32,
+        .descriptor_ordinal = 11,
+        .result_operand_index_start = 21,
+        .result_operand_index_count = 0,
+        .operand_index_start = 21,
+        .operand_index_count = 1,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_return_void,
+        .descriptor_ordinal = 12,
+        .result_operand_index_start = 22,
+        .result_operand_index_count = 0,
+        .operand_index_start = 22,
+        .operand_index_count = 0,
+        .immediate_start = 5,
+        .immediate_count = 0,
+    },
+    {
+        .mnemonic_string_offset =
+            TEST_LOW_CORE_STRING_descriptor_test_store_v4i32,
+        .descriptor_ordinal = 7,
+        .result_operand_index_start = 22,
+        .result_operand_index_count = 0,
+        .operand_index_start = 22,
+        .operand_index_count = 2,
+        .immediate_start = 5,
+        .immediate_count = 0,
     },
 };
 
@@ -1125,6 +1365,12 @@ static const loom_low_descriptor_set_t kTestLowCoreSet = {
     .issue_use_count = IREE_ARRAYSIZE(kTestLowCoreIssueUses),
     .resources = kTestLowCoreResources,
     .resource_count = IREE_ARRAYSIZE(kTestLowCoreResources),
+    .asm_forms = kTestLowCoreAsmForms,
+    .asm_form_count = IREE_ARRAYSIZE(kTestLowCoreAsmForms),
+    .asm_operand_indices = kTestLowCoreAsmOperandIndices,
+    .asm_operand_index_count = IREE_ARRAYSIZE(kTestLowCoreAsmOperandIndices),
+    .asm_immediates = kTestLowCoreAsmImmediates,
+    .asm_immediate_count = IREE_ARRAYSIZE(kTestLowCoreAsmImmediates),
 };
 
 const loom_low_descriptor_set_t* loom_test_low_core_descriptor_set(void) {

@@ -11,6 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.target.low_descriptors import (
+    AsmForm,
+    AsmImmediate,
     Descriptor,
     DescriptorFlag,
     DescriptorSet,
@@ -62,6 +64,21 @@ _I32_ALT = (RegClassAlt(_REG_I32),)
 _PTR_ALT = (RegClassAlt(_REG_PTR),)
 _V4I32_ALT = (RegClassAlt(_REG_V4I32),)
 _PHYS_ALT = (RegClassAlt(_REG_PHYS),)
+
+
+def _asm(
+    *,
+    results: tuple[str, ...] = (),
+    operands: tuple[str, ...] = (),
+    immediates: tuple[str, ...] = (),
+) -> tuple[AsmForm, ...]:
+    return (
+        AsmForm(
+            results=results,
+            operands=operands,
+            immediates=tuple(AsmImmediate(field_name) for field_name in immediates),
+        ),
+    )
 
 
 def _i32_result(field_name: str = "dst") -> Operand:
@@ -271,6 +288,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.i32",
             operands=(_i32_result(),),
             immediates=(_I32_VALUE_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
             schedule_class=_SCHEDULE_CONST,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -279,6 +297,16 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.add.i32",
             semantic_tag="integer.add.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_SCALAR_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="test.spv.op_iadd.i32",
+            mnemonic="OpIAdd",
+            semantic_tag="spirv.op_iadd.i32",
+            operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -287,6 +315,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.cmp.eq.i32",
             semantic_tag="integer.cmp.eq.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -299,6 +328,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _v4i32_operand("lhs"),
                 _v4i32_operand("rhs"),
             ),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -307,6 +337,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.add.phys",
             semantic_tag="test.physical.add",
             operands=(_phys_result(), _phys_operand("lhs"), _phys_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_VECTOR_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -315,6 +346,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.load.v4i32",
             semantic_tag="memory.load.v128",
             operands=(_v4i32_result(), _ptr_resource("address")),
+            asm_forms=_asm(results=("dst",), operands=("address",)),
             effects=(_LOAD_EFFECT,),
             schedule_class=_SCHEDULE_LOAD,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -324,6 +356,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.store.v4i32",
             semantic_tag="memory.store.v128",
             operands=(_ptr_resource("address"), _v4i32_operand("value")),
+            asm_forms=_asm(operands=("address", "value")),
             effects=(_STORE_EFFECT,),
             schedule_class=_SCHEDULE_STORE,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -334,6 +367,9 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="call.import.i32",
             operands=(_i32_result(), _i32_operand("arg0")),
             immediates=(_CALLEE_IMMEDIATE,),
+            asm_forms=_asm(
+                results=("dst",), operands=("arg0",), immediates=("callee_ordinal",)
+            ),
             effects=(_CALL_EFFECT,),
             schedule_class=_SCHEDULE_CALL,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -344,6 +380,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="control.branch",
             operands=(),
             immediates=(_TARGET_BLOCK_IMMEDIATE,),
+            asm_forms=_asm(immediates=("target_block",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -354,6 +391,9 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="control.cond_branch.i32",
             operands=(_i32_predicate("cond"),),
             immediates=(_TRUE_BLOCK_IMMEDIATE, _FALSE_BLOCK_IMMEDIATE),
+            asm_forms=_asm(
+                operands=("cond",), immediates=("true_block", "false_block")
+            ),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -363,6 +403,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.return.i32",
             semantic_tag="control.return.i32",
             operands=(_i32_operand("value"),),
+            asm_forms=_asm(operands=("value",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -372,6 +413,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="test.return.void",
             semantic_tag="control.return.void",
             operands=(),
+            asm_forms=_asm(),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),

@@ -11,6 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.target.low_descriptors import (
+    AsmForm,
+    AsmImmediate,
     Descriptor,
     DescriptorFlag,
     DescriptorSet,
@@ -57,6 +59,21 @@ _SCHEDULE_CONTROL = "wasm.control"
 
 _I32_ALT = (RegClassAlt(_REG_I32),)
 _V128_ALT = (RegClassAlt(_REG_V128),)
+
+
+def _asm(
+    *,
+    results: tuple[str, ...] = (),
+    operands: tuple[str, ...] = (),
+    immediates: tuple[str, ...] = (),
+) -> tuple[AsmForm, ...]:
+    return (
+        AsmForm(
+            results=results,
+            operands=operands,
+            immediates=tuple(AsmImmediate(field_name) for field_name in immediates),
+        ),
+    )
 
 
 def _i32_result(field_name: str = "dst") -> Operand:
@@ -220,6 +237,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="integer.const.i32",
             operands=(_i32_result(),),
             immediates=(_I32_VALUE_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
             schedule_class=_SCHEDULE_CONST,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -228,6 +246,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32.add",
             semantic_tag="integer.add.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -236,6 +255,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32.sub",
             semantic_tag="integer.sub.i32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -244,6 +264,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32.lt_u",
             semantic_tag="integer.cmp.lt.u32",
             operands=(_i32_result(), _i32_operand("lhs"), _i32_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SCALAR_I32,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -253,6 +274,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="vector.const.v128",
             operands=(_v128_result(),),
             immediates=(_V128_LO_IMMEDIATE, _V128_HI_IMMEDIATE),
+            asm_forms=_asm(results=("dst",), immediates=("lo64", "hi64")),
             schedule_class=_SCHEDULE_CONST,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -261,6 +283,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32x4.splat",
             semantic_tag="vector.splat.i32x4",
             operands=(_v128_result(), _i32_operand("value")),
+            asm_forms=_asm(results=("dst",), operands=("value",)),
             schedule_class=_SCHEDULE_SIMD_I32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -269,6 +292,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32x4.add",
             semantic_tag="vector.add.i32x4",
             operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SIMD_I32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -277,6 +301,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="i32x4.mul",
             semantic_tag="vector.mul.i32x4",
             operands=(_v128_result(), _v128_operand("lhs"), _v128_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_SIMD_I32X4,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
@@ -285,6 +310,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="v128.load",
             semantic_tag="memory.load.v128",
             operands=(_v128_result(), _i32_resource("address")),
+            asm_forms=_asm(results=("dst",), operands=("address",)),
             effects=(_LOAD_EFFECT,),
             schedule_class=_SCHEDULE_MEMORY_LOAD,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -294,6 +320,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="v128.store",
             semantic_tag="memory.store.v128",
             operands=(_i32_resource("address"), _v128_operand("value")),
+            asm_forms=_asm(operands=("address", "value")),
             effects=(_STORE_EFFECT,),
             schedule_class=_SCHEDULE_MEMORY_STORE,
             flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -304,6 +331,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="control.branch",
             operands=(),
             immediates=(_TARGET_BLOCK_IMMEDIATE,),
+            asm_forms=_asm(immediates=("target_block",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -314,6 +342,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             semantic_tag="control.cond_branch.i32",
             operands=(_i32_predicate("cond"),),
             immediates=(_TARGET_BLOCK_IMMEDIATE,),
+            asm_forms=_asm(operands=("cond",), immediates=("target_block",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
@@ -323,6 +352,7 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
             mnemonic="return",
             semantic_tag="control.return.v128",
             operands=(_v128_operand("value"),),
+            asm_forms=_asm(operands=("value",)),
             effects=(_CONTROL_EFFECT,),
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),

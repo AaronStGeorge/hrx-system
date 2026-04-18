@@ -14,6 +14,14 @@
 namespace loom {
 namespace {
 
+std::string ToString(const loom_low_descriptor_set_t* descriptor_set,
+                     loom_bstring_table_offset_t string_offset) {
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_EXPECT_OK(
+      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  return std::string(value.data, value.size);
+}
+
 const loom_low_descriptor_t* LookupDescriptor(
     const loom_low_descriptor_set_t* descriptor_set, iree_string_view_t key) {
   uint32_t ordinal = LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
@@ -136,6 +144,30 @@ TEST(AmdgpuDescriptorsTest, Gfx11WmmaPacketMatchesRdnaRegisterShape) {
   EXPECT_EQ(accumulator_alts[1].reg_class_id, LOOM_LOW_REG_CLASS_NONE);
   EXPECT_NE(accumulator_alts[1].flags & LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE,
             0u);
+}
+
+TEST(AmdgpuDescriptorsTest, Gfx11AsmFormsExposeNamedWaitcntImmediates) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_amdgpu_gfx11_core_descriptor_set();
+  ASSERT_GE(descriptor_set->asm_form_count, 10u);
+
+  uint32_t asm_form_ordinal = LOOM_LOW_ASM_FORM_ORDINAL_NONE;
+  IREE_ASSERT_OK(loom_low_descriptor_set_lookup_asm_form(
+      descriptor_set, IREE_SV("s_waitcnt"), &asm_form_ordinal));
+  const loom_low_asm_form_t* asm_form =
+      loom_low_descriptor_set_asm_form_at(descriptor_set, asm_form_ordinal);
+  ASSERT_NE(asm_form, nullptr);
+  EXPECT_EQ(asm_form->result_operand_index_count, 0u);
+  EXPECT_EQ(asm_form->operand_index_count, 0u);
+  ASSERT_EQ(asm_form->immediate_count, 2u);
+
+  const loom_low_asm_immediate_t* first_immediate =
+      &descriptor_set->asm_immediates[asm_form->immediate_start];
+  const loom_low_asm_immediate_t* second_immediate = first_immediate + 1;
+  EXPECT_EQ(ToString(descriptor_set, first_immediate->name_string_offset),
+            "vmcnt");
+  EXPECT_EQ(ToString(descriptor_set, second_immediate->name_string_offset),
+            "lgkmcnt");
 }
 
 TEST(AmdgpuDescriptorsTest,
