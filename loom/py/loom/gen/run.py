@@ -7,6 +7,7 @@
 """Root-invocable runner for Loom generators.
 
 Usage:
+    python3 loom/py/loom/gen/run.py amdgpu_isa_snapshot --xml ... --out ...
     python3 loom/py/loom/gen/run.py builders
     python3 loom/py/loom/gen/run.py c_tables
     python3 loom/py/loom/gen/run.py low_descriptors
@@ -22,6 +23,7 @@ from pathlib import Path
 import bootstrap
 
 GENERATORS = {
+    "amdgpu_isa_snapshot": "loom.gen.amdgpu_isa_snapshot",
     "builders": "loom.gen.builders",
     "c_errors": "loom.gen.c_errors",
     "c_tables": "loom.gen.c_tables",
@@ -29,14 +31,19 @@ GENERATORS = {
     "textmate": "loom.gen.textmate",
 }
 
+ARGUMENT_GENERATORS = {"amdgpu_isa_snapshot"}
+
 
 def _usage() -> str:
     names = "|".join(GENERATORS)
-    return f"usage: python3 loom/py/loom/gen/run.py <{names}>"
+    return f"usage: python3 loom/py/loom/gen/run.py <{names}> [generator args...]"
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] not in GENERATORS:
+    if len(argv) < 2 or argv[1] not in GENERATORS:
+        print(_usage(), file=sys.stderr)
+        return 2
+    if argv[1] not in ARGUMENT_GENERATORS and len(argv) != 2:
         print(_usage(), file=sys.stderr)
         return 2
 
@@ -46,6 +53,8 @@ def main(argv: list[str]) -> int:
         return 2
 
     module = importlib.import_module(GENERATORS[argv[1]])
+    if argv[1] in ARGUMENT_GENERATORS:
+        return int(module.main(argv[2:]))
     module.main()
     return 0
 

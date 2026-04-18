@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 from xml.etree import ElementTree
 
 
@@ -119,6 +120,51 @@ class AmdgpuIsaEncodingFieldSummary:
     ranges: tuple[AmdgpuIsaBitRange, ...]
     total_bit_count: int
     total_padding_bit_count: int
+
+
+class AmdgpuIsaFactSource(Protocol):
+    @property
+    def source_name(self) -> str: ...
+
+    @property
+    def architecture_name(self) -> str: ...
+
+    @property
+    def architecture_id(self) -> int: ...
+
+    @property
+    def encodings(self) -> tuple[AmdgpuIsaEncoding, ...]: ...
+
+    @property
+    def instructions(self) -> tuple[AmdgpuIsaInstruction, ...]: ...
+
+    def encoding_map(self) -> dict[str, AmdgpuIsaEncoding]: ...
+
+    def select_encodings(
+        self, names: Iterable[str]
+    ) -> tuple[AmdgpuIsaEncoding, ...]: ...
+
+    def encoding_field_summaries(
+        self, names: Iterable[str] | None = None
+    ) -> tuple[AmdgpuIsaEncodingFieldSummary, ...]: ...
+
+    def instruction_map(
+        self, *, include_aliases: bool = False
+    ) -> dict[str, AmdgpuIsaInstruction]: ...
+
+    def select_instructions(
+        self,
+        names: Iterable[str],
+        *,
+        include_aliases: bool = True,
+    ) -> tuple[AmdgpuIsaInstruction, ...]: ...
+
+    def instruction_encoding_summaries(
+        self,
+        names: Iterable[str] | None = None,
+        *,
+        include_aliases: bool = True,
+    ) -> tuple[AmdgpuIsaInstructionEncodingSummary, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)

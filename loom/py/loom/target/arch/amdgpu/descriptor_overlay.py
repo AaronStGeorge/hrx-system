@@ -18,10 +18,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from loom.target.arch.amdgpu.isa_xml import (
+    AmdgpuIsaFactSource,
     AmdgpuIsaInstruction,
     AmdgpuIsaInstructionEncoding,
     AmdgpuIsaOperand,
-    AmdgpuIsaSpec,
     AmdgpuIsaXmlError,
 )
 from loom.target.low_descriptors import (
@@ -65,7 +65,7 @@ class AmdgpuDescriptorOverlay:
 
 
 def materialize_amdgpu_descriptor_overlay(
-    spec: AmdgpuIsaSpec, overlay: AmdgpuDescriptorOverlay
+    spec: AmdgpuIsaFactSource, overlay: AmdgpuDescriptorOverlay
 ) -> Descriptor:
     instruction = _select_instruction(spec, overlay)
     encoding = _select_instruction_encoding(instruction, overlay)
@@ -90,7 +90,7 @@ def materialize_amdgpu_descriptor_overlay(
 
 
 def materialize_amdgpu_descriptor_overlays(
-    spec: AmdgpuIsaSpec, overlays: Iterable[AmdgpuDescriptorOverlay]
+    spec: AmdgpuIsaFactSource, overlays: Iterable[AmdgpuDescriptorOverlay]
 ) -> tuple[Descriptor, ...]:
     return tuple(
         materialize_amdgpu_descriptor_overlay(spec, overlay) for overlay in overlays
@@ -98,7 +98,7 @@ def materialize_amdgpu_descriptor_overlays(
 
 
 def _select_instruction(
-    spec: AmdgpuIsaSpec, overlay: AmdgpuDescriptorOverlay
+    spec: AmdgpuIsaFactSource, overlay: AmdgpuDescriptorOverlay
 ) -> AmdgpuIsaInstruction:
     try:
         return spec.select_instructions(
