@@ -46,9 +46,21 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "gfx12_descriptors_no_matrix_contract_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
+)
+
+iree_assert_no_dependency(
     name = "gfx950_descriptors_no_wasm_arch_dep",
     dependency = "//loom/src/loom/target/arch/wasm:descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "gfx12_descriptors_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
 )
 
 iree_assert_no_dependency(
@@ -58,9 +70,21 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "gfx12_descriptors_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
+)
+
+iree_assert_no_dependency(
     name = "gfx950_descriptors_no_ireevm_emit_dep",
     dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
     target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "gfx12_descriptors_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
 )
 
 iree_assert_no_dependency(
@@ -69,9 +93,33 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/arch/amdgpu:gfx950_descriptors",
 )
 
+iree_assert_no_dependency(
+    name = "gfx12_descriptors_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:gfx12_descriptors",
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU low descriptors
 #===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "gfx12_descriptors",
+    srcs = ["gfx12_descriptors.c"],
+    hdrs = ["gfx12_descriptors.h"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_test(
+    name = "gfx12_descriptors_test",
+    srcs = ["gfx12_descriptors_test.cc"],
+    deps = [
+        ":gfx12_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
 
 loom_cc_library(
     name = "gfx950_descriptors",

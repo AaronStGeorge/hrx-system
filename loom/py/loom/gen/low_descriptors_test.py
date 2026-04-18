@@ -13,7 +13,10 @@ from typing import cast
 import pytest
 
 from loom.gen.low_descriptors import DescriptorAllowlist, generate_descriptor_set
-from loom.target.arch.amdgpu.descriptors import AMDGPU_GFX950_CORE_DESCRIPTOR_SET
+from loom.target.arch.amdgpu.descriptors import (
+    AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
+    AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
+)
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import EnumDomain, EnumValue, ImmediateKind, OperandRole
@@ -92,6 +95,30 @@ def test_generate_amdgpu_gfx950_core_descriptor_set() -> None:
     assert manifest["table_counts"]["reg_classes"] == 3
     assert manifest["table_counts"]["resources"] >= 6
     assert any(descriptor["key"] == "amdgpu.v_mfma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
+
+
+def test_generate_amdgpu_gfx12_core_descriptor_set() -> None:
+    generated = generate_descriptor_set(AMDGPU_GFX12_CORE_DESCRIPTOR_SET)
+
+    assert "loom_amdgpu_gfx12_core_descriptor_set" in generated.header
+    assert 'LOOM_BSTRING_LITERAL("\\x11", "amdgpu.gfx12.core")' in generated.source
+    assert "amdgpu.v_add_u32" in generated.source
+    assert "amdgpu.buffer_load_dword" in generated.source
+    assert "amdgpu.v_wmma_f32_16x16x16_f16" in generated.source
+    assert "fingerprint" not in generated.source
+    assert "fingerprint" not in generated.manifest_json
+
+    manifest = json.loads(generated.manifest_json)
+    assert manifest["key"] == "amdgpu.gfx12.core"
+    assert manifest["target"] == "amdgpu"
+    assert manifest["feature_namespace"] == "amdgpu.gfx12.v1"
+    assert manifest["abi_version"] == 5
+    assert manifest["table_counts"]["descriptors"] >= 10
+    assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
+    assert manifest["table_counts"]["reg_classes"] == 2
+    assert manifest["table_counts"]["resources"] >= 6
+    assert any(descriptor["key"] == "amdgpu.v_wmma_f32_16x16x16_f16" for descriptor in manifest["descriptors"])
+    assert any(descriptor["key"] == "amdgpu.s_wait_loadcnt" for descriptor in manifest["descriptors"])
 
 
 def test_allowlist_accepts_semantic_tags() -> None:
