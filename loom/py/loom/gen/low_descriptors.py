@@ -37,6 +37,7 @@ from loom.target.low_descriptors import (
     ImmediateKind,
     IssueUse,
     Operand,
+    OperandFlag,
     OperandRole,
     PressureDelta,
     RegClass,
@@ -243,6 +244,8 @@ def _validate_descriptor_operands(descriptor: Descriptor) -> int:
             result_count += 1
         else:
             seen_non_result = True
+        if operand.role is OperandRole.IMPLICIT and OperandFlag.IMPLICIT not in operand.flags:
+            raise ValueError(f"descriptor '{descriptor.key}' implicit operand '{operand.field_name}' must set the implicit flag")
         if not operand.reg_alts:
             raise ValueError(f"descriptor '{descriptor.key}' operand '{operand.field_name}' has no register-class alternatives")
     return result_count

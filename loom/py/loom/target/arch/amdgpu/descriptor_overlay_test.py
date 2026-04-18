@@ -11,6 +11,7 @@ import pytest
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
     AmdgpuDescriptorOverlayError,
+    AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlay,
     materialize_amdgpu_descriptor_overlays,
@@ -22,6 +23,7 @@ from loom.target.low_descriptors import (
     Immediate,
     ImmediateKind,
     Operand,
+    OperandFlag,
     OperandRole,
     RegClassAlt,
 )
@@ -39,6 +41,24 @@ _U32_IMMEDIATE = Immediate(
     unsigned_max=(2**32) - 1,
 )
 
+_IGNORE_SCC_OUTPUT = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_SSRC_SPECIAL_SCC",
+    data_format_name="FMT_NUM_B1",
+    size_bits=1,
+    is_input=False,
+    is_output=True,
+    ignore_reason="value-pseudo-drops-scc",
+)
+
+_IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B32",
+    size_bits=32,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
 
 def _result(field_name: str, reg_alts: tuple[RegClassAlt, ...]) -> Operand:
     return Operand(field_name, OperandRole.RESULT, reg_alts)
@@ -52,24 +72,46 @@ def _resource(field_name: str, reg_alts: tuple[RegClassAlt, ...]) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, reg_alts)
 
 
+def _s_add_u32_operands() -> tuple[AmdgpuOperandOverlay, ...]:
+    return (
+        AmdgpuOperandOverlay("SDST", _result("dst", _SGPR_ALT)),
+        AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
+        AmdgpuOperandOverlay("SSRC1", _operand("rhs", _SGPR_ALT)),
+    )
+
+
+def _s_add_u32_overlay(
+    descriptor_key: str,
+    *,
+    mnemonic: str | None = None,
+    encoding_name: str = "ENC_SOP2",
+    operands: tuple[AmdgpuOperandOverlay, ...] | None = None,
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (),
+    flags: tuple[DescriptorFlag, ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_ADD_U32",
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag="integer.add.u32",
+        schedule_class="amdgpu.salu",
+        operands=_s_add_u32_operands() if operands is None else operands,
+        implicit_operands=implicit_operands,
+        flags=flags,
+    )
+
+
 def test_materialize_amdgpu_descriptor_overlays_from_xml_facts() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
 
     descriptors = materialize_amdgpu_descriptor_overlays(
         spec,
         (
-            AmdgpuDescriptorOverlay(
-                descriptor_key="amdgpu.s_add_u32",
-                instruction_name="S_ADD_U32",
+            _s_add_u32_overlay(
+                "amdgpu.s_add_u32",
                 mnemonic="s_add_u32",
-                encoding_name="ENC_SOP2",
-                semantic_tag="integer.add.u32",
-                schedule_class="amdgpu.salu",
-                operands=(
-                    AmdgpuOperandOverlay("SDST", _result("dst", _SGPR_ALT)),
-                    AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
-                    AmdgpuOperandOverlay("SSRC1", _operand("rhs", _SGPR_ALT)),
-                ),
+                implicit_operands=(_IGNORE_SCC_OUTPUT,),
                 flags=(DescriptorFlag.DEAD_REMOVABLE,),
             ),
             AmdgpuDescriptorOverlay(
@@ -101,6 +143,7 @@ def test_materialize_amdgpu_descriptor_overlays_from_xml_facts() -> None:
                     AmdgpuOperandOverlay("RSRC", _resource("resource", _SGPR_ALT)),
                     AmdgpuOperandOverlay("SOFFSET", _operand("soffset", _SGPR_ALT)),
                 ),
+                implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
             ),
             AmdgpuDescriptorOverlay(
                 descriptor_key="amdgpu.s_wait_idle",
@@ -155,14 +198,7 @@ def test_materialize_rejects_missing_instruction() -> None:
 
 def test_materialize_rejects_missing_encoding() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
-    overlay = AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.bad_encoding",
-        instruction_name="S_ADD_U32",
-        encoding_name="ENC_VOP2",
-        semantic_tag="integer.add.u32",
-        schedule_class="amdgpu.salu",
-        operands=(),
-    )
+    overlay = _s_add_u32_overlay("amdgpu.bad_encoding", encoding_name="ENC_VOP2")
 
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
@@ -173,12 +209,8 @@ def test_materialize_rejects_missing_encoding() -> None:
 
 def test_materialize_rejects_operand_role_mismatch() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
-    overlay = AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.bad_role",
-        instruction_name="S_ADD_U32",
-        encoding_name="ENC_SOP2",
-        semantic_tag="integer.add.u32",
-        schedule_class="amdgpu.salu",
+    overlay = _s_add_u32_overlay(
+        "amdgpu.bad_role",
         operands=(
             AmdgpuOperandOverlay("SDST", _operand("dst", _SGPR_ALT)),
             AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
@@ -219,12 +251,8 @@ def test_materialize_rejects_repeated_overlay_xml_field() -> None:
 
 def test_materialize_rejects_uncovered_explicit_xml_operand() -> None:
     spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
-    overlay = AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.incomplete",
-        instruction_name="S_ADD_U32",
-        encoding_name="ENC_SOP2",
-        semantic_tag="integer.add.u32",
-        schedule_class="amdgpu.salu",
+    overlay = _s_add_u32_overlay(
+        "amdgpu.incomplete",
         operands=(
             AmdgpuOperandOverlay("SDST", _result("dst", _SGPR_ALT)),
             AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
@@ -234,5 +262,188 @@ def test_materialize_rejects_uncovered_explicit_xml_operand() -> None:
     with pytest.raises(
         AmdgpuDescriptorOverlayError,
         match="does not cover XML operand field\\(s\\): SSRC1",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_uncovered_implicit_xml_operand() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay("amdgpu.incomplete_implicit")
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="does not cover implicit XML operand\\(s\\): "
+        "order=4,type=OPR_SSRC_SPECIAL_SCC",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_implicit_decision_without_xml_operand() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.extra_implicit",
+        instruction_name="S_WAIT_IDLE",
+        encoding_name="ENC_SOPP",
+        semantic_tag="control.waitcnt.idle",
+        schedule_class="amdgpu.wait",
+        operands=(),
+        implicit_operands=(_IGNORE_SCC_OUTPUT,),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="has implicit operand decision\\(s\\).*has no implicit operands",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_missing_implicit_xml_operand_reference() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.missing_implicit_reference",
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                operand_type="OPR_MISSING",
+                ignore_reason="not-present-in-sample",
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="references missing implicit XML operand 'type=OPR_MISSING'",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_implicit_ignore_without_reason() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.implicit_without_reason",
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                operand_type="OPR_SSRC_SPECIAL_SCC",
+                data_format_name="FMT_NUM_B1",
+                is_output=True,
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="ignores implicit XML operand .* without a named reason",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_repeated_implicit_xml_operand_decision() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.repeated_implicit",
+        implicit_operands=(_IGNORE_SCC_OUTPUT, _IGNORE_SCC_OUTPUT),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="repeats implicit XML operand order=4,type=OPR_SSRC_SPECIAL_SCC",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_maps_implicit_xml_operand_to_low_operand() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    scc_operand = Operand(
+        "scc",
+        OperandRole.IMPLICIT,
+        _SGPR_ALT,
+        flags=(OperandFlag.IMPLICIT,),
+        unit_count=1,
+    )
+    overlay = _s_add_u32_overlay(
+        "amdgpu.s_add_u32.scc",
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                operand_type="OPR_SSRC_SPECIAL_SCC",
+                descriptor_operand=scc_operand,
+                data_format_name="FMT_NUM_B1",
+                size_bits=1,
+                is_input=False,
+                is_output=True,
+            ),
+        ),
+    )
+
+    descriptor = materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+    assert descriptor.operands[-1] == scc_operand
+
+
+def test_materialize_rejects_implicit_mapping_without_implicit_role() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.bad_implicit_mapping_role",
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                operand_type="OPR_SSRC_SPECIAL_SCC",
+                descriptor_operand=Operand(
+                    "scc",
+                    OperandRole.OPERAND,
+                    _SGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                ),
+                data_format_name="FMT_NUM_B1",
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="without implicit role",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_implicit_mapping_with_ignore_reason() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.bad_implicit_mapping_reason",
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                operand_type="OPR_SSRC_SPECIAL_SCC",
+                descriptor_operand=Operand(
+                    "scc",
+                    OperandRole.IMPLICIT,
+                    _SGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                ),
+                ignore_reason="conflicting-decision",
+                data_format_name="FMT_NUM_B1",
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="and also provides an ignore reason",
+    ):
+        materialize_amdgpu_descriptor_overlay(spec, overlay)
+
+
+def test_materialize_rejects_implicit_mapping_without_implicit_flag() -> None:
+    spec = parse_amdgpu_isa_xml_text(SAMPLE_XML, source_name="sample.xml")
+    overlay = _s_add_u32_overlay(
+        "amdgpu.bad_implicit_mapping",
+        implicit_operands=(
+            AmdgpuImplicitOperandOverlay(
+                operand_type="OPR_SSRC_SPECIAL_SCC",
+                descriptor_operand=Operand("scc", OperandRole.IMPLICIT, _SGPR_ALT),
+                data_format_name="FMT_NUM_B1",
+            ),
+        ),
+    )
+
+    with pytest.raises(
+        AmdgpuDescriptorOverlayError,
+        match="without implicit flag",
     ):
         materialize_amdgpu_descriptor_overlay(spec, overlay)

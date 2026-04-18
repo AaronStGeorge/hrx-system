@@ -402,3 +402,26 @@ def test_generator_rejects_operand_result_role() -> None:
         match=("descriptor 'iree.vm.add.i32' operand 'dst' uses OPERAND_RESULT; use separate result and operand rows plus an explicit constraint"),
     ):
         generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_implicit_operand_without_implicit_flag() -> None:
+    implicit_operand = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[1],
+        role=OperandRole.IMPLICIT,
+        flags=(),
+    )
+    descriptor = replace(
+        IREEVM_CORE_DESCRIPTOR_SET.descriptors[1],
+        operands=(
+            IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[0],
+            implicit_operand,
+            *IREEVM_CORE_DESCRIPTOR_SET.descriptors[1].operands[2:],
+        ),
+    )
+    descriptor_set = replace(IREEVM_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'iree.vm.add.i32' implicit operand 'lhs' must set the implicit flag"),
+    ):
+        generate_descriptor_set(descriptor_set)

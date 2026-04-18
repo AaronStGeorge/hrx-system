@@ -12,6 +12,7 @@ from pathlib import Path
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
+    AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlays,
 )
@@ -282,6 +283,33 @@ _DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
     Constraint(ConstraintKind.EARLY_CLOBBER, 0),
 )
 
+_IGNORE_SCC_OUTPUT = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_SSRC_SPECIAL_SCC",
+    data_format_name="FMT_NUM_B1",
+    size_bits=1,
+    is_input=False,
+    is_output=True,
+    ignore_reason="value-pseudo-drops-scc",
+)
+
+_IGNORE_GLOBAL_READ_MEMORY = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B32",
+    size_bits=32,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
+_IGNORE_GLOBAL_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B32",
+    size_bits=32,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-global-write-effect",
+)
+
 
 def _load_amdgpu_isa_snapshot(filename: str) -> AmdgpuIsaSnapshot:
     path = Path(__file__).with_name(filename)
@@ -309,6 +337,7 @@ def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SSRC0", _sgpr_operand("lhs")),
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
+        implicit_operands=(_IGNORE_SCC_OUTPUT,),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -343,6 +372,7 @@ def _s_buffer_load_dword_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SBASE", _sgpr_resource("resource", units=4)),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
         immediates=(_OFFSET_IMMEDIATE,),
         effects=(_GLOBAL_LOAD_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -367,6 +397,7 @@ def _buffer_load_dword_overlay(
             AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
+        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
         immediates=(_OFFSET_IMMEDIATE,),
         effects=(_GLOBAL_LOAD_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -391,6 +422,7 @@ def _buffer_store_dword_overlay(
             AmdgpuOperandOverlay("VADDR", _vgpr_operand("vaddr")),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
+        implicit_operands=(_IGNORE_GLOBAL_WRITE_MEMORY,),
         immediates=(_OFFSET_IMMEDIATE,),
         effects=(_GLOBAL_STORE_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),

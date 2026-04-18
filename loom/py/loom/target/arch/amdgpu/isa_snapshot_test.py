@@ -12,6 +12,7 @@ import pytest
 
 from loom.target.arch.amdgpu.descriptor_overlay import (
     AmdgpuDescriptorOverlay,
+    AmdgpuImplicitOperandOverlay,
     AmdgpuOperandOverlay,
     materialize_amdgpu_descriptor_overlay,
 )
@@ -37,6 +38,15 @@ _REG_VGPR = "amdgpu.vgpr"
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
+
+_IGNORE_SCC_OUTPUT = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_SSRC_SPECIAL_SCC",
+    data_format_name="FMT_NUM_B1",
+    size_bits=1,
+    is_input=False,
+    is_output=True,
+    ignore_reason="value-pseudo-drops-scc",
+)
 
 
 def _result(field_name: str, reg_alts: tuple[RegClassAlt, ...]) -> Operand:
@@ -103,6 +113,7 @@ def test_snapshot_round_trips_overlay_and_encoding_bit_layout_facts() -> None:
                 AmdgpuOperandOverlay("SSRC0", _operand("lhs", _SGPR_ALT)),
                 AmdgpuOperandOverlay("SSRC1", _operand("rhs", _SGPR_ALT)),
             ),
+            implicit_operands=(_IGNORE_SCC_OUTPUT,),
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
     )
