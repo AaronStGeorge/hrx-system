@@ -486,6 +486,73 @@ TEST(LowDescriptorsTest, RejectsPseudoFlagWithTargetEncoding) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowDescriptorsTest, RejectsUnknownDescriptorFlagBits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.descriptors[1].flags = 0x8000u;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnknownOperandFlagBits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].flags = 0x8000u;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnknownRegisterClassFlagBits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_classes[0].flags = LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY | 0x8000u;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnknownRegisterClassAltFlagBits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_class_alts[0].flags =
+      LOOM_LOW_REG_CLASS_ALT_FLAG_PREFERRED | 0x8000u;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnknownImmediateFlagBits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].flags = 0x8000u;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnknownEffectFlagBits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.effects[0].flags = 0x8000u;
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsUnknownScheduleClassFlagBits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.schedule_classes[1].flags = 0x8000u;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorsTest, AcceptsSideEffectingReadEffect) {
   TestTables tables;
   InitializeTestTables(&tables);
@@ -837,6 +904,12 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
   AddAddDescriptorConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
   AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
                          LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.descriptors[1].encoding_id = LOOM_LOW_ID_NONE;
+  tables.descriptors[1].flags =
+      LOOM_LOW_DESCRIPTOR_FLAG_DEAD_REMOVABLE | LOOM_LOW_DESCRIPTOR_FLAG_PSEUDO;
+  tables.operands[3].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
+  tables.operands[3].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
+  tables.effects[0].flags = LOOM_LOW_EFFECT_FLAG_DEPENDENCY;
   tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
 
   iree_string_builder_t builder;
@@ -854,22 +927,32 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
             std::string::npos);
   EXPECT_NE(json.find("\"reg_classes\":[{\"ordinal\":0,\"name\":\"test.gpr\""),
             std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"virtual_only\"]"), std::string::npos);
   EXPECT_NE(json.find("\"kind_name\":\"scalar_alu\""), std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"may_load\"]"), std::string::npos);
   EXPECT_NE(json.find("\"issue_uses\":[{\"resource\":0,\"resource_name\":"
                       "\"test.alu\",\"cycles\":1,\"units\":1"),
             std::string::npos);
   EXPECT_NE(json.find("\"field\":\"lhs\",\"role\":2,\"role_name\":\"operand\""),
             std::string::npos);
+  EXPECT_NE(
+      json.find("\"field\":\"rhs\",\"role\":6,\"role_name\":\"implicit\""),
+      std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"implicit\"]"), std::string::npos);
   EXPECT_NE(json.find("\"unit_count\":1"), std::string::npos);
   EXPECT_NE(json.find("\"reg_class_name\":\"test.gpr\""), std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"preferred\"]"), std::string::npos);
   EXPECT_NE(json.find("\"kind_name\":\"signed\""), std::string::npos);
   EXPECT_NE(json.find("\"signed_min\":-2147483648"), std::string::npos);
   EXPECT_NE(json.find("\"kind_name\":\"read\""), std::string::npos);
   EXPECT_NE(json.find("\"memory_space_name\":\"generic\""), std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"dependency\"]"), std::string::npos);
   EXPECT_NE(json.find("\"kind_name\":\"tied\""), std::string::npos);
   EXPECT_NE(json.find("\"lhs_operand\":0,\"rhs_operand\":1"),
             std::string::npos);
   EXPECT_NE(json.find("\"feature_mask_words\":[5]"), std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"dead_removable\",\"pseudo\"]"),
+            std::string::npos);
 }
 
 }  // namespace

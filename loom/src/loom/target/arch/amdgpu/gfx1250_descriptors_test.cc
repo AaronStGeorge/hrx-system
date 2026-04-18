@@ -266,6 +266,8 @@ TEST(AmdgpuDescriptorsTest,
   EXPECT_NE(json.find("\"key\":\"amdgpu.s_wait_loadcnt\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_wmma_f32_16x16x32_f16\""),
             std::string::npos);
+  EXPECT_NE(json.find("\"flag_names\":[\"dead_removable\",\"pseudo\"]"),
+            std::string::npos);
   EXPECT_NE(
       json.find("\"key\":\"amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8\""),
       std::string::npos);
