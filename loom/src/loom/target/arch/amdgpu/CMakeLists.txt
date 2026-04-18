@@ -12,6 +12,30 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    gfx11_descriptors
+  HDRS
+    "gfx11_descriptors.h"
+  SRCS
+    "gfx11_descriptors.c"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    gfx11_descriptors_test
+  SRCS
+    "gfx11_descriptors_test.cc"
+  DEPS
+    ::gfx11_descriptors
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     gfx12_descriptors
   HDRS
     "gfx12_descriptors.h"
