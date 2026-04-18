@@ -60,6 +60,7 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   EXPECT_TRUE(iree_string_view_equal(add_key, IREE_SV("amdgpu.v_add_u32")));
   EXPECT_EQ(add_descriptor->operand_count, 3u);
   EXPECT_EQ(add_descriptor->result_count, 1u);
+  EXPECT_EQ(add_descriptor->encoding_id, 37u);
 
   const loom_low_descriptor_t* load_descriptor =
       LookupDescriptor(descriptor_set, IREE_SV("amdgpu.buffer_load_dword"));
@@ -67,6 +68,7 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(load_descriptor->operand_count, 4u);
   EXPECT_EQ(load_descriptor->result_count, 1u);
   EXPECT_EQ(load_descriptor->effect_count, 1u);
+  EXPECT_EQ(load_descriptor->encoding_id, 20u);
   EXPECT_NE(load_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
             0u);
 
@@ -76,6 +78,7 @@ TEST(AmdgpuDescriptorsTest, Gfx12CoreDescriptorLookupUsesStableKeys) {
   EXPECT_EQ(load_wait_descriptor->operand_count, 0u);
   EXPECT_EQ(load_wait_descriptor->immediate_count, 1u);
   EXPECT_EQ(load_wait_descriptor->effect_count, 1u);
+  EXPECT_EQ(load_wait_descriptor->encoding_id, 64u);
   EXPECT_NE(
       load_wait_descriptor->flags & LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING,
       0u);
@@ -99,6 +102,7 @@ TEST(AmdgpuDescriptorsTest, Gfx12WmmaPacketMatchesRdnaRegisterShape) {
   ASSERT_NE(wmma_descriptor, nullptr);
   EXPECT_EQ(wmma_descriptor->operand_count, 4u);
   EXPECT_EQ(wmma_descriptor->result_count, 1u);
+  EXPECT_EQ(wmma_descriptor->encoding_id, 64u);
 
   const loom_low_operand_t* wmma_operands =
       &descriptor_set->operands[wmma_descriptor->operand_start];

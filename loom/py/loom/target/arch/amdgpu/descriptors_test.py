@@ -9,7 +9,10 @@ from __future__ import annotations
 from loom.target.arch.amdgpu.descriptors import (
     _GFX11_CORE_OVERLAY_DESCRIPTORS,
     _GFX11_ISA_SNAPSHOT,
+    _GFX12_CORE_OVERLAY_DESCRIPTORS,
+    _GFX12_ISA_SNAPSHOT,
     AMDGPU_GFX11_CORE_DESCRIPTOR_SET,
+    AMDGPU_GFX12_CORE_DESCRIPTOR_SET,
 )
 
 
@@ -68,3 +71,46 @@ def test_gfx11_snapshot_covers_only_overlay_backed_source_facts() -> None:
         ].name
         == "BUFFER_LOAD_B32"
     )
+
+
+def test_gfx12_core_descriptors_are_materialized_from_snapshot() -> None:
+    descriptor_by_key = {
+        descriptor.key: descriptor for descriptor in _GFX12_CORE_OVERLAY_DESCRIPTORS
+    }
+
+    assert list(descriptor_by_key) == [
+        "amdgpu.s_add_u32",
+        "amdgpu.v_add_u32",
+        "amdgpu.s_buffer_load_dword",
+        "amdgpu.buffer_load_dword",
+        "amdgpu.buffer_store_dword",
+        "amdgpu.v_wmma_f32_16x16x16_f16",
+        "amdgpu.s_wait_loadcnt",
+        "amdgpu.s_wait_storecnt",
+        "amdgpu.s_wait_alu",
+        "amdgpu.s_wait_idle",
+    ]
+    assert descriptor_by_key["amdgpu.v_add_u32"].encoding_id == 37
+    assert descriptor_by_key["amdgpu.s_buffer_load_dword"].encoding_id == 16
+    assert descriptor_by_key["amdgpu.buffer_load_dword"].encoding_id == 20
+    assert descriptor_by_key["amdgpu.buffer_store_dword"].encoding_id == 26
+    assert descriptor_by_key["amdgpu.v_wmma_f32_16x16x16_f16"].encoding_id == 64
+    assert descriptor_by_key["amdgpu.s_wait_loadcnt"].encoding_id == 64
+    assert descriptor_by_key["amdgpu.s_wait_storecnt"].encoding_id == 65
+    assert descriptor_by_key["amdgpu.s_wait_alu"].encoding_id == 8
+    assert descriptor_by_key["amdgpu.s_wait_idle"].encoding_id == 10
+
+    assert AMDGPU_GFX12_CORE_DESCRIPTOR_SET.descriptors[0].key == "amdgpu.s_mov_b32"
+    assert (
+        AMDGPU_GFX12_CORE_DESCRIPTOR_SET.descriptors[1:]
+        == _GFX12_CORE_OVERLAY_DESCRIPTORS
+    )
+
+
+def test_gfx12_snapshot_covers_rdna4_split_wait_source_facts() -> None:
+    instruction_map = _GFX12_ISA_SNAPSHOT.instruction_map(include_aliases=True)
+
+    assert "S_MOV_B32" not in _GFX12_ISA_SNAPSHOT.instruction_map()
+    assert instruction_map["S_ADD_U32"].name == "S_ADD_CO_U32"
+    assert instruction_map["BUFFER_LOAD_DWORD"].name == "BUFFER_LOAD_B32"
+    assert instruction_map["S_WAITCNT_DEPCTR"].name == "S_WAIT_ALU"
