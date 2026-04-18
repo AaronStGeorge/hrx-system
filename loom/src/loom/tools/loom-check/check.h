@@ -30,7 +30,8 @@
 //                           Targets include llvmir, llvmir-body,
 //                           llvmir-bitcode, llvmir-object, and
 //                           llvmir-assembly-mnemonics. Non-IR descriptor
-//                           targets include low-descriptor-manifest.
+//                           targets include low-descriptor-manifest and
+//                           target-low-registry-manifest.
 //   // REQUIRES: <name>[, <name>...]
 //                           Skip the case when external tools or target
 //                           backends are unavailable.

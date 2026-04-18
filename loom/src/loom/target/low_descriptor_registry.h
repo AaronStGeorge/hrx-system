@@ -50,6 +50,15 @@ iree_status_t loom_target_low_descriptor_registry_verify(
     const loom_target_low_descriptor_registry_t* registry,
     loom_low_descriptor_requirement_flags_t requirements);
 
+// Appends a compact JSON manifest for the linked target-low registry package to
+// |builder|. The manifest is a diagnostic and test format that lists linked
+// descriptor-set summaries and target bundle selections without embedding full
+// instruction descriptor rows.
+iree_status_t loom_target_low_descriptor_registry_format_manifest_json(
+    const loom_target_low_descriptor_registry_t* registry,
+    loom_low_descriptor_requirement_flags_t requirements,
+    iree_string_builder_t* builder);
+
 // Looks up a descriptor set by key in the selected target registry.
 iree_status_t loom_target_low_descriptor_set_lookup(
     iree_string_view_t key,

@@ -1059,6 +1059,31 @@ TEST_F(ExecuteTest, EmitLowDescriptorManifestReportsUnknownSet) {
   loom_check_result_deinitialize(&result);
 }
 
+TEST_F(ExecuteTest, EmitTargetLowRegistryManifestUsesRegistryPackage) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: emit target-low-registry-manifest\n"
+                   "func.def @unused() {\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  const std::string actual_output = ActualOutputString(result);
+  EXPECT_NE(actual_output.find("\"descriptor_set_count\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"bundle_count\":"), std::string::npos);
+  EXPECT_NE(actual_output.find("\"key\":\"amdgpu-gfx11-hal\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"target_cpu\":\"gfx1100\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"descriptor_set\":\"amdgpu.gfx11.core\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"key\":\"wasm32-simd128\""),
+            std::string::npos);
+  EXPECT_NE(actual_output.find("\"key\":\"x86_64-avx512-object\""),
+            std::string::npos);
+  loom_check_result_deinitialize(&result);
+}
+
 TEST_F(ExecuteTest, FormatModeUnimplemented) {
   loom_check_result_t result;
   IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED,

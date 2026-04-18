@@ -27,6 +27,7 @@ typedef enum loom_check_emit_format_e {
   LOOM_CHECK_EMIT_LLVMIR_OBJECT = 3,
   LOOM_CHECK_EMIT_LLVMIR_ASSEMBLY_MNEMONICS = 4,
   LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST = 5,
+  LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST = 6,
 } loom_check_emit_format_t;
 
 typedef struct loom_check_emit_request_t {
@@ -92,6 +93,17 @@ static iree_status_t loom_check_emit_parse_request(
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "unknown low descriptor set '%.*s'",
                             (int)profile_name.size, profile_name.data);
+  } else if (iree_string_view_equal(target_name,
+                                    IREE_SV("target-low-registry-manifest")) ||
+             iree_string_view_equal(target_name,
+                                    IREE_SV("target-low-registry-json"))) {
+    if (!iree_string_view_is_empty(profile_name)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "target-low registry manifest does not accept a profile");
+    }
+    out_request->format = LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST;
+    return iree_ok_status();
   } else {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown emit target '%.*s'", (int)target_name.size,
@@ -561,9 +573,18 @@ iree_status_t loom_check_execute_emit(
     iree_arena_deinitialize(&diagnostic_arena);
     return status;
   }
-  if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST) {
-    status = loom_low_descriptor_set_format_manifest_json(
-        request.low_descriptor_set, &result->actual_output);
+  if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST ||
+      request.format == LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST) {
+    if (request.format == LOOM_CHECK_EMIT_LOW_DESCRIPTOR_MANIFEST) {
+      status = loom_low_descriptor_set_format_manifest_json(
+          request.low_descriptor_set, &result->actual_output);
+    } else {
+      loom_target_low_descriptor_registry_t registry;
+      loom_target_low_descriptor_registry_initialize(&registry);
+      status = loom_target_low_descriptor_registry_format_manifest_json(
+          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+          &result->actual_output);
+    }
     if (!iree_status_is_ok(status)) {
       status = loom_check_emit_finish_status_failure(
           status, &diagnostic_collector, test_case, case_index, report,
@@ -724,6 +745,11 @@ iree_status_t loom_check_execute_emit(
         status = iree_make_status(
             IREE_STATUS_INTERNAL,
             "low descriptor manifest emit should bypass LLVMIR lowering");
+        break;
+      case LOOM_CHECK_EMIT_TARGET_LOW_REGISTRY_MANIFEST:
+        status = iree_make_status(
+            IREE_STATUS_INTERNAL,
+            "target-low registry manifest emit should bypass LLVMIR lowering");
         break;
     }
   }

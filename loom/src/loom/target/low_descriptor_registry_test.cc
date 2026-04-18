@@ -6,6 +6,8 @@
 
 #include "loom/target/low_descriptor_registry.h"
 
+#include <string>
+
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/requirements.h"
@@ -173,6 +175,44 @@ TEST(LowDescriptorRegistryTest, TargetBundlesSelectFoundationDescriptorSets) {
         iree_make_cstring_view(expected.descriptor_set_key)))
         << expected.bundle_key;
   }
+}
+
+TEST(LowDescriptorRegistryTest, FormatsRegistryManifestJson) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_low_descriptor_registry_initialize(&registry);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(loom_target_low_descriptor_registry_format_manifest_json(
+      &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+      &builder));
+  std::string json(iree_string_builder_buffer(&builder),
+                   iree_string_builder_size(&builder));
+  iree_string_builder_deinitialize(&builder);
+
+  EXPECT_NE(json.find("\"descriptor_set_count\":"), std::string::npos);
+  EXPECT_NE(json.find("\"bundle_count\":"), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"iree.vm.core\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"wasm.core.simd128\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"x86.avx512.core\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu.gfx11.core\""), std::string::npos);
+  EXPECT_NE(json.find("\"key\":\"amdgpu-gfx11-hal\""), std::string::npos);
+  EXPECT_NE(json.find("\"target_cpu\":\"gfx1100\""), std::string::npos);
+  EXPECT_NE(json.find("\"descriptor_set\":\"amdgpu.gfx11.core\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"hal_kernel\":{\"binding_alignment\":16"),
+            std::string::npos);
+}
+
+TEST(LowDescriptorRegistryTest, FormatManifestRejectsMissingBuilder) {
+  loom_target_low_descriptor_registry_t registry = {};
+  loom_target_low_descriptor_registry_initialize(&registry);
+
+  iree_status_t status =
+      loom_target_low_descriptor_registry_format_manifest_json(
+          &registry, LOOM_LOW_DESCRIPTOR_REQUIREMENT_TARGET_LOW_FOUNDATION,
+          nullptr);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
 TEST(LowDescriptorRegistryTest, MissingKeyReturnsNullDescriptorSet) {

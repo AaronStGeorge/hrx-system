@@ -130,6 +130,8 @@ loom_cc_library(
         "//loom/src/loom/target/arch/x86:feature_bits",
         "//loom/src/loom/target/arch/x86:packed_dot_descriptors",
         "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
     ],
 )
