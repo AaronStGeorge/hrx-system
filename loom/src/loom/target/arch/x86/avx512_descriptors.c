@@ -199,6 +199,7 @@ static const loom_low_reg_class_t kX86Avx512CoreRegClasses[] = {
         .physical_count = 16,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK,
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_reg_x86_zmm,
@@ -208,6 +209,7 @@ static const loom_low_reg_class_t kX86Avx512CoreRegClasses[] = {
         .physical_count = 32,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK,
     },
     {
         .name_string_offset = X86_AVX512_CORE_STRING_reg_x86_k,
@@ -217,6 +219,7 @@ static const loom_low_reg_class_t kX86Avx512CoreRegClasses[] = {
         .physical_count = 8,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK,
     },
 };
 

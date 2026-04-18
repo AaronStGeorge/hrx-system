@@ -373,6 +373,18 @@ static bool loom_low_memory_space_is_valid(loom_low_memory_space_t space) {
   }
 }
 
+static bool loom_low_spill_slot_space_is_valid(uint8_t space) {
+  switch (space) {
+    case LOOM_LOW_SPILL_SLOT_SPACE_STACK:
+    case LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH:
+    case LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE:
+    case LOOM_LOW_SPILL_SLOT_SPACE_LDS:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool loom_low_constraint_kind_is_valid(loom_low_constraint_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_CONSTRAINT_KIND_TIED:
@@ -821,6 +833,12 @@ static iree_status_t loom_low_verify_reg_class(
                             " has zero allocation-unit width",
                             reg_class_index);
   }
+  if (!loom_low_spill_slot_space_is_valid(reg_class->spill_slot_space)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low register class %" PRIu32 " has unknown spill slot space %u",
+        reg_class_index, (unsigned)reg_class->spill_slot_space);
+  }
   const bool is_virtual_only =
       iree_all_bits_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY);
   const bool is_physical =
@@ -1211,6 +1229,21 @@ static iree_string_view_t loom_low_memory_space_name(
   }
 }
 
+static iree_string_view_t loom_low_spill_slot_space_name(uint8_t space) {
+  switch (space) {
+    case LOOM_LOW_SPILL_SLOT_SPACE_STACK:
+      return IREE_SV("stack");
+    case LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH:
+      return IREE_SV("scratch");
+    case LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE:
+      return IREE_SV("private");
+    case LOOM_LOW_SPILL_SLOT_SPACE_LDS:
+      return IREE_SV("lds");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 static iree_string_view_t loom_low_constraint_kind_name(
     loom_low_constraint_kind_t kind) {
   switch (kind) {
@@ -1435,9 +1468,14 @@ static iree_status_t loom_low_append_manifest_reg_classes(
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder,
         ",\"alloc_unit_bits\":%" PRIu16 ",\"physical_count\":%" PRIu16
-        ",\"alias_set\":%" PRIu16 ",\"spill_class\":%" PRIu16 "}",
+        ",\"alias_set\":%" PRIu16 ",\"spill_class\":%" PRIu16 ",",
         reg_class->alloc_unit_bits, reg_class->physical_count,
         reg_class->alias_set_id, reg_class->spill_class_id));
+    IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+        builder, "spill_slot_space", "spill_slot_space_name",
+        reg_class->spill_slot_space,
+        loom_low_spill_slot_space_name(reg_class->spill_slot_space)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
   }
   return iree_string_builder_append_cstring(builder, "]");
 }

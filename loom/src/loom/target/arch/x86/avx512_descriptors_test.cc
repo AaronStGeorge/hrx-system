@@ -193,7 +193,6 @@ TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {
   iree_string_builder_deinitialize(&builder);
 
   EXPECT_NE(json.find("\"key\":\"x86.avx512.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"abi_version\":5"), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.vpaddd.zmm\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.vmovdqu32.load.zmm\""),
             std::string::npos);

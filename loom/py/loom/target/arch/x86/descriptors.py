@@ -48,6 +48,7 @@ from loom.target.low_descriptors import (
     ResourceKind,
     ScheduleClass,
     ScheduleClassFlag,
+    SpillSlotSpace,
 )
 
 _REG_GPR64 = "x86.gpr64"
@@ -224,9 +225,27 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="X86_AVX512_CORE",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_GPR64, 64, flags=(RegClassFlag.PHYSICAL,), physical_count=16),
-        RegClass(_REG_ZMM, 512, flags=(RegClassFlag.PHYSICAL,), physical_count=32),
-        RegClass(_REG_K, 64, flags=(RegClassFlag.PHYSICAL,), physical_count=8),
+        RegClass(
+            _REG_GPR64,
+            64,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=16,
+        ),
+        RegClass(
+            _REG_ZMM,
+            512,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=32,
+        ),
+        RegClass(
+            _REG_K,
+            64,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=8,
+        ),
     ),
     resources=(
         Resource(_RESOURCE_SCALAR, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
@@ -397,9 +416,27 @@ X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="X86_PACKED_DOT_CORE",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_XMM, 128, flags=(RegClassFlag.PHYSICAL,), physical_count=32),
-        RegClass(_REG_YMM, 256, flags=(RegClassFlag.PHYSICAL,), physical_count=32),
-        RegClass(_REG_ZMM, 512, flags=(RegClassFlag.PHYSICAL,), physical_count=32),
+        RegClass(
+            _REG_XMM,
+            128,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=32,
+        ),
+        RegClass(
+            _REG_YMM,
+            256,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=32,
+        ),
+        RegClass(
+            _REG_ZMM,
+            512,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=32,
+        ),
     ),
     resources=(
         Resource(_RESOURCE_DOT, capacity_per_cycle=1, kind=ResourceKind.VECTOR_ALU),

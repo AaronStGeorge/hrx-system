@@ -102,6 +102,7 @@ void InitializeTestTables(TestTables* tables) {
   tables->reg_classes[0].flags = LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY;
   tables->reg_classes[0].alloc_unit_bits = 32;
   tables->reg_classes[0].spill_class_id = LOOM_LOW_REG_CLASS_NONE;
+  tables->reg_classes[0].spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK;
 
   tables->reg_class_alts[0].reg_class_id = 0;
   tables->reg_class_alts[0].flags = LOOM_LOW_REG_CLASS_ALT_FLAG_PREFERRED;
@@ -849,6 +850,15 @@ TEST(LowDescriptorsTest, RejectsVirtualRegisterClassWithPhysicalCount) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowDescriptorsTest, RejectsRegisterClassWithoutSpillSlotSpace) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_classes[0].spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_UNKNOWN;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorsTest, RejectsPhysicalRegisterClassWithoutPhysicalCount) {
   TestTables tables;
   InitializeTestTables(&tables);
@@ -1074,6 +1084,8 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
   EXPECT_NE(json.find("\"reg_classes\":[{\"ordinal\":0,\"name\":\"test.gpr\""),
             std::string::npos);
   EXPECT_NE(json.find("\"flag_names\":[\"virtual_only\"]"), std::string::npos);
+  EXPECT_NE(json.find("\"spill_slot_space_name\":\"stack\""),
+            std::string::npos);
   EXPECT_NE(json.find("\"kind_name\":\"scalar_alu\""), std::string::npos);
   EXPECT_NE(json.find("\"flag_names\":[\"may_load\"]"), std::string::npos);
   EXPECT_NE(json.find("\"issue_uses\":[{\"resource\":0,\"resource_name\":"

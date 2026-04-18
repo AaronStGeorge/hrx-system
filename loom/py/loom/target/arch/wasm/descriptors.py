@@ -33,6 +33,7 @@ from loom.target.low_descriptors import (
     ResourceKind,
     ScheduleClass,
     ScheduleClassFlag,
+    SpillSlotSpace,
 )
 
 _REG_I32 = "wasm.i32"
@@ -144,11 +145,21 @@ WASM_CORE_SIMD128_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="WASM_CORE_SIMD128",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_I32, 32, flags=(RegClassFlag.VIRTUAL_ONLY,)),
-        RegClass(_REG_I64, 64, flags=(RegClassFlag.VIRTUAL_ONLY,)),
-        RegClass(_REG_F32, 32, flags=(RegClassFlag.VIRTUAL_ONLY,)),
-        RegClass(_REG_F64, 64, flags=(RegClassFlag.VIRTUAL_ONLY,)),
-        RegClass(_REG_V128, 128, flags=(RegClassFlag.VIRTUAL_ONLY,)),
+        RegClass(
+            _REG_I32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_I64, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_F32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_F64, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_V128, 128, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
     ),
     resources=(
         Resource(_RESOURCE_SCALAR, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),

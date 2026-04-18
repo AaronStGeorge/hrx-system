@@ -203,6 +203,7 @@ static const loom_low_reg_class_t kIreeVmCoreRegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = IREE_VM_CORE_STRING_reg_vm_i64,
@@ -212,6 +213,7 @@ static const loom_low_reg_class_t kIreeVmCoreRegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = IREE_VM_CORE_STRING_reg_vm_f32,
@@ -221,6 +223,7 @@ static const loom_low_reg_class_t kIreeVmCoreRegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = IREE_VM_CORE_STRING_reg_vm_f64,
@@ -230,6 +233,7 @@ static const loom_low_reg_class_t kIreeVmCoreRegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = IREE_VM_CORE_STRING_reg_vm_ref,
@@ -240,6 +244,7 @@ static const loom_low_reg_class_t kIreeVmCoreRegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = IREE_VM_CORE_STRING_reg_vm_list,
@@ -250,6 +255,7 @@ static const loom_low_reg_class_t kIreeVmCoreRegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
 };
 

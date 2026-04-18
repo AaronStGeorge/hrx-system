@@ -46,6 +46,7 @@ from loom.target.low_descriptors import (
     ResourceKind,
     ScheduleClass,
     ScheduleClassFlag,
+    SpillSlotSpace,
 )
 
 _REG_SGPR = "amdgpu.sgpr"
@@ -649,9 +650,27 @@ AMDGPU_GFX950_CORE_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="AMDGPU_GFX950_CORE",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_SGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=106),
-        RegClass(_REG_VGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=1024),
-        RegClass(_REG_AGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=256),
+        RegClass(
+            _REG_SGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=106,
+        ),
+        RegClass(
+            _REG_VGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=1024,
+        ),
+        RegClass(
+            _REG_AGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=256,
+        ),
     ),
     resources=(
         Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
@@ -744,8 +763,20 @@ AMDGPU_GFX11_CORE_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="AMDGPU_GFX11_CORE",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_SGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=106),
-        RegClass(_REG_VGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=1024),
+        RegClass(
+            _REG_SGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=106,
+        ),
+        RegClass(
+            _REG_VGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=1024,
+        ),
     ),
     resources=(
         Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
@@ -838,8 +869,20 @@ AMDGPU_GFX12_CORE_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="AMDGPU_GFX12_CORE",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_SGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=106),
-        RegClass(_REG_VGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=1024),
+        RegClass(
+            _REG_SGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=106,
+        ),
+        RegClass(
+            _REG_VGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=1024,
+        ),
     ),
     resources=(
         Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
@@ -932,8 +975,20 @@ AMDGPU_GFX1250_CORE_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="AMDGPU_GFX1250_CORE",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_SGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=106),
-        RegClass(_REG_VGPR, 32, flags=(RegClassFlag.PHYSICAL,), physical_count=1024),
+        RegClass(
+            _REG_SGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=106,
+        ),
+        RegClass(
+            _REG_VGPR,
+            32,
+            SpillSlotSpace.SCRATCH,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=1024,
+        ),
     ),
     resources=(
         Resource(_RESOURCE_SALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),

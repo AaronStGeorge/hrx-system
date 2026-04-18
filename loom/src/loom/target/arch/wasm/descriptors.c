@@ -262,6 +262,7 @@ static const loom_low_reg_class_t kWasmCoreSimd128RegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = WASM_CORE_SIMD128_STRING_reg_wasm_i64,
@@ -271,6 +272,7 @@ static const loom_low_reg_class_t kWasmCoreSimd128RegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = WASM_CORE_SIMD128_STRING_reg_wasm_f32,
@@ -280,6 +282,7 @@ static const loom_low_reg_class_t kWasmCoreSimd128RegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = WASM_CORE_SIMD128_STRING_reg_wasm_f64,
@@ -289,6 +292,7 @@ static const loom_low_reg_class_t kWasmCoreSimd128RegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
     {
         .name_string_offset = WASM_CORE_SIMD128_STRING_reg_wasm_v128,
@@ -298,6 +302,7 @@ static const loom_low_reg_class_t kWasmCoreSimd128RegClasses[] = {
         .physical_count = 0,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE,
     },
 };
 

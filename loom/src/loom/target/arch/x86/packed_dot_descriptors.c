@@ -520,6 +520,7 @@ static const loom_low_reg_class_t kX86PackedDotCoreRegClasses[] = {
         .physical_count = 32,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK,
     },
     {
         .name_string_offset = X86_PACKED_DOT_CORE_STRING_reg_x86_ymm,
@@ -529,6 +530,7 @@ static const loom_low_reg_class_t kX86PackedDotCoreRegClasses[] = {
         .physical_count = 32,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK,
     },
     {
         .name_string_offset = X86_PACKED_DOT_CORE_STRING_reg_x86_zmm,
@@ -538,6 +540,7 @@ static const loom_low_reg_class_t kX86PackedDotCoreRegClasses[] = {
         .physical_count = 32,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK,
     },
 };
 

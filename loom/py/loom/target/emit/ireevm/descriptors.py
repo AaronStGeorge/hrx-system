@@ -32,6 +32,7 @@ from loom.target.low_descriptors import (
     ResourceKind,
     ScheduleClass,
     ScheduleClassFlag,
+    SpillSlotSpace,
 )
 
 _REG_I32 = "vm.i32"
@@ -128,18 +129,28 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
     c_enum_prefix="IREE_VM_CORE",
     generator_version=1,
     reg_classes=(
-        RegClass(_REG_I32, 32, flags=(RegClassFlag.VIRTUAL_ONLY,)),
-        RegClass(_REG_I64, 64, flags=(RegClassFlag.VIRTUAL_ONLY,)),
-        RegClass(_REG_F32, 32, flags=(RegClassFlag.VIRTUAL_ONLY,)),
-        RegClass(_REG_F64, 64, flags=(RegClassFlag.VIRTUAL_ONLY,)),
+        RegClass(
+            _REG_I32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_I64, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_F32, 32, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
+        RegClass(
+            _REG_F64, 64, SpillSlotSpace.PRIVATE, flags=(RegClassFlag.VIRTUAL_ONLY,)
+        ),
         RegClass(
             _REG_REF,
             64,
+            SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.VIRTUAL_ONLY, RegClassFlag.REFERENCE),
         ),
         RegClass(
             _REG_LIST,
             64,
+            SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.VIRTUAL_ONLY, RegClassFlag.REFERENCE),
         ),
     ),

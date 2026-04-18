@@ -638,6 +638,7 @@ def _emit_source(compiled: _CompiledDescriptorSet) -> str:
                 f".physical_count = {reg_class.physical_count},",
                 f".alias_set_id = {reg_class.alias_set_id},",
                 ".spill_class_id = " + ("LOOM_LOW_REG_CLASS_NONE" if reg_class.spill_class is None else str(compiled.reg_class_ids[reg_class.spill_class])) + ",",
+                f".spill_slot_space = {reg_class.spill_slot_space.c_name},",
             ]
             for reg_class in compiled.reg_classes
         ],

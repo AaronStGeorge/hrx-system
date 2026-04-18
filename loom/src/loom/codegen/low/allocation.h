@@ -103,6 +103,8 @@ typedef struct loom_low_allocation_spill_plan_t {
   uint32_t assignment_index;
   // Spill slot ordinal assigned to this interval.
   uint32_t slot_index;
+  // Storage space used by the spill slot.
+  uint8_t slot_space;
   // Slot size in bytes.
   uint32_t byte_size;
   // Required slot alignment in bytes.

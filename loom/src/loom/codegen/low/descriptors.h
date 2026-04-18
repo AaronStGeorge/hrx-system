@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 5u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 6u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -95,6 +95,19 @@ typedef uint16_t loom_low_reg_class_flags_t;
 #define LOOM_LOW_REG_CLASS_FLAG_PHYSICAL ((uint16_t)1u << 1)
 // Register class contains reference-counted or GC-visible references.
 #define LOOM_LOW_REG_CLASS_FLAG_REFERENCE ((uint16_t)1u << 2)
+
+typedef enum loom_low_spill_slot_space_e {
+  // Unknown or uninitialized spill storage space.
+  LOOM_LOW_SPILL_SLOT_SPACE_UNKNOWN = 0,
+  // CPU stack-frame storage.
+  LOOM_LOW_SPILL_SLOT_SPACE_STACK = 1,
+  // GPU per-lane scratch storage.
+  LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH = 2,
+  // Target-private per-invocation storage.
+  LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE = 3,
+  // GPU local data share or workgroup storage.
+  LOOM_LOW_SPILL_SLOT_SPACE_LDS = 4,
+} loom_low_spill_slot_space_t;
 
 typedef enum loom_low_immediate_kind_e {
   // Unknown or uninitialized immediate kind.
@@ -282,6 +295,8 @@ typedef struct loom_low_reg_class_t {
   uint16_t alias_set_id;
   // Register class used for spill/reload values, or LOOM_LOW_REG_CLASS_NONE.
   uint16_t spill_class_id;
+  // Storage space used when values from this class are spilled.
+  uint8_t spill_slot_space;
 } loom_low_reg_class_t;
 
 typedef struct loom_low_reg_class_alt_t {

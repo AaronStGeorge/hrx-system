@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 5
+LOW_DESCRIPTOR_SET_ABI_VERSION = 6
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 
 
@@ -48,6 +48,13 @@ class RegClassFlag(CEnum):
     VIRTUAL_ONLY = "LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY"
     PHYSICAL = "LOOM_LOW_REG_CLASS_FLAG_PHYSICAL"
     REFERENCE = "LOOM_LOW_REG_CLASS_FLAG_REFERENCE"
+
+
+class SpillSlotSpace(CEnum):
+    STACK = "LOOM_LOW_SPILL_SLOT_SPACE_STACK"
+    SCRATCH = "LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH"
+    PRIVATE = "LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE"
+    LDS = "LOOM_LOW_SPILL_SLOT_SPACE_LDS"
 
 
 class ImmediateKind(CEnum):
@@ -144,6 +151,7 @@ class DescriptorFlag(CEnum):
 class RegClass:
     name: str
     alloc_unit_bits: int
+    spill_slot_space: SpillSlotSpace
     flags: tuple[RegClassFlag, ...] = ()
     target_bank_id: int = 0
     physical_count: int = 0

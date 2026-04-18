@@ -27,6 +27,7 @@ from loom.target.arch.x86.descriptors import (
 from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import (
     LOW_DESCRIPTOR_ENCODING_ID_NONE,
+    LOW_DESCRIPTOR_SET_ABI_VERSION,
     DescriptorFlag,
     EnumDomain,
     EnumValue,
@@ -46,7 +47,7 @@ def test_generate_ireevm_core_descriptor_set() -> None:
 
     manifest = json.loads(generated.manifest_json)
     assert manifest["key"] == "iree.vm.core"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 9
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert any(descriptor["key"] == "iree.vm.call.import.i32" for descriptor in manifest["descriptors"])
@@ -82,7 +83,7 @@ def test_generate_wasm_core_simd128_descriptor_set() -> None:
     assert manifest["key"] == "wasm.core.simd128"
     assert manifest["target"] == "wasm"
     assert manifest["feature_namespace"] == "wasm.simd128.v1"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 12
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert any(descriptor["key"] == "wasm.v128.load" for descriptor in manifest["descriptors"])
@@ -102,7 +103,7 @@ def test_generate_amdgpu_gfx950_core_descriptor_set() -> None:
     assert manifest["key"] == "amdgpu.gfx950.core"
     assert manifest["target"] == "amdgpu"
     assert manifest["feature_namespace"] == "amdgpu.gfx950.v1"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 8
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 3
@@ -126,7 +127,7 @@ def test_generate_amdgpu_gfx11_core_descriptor_set() -> None:
     assert manifest["key"] == "amdgpu.gfx11.core"
     assert manifest["target"] == "amdgpu"
     assert manifest["feature_namespace"] == "amdgpu.gfx11.v1"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 10
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 2
@@ -151,7 +152,7 @@ def test_generate_amdgpu_gfx12_core_descriptor_set() -> None:
     assert manifest["key"] == "amdgpu.gfx12.core"
     assert manifest["target"] == "amdgpu"
     assert manifest["feature_namespace"] == "amdgpu.gfx12.v1"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 10
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 2
@@ -177,7 +178,7 @@ def test_generate_amdgpu_gfx1250_core_descriptor_set() -> None:
     assert manifest["key"] == "amdgpu.gfx1250.core"
     assert manifest["target"] == "amdgpu"
     assert manifest["feature_namespace"] == "amdgpu.gfx1250.v1"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 14
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 2
@@ -204,7 +205,7 @@ def test_generate_x86_avx512_core_descriptor_set() -> None:
     assert manifest["key"] == "x86.avx512.core"
     assert manifest["target"] == "x86"
     assert manifest["feature_namespace"] == "x86.avx512.v1"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 7
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 3
@@ -230,7 +231,7 @@ def test_generate_x86_packed_dot_descriptor_set() -> None:
     assert manifest["key"] == "x86.packed_dot.core"
     assert manifest["target"] == "x86"
     assert manifest["feature_namespace"] == "x86.packed_dot.v1"
-    assert manifest["abi_version"] == 5
+    assert manifest["abi_version"] == LOW_DESCRIPTOR_SET_ABI_VERSION
     assert manifest["table_counts"]["descriptors"] >= 53
     assert manifest["table_counts"]["descriptor_refs"] == manifest["table_counts"]["descriptors"]
     assert manifest["table_counts"]["reg_classes"] == 3

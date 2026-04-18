@@ -338,6 +338,7 @@ static const loom_low_reg_class_t kAmdgpuGfx1250CoreRegClasses[] = {
         .physical_count = 106,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH,
     },
     {
         .name_string_offset = AMDGPU_GFX1250_CORE_STRING_reg_amdgpu_vgpr,
@@ -347,6 +348,7 @@ static const loom_low_reg_class_t kAmdgpuGfx1250CoreRegClasses[] = {
         .physical_count = 1024,
         .alias_set_id = 0,
         .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+        .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_SCRATCH,
     },
 };
 

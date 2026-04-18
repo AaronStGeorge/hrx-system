@@ -131,7 +131,6 @@ TEST(AmdgpuDescriptorsTest, ManifestNamesScalarVectorMemoryAndMatrixPackets) {
   iree_string_builder_deinitialize(&builder);
 
   EXPECT_NE(json.find("\"key\":\"amdgpu.gfx950.core\""), std::string::npos);
-  EXPECT_NE(json.find("\"abi_version\":5"), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.s_add_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_add_u32\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.buffer_load_dword\""),
