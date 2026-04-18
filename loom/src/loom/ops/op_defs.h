@@ -611,6 +611,10 @@ typedef uint8_t loom_result_flags_t;
 
 enum loom_attr_flag_bits_e {
   LOOM_ATTR_OPTIONAL = 1u << 0,
+  // Enum values are ordinal-preserving across bytecode and generic
+  // verification. Op-specific verifiers still own sentinel and consumer
+  // support checks.
+  LOOM_ATTR_OPEN_ENUM = 1u << 1,
 };
 typedef uint8_t loom_attr_flags_t;
 

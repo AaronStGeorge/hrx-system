@@ -149,7 +149,7 @@ BYTECODE_IR_KIND_BY_TYPE_KIND: dict[int, TypeKind] = {
 
 # File magic and version.
 MAGIC = b"LOOM"
-FORMAT_VERSION = 10
+FORMAT_VERSION = 11
 PRODUCER = "loom-py"
 
 SYMBOL_FLAG_PUBLIC = 0x0001
@@ -343,7 +343,7 @@ class BytecodeWriter:
             if key in shared_attr_keys:
                 continue
             self._ctx.intern_string(key)
-            self._number_attr_value(value)
+            self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
 
         # Body region.
         if op.regions:
@@ -389,7 +389,7 @@ class BytecodeWriter:
             if key == symbol_field:
                 continue
             self._ctx.intern_string(key)
-            self._number_attr_value(value)
+            self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
 
     def _number_record_op(self, op: Operation) -> None:
         """Number all entities in an attr-only record symbol-defining op."""
@@ -401,7 +401,7 @@ class BytecodeWriter:
             if key == symbol_field:
                 continue
             self._ctx.intern_string(key)
-            self._number_attr_value(value)
+            self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
 
     def _symbol_field_for_op(self, op: Operation) -> str:
         """Return the generated symbol identity attr field for ``op``."""
@@ -506,7 +506,7 @@ class BytecodeWriter:
         # Attributes.
         for key, value in op.attributes.items():
             self._ctx.intern_string(key)
-            self._number_attr_value(value)
+            self._number_attr_value(value, self._attr_def_for_op_attr(op.name, key))
 
         # Regions.
         for region in op.regions:
@@ -543,8 +543,10 @@ class BytecodeWriter:
         # Intern the parent AFTER sub-types (ensures sub-types have lower IDs).
         self._ctx.intern_type(ir_type)
 
-    def _number_attr_value(self, value: Any) -> None:
+    def _number_attr_value(self, value: Any, attr_def: Any | None = None) -> None:
         """Intern strings referenced by attribute values."""
+        if getattr(attr_def, "attr_type", None) == "enum":
+            return
         if isinstance(value, str):
             self._ctx.intern_string(value)
         elif isinstance(value, _IR_TYPE_CLASSES):
@@ -1040,10 +1042,33 @@ class BytecodeWriter:
             buf.write_varint(self._ctx.strings[value])
             return
         if attr_type == "enum":
-            if not isinstance(value, str):
-                raise TypeError(f"enum attribute value must be a string, got {value!r}")
+            enum_def = getattr(attr_def, "enum_def", None)
+            if isinstance(value, str):
+                for enum_case in getattr(enum_def, "cases", ()):
+                    if enum_case.keyword == value:
+                        value = enum_case.value
+                        break
+                else:
+                    raise ValueError(
+                        f"enum attribute value {value!r} is not declared by "
+                        f"{getattr(enum_def, 'name', 'enum')}"
+                    )
+            if type(value) is not int or value < 0 or value > 0xFF:
+                raise TypeError(
+                    "enum attribute value must be a keyword or uint8 ordinal, "
+                    f"got {value!r}"
+                )
+            if not getattr(attr_def, "open_enum", False):
+                known_values = {
+                    enum_case.value for enum_case in getattr(enum_def, "cases", ())
+                }
+                if value not in known_values:
+                    raise ValueError(
+                        f"enum attribute ordinal {value} is not declared by "
+                        f"{getattr(enum_def, 'name', 'enum')}"
+                    )
             buf.write_u8(ATTR_KIND_ENUM)
-            buf.write_varint(self._ctx.strings[value])
+            buf.write_u8(value)
             return
         if attr_type == "type":
             if not isinstance(value, _IR_TYPE_CLASSES):

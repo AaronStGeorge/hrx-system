@@ -700,8 +700,7 @@ static iree_status_t loom_bytecode_reader_skip_attr_value(
           loom_bytecode_reader_read_u64_le(reader, cursor, &bits));
       return iree_ok_status();
     }
-    case LOOM_BYTECODE_ATTR_STRING:
-    case LOOM_BYTECODE_ATTR_ENUM: {
+    case LOOM_BYTECODE_ATTR_STRING: {
       uint64_t string_id = 0;
       uint64_t offset = loom_bytecode_reader_cursor_absolute_position(cursor);
       IREE_RETURN_IF_ERROR(
@@ -710,6 +709,10 @@ static iree_status_t loom_bytecode_reader_skip_attr_value(
       iree_string_view_t unused = {0};
       return loom_bytecode_reader_validate_string_ref(
           reader, string_id, IREE_SV("attribute_string"), offset, &unused);
+    }
+    case LOOM_BYTECODE_ATTR_ENUM: {
+      uint8_t unused = 0;
+      return loom_bytecode_reader_read_u8(reader, cursor, &unused);
     }
     case LOOM_BYTECODE_ATTR_BOOL: {
       uint8_t value = 0;
@@ -921,6 +924,7 @@ static iree_status_t loom_bytecode_reader_read_attr_value(
     loom_bytecode_body_reader_t* body_reader,
     const loom_attr_descriptor_t* descriptor, uint8_t kind,
     loom_attribute_t* out_attr) {
+  (void)descriptor;
   switch (kind) {
     case LOOM_BYTECODE_ATTR_I64: {
       int64_t value = 0;
@@ -968,34 +972,12 @@ static iree_status_t loom_bytecode_reader_read_attr_value(
       return iree_ok_status();
     }
     case LOOM_BYTECODE_ATTR_ENUM: {
-      uint64_t string_offset =
-          loom_bytecode_reader_cursor_absolute_position(cursor);
-      uint64_t string_id = 0;
+      uint8_t value = 0;
       IREE_RETURN_IF_ERROR(
-          loom_bytecode_reader_read_uvarint(reader, cursor, &string_id));
+          loom_bytecode_reader_read_u8(reader, cursor, &value));
       if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
-      iree_string_view_t case_name = {0};
-      IREE_RETURN_IF_ERROR(loom_bytecode_reader_validate_string_ref(
-          reader, string_id, IREE_SV("enum_case"), string_offset, &case_name));
-      if (loom_bytecode_reader_has_errors(reader)) return iree_ok_status();
-      if (!descriptor || !descriptor->enum_case_names) {
-        return loom_bytecode_reader_emit_invalid_field(
-            reader, cursor->range_name, IREE_SV("attribute"), 0,
-            IREE_SV("enum_case"), string_offset,
-            IREE_SV("enum attribute has no descriptor case table"));
-      }
-      for (uint8_t i = 0; i < descriptor->enum_case_count; ++i) {
-        if (!descriptor->enum_case_names[i]) continue;
-        if (iree_string_view_equal(
-                case_name, loom_bstring_view(descriptor->enum_case_names[i]))) {
-          *out_attr = loom_attr_enum(i);
-          return iree_ok_status();
-        }
-      }
-      return loom_bytecode_reader_emit_invalid_field(
-          reader, cursor->range_name, IREE_SV("attribute"), 0,
-          IREE_SV("enum_case"), string_offset,
-          IREE_SV("enum case is not valid for this attribute"));
+      *out_attr = loom_attr_enum(value);
+      return iree_ok_status();
     }
     case LOOM_BYTECODE_ATTR_I64_ARRAY: {
       uint64_t count_offset =

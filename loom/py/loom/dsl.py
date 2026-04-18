@@ -557,6 +557,8 @@ class AttrDef:
     enum_def: For enum attrs, the EnumDef describing valid values.
         Required when attr_type is "enum".
     optional: If True, this attribute may be absent.
+    open_enum: If True, generic verification preserves future raw enum
+        ordinals and leaves selected/supported-case policy to the op verifier.
     """
 
     name: str
@@ -566,6 +568,7 @@ class AttrDef:
     enum_def: EnumDef | None = None
     optional: bool = False
     symbol_ref: SymbolReference | None = None
+    open_enum: bool = False
 
     def __post_init__(self) -> None:
         if self.attr_type not in _VALID_ATTR_TYPES:
@@ -580,6 +583,10 @@ class AttrDef:
         if self.attr_type == ATTR_TYPE_FLAGS and self.enum_def is None:
             raise ValueError(
                 f"AttrDef '{self.name}': attr_type='flags' requires enum_def"
+            )
+        if self.open_enum and self.attr_type != ATTR_TYPE_ENUM:
+            raise ValueError(
+                f"AttrDef '{self.name}': open_enum requires attr_type='enum'"
             )
         if self.symbol_ref is not None and self.attr_type != ATTR_TYPE_SYMBOL:
             raise ValueError(

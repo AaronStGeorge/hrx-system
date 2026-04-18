@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_registry.h"
+#include "loom/ops/target/ops.h"
 #include "loom/testing/diagnostic_matchers.h"
 
 namespace loom {
@@ -43,22 +44,7 @@ class TargetVerifyTest : public ::testing::Test {
   loom_verify_result_t VerifySource(const char* source,
                                     DiagnosticCapture* verify_capture) {
     const char* filename = "target_verify_test.loom";
-    DiagnosticCapture parse_capture;
-    loom_text_parse_options_t parse_options = {};
-    parse_options.diagnostic_sink = parse_capture.sink();
-    parse_options.max_errors = 20;
-
-    loom_module_t* module = nullptr;
-    IREE_EXPECT_OK(loom_text_parse(iree_make_cstring_view(source),
-                                   iree_make_cstring_view(filename), &context_,
-                                   &block_pool_, &parse_options, &module));
-    if (!parse_capture.diagnostics.empty()) {
-      ADD_FAILURE() << "expected parser success, got "
-                    << parse_capture.diagnostics.size() << " diagnostic(s)";
-      if (module) loom_module_free(module);
-      return {};
-    }
-    EXPECT_NE(module, nullptr);
+    loom_module_t* module = ParseSource(source, filename);
     if (!module) return {};
 
     loom_source_entry_t source_entries[] = {{
@@ -82,6 +68,34 @@ class TargetVerifyTest : public ::testing::Test {
     IREE_EXPECT_OK(loom_verify_module(module, &verify_options, &result));
     loom_module_free(module);
     return result;
+  }
+
+  loom_module_t* ParseSource(const char* source, const char* filename) {
+    DiagnosticCapture parse_capture;
+    loom_text_parse_options_t parse_options = {};
+    parse_options.diagnostic_sink = parse_capture.sink();
+    parse_options.max_errors = 20;
+
+    loom_module_t* module = nullptr;
+    IREE_EXPECT_OK(loom_text_parse(iree_make_cstring_view(source),
+                                   iree_make_cstring_view(filename), &context_,
+                                   &block_pool_, &parse_options, &module));
+    if (!parse_capture.diagnostics.empty()) {
+      ADD_FAILURE() << "expected parser success, got "
+                    << parse_capture.diagnostics.size() << " diagnostic(s)";
+      if (module) loom_module_free(module);
+      return nullptr;
+    }
+    EXPECT_NE(module, nullptr);
+    return module;
+  }
+
+  loom_op_t* FindFirstMutableOp(loom_module_t* module, loom_op_kind_t kind) {
+    loom_op_t* op = nullptr;
+    loom_block_for_each_op(loom_module_block(module), op) {
+      if (op->kind == kind) return op;
+    }
+    return nullptr;
   }
 
   loom_source_id_t FindContextSourceId(const char* filename) const {
@@ -160,6 +174,35 @@ TEST_F(TargetVerifyTest, CpuAmdgpuAndWasmRecordsVerify) {
   loom_verify_result_t result = VerifySource(kValidTargetRecords, &capture);
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(TargetVerifyTest, FutureTargetEnumOrdinalsVerifyAsOpenEnums) {
+  loom_module_t* module =
+      ParseSource(kValidTargetRecords, "target_verify_test.loom");
+  ASSERT_NE(module, nullptr);
+  loom_op_t* snapshot = FindFirstMutableOp(module, LOOM_OP_TARGET_SNAPSHOT);
+  ASSERT_NE(snapshot, nullptr);
+  loom_op_attrs(snapshot)[loom_target_snapshot_codegen_format_ATTR_INDEX] =
+      loom_attr_enum(250);
+  loom_op_attrs(snapshot)[loom_target_snapshot_artifact_format_ATTR_INDEX] =
+      loom_attr_enum(251);
+  loom_op_t* export_op = FindFirstMutableOp(module, LOOM_OP_TARGET_EXPORT);
+  ASSERT_NE(export_op, nullptr);
+  loom_op_attrs(export_op)[loom_target_export_abi_ATTR_INDEX] =
+      loom_attr_enum(252);
+  loom_op_attrs(export_op)[loom_target_export_linkage_ATTR_INDEX] =
+      loom_attr_enum(253);
+
+  DiagnosticCapture capture;
+  loom_verify_options_t verify_options = {};
+  verify_options.sink = capture.sink();
+  verify_options.max_errors = 20;
+  loom_verify_result_t result = {};
+  IREE_ASSERT_OK(loom_verify_module(module, &verify_options, &result));
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+  loom_module_free(module);
 }
 
 TEST_F(TargetVerifyTest, SnapshotRejectsInvalidBitwidth) {

@@ -1729,7 +1729,8 @@ static void loom_verify_type_constraints(loom_verify_state_t* state,
             state, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 5), params,
             IREE_ARRAYSIZE(params));
       }
-      if (attrs[i].kind == LOOM_ATTR_ENUM && descriptor->enum_case_count > 0) {
+      if (attrs[i].kind == LOOM_ATTR_ENUM && descriptor->enum_case_count > 0 &&
+          (descriptor->flags & LOOM_ATTR_OPEN_ENUM) == 0) {
         uint8_t case_index = (uint8_t)attrs[i].raw;
         if (case_index >= descriptor->enum_case_count) {
           loom_diagnostic_param_t params[] = {

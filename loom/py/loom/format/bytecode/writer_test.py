@@ -13,6 +13,7 @@ is the oracle for the C reader — these tests must be exhaustive.
 """
 
 import struct
+from dataclasses import replace
 from typing import TypeVar
 
 import pytest
@@ -27,6 +28,7 @@ from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.kernel import ALL_KERNEL_OPS, ALL_KERNEL_TYPES
 from loom.dialect.low import ALL_LOW_OPS
 from loom.dialect.scalar import ALL_SCALAR_OPS
+from loom.dialect.target import ALL_TARGET_OPS
 from loom.dialect.test import ALL_TEST_OPS
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dsl import (
@@ -1480,6 +1482,86 @@ class TestCrossFormatRoundTrip:
         assert lhs_symbol.op.attributes["semantic_type"] == I32
         assert lhs_symbol.op.attributes["abi_type"] == RegisterType("vm.i32")
         assert _roundtrip_text_through_bytecode(text, include_low=True) == text
+
+    def test_enum_future_ordinal_survives_bytecode(self) -> None:
+        text = (
+            "target.snapshot @future {codegen_format = llvmir, "
+            'target_triple = "future", data_layout = "", '
+            'artifact_format = elf, target_cpu = "", '
+            'target_features = "", default_pointer_bitwidth = 64, '
+            "index_bitwidth = 64, offset_bitwidth = 64, "
+            "memory_space_generic = 0, memory_space_global = 0, "
+            "memory_space_workgroup = 0, memory_space_constant = 0, "
+            "memory_space_private = 0, memory_space_host = 0, "
+            "memory_space_descriptor = 0}\n"
+        )
+        parser = Parser()
+        parser.register_ops(ALL_TARGET_OPS)
+        module = parser.parse(text)
+        snapshot_op = module.symbols[0].op
+        assert snapshot_op is not None
+        module.symbols[0].op = replace(
+            snapshot_op,
+            attributes={
+                **snapshot_op.attributes,
+                "codegen_format": 250,
+                "artifact_format": 251,
+            },
+        )
+
+        loaded = read_module(write_module(module))
+        loaded_snapshot = loaded.symbols[0].op
+        assert loaded_snapshot is not None
+        assert loaded_snapshot.attributes["codegen_format"] == 250
+        assert loaded_snapshot.attributes["artifact_format"] == 251
+
+    def test_closed_enum_future_ordinal_fails_loudly(self) -> None:
+        module = Module(name="closed_enum")
+        lhs = module.add_value(Value(name="lhs", type=I32))
+        rhs = module.add_value(Value(name="rhs", type=I32))
+        cmp_result = module.add_value(Value(name="cmp", type=I32))
+        cmp_op = Operation(
+            name="test.cmp",
+            operands=[lhs, rhs],
+            results=[cmp_result],
+            attributes={"predicate": 250},
+        )
+        yield_op = Operation(name="test.yield", operands=[cmp_result])
+        func_op = Operation(
+            name="test.func",
+            attributes={"callee": "f"},
+            regions=[
+                Region(blocks=[Block(arg_ids=[lhs, rhs], ops=[cmp_op, yield_op])])
+            ],
+        )
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+
+        with pytest.raises(ValueError, match="enum attribute ordinal 250"):
+            write_module(module)
+
+    def test_enum_bool_ordinal_fails_loudly(self) -> None:
+        module = Module(name="enum_bool")
+        lhs = module.add_value(Value(name="lhs", type=I32))
+        rhs = module.add_value(Value(name="rhs", type=I32))
+        cmp_result = module.add_value(Value(name="cmp", type=I32))
+        cmp_op = Operation(
+            name="test.cmp",
+            operands=[lhs, rhs],
+            results=[cmp_result],
+            attributes={"predicate": True},
+        )
+        yield_op = Operation(name="test.yield", operands=[cmp_result])
+        func_op = Operation(
+            name="test.func",
+            attributes={"callee": "f"},
+            regions=[
+                Region(blocks=[Block(arg_ids=[lhs, rhs], ops=[cmp_op, yield_op])])
+            ],
+        )
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+
+        with pytest.raises(TypeError, match="uint8 ordinal"):
+            write_module(module)
 
     def test_symbol_without_bytecode_payload_kind_fails_loud(self) -> None:
         module = Module()

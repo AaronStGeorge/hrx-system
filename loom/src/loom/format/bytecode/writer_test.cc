@@ -1045,6 +1045,49 @@ TEST_F(WriterTest, NonSeekableStreamFails) {
   loom_module_free(module);
 }
 
+TEST_F(WriterTest, ClosedEnumAttributeRejectsFutureOrdinal) {
+  loom_module_t* module = CreateModule("closed_enum");
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  IREE_ASSERT_OK(loom_module_intern_type(module, i32_type, &i32_type));
+
+  loom_builder_t module_builder;
+  loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                          &module_builder);
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_intern_string(&module_builder, IREE_SV("f"), &name_id));
+  uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+  loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+  loom_op_t* func_op = nullptr;
+  IREE_ASSERT_OK(loom_test_func_build(
+      &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, &i32_type, 1,
+      &i32_type, 1, /*tied_results=*/nullptr, 0, /*predicates=*/nullptr, 0,
+      LOOM_LOCATION_UNKNOWN, &func_op));
+
+  loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+  uint16_t arg_count = 0;
+  const loom_value_id_t* arg_ids =
+      loom_func_like_arg_ids(func_like, &arg_count);
+  ASSERT_EQ(arg_count, 1);
+  loom_builder_t body_builder;
+  loom_builder_initialize(
+      module, &module->arena,
+      loom_region_entry_block(loom_func_like_body(func_like)), &body_builder);
+  loom_op_t* cmp_op = nullptr;
+  IREE_ASSERT_OK(loom_test_cmp_build(&body_builder, LOOM_TEST_CMP_PREDICATE_EQ,
+                                     arg_ids[0], arg_ids[0], i32_type, i32_type,
+                                     LOOM_LOCATION_UNKNOWN, &cmp_op));
+  loom_op_attrs(cmp_op)[0] = loom_attr_enum(250);
+  loom_value_id_t result_id = loom_test_cmp_result(cmp_op);
+  loom_op_t* yield_op = nullptr;
+  IREE_ASSERT_OK(loom_test_yield_build(&body_builder, &result_id, 1,
+                                       LOOM_LOCATION_UNKNOWN, &yield_op));
+
+  ExpectWriteModuleStatus(IREE_STATUS_INVALID_ARGUMENT, module);
+  loom_module_free(module);
+}
+
 TEST_F(WriterTest, RankZeroVectorTypeFails) {
   loom_module_t* module = CreateModule("test");
 

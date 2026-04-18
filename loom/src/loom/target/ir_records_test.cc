@@ -269,5 +269,33 @@ TEST_F(TargetIrRecordsTest, CarriesFutureNonzeroExportAbiOrdinal) {
   loom_module_free(module);
 }
 
+TEST_F(TargetIrRecordsTest, CarriesFutureNonzeroSnapshotEnumOrdinals) {
+  const char source[] =
+      "target.snapshot @future_snapshot {codegen_format = llvmir, "
+      "target_triple = \"future\", data_layout = \"\", artifact_format = elf, "
+      "target_cpu = \"future\", target_features = \"\", "
+      "default_pointer_bitwidth = 64, index_bitwidth = 64, "
+      "offset_bitwidth = 64, memory_space_generic = 0, "
+      "memory_space_global = 0, memory_space_workgroup = 0, "
+      "memory_space_constant = 0, memory_space_private = 0, "
+      "memory_space_host = 0, memory_space_descriptor = 0}\n";
+  loom_module_t* module = ParseSource(source);
+  ASSERT_NE(module, nullptr);
+  loom_op_t* snapshot_op = FindFirstMutableOp(module, LOOM_OP_TARGET_SNAPSHOT);
+  ASSERT_NE(snapshot_op, nullptr);
+  loom_op_attrs(snapshot_op)[loom_target_snapshot_codegen_format_ATTR_INDEX] =
+      loom_attr_enum(249);
+  loom_op_attrs(snapshot_op)[loom_target_snapshot_artifact_format_ATTR_INDEX] =
+      loom_attr_enum(250);
+
+  loom_target_snapshot_t snapshot = {};
+  IREE_ASSERT_OK(
+      loom_target_ir_snapshot_from_op(module, snapshot_op, &snapshot));
+  EXPECT_EQ((uint32_t)snapshot.codegen_format, 249u);
+  EXPECT_EQ((uint32_t)snapshot.artifact_format, 250u);
+
+  loom_module_free(module);
+}
+
 }  // namespace
 }  // namespace loom

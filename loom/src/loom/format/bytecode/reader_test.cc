@@ -20,6 +20,7 @@
 #include "loom/format/bytecode/writer.h"
 #include "loom/ir/module.h"
 #include "loom/ops/global/ops.h"
+#include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/testing/context.h"
 
@@ -129,6 +130,37 @@ class ReaderTest : public ::testing::Test {
   loom_module_t* CreateFunctionModule() {
     loom_module_t* module = CreateModule("reader_func");
     AddSimpleFunction(module, "f");
+    return module;
+  }
+
+  loom_module_t* CreateTargetSnapshotWithFutureEnumOrdinals() {
+    loom_module_t* module = CreateModule("reader_future_target_enum");
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("future"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t symbol = {.module_id = 0, .symbol_id = symbol_id};
+    loom_string_id_t target_triple = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("future"),
+                                             &target_triple));
+    loom_string_id_t empty = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, iree_string_view_empty(), &empty));
+    loom_op_t* snapshot_op = nullptr;
+    IREE_CHECK_OK(loom_target_snapshot_build(
+        &builder, symbol, LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_LLVMIR,
+        target_triple, empty, LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_ELF, empty,
+        empty, 64, 64, 64, 0, 0, 0, 0, 0, 0, 0, LOOM_LOCATION_UNKNOWN,
+        &snapshot_op));
+    loom_op_attrs(snapshot_op)[loom_target_snapshot_codegen_format_ATTR_INDEX] =
+        loom_attr_enum(250);
+    loom_op_attrs(
+        snapshot_op)[loom_target_snapshot_artifact_format_ATTR_INDEX] =
+        loom_attr_enum(251);
     return module;
   }
 
@@ -1337,6 +1369,33 @@ TEST_F(ReaderTest, ReadsFunctionBodyModule) {
   EXPECT_EQ(loom_test_addi_lhs(body_op), loom_test_addi_rhs(body_op));
   ASSERT_NE(entry->last_op, nullptr);
   EXPECT_TRUE(loom_test_yield_isa(entry->last_op));
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, EnumAttributesPreserveFutureOrdinals) {
+  loom_module_t* module = CreateTargetSnapshotWithFutureEnumOrdinals();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids, /*verify_module=*/true);
+
+  EXPECT_EQ(result.error_count, 0u) << ::testing::PrintToString(error_ids);
+  EXPECT_TRUE(error_ids.empty()) << ::testing::PrintToString(error_ids);
+  if (!read_module) {
+    loom_module_free(module);
+    FAIL() << ::testing::PrintToString(error_ids);
+  }
+  ASSERT_EQ(read_module->symbols.count, 1u);
+
+  loom_op_t* read_snapshot = read_module->symbols.entries[0].defining_op;
+  ASSERT_NE(read_snapshot, nullptr);
+  ASSERT_TRUE(loom_target_snapshot_isa(read_snapshot));
+  EXPECT_EQ(loom_target_snapshot_codegen_format(read_snapshot), 250u);
+  EXPECT_EQ(loom_target_snapshot_artifact_format(read_snapshot), 251u);
 
   loom_module_free(read_module);
   loom_module_free(module);

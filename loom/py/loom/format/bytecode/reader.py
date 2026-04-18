@@ -21,6 +21,7 @@ from typing import Any, ClassVar, cast
 
 from loom.format.bytecode.encoding import decode_signed_varint, decode_varint
 from loom.format.bytecode.op_decls import (
+    attr_def_for_op,
     build_op_decl_map,
     func_like_interface_for_op,
     symbol_def_for_op,
@@ -856,6 +857,7 @@ class BytecodeReader:
                     payload_attr_count,
                     module,
                     signature_value_map,
+                    op_name,
                 )
 
                 has_body = sym_data[offset]
@@ -971,7 +973,7 @@ class BytecodeReader:
 
                 attr_count, offset = decode_varint(sym_data, offset)
                 op_attrs, offset = self._read_op_attr_entries(
-                    sym_data, offset, attr_count, module, local_value_map
+                    sym_data, offset, attr_count, module, local_value_map, op_name
                 )
                 symbol_field = self._symbol_field_for_op(op_name)
                 op_attrs = {symbol_field: name, **op_attrs}
@@ -1009,7 +1011,7 @@ class BytecodeReader:
 
                 attr_count, offset = decode_varint(sym_data, offset)
                 op_attrs, offset = self._read_op_attr_entries(
-                    sym_data, offset, attr_count, module, None
+                    sym_data, offset, attr_count, module, None, op_name
                 )
                 symbol_field = self._symbol_field_for_op(op_name)
                 op_attrs = {symbol_field: name, **op_attrs}
@@ -1229,7 +1231,7 @@ class BytecodeReader:
         # Attributes.
         attr_count, offset = decode_varint(data, offset)
         attributes, offset = self._read_op_attr_entries(
-            data, offset, attr_count, module, value_map
+            data, offset, attr_count, module, value_map, op_name
         )
 
         # Regions.
@@ -1280,8 +1282,7 @@ class BytecodeReader:
             case 3:  # BOOL
                 return bool(data[offset]), offset + 1
             case 4:  # ENUM
-                string_id, offset = decode_varint(data, offset)
-                return self._strings[string_id], offset
+                return data[offset], offset + 1
             case 5:  # I64_ARRAY
                 count, offset = decode_varint(data, offset)
                 values = []
@@ -1354,6 +1355,7 @@ class BytecodeReader:
         count: int,
         module: Module | None = None,
         value_map: list[int] | None = None,
+        op_name: str | None = None,
     ) -> tuple[dict[str, Any], int]:
         """Read op attribute entries, preserving payload order."""
         attributes: dict[str, Any] = {}
@@ -1368,8 +1370,23 @@ class BytecodeReader:
             if key in attributes:
                 raise BytecodeError(f"duplicate op attr key: {key!r}")
             value, offset = self._read_attr_value(data, offset, module, value_map)
+            attr_def = self._attr_def_for_op_attr(op_name, key) if op_name else None
+            if getattr(attr_def, "attr_type", None) == "enum":
+                value = self._enum_value_for_attr(attr_def, value)
             attributes[key] = value
         return attributes, offset
+
+    def _attr_def_for_op_attr(self, op_name: str, attr_name: str) -> Any | None:
+        """Return generated attr metadata when the reader knows the op."""
+        return attr_def_for_op(self._op_decls_by_name, op_name, attr_name)
+
+    def _enum_value_for_attr(self, attr_def: Any, value: int) -> str | int:
+        """Map known enum ordinals back to keywords and preserve future ordinals."""
+        enum_def = getattr(attr_def, "enum_def", None)
+        for enum_case in getattr(enum_def, "cases", ()):
+            if enum_case.value == value:
+                return cast(str, enum_case.keyword)
+        return value
 
     # Predicate kind byte → name mapping (inverse of writer).
     _PRED_KIND_NAMES: ClassVar[list[str]] = [

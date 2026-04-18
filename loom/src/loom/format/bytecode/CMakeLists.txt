@@ -106,6 +106,7 @@ loom_cc_test(
     iree::io::stream
     loom::src::loom::ir
     loom::src::loom::ops::global
+    loom::src::loom::ops::target
     loom::src::loom::ops::test
     loom::src::loom::testing::context
     iree::testing::gtest

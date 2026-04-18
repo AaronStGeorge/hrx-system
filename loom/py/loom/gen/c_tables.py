@@ -2665,7 +2665,12 @@ def generate_tables_c(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> 
             if attr_def.attr_type not in ATTR_KIND_MAP:
                 raise ValueError(f"attr {attr_def.name!r} on {op.name!r} has unknown attr_type {attr_def.attr_type!r} with no C mapping")
             attr_kind = ATTR_KIND_MAP[attr_def.attr_type]
-            flags = "LOOM_ATTR_OPTIONAL" if attr_def.optional else "0"
+            flag_names = []
+            if attr_def.optional:
+                flag_names.append("LOOM_ATTR_OPTIONAL")
+            if attr_def.open_enum:
+                flag_names.append("LOOM_ATTR_OPEN_ENUM")
+            flags = " | ".join(flag_names) if flag_names else "0"
             if attr_def.attr_type == "enum" and attr_def.enum_def:
                 shared = shared_enums.get(id(attr_def.enum_def))
                 if shared:
