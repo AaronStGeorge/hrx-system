@@ -90,6 +90,8 @@ struct TestTables {
   loom_low_schedule_class_t schedule_classes[2];
   loom_low_issue_use_t issue_uses[1];
   loom_low_resource_t resources[1];
+  loom_low_hazard_t hazards[1];
+  loom_low_pressure_delta_t pressure_deltas[1];
   uint64_t feature_mask_words[1];
   loom_low_descriptor_set_t set;
 };
@@ -154,6 +156,15 @@ void InitializeTestTables(TestTables* tables) {
   tables->issue_uses[0].resource_id = 0;
   tables->issue_uses[0].cycles = 1;
   tables->issue_uses[0].units = 1;
+
+  tables->hazards[0].kind = LOOM_LOW_HAZARD_KIND_MIN_DISTANCE;
+  tables->hazards[0].resource_or_counter_id = 0;
+  tables->hazards[0].producer_stage = 1;
+  tables->hazards[0].consumer_stage = 3;
+  tables->hazards[0].distance = 2;
+
+  tables->pressure_deltas[0].reg_class_id = 0;
+  tables->pressure_deltas[0].delta = -1;
 
   tables->schedule_classes[0].name_string_offset =
       TEST_STRING_OFFSET(schedule_const);
@@ -233,6 +244,8 @@ void InitializeTestTables(TestTables* tables) {
   tables->set.issue_use_count = IREE_ARRAYSIZE(tables->issue_uses);
   tables->set.resources = tables->resources;
   tables->set.resource_count = IREE_ARRAYSIZE(tables->resources);
+  tables->set.hazards = tables->hazards;
+  tables->set.pressure_deltas = tables->pressure_deltas;
   tables->set.feature_mask_words = tables->feature_mask_words;
   tables->set.feature_mask_word_count =
       IREE_ARRAYSIZE(tables->feature_mask_words);
@@ -911,6 +924,12 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
   tables.operands[3].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
   tables.effects[0].flags = LOOM_LOW_EFFECT_FLAG_DEPENDENCY;
   tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
+  tables.schedule_classes[1].hazard_start = 0;
+  tables.schedule_classes[1].hazard_count = 1;
+  tables.schedule_classes[1].pressure_delta_start = 0;
+  tables.schedule_classes[1].pressure_delta_count = 1;
+  tables.set.hazard_count = 1;
+  tables.set.pressure_delta_count = 1;
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -932,6 +951,15 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
   EXPECT_NE(json.find("\"flag_names\":[\"may_load\"]"), std::string::npos);
   EXPECT_NE(json.find("\"issue_uses\":[{\"resource\":0,\"resource_name\":"
                       "\"test.alu\",\"cycles\":1,\"units\":1"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"hazard_rows\":[{\"index\":0,\"kind\":1,"
+                      "\"kind_name\":\"min_distance\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"resource_or_counter\":0,\"producer_stage\":1,"
+                      "\"consumer_stage\":3,\"distance\":2"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"pressure_delta_rows\":[{\"index\":0,\"reg_class\":0,"
+                      "\"reg_class_name\":\"test.gpr\",\"delta\":-1}]"),
             std::string::npos);
   EXPECT_NE(json.find("\"field\":\"lhs\",\"role\":2,\"role_name\":\"operand\""),
             std::string::npos);

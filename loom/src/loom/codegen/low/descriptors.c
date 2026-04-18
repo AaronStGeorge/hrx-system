@@ -1171,6 +1171,22 @@ static iree_string_view_t loom_low_resource_kind_name(
   }
 }
 
+static iree_string_view_t loom_low_hazard_kind_name(
+    loom_low_hazard_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_HAZARD_KIND_MIN_DISTANCE:
+      return IREE_SV("min_distance");
+    case LOOM_LOW_HAZARD_KIND_WAIT_COUNTER:
+      return IREE_SV("wait_counter");
+    case LOOM_LOW_HAZARD_KIND_BYPASS:
+      return IREE_SV("bypass");
+    case LOOM_LOW_HAZARD_KIND_FUSION:
+      return IREE_SV("fusion");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 typedef struct loom_low_manifest_flag_name_t {
   uint16_t bit;
   const char* name;
@@ -1363,6 +1379,54 @@ static iree_status_t loom_low_append_manifest_issue_uses(
   return iree_string_builder_append_cstring(builder, "]");
 }
 
+static iree_status_t loom_low_append_manifest_hazard_rows(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_schedule_class_t* schedule) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ",\"hazard_rows\":["));
+  for (uint16_t i = 0; i < schedule->hazard_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_hazard_t* hazard =
+        &descriptor_set->hazards[schedule->hazard_start + i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "{\"index\":%" PRIu16 ",", i));
+    IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+        builder, "kind", "kind_name", hazard->kind,
+        loom_low_hazard_kind_name(hazard->kind)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        ",\"resource_or_counter\":%" PRIu16 ",\"producer_stage\":%" PRIu16
+        ",\"consumer_stage\":%" PRIu16 ",\"distance\":%" PRIu16
+        ",\"flags\":%" PRIu16 "}",
+        hazard->resource_or_counter_id, hazard->producer_stage,
+        hazard->consumer_stage, hazard->distance, hazard->flags));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
+static iree_status_t loom_low_append_manifest_pressure_delta_rows(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_schedule_class_t* schedule) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+      builder, ",\"pressure_delta_rows\":["));
+  for (uint16_t i = 0; i < schedule->pressure_delta_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_pressure_delta_t* pressure_delta =
+        &descriptor_set->pressure_deltas[schedule->pressure_delta_start + i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "{\"index\":%" PRIu16 ",", i));
+    IREE_RETURN_IF_ERROR(loom_low_append_reg_class_ref(
+        descriptor_set, builder, pressure_delta->reg_class_id));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, ",\"delta\":%d}", (int)pressure_delta->delta));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
 static iree_status_t loom_low_append_manifest_schedule_classes(
     const loom_low_descriptor_set_t* descriptor_set,
     iree_string_builder_t* builder) {
@@ -1397,6 +1461,10 @@ static iree_status_t loom_low_append_manifest_schedule_classes(
         schedule->hazard_count, schedule->pressure_delta_count));
     IREE_RETURN_IF_ERROR(
         loom_low_append_manifest_issue_uses(descriptor_set, builder, schedule));
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_hazard_rows(
+        descriptor_set, builder, schedule));
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_pressure_delta_rows(
+        descriptor_set, builder, schedule));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
   }
   return iree_string_builder_append_cstring(builder, "]");
