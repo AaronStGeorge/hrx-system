@@ -47,6 +47,7 @@ class TestTargetDialect:
             ("spirv", 2),
             ("vm", 3),
             ("low_native", 4),
+            ("wasm", 5),
         ]
         assert [(case.keyword, case.value) for case in ArtifactFormatAttr.cases] == [
             ("unknown", 0),
@@ -55,6 +56,7 @@ class TestTargetDialect:
             ("macho", 3),
             ("spirv_binary", 4),
             ("vm_bytecode", 5),
+            ("wasm_binary", 6),
         ]
         assert [(case.keyword, case.value) for case in ExportAbiKind.cases] == [
             ("unknown", 0),
@@ -62,6 +64,7 @@ class TestTargetDialect:
             ("hal_kernel", 2),
             ("vm_module_function", 3),
             ("shader_entry_point", 4),
+            ("wasm_function", 5),
         ]
         assert [(case.keyword, case.value) for case in ExportLinkage.cases] == [
             ("default", 0),

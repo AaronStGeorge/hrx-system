@@ -46,24 +46,20 @@ iree_status_t loom_llvmir_target_profile_module_config(
 static iree_status_t loom_llvmir_object_format_from_artifact(
     loom_target_artifact_format_t artifact_format,
     loom_llvmir_object_format_t* out_object_format) {
-  switch (artifact_format) {
-    case LOOM_TARGET_ARTIFACT_FORMAT_ELF:
-      *out_object_format = LOOM_LLVMIR_OBJECT_FORMAT_ELF;
-      return iree_ok_status();
-    case LOOM_TARGET_ARTIFACT_FORMAT_COFF:
-      *out_object_format = LOOM_LLVMIR_OBJECT_FORMAT_COFF;
-      return iree_ok_status();
-    case LOOM_TARGET_ARTIFACT_FORMAT_MACHO:
-      *out_object_format = LOOM_LLVMIR_OBJECT_FORMAT_MACHO;
-      return iree_ok_status();
-    case LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN:
-    case LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY:
-    case LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "target artifact format is not an LLVM object");
+  if (artifact_format == LOOM_TARGET_ARTIFACT_FORMAT_ELF) {
+    *out_object_format = LOOM_LLVMIR_OBJECT_FORMAT_ELF;
+    return iree_ok_status();
+  }
+  if (artifact_format == LOOM_TARGET_ARTIFACT_FORMAT_COFF) {
+    *out_object_format = LOOM_LLVMIR_OBJECT_FORMAT_COFF;
+    return iree_ok_status();
+  }
+  if (artifact_format == LOOM_TARGET_ARTIFACT_FORMAT_MACHO) {
+    *out_object_format = LOOM_LLVMIR_OBJECT_FORMAT_MACHO;
+    return iree_ok_status();
   }
   return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown target artifact format");
+                          "target artifact format is not an LLVM object");
 }
 
 static iree_status_t loom_llvmir_linkage_from_target(
@@ -191,44 +187,37 @@ iree_status_t loom_llvmir_target_profile_storage_initialize_from_bundle(
       .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
   };
 
-  switch (export_plan->abi_kind) {
-    case LOOM_TARGET_ABI_OBJECT_FUNCTION:
-      out_storage->profile.kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT;
-      return iree_ok_status();
-    case LOOM_TARGET_ABI_HAL_KERNEL: {
-      IREE_RETURN_IF_ERROR(
-          loom_llvmir_validate_hal_kernel_export_plan(snapshot, export_plan));
-      out_storage->profile.kind = LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL;
-      out_storage->profile.kernel_calling_convention =
-          LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL;
-      out_storage->profile.required_workgroup_size_metadata_name =
-          IREE_SV("reqd_work_group_size");
-      out_storage->profile.amdgpu_hal = (loom_llvmir_amdgpu_hal_abi_t){
-          .binding_alignment = export_plan->hal_kernel.binding_alignment,
-          .required_workgroup_size =
-              {
-                  .x = export_plan->hal_kernel.required_workgroup_size.x,
-                  .y = export_plan->hal_kernel.required_workgroup_size.y,
-                  .z = export_plan->hal_kernel.required_workgroup_size.z,
-              },
-          .flat_workgroup_size_min =
-              export_plan->hal_kernel.flat_workgroup_size_min,
-          .flat_workgroup_size_max =
-              export_plan->hal_kernel.flat_workgroup_size_max,
-          .buffer_resource_flags =
-              export_plan->hal_kernel.buffer_resource_flags,
-      };
-      return iree_ok_status();
-    }
-    case LOOM_TARGET_ABI_UNKNOWN:
-    case LOOM_TARGET_ABI_VM_MODULE_FUNCTION:
-    case LOOM_TARGET_ABI_SHADER_ENTRY_POINT:
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "target ABI kind does not have an LLVMIR profile adapter yet");
+  if (export_plan->abi_kind == LOOM_TARGET_ABI_OBJECT_FUNCTION) {
+    out_storage->profile.kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT;
+    return iree_ok_status();
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unknown target ABI kind");
+  if (export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
+    IREE_RETURN_IF_ERROR(
+        loom_llvmir_validate_hal_kernel_export_plan(snapshot, export_plan));
+    out_storage->profile.kind = LOOM_LLVMIR_TARGET_PROFILE_HAL_KERNEL;
+    out_storage->profile.kernel_calling_convention =
+        LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL;
+    out_storage->profile.required_workgroup_size_metadata_name =
+        IREE_SV("reqd_work_group_size");
+    out_storage->profile.amdgpu_hal = (loom_llvmir_amdgpu_hal_abi_t){
+        .binding_alignment = export_plan->hal_kernel.binding_alignment,
+        .required_workgroup_size =
+            {
+                .x = export_plan->hal_kernel.required_workgroup_size.x,
+                .y = export_plan->hal_kernel.required_workgroup_size.y,
+                .z = export_plan->hal_kernel.required_workgroup_size.z,
+            },
+        .flat_workgroup_size_min =
+            export_plan->hal_kernel.flat_workgroup_size_min,
+        .flat_workgroup_size_max =
+            export_plan->hal_kernel.flat_workgroup_size_max,
+        .buffer_resource_flags = export_plan->hal_kernel.buffer_resource_flags,
+    };
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_UNIMPLEMENTED,
+      "target ABI kind does not have an LLVMIR profile adapter yet");
 }
 
 static iree_status_t loom_llvmir_target_profile_append_llc_argument(

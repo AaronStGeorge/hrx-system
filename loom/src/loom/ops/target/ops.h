@@ -32,7 +32,8 @@ typedef enum loom_target_snapshot_codegen_format_e {
   LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_SPIRV = 2,
   LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_VM = 3,
   LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_LOW_NATIVE = 4,
-  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_COUNT_ = 5,
+  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_WASM = 5,
+  LOOM_TARGET_SNAPSHOT_CODEGEN_FORMAT_COUNT_ = 6,
 } loom_target_snapshot_codegen_format_t;
 
 // Linkable or loadable artifact format produced for a snapshot.
@@ -43,7 +44,8 @@ typedef enum loom_target_snapshot_artifact_format_e {
   LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_MACHO = 3,
   LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_SPIRV_BINARY = 4,
   LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_VM_BYTECODE = 5,
-  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_COUNT_ = 6,
+  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_WASM_BINARY = 6,
+  LOOM_TARGET_SNAPSHOT_ARTIFACT_FORMAT_COUNT_ = 7,
 } loom_target_snapshot_artifact_format_t;
 
 // Callable or package ABI used by an export plan.
@@ -53,7 +55,8 @@ typedef enum loom_target_export_abi_e {
   LOOM_TARGET_EXPORT_ABI_HAL_KERNEL = 2,
   LOOM_TARGET_EXPORT_ABI_VM_MODULE_FUNCTION = 3,
   LOOM_TARGET_EXPORT_ABI_SHADER_ENTRY_POINT = 4,
-  LOOM_TARGET_EXPORT_ABI_COUNT_ = 5,
+  LOOM_TARGET_EXPORT_ABI_WASM_FUNCTION = 5,
+  LOOM_TARGET_EXPORT_ABI_COUNT_ = 6,
 } loom_target_export_abi_t;
 
 // ABI-required linkage for exported object functions or entry points.

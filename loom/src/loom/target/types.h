@@ -26,6 +26,7 @@ typedef enum loom_target_codegen_format_e {
   LOOM_TARGET_CODEGEN_FORMAT_SPIRV = 2,
   LOOM_TARGET_CODEGEN_FORMAT_VM = 3,
   LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE = 4,
+  LOOM_TARGET_CODEGEN_FORMAT_WASM = 5,
 } loom_target_codegen_format_t;
 
 typedef enum loom_target_artifact_format_e {
@@ -35,6 +36,7 @@ typedef enum loom_target_artifact_format_e {
   LOOM_TARGET_ARTIFACT_FORMAT_MACHO = 3,
   LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY = 4,
   LOOM_TARGET_ARTIFACT_FORMAT_VM_BYTECODE = 5,
+  LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY = 6,
 } loom_target_artifact_format_t;
 
 typedef enum loom_target_abi_kind_e {
@@ -43,6 +45,7 @@ typedef enum loom_target_abi_kind_e {
   LOOM_TARGET_ABI_HAL_KERNEL = 2,
   LOOM_TARGET_ABI_VM_MODULE_FUNCTION = 3,
   LOOM_TARGET_ABI_SHADER_ENTRY_POINT = 4,
+  LOOM_TARGET_ABI_WASM_FUNCTION = 5,
 } loom_target_abi_kind_t;
 
 typedef enum loom_target_linkage_e {

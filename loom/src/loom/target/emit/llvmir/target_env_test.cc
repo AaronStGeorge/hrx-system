@@ -356,6 +356,48 @@ TEST(LlvmIrTargetEnvTest, RejectsMalformedDerivedAmdgpuHalProfile) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileArtifactFormat) {
+  const loom_target_bundle_t* fixture_bundle =
+      loom_llvmir_target_bundle_x86_64_object();
+  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
+  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
+  loom_target_config_t config = *fixture_bundle->config;
+  snapshot.artifact_format = static_cast<loom_target_artifact_format_t>(255);
+
+  loom_target_bundle_t broken_bundle = {};
+  broken_bundle.name = fixture_bundle->name;
+  broken_bundle.snapshot = &snapshot;
+  broken_bundle.export_plan = &export_plan;
+  broken_bundle.config = &config;
+
+  loom_llvmir_target_profile_storage_t storage = {};
+  iree_status_t status =
+      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
+                                                                &storage);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LlvmIrTargetEnvTest, RejectsUnsupportedDerivedProfileAbiKind) {
+  const loom_target_bundle_t* fixture_bundle =
+      loom_llvmir_target_bundle_x86_64_object();
+  loom_target_snapshot_t snapshot = *fixture_bundle->snapshot;
+  loom_target_export_plan_t export_plan = *fixture_bundle->export_plan;
+  loom_target_config_t config = *fixture_bundle->config;
+  export_plan.abi_kind = static_cast<loom_target_abi_kind_t>(255);
+
+  loom_target_bundle_t broken_bundle = {};
+  broken_bundle.name = fixture_bundle->name;
+  broken_bundle.snapshot = &snapshot;
+  broken_bundle.export_plan = &export_plan;
+  broken_bundle.config = &config;
+
+  loom_llvmir_target_profile_storage_t storage = {};
+  iree_status_t status =
+      loom_llvmir_target_profile_storage_initialize_from_bundle(&broken_bundle,
+                                                                &storage);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_UNIMPLEMENTED, status);
+}
+
 TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
   const loom_llvmir_target_profile_t* profile = nullptr;
   IREE_ASSERT_OK(LookupRegisteredProfile(IREE_SV(""), &profile));

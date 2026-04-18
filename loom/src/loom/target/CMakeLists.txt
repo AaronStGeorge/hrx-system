@@ -41,14 +41,17 @@ loom_cc_library(
   SRCS
     "low_descriptor_registry.c"
   DEPS
+    ::types
     iree::base
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::requirements
     loom::src::loom::target::arch::amdgpu::gfx11_descriptors
     loom::src::loom::target::arch::amdgpu::gfx1250_descriptors
     loom::src::loom::target::arch::amdgpu::gfx12_descriptors
     loom::src::loom::target::arch::amdgpu::gfx950_descriptors
     loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::arch::x86::avx512_descriptors
+    loom::src::loom::target::arch::x86::packed_dot_contract
     loom::src::loom::target::arch::x86::packed_dot_descriptors
     loom::src::loom::target::emit::ireevm::descriptors
   PUBLIC

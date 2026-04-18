@@ -350,24 +350,19 @@ static iree_status_t loom_llvmir_target_legality_validate_options(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
         IREE_SV("target config is required"), options->snapshot->name);
   }
-  switch (options->export_plan->abi_kind) {
-    case LOOM_TARGET_ABI_OBJECT_FUNCTION:
-      break;
-    case LOOM_TARGET_ABI_HAL_KERNEL:
-      if (options->snapshot->memory_spaces.global == UINT32_MAX) {
-        return loom_llvmir_target_legality_fail(
-            context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-            IREE_SV("HAL kernel target global address space is unavailable"),
-            options->snapshot->name);
-      }
-      break;
-    case LOOM_TARGET_ABI_UNKNOWN:
-    case LOOM_TARGET_ABI_VM_MODULE_FUNCTION:
-    case LOOM_TARGET_ABI_SHADER_ENTRY_POINT:
+  if (options->export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
+    if (options->snapshot->memory_spaces.global == UINT32_MAX) {
       return loom_llvmir_target_legality_fail(
-          context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, NULL,
-          IREE_SV("target ABI does not have an LLVMIR legality adapter"),
-          options->export_plan->name);
+          context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
+          IREE_SV("HAL kernel target global address space is unavailable"),
+          options->snapshot->name);
+    }
+  } else if (options->export_plan->abi_kind !=
+             LOOM_TARGET_ABI_OBJECT_FUNCTION) {
+    return loom_llvmir_target_legality_fail(
+        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_UNSUPPORTED_ABI, NULL,
+        IREE_SV("target ABI does not have an LLVMIR legality adapter"),
+        options->export_plan->name);
   }
   context->bundle = (loom_target_bundle_t){
       .name = options->snapshot->name,

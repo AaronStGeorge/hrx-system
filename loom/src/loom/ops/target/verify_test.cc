@@ -136,9 +136,26 @@ static const char* kValidTargetRecords =
     "target.config @gfx11_config {contract_set_key = \"amdgpu.gfx11\", "
     "contract_feature_bits = 1}\n"
     "target.bundle @matmul_gfx1100 {snapshot = @gfx1100, export_plan = "
-    "@matmul_hal, config = @gfx11_config}\n";
+    "@matmul_hal, config = @gfx11_config}\n"
+    "target.snapshot @wasm32 {codegen_format = wasm, target_triple = "
+    "\"wasm32-unknown-unknown\", data_layout = \"\", artifact_format = "
+    "wasm_binary, target_cpu = \"\", target_features = \"+simd128\", "
+    "default_pointer_bitwidth = 32, index_bitwidth = 32, offset_bitwidth = 32, "
+    "memory_space_generic = 0, memory_space_global = 0, "
+    "memory_space_workgroup = 4294967295, memory_space_constant = 0, "
+    "memory_space_private = 4294967295, memory_space_host = 4294967295, "
+    "memory_space_descriptor = 4294967295}\n"
+    "target.export @wasm_export {source = @matmul, export_symbol = \"matmul\", "
+    "abi = wasm_function, linkage = default, hal_binding_alignment = 0, "
+    "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
+    "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
+    "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}\n"
+    "target.config @wasm_config {contract_set_key = \"wasm.core.simd128\", "
+    "contract_feature_bits = 0}\n"
+    "target.bundle @matmul_wasm32 {snapshot = @wasm32, export_plan = "
+    "@wasm_export, config = @wasm_config}\n";
 
-TEST_F(TargetVerifyTest, CpuAndAmdgpuRecordsVerify) {
+TEST_F(TargetVerifyTest, CpuAmdgpuAndWasmRecordsVerify) {
   DiagnosticCapture capture;
   loom_verify_result_t result = VerifySource(kValidTargetRecords, &capture);
   EXPECT_EQ(result.error_count, 0u);

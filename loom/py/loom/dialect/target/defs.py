@@ -49,6 +49,7 @@ SnapshotCodegenFormat = EnumDef(
         EnumCase("spirv", 2, doc="SPIR-V emission target."),
         EnumCase("vm", 3, doc="IREE VM bytecode target."),
         EnumCase("low_native", 4, doc="Native low dialect code emission target."),
+        EnumCase("wasm", 5, doc="WebAssembly module emission target."),
     ],
     doc="Primary codegen representation emitted for a target snapshot.",
 )
@@ -62,6 +63,7 @@ ArtifactFormatAttr = EnumDef(
         EnumCase("macho", 3, doc="Mach-O object artifact."),
         EnumCase("spirv_binary", 4, doc="SPIR-V binary artifact."),
         EnumCase("vm_bytecode", 5, doc="IREE VM bytecode artifact."),
+        EnumCase("wasm_binary", 6, doc="WebAssembly binary module artifact."),
     ],
     doc="Linkable or loadable artifact format produced for a snapshot.",
 )
@@ -74,6 +76,7 @@ ExportAbiKind = EnumDef(
         EnumCase("hal_kernel", 2, doc="IREE HAL dispatch kernel ABI."),
         EnumCase("vm_module_function", 3, doc="IREE VM module function ABI."),
         EnumCase("shader_entry_point", 4, doc="Graphics shader entry point ABI."),
+        EnumCase("wasm_function", 5, doc="WebAssembly module function ABI."),
     ],
     doc="Callable or package ABI used by an export plan.",
 )
