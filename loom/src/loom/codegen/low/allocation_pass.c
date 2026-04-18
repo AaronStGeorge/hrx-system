@@ -1,0 +1,217 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/codegen/low/allocation_pass.h"
+
+#include <string.h>
+
+#include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/allocation_materialization.h"
+#include "loom/ops/low/ops.h"
+#include "loom/target/low_descriptor_registry.h"
+
+typedef struct loom_low_materialize_allocation_pass_state_t {
+  // Fixed register budget overrides parsed from the pass options.
+  loom_low_allocation_budget_t* budgets;
+  // Number of entries in |budgets|.
+  iree_host_size_t budget_count;
+} loom_low_materialize_allocation_pass_state_t;
+
+typedef struct loom_low_materialize_allocation_parse_context_t {
+  // Pass instance that owns option storage.
+  loom_pass_t* pass;
+  // Mutable pass state being populated.
+  loom_low_materialize_allocation_pass_state_t* state;
+} loom_low_materialize_allocation_parse_context_t;
+
+static const loom_pass_option_def_t kLowMaterializeAllocationOptions[] = {
+    {IREE_SVL("budgets"),
+     IREE_SVL("Semicolon-separated register class budgets, such as "
+              "vm.i32=2;x86.zmm=1.")},
+};
+
+enum {
+  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SLOTS = 0,
+  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS = 1,
+  LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS = 2,
+};
+
+static const loom_pass_statistic_def_t kLowMaterializeAllocationStatistics[] = {
+    {IREE_SVL("slots"), IREE_SVL("Number of low.slot records inserted.")},
+    {IREE_SVL("spills"), IREE_SVL("Number of low.spill stores inserted.")},
+    {IREE_SVL("reloads"), IREE_SVL("Number of low.reload ops inserted.")},
+};
+
+static const loom_pass_info_t
+    loom_low_materialize_allocation_pass_info_storage = {
+        .name = IREE_SVL("low-materialize-allocation"),
+        .description =
+            IREE_SVL("Allocate target-low values and materialize spills."),
+        .kind = LOOM_PASS_FUNCTION,
+        .option_defs = kLowMaterializeAllocationOptions,
+        .option_count = IREE_ARRAYSIZE(kLowMaterializeAllocationOptions),
+        .statistic_defs = kLowMaterializeAllocationStatistics,
+        .statistic_count = IREE_ARRAYSIZE(kLowMaterializeAllocationStatistics),
+};
+
+const loom_pass_info_t* loom_low_materialize_allocation_pass_info(void) {
+  return &loom_low_materialize_allocation_pass_info_storage;
+}
+
+static iree_status_t loom_low_materialize_allocation_count_budgets(
+    iree_string_view_t text, iree_host_size_t* out_count) {
+  iree_host_size_t count = 0;
+  text = iree_string_view_trim(text);
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(text, ';', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (iree_string_view_is_empty(token)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass 'low-materialize-allocation' option 'budgets' contains an "
+          "empty budget entry");
+    }
+    ++count;
+    text = iree_string_view_trim(remaining);
+  }
+  *out_count = count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_materialize_allocation_parse_budget(
+    iree_string_view_t token, loom_low_allocation_budget_t* out_budget) {
+  iree_string_view_t register_class = iree_string_view_empty();
+  iree_string_view_t budget_text = iree_string_view_empty();
+  iree_string_view_split(token, '=', &register_class, &budget_text);
+  register_class = iree_string_view_trim(register_class);
+  budget_text = iree_string_view_trim(budget_text);
+  if (iree_string_view_is_empty(register_class) ||
+      iree_string_view_is_empty(budget_text)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' option 'budgets' entries must have "
+        "the form <register-class>=<units>");
+  }
+  uint32_t max_units = 0;
+  if (!iree_string_view_atoi_uint32(budget_text, &max_units)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' budget expected a uint32 value, "
+        "got '%.*s'",
+        (int)budget_text.size, budget_text.data);
+  }
+  *out_budget = (loom_low_allocation_budget_t){
+      .register_class = register_class,
+      .max_units = max_units,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_materialize_allocation_parse_budgets(
+    iree_string_view_t text,
+    loom_low_materialize_allocation_parse_context_t* context) {
+  if (context->state->budgets) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "duplicate option 'budgets' for pass 'low-materialize-allocation'");
+  }
+
+  iree_host_size_t budget_count = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_low_materialize_allocation_count_budgets(text, &budget_count));
+  if (budget_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' option 'budgets' must not be empty");
+  }
+
+  loom_low_allocation_budget_t* budgets = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(context->pass->instance_arena,
+                                                 budget_count, sizeof(*budgets),
+                                                 (void**)&budgets));
+  memset(budgets, 0, budget_count * sizeof(*budgets));
+
+  iree_host_size_t index = 0;
+  text = iree_string_view_trim(text);
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(text, ';', &token, &remaining);
+    token = iree_string_view_trim(token);
+    IREE_RETURN_IF_ERROR(
+        loom_low_materialize_allocation_parse_budget(token, &budgets[index++]));
+    text = iree_string_view_trim(remaining);
+  }
+
+  context->state->budgets = budgets;
+  context->state->budget_count = budget_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_materialize_allocation_parse_option(
+    void* user_data, iree_string_view_t name, iree_string_view_t value) {
+  loom_low_materialize_allocation_parse_context_t* context =
+      (loom_low_materialize_allocation_parse_context_t*)user_data;
+  if (iree_string_view_equal(name, IREE_SV("budgets"))) {
+    return loom_low_materialize_allocation_parse_budgets(value, context);
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "unknown option '%.*s' for pass 'low-materialize-allocation'",
+      (int)name.size, name.data);
+}
+
+iree_status_t loom_low_materialize_allocation_create(
+    loom_pass_t* pass, iree_string_view_t options) {
+  loom_low_materialize_allocation_pass_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena, sizeof(*state),
+                                           (void**)&state));
+  memset(state, 0, sizeof(*state));
+
+  loom_low_materialize_allocation_parse_context_t context = {
+      .pass = pass,
+      .state = state,
+  };
+  IREE_RETURN_IF_ERROR(loom_pass_options_parse(
+      pass->info->name, options, loom_low_materialize_allocation_parse_option,
+      &context));
+  pass->state = state;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
+                                                  loom_module_t* module,
+                                                  loom_func_like_t function) {
+  if (!loom_low_func_def_isa(function.op)) return iree_ok_status();
+
+  loom_low_materialize_allocation_pass_state_t* state =
+      (loom_low_materialize_allocation_pass_state_t*)pass->state;
+  loom_target_low_descriptor_registry_t target_registry;
+  loom_target_low_descriptor_registry_initialize(&target_registry);
+  loom_low_allocation_options_t allocation_options = {
+      .descriptor_registry = &target_registry.registry,
+      .budgets = state ? state->budgets : NULL,
+      .budget_count = state ? state->budget_count : 0,
+      .emitter = pass->diagnostic_emitter,
+  };
+  loom_low_allocation_sidecar_t sidecar = {0};
+  IREE_RETURN_IF_ERROR(loom_low_allocate_function(
+      module, function.op, &allocation_options, pass->arena, &sidecar));
+
+  loom_low_allocation_materialization_result_t result = {0};
+  IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
+      module, &sidecar, NULL, pass->arena, &result));
+
+  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SLOTS,
+                          result.slot_count);
+  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS,
+                          result.spill_count);
+  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS,
+                          result.reload_count);
+  return iree_ok_status();
+}

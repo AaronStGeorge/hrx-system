@@ -23,6 +23,7 @@ loom_check_test_suite(
         "llvmir/toolchain.loom-test",
         "llvmir/vector_core.loom-test",
         "low_allocation.loom-test",
+        "low_allocation_materialization.loom-test",
         "low_schedule.loom-test",
         "low_verify.loom-test",
         "pass.loom-test",

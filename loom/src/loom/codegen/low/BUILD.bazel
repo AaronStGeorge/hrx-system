@@ -69,6 +69,36 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/codegen/low:requirements",
 )
 
+iree_assert_no_dependency(
+    name = "allocation_materialization_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/codegen/low:allocation_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_materialization_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/codegen/low:allocation_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_materialization_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/codegen/low:allocation_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_materialization_no_target_registry_dep",
+    dependency = "//loom/src/loom/target:low_descriptor_registry",
+    target = "//loom/src/loom/codegen/low:allocation_materialization",
+)
+
+iree_assert_no_dependency(
+    name = "allocation_materialization_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/codegen/low:allocation_materialization",
+)
+
 #===------------------------------------------------------------------------===#
 # Dense low descriptor tables
 #===------------------------------------------------------------------------===#
@@ -121,6 +151,37 @@ loom_cc_library(
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "allocation_materialization",
+    srcs = ["allocation_materialization.c"],
+    hdrs = ["allocation_materialization.h"],
+    deps = [
+        ":allocation",
+        ":descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "allocation_pass",
+    srcs = ["allocation_pass.c"],
+    hdrs = ["allocation_pass.h"],
+    deps = [
+        ":allocation",
+        ":allocation_materialization",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/transforms:pass",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

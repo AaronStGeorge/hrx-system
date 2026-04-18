@@ -77,6 +77,43 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    allocation_materialization
+  HDRS
+    "allocation_materialization.h"
+  SRCS
+    "allocation_materialization.c"
+  DEPS
+    ::allocation
+    ::descriptors
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    allocation_pass
+  HDRS
+    "allocation_pass.h"
+  SRCS
+    "allocation_pass.c"
+  DEPS
+    ::allocation
+    ::allocation_materialization
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::transforms::pass
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     allocation_json
   HDRS
     "allocation_json.h"

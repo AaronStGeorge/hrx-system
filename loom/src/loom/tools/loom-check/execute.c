@@ -6,6 +6,7 @@
 
 #include "loom/tools/loom-check/execute.h"
 
+#include "loom/codegen/low/allocation_pass.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
 #include "loom/error/json_sink.h"
@@ -270,6 +271,11 @@ static iree_status_t loom_check_run_pipeline(
                                       IREE_SV("kernel-async-legality"))) {
       info = loom_kernel_async_legality_pass_info();
       function_run = loom_kernel_async_legality_run;
+    } else if (iree_string_view_equal(entry.name,
+                                      IREE_SV("low-materialize-allocation"))) {
+      info = loom_low_materialize_allocation_pass_info();
+      function_run = loom_low_materialize_allocation_run;
+      create = loom_low_materialize_allocation_create;
     } else if (iree_string_view_equal(entry.name,
                                       IREE_SV("normalize-kernel-resources"))) {
       info = loom_normalize_kernel_resources_pass_info();
