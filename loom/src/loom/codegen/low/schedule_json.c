@@ -186,6 +186,28 @@ iree_status_t loom_low_schedule_format_json(
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
 
+  if (sidecar->pressure_step_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"scheduled_pressure_steps\":["));
+    for (iree_host_size_t i = 0; i < sidecar->pressure_step_count; ++i) {
+      if (i > 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+      }
+      const loom_low_schedule_pressure_step_t* step =
+          &sidecar->pressure_steps[i];
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream,
+          "{\"node\":%" PRIu32 ",\"block\":%" PRIu32
+          ",\"scheduled_ordinal\":%" PRIu32 ",\"live_units_before\":%" PRIu64
+          ",\"killed_live_units\":%" PRIu64 ",\"produced_live_units\":%" PRIu64
+          ",\"live_units_after\":%" PRIu64 "}",
+          step->node_index, step->block_index, step->scheduled_ordinal,
+          step->live_units_before, step->killed_live_units,
+          step->produced_live_units, step->live_units_after));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]"));
+  }
+
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"liveness\":"));
   IREE_RETURN_IF_ERROR(loom_liveness_format_json(&sidecar->liveness, builder));

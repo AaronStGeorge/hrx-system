@@ -113,6 +113,26 @@ typedef struct loom_low_schedule_dependency_t {
   uint32_t operand_index;
 } loom_low_schedule_dependency_t;
 
+// Pressure-model step recorded while scheduling one node. This is an aggregate
+// target-independent register-pressure estimate across all register classes,
+// not a replacement for source-order liveness or target occupancy analysis.
+typedef struct loom_low_schedule_pressure_step_t {
+  // Scheduled node represented by this step.
+  uint32_t node_index;
+  // Region block containing |node_index|.
+  uint32_t block_index;
+  // Scheduled ordinal within |block_index|.
+  uint32_t scheduled_ordinal;
+  // Aggregate register live units before scheduling the node.
+  uint64_t live_units_before;
+  // Register live units killed by the node.
+  uint64_t killed_live_units;
+  // Register live units produced by the node.
+  uint64_t produced_live_units;
+  // Aggregate register live units after scheduling the node.
+  uint64_t live_units_after;
+} loom_low_schedule_pressure_step_t;
+
 // Schedule metadata for one low function block.
 typedef struct loom_low_schedule_block_t {
   // Region block represented by this record.
@@ -166,6 +186,11 @@ typedef struct loom_low_schedule_sidecar_t {
   const uint32_t* scheduled_node_indices;
   // Number of scheduled node indices.
   iree_host_size_t scheduled_node_count;
+  // Pressure-model steps in scheduled order when the selected strategy records
+  // them. Empty for the default source-priority strategy.
+  const loom_low_schedule_pressure_step_t* pressure_steps;
+  // Number of pressure-model steps.
+  iree_host_size_t pressure_step_count;
 } loom_low_schedule_sidecar_t;
 
 // Schedules one low.func.def body and writes an arena-owned sidecar. The caller

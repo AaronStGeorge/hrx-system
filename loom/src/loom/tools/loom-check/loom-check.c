@@ -279,7 +279,7 @@ static iree_status_t loom_check_process_file(
         (FLAG_json.output_mode == LOOM_CHECK_JSON_OUTPUT_ALL ||
          (FLAG_json.output_mode == LOOM_CHECK_JSON_OUTPUT_FAILURES &&
           results[i].final_outcome == LOOM_CHECK_FAIL));
-    if ((wants_json_case || updates) && results[i].actual_output.size > 0) {
+    if ((wants_json_case || updates) && results[i].has_actual_output) {
       iree_string_view_t stripped_expected_trimmed =
           iree_string_view_trim(test_case->expected);
       iree_string_view_t actual_output =

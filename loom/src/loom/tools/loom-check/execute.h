@@ -68,9 +68,13 @@ typedef struct loom_check_result_t {
   // Number of objects in diff_hunk_json.
   iree_host_size_t diff_hunk_count;
 
-  // Printed IR from roundtrip/pass/format/emit modes. Empty for verify
-  // mode. Used by --update to rewrite expected sections in test files.
+  // Printed IR from roundtrip/pass/format/emit modes. Used by --update to
+  // rewrite expected sections in test files when has_actual_output is true.
   iree_string_builder_t actual_output;
+
+  // True when actual_output is the comparable output for this case, even when
+  // the output is intentionally empty.
+  bool has_actual_output;
 
   // Machine-readable edit for accepting actual_output into the expected
   // section.

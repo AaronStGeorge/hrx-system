@@ -51,6 +51,7 @@ iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
       module, &result->actual_output, LOOM_TEXT_PRINT_DEFAULT);
   loom_module_free(module);
   IREE_RETURN_IF_ERROR(print_status);
+  result->has_actual_output = true;
 
   // Strip comments from the expected section for comparison. When no
   // // ---- separator is present, expected == input and stripping

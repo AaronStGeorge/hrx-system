@@ -518,6 +518,9 @@ iree_status_t loom_check_execute_pass(
   status = loom_text_print_module_to_builder(module, &result->actual_output,
                                              LOOM_TEXT_PRINT_DEFAULT);
   loom_module_free(module);
+  if (iree_status_is_ok(status)) {
+    result->has_actual_output = true;
+  }
 
   // Strip comments from the expected section.
   iree_string_builder_t stripped_expected;

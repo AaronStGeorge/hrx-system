@@ -54,7 +54,7 @@ low.func.def target(@x86_target) @phys(%lhs : reg<x86.zmm>, %rhs : reg<x86.zmm>)
 
 // ====
 
-// RUN: emit low-allocation-json @phys_predicted_spill diagnostics=predicted-spills x86.zmm=1
+// RUN: emit low-allocation-json @phys_predicted_spill diagnostics=predicted-spills output=none x86.zmm=1
 
 target.snapshot @x86_snapshot {codegen_format = low_native, target_triple = "x86_64-unknown-linux-gnu", data_layout = "", artifact_format = elf, target_cpu = "x86-64-v4", target_features = "+avx512f", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
 target.export @x86_export {export_symbol = "phys_predicted_spill", abi = object_function, linkage = dso_local, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}
@@ -89,7 +89,7 @@ low.func.def target(@vm_target) @copy(%lhs : reg<vm.i32>, %rhs : reg<vm.i32>) ->
 
 // ====
 
-// RUN: emit low-allocation-json @copy_diagnostics diagnostics=copy-decisions
+// RUN: emit low-allocation-json @copy_diagnostics diagnostics=copy-decisions output=none
 
 target.snapshot @vm_snapshot {codegen_format = vm, target_triple = "iree-vm", data_layout = "", artifact_format = vm_bytecode, target_cpu = "", target_features = "", default_pointer_bitwidth = 64, index_bitwidth = 64, offset_bitwidth = 64, memory_space_generic = 0, memory_space_global = 0, memory_space_workgroup = 0, memory_space_constant = 0, memory_space_private = 0, memory_space_host = 0, memory_space_descriptor = 0}
 target.export @vm_export {export_symbol = "copy_diagnostics", abi = vm_module_function, linkage = default, hal_binding_alignment = 0, hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = 0}

@@ -34,9 +34,11 @@
 //                           target-low-registry-manifest. Analysis targets
 //                           include liveness-json @function,
 //                           low-schedule-json @function
-//                           [strategy=...] [diagnostics=...], and
+//                           [strategy=...] [diagnostics=...]
+//                           [output=json|none], and
 //                           low-allocation-json @function
-//                           [diagnostics=...] [class=units...].
+//                           [diagnostics=...] [output=json|none]
+//                           [class=units...].
 //   // REQUIRES: <name>[, <name>...]
 //                           Skip the case when external tools or target
 //                           backends are unavailable.
