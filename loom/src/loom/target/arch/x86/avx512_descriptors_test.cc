@@ -203,6 +203,13 @@ TEST(X86DescriptorsTest, ManifestNamesVectorMemoryAndDotPackets) {
             std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.kandq\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"x86.avx512.jmp\""), std::string::npos);
+  EXPECT_NE(json.find("\"schedule_class_name\":\"x86.vector.dot\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"resource_name\":\"x86.vector.dot\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"field\":\"acc\",\"role\":2,\"role_name\":\"operand\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"destructive\""), std::string::npos);
   EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
 }
 

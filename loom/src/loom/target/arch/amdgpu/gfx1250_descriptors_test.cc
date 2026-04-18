@@ -246,6 +246,14 @@ TEST(AmdgpuDescriptorsTest,
       std::string::npos);
   EXPECT_NE(json.find("\"key\":\"amdgpu.v_swmmac_f32_16x16x64_f16\""),
             std::string::npos);
+  EXPECT_NE(json.find("\"schedule_class_name\":\"amdgpu.swmmac\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"resource_name\":\"amdgpu.swmmac\""),
+            std::string::npos);
+  EXPECT_NE(
+      json.find("\"field\":\"index\",\"role\":2,\"role_name\":\"operand\""),
+      std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"early_clobber\""), std::string::npos);
   EXPECT_NE(json.find("\"descriptor_refs\""), std::string::npos);
 }
 

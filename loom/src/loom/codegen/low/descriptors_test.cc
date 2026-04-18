@@ -805,6 +805,10 @@ TEST(LowDescriptorsTest, RejectsZeroIssueUseUnits) {
 TEST(LowDescriptorsTest, FormatsManifestJson) {
   TestTables tables;
   InitializeTestTables(&tables);
+  AddAddDescriptorConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.schedule_classes[1].flags = LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD;
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
@@ -817,6 +821,26 @@ TEST(LowDescriptorsTest, FormatsManifestJson) {
   EXPECT_NE(json.find("\"key\":\"test.core\""), std::string::npos);
   EXPECT_NE(json.find("\"key\":\"test.add.i32\""), std::string::npos);
   EXPECT_NE(json.find("\"schedule_class\":1"), std::string::npos);
+  EXPECT_NE(json.find("\"schedule_class_name\":\"test.alu.i32\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"reg_classes\":[{\"ordinal\":0,\"name\":\"test.gpr\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"scalar_alu\""), std::string::npos);
+  EXPECT_NE(json.find("\"issue_uses\":[{\"resource\":0,\"resource_name\":"
+                      "\"test.alu\",\"cycles\":1,\"units\":1"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"field\":\"lhs\",\"role\":2,\"role_name\":\"operand\""),
+            std::string::npos);
+  EXPECT_NE(json.find("\"unit_count\":1"), std::string::npos);
+  EXPECT_NE(json.find("\"reg_class_name\":\"test.gpr\""), std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"signed\""), std::string::npos);
+  EXPECT_NE(json.find("\"signed_min\":-2147483648"), std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"read\""), std::string::npos);
+  EXPECT_NE(json.find("\"memory_space_name\":\"generic\""), std::string::npos);
+  EXPECT_NE(json.find("\"kind_name\":\"tied\""), std::string::npos);
+  EXPECT_NE(json.find("\"lhs_operand\":0,\"rhs_operand\":1"),
+            std::string::npos);
+  EXPECT_NE(json.find("\"feature_mask_words\":[5]"), std::string::npos);
 }
 
 }  // namespace

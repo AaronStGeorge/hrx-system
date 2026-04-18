@@ -948,6 +948,472 @@ static iree_status_t loom_low_descriptor_set_append_string_field(
   return loom_low_append_json_string(builder, value);
 }
 
+static iree_string_view_t loom_low_operand_role_name(
+    loom_low_operand_role_t role) {
+  switch (role) {
+    case LOOM_LOW_OPERAND_ROLE_RESULT:
+      return IREE_SV("result");
+    case LOOM_LOW_OPERAND_ROLE_OPERAND:
+      return IREE_SV("operand");
+    case LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT:
+      return IREE_SV("operand_result");
+    case LOOM_LOW_OPERAND_ROLE_PREDICATE:
+      return IREE_SV("predicate");
+    case LOOM_LOW_OPERAND_ROLE_RESOURCE:
+      return IREE_SV("resource");
+    case LOOM_LOW_OPERAND_ROLE_IMPLICIT:
+      return IREE_SV("implicit");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_immediate_kind_name(
+    loom_low_immediate_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_IMMEDIATE_KIND_SIGNED:
+      return IREE_SV("signed");
+    case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
+      return IREE_SV("unsigned");
+    case LOOM_LOW_IMMEDIATE_KIND_ORDINAL:
+      return IREE_SV("ordinal");
+    case LOOM_LOW_IMMEDIATE_KIND_ENUM:
+      return IREE_SV("enum");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_effect_kind_name(
+    loom_low_effect_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_EFFECT_KIND_READ:
+      return IREE_SV("read");
+    case LOOM_LOW_EFFECT_KIND_WRITE:
+      return IREE_SV("write");
+    case LOOM_LOW_EFFECT_KIND_CALL:
+      return IREE_SV("call");
+    case LOOM_LOW_EFFECT_KIND_BARRIER:
+      return IREE_SV("barrier");
+    case LOOM_LOW_EFFECT_KIND_COUNTER:
+      return IREE_SV("counter");
+    case LOOM_LOW_EFFECT_KIND_CONVERGENT:
+      return IREE_SV("convergent");
+    case LOOM_LOW_EFFECT_KIND_CONTROL:
+      return IREE_SV("control");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_memory_space_name(
+    loom_low_memory_space_t memory_space) {
+  switch (memory_space) {
+    case LOOM_LOW_MEMORY_SPACE_NONE:
+      return IREE_SV("none");
+    case LOOM_LOW_MEMORY_SPACE_GENERIC:
+      return IREE_SV("generic");
+    case LOOM_LOW_MEMORY_SPACE_GLOBAL:
+      return IREE_SV("global");
+    case LOOM_LOW_MEMORY_SPACE_WORKGROUP:
+      return IREE_SV("workgroup");
+    case LOOM_LOW_MEMORY_SPACE_STACK:
+      return IREE_SV("stack");
+    case LOOM_LOW_MEMORY_SPACE_VM_REF:
+      return IREE_SV("vm_ref");
+    case LOOM_LOW_MEMORY_SPACE_WASM_MEMORY:
+      return IREE_SV("wasm_memory");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_constraint_kind_name(
+    loom_low_constraint_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_CONSTRAINT_KIND_TIED:
+      return IREE_SV("tied");
+    case LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE:
+      return IREE_SV("commutable");
+    case LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE:
+      return IREE_SV("destructive");
+    case LOOM_LOW_CONSTRAINT_KIND_EARLY_CLOBBER:
+      return IREE_SV("early_clobber");
+    case LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE:
+      return IREE_SV("rematerializable");
+    case LOOM_LOW_CONSTRAINT_KIND_FOLDABLE:
+      return IREE_SV("foldable");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_latency_kind_name(
+    loom_low_latency_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_LATENCY_KIND_EXACT:
+      return IREE_SV("exact");
+    case LOOM_LOW_LATENCY_KIND_ESTIMATE:
+      return IREE_SV("estimate");
+    case LOOM_LOW_LATENCY_KIND_VARIABLE:
+      return IREE_SV("variable");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_model_quality_name(
+    loom_low_model_quality_t quality) {
+  switch (quality) {
+    case LOOM_LOW_MODEL_QUALITY_EXACT:
+      return IREE_SV("exact");
+    case LOOM_LOW_MODEL_QUALITY_CALIBRATED:
+      return IREE_SV("calibrated");
+    case LOOM_LOW_MODEL_QUALITY_ESTIMATED:
+      return IREE_SV("estimated");
+    case LOOM_LOW_MODEL_QUALITY_FALLBACK:
+      return IREE_SV("fallback");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_resource_kind_name(
+    loom_low_resource_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_RESOURCE_KIND_SCALAR_ALU:
+      return IREE_SV("scalar_alu");
+    case LOOM_LOW_RESOURCE_KIND_VECTOR_ALU:
+      return IREE_SV("vector_alu");
+    case LOOM_LOW_RESOURCE_KIND_MATRIX:
+      return IREE_SV("matrix");
+    case LOOM_LOW_RESOURCE_KIND_LOAD:
+      return IREE_SV("load");
+    case LOOM_LOW_RESOURCE_KIND_STORE:
+      return IREE_SV("store");
+    case LOOM_LOW_RESOURCE_KIND_CONTROL:
+      return IREE_SV("control");
+    case LOOM_LOW_RESOURCE_KIND_ADDRESS:
+      return IREE_SV("address");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_status_t loom_low_descriptor_set_append_string_value(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, loom_bstring_table_offset_t string_offset) {
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(
+      loom_low_descriptor_set_string(descriptor_set, string_offset, &value));
+  return loom_low_append_json_string(builder, value);
+}
+
+static iree_status_t loom_low_append_named_enum_field(
+    iree_string_builder_t* builder, const char* value_field_name,
+    const char* name_field_name, uint32_t value, iree_string_view_t name) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "\"%s\":%" PRIu32 ",\"%s\":", value_field_name, value,
+      name_field_name));
+  return loom_low_append_json_string(builder, name);
+}
+
+static iree_status_t loom_low_append_resource_ref(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, uint16_t resource_id) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "\"resource\":%" PRIu16 ",\"resource_name\":", resource_id));
+  if (resource_id == LOOM_LOW_RESOURCE_NONE ||
+      resource_id >= descriptor_set->resource_count) {
+    return loom_low_append_json_string(builder, IREE_SV(""));
+  }
+  return loom_low_descriptor_set_append_string_value(
+      descriptor_set, builder,
+      descriptor_set->resources[resource_id].name_string_offset);
+}
+
+static iree_status_t loom_low_append_reg_class_ref(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, uint16_t reg_class_id) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "\"reg_class\":%" PRIu16 ",\"reg_class_name\":", reg_class_id));
+  if (reg_class_id == LOOM_LOW_REG_CLASS_NONE ||
+      reg_class_id >= descriptor_set->reg_class_count) {
+    return loom_low_append_json_string(builder, IREE_SV(""));
+  }
+  return loom_low_descriptor_set_append_string_value(
+      descriptor_set, builder,
+      descriptor_set->reg_classes[reg_class_id].name_string_offset);
+}
+
+static iree_status_t loom_low_append_manifest_reg_classes(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ",\"reg_classes\":["));
+  for (uint32_t i = 0; i < descriptor_set->reg_class_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_reg_class_t* reg_class = &descriptor_set->reg_classes[i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "{\"ordinal\":%" PRIu32 ",\"name\":", i));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, reg_class->name_string_offset));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        ",\"target_bank\":%" PRIu16 ",\"flags\":%" PRIu16
+        ",\"alloc_unit_bits\":%" PRIu16 ",\"physical_count\":%" PRIu16
+        ",\"alias_set\":%" PRIu16 ",\"spill_class\":%" PRIu16 "}",
+        reg_class->target_bank_id, reg_class->flags, reg_class->alloc_unit_bits,
+        reg_class->physical_count, reg_class->alias_set_id,
+        reg_class->spill_class_id));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
+static iree_status_t loom_low_append_manifest_resources(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ",\"resources\":["));
+  for (uint32_t i = 0; i < descriptor_set->resource_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_resource_t* resource = &descriptor_set->resources[i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "{\"ordinal\":%" PRIu32 ",\"name\":", i));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, resource->name_string_offset));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, ",\"capacity_per_cycle\":%" PRIu16 ",\"flags\":%" PRIu16 ",",
+        resource->capacity_per_cycle, resource->flags));
+    IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+        builder, "kind", "kind_name", resource->kind,
+        loom_low_resource_kind_name(resource->kind)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, ",\"contention_group\":%" PRIu16 "}",
+        resource->contention_group_id));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
+static iree_status_t loom_low_append_manifest_issue_uses(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_schedule_class_t* schedule) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ",\"issue_uses\":["));
+  for (uint16_t i = 0; i < schedule->issue_use_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_issue_use_t* issue_use =
+        &descriptor_set->issue_uses[schedule->issue_use_start + i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "{"));
+    IREE_RETURN_IF_ERROR(loom_low_append_resource_ref(descriptor_set, builder,
+                                                      issue_use->resource_id));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        ",\"cycles\":%" PRIu16 ",\"units\":%" PRIu16 ",\"stage\":%" PRIu16 "}",
+        issue_use->cycles, issue_use->units, issue_use->stage));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
+static iree_status_t loom_low_append_manifest_schedule_classes(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder) {
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, ",\"schedule_classes\":["));
+  for (uint32_t i = 0; i < descriptor_set->schedule_class_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_schedule_class_t* schedule =
+        &descriptor_set->schedule_classes[i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "{\"ordinal\":%" PRIu32 ",\"name\":", i));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+        descriptor_set, builder, schedule->name_string_offset));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, ",\"latency_cycles\":%" PRIu16 ",", schedule->latency_cycles));
+    IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+        builder, "latency_kind", "latency_kind_name", schedule->latency_kind,
+        loom_low_latency_kind_name(schedule->latency_kind)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+        builder, "model_quality", "model_quality_name", schedule->model_quality,
+        loom_low_model_quality_name(schedule->model_quality)));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        ",\"flags\":%" PRIu16 ",\"hazards\":%" PRIu16
+        ",\"pressure_deltas\":%" PRIu16,
+        schedule->flags, schedule->hazard_count,
+        schedule->pressure_delta_count));
+    IREE_RETURN_IF_ERROR(
+        loom_low_append_manifest_issue_uses(descriptor_set, builder, schedule));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
+static iree_status_t loom_low_append_manifest_operand(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_operand_t* operand,
+    uint16_t descriptor_operand_index) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "{\"index\":%" PRIu16 ",\"field\":", descriptor_operand_index));
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+      descriptor_set, builder, operand->field_name_string_offset));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+  IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+      builder, "role", "role_name", operand->role,
+      loom_low_operand_role_name(operand->role)));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder,
+      ",\"flags\":%" PRIu16 ",\"unit_count\":%" PRIu16
+      ",\"data_format\":%" PRIu16 ",\"read_stage\":%" PRIu16
+      ",\"ready_stage\":%" PRIu16 ",\"reg_class_alts\":[",
+      operand->flags, operand->unit_count, operand->data_format_id,
+      operand->read_stage, operand->ready_stage));
+  for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    const loom_low_reg_class_alt_t* alt =
+        &descriptor_set->reg_class_alts[operand->reg_class_alt_start + i];
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "{"));
+    IREE_RETURN_IF_ERROR(loom_low_append_reg_class_ref(descriptor_set, builder,
+                                                       alt->reg_class_id));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, ",\"flags\":%" PRIu16 "}", alt->flags));
+  }
+  return iree_string_builder_append_cstring(builder, "]}");
+}
+
+static iree_status_t loom_low_append_manifest_immediate(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_immediate_t* immediate,
+    uint16_t descriptor_immediate_index) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder,
+      "{\"index\":%" PRIu16 ",\"field\":", descriptor_immediate_index));
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+      descriptor_set, builder, immediate->field_name_string_offset));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+  IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+      builder, "kind", "kind_name", immediate->kind,
+      loom_low_immediate_kind_name(immediate->kind)));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder,
+      ",\"flags\":%" PRIu16 ",\"bit_width\":%" PRIu16
+      ",\"enum_domain\":%" PRIu16 ",\"encoding\":%" PRIu16
+      ",\"signed_min\":%" PRId64 ",\"unsigned_max\":%" PRIu64 "}",
+      immediate->flags, immediate->bit_width, immediate->enum_domain_id,
+      immediate->encoding_id, immediate->signed_min, immediate->unsigned_max));
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_append_manifest_effect(
+    iree_string_builder_t* builder, const loom_low_effect_t* effect,
+    uint16_t descriptor_effect_index) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "{\"index\":%" PRIu16 ",", descriptor_effect_index));
+  IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+      builder, "kind", "kind_name", effect->kind,
+      loom_low_effect_kind_name(effect->kind)));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+  IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+      builder, "memory_space", "memory_space_name", effect->memory_space,
+      loom_low_memory_space_name(effect->memory_space)));
+  return iree_string_builder_append_format(
+      builder,
+      ",\"scope\":%" PRIu16 ",\"flags\":%" PRIu16 ",\"counter\":%" PRIu16
+      ",\"width_bits\":%" PRIu16 "}",
+      effect->scope_id, effect->flags, effect->counter_id, effect->width_bits);
+}
+
+static iree_status_t loom_low_append_manifest_constraint(
+    iree_string_builder_t* builder, const loom_low_constraint_t* constraint,
+    uint16_t descriptor_constraint_index) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "{\"index\":%" PRIu16 ",", descriptor_constraint_index));
+  IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+      builder, "kind", "kind_name", constraint->kind,
+      loom_low_constraint_kind_name(constraint->kind)));
+  return iree_string_builder_append_format(
+      builder,
+      ",\"lhs_operand\":%" PRIu16 ",\"rhs_operand\":%" PRIu16
+      ",\"flags\":%" PRIu16 "}",
+      constraint->lhs_operand_index, constraint->rhs_operand_index,
+      constraint->flags);
+}
+
+static iree_status_t loom_low_append_manifest_descriptor_rows(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_builder_t* builder, const loom_low_descriptor_t* descriptor) {
+  const loom_low_schedule_class_t* schedule =
+      &descriptor_set->schedule_classes[descriptor->schedule_class_id];
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, ",\"schedule_class\":%" PRIu16 ",\"schedule_class_name\":",
+      descriptor->schedule_class_id));
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_value(
+      descriptor_set, builder, schedule->name_string_offset));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_format(builder, ",\"operands\":["));
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_operand(
+        descriptor_set, builder,
+        &descriptor_set->operands[descriptor->operand_start + i], i));
+  }
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder, "],\"results\":%" PRIu16 ",\"immediates\":[",
+      descriptor->result_count));
+  for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_immediate(
+        descriptor_set, builder,
+        &descriptor_set->immediates[descriptor->immediate_start + i], i));
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, "],\"effects\":["));
+  for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_effect(
+        builder, &descriptor_set->effects[descriptor->effect_start + i], i));
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(builder, "],\"constraints\":["));
+  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_constraint(
+        builder, &descriptor_set->constraints[descriptor->constraint_start + i],
+        i));
+  }
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
+      builder, "],\"feature_mask_words\":["));
+  for (uint16_t i = 0; i < descriptor->feature_mask_word_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder, "%" PRIu64,
+        descriptor_set
+            ->feature_mask_words[descriptor->feature_mask_word_start + i]));
+  }
+  return iree_string_builder_append_cstring(builder, "]");
+}
+
 iree_status_t loom_low_descriptor_set_verify(
     const loom_low_descriptor_set_t* descriptor_set) {
   if (descriptor_set == NULL) {
@@ -1135,12 +1601,25 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       ",\"immediates\":%" PRIu32 ",\"enum_domains\":%" PRIu32
       ",\"enum_values\":%" PRIu32 ",\"effects\":%" PRIu32
       ",\"constraints\":%" PRIu32 ",\"reg_classes\":%" PRIu32
-      ",\"schedule_classes\":%" PRIu32 "}",
+      ",\"reg_class_alts\":%" PRIu32 ",\"schedule_classes\":%" PRIu32
+      ",\"issue_uses\":%" PRIu32 ",\"resources\":%" PRIu32
+      ",\"hazards\":%" PRIu32 ",\"pressure_deltas\":%" PRIu32
+      ",\"feature_mask_words\":%" PRIu32 "}",
       descriptor_set->descriptor_count, descriptor_set->descriptor_ref_count,
       descriptor_set->operand_count, descriptor_set->immediate_count,
       descriptor_set->enum_domain_count, descriptor_set->enum_value_count,
       descriptor_set->effect_count, descriptor_set->constraint_count,
-      descriptor_set->reg_class_count, descriptor_set->schedule_class_count));
+      descriptor_set->reg_class_count, descriptor_set->reg_class_alt_count,
+      descriptor_set->schedule_class_count, descriptor_set->issue_use_count,
+      descriptor_set->resource_count, descriptor_set->hazard_count,
+      descriptor_set->pressure_delta_count,
+      descriptor_set->feature_mask_word_count));
+  IREE_RETURN_IF_ERROR(
+      loom_low_append_manifest_reg_classes(descriptor_set, builder));
+  IREE_RETURN_IF_ERROR(
+      loom_low_append_manifest_resources(descriptor_set, builder));
+  IREE_RETURN_IF_ERROR(
+      loom_low_append_manifest_schedule_classes(descriptor_set, builder));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(builder, ",\"descriptors\":["));
   for (uint32_t i = 0; i < descriptor_set->descriptor_count; ++i) {
@@ -1156,14 +1635,16 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
     IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_field(
         descriptor_set, builder, "mnemonic",
         descriptor->mnemonic_string_offset));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));
+    IREE_RETURN_IF_ERROR(loom_low_descriptor_set_append_string_field(
+        descriptor_set, builder, "semantic_tag",
+        descriptor->semantic_tag_string_offset));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        builder,
-        ",\"schedule_class\":%" PRIu16 ",\"operands\":%" PRIu16
-        ",\"results\":%" PRIu16 ",\"immediates\":%" PRIu16
-        ",\"effects\":%" PRIu16 ",\"flags\":%" PRIu16 "}",
-        descriptor->schedule_class_id, descriptor->operand_count,
-        descriptor->result_count, descriptor->immediate_count,
-        descriptor->effect_count, descriptor->flags));
+        builder, ",\"encoding\":%" PRIu16 ",\"flags\":%" PRIu16,
+        descriptor->encoding_id, descriptor->flags));
+    IREE_RETURN_IF_ERROR(loom_low_append_manifest_descriptor_rows(
+        descriptor_set, builder, descriptor));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "}"));
   }
   return iree_string_builder_append_cstring(builder, "]}");
 }
