@@ -95,6 +95,24 @@ typedef struct loom_low_allocation_remark_t {
   uint32_t required_units;
 } loom_low_allocation_remark_t;
 
+// Spill materialization plan for one spilled assignment.
+typedef struct loom_low_allocation_spill_plan_t {
+  // SSA value represented by the spilled assignment.
+  loom_value_id_t value_id;
+  // Spilled assignment index in |assignments|.
+  uint32_t assignment_index;
+  // Spill slot ordinal assigned to this interval.
+  uint32_t slot_index;
+  // Slot size in bytes.
+  uint32_t byte_size;
+  // Required slot alignment in bytes.
+  uint32_t byte_alignment;
+  // Predicted stores needed by the current synthetic spill plan.
+  uint32_t store_count;
+  // Predicted operand-use reloads in the current synthetic spill plan.
+  uint32_t reload_count;
+} loom_low_allocation_spill_plan_t;
+
 // Copy/coalescing decision for one low.copy op.
 typedef struct loom_low_allocation_copy_decision_t {
   // Source SSA value consumed by the low.copy op.
@@ -138,6 +156,10 @@ typedef struct loom_low_allocation_sidecar_t {
   const loom_low_allocation_assignment_t* assignments;
   // Number of records in |assignments|.
   iree_host_size_t assignment_count;
+  // Spill materialization plans in assignment order.
+  const loom_low_allocation_spill_plan_t* spill_plans;
+  // Number of records in |spill_plans|.
+  iree_host_size_t spill_plan_count;
   // Allocation remarks in assignment order.
   const loom_low_allocation_remark_t* remarks;
   // Number of records in |remarks|.

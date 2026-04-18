@@ -27,12 +27,16 @@ typedef struct loom_low_allocation_build_state_t {
   loom_liveness_analysis_t liveness;
   // Mutable assignment records being built.
   loom_low_allocation_assignment_t* assignments;
+  // Mutable spill materialization plan records being built.
+  loom_low_allocation_spill_plan_t* spill_plans;
   // Mutable remark records being built.
   loom_low_allocation_remark_t* remarks;
   // Mutable copy/coalescing decision records being built.
   loom_low_allocation_copy_decision_t* copy_decisions;
   // Number of initialized assignment records.
   iree_host_size_t assignment_count;
+  // Number of initialized spill materialization plan records.
+  iree_host_size_t spill_plan_count;
   // Number of initialized remark records.
   iree_host_size_t remark_count;
   // Number of initialized copy/coalescing decision records.
@@ -50,6 +54,8 @@ typedef struct loom_low_allocation_class_capacity_t {
   loom_low_allocation_location_kind_t location_kind;
   // Maximum allocation units when |is_bounded| is true.
   uint32_t max_units;
+  // Number of bits in one allocation unit.
+  uint16_t alloc_unit_bits;
   // True when |max_units| is a hard allocation budget.
   bool is_bounded;
 } loom_low_allocation_class_capacity_t;
@@ -80,6 +86,22 @@ static bool loom_low_allocation_location_is_register_like(
     loom_low_allocation_location_kind_t location_kind) {
   return location_kind == LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
          location_kind == LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
+}
+
+static bool loom_low_allocation_is_power_of_two_u32(uint32_t value) {
+  return value != 0 && (value & (value - 1u)) == 0;
+}
+
+static uint32_t loom_low_allocation_round_up_to_power_of_two_u32(
+    uint32_t value) {
+  if (value <= 1) return 1;
+  --value;
+  value |= value >> 1;
+  value |= value >> 2;
+  value |= value >> 4;
+  value |= value >> 8;
+  value |= value >> 16;
+  return value == UINT32_MAX ? 0 : value + 1u;
 }
 
 static bool loom_low_allocation_location_kind_is_known(
@@ -247,51 +269,42 @@ static iree_status_t loom_low_allocation_require_descriptor_register_class(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_descriptor_location_kind(
-    const loom_low_allocation_build_state_t* state,
-    loom_liveness_value_class_t value_class,
-    loom_low_allocation_location_kind_t* out_location_kind) {
-  iree_string_view_t register_class_name = loom_low_allocation_module_string(
-      state->module, value_class.register_class_id);
-  const loom_low_reg_class_t* reg_class = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_require_descriptor_register_class(
-      state, register_class_name, &reg_class));
+static loom_low_allocation_location_kind_t
+loom_low_allocation_reg_class_location_kind(
+    const loom_low_reg_class_t* reg_class) {
   if (reg_class->physical_count > 0 ||
       iree_any_bit_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL)) {
-    *out_location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
-    return iree_ok_status();
+    return LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
   }
-  *out_location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
-  return iree_ok_status();
+  return LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
 }
 
 static iree_status_t loom_low_allocation_class_capacity(
     const loom_low_allocation_build_state_t* state,
     loom_liveness_value_class_t value_class,
     loom_low_allocation_class_capacity_t* out_capacity) {
-  uint32_t budget_units = 0;
-  if (loom_low_allocation_lookup_budget(state, value_class, &budget_units)) {
-    loom_low_allocation_location_kind_t location_kind =
-        LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_descriptor_location_kind(
-        state, value_class, &location_kind));
-    *out_capacity = (loom_low_allocation_class_capacity_t){
-        .location_kind = location_kind,
-        .max_units = budget_units,
-        .is_bounded = true,
-    };
-    return iree_ok_status();
-  }
-
   iree_string_view_t register_class_name = loom_low_allocation_module_string(
       state->module, value_class.register_class_id);
   const loom_low_reg_class_t* reg_class = NULL;
   IREE_RETURN_IF_ERROR(loom_low_allocation_require_descriptor_register_class(
       state, register_class_name, &reg_class));
+
+  uint32_t budget_units = 0;
+  if (loom_low_allocation_lookup_budget(state, value_class, &budget_units)) {
+    *out_capacity = (loom_low_allocation_class_capacity_t){
+        .location_kind = loom_low_allocation_reg_class_location_kind(reg_class),
+        .max_units = budget_units,
+        .alloc_unit_bits = reg_class->alloc_unit_bits,
+        .is_bounded = true,
+    };
+    return iree_ok_status();
+  }
+
   if (reg_class->physical_count > 0) {
     *out_capacity = (loom_low_allocation_class_capacity_t){
         .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
         .max_units = reg_class->physical_count,
+        .alloc_unit_bits = reg_class->alloc_unit_bits,
         .is_bounded = true,
     };
     return iree_ok_status();
@@ -300,6 +313,7 @@ static iree_status_t loom_low_allocation_class_capacity(
   *out_capacity = (loom_low_allocation_class_capacity_t){
       .location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
       .max_units = UINT32_MAX,
+      .alloc_unit_bits = reg_class->alloc_unit_bits,
       .is_bounded = false,
   };
   return iree_ok_status();
@@ -428,6 +442,63 @@ static void loom_low_allocation_record_spill_remark(
   };
 }
 
+static iree_status_t loom_low_allocation_spill_plan_layout(
+    const loom_low_allocation_assignment_t* assignment,
+    uint16_t alloc_unit_bits, uint32_t* out_byte_size,
+    uint32_t* out_byte_alignment) {
+  if (alloc_unit_bits == 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "cannot plan spill for register class with zero allocation unit bits");
+  }
+  uint64_t bit_size = (uint64_t)assignment->unit_count * alloc_unit_bits;
+  uint64_t byte_size = (bit_size + 7u) / 8u;
+  if (byte_size > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "spill slot byte size exceeds uint32_t");
+  }
+  uint32_t unit_byte_size = ((uint32_t)alloc_unit_bits + 7u) / 8u;
+  uint32_t byte_alignment =
+      loom_low_allocation_round_up_to_power_of_two_u32(unit_byte_size);
+  if (byte_alignment == 0) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "spill slot byte alignment exceeds uint32_t");
+  }
+  *out_byte_size = (uint32_t)byte_size;
+  *out_byte_alignment = byte_alignment;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_record_spill_plan(
+    loom_low_allocation_build_state_t* state, uint32_t assignment_index,
+    uint16_t alloc_unit_bits) {
+  const loom_low_allocation_assignment_t* assignment =
+      &state->assignments[assignment_index];
+  uint32_t byte_size = 0;
+  uint32_t byte_alignment = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_spill_plan_layout(
+      assignment, alloc_unit_bits, &byte_size, &byte_alignment));
+
+  if (assignment->value_id >= state->module->values.count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "cannot plan spill for out-of-range value %u",
+                            (unsigned)assignment->value_id);
+  }
+  uint32_t reload_count =
+      loom_module_value(state->module, assignment->value_id)->use_count;
+  state->spill_plans[state->spill_plan_count++] =
+      (loom_low_allocation_spill_plan_t){
+          .value_id = assignment->value_id,
+          .assignment_index = assignment_index,
+          .slot_index = assignment->location_base,
+          .byte_size = byte_size,
+          .byte_alignment = byte_alignment,
+          .store_count = reload_count > 0 ? 1u : 0u,
+          .reload_count = reload_count,
+      };
+  return iree_ok_status();
+}
+
 static bool loom_low_allocation_assignment_locations_equal(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
@@ -552,6 +623,12 @@ static iree_status_t loom_low_allocation_assign_intervals(
       (void**)&state->assignments));
   memset(state->assignments, 0,
          allocatable_count * sizeof(*state->assignments));
+  state->spill_plans = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->arena, allocatable_count, sizeof(*state->spill_plans),
+      (void**)&state->spill_plans));
+  memset(state->spill_plans, 0,
+         allocatable_count * sizeof(*state->spill_plans));
   state->remarks = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       state->arena, allocatable_count, sizeof(*state->remarks),
@@ -600,6 +677,8 @@ static iree_status_t loom_low_allocation_assign_intervals(
     uint32_t assignment_index = (uint32_t)state->assignment_count++;
     if (!assigned) {
       ++state->spill_count;
+      IREE_RETURN_IF_ERROR(loom_low_allocation_record_spill_plan(
+          state, assignment_index, capacity.alloc_unit_bits));
       loom_low_allocation_record_spill_remark(
           state, assignment_index,
           capacity.is_bounded ? capacity.max_units : UINT32_MAX,
@@ -675,6 +754,53 @@ static iree_status_t loom_low_allocation_verify_remark(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_verify_spill_plan(
+    const loom_low_allocation_sidecar_t* sidecar,
+    const loom_low_allocation_spill_plan_t* spill_plan,
+    iree_host_size_t spill_plan_index) {
+  if (spill_plan->assignment_index >= sidecar->assignment_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "allocation spill plan %zu references assignment %u, but sidecar has "
+        "only %zu assignments",
+        spill_plan_index, spill_plan->assignment_index,
+        sidecar->assignment_count);
+  }
+  const loom_low_allocation_assignment_t* assignment =
+      &sidecar->assignments[spill_plan->assignment_index];
+  if (spill_plan->value_id >= sidecar->module->values.count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "allocation spill plan %zu references out-of-range value %u",
+        spill_plan_index, (unsigned)spill_plan->value_id);
+  }
+  if (assignment->location_kind != LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation spill plan %zu references a non-spill assignment",
+        spill_plan_index);
+  }
+  if (assignment->value_id != spill_plan->value_id ||
+      assignment->location_base != spill_plan->slot_index) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation spill plan %zu does not match referenced assignment",
+        spill_plan_index);
+  }
+  if (spill_plan->byte_size == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "allocation spill plan %zu has empty byte size",
+                            spill_plan_index);
+  }
+  if (!loom_low_allocation_is_power_of_two_u32(spill_plan->byte_alignment)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "allocation spill plan %zu has non-power-of-two byte alignment",
+        spill_plan_index);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_verify_copy_decision(
     const loom_low_allocation_sidecar_t* sidecar,
     const loom_low_allocation_copy_decision_t* copy_decision,
@@ -730,6 +856,10 @@ iree_status_t loom_low_allocation_verify_sidecar(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar is required");
   }
+  if (!sidecar->module) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "allocation sidecar module is required");
+  }
   if (!sidecar->function_op || !loom_low_func_def_isa(sidecar->function_op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar low.func.def is required");
@@ -742,6 +872,10 @@ iree_status_t loom_low_allocation_verify_sidecar(
   if (sidecar->assignment_count > 0 && !sidecar->assignments) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation sidecar assignments are required");
+  }
+  if (sidecar->spill_plan_count > 0 && !sidecar->spill_plans) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "allocation sidecar spill plans are required");
   }
   if (sidecar->remark_count > 0 && !sidecar->remarks) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -769,6 +903,10 @@ iree_status_t loom_low_allocation_verify_sidecar(
   for (iree_host_size_t i = 0; i < sidecar->remark_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_remark(
         &sidecar->remarks[i], i, sidecar->assignment_count));
+  }
+  for (iree_host_size_t i = 0; i < sidecar->spill_plan_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_verify_spill_plan(
+        sidecar, &sidecar->spill_plans[i], i));
   }
   iree_host_size_t coalesced_copy_count = 0;
   iree_host_size_t materialized_copy_count = 0;
@@ -800,6 +938,12 @@ iree_status_t loom_low_allocation_verify_sidecar(
         "allocation sidecar spill_count is %zu but assignments contain %zu "
         "spills",
         sidecar->spill_count, spill_count);
+  }
+  if (sidecar->spill_plan_count != spill_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation sidecar has %zu spill plans for %zu spilled assignments",
+        sidecar->spill_plan_count, spill_count);
   }
   if (sidecar->coalesced_copy_count != coalesced_copy_count ||
       sidecar->materialized_copy_count != materialized_copy_count) {
@@ -870,6 +1014,8 @@ iree_status_t loom_low_allocate_function(
       .allocation_mode = loom_low_func_def_allocation(low_func_op),
       .assignments = state.assignments,
       .assignment_count = state.assignment_count,
+      .spill_plans = state.spill_plans,
+      .spill_plan_count = state.spill_plan_count,
       .remarks = state.remarks,
       .remark_count = state.remark_count,
       .copy_decisions = state.copy_decisions,
