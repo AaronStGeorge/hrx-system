@@ -12,6 +12,30 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    descriptors
+  HDRS
+    "descriptors.h"
+  SRCS
+    "descriptors.c"
+  DEPS
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    descriptors_test
+  SRCS
+    "descriptors_test.cc"
+  DEPS
+    ::descriptors
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     matrix_contract
   HDRS
     "matrix_contract.h"

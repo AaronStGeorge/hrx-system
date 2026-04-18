@@ -585,6 +585,52 @@ TEST(LowDescriptorsTest, LookupRejectsIncompleteDescriptorReferences) {
   EXPECT_EQ(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE);
 }
 
+TEST(LowDescriptorsTest, RejectsRegisterClassWithoutStorageKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_classes[0].flags = 0;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsConflictingRegisterClassStorageKinds) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_classes[0].flags =
+      LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY | LOOM_LOW_REG_CLASS_FLAG_PHYSICAL;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsVirtualRegisterClassWithPhysicalCount) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_classes[0].physical_count = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsPhysicalRegisterClassWithoutPhysicalCount) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_classes[0].flags = LOOM_LOW_REG_CLASS_FLAG_PHYSICAL;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, AcceptsPhysicalRegisterClassWithPhysicalCount) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_classes[0].flags = LOOM_LOW_REG_CLASS_FLAG_PHYSICAL;
+  tables.reg_classes[0].physical_count = 32;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
 TEST(LowDescriptorsTest, RejectsUnknownScheduleModelData) {
   TestTables tables;
   InitializeTestTables(&tables);

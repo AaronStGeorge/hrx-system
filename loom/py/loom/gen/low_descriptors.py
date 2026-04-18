@@ -998,12 +998,14 @@ def write_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | N
 
 
 def main() -> None:
+    from loom.target.arch.amdgpu.descriptors import AMDGPU_GFX950_CORE_DESCRIPTOR_SET
     from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
     from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 
     descriptor_sets = (
         IREEVM_CORE_DESCRIPTOR_SET,
         WASM_CORE_SIMD128_DESCRIPTOR_SET,
+        AMDGPU_GFX950_CORE_DESCRIPTOR_SET,
     )
     for descriptor_set in descriptor_sets:
         write_descriptor_set(descriptor_set)

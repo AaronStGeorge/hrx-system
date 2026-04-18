@@ -39,6 +39,58 @@ iree_assert_no_dependency(
     target = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
 )
 
+iree_assert_no_dependency(
+    name = "descriptors_no_matrix_contract_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "descriptors_no_wasm_arch_dep",
+    dependency = "//loom/src/loom/target/arch/wasm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "descriptors_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target/arch/amdgpu:descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "descriptors_no_ireevm_emit_dep",
+    dependency = "//loom/src/loom/target/emit/ireevm:descriptors",
+    target = "//loom/src/loom/target/arch/amdgpu:descriptors",
+)
+
+iree_assert_no_dependency(
+    name = "descriptors_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target/arch/amdgpu:descriptors",
+)
+
+#===------------------------------------------------------------------------===#
+# AMDGPU low descriptors
+#===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "descriptors",
+    srcs = ["descriptors.c"],
+    hdrs = ["descriptors.h"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
+)
+
+loom_cc_test(
+    name = "descriptors_test",
+    srcs = ["descriptors_test.cc"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 #===------------------------------------------------------------------------===#
 # AMDGPU matrix contracts
 #===------------------------------------------------------------------------===#
