@@ -566,6 +566,64 @@ TEST(LowDescriptorsTest, RejectsUnknownScheduleClassFlagBits) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
 }
 
+TEST(LowDescriptorsTest, RejectsInvalidOperandRole) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].role = static_cast<loom_low_operand_role_t>(99);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidImmediateKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.immediates[0].kind = static_cast<loom_low_immediate_kind_t>(99);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidEffectKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorEffect(&tables, LOOM_LOW_EFFECT_KIND_READ,
+                         LOOM_LOW_MEMORY_SPACE_GENERIC);
+  tables.effects[0].kind = static_cast<loom_low_effect_kind_t>(99);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidConstraintKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  AddAddDescriptorConstraint(&tables, LOOM_LOW_CONSTRAINT_KIND_TIED, 0, 1);
+  tables.constraints[0].kind = static_cast<loom_low_constraint_kind_t>(99);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidResourceKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.resources[0].kind = static_cast<loom_low_resource_kind_t>(99);
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidHazardKind) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.hazards[0].kind = static_cast<loom_low_hazard_kind_t>(99);
+  tables.set.hazard_count = 1;
+
+  iree_status_t status = loom_low_descriptor_set_verify(&tables.set);
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT, status);
+}
+
 TEST(LowDescriptorsTest, AcceptsSideEffectingReadEffect) {
   TestTables tables;
   InitializeTestTables(&tables);

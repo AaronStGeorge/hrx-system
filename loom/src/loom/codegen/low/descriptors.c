@@ -212,6 +212,20 @@ static bool loom_low_operand_role_is_packet_operand(
          role == LOOM_LOW_OPERAND_ROLE_RESOURCE;
 }
 
+static bool loom_low_operand_role_is_valid(loom_low_operand_role_t role) {
+  switch (role) {
+    case LOOM_LOW_OPERAND_ROLE_RESULT:
+    case LOOM_LOW_OPERAND_ROLE_OPERAND:
+    case LOOM_LOW_OPERAND_ROLE_OPERAND_RESULT:
+    case LOOM_LOW_OPERAND_ROLE_PREDICATE:
+    case LOOM_LOW_OPERAND_ROLE_RESOURCE:
+    case LOOM_LOW_OPERAND_ROLE_IMPLICIT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_low_verify_binary_constraint(
     const loom_low_constraint_t* constraint, const char* constraint_name) {
   if (constraint->rhs_operand_index == LOOM_LOW_ID_NONE) {
@@ -317,6 +331,33 @@ static iree_status_t loom_low_verify_descriptor_constraints(
   return iree_ok_status();
 }
 
+static bool loom_low_immediate_kind_is_valid(loom_low_immediate_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_IMMEDIATE_KIND_SIGNED:
+    case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
+    case LOOM_LOW_IMMEDIATE_KIND_ORDINAL:
+    case LOOM_LOW_IMMEDIATE_KIND_ENUM:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_effect_kind_is_valid(loom_low_effect_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_EFFECT_KIND_READ:
+    case LOOM_LOW_EFFECT_KIND_WRITE:
+    case LOOM_LOW_EFFECT_KIND_CALL:
+    case LOOM_LOW_EFFECT_KIND_BARRIER:
+    case LOOM_LOW_EFFECT_KIND_COUNTER:
+    case LOOM_LOW_EFFECT_KIND_CONVERGENT:
+    case LOOM_LOW_EFFECT_KIND_CONTROL:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool loom_low_memory_space_is_valid(loom_low_memory_space_t space) {
   switch (space) {
     case LOOM_LOW_MEMORY_SPACE_NONE:
@@ -326,6 +367,20 @@ static bool loom_low_memory_space_is_valid(loom_low_memory_space_t space) {
     case LOOM_LOW_MEMORY_SPACE_STACK:
     case LOOM_LOW_MEMORY_SPACE_VM_REF:
     case LOOM_LOW_MEMORY_SPACE_WASM_MEMORY:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_constraint_kind_is_valid(loom_low_constraint_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_CONSTRAINT_KIND_TIED:
+    case LOOM_LOW_CONSTRAINT_KIND_COMMUTABLE:
+    case LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE:
+    case LOOM_LOW_CONSTRAINT_KIND_EARLY_CLOBBER:
+    case LOOM_LOW_CONSTRAINT_KIND_REMATERIALIZABLE:
+    case LOOM_LOW_CONSTRAINT_KIND_FOLDABLE:
       return true;
     default:
       return false;
@@ -349,6 +404,33 @@ static bool loom_low_model_quality_is_valid(loom_low_model_quality_t quality) {
     case LOOM_LOW_MODEL_QUALITY_CALIBRATED:
     case LOOM_LOW_MODEL_QUALITY_ESTIMATED:
     case LOOM_LOW_MODEL_QUALITY_FALLBACK:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_resource_kind_is_valid(loom_low_resource_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_RESOURCE_KIND_SCALAR_ALU:
+    case LOOM_LOW_RESOURCE_KIND_VECTOR_ALU:
+    case LOOM_LOW_RESOURCE_KIND_MATRIX:
+    case LOOM_LOW_RESOURCE_KIND_LOAD:
+    case LOOM_LOW_RESOURCE_KIND_STORE:
+    case LOOM_LOW_RESOURCE_KIND_CONTROL:
+    case LOOM_LOW_RESOURCE_KIND_ADDRESS:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_hazard_kind_is_valid(loom_low_hazard_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_HAZARD_KIND_MIN_DISTANCE:
+    case LOOM_LOW_HAZARD_KIND_WAIT_COUNTER:
+    case LOOM_LOW_HAZARD_KIND_BYPASS:
+    case LOOM_LOW_HAZARD_KIND_FUSION:
       return true;
     default:
       return false;
@@ -618,6 +700,11 @@ static iree_status_t loom_low_verify_operand(
                             "low operand %" PRIu32 " has unknown role",
                             operand_index);
   }
+  if (!loom_low_operand_role_is_valid(operand->role)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low operand %" PRIu32 " has invalid role %u",
+                            operand_index, (unsigned)operand->role);
+  }
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
       operand->reg_class_alt_start, operand->reg_class_alt_count,
       descriptor_set->reg_class_alt_count, "reg_class_alts"));
@@ -639,6 +726,11 @@ static iree_status_t loom_low_verify_immediate(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low immediate %" PRIu32 " has unknown kind",
                             immediate_index);
+  }
+  if (!loom_low_immediate_kind_is_valid(immediate->kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low immediate %" PRIu32 " has invalid kind %u",
+                            immediate_index, (unsigned)immediate->kind);
   }
   if (immediate->kind == LOOM_LOW_IMMEDIATE_KIND_ENUM) {
     if (immediate->enum_domain_id == LOOM_LOW_ENUM_DOMAIN_NONE) {
@@ -897,6 +989,11 @@ static iree_status_t loom_low_verify_resource(
                             "low resource %" PRIu32 " has unknown kind",
                             resource_index);
   }
+  if (!loom_low_resource_kind_is_valid(resource->kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low resource %" PRIu32 " has invalid kind %u",
+                            resource_index, (unsigned)resource->kind);
+  }
   if (resource->capacity_per_cycle == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -916,6 +1013,11 @@ static iree_status_t loom_low_verify_effect(uint32_t effect_index,
                             "low effect %" PRIu32 " has unknown kind",
                             effect_index);
   }
+  if (!loom_low_effect_kind_is_valid(effect->kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low effect %" PRIu32 " has invalid kind %u",
+                            effect_index, (unsigned)effect->kind);
+  }
   if (!loom_low_memory_space_is_valid(effect->memory_space)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low effect %" PRIu32
@@ -932,6 +1034,11 @@ static iree_status_t loom_low_verify_constraint(
                             "low constraint %" PRIu32 " has unknown kind",
                             constraint_index);
   }
+  if (!loom_low_constraint_kind_is_valid(constraint->kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low constraint %" PRIu32 " has invalid kind %u",
+                            constraint_index, (unsigned)constraint->kind);
+  }
   return iree_ok_status();
 }
 
@@ -941,6 +1048,11 @@ static iree_status_t loom_low_verify_hazard(uint32_t hazard_index,
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low hazard %" PRIu32 " has unknown kind",
                             hazard_index);
+  }
+  if (!loom_low_hazard_kind_is_valid(hazard->kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low hazard %" PRIu32 " has invalid kind %u",
+                            hazard_index, (unsigned)hazard->kind);
   }
   return iree_ok_status();
 }
