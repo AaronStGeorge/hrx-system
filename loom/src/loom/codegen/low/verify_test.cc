@@ -730,14 +730,33 @@ void AddFeatureTestConstraint(FeatureTestTables* tables,
   tables->set.constraint_count = 1;
 }
 
-std::string FeatureEnumImmediateSource(const char* mode_value) {
+std::string FeatureTargetRecords(const char* feature_bits) {
   return std::string(
-             "test.record @snapshot {}\n"
-             "test.record @export {}\n"
+             "target.snapshot @test_snapshot {codegen_format = low_native, "
+             "target_triple = \"test\", data_layout = \"\", artifact_format = "
+             "elf, target_cpu = \"generic\", target_features = \"\", "
+             "default_pointer_bitwidth = 64, index_bitwidth = 64, "
+             "offset_bitwidth = 64, memory_space_generic = 0, "
+             "memory_space_global = 0, memory_space_workgroup = 0, "
+             "memory_space_constant = 0, memory_space_private = 0, "
+             "memory_space_host = 0, memory_space_descriptor = 0}\n"
+             "target.export @test_export {export_symbol = \"add\", abi = "
+             "object_function, linkage = default, hal_binding_alignment = 0, "
+             "hal_workgroup_size_x = 0, hal_workgroup_size_y = 0, "
+             "hal_workgroup_size_z = 0, hal_flat_workgroup_size_min = 0, "
+             "hal_flat_workgroup_size_max = 0, hal_buffer_resource_flags = "
+             "0}\n"
              "target.config @test_config {contract_set_key = \"test.core\", "
-             "contract_feature_bits = 5}\n"
-             "target.bundle @test_target {snapshot = @snapshot, export_plan = "
-             "@export, config = @test_config}\n"
+             "contract_feature_bits = ") +
+         feature_bits +
+         "}\n"
+         "target.bundle @test_target {snapshot = @test_snapshot, export_plan = "
+         "@test_export, config = @test_config}\n";
+}
+
+std::string FeatureEnumImmediateSource(const char* mode_value) {
+  return FeatureTargetRecords("5") +
+         std::string(
              "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
              "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
              "  %sum = low.op<test.add.i32>(%lhs, %rhs) {mode = ") +
@@ -789,12 +808,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsMissingFeatureBits) {
   };
 
   std::string source =
-      "test.record @snapshot {}\n"
-      "test.record @export {}\n"
-      "target.config @test_config {contract_set_key = \"test.core\", "
-      "contract_feature_bits = 1}\n"
-      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
-      "@export, config = @test_config}\n"
+      FeatureTargetRecords("1") +
       "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
@@ -942,12 +956,7 @@ TEST_F(LowDescriptorVerifyTest, IgnoresImplicitDescriptorOperandRows) {
   };
 
   std::string source =
-      "test.record @snapshot {}\n"
-      "test.record @export {}\n"
-      "target.config @test_config {contract_set_key = \"test.core\", "
-      "contract_feature_bits = 5}\n"
-      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
-      "@export, config = @test_config}\n"
+      FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
@@ -978,12 +987,7 @@ TEST_F(LowDescriptorVerifyTest, AcceptsMatchingTiedConstraintTypes) {
   };
 
   std::string source =
-      "test.record @snapshot {}\n"
-      "test.record @export {}\n"
-      "target.config @test_config {contract_set_key = \"test.core\", "
-      "contract_feature_bits = 5}\n"
-      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
-      "@export, config = @test_config}\n"
+      FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
@@ -1014,12 +1018,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsTiedConstraintTypeMismatch) {
   };
 
   std::string source =
-      "test.record @snapshot {}\n"
-      "test.record @export {}\n"
-      "target.config @test_config {contract_set_key = \"test.core\", "
-      "contract_feature_bits = 5}\n"
-      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
-      "@export, config = @test_config}\n"
+      FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
@@ -1070,12 +1069,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsDestructiveConstraintTypeMismatch) {
   };
 
   std::string source =
-      "test.record @snapshot {}\n"
-      "test.record @export {}\n"
-      "target.config @test_config {contract_set_key = \"test.core\", "
-      "contract_feature_bits = 5}\n"
-      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
-      "@export, config = @test_config}\n"
+      FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
       "%rhs : reg<test.gpr x1>) -> (reg<test.alt x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "
@@ -1110,12 +1104,7 @@ TEST_F(LowDescriptorVerifyTest, RejectsCommutableConstraintTypeMismatch) {
   };
 
   std::string source =
-      "test.record @snapshot {}\n"
-      "test.record @export {}\n"
-      "target.config @test_config {contract_set_key = \"test.core\", "
-      "contract_feature_bits = 5}\n"
-      "target.bundle @test_target {snapshot = @snapshot, export_plan = "
-      "@export, config = @test_config}\n"
+      FeatureTargetRecords("5") +
       "low.func.def target(@test_target) @add(%lhs : reg<test.gpr x1>, "
       "%rhs : reg<test.alt x1>) -> (reg<test.gpr x1>) {\n"
       "  %sum = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.gpr x1>, "

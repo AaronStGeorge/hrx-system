@@ -19,6 +19,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
+#include "loom/target/ir_records.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,8 +31,14 @@ typedef struct loom_low_resolved_target_t {
   const loom_symbol_t* target_symbol;
   // Defining op for |target_symbol|; currently expected to be target.bundle.
   const loom_op_t* target_op;
+  // target.snapshot op selected by the target bundle.
+  const loom_op_t* snapshot_op;
+  // target.export op selected by the target bundle.
+  const loom_op_t* export_plan_op;
   // target.config op selected by the target bundle.
   const loom_op_t* config_op;
+  // Materialized target records selected by this low function.
+  loom_target_ir_bundle_storage_t bundle_storage;
   // Borrowed target symbol name without the leading '@'.
   iree_string_view_t target_name;
   // Borrowed descriptor-set key selected by |config_op|.

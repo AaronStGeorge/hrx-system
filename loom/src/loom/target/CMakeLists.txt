@@ -35,6 +35,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    ir_records
+  HDRS
+    "ir_records.h"
+  SRCS
+    "ir_records.c"
+  DEPS
+    ::types
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::target
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_descriptor_registry
   HDRS
     "low_descriptor_registry.h"
@@ -64,6 +79,22 @@ loom_cc_test(
     "records_test.cc"
   DEPS
     ::records
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    ir_records_test
+  SRCS
+    "ir_records_test.cc"
+  DEPS
+    ::ir_records
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::target
     iree::testing::gtest
     iree::testing::gtest_main
 )

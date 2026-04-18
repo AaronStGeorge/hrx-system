@@ -58,6 +58,24 @@ iree_assert_no_dependency(
 )
 
 iree_assert_no_dependency(
+    name = "ir_records_no_x86_arch_dep",
+    dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
+    target = "//loom/src/loom/target:ir_records",
+)
+
+iree_assert_no_dependency(
+    name = "ir_records_no_amdgpu_arch_dep",
+    dependency = "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+    target = "//loom/src/loom/target:ir_records",
+)
+
+iree_assert_no_dependency(
+    name = "ir_records_no_llvmir_emit_dep",
+    dependency = "//loom/src/loom/target/emit/llvmir:llvmir",
+    target = "//loom/src/loom/target:ir_records",
+)
+
+iree_assert_no_dependency(
     name = "low_descriptor_registry_no_x86_contract_dep",
     dependency = "//loom/src/loom/target/arch/x86:packed_dot_contract",
     target = "//loom/src/loom/target:low_descriptor_registry",
@@ -79,6 +97,18 @@ loom_cc_library(
     hdrs = ["records.h"],
     deps = [
         ":types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "ir_records",
+    srcs = ["ir_records.c"],
+    hdrs = ["ir_records.h"],
+    deps = [
+        ":types",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/target",
         "//runtime/src/iree/base",
     ],
 )
@@ -109,6 +139,21 @@ loom_cc_test(
     srcs = ["records_test.cc"],
     deps = [
         ":records",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "ir_records_test",
+    srcs = ["ir_records_test.cc"],
+    deps = [
+        ":ir_records",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/target",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
