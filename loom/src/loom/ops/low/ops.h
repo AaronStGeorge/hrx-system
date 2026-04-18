@@ -26,7 +26,9 @@ enum {
   LOOM_OP_LOW_COPY = LOOM_OP_KIND(LOOM_DIALECT_LOW, 5),
   LOOM_OP_LOW_INVOKE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 6),
   LOOM_OP_LOW_ABI_ADAPTER = LOOM_OP_KIND(LOOM_DIALECT_LOW, 7),
-  LOOM_OP_LOW_COUNT_ = 8,
+  LOOM_OP_LOW_ABI_OPERAND = LOOM_OP_KIND(LOOM_DIALECT_LOW, 8),
+  LOOM_OP_LOW_ABI_RESULT = LOOM_OP_KIND(LOOM_DIALECT_LOW, 9),
+  LOOM_OP_LOW_COUNT_ = 10,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -50,10 +52,19 @@ typedef enum loom_low_purity_e {
   LOOM_LOW_PURITY_COUNT_ = 2,
 } loom_low_purity_t;
 
+// Per-slot conversion rule used by low ABI adapter mapping records.
+typedef enum loom_low_conversion_e {
+  LOOM_LOW_CONVERSION_DIRECT = 0,
+  LOOM_LOW_CONVERSION_SCALAR_TO_REGISTER = 1,
+  LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR = 2,
+  LOOM_LOW_CONVERSION_COUNT_ = 3,
+} loom_low_conversion_t;
+
 // Semantic-to-low ABI conversion rule used by a low ABI adapter record.
 typedef enum loom_low_abi_adapter_conversion_e {
   LOOM_LOW_ABI_ADAPTER_CONVERSION_DIRECT = 0,
-  LOOM_LOW_ABI_ADAPTER_CONVERSION_COUNT_ = 1,
+  LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED = 1,
+  LOOM_LOW_ABI_ADAPTER_CONVERSION_COUNT_ = 2,
 } loom_low_abi_adapter_conversion_t;
 
 // LOOM_OP_LOW_FUNC_DEF: Target-bound low function definition with register-typed signature values.
@@ -238,6 +249,52 @@ iree_status_t loom_low_abi_adapter_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_abi_adapter_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_ABI_OPERAND: Mapped low ABI adapter operand slot from semantic value type to callee register ABI type.
+// low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}
+LOOM_DEFINE_ISA(loom_low_abi_operand_isa, LOOM_OP_LOW_ABI_OPERAND)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_operand_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_operand_adapter, 1)
+LOOM_DEFINE_ATTR_I64(loom_low_abi_operand_index, 2)
+LOOM_DEFINE_ATTR_ENUM(loom_low_abi_operand_conversion, 3)
+LOOM_DEFINE_ATTR_TYPE(loom_low_abi_operand_semantic_type, 4)
+LOOM_DEFINE_ATTR_TYPE(loom_low_abi_operand_abi_type, 5)
+iree_status_t loom_low_abi_operand_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t adapter,
+    int64_t index,
+    uint8_t conversion,
+    uint32_t semantic_type,
+    uint32_t abi_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_abi_operand_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_ABI_RESULT: Mapped low ABI adapter result slot from callee register ABI type to semantic value type.
+// low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<vm.i32>}
+LOOM_DEFINE_ISA(loom_low_abi_result_isa, LOOM_OP_LOW_ABI_RESULT)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_result_symbol, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_low_abi_result_adapter, 1)
+LOOM_DEFINE_ATTR_I64(loom_low_abi_result_index, 2)
+LOOM_DEFINE_ATTR_ENUM(loom_low_abi_result_conversion, 3)
+LOOM_DEFINE_ATTR_TYPE(loom_low_abi_result_semantic_type, 4)
+LOOM_DEFINE_ATTR_TYPE(loom_low_abi_result_abi_type, 5)
+iree_status_t loom_low_abi_result_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t symbol,
+    loom_symbol_ref_t adapter,
+    int64_t index,
+    uint8_t conversion,
+    uint32_t semantic_type,
+    uint32_t abi_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_abi_result_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

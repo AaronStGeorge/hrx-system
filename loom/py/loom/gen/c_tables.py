@@ -2354,6 +2354,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
                 "encoding": "LOOM_DEFINE_ATTR_ENCODING",
                 "enum": "LOOM_DEFINE_ATTR_ENUM",
                 "symbol": "LOOM_DEFINE_ATTR_SYMBOL",
+                "type": "LOOM_DEFINE_ATTR_TYPE",
                 "any": "LOOM_DEFINE_ATTR_ANY",
             }
             macro = macro_map.get(attr_def.attr_type)

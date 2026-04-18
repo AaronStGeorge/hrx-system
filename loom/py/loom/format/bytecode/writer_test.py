@@ -1447,6 +1447,40 @@ class TestCrossFormatRoundTrip:
         assert symbol.op.attributes["target"] == "gfx1100"
         assert _roundtrip_text_through_bytecode(text, include_low=True) == text
 
+    def test_low_mapped_abi_adapter_survives_bytecode(self) -> None:
+        text = (
+            "test.record @vm_target\n\n"
+            "low.func.decl target(@vm_target) @extern_add(%lhs: reg<vm.i32>, "
+            "%rhs: reg<vm.i32>) -> (reg<vm.i32>)\n\n"
+            "low.abi.adapter @extern_add_i32 {callee = @extern_add, "
+            "conversion = mapped, operand_count = 2, result_count = 1}\n\n"
+            "low.abi.operand @extern_add_i32_lhs {abi_type = reg<vm.i32>, "
+            "adapter = @extern_add_i32, conversion = scalar_to_register, "
+            "index = 0, semantic_type = i32}\n\n"
+            "low.abi.operand @extern_add_i32_rhs {abi_type = reg<vm.i32>, "
+            "adapter = @extern_add_i32, conversion = scalar_to_register, "
+            "index = 1, semantic_type = i32}\n\n"
+            "low.abi.result @extern_add_i32_result {abi_type = reg<vm.i32>, "
+            "adapter = @extern_add_i32, conversion = register_to_scalar, "
+            "index = 0, semantic_type = i32}\n\n"
+            "func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {\n"
+            "  %sum = low.invoke @extern_add(%lhs, %rhs) "
+            "{adapter = @extern_add_i32} : (i32, i32) -> (i32)\n"
+            "  func.return %sum : i32\n"
+            "}\n"
+        )
+
+        loaded = _parse_write_read(text, include_low=True)
+        assert len(loaded.symbols) == 7
+        adapter_symbol = loaded.symbols[2]
+        assert adapter_symbol.op is not None
+        assert adapter_symbol.op.attributes["conversion"] == "mapped"
+        lhs_symbol = loaded.symbols[3]
+        assert lhs_symbol.op is not None
+        assert lhs_symbol.op.attributes["semantic_type"] == I32
+        assert lhs_symbol.op.attributes["abi_type"] == RegisterType("vm.i32")
+        assert _roundtrip_text_through_bytecode(text, include_low=True) == text
+
     def test_symbol_without_bytecode_payload_kind_fails_loud(self) -> None:
         module = Module()
         module.add_symbol(Symbol(name="opaque", kind=SymbolKind.NONE))

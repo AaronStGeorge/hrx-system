@@ -44,6 +44,7 @@ from loom.dsl import (
     ANY,
     ATTR_TYPE_ENUM,
     ATTR_TYPE_I64,
+    ATTR_TYPE_TYPE,
     ISOLATED_FROM_ABOVE,
     REGISTER,
     SYMBOL_DEFINE,
@@ -87,8 +88,35 @@ LowAbiConversion = EnumDef(
             0,
             doc="Invoke operands/results are already the callee register ABI types.",
         ),
+        EnumCase(
+            "mapped",
+            1,
+            doc="Adapter slot records describe semantic and register ABI type crossings.",
+        ),
     ],
     doc="Semantic-to-low ABI conversion rule used by a low ABI adapter record.",
+)
+
+LowAbiValueConversion = EnumDef(
+    "LowAbiValueConversion",
+    [
+        EnumCase(
+            "direct",
+            0,
+            doc="Semantic and ABI slot types are identical.",
+        ),
+        EnumCase(
+            "scalar_to_register",
+            1,
+            doc="A semantic scalar is materialized into a callee register ABI slot.",
+        ),
+        EnumCase(
+            "register_to_scalar",
+            2,
+            doc="A callee register ABI slot is unpacked into a semantic scalar.",
+        ),
+    ],
+    doc="Per-slot conversion rule used by low ABI adapter mapping records.",
 )
 
 # ============================================================================
@@ -349,6 +377,81 @@ low_abi_adapter = Op(
     ],
     examples=[
         "low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = direct, operand_count = 2, result_count = 1}",
+        "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = mapped, operand_count = 2, result_count = 1}",
+    ],
+)
+
+# ============================================================================
+# low.abi.operand — semantic-to-register ABI operand mapping
+# ============================================================================
+
+low_abi_operand = Op(
+    "low.abi.operand",
+    group=low_ops,
+    doc=("Mapped low ABI adapter operand slot from semantic value type to callee register ABI type."),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="low ABI operand mapping",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "adapter",
+            "symbol",
+            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
+        ),
+        AttrDef("index", ATTR_TYPE_I64),
+        AttrDef("conversion", ATTR_TYPE_ENUM, enum_def=LowAbiValueConversion),
+        AttrDef("semantic_type", ATTR_TYPE_TYPE),
+        AttrDef("abi_type", ATTR_TYPE_TYPE),
+    ],
+    verify="loom_low_abi_operand_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index = 0, conversion = scalar_to_register, semantic_type = i32, abi_type = reg<vm.i32>}",
+    ],
+)
+
+# ============================================================================
+# low.abi.result — register-to-semantic ABI result mapping
+# ============================================================================
+
+low_abi_result = Op(
+    "low.abi.result",
+    group=low_ops,
+    doc=("Mapped low ABI adapter result slot from callee register ABI type to semantic value type."),
+    traits=[SYMBOL_DEFINE],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="low ABI result mapping",
+        interfaces=["record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+    ),
+    attrs=[
+        AttrDef("symbol", "symbol"),
+        AttrDef(
+            "adapter",
+            "symbol",
+            symbol_ref=SymbolReference("low ABI adapter", ["record"]),
+        ),
+        AttrDef("index", ATTR_TYPE_I64),
+        AttrDef("conversion", ATTR_TYPE_ENUM, enum_def=LowAbiValueConversion),
+        AttrDef("semantic_type", ATTR_TYPE_TYPE),
+        AttrDef("abi_type", ATTR_TYPE_TYPE),
+    ],
+    verify="loom_low_abi_result_verify",
+    format=[
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, index = 0, conversion = register_to_scalar, semantic_type = i32, abi_type = reg<vm.i32>}",
     ],
 )
 
@@ -408,4 +511,6 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_copy,
     low_invoke,
     low_abi_adapter,
+    low_abi_operand,
+    low_abi_result,
 )

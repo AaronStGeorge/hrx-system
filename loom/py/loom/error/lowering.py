@@ -376,6 +376,57 @@ ERR_LOWERING_017 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_018: Low ABI adapter mapping entry is invalid.
+ERR_LOWERING_018 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=18,
+    severity=Severity.ERROR,
+    summary="Low ABI adapter mapping entry is invalid.",
+    message=(
+        "low ABI adapter '@{adapter_name}' {field_kind} entry "
+        "'@{entry_name}' at index {field_index} is invalid: {reason}"
+    ),
+    params=(
+        ErrorParam("adapter_name", ParamKind.STRING),
+        ErrorParam("entry_name", ParamKind.STRING),
+        ErrorParam("field_kind", ParamKind.STRING),
+        ErrorParam("field_index", ParamKind.I64),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Make each mapped adapter operand/result index appear exactly once, "
+        "within the adapter arity, with a conversion valid for that slot kind"
+    ),
+)
+
+# ERR_LOWERING_019: Low ABI adapter mapping type mismatch.
+ERR_LOWERING_019 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=19,
+    severity=Severity.ERROR,
+    summary="Low ABI adapter mapping type mismatch.",
+    message=(
+        "low ABI adapter '@{adapter_name}' entry '@{entry_name}' "
+        "{conversion_rule} conversion for {field_kind} {field_index} has "
+        "type {actual_type}, expected {expected_field_kind} type "
+        "{expected_type}"
+    ),
+    params=(
+        ErrorParam("adapter_name", ParamKind.STRING),
+        ErrorParam("entry_name", ParamKind.STRING),
+        ErrorParam("conversion_rule", ParamKind.STRING),
+        ErrorParam("field_kind", ParamKind.STRING),
+        ErrorParam("field_index", ParamKind.U32),
+        ErrorParam("actual_type", ParamKind.TYPE),
+        ErrorParam("expected_field_kind", ParamKind.STRING),
+        ErrorParam("expected_type", ParamKind.TYPE),
+    ),
+    fix_hint=(
+        "Match mapped adapter semantic types to the invoke boundary and ABI "
+        "types to the callee low-function register signature"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_001,
     ERR_LOWERING_002,
@@ -394,4 +445,6 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_015,
     ERR_LOWERING_016,
     ERR_LOWERING_017,
+    ERR_LOWERING_018,
+    ERR_LOWERING_019,
 )

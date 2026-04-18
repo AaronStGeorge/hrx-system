@@ -1141,6 +1141,13 @@ bool loom_region_branch_region_yield_only_operands(
     return loom_attr_as_encoding_id(loom_op_attrs(op)[(index)]); \
   }
 
+// Defines a function that reads a type-table attribute by index.
+#define LOOM_DEFINE_ATTR_TYPE(func_name, index)                 \
+  enum { func_name##_ATTR_INDEX = (index) };                    \
+  static inline loom_type_id_t func_name(const loom_op_t* op) { \
+    return loom_attr_as_type_id(loom_op_attrs(op)[(index)]);    \
+  }
+
 // Defines a function that reads an i64 array attribute by index.
 #define LOOM_DEFINE_ATTR_I64_ARRAY(func_name, index)              \
   enum { func_name##_ATTR_INDEX = (index) };                      \

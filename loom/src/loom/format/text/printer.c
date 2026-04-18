@@ -846,6 +846,10 @@ static iree_status_t loom_print_attr(loom_output_stream_t* stream,
       return loom_output_stream_write_char(stream, ']');
     }
     case LOOM_ATTR_TYPE:
+      if (module && attr->type_id < module->types.count) {
+        return loom_text_print_type(module->types.entries[attr->type_id],
+                                    module, stream);
+      }
       return loom_output_stream_write_format(stream, "type<%" PRIu32 ">",
                                              attr->type_id);
     case LOOM_ATTR_ENCODING:

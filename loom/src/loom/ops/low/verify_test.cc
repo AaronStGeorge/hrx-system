@@ -25,6 +25,7 @@ using ::loom::testing::DiagnosticCapture;
 using ::loom::testing::ExpectError;
 using ::loom::testing::ExpectFieldRefParam;
 using ::loom::testing::ExpectI64Param;
+using ::loom::testing::ExpectU32Param;
 using ::loom::testing::FindDiagnostic;
 using ::loom::testing::GetStringParam;
 
@@ -156,6 +157,222 @@ TEST_F(LowVerifyTest, InvokeMatchesDirectAbiAdapterSignature) {
       &capture);
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, InvokeMatchesMappedAbiAdapterSignature) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>, "
+      "%rhs : reg<vm.i32>) -> (reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = "
+      "mapped, operand_count = 2, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index "
+      "= 0, conversion = scalar_to_register, semantic_type = i32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.operand @extern_add_i32_rhs {adapter = @extern_add_i32, index "
+      "= 1, conversion = scalar_to_register, semantic_type = i32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, "
+      "index = 0, conversion = register_to_scalar, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n"
+      "func.def @caller(%lhs : i32, %rhs : i32) -> (i32) {\n"
+      "  %sum = low.invoke @extern_add(%lhs, %rhs) {adapter = "
+      "@extern_add_i32} : (i32, i32) -> (i32)\n"
+      "  func.return %sum : i32\n"
+      "}\n",
+      &capture);
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(capture.diagnostics.empty());
+}
+
+TEST_F(LowVerifyTest, MappedAbiAdapterRejectsMissingEntry) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>, "
+      "%rhs : reg<vm.i32>) -> (reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = "
+      "mapped, operand_count = 2, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index "
+      "= 0, conversion = scalar_to_register, semantic_type = i32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, "
+      "index = 0, conversion = register_to_scalar, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add_i32");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "<missing>");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "operand");
+  ExpectI64Param(*diagnostic, 3, 1);
+  EXPECT_EQ(GetStringParam(*diagnostic, 4),
+            "mapped adapter is missing this entry");
+}
+
+TEST_F(LowVerifyTest, MappedAbiAdapterRejectsDuplicateEntry) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = "
+      "mapped, operand_count = 1, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index "
+      "= 0, conversion = scalar_to_register, semantic_type = i32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.operand @extern_add_i32_lhs_copy {adapter = @extern_add_i32, "
+      "index = 0, conversion = scalar_to_register, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n"
+      "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, "
+      "index = 0, conversion = register_to_scalar, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add_i32");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "extern_add_i32_lhs_copy");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "operand");
+  ExpectI64Param(*diagnostic, 3, 0);
+  EXPECT_EQ(GetStringParam(*diagnostic, 4),
+            "mapped adapter has more than one entry for this index");
+}
+
+TEST_F(LowVerifyTest, MappedAbiAdapterRejectsWrongEntryDirection) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = "
+      "mapped, operand_count = 1, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index "
+      "= 0, conversion = register_to_scalar, semantic_type = i32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, "
+      "index = 0, conversion = register_to_scalar, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add_i32");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "extern_add_i32_lhs");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "operand");
+  ExpectI64Param(*diagnostic, 3, 0);
+  EXPECT_EQ(GetStringParam(*diagnostic, 4),
+            "register_to_scalar is only valid for result entries");
+}
+
+TEST_F(LowVerifyTest, InvokeRejectsMappedAdapterSemanticTypeMismatch) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = "
+      "mapped, operand_count = 1, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index "
+      "= 0, conversion = scalar_to_register, semantic_type = f32, abi_type = "
+      "reg<vm.i32>}\n"
+      "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, "
+      "index = 0, conversion = register_to_scalar, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n"
+      "func.def @caller(%lhs : i32) -> (i32) {\n"
+      "  %sum = low.invoke @extern_add(%lhs) {adapter = @extern_add_i32} : "
+      "(i32) -> (i32)\n"
+      "  func.return %sum : i32\n"
+      "}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 19);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add_i32");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "extern_add_i32_lhs");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "scalar_to_register");
+  EXPECT_EQ(GetStringParam(*diagnostic, 3), "operand");
+  ExpectU32Param(*diagnostic, 4, 0);
+  ASSERT_EQ(diagnostic->params[5].kind, LOOM_PARAM_TYPE);
+  EXPECT_EQ(GetStringParam(*diagnostic, 6), "adapter semantic");
+  ASSERT_EQ(diagnostic->params[7].kind, LOOM_PARAM_TYPE);
+}
+
+TEST_F(LowVerifyTest, MappedAbiAdapterRejectsAbiTypeMismatch) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_i32 {callee = @extern_add, conversion = "
+      "mapped, operand_count = 1, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_i32, index "
+      "= 0, conversion = scalar_to_register, semantic_type = i32, abi_type = "
+      "reg<vm.i64>}\n"
+      "low.abi.result @extern_add_i32_result {adapter = @extern_add_i32, "
+      "index = 0, conversion = register_to_scalar, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 19);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add_i32");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "extern_add_i32_lhs");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "scalar_to_register");
+  EXPECT_EQ(GetStringParam(*diagnostic, 3), "operand");
+  ExpectU32Param(*diagnostic, 4, 0);
+  ASSERT_EQ(diagnostic->params[5].kind, LOOM_PARAM_TYPE);
+  EXPECT_EQ(GetStringParam(*diagnostic, 6), "callee argument");
+  ASSERT_EQ(diagnostic->params[7].kind, LOOM_PARAM_TYPE);
+}
+
+TEST_F(LowVerifyTest, DirectAbiAdapterRejectsMappingEntries) {
+  DiagnosticCapture capture;
+  loom_verify_result_t result = VerifySource(
+      "test.record @vm_target {}\n"
+      "low.func.decl target(@vm_target) @extern_add(%lhs : reg<vm.i32>) -> "
+      "(reg<vm.i32>)\n"
+      "low.abi.adapter @extern_add_direct {callee = @extern_add, conversion = "
+      "direct, operand_count = 1, result_count = 1}\n"
+      "low.abi.operand @extern_add_i32_lhs {adapter = @extern_add_direct, "
+      "index = 0, conversion = scalar_to_register, semantic_type = i32, "
+      "abi_type = reg<vm.i32>}\n",
+      &capture);
+  EXPECT_GT(result.error_count, 0u);
+
+  const loom_error_def_t* error =
+      loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18);
+  const CapturedDiagnostic* diagnostic = FindDiagnostic(capture, error);
+  ASSERT_NE(diagnostic, nullptr);
+  ExpectError(*diagnostic, error, LOOM_EMITTER_VERIFIER);
+  EXPECT_EQ(GetStringParam(*diagnostic, 0), "extern_add_direct");
+  EXPECT_EQ(GetStringParam(*diagnostic, 1), "extern_add_i32_lhs");
+  EXPECT_EQ(GetStringParam(*diagnostic, 2), "operand");
+  ExpectI64Param(*diagnostic, 3, 0);
+  EXPECT_EQ(GetStringParam(*diagnostic, 4),
+            "only mapped adapters accept operand/result mapping entries");
 }
 
 TEST_F(LowVerifyTest, InvokeRejectsNonLowCallee) {

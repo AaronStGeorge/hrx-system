@@ -352,6 +352,8 @@ def _attr_type_hint(attr_def: AttrDef | None) -> str:
             return "str"
         case "symbol":
             return "str"
+        case "type":
+            return "Type"
         case "i64_array":
             return "list[int]"
         case "any":

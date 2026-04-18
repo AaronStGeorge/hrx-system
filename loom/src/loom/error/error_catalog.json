@@ -3993,5 +3993,96 @@
       }
     ],
     "fix_hint_template": "Choose an ABI adapter conversion that accepts the semantic value type or materialize values matching the callee register ABI"
+  },
+  {
+    "error_id": "ERR_LOWERING_018",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 18,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low ABI adapter mapping entry is invalid.",
+    "message_template": "low ABI adapter '@{adapter_name}' {field_kind} entry '@{entry_name}' at index {field_index} is invalid: {reason}",
+    "params": [
+      {
+        "name": "adapter_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "entry_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_index",
+        "kind": 1,
+        "kind_name": "I64"
+      },
+      {
+        "name": "reason",
+        "kind": 0,
+        "kind_name": "STRING"
+      }
+    ],
+    "fix_hint_template": "Make each mapped adapter operand/result index appear exactly once, within the adapter arity, with a conversion valid for that slot kind"
+  },
+  {
+    "error_id": "ERR_LOWERING_019",
+    "domain": 10,
+    "domain_name": "LOWERING",
+    "code": 19,
+    "severity": 0,
+    "severity_name": "error",
+    "summary": "Low ABI adapter mapping type mismatch.",
+    "message_template": "low ABI adapter '@{adapter_name}' entry '@{entry_name}' {conversion_rule} conversion for {field_kind} {field_index} has type {actual_type}, expected {expected_field_kind} type {expected_type}",
+    "params": [
+      {
+        "name": "adapter_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "entry_name",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "conversion_rule",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "field_index",
+        "kind": 2,
+        "kind_name": "U32"
+      },
+      {
+        "name": "actual_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      },
+      {
+        "name": "expected_field_kind",
+        "kind": 0,
+        "kind_name": "STRING"
+      },
+      {
+        "name": "expected_type",
+        "kind": 4,
+        "kind_name": "TYPE"
+      }
+    ],
+    "fix_hint_template": "Match mapped adapter semantic types to the invoke boundary and ABI types to the callee low-function register signature"
   }
 ]

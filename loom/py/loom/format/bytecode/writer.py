@@ -59,6 +59,19 @@ from loom.ir import (
     Value,
 )
 
+_IR_TYPE_CLASSES = (
+    ScalarType,
+    ShapedType,
+    BufferType,
+    GroupType,
+    FunctionType,
+    RegisterType,
+    DialectType,
+    EncodingType,
+    PoolType,
+    NoneType,
+)
+
 __all__ = [
     "BytecodeWriter",
     "write_module",
@@ -534,6 +547,8 @@ class BytecodeWriter:
         """Intern strings referenced by attribute values."""
         if isinstance(value, str):
             self._ctx.intern_string(value)
+        elif isinstance(value, _IR_TYPE_CLASSES):
+            self._ctx.intern_type(cast(Type, value))
         elif isinstance(value, EncodingInstance):
             self._number_encoding_instance(value)
         elif isinstance(value, Mapping):
@@ -1029,6 +1044,12 @@ class BytecodeWriter:
                 raise TypeError(f"enum attribute value must be a string, got {value!r}")
             buf.write_u8(ATTR_KIND_ENUM)
             buf.write_varint(self._ctx.strings[value])
+            return
+        if attr_type == "type":
+            if not isinstance(value, _IR_TYPE_CLASSES):
+                raise TypeError(f"type attribute value must be a Type, got {value!r}")
+            buf.write_u8(ATTR_KIND_TYPE)
+            buf.write_varint(self._ctx.intern_type(cast(Type, value)))
             return
         if isinstance(value, bool):
             buf.write_u8(ATTR_KIND_BOOL)

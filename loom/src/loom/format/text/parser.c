@@ -1481,6 +1481,16 @@ iree_status_t loom_parse_attr_value(loom_parser_t* parser,
     case LOOM_ATTR_I64_ARRAY: {
       return loom_parse_i64_array_attr(parser, out_attr);
     }
+    case LOOM_ATTR_TYPE: {
+      loom_type_t type = {0};
+      IREE_RETURN_IF_ERROR(
+          loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
+      loom_type_id_t type_id = LOOM_TYPE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(
+          loom_module_intern_type_id(parser->module, type, &type_id));
+      *out_attr = loom_attr_type(type_id);
+      return iree_ok_status();
+    }
     case LOOM_ATTR_ENCODING: {
       uint16_t encoding_id = 0;
       IREE_RETURN_IF_ERROR(loom_parse_static_encoding(

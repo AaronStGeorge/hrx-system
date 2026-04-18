@@ -2913,6 +2913,54 @@ static const loom_error_def_t loom_err_lowering_017 = {
     .param_count = 8,
 };
 
+static const loom_error_param_def_t loom_err_lowering_018_params[] = {
+    {"adapter_name", LOOM_PARAM_STRING}, {"entry_name", LOOM_PARAM_STRING},
+    {"field_kind", LOOM_PARAM_STRING},   {"field_index", LOOM_PARAM_I64},
+    {"reason", LOOM_PARAM_STRING},
+};
+static const loom_error_def_t loom_err_lowering_018 = {
+    .error_id = "ERR_LOWERING_018",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 18,
+    .summary = "Low ABI adapter mapping entry is invalid.",
+    .message_template =
+        "low ABI adapter '@{adapter_name}' {field_kind} entry '@{entry_name}' "
+        "at index {field_index} is invalid: {reason}",
+    .fix_hint_template =
+        "Make each mapped adapter operand/result index appear exactly once, "
+        "within the adapter arity, with a conversion valid for that slot kind",
+    .param_defs = loom_err_lowering_018_params,
+    .param_count = 5,
+};
+
+static const loom_error_param_def_t loom_err_lowering_019_params[] = {
+    {"adapter_name", LOOM_PARAM_STRING},
+    {"entry_name", LOOM_PARAM_STRING},
+    {"conversion_rule", LOOM_PARAM_STRING},
+    {"field_kind", LOOM_PARAM_STRING},
+    {"field_index", LOOM_PARAM_U32},
+    {"actual_type", LOOM_PARAM_TYPE},
+    {"expected_field_kind", LOOM_PARAM_STRING},
+    {"expected_type", LOOM_PARAM_TYPE},
+};
+static const loom_error_def_t loom_err_lowering_019 = {
+    .error_id = "ERR_LOWERING_019",
+    .domain = LOOM_ERROR_DOMAIN_LOWERING,
+    .severity = LOOM_DIAGNOSTIC_ERROR,
+    .code = 19,
+    .summary = "Low ABI adapter mapping type mismatch.",
+    .message_template =
+        "low ABI adapter '@{adapter_name}' entry '@{entry_name}' "
+        "{conversion_rule} conversion for {field_kind} {field_index} has type "
+        "{actual_type}, expected {expected_field_kind} type {expected_type}",
+    .fix_hint_template =
+        "Match mapped adapter semantic types to the invoke boundary and ABI "
+        "types to the callee low-function register signature",
+    .param_defs = loom_err_lowering_019_params,
+    .param_count = 8,
+};
+
 static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_type_001,      &loom_err_type_002,      &loom_err_type_003,
     &loom_err_type_004,      &loom_err_type_005,      &loom_err_type_006,
@@ -2965,6 +3013,7 @@ static const loom_error_def_t* const loom_all_error_defs[] = {
     &loom_err_lowering_009,  &loom_err_lowering_010,  &loom_err_lowering_011,
     &loom_err_lowering_012,  &loom_err_lowering_013,  &loom_err_lowering_014,
     &loom_err_lowering_015,  &loom_err_lowering_016,  &loom_err_lowering_017,
+    &loom_err_lowering_018,  &loom_err_lowering_019,
 };
 
 const loom_error_def_t* loom_error_def_lookup(loom_error_domain_t domain,

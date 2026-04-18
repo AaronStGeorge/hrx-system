@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 from loom.assembly import (
     Attr,
@@ -95,6 +95,19 @@ from loom.ir import (
     Type,
     TypeKind,
     Value,
+)
+
+_IR_TYPE_CLASSES = (
+    ScalarType,
+    ShapedType,
+    BufferType,
+    GroupType,
+    FunctionType,
+    RegisterType,
+    DialectType,
+    EncodingType,
+    PoolType,
+    NoneType,
 )
 
 __all__ = [
@@ -472,6 +485,10 @@ def _format_attr_value(value: Any, attr_def: AttrDef | None = None) -> str:
         if value.startswith("@"):
             raise ValueError(f"symbol attribute value must not include '@': {value!r}")
         return "@" + value
+    if attr_def is not None and attr_def.attr_type == "type":
+        if not isinstance(value, _IR_TYPE_CLASSES):
+            raise TypeError(f"type attribute value must be a Type: {value!r}")
+        return print_type(cast(Type, value))
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):

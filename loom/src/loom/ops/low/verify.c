@@ -4,18 +4,49 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <string.h>
+
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 
 typedef struct loom_low_callee_signature_t {
+  // Defining low.func op for related diagnostic locations.
   const loom_op_t* definition_op;
+  // Callee entry block argument value IDs in signature order.
   const loom_value_id_t* argument_ids;
+  // Number of callee arguments.
   uint16_t argument_count;
+  // Callee result value IDs in signature order.
   const loom_value_id_t* result_ids;
+  // Number of callee results.
   uint16_t result_count;
 } loom_low_callee_signature_t;
+
+typedef enum loom_low_abi_field_kind_e {
+  // Adapter operand entry mapping a caller value to callee ABI argument.
+  LOOM_LOW_ABI_FIELD_OPERAND = 0,
+  // Adapter result entry mapping a callee ABI result to caller value.
+  LOOM_LOW_ABI_FIELD_RESULT = 1,
+} loom_low_abi_field_kind_t;
+
+typedef struct loom_low_abi_entry_t {
+  // Mapping record operation that defines this entry.
+  const loom_op_t* op;
+  // Symbol reference naming this mapping record.
+  loom_symbol_ref_t symbol;
+  // Adapter symbol reference this mapping belongs to.
+  loom_symbol_ref_t adapter;
+  // Slot index within the adapter operand or result list.
+  int64_t index;
+  // Per-slot conversion rule.
+  uint8_t conversion;
+  // Semantic boundary type carried by low.invoke.
+  loom_type_t semantic_type;
+  // Callee register ABI type carried by low.func.
+  loom_type_t abi_type;
+} loom_low_abi_entry_t;
 
 static iree_status_t loom_low_emit_related(
     iree_diagnostic_emitter_t emitter, const loom_op_t* op,
@@ -124,13 +155,120 @@ static bool loom_low_optional_symbol_attr_is_present(const loom_op_t* op,
          !loom_attr_is_absent(loom_op_attrs(op)[attr_index]);
 }
 
+static loom_type_t loom_low_type_attr(const loom_module_t* module,
+                                      loom_type_id_t type_id) {
+  if (type_id == LOOM_TYPE_ID_INVALID || type_id >= module->types.count) {
+    return loom_type_none();
+  }
+  return module->types.entries[type_id];
+}
+
 static iree_string_view_t loom_low_abi_conversion_name(uint8_t conversion) {
   switch (conversion) {
     case LOOM_LOW_ABI_ADAPTER_CONVERSION_DIRECT:
       return IREE_SV("direct");
+    case LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED:
+      return IREE_SV("mapped");
     default:
       return IREE_SV("unknown");
   }
+}
+
+static iree_string_view_t loom_low_abi_value_conversion_name(
+    uint8_t conversion) {
+  switch (conversion) {
+    case LOOM_LOW_CONVERSION_DIRECT:
+      return IREE_SV("direct");
+    case LOOM_LOW_CONVERSION_SCALAR_TO_REGISTER:
+      return IREE_SV("scalar_to_register");
+    case LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR:
+      return IREE_SV("register_to_scalar");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_string_view_t loom_low_abi_field_kind_name(
+    loom_low_abi_field_kind_t field_kind) {
+  switch (field_kind) {
+    case LOOM_LOW_ABI_FIELD_OPERAND:
+      return IREE_SV("operand");
+    case LOOM_LOW_ABI_FIELD_RESULT:
+      return IREE_SV("result");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static bool loom_low_abi_field_kind_matches_op(
+    loom_low_abi_field_kind_t field_kind, const loom_op_t* op) {
+  switch (field_kind) {
+    case LOOM_LOW_ABI_FIELD_OPERAND:
+      return loom_low_abi_operand_isa(op);
+    case LOOM_LOW_ABI_FIELD_RESULT:
+      return loom_low_abi_result_isa(op);
+    default:
+      return false;
+  }
+}
+
+static loom_symbol_ref_t loom_low_abi_entry_symbol(const loom_op_t* op) {
+  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_symbol(op);
+  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_symbol(op);
+  return loom_symbol_ref_null();
+}
+
+static loom_symbol_ref_t loom_low_abi_entry_adapter(const loom_op_t* op) {
+  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_adapter(op);
+  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_adapter(op);
+  return loom_symbol_ref_null();
+}
+
+static int64_t loom_low_abi_entry_index(const loom_op_t* op) {
+  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_index(op);
+  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_index(op);
+  return -1;
+}
+
+static uint8_t loom_low_abi_entry_conversion(const loom_op_t* op) {
+  if (loom_low_abi_operand_isa(op)) return loom_low_abi_operand_conversion(op);
+  if (loom_low_abi_result_isa(op)) return loom_low_abi_result_conversion(op);
+  return UINT8_MAX;
+}
+
+static loom_type_t loom_low_abi_entry_semantic_type(const loom_module_t* module,
+                                                    const loom_op_t* op) {
+  if (loom_low_abi_operand_isa(op)) {
+    return loom_low_type_attr(module, loom_low_abi_operand_semantic_type(op));
+  }
+  if (loom_low_abi_result_isa(op)) {
+    return loom_low_type_attr(module, loom_low_abi_result_semantic_type(op));
+  }
+  return loom_type_none();
+}
+
+static loom_type_t loom_low_abi_entry_abi_type(const loom_module_t* module,
+                                               const loom_op_t* op) {
+  if (loom_low_abi_operand_isa(op)) {
+    return loom_low_type_attr(module, loom_low_abi_operand_abi_type(op));
+  }
+  if (loom_low_abi_result_isa(op)) {
+    return loom_low_type_attr(module, loom_low_abi_result_abi_type(op));
+  }
+  return loom_type_none();
+}
+
+static loom_low_abi_entry_t loom_low_abi_entry_load(const loom_module_t* module,
+                                                    const loom_op_t* op) {
+  return (loom_low_abi_entry_t){
+      .op = op,
+      .symbol = loom_low_abi_entry_symbol(op),
+      .adapter = loom_low_abi_entry_adapter(op),
+      .index = loom_low_abi_entry_index(op),
+      .conversion = loom_low_abi_entry_conversion(op),
+      .semantic_type = loom_low_abi_entry_semantic_type(module, op),
+      .abi_type = loom_low_abi_entry_abi_type(module, op),
+  };
 }
 
 static iree_status_t loom_low_emit_callee_related(
@@ -365,6 +503,80 @@ static iree_status_t loom_low_emit_adapter_type_mismatch(
       params, IREE_ARRAYSIZE(params), related, IREE_ARRAYSIZE(related));
 }
 
+static iree_status_t loom_low_emit_abi_entry_error(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_symbol_ref_t adapter_ref, const loom_op_t* adapter_op,
+    iree_string_view_t entry_name, const loom_op_t* entry_op,
+    loom_low_abi_field_kind_t field_kind, int64_t field_index,
+    iree_string_view_t reason, iree_diagnostic_emitter_t emitter) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_symbol_name(module, adapter_ref)),
+      loom_param_string(entry_name),
+      loom_param_string(loom_low_abi_field_kind_name(field_kind)),
+      loom_param_i64(field_index),
+      loom_param_string(reason),
+  };
+  loom_diagnostic_related_op_t related[] = {
+      {0},
+      {0},
+  };
+  iree_host_size_t related_count = 0;
+  if (adapter_op) {
+    related[related_count++] = (loom_diagnostic_related_op_t){
+        .label = IREE_SV("adapter defined here"),
+        .op = adapter_op,
+    };
+  }
+  if (entry_op) {
+    related[related_count++] = (loom_diagnostic_related_op_t){
+        .label = IREE_SV("entry defined here"),
+        .op = entry_op,
+    };
+  }
+  return loom_low_emit_related(
+      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 18),
+      params, IREE_ARRAYSIZE(params), related, related_count);
+}
+
+static iree_status_t loom_low_emit_abi_entry_type_mismatch(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_symbol_ref_t adapter_ref, const loom_op_t* adapter_op,
+    const loom_low_abi_entry_t* entry, loom_low_abi_field_kind_t field_kind,
+    uint16_t field_index, loom_type_t actual_type,
+    iree_string_view_t expected_field_kind, loom_type_t expected_type,
+    iree_diagnostic_emitter_t emitter) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_symbol_name(module, adapter_ref)),
+      loom_param_string(loom_low_symbol_name(module, entry->symbol)),
+      loom_param_string(loom_low_abi_value_conversion_name(entry->conversion)),
+      loom_param_string(loom_low_abi_field_kind_name(field_kind)),
+      loom_param_u32(field_index),
+      loom_param_type(actual_type),
+      loom_param_string(expected_field_kind),
+      loom_param_type(expected_type),
+  };
+  loom_diagnostic_related_op_t related[] = {
+      {0},
+      {0},
+  };
+  iree_host_size_t related_count = 0;
+  if (adapter_op) {
+    related[related_count++] = (loom_diagnostic_related_op_t){
+        .label = IREE_SV("adapter defined here"),
+        .op = adapter_op,
+    };
+  }
+  if (entry->op) {
+    related[related_count++] = (loom_diagnostic_related_op_t){
+        .label = IREE_SV("entry defined here"),
+        .op = entry->op,
+    };
+  }
+  return loom_low_emit_related(
+      emitter, op, loom_error_def_lookup(LOOM_ERROR_DOMAIN_LOWERING, 19),
+      params, IREE_ARRAYSIZE(params), related, related_count);
+}
+
 static iree_status_t loom_low_verify_descriptor_key(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter, loom_string_id_t opcode_id,
@@ -521,6 +733,279 @@ static iree_status_t loom_low_verify_invoke_adapter_result_types(
   return iree_ok_status();
 }
 
+static bool loom_low_find_abi_entry(const loom_module_t* module,
+                                    loom_symbol_ref_t adapter_ref,
+                                    loom_low_abi_field_kind_t field_kind,
+                                    uint16_t field_index,
+                                    loom_low_abi_entry_t* out_entry,
+                                    loom_low_abi_entry_t* out_duplicate) {
+  bool found = false;
+  if (out_entry) memset(out_entry, 0, sizeof(*out_entry));
+  if (out_duplicate) memset(out_duplicate, 0, sizeof(*out_duplicate));
+  const loom_symbol_t* symbol = NULL;
+  loom_module_for_each_symbol(module, symbol) {
+    const loom_op_t* entry_op = symbol->defining_op;
+    if (!entry_op ||
+        !loom_low_abi_field_kind_matches_op(field_kind, entry_op)) {
+      continue;
+    }
+    loom_low_abi_entry_t entry = loom_low_abi_entry_load(module, entry_op);
+    if (!loom_low_symbol_ref_equal(entry.adapter, adapter_ref) ||
+        entry.index != field_index) {
+      continue;
+    }
+    if (found) {
+      if (out_duplicate) *out_duplicate = entry;
+      return true;
+    }
+    found = true;
+    if (out_entry) *out_entry = entry;
+  }
+  return found;
+}
+
+static iree_status_t loom_low_verify_abi_entry_conversion_shape(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_low_abi_entry_t* entry, loom_low_abi_field_kind_t field_kind,
+    const loom_op_t* adapter_op, iree_diagnostic_emitter_t emitter) {
+  switch (entry->conversion) {
+    case LOOM_LOW_CONVERSION_DIRECT:
+      if (loom_type_equal(entry->semantic_type, entry->abi_type)) {
+        return iree_ok_status();
+      }
+      return loom_low_emit_abi_entry_type_mismatch(
+          module, op, entry->adapter, adapter_op, entry, field_kind,
+          (uint16_t)entry->index, entry->semantic_type, IREE_SV("ABI"),
+          entry->abi_type, emitter);
+    case LOOM_LOW_CONVERSION_SCALAR_TO_REGISTER:
+      if (field_kind != LOOM_LOW_ABI_FIELD_OPERAND) {
+        return loom_low_emit_abi_entry_error(
+            module, op, entry->adapter, adapter_op,
+            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+            entry->index,
+            IREE_SV("scalar_to_register is only valid for operand entries"),
+            emitter);
+      }
+      if (loom_type_is_scalar(entry->semantic_type) &&
+          loom_type_is_register(entry->abi_type)) {
+        return iree_ok_status();
+      }
+      return loom_low_emit_abi_entry_error(
+          module, op, entry->adapter, adapter_op,
+          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+          entry->index,
+          IREE_SV("scalar_to_register requires a scalar semantic type and "
+                  "register ABI type"),
+          emitter);
+    case LOOM_LOW_CONVERSION_REGISTER_TO_SCALAR:
+      if (field_kind != LOOM_LOW_ABI_FIELD_RESULT) {
+        return loom_low_emit_abi_entry_error(
+            module, op, entry->adapter, adapter_op,
+            loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+            entry->index,
+            IREE_SV("register_to_scalar is only valid for result entries"),
+            emitter);
+      }
+      if (loom_type_is_scalar(entry->semantic_type) &&
+          loom_type_is_register(entry->abi_type)) {
+        return iree_ok_status();
+      }
+      return loom_low_emit_abi_entry_error(
+          module, op, entry->adapter, adapter_op,
+          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+          entry->index,
+          IREE_SV("register_to_scalar requires a register ABI type and scalar "
+                  "semantic type"),
+          emitter);
+    default:
+      return loom_low_emit_abi_entry_error(
+          module, op, entry->adapter, adapter_op,
+          loom_low_symbol_name(module, entry->symbol), entry->op, field_kind,
+          entry->index, IREE_SV("unknown conversion rule"), emitter);
+  }
+}
+
+static iree_status_t loom_low_verify_abi_entry_record(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_low_abi_field_kind_t field_kind, iree_diagnostic_emitter_t emitter) {
+  loom_low_abi_entry_t entry = loom_low_abi_entry_load(module, op);
+  const loom_symbol_t* adapter_symbol =
+      loom_low_lookup_defined_symbol(module, entry.adapter);
+  if (!adapter_symbol) {
+    return iree_ok_status();
+  }
+  const loom_op_t* adapter_op = adapter_symbol->defining_op;
+  uint16_t adapter_attr_index = field_kind == LOOM_LOW_ABI_FIELD_OPERAND
+                                    ? loom_low_abi_operand_adapter_ATTR_INDEX
+                                    : loom_low_abi_result_adapter_ATTR_INDEX;
+  if (!loom_low_abi_adapter_isa(adapter_op)) {
+    IREE_RETURN_IF_ERROR(loom_low_emit_symbol_kind_mismatch(
+        module, op, entry.adapter, adapter_attr_index, adapter_symbol,
+        IREE_SV("low ABI adapter"), emitter));
+    return iree_ok_status();
+  }
+
+  if (loom_low_abi_adapter_conversion(adapter_op) !=
+      LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED) {
+    return loom_low_emit_abi_entry_error(
+        module, op, entry.adapter, adapter_op,
+        loom_low_symbol_name(module, entry.symbol), op, field_kind, entry.index,
+        IREE_SV("only mapped adapters accept operand/result mapping entries"),
+        emitter);
+  }
+
+  int64_t expected_count = field_kind == LOOM_LOW_ABI_FIELD_OPERAND
+                               ? loom_low_abi_adapter_operand_count(adapter_op)
+                               : loom_low_abi_adapter_result_count(adapter_op);
+  if (entry.index < 0 || entry.index >= expected_count) {
+    return loom_low_emit_abi_entry_error(
+        module, op, entry.adapter, adapter_op,
+        loom_low_symbol_name(module, entry.symbol), op, field_kind, entry.index,
+        IREE_SV("index is outside the adapter arity"), emitter);
+  }
+
+  return loom_low_verify_abi_entry_conversion_shape(
+      module, op, &entry, field_kind, adapter_op, emitter);
+}
+
+static iree_status_t loom_low_verify_adapter_mapped_entry(
+    const loom_module_t* module, const loom_op_t* adapter_op,
+    loom_low_abi_field_kind_t field_kind, uint16_t field_index,
+    loom_type_t expected_abi_type, iree_diagnostic_emitter_t emitter) {
+  loom_symbol_ref_t adapter_ref = loom_low_abi_adapter_symbol(adapter_op);
+  loom_low_abi_entry_t entry = {0};
+  loom_low_abi_entry_t duplicate = {0};
+  bool found = loom_low_find_abi_entry(module, adapter_ref, field_kind,
+                                       field_index, &entry, &duplicate);
+  if (!found) {
+    return loom_low_emit_abi_entry_error(
+        module, adapter_op, adapter_ref, adapter_op, IREE_SV("<missing>"), NULL,
+        field_kind, field_index,
+        IREE_SV("mapped adapter is missing this entry"), emitter);
+  }
+  if (duplicate.op) {
+    return loom_low_emit_abi_entry_error(
+        module, adapter_op, adapter_ref, adapter_op,
+        loom_low_symbol_name(module, duplicate.symbol), duplicate.op,
+        field_kind, field_index,
+        IREE_SV("mapped adapter has more than one entry for this index"),
+        emitter);
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_abi_entry_conversion_shape(
+      module, adapter_op, &entry, field_kind, adapter_op, emitter));
+  if (loom_type_equal(entry.abi_type, expected_abi_type)) {
+    return iree_ok_status();
+  }
+  iree_string_view_t expected_field_kind =
+      field_kind == LOOM_LOW_ABI_FIELD_OPERAND ? IREE_SV("callee argument")
+                                               : IREE_SV("callee result");
+  return loom_low_emit_abi_entry_type_mismatch(
+      module, adapter_op, adapter_ref, adapter_op, &entry, field_kind,
+      field_index, entry.abi_type, expected_field_kind, expected_abi_type,
+      emitter);
+}
+
+static iree_status_t loom_low_verify_adapter_mapped_entries(
+    const loom_module_t* module, const loom_op_t* adapter_op,
+    const loom_low_callee_signature_t* signature,
+    iree_diagnostic_emitter_t emitter) {
+  uint8_t conversion = loom_low_abi_adapter_conversion(adapter_op);
+  if (conversion != LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED) {
+    return iree_ok_status();
+  }
+  for (uint16_t i = 0; i < signature->argument_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_adapter_mapped_entry(
+        module, adapter_op, LOOM_LOW_ABI_FIELD_OPERAND, i,
+        loom_module_value_type(module, signature->argument_ids[i]), emitter));
+  }
+  for (uint16_t i = 0; i < signature->result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_adapter_mapped_entry(
+        module, adapter_op, LOOM_LOW_ABI_FIELD_RESULT, i,
+        loom_module_value_type(module, signature->result_ids[i]), emitter));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_invoke_mapped_entry(
+    const loom_module_t* module, const loom_op_t* invoke_op,
+    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
+    loom_low_abi_field_kind_t field_kind, uint16_t field_index,
+    loom_type_t actual_semantic_type, iree_diagnostic_emitter_t emitter) {
+  loom_symbol_ref_t adapter_ref = loom_low_invoke_adapter(invoke_op);
+  loom_low_abi_entry_t entry = {0};
+  loom_low_abi_entry_t duplicate = {0};
+  bool found = loom_low_find_abi_entry(module, adapter_ref, field_kind,
+                                       field_index, &entry, &duplicate);
+  if (!found) {
+    return loom_low_emit_abi_entry_error(
+        module, invoke_op, adapter_ref, adapter_op, IREE_SV("<missing>"), NULL,
+        field_kind, field_index,
+        IREE_SV("mapped adapter is missing this entry"), emitter);
+  }
+  if (duplicate.op) {
+    return loom_low_emit_abi_entry_error(
+        module, invoke_op, adapter_ref, adapter_op,
+        loom_low_symbol_name(module, duplicate.symbol), duplicate.op,
+        field_kind, field_index,
+        IREE_SV("mapped adapter has more than one entry for this index"),
+        emitter);
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_abi_entry_conversion_shape(
+      module, invoke_op, &entry, field_kind, adapter_op, emitter));
+  if (!loom_type_equal(actual_semantic_type, entry.semantic_type)) {
+    return loom_low_emit_abi_entry_type_mismatch(
+        module, invoke_op, adapter_ref, adapter_op, &entry, field_kind,
+        field_index, actual_semantic_type, IREE_SV("adapter semantic"),
+        entry.semantic_type, emitter);
+  }
+
+  loom_type_t expected_abi_type =
+      field_kind == LOOM_LOW_ABI_FIELD_OPERAND
+          ? loom_module_value_type(module, signature->argument_ids[field_index])
+          : loom_module_value_type(module, signature->result_ids[field_index]);
+  if (loom_type_equal(entry.abi_type, expected_abi_type)) {
+    return iree_ok_status();
+  }
+  iree_string_view_t expected_field_kind =
+      field_kind == LOOM_LOW_ABI_FIELD_OPERAND ? IREE_SV("callee argument")
+                                               : IREE_SV("callee result");
+  return loom_low_emit_abi_entry_type_mismatch(
+      module, invoke_op, adapter_ref, adapter_op, &entry, field_kind,
+      field_index, entry.abi_type, expected_field_kind, expected_abi_type,
+      emitter);
+}
+
+static iree_status_t loom_low_verify_invoke_adapter_mapped_types(
+    const loom_module_t* module, const loom_op_t* invoke_op,
+    const loom_low_callee_signature_t* signature, const loom_op_t* adapter_op,
+    iree_diagnostic_emitter_t emitter) {
+  uint8_t conversion = loom_low_abi_adapter_conversion(adapter_op);
+  if (conversion != LOOM_LOW_ABI_ADAPTER_CONVERSION_MAPPED) {
+    return iree_ok_status();
+  }
+  uint16_t compare_count = invoke_op->operand_count;
+  if (compare_count > signature->argument_count) {
+    compare_count = signature->argument_count;
+  }
+  const loom_value_id_t* invoke_operands = loom_op_const_operands(invoke_op);
+  for (uint16_t i = 0; i < compare_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_mapped_entry(
+        module, invoke_op, signature, adapter_op, LOOM_LOW_ABI_FIELD_OPERAND, i,
+        loom_module_value_type(module, invoke_operands[i]), emitter));
+  }
+  compare_count = invoke_op->result_count;
+  if (compare_count > signature->result_count) {
+    compare_count = signature->result_count;
+  }
+  const loom_value_id_t* invoke_results = loom_op_const_results(invoke_op);
+  for (uint16_t i = 0; i < compare_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_mapped_entry(
+        module, invoke_op, signature, adapter_op, LOOM_LOW_ABI_FIELD_RESULT, i,
+        loom_module_value_type(module, invoke_results[i]), emitter));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_op_verify(const loom_module_t* module,
                                  const loom_op_t* op,
                                  iree_diagnostic_emitter_t emitter) {
@@ -560,7 +1045,23 @@ iree_status_t loom_low_abi_adapter_verify(const loom_module_t* module,
   IREE_RETURN_IF_ERROR(loom_low_verify_adapter_signature_count(
       module, op, &signature, emitter, IREE_SV("adapter result"),
       loom_low_abi_adapter_result_count(op), signature.result_count));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_adapter_mapped_entries(module, op, &signature, emitter));
   return iree_ok_status();
+}
+
+iree_status_t loom_low_abi_operand_verify(const loom_module_t* module,
+                                          const loom_op_t* op,
+                                          iree_diagnostic_emitter_t emitter) {
+  return loom_low_verify_abi_entry_record(module, op,
+                                          LOOM_LOW_ABI_FIELD_OPERAND, emitter);
+}
+
+iree_status_t loom_low_abi_result_verify(const loom_module_t* module,
+                                         const loom_op_t* op,
+                                         iree_diagnostic_emitter_t emitter) {
+  return loom_low_verify_abi_entry_record(module, op, LOOM_LOW_ABI_FIELD_RESULT,
+                                          emitter);
 }
 
 iree_status_t loom_low_invoke_verify(const loom_module_t* module,
@@ -612,6 +1113,8 @@ iree_status_t loom_low_invoke_verify(const loom_module_t* module,
     IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_argument_types(
         module, op, &signature, adapter_op, emitter));
     IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_result_types(
+        module, op, &signature, adapter_op, emitter));
+    IREE_RETURN_IF_ERROR(loom_low_verify_invoke_adapter_mapped_types(
         module, op, &signature, adapter_op, emitter));
     return iree_ok_status();
   }

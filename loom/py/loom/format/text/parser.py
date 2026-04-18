@@ -2043,6 +2043,15 @@ class Parser:
             case "symbol":
                 sym = tok.expect(TokenKind.SYMBOL)
                 return sym.text
+            case "type":
+                parsed_type, _ = parse_type_from_tokens(
+                    tok,
+                    self._scope,
+                    self._module,
+                    self._type_registry,
+                    TypeParseMode.BODY,
+                )
+                return parsed_type
             case "i64_array":
                 return self._parse_i64_array()
             case "encoding":
